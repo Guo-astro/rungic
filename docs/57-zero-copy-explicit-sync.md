@@ -82,6 +82,13 @@ APK1.12–1.18给零拷贝事务设`setOnComplete`，用present fence实际signa
 
 另外观察到plasmashell在静止时有时持续约10%单核、120–150次/秒唤醒（与本开关无关，1.22首次测量时只有0.6%），列为第6项调查。
 
+## GPU频率（第4项）：本轮不改
+
+- 本机电源HAL（高通/Moto MDPF）配置中，GPU最低功率档`/sys/class/kgsl/kgsl-3d0/min_pwrlevel`只由`INTERACTION_SEVERE/MODERATE_SCROLL`、`INTERACTION_SEVERE/MODERATE_TOUCH`（厂商交互hint）和`EXPENSIVE_RENDERING`（SurfaceFlinger在昂贵GPU合成时设置）触发，普通应用没有入口。ADPF（`PerformanceHintManager`）会话的MDPF配置只有CPU uclamp的PID参数，没有GPU项；会话线程还必须属于调用方进程，宿主不能替容器内KWin/plasmashell报告。`SessionHint.GPU_LOAD_UP`等提示在这里没有对应的GPU动作。
+- 其余可行手段都是全局改动：KGSL `devfreq`的`mod_percent`（需要root、影响全机）、`min_pwrlevel`或频率锁定。它们违反49、51篇“不锁频、不改温控”的边界，未采用。
+- 必要性也下降了：显式同步后KWin不再在CPU上等待GPU，滚动时GPU只有11–13%忙碌，平均约560MHz（295–816MHz之间来回），SurfaceFlinger帧间隔p95已稳定在16.8ms。频率只影响缓冲就绪的时刻，当前数据中看不到由它造成的丢帧。
+- 以后如果出现明确由GPU低频造成的卡顿（KGSL轨迹中提交排队、`adreno_cmdbatch_retired`延后），再评估用户可选的`mod_percent`开关；默认不启用。
+
 ## 其他修复
 
 - 开机左上角黑框光标：宿主seat在触屏模式下仍声明`wl_pointer`，KWin据此在(0,0)绘制自己的光标（透明区在不透明层中显示为黑框），直到有指针事件。宿主改为只在鼠标/触控板模式声明`wl_pointer`（触屏模式只走`wl_touch`，本来就不经过指针），切换模式时增删能力。开机截图已无光标；按控件名启动/关闭应用检查3/3及改变布局2/2通过。蓝牙鼠标模式尚未实机验证。
