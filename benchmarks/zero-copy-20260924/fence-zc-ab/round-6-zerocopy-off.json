@@ -1,0 +1,135 @@
+{
+ "trace": "/home/kevinzhow/github/range-dev/.work/diag/moto-20260924-015841-kwin-pipeline-6.pftrace",
+ "window_s": 8.5,
+ "pids": {
+  "kwin": [
+   20865
+  ],
+  "plasmashell": [
+   21002
+  ],
+  "apk": [
+   9979
+  ],
+  "surfaceflinger": [
+   1747
+  ]
+ },
+ "host_queue": {
+  "buffers": 433,
+  "per_s": 50.94,
+  "interval_ms": {
+   "n": 432,
+   "mean": 18.802,
+   "p50": 8.609,
+   "p95": 22.255,
+   "p99": 501.794,
+   "max": 514.75
+  },
+  "queueBuffer_ms": {
+   "n": 433,
+   "mean": 0.412,
+   "p50": 0.317,
+   "p95": 0.707,
+   "p99": 1.475,
+   "max": 2.026
+  }
+ },
+ "sf_display": {
+  "frames": 431,
+  "per_s": 50.71,
+  "interval_ms": {
+   "n": 430,
+   "mean": 18.766,
+   "p50": 8.358,
+   "p95": 25.027,
+   "p99": 501.197,
+   "max": 509.585
+  },
+  "jank_types": {
+   "None": 430,
+   "Prediction Error": 1
+  }
+ },
+ "kwin": {
+  "Import": {
+   "n": 409,
+   "mean": 0.061,
+   "p50": 0.05,
+   "p95": 0.102,
+   "p99": 0.155,
+   "max": 0.607
+  },
+  "Paint": {
+   "n": 409,
+   "mean": 2.511,
+   "p50": 2.212,
+   "p95": 4.605,
+   "p99": 6.591,
+   "max": 8.014
+  },
+  "batched_print_events": 0
+ },
+ "cpu": {
+  "kwin": {
+   "ms": 1938.1,
+   "core_pct": 22.8
+  },
+  "plasmashell": {
+   "ms": 3489.2,
+   "core_pct": 41.0
+  },
+  "apk": {
+   "ms": 1931.2,
+   "core_pct": 22.7
+  },
+  "surfaceflinger": {
+   "ms": 2324.5,
+   "core_pct": 27.3
+  }
+ },
+ "gpu_freq_mhz_seconds": {
+  "345": 3.091,
+  "500": 0.06,
+  "600": 0.15,
+  "650": 0.748,
+  "734": 0.79,
+  "816": 3.661
+ },
+ "gpu": {
+  "busy_pct": 11.64,
+  "per_process": {
+   "/usr/bin/plasmashell[21002]": {
+    "n": 799,
+    "mean": 2.539,
+    "p50": 3.563,
+    "p95": 5.186,
+    "p99": 7.661,
+    "max": 8.372,
+    "total_ms": 2028.62
+   },
+   "/usr/bin/kwin_wayland[20865]": {
+    "n": 1179,
+    "mean": 1.034,
+    "p50": 0.006,
+    "p95": 3.101,
+    "p99": 3.783,
+    "max": 5.781,
+    "total_ms": 1218.81
+   },
+   "dev.moto.plasma[9979]": {
+    "n": 441,
+    "mean": 1.222,
+    "p50": 1.136,
+    "p95": 1.668,
+    "p99": 2.963,
+    "max": 4.04,
+    "total_ms": 538.77
+   }
+  }
+ },
+ "thermal_before": 0,
+ "zerocopy": "off",
+ "host_native_stats": "(enabled=false available=true frames=3688 acquire_fences=3137 fallback=2957 last_fallback=disabled in_flight=1 released=3687)",
+ "thermal_after": 0
+}

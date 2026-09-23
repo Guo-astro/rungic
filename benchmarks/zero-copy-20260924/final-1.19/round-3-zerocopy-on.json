@@ -1,0 +1,115 @@
+{
+ "trace": "/home/kevinzhow/github/range-dev/.work/diag/moto-20260924-030642-kwin-pipeline-3.pftrace",
+ "window_s": 8.5,
+ "pids": {
+  "kwin": [
+   14053
+  ],
+  "plasmashell": [
+   14135
+  ],
+  "apk": [
+   13838
+  ],
+  "surfaceflinger": [
+   11550
+  ]
+ },
+ "host_queue": {
+  "buffers": 0,
+  "per_s": 0.0,
+  "interval_ms": {
+   "n": 0
+  },
+  "queueBuffer_ms": {
+   "n": 0
+  }
+ },
+ "sf_display": {
+  "frames": 346,
+  "per_s": 40.71,
+  "interval_ms": {
+   "n": 345,
+   "mean": 24.193,
+   "p50": 8.376,
+   "p95": 25.069,
+   "p99": 509.676,
+   "max": 551.438
+  },
+  "jank_types": {
+   "None": 346
+  }
+ },
+ "kwin": {
+  "Import": {
+   "n": 362,
+   "mean": 0.06,
+   "p50": 0.051,
+   "p95": 0.102,
+   "p99": 0.155,
+   "max": 0.32
+  },
+  "Paint": {
+   "n": 362,
+   "mean": 2.326,
+   "p50": 2.15,
+   "p95": 3.847,
+   "p99": 4.477,
+   "max": 7.315
+  },
+  "batched_print_events": 0
+ },
+ "cpu": {
+  "kwin": {
+   "ms": 1638.9,
+   "core_pct": 19.3
+  },
+  "plasmashell": {
+   "ms": 2592.5,
+   "core_pct": 30.5
+  },
+  "apk": {
+   "ms": 1499.0,
+   "core_pct": 17.6
+  },
+  "surfaceflinger": {
+   "ms": 2043.8,
+   "core_pct": 24.0
+  }
+ },
+ "gpu_freq_mhz_seconds": {
+  "345": 2.957,
+  "500": 0.062,
+  "600": 1.901,
+  "650": 0.467,
+  "734": 0.951,
+  "816": 2.162
+ },
+ "gpu": {
+  "busy_pct": 11.03,
+  "per_process": {
+   "/usr/bin/plasmashell[14135]": {
+    "n": 711,
+    "mean": 2.603,
+    "p50": 3.608,
+    "p95": 5.556,
+    "p99": 8.275,
+    "max": 9.251,
+    "total_ms": 1850.94
+   },
+   "/usr/bin/kwin_wayland[14053]": {
+    "n": 758,
+    "mean": 1.56,
+    "p50": 0.012,
+    "p95": 3.87,
+    "p99": 4.884,
+    "max": 6.57,
+    "total_ms": 1182.18
+   }
+  }
+ },
+ "thermal_before": 0,
+ "zerocopy": "on",
+ "host_native_stats": "(enabled=true available=true frames=2930 acquire_fences=2926 feedback_hw=0 feedback_latch=0 feedback_timeout=0 feedback_pending=0 feedback_implausible=0 fallback=128 last_fallback=not a single full-surface dma-buf in_flight=2 released=2928)",
+ "thermal_after": 0
+}

@@ -1,0 +1,111 @@
+{
+ "trace": "/home/kevinzhow/github/range-dev/.work/diag/moto-20260924-030205-kwin-pipeline-3.pftrace",
+ "window_s": 8.5,
+ "pids": {
+  "kwin": [
+   8488
+  ],
+  "plasmashell": [
+   8635
+  ],
+  "apk": [
+   8160
+  ],
+  "surfaceflinger": [
+   11550
+  ]
+ },
+ "host_queue": {
+  "buffers": 0,
+  "per_s": 0.0,
+  "interval_ms": {
+   "n": 0
+  },
+  "queueBuffer_ms": {
+   "n": 0
+  }
+ },
+ "sf_display": {
+  "frames": 233,
+  "per_s": 27.41,
+  "interval_ms": {
+   "n": 232,
+   "mean": 34.428,
+   "p50": 16.66,
+   "p95": 50.145,
+   "p99": 509.674,
+   "max": 559.761
+  },
+  "jank_types": {
+   "None": 233
+  }
+ },
+ "kwin": {
+  "Import": {
+   "n": 101,
+   "mean": 0.116,
+   "p50": 0.11,
+   "p95": 0.174,
+   "p99": 0.323,
+   "max": 0.616
+  },
+  "Paint": {
+   "n": 101,
+   "mean": 3.925,
+   "p50": 3.986,
+   "p95": 5.86,
+   "p99": 8.235,
+   "max": 9.89
+  },
+  "batched_print_events": 0
+ },
+ "cpu": {
+  "kwin": {
+   "ms": 961.3,
+   "core_pct": 11.3
+  },
+  "plasmashell": {
+   "ms": 1319.4,
+   "core_pct": 15.5
+  },
+  "apk": {
+   "ms": 1471.9,
+   "core_pct": 17.3
+  },
+  "surfaceflinger": {
+   "ms": 1835.3,
+   "core_pct": 21.6
+  }
+ },
+ "gpu_freq_mhz_seconds": {
+  "295": 5.706,
+  "345": 2.794
+ },
+ "gpu": {
+  "busy_pct": 11.25,
+  "per_process": {
+   "/usr/bin/plasmashell[8635]": {
+    "n": 227,
+    "mean": 4.797,
+    "p50": 1.744,
+    "p95": 9.494,
+    "p99": 9.727,
+    "max": 9.779,
+    "total_ms": 1088.9
+   },
+   "/usr/bin/kwin_wayland[8488]": {
+    "n": 210,
+    "mean": 3.031,
+    "p50": 0.017,
+    "p95": 11.324,
+    "p99": 13.296,
+    "max": 13.881,
+    "total_ms": 636.44
+   }
+  }
+ },
+ "thermal_before": 0,
+ "zerocopy": "on",
+ "host_native_stats": "(enabled=true available=true frames=1996 acquire_fences=1993 feedback_hw=580 feedback_latch=112 feedback_timeout=0 feedback_pending=0 feedback_implausible=0 fallback=116 last_fallback=not a single full-surface dma-buf in_flight=1 released=1995)",
+ "thermal_after": 0
+}

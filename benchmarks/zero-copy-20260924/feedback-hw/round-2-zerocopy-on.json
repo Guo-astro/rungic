@@ -1,0 +1,120 @@
+{
+ "trace": "/home/kevinzhow/github/range-dev/.work/diag/moto-20260924-030058-kwin-pipeline-2.pftrace",
+ "window_s": 8.5,
+ "pids": {
+  "kwin": [
+   8488
+  ],
+  "plasmashell": [
+   8635
+  ],
+  "apk": [
+   8160
+  ],
+  "surfaceflinger": [
+   11550
+  ]
+ },
+ "host_queue": {
+  "buffers": 0,
+  "per_s": 0.0,
+  "interval_ms": {
+   "n": 0
+  },
+  "queueBuffer_ms": {
+   "n": 0
+  }
+ },
+ "sf_display": {
+  "frames": 308,
+  "per_s": 36.24,
+  "interval_ms": {
+   "n": 307,
+   "mean": 26.861,
+   "p50": 8.41,
+   "p95": 50.142,
+   "p99": 509.637,
+   "max": 534.802
+  },
+  "jank_types": {
+   "None": 308
+  }
+ },
+ "kwin": {
+  "Import": {
+   "n": 123,
+   "mean": 0.113,
+   "p50": 0.105,
+   "p95": 0.167,
+   "p99": 0.429,
+   "max": 0.521
+  },
+  "Paint": {
+   "n": 123,
+   "mean": 3.786,
+   "p50": 3.74,
+   "p95": 5.412,
+   "p99": 7.318,
+   "max": 10.786
+  },
+  "batched_print_events": 0
+ },
+ "cpu": {
+  "kwin": {
+   "ms": 1131.0,
+   "core_pct": 13.3
+  },
+  "plasmashell": {
+   "ms": 1567.6,
+   "core_pct": 18.4
+  },
+  "apk": {
+   "ms": 1569.3,
+   "core_pct": 18.5
+  },
+  "surfaceflinger": {
+   "ms": 2062.0,
+   "core_pct": 24.3
+  }
+ },
+ "gpu_freq_mhz_seconds": {
+  "295": 6.655,
+  "345": 1.845
+ },
+ "gpu": {
+  "busy_pct": 11.4,
+  "per_process": {
+   "/usr/bin/plasmashell[8635]": {
+    "n": 268,
+    "mean": 4.935,
+    "p50": 1.957,
+    "p95": 9.55,
+    "p99": 9.765,
+    "max": 11.77,
+    "total_ms": 1322.66
+   },
+   "/usr/bin/kwin_wayland[8488]": {
+    "n": 253,
+    "mean": 2.856,
+    "p50": 0.019,
+    "p95": 8.513,
+    "p99": 13.065,
+    "max": 14.67,
+    "total_ms": 722.45
+   },
+   "com.android.systemui[649]": {
+    "n": 56,
+    "mean": 0.151,
+    "p50": 0.074,
+    "p95": 0.376,
+    "p99": 0.403,
+    "max": 0.421,
+    "total_ms": 8.48
+   }
+  }
+ },
+ "thermal_before": 0,
+ "zerocopy": "on",
+ "host_native_stats": "(enabled=true available=true frames=1333 acquire_fences=1330 feedback_hw=385 feedback_latch=72 feedback_timeout=0 feedback_pending=0 feedback_implausible=0 fallback=116 last_fallback=not a single full-surface dma-buf in_flight=2 released=1331)",
+ "thermal_after": 0
+}

@@ -1,0 +1,132 @@
+{
+ "trace": "/home/kevinzhow/github/range-dev/.work/diag/moto-20260924-013628-kwin-pipeline-5.pftrace",
+ "window_s": 8.5,
+ "pids": {
+  "kwin": [
+   24680
+  ],
+  "plasmashell": [
+   24766
+  ],
+  "apk": [
+   24425
+  ],
+  "surfaceflinger": [
+   1747
+  ]
+ },
+ "host_queue": {
+  "buffers": 0,
+  "per_s": 0.0,
+  "interval_ms": {
+   "n": 0
+  },
+  "queueBuffer_ms": {
+   "n": 0
+  }
+ },
+ "sf_display": {
+  "frames": 360,
+  "per_s": 42.35,
+  "interval_ms": {
+   "n": 359,
+   "mean": 22.943,
+   "p50": 8.363,
+   "p95": 16.741,
+   "p99": 501.218,
+   "max": 517.905
+  },
+  "jank_types": {
+   "None": 360
+  }
+ },
+ "kwin": {
+  "GpuWait": {
+   "n": 340,
+   "mean": 4.929,
+   "p50": 4.276,
+   "p95": 9.478,
+   "p99": 15.072,
+   "max": 16.383
+  },
+  "Import": {
+   "n": 340,
+   "mean": 0.049,
+   "p50": 0.046,
+   "p95": 0.079,
+   "p99": 0.131,
+   "max": 0.203
+  },
+  "Paint": {
+   "n": 340,
+   "mean": 7.361,
+   "p50": 6.917,
+   "p95": 12.582,
+   "p99": 16.771,
+   "max": 18.624
+  },
+  "batched_print_events": 0
+ },
+ "cpu": {
+  "kwin": {
+   "ms": 1608.4,
+   "core_pct": 18.9
+  },
+  "plasmashell": {
+   "ms": 2803.2,
+   "core_pct": 33.0
+  },
+  "apk": {
+   "ms": 1310.1,
+   "core_pct": 15.4
+  },
+  "surfaceflinger": {
+   "ms": 2152.0,
+   "core_pct": 25.3
+  }
+ },
+ "gpu_freq_mhz_seconds": {
+  "345": 3.485,
+  "500": 0.125,
+  "600": 0.589,
+  "650": 0.686,
+  "734": 0.045,
+  "816": 3.571
+ },
+ "gpu": {
+  "busy_pct": 11.03,
+  "per_process": {
+   "/usr/bin/plasmashell[24766]": {
+    "n": 646,
+    "mean": 2.767,
+    "p50": 3.637,
+    "p95": 7.194,
+    "p99": 7.889,
+    "max": 8.914,
+    "total_ms": 1787.3
+   },
+   "/usr/bin/kwin_wayland[24680]": {
+    "n": 1191,
+    "mean": 0.893,
+    "p50": 0.008,
+    "p95": 3.429,
+    "p99": 3.971,
+    "max": 7.062,
+    "total_ms": 1064.08
+   },
+   "com.android.systemui[3188]": {
+    "n": 27,
+    "mean": 0.213,
+    "p50": 0.229,
+    "p95": 0.327,
+    "p99": 0.342,
+    "max": 0.342,
+    "total_ms": 5.74
+   }
+  }
+ },
+ "thermal_before": 0,
+ "zerocopy": "on",
+ "host_native_stats": "(enabled=true available=true frames=2904 fallback=1906 last_fallback=disabled in_flight=1 released=2903)",
+ "thermal_after": 0
+}

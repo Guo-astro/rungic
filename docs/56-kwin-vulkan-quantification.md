@@ -117,3 +117,5 @@ uv run --script tools/compbench_run.py .work/refs/NEW/l1 --variant gles:fence --
 ```
 
 原型需先在容器内构建并安装为`/usr/local/bin/moto-compbench`（`plasma/bench/compbench/build.sh`）。
+
+后续：第1、5项（宿主零拷贝与fence同步）已实施，KWin每帧阻塞约降70%，见[57篇](57-zero-copy-explicit-sync.md)。

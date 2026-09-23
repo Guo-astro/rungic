@@ -1,0 +1,112 @@
+{
+ "trace": "/home/kevinzhow/github/range-dev/.work/diag/moto-20260924-025957-kwin-pipeline-1.pftrace",
+ "window_s": 8.5,
+ "pids": {
+  "kwin": [
+   8488
+  ],
+  "plasmashell": [
+   8635
+  ],
+  "apk": [
+   8160
+  ],
+  "surfaceflinger": [
+   11550
+  ]
+ },
+ "host_queue": {
+  "buffers": 0,
+  "per_s": 0.0,
+  "interval_ms": {
+   "n": 0
+  },
+  "queueBuffer_ms": {
+   "n": 0
+  }
+ },
+ "sf_display": {
+  "frames": 257,
+  "per_s": 30.24,
+  "interval_ms": {
+   "n": 256,
+   "mean": 31.929,
+   "p50": 11.155,
+   "p95": 55.698,
+   "p99": 501.324,
+   "max": 576.519
+  },
+  "jank_types": {
+   "None": 253,
+   "Prediction Error": 4
+  }
+ },
+ "kwin": {
+  "Import": {
+   "n": 106,
+   "mean": 0.111,
+   "p50": 0.1,
+   "p95": 0.191,
+   "p99": 0.371,
+   "max": 0.454
+  },
+  "Paint": {
+   "n": 106,
+   "mean": 3.805,
+   "p50": 3.708,
+   "p95": 5.628,
+   "p99": 7.3,
+   "max": 8.52
+  },
+  "batched_print_events": 0
+ },
+ "cpu": {
+  "kwin": {
+   "ms": 1020.4,
+   "core_pct": 12.0
+  },
+  "plasmashell": {
+   "ms": 1399.9,
+   "core_pct": 16.5
+  },
+  "apk": {
+   "ms": 1435.4,
+   "core_pct": 16.9
+  },
+  "surfaceflinger": {
+   "ms": 1910.5,
+   "core_pct": 22.5
+  }
+ },
+ "gpu_freq_mhz_seconds": {
+  "295": 6.181,
+  "345": 2.319
+ },
+ "gpu": {
+  "busy_pct": 10.26,
+  "per_process": {
+   "/usr/bin/plasmashell[8635]": {
+    "n": 231,
+    "mean": 4.869,
+    "p50": 1.677,
+    "p95": 9.539,
+    "p99": 9.715,
+    "max": 9.738,
+    "total_ms": 1124.85
+   },
+   "/usr/bin/kwin_wayland[8488]": {
+    "n": 212,
+    "mean": 2.894,
+    "p50": 2.842,
+    "p95": 6.766,
+    "p99": 12.524,
+    "max": 13.111,
+    "total_ms": 613.56
+   }
+  }
+ },
+ "thermal_before": 0,
+ "zerocopy": "on",
+ "host_native_stats": "(enabled=true available=true frames=627 acquire_fences=624 feedback_hw=188 feedback_latch=33 feedback_timeout=0 feedback_pending=0 feedback_implausible=0 fallback=116 last_fallback=not a single full-surface dma-buf in_flight=1 released=626)",
+ "thermal_after": 0
+}

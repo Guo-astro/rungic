@@ -1,0 +1,124 @@
+{
+ "trace": "/home/kevinzhow/github/range-dev/.work/diag/moto-20260924-013520-kwin-pipeline-4.pftrace",
+ "window_s": 8.5,
+ "pids": {
+  "kwin": [
+   24680
+  ],
+  "plasmashell": [
+   24766
+  ],
+  "apk": [
+   24425
+  ],
+  "surfaceflinger": [
+   1747
+  ]
+ },
+ "host_queue": {
+  "buffers": 0,
+  "per_s": 0.0,
+  "interval_ms": {
+   "n": 0
+  },
+  "queueBuffer_ms": {
+   "n": 0
+  }
+ },
+ "sf_display": {
+  "frames": 328,
+  "per_s": 38.59,
+  "interval_ms": {
+   "n": 327,
+   "mean": 24.728,
+   "p50": 8.367,
+   "p95": 16.767,
+   "p99": 501.224,
+   "max": 568.024
+  },
+  "jank_types": {
+   "None": 327,
+   "Prediction Error": 1
+  }
+ },
+ "kwin": {
+  "GpuWait": {
+   "n": 308,
+   "mean": 5.489,
+   "p50": 4.76,
+   "p95": 10.938,
+   "p99": 14.557,
+   "max": 16.975
+  },
+  "Import": {
+   "n": 308,
+   "mean": 0.058,
+   "p50": 0.05,
+   "p95": 0.096,
+   "p99": 0.268,
+   "max": 0.424
+  },
+  "Paint": {
+   "n": 308,
+   "mean": 8.092,
+   "p50": 7.358,
+   "p95": 13.861,
+   "p99": 17.336,
+   "max": 19.235
+  },
+  "batched_print_events": 0
+ },
+ "cpu": {
+  "kwin": {
+   "ms": 1568.2,
+   "core_pct": 18.4
+  },
+  "plasmashell": {
+   "ms": 2686.4,
+   "core_pct": 31.6
+  },
+  "apk": {
+   "ms": 1303.6,
+   "core_pct": 15.3
+  },
+  "surfaceflinger": {
+   "ms": 2033.9,
+   "core_pct": 23.9
+  }
+ },
+ "gpu_freq_mhz_seconds": {
+  "345": 3.975,
+  "500": 0.047,
+  "600": 1.069,
+  "650": 1.91,
+  "734": 0.333,
+  "816": 1.167
+ },
+ "gpu": {
+  "busy_pct": 10.96,
+  "per_process": {
+   "/usr/bin/plasmashell[24766]": {
+    "n": 596,
+    "mean": 3.023,
+    "p50": 3.699,
+    "p95": 7.366,
+    "p99": 7.732,
+    "max": 8.882,
+    "total_ms": 1801.95
+   },
+   "/usr/bin/kwin_wayland[24680]": {
+    "n": 1064,
+    "mean": 0.961,
+    "p50": 0.009,
+    "p95": 3.581,
+    "p99": 4.081,
+    "max": 5.688,
+    "total_ms": 1022.52
+   }
+  }
+ },
+ "thermal_before": 0,
+ "zerocopy": "on",
+ "host_native_stats": "(enabled=true available=true frames=2031 fallback=1906 last_fallback=disabled in_flight=1 released=2030)",
+ "thermal_after": 0
+}

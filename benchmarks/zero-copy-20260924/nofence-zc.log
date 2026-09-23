@@ -1,0 +1,40 @@
+round 1 on: paint p50=6.559 gpuwait p50=3.94 host/s=0.0
+round 2 on: paint p50=7.64 gpuwait p50=4.928 host/s=0.0
+round 3 on: paint p50=7.229 gpuwait p50=4.701 host/s=0.0
+{
+ "rounds": 3,
+ "plasmashell_rhi": "default",
+ "plasmashell_drivers": null,
+ "kwin_env": [
+  "MOTO_KWIN_EXPLICIT_SYNC=-1"
+ ],
+ "host_native_stats_last": "(enabled=true available=true frames=6415 acquire_fences=3148 fallback=3093 last_fallback=not a single full-surface dma-buf in_flight=2 released=6413)",
+ "kwin_paint_ms_p50": 7.229,
+ "kwin_paint_ms_p95": 13.657,
+ "kwin_gpuwait_ms_p50": 4.701,
+ "kwin_gpuwait_ms_p95": 10.673,
+ "kwin_import_ms_p50": 0.045,
+ "kwin_paints": 329,
+ "host_buffers_per_s": 0.0,
+ "host_interval_ms_p50": null,
+ "host_interval_ms_p95": null,
+ "host_queueBuffer_ms_p50": null,
+ "sf_interval_ms_p95": 16.743,
+ "cpu_core_pct": {
+  "kwin": 18.8,
+  "plasmashell": 32.8,
+  "apk": 15.7,
+  "surfaceflinger": 25.0
+ },
+ "gpu_busy_pct": 11.0,
+ "gpu_total_ms": {
+  "kwin_wayland": 1082.3,
+  "plasmashell": 1954.26,
+  "dev.moto.plasma": 0
+ },
+ "gpu_submission_ms_mean": {
+  "kwin_wayland": 0.98,
+  "plasmashell": 3.016,
+  "dev.moto.plasma": 0
+ }
+}

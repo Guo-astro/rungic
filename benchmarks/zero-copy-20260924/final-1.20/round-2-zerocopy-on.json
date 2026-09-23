@@ -1,0 +1,158 @@
+{
+ "trace": "/home/kevinzhow/github/range-dev/.work/diag/moto-20260924-031053-kwin-pipeline-2.pftrace",
+ "window_s": 8.5,
+ "pids": {
+  "kwin": [
+   19908
+  ],
+  "plasmashell": [
+   19990
+  ],
+  "apk": [
+   19607
+  ],
+  "surfaceflinger": [
+   11550
+  ]
+ },
+ "host_queue": {
+  "buffers": 1,
+  "per_s": 0.12,
+  "interval_ms": {
+   "n": 0
+  },
+  "queueBuffer_ms": {
+   "n": 1,
+   "mean": 0.625,
+   "p50": 0.625,
+   "p95": 0.625,
+   "p99": 0.625,
+   "max": 0.625
+  }
+ },
+ "sf_display": {
+  "frames": 466,
+  "per_s": 54.82,
+  "interval_ms": {
+   "n": 465,
+   "mean": 17.986,
+   "p50": 8.357,
+   "p95": 25.033,
+   "p99": 459.544,
+   "max": 568.119
+  },
+  "jank_types": {
+   "None": 464,
+   "SurfaceFlinger Scheduling": 2
+  }
+ },
+ "kwin": {
+  "Import": {
+   "n": 198,
+   "mean": 0.062,
+   "p50": 0.053,
+   "p95": 0.112,
+   "p99": 0.218,
+   "max": 0.268
+  },
+  "Paint": {
+   "n": 198,
+   "mean": 2.662,
+   "p50": 2.321,
+   "p95": 4.883,
+   "p99": 7.233,
+   "max": 8.94
+  },
+  "batched_print_events": 0
+ },
+ "cpu": {
+  "kwin": {
+   "ms": 950.5,
+   "core_pct": 11.2
+  },
+  "plasmashell": {
+   "ms": 1381.0,
+   "core_pct": 16.2
+  },
+  "apk": {
+   "ms": 1253.3,
+   "core_pct": 14.7
+  },
+  "surfaceflinger": {
+   "ms": 2711.7,
+   "core_pct": 31.9
+  }
+ },
+ "gpu_freq_mhz_seconds": {
+  "295": 1.144,
+  "345": 3.478,
+  "500": 2.399,
+  "600": 0.082,
+  "650": 0.02,
+  "734": 0.405,
+  "816": 0.972
+ },
+ "gpu": {
+  "busy_pct": 17.13,
+  "per_process": {
+   "com.android.systemui[649]": {
+    "n": 644,
+    "mean": 1.983,
+    "p50": 1.556,
+    "p95": 5.315,
+    "p99": 6.251,
+    "max": 6.681,
+    "total_ms": 1277.02
+   },
+   "/usr/bin/kwin_wayland[19908]": {
+    "n": 499,
+    "mean": 1.811,
+    "p50": 0.009,
+    "p95": 6.002,
+    "p99": 6.757,
+    "max": 7.24,
+    "total_ms": 903.58
+   },
+   "/usr/bin/plasmashell[19990]": {
+    "n": 239,
+    "mean": 3.296,
+    "p50": 3.528,
+    "p95": 5.477,
+    "p99": 7.558,
+    "max": 10.397,
+    "total_ms": 787.7
+   },
+   "/usr/local/libexec/moto-plasma-keyboard[19951]": {
+    "n": 2,
+    "mean": 2.495,
+    "p50": 2.482,
+    "p95": 2.508,
+    "p99": 2.508,
+    "max": 2.508,
+    "total_ms": 4.99
+   },
+   "/system/bin/surfaceflinger[11550]": {
+    "n": 34,
+    "mean": 0.072,
+    "p50": 0.068,
+    "p95": 0.107,
+    "p99": 0.225,
+    "max": 0.225,
+    "total_ms": 2.46
+   },
+   "dev.moto.plasma[19607]": {
+    "n": 1,
+    "mean": 0.885,
+    "p50": 0.885,
+    "p95": 0.885,
+    "p99": 0.885,
+    "max": 0.885,
+    "total_ms": 0.88
+   }
+  }
+ },
+ "thermal_before": 0,
+ "zerocopy": "on",
+ "host_native_stats": "(enabled=true available=true frames=2822 acquire_fences=2819 feedback_hw=0 feedback_latch=0 feedback_timeout=0 feedback_pending=0 feedback_implausible=0 fallback=124 last_fallback=not a single full-surface dma-buf in_flight=1 released=2821)",
+ "thermal_after": 0
+}

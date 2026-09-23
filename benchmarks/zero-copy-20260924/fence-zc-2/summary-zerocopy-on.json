@@ -1,0 +1,35 @@
+{
+ "rounds": 3,
+ "plasmashell_rhi": "default",
+ "plasmashell_drivers": null,
+ "kwin_env": [],
+ "host_native_stats_last": "(enabled=true available=true frames=9286 acquire_fences=5978 fallback=3217 last_fallback=not a single full-surface dma-buf in_flight=1 released=9285)",
+ "kwin_paint_ms_p50": 2.027,
+ "kwin_paint_ms_p95": 3.91,
+ "kwin_gpuwait_ms_p50": null,
+ "kwin_gpuwait_ms_p95": null,
+ "kwin_import_ms_p50": 0.048,
+ "kwin_paints": 370,
+ "host_buffers_per_s": 0.0,
+ "host_interval_ms_p50": null,
+ "host_interval_ms_p95": null,
+ "host_queueBuffer_ms_p50": null,
+ "sf_interval_ms_p95": 16.783,
+ "cpu_core_pct": {
+  "kwin": 18.6,
+  "plasmashell": 32.1,
+  "apk": 15.4,
+  "surfaceflinger": 25.3
+ },
+ "gpu_busy_pct": 10.9,
+ "gpu_total_ms": {
+  "kwin_wayland": 1205.34,
+  "plasmashell": 1944.7,
+  "dev.moto.plasma": 0
+ },
+ "gpu_submission_ms_mean": {
+  "kwin_wayland": 1.592,
+  "plasmashell": 2.603,
+  "dev.moto.plasma": 0
+ }
+}

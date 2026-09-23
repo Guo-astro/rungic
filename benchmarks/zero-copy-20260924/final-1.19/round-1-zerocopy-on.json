@@ -1,0 +1,115 @@
+{
+ "trace": "/home/kevinzhow/github/range-dev/.work/diag/moto-20260924-030425-kwin-pipeline-1.pftrace",
+ "window_s": 8.5,
+ "pids": {
+  "kwin": [
+   14053
+  ],
+  "plasmashell": [
+   14135
+  ],
+  "apk": [
+   13838
+  ],
+  "surfaceflinger": [
+   11550
+  ]
+ },
+ "host_queue": {
+  "buffers": 0,
+  "per_s": 0.0,
+  "interval_ms": {
+   "n": 0
+  },
+  "queueBuffer_ms": {
+   "n": 0
+  }
+ },
+ "sf_display": {
+  "frames": 338,
+  "per_s": 39.76,
+  "interval_ms": {
+   "n": 337,
+   "mean": 24.619,
+   "p50": 8.363,
+   "p95": 25.062,
+   "p99": 509.691,
+   "max": 559.805
+  },
+  "jank_types": {
+   "None": 338
+  }
+ },
+ "kwin": {
+  "Import": {
+   "n": 348,
+   "mean": 0.055,
+   "p50": 0.047,
+   "p95": 0.093,
+   "p99": 0.149,
+   "max": 0.264
+  },
+  "Paint": {
+   "n": 348,
+   "mean": 2.298,
+   "p50": 1.996,
+   "p95": 3.968,
+   "p99": 6.554,
+   "max": 9.465
+  },
+  "batched_print_events": 0
+ },
+ "cpu": {
+  "kwin": {
+   "ms": 1557.7,
+   "core_pct": 18.3
+  },
+  "plasmashell": {
+   "ms": 2502.3,
+   "core_pct": 29.4
+  },
+  "apk": {
+   "ms": 1545.5,
+   "core_pct": 18.2
+  },
+  "surfaceflinger": {
+   "ms": 2095.6,
+   "core_pct": 24.7
+  }
+ },
+ "gpu_freq_mhz_seconds": {
+  "345": 3.87,
+  "500": 0.051,
+  "600": 0.353,
+  "650": 0.153,
+  "734": 1.889,
+  "816": 2.185
+ },
+ "gpu": {
+  "busy_pct": 11.63,
+  "per_process": {
+   "/usr/bin/plasmashell[14135]": {
+    "n": 705,
+    "mean": 2.55,
+    "p50": 3.584,
+    "p95": 6.032,
+    "p99": 8.342,
+    "max": 11.382,
+    "total_ms": 1797.46
+   },
+   "/usr/bin/kwin_wayland[14053]": {
+    "n": 739,
+    "mean": 1.534,
+    "p50": 0.013,
+    "p95": 3.633,
+    "p99": 5.381,
+    "max": 6.487,
+    "total_ms": 1133.48
+   }
+  }
+ },
+ "thermal_before": 0,
+ "zerocopy": "on",
+ "host_native_stats": "(enabled=true available=true frames=956 acquire_fences=952 feedback_hw=0 feedback_latch=0 feedback_timeout=0 feedback_pending=0 feedback_implausible=0 fallback=128 last_fallback=not a single full-surface dma-buf in_flight=1 released=955)",
+ "thermal_after": 0
+}

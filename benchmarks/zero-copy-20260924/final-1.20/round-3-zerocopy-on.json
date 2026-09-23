@@ -1,0 +1,116 @@
+{
+ "trace": "/home/kevinzhow/github/range-dev/.work/diag/moto-20260924-031216-kwin-pipeline-3.pftrace",
+ "window_s": 8.5,
+ "pids": {
+  "kwin": [
+   19908
+  ],
+  "plasmashell": [
+   19990
+  ],
+  "apk": [
+   19607
+  ],
+  "surfaceflinger": [
+   11550
+  ]
+ },
+ "host_queue": {
+  "buffers": 0,
+  "per_s": 0.0,
+  "interval_ms": {
+   "n": 0
+  },
+  "queueBuffer_ms": {
+   "n": 0
+  }
+ },
+ "sf_display": {
+  "frames": 400,
+  "per_s": 47.06,
+  "interval_ms": {
+   "n": 399,
+   "mean": 20.018,
+   "p50": 8.367,
+   "p95": 16.75,
+   "p99": 401.086,
+   "max": 543.019
+  },
+  "jank_types": {
+   "None": 399,
+   "Prediction Error": 1
+  }
+ },
+ "kwin": {
+  "Import": {
+   "n": 423,
+   "mean": 0.055,
+   "p50": 0.048,
+   "p95": 0.096,
+   "p99": 0.124,
+   "max": 0.19
+  },
+  "Paint": {
+   "n": 423,
+   "mean": 2.263,
+   "p50": 2.004,
+   "p95": 3.812,
+   "p99": 5.472,
+   "max": 9.122
+  },
+  "batched_print_events": 0
+ },
+ "cpu": {
+  "kwin": {
+   "ms": 1906.4,
+   "core_pct": 22.4
+  },
+  "plasmashell": {
+   "ms": 3660.5,
+   "core_pct": 43.1
+  },
+  "apk": {
+   "ms": 1495.7,
+   "core_pct": 17.6
+  },
+  "surfaceflinger": {
+   "ms": 2213.9,
+   "core_pct": 26.0
+  }
+ },
+ "gpu_freq_mhz_seconds": {
+  "345": 2.513,
+  "500": 0.684,
+  "600": 0.168,
+  "650": 1.42,
+  "734": 0.927,
+  "816": 2.788
+ },
+ "gpu": {
+  "busy_pct": 11.64,
+  "per_process": {
+   "/usr/bin/plasmashell[19990]": {
+    "n": 826,
+    "mean": 2.627,
+    "p50": 3.584,
+    "p95": 5.437,
+    "p99": 7.935,
+    "max": 9.301,
+    "total_ms": 2170.16
+   },
+   "/usr/bin/kwin_wayland[19908]": {
+    "n": 1150,
+    "mean": 1.215,
+    "p50": 0.007,
+    "p95": 3.697,
+    "p99": 4.325,
+    "max": 6.393,
+    "total_ms": 1397.6
+   }
+  }
+ },
+ "thermal_before": 0,
+ "zerocopy": "on",
+ "host_native_stats": "(enabled=true available=true frames=4915 acquire_fences=4912 feedback_hw=0 feedback_latch=0 feedback_timeout=0 feedback_pending=0 feedback_implausible=0 fallback=124 last_fallback=not a single full-surface dma-buf in_flight=1 released=4914)",
+ "thermal_after": 0
+}

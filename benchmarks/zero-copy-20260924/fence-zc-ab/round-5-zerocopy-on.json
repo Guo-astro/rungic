@@ -1,0 +1,115 @@
+{
+ "trace": "/home/kevinzhow/github/range-dev/.work/diag/moto-20260924-015730-kwin-pipeline-5.pftrace",
+ "window_s": 8.5,
+ "pids": {
+  "kwin": [
+   20865
+  ],
+  "plasmashell": [
+   21002
+  ],
+  "apk": [
+   9979
+  ],
+  "surfaceflinger": [
+   1747
+  ]
+ },
+ "host_queue": {
+  "buffers": 0,
+  "per_s": 0.0,
+  "interval_ms": {
+   "n": 0
+  },
+  "queueBuffer_ms": {
+   "n": 0
+  }
+ },
+ "sf_display": {
+  "frames": 366,
+  "per_s": 43.06,
+  "interval_ms": {
+   "n": 365,
+   "mean": 21.856,
+   "p50": 8.361,
+   "p95": 16.809,
+   "p99": 426.051,
+   "max": 568.018
+  },
+  "jank_types": {
+   "None": 366
+  }
+ },
+ "kwin": {
+  "Import": {
+   "n": 362,
+   "mean": 0.06,
+   "p50": 0.051,
+   "p95": 0.103,
+   "p99": 0.148,
+   "max": 0.711
+  },
+  "Paint": {
+   "n": 362,
+   "mean": 2.215,
+   "p50": 2.109,
+   "p95": 3.328,
+   "p99": 4.556,
+   "max": 4.827
+  },
+  "batched_print_events": 0
+ },
+ "cpu": {
+  "kwin": {
+   "ms": 1659.3,
+   "core_pct": 19.5
+  },
+  "plasmashell": {
+   "ms": 3157.7,
+   "core_pct": 37.1
+  },
+  "apk": {
+   "ms": 1387.5,
+   "core_pct": 16.3
+  },
+  "surfaceflinger": {
+   "ms": 2145.4,
+   "core_pct": 25.2
+  }
+ },
+ "gpu_freq_mhz_seconds": {
+  "345": 3.399,
+  "500": 0.246,
+  "600": 0.739,
+  "650": 0.43,
+  "734": 0.601,
+  "816": 3.085
+ },
+ "gpu": {
+  "busy_pct": 10.98,
+  "per_process": {
+   "/usr/bin/plasmashell[21002]": {
+    "n": 721,
+    "mean": 2.58,
+    "p50": 3.626,
+    "p95": 5.479,
+    "p99": 8.051,
+    "max": 9.227,
+    "total_ms": 1859.94
+   },
+   "/usr/bin/kwin_wayland[20865]": {
+    "n": 934,
+    "mean": 1.249,
+    "p50": 0.007,
+    "p95": 3.555,
+    "p99": 4.897,
+    "max": 6.406,
+    "total_ms": 1166.52
+   }
+  }
+ },
+ "thermal_before": 0,
+ "zerocopy": "on",
+ "host_native_stats": "(enabled=true available=true frames=3683 acquire_fences=3132 fallback=2056 last_fallback=disabled in_flight=1 released=3682)",
+ "thermal_after": 0
+}

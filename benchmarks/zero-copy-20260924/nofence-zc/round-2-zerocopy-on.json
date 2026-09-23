@@ -1,0 +1,124 @@
+{
+ "trace": "/home/kevinzhow/github/range-dev/.work/diag/moto-20260924-020124-kwin-pipeline-2.pftrace",
+ "window_s": 8.5,
+ "pids": {
+  "kwin": [
+   30764
+  ],
+  "plasmashell": [
+   30846
+  ],
+  "apk": [
+   9979
+  ],
+  "surfaceflinger": [
+   1747
+  ]
+ },
+ "host_queue": {
+  "buffers": 0,
+  "per_s": 0.0,
+  "interval_ms": {
+   "n": 0
+  },
+  "queueBuffer_ms": {
+   "n": 0
+  }
+ },
+ "sf_display": {
+  "frames": 360,
+  "per_s": 42.35,
+  "interval_ms": {
+   "n": 359,
+   "mean": 23.268,
+   "p50": 8.365,
+   "p95": 16.738,
+   "p99": 501.176,
+   "max": 501.231
+  },
+  "jank_types": {
+   "None": 359,
+   "Prediction Error": 1
+  }
+ },
+ "kwin": {
+  "GpuWait": {
+   "n": 309,
+   "mean": 5.948,
+   "p50": 4.928,
+   "p95": 13.846,
+   "p99": 15.918,
+   "max": 17.172
+  },
+  "Import": {
+   "n": 309,
+   "mean": 0.051,
+   "p50": 0.046,
+   "p95": 0.081,
+   "p99": 0.196,
+   "max": 0.328
+  },
+  "Paint": {
+   "n": 309,
+   "mean": 8.615,
+   "p50": 7.64,
+   "p95": 16.632,
+   "p99": 18.699,
+   "max": 19.578
+  },
+  "batched_print_events": 0
+ },
+ "cpu": {
+  "kwin": {
+   "ms": 1598.0,
+   "core_pct": 18.8
+  },
+  "plasmashell": {
+   "ms": 2789.1,
+   "core_pct": 32.8
+  },
+  "apk": {
+   "ms": 1367.5,
+   "core_pct": 16.1
+  },
+  "surfaceflinger": {
+   "ms": 2135.0,
+   "core_pct": 25.1
+  }
+ },
+ "gpu_freq_mhz_seconds": {
+  "345": 3.966,
+  "500": 0.256,
+  "600": 1.984,
+  "650": 0.925,
+  "734": 0.695,
+  "816": 0.674
+ },
+ "gpu": {
+  "busy_pct": 10.87,
+  "per_process": {
+   "/usr/bin/plasmashell[30846]": {
+    "n": 610,
+    "mean": 3.227,
+    "p50": 3.677,
+    "p95": 7.614,
+    "p99": 7.916,
+    "max": 9.304,
+    "total_ms": 1968.67
+   },
+   "/usr/bin/kwin_wayland[30764]": {
+    "n": 1114,
+    "mean": 0.972,
+    "p50": 0.011,
+    "p95": 3.735,
+    "p99": 4.73,
+    "max": 8.421,
+    "total_ms": 1082.3
+   }
+  }
+ },
+ "thermal_before": 0,
+ "zerocopy": "on",
+ "host_native_stats": "(enabled=true available=true frames=5501 acquire_fences=3148 fallback=3093 last_fallback=not a single full-surface dma-buf in_flight=1 released=5500)",
+ "thermal_after": 0
+}

@@ -1,0 +1,115 @@
+{
+ "trace": "/home/kevinzhow/github/range-dev/.work/diag/moto-20260924-030533-kwin-pipeline-2.pftrace",
+ "window_s": 8.5,
+ "pids": {
+  "kwin": [
+   14053
+  ],
+  "plasmashell": [
+   14135
+  ],
+  "apk": [
+   13838
+  ],
+  "surfaceflinger": [
+   11550
+  ]
+ },
+ "host_queue": {
+  "buffers": 0,
+  "per_s": 0.0,
+  "interval_ms": {
+   "n": 0
+  },
+  "queueBuffer_ms": {
+   "n": 0
+  }
+ },
+ "sf_display": {
+  "frames": 394,
+  "per_s": 46.35,
+  "interval_ms": {
+   "n": 393,
+   "mean": 20.175,
+   "p50": 8.365,
+   "p95": 16.762,
+   "p99": 375.945,
+   "max": 509.724
+  },
+  "jank_types": {
+   "None": 394
+  }
+ },
+ "kwin": {
+  "Import": {
+   "n": 416,
+   "mean": 0.059,
+   "p50": 0.047,
+   "p95": 0.101,
+   "p99": 0.256,
+   "max": 0.409
+  },
+  "Paint": {
+   "n": 416,
+   "mean": 2.243,
+   "p50": 2.005,
+   "p95": 3.712,
+   "p99": 5.739,
+   "max": 9.843
+  },
+  "batched_print_events": 0
+ },
+ "cpu": {
+  "kwin": {
+   "ms": 1849.4,
+   "core_pct": 21.8
+  },
+  "plasmashell": {
+   "ms": 2994.1,
+   "core_pct": 35.2
+  },
+  "apk": {
+   "ms": 1634.7,
+   "core_pct": 19.2
+  },
+  "surfaceflinger": {
+   "ms": 2236.8,
+   "core_pct": 26.3
+  }
+ },
+ "gpu_freq_mhz_seconds": {
+  "345": 2.746,
+  "500": 0.06,
+  "600": 0.099,
+  "650": 0.767,
+  "734": 0.557,
+  "816": 4.272
+ },
+ "gpu": {
+  "busy_pct": 11.16,
+  "per_process": {
+   "/usr/bin/plasmashell[14135]": {
+    "n": 846,
+    "mean": 2.417,
+    "p50": 3.521,
+    "p95": 4.952,
+    "p99": 8.355,
+    "max": 9.294,
+    "total_ms": 2045.05
+   },
+   "/usr/bin/kwin_wayland[14053]": {
+    "n": 922,
+    "mean": 1.442,
+    "p50": 0.008,
+    "p95": 3.567,
+    "p99": 4.929,
+    "max": 6.854,
+    "total_ms": 1329.55
+   }
+  }
+ },
+ "thermal_before": 0,
+ "zerocopy": "on",
+ "host_native_stats": "(enabled=true available=true frames=1923 acquire_fences=1919 feedback_hw=0 feedback_latch=0 feedback_timeout=0 feedback_pending=0 feedback_implausible=0 fallback=128 last_fallback=not a single full-surface dma-buf in_flight=1 released=1922)",
+ "thermal_after": 0
+}
