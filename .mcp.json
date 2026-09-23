@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "moto": {
+      "command": "uv",
+      "args": ["run", "--quiet", "--script", "tools/moto_agent_mcp.py"],
+      "env": {"PYTHONPYCACHEPREFIX": ".work/cache/python"}
+    }
+  }
+}
