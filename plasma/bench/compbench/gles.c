@@ -86,7 +86,7 @@ static void init(void) {
         struct output_buffer *b = &out_buf[i];
         struct gles_target *t = calloc(1, sizeof *t);
         const EGLint image_attrs[] = {
-            EGL_WIDTH, opt.width, EGL_HEIGHT, opt.height, EGL_LINUX_DRM_FOURCC_EXT, 0x34325258,
+            EGL_WIDTH, opt.width, EGL_HEIGHT, opt.height, EGL_LINUX_DRM_FOURCC_EXT, 0x34324258,  // XB24
             EGL_DMA_BUF_PLANE0_FD_EXT, b->fd, EGL_DMA_BUF_PLANE0_OFFSET_EXT, 0,
             EGL_DMA_BUF_PLANE0_PITCH_EXT, (EGLint)b->stride,
             EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT, 0, EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT, 0, EGL_NONE};

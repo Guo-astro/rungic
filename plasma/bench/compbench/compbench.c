@@ -2,7 +2,7 @@
 // compbench: a minimal compositor-style renderer on KWin's exact Android output path.
 //
 // Like KWin's Wayland backend it connects to the Android host's Wayland server,
-// leases AHardwareBuffers from the host allocator (linear XRGB8888), renders a
+// leases AHardwareBuffers from the host allocator (linear XBGR8888), renders a
 // frame into them and commits them through linux-dmabuf. Only the renderer
 // (OpenGL ES through EGL dma-buf import, or Vulkan through dma-buf/modifier
 // import on Turnip) and the CPU-side completion wait differ between runs, so
@@ -35,7 +35,7 @@
 
 #include "compbench.h"
 
-#define FOURCC_XR24 0x34325258u
+#define FOURCC_XB24 0x34324258u  // R,G,B,X bytes = AHB R8G8B8A8 (host allocator)
 #define MAX_FRAMES 20000
 
 struct options opt = {
@@ -175,11 +175,11 @@ static void allocate_buffers(void) {
     const char *socket = getenv("MOTO_GPU_ALLOCATOR") ? getenv("MOTO_GPU_ALLOCATOR") : "/mnt/android-wayland/moto-gpu-alloc";
     for (int i = 0; i < opt.buffers; i++) {
         struct output_buffer *b = &out_buf[i];
-        if (!moto_gpu_allocate(socket, opt.width, opt.height, FOURCC_XR24, &b->lease, &b->fd, &b->stride))
+        if (!moto_gpu_allocate(socket, opt.width, opt.height, FOURCC_XB24, &b->lease, &b->fd, &b->stride))
             die("host allocator refused an AHardwareBuffer lease");
         struct zwp_linux_buffer_params_v1 *params = zwp_linux_dmabuf_v1_create_params(dmabuf);
         zwp_linux_buffer_params_v1_add(params, b->fd, 0, 0, b->stride, 0, 0);  // DRM_FORMAT_MOD_LINEAR
-        b->wl = zwp_linux_buffer_params_v1_create_immed(params, opt.width, opt.height, FOURCC_XR24, 0);
+        b->wl = zwp_linux_buffer_params_v1_create_immed(params, opt.width, opt.height, FOURCC_XB24, 0);
         zwp_linux_buffer_params_v1_destroy(params);
         wl_buffer_add_listener(b->wl, &buffer_listener, b);
     }

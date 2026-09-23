@@ -85,7 +85,7 @@ static void import_target(struct output_buffer *b) {
                                                 VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT};
     VkImageCreateInfo image = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .pNext = &external, .imageType = VK_IMAGE_TYPE_2D,
-        .format = VK_FORMAT_B8G8R8A8_UNORM,  // DRM XRGB8888 is B,G,R,X in memory
+        .format = VK_FORMAT_R8G8B8A8_UNORM,  // DRM XBGR8888 is R,G,B,X in memory
         .extent = {opt.width, opt.height, 1}, .mipLevels = 1, .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_1_BIT,
         .tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT, .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE, .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED};
@@ -104,7 +104,7 @@ static void import_target(struct output_buffer *b) {
     CHECK(vkAllocateMemory(dev, &alloc, NULL, &t->memory));
     CHECK(vkBindImageMemory(dev, t->image, t->memory, 0));
     VkImageViewCreateInfo view = {VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, NULL, 0, t->image, VK_IMAGE_VIEW_TYPE_2D,
-                                  VK_FORMAT_B8G8R8A8_UNORM, {0}, {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+                                  VK_FORMAT_R8G8B8A8_UNORM, {0}, {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
     CHECK(vkCreateImageView(dev, &view, NULL, &t->view));
     VkCommandBufferAllocateInfo cmd = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, NULL, pool,
                                        VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1};
@@ -198,7 +198,7 @@ static VkPipeline pipeline(bool with_blend) {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO, .attachmentCount = 1, .pAttachments = &attachment};
     VkDynamicState states[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
     VkPipelineDynamicStateCreateInfo dynamic = {VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO, NULL, 0, 2, states};
-    VkFormat format = VK_FORMAT_B8G8R8A8_UNORM;
+    VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
     VkPipelineRenderingCreateInfo rendering = {VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO, NULL, 0, 1, &format};
     VkGraphicsPipelineCreateInfo info = {
         .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .pNext = &rendering, .stageCount = 2,
