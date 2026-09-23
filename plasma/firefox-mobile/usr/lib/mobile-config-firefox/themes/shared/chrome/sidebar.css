@@ -1,0 +1,18 @@
+/* Copyright 2026 Peter Mack *
+ * SPDX-License-Identifier: MPL-2.0 */
+
+/* Optionally show close button on all tabs */
+@media -moz-pref("mcf.tabs.alwaysShowCloseButton") {
+    .tab-close-button, .close-icon, #tabbrowser-tabs[closebuttons="activetab"][orient="horizontal"] &:not([selected]) {
+        display: block !important;
+    }
+}
+
+/* Apply this customization only on smaller screens in portrait mode */
+@media (orientation: portrait) and (max-width: 720px) {
+
+    /* Hide sidebar when vertical tabs are enabled */
+    #sidebar-main:not([sidebar-launcher-expanded]) {
+        display: none !important;
+    }
+}

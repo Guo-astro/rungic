@@ -28,6 +28,7 @@ Motorola moto g100s（XT2537-4 / Adreno710）上的Android与Linux桌面适配�
 - 媒体和显示尚有剩余验收项，以[48篇](docs/48-plasma-media-pipelines.md)、[50篇](docs/50-plasma-display-settings.md)为准，不把安装成功等同于完整验收。
 - 设备管理：`python3 tools/moto_plasma.py status`。开发环境：`source tools/work-env.sh`。APK构建：`bash plasma/build-apk.sh`，产物写入`.work/`。
 - 图形和后端架构见[40篇](docs/40-plasma-mobile-integration.md)及[共享桥说明](shared/README.md)。全新机器构建仍需准备SDK/NDK及部分依赖。
+- 远程系统功能开发的源码范围、已补漏项及构建缺口见[53篇](docs/53-remote-system-development.md)。
 
 ## 文档索引
 
