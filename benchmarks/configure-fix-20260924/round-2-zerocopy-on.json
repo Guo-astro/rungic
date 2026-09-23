@@ -1,0 +1,118 @@
+{
+ "trace": "/home/kevinzhow/github/range-dev/.work/diag/moto-20260924-062545-kwin-pipeline-2.pftrace",
+ "window_s": 8.5,
+ "pids": {
+  "kwin": [
+   24868
+  ],
+  "plasmashell": [
+   24956
+  ],
+  "apk": [
+   24608
+  ],
+  "surfaceflinger": [
+   11550
+  ]
+ },
+ "host_queue": {
+  "buffers": 0,
+  "per_s": 0.0,
+  "interval_ms": {
+   "n": 0
+  },
+  "queueBuffer_ms": {
+   "n": 0
+  }
+ },
+ "sf_display": {
+  "frames": 389,
+  "per_s": 45.76,
+  "interval_ms": {
+   "n": 388,
+   "mean": 18.239,
+   "p50": 8.366,
+   "p95": 16.726,
+   "p99": 33.464,
+   "max": 810.429
+  },
+  "jank_types": {
+   "None": 389
+  }
+ },
+ "kwin": {
+  "Import": {
+   "n": 405,
+   "mean": 0.062,
+   "p50": 0.055,
+   "p95": 0.106,
+   "p99": 0.188,
+   "max": 0.23
+  },
+  "Paint": {
+   "n": 405,
+   "mean": 2.601,
+   "p50": 2.449,
+   "p95": 3.805,
+   "p99": 5.189,
+   "max": 7.952
+  },
+  "batched_print_events": 0
+ },
+ "cpu": {
+  "kwin": {
+   "ms": 1764.0,
+   "core_pct": 20.8
+  },
+  "plasmashell": {
+   "ms": 2850.2,
+   "core_pct": 33.5
+  },
+  "apk": {
+   "ms": 1320.7,
+   "core_pct": 15.5
+  },
+  "surfaceflinger": {
+   "ms": 1965.5,
+   "core_pct": 23.1
+  }
+ },
+ "gpu_freq_mhz_seconds": {
+  "345": 2.627,
+  "500": 2.051,
+  "600": 1.41,
+  "650": 2.059,
+  "734": 0.075,
+  "816": 0.278
+ },
+ "gpu": {
+  "busy_pct": 11.84,
+  "bw_mbps": {
+   "19091000.qcom,bwmon-ddr": 1523.9
+  },
+  "per_process": {
+   "/usr/bin/plasmashell[24956]": {
+    "n": 811,
+    "mean": 3.028,
+    "p50": 3.547,
+    "p95": 6.468,
+    "p99": 8.291,
+    "max": 8.639,
+    "total_ms": 2455.48
+   },
+   "/usr/bin/kwin_wayland[24868]": {
+    "n": 879,
+    "mean": 0.856,
+    "p50": 0.012,
+    "p95": 2.17,
+    "p99": 2.753,
+    "max": 3.132,
+    "total_ms": 752.08
+   }
+  }
+ },
+ "thermal_before": 0,
+ "zerocopy": "on",
+ "host_native_stats": "(enabled=true available=true frames=8757 acquire_fences=8757 feedback_hw=0 feedback_latch=0 feedback_timeout=0 feedback_pending=0 feedback_implausible=0 fallback=1 last_fallback=window resized: parent frame first in_flight=1 released=8756) vsync_wanted=false parks=55",
+ "thermal_after": 0
+}

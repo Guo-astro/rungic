@@ -1,0 +1,130 @@
+{
+ "trace": "/home/kevinzhow/github/range-dev/.work/diag/moto-20260924-062431-kwin-pipeline-1.pftrace",
+ "window_s": 8.5,
+ "pids": {
+  "kwin": [
+   24868
+  ],
+  "plasmashell": [
+   24956
+  ],
+  "apk": [
+   24608
+  ],
+  "surfaceflinger": [
+   11550
+  ]
+ },
+ "host_queue": {
+  "buffers": 0,
+  "per_s": 0.0,
+  "interval_ms": {
+   "n": 0
+  },
+  "queueBuffer_ms": {
+   "n": 0
+  }
+ },
+ "sf_display": {
+  "frames": 386,
+  "per_s": 45.41,
+  "interval_ms": {
+   "n": 385,
+   "mean": 18.555,
+   "p50": 8.361,
+   "p95": 16.8,
+   "p99": 158.766,
+   "max": 860.562
+  },
+  "jank_types": {
+   "None": 384,
+   "Prediction Error": 1,
+   "Display HAL": 1
+  }
+ },
+ "kwin": {
+  "Import": {
+   "n": 375,
+   "mean": 0.064,
+   "p50": 0.055,
+   "p95": 0.106,
+   "p99": 0.139,
+   "max": 0.677
+  },
+  "Paint": {
+   "n": 375,
+   "mean": 2.587,
+   "p50": 2.36,
+   "p95": 3.998,
+   "p99": 4.947,
+   "max": 11.089
+  },
+  "batched_print_events": 0
+ },
+ "cpu": {
+  "kwin": {
+   "ms": 1598.9,
+   "core_pct": 18.8
+  },
+  "plasmashell": {
+   "ms": 2535.2,
+   "core_pct": 29.8
+  },
+  "apk": {
+   "ms": 1208.0,
+   "core_pct": 14.2
+  },
+  "surfaceflinger": {
+   "ms": 1999.9,
+   "core_pct": 23.5
+  }
+ },
+ "gpu_freq_mhz_seconds": {
+  "295": 0.193,
+  "345": 3.313,
+  "500": 0.62,
+  "600": 1.312,
+  "650": 1.507,
+  "734": 0.946,
+  "816": 0.608
+ },
+ "gpu": {
+  "busy_pct": 10.94,
+  "bw_mbps": {
+   "19091000.qcom,bwmon-ddr": 1724.1
+  },
+  "per_process": {
+   "/usr/bin/plasmashell[24956]": {
+    "n": 766,
+    "mean": 2.924,
+    "p50": 1.954,
+    "p95": 7.48,
+    "p99": 8.636,
+    "max": 9.297,
+    "total_ms": 2239.95
+   },
+   "/usr/bin/kwin_wayland[24868]": {
+    "n": 778,
+    "mean": 0.86,
+    "p50": 0.015,
+    "p95": 2.101,
+    "p99": 2.625,
+    "max": 3.036,
+    "total_ms": 668.72
+   },
+   "com.android.systemui[649]": {
+    "n": 183,
+    "mean": 0.097,
+    "p50": 0.075,
+    "p95": 0.32,
+    "p99": 0.337,
+    "max": 0.354,
+    "total_ms": 17.83
+   }
+  }
+ },
+ "thermal_before": 0,
+ "zerocopy": "on",
+ "host_native_stats": "(enabled=true available=true frames=7893 acquire_fences=7893 feedback_hw=0 feedback_latch=0 feedback_timeout=0 feedback_pending=0 feedback_implausible=0 fallback=1 last_fallback=window resized: parent frame first in_flight=1 released=7892) vsync_wanted=false parks=43",
+ "thermal_after": 0
+}

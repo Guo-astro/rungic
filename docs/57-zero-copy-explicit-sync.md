@@ -1,6 +1,6 @@
 # 零拷贝呈现与显式同步
 
-2026-09-24。XT2537-4 / Android16 / APK1.10–1.24 / KWin 6.6.6+moto8–moto10。56篇的量化结论是：KWin改原生Vulkan只省CPU，更大的开销在宿主GLES合成和`glFinish`同步等待。本篇实施了其中两项共享层改动，并做同机A/B。
+2026-09-24。XT2537-4 / Android16 / APK1.10–1.25 / KWin 6.6.6+moto8–moto10。56篇的量化结论是：KWin改原生Vulkan只省CPU，更大的开销在宿主GLES合成和`glFinish`同步等待。本篇实施了其中两项共享层改动，并做同机A/B。
 
 ## 结论
 
@@ -145,6 +145,18 @@ DDR带宽取自内核`dcvs/bw_hwmon_meas`事件（bwmon每个采样窗口测得�
 验收旋转时发现：零拷贝打开时竖屏→横屏只显示左侧1080像素，其余全黑；关闭UBWC仍然如此，关闭零拷贝则正常。原因：零拷贝层是SurfaceView窗口层的子层，SurfaceFlinger按父层范围裁剪子层，而父层范围来自它最后一帧缓冲；零拷贝期间宿主不再向窗口提交缓冲，旋转后父层仍是旧方向的尺寸。此前零拷贝没有做过横屏验收。
 
 修复（APK1.24）：记录最近一次GLES帧实际绘入的窗口缓冲尺寸，与当前表面尺寸不一致时先走GLES（回退原因`window resized: parent frame first`），一致后恢复零拷贝。尺寸必须在绘制前用`eglQuerySurface`读取：Android在`eglSwapBuffers`时就把EGL_WIDTH/HEIGHT更新为下一块缓冲的尺寸，swap后读取会误判（第一版即因此只修好了横屏→竖屏）。实测每次旋转走2帧GLES，竖→横→竖→横→竖五次截图均完整。
+
+## KWin绘制以外的CPU（第7项）
+
+方法：Android自带`simpleperf record -p <kwin_wayland> --call-graph fp`（容器与Android同一内核，root可直接采样容器进程；Ubuntu 24.04起默认保留帧指针，DWARF回溯越不过libc而fp可以）。记录时设备端读不到容器内文件，构建号全为0；把`libkwin`、`libgallium`、`libQt6Core`等从容器rootfs拷回K8，用`llvm-objcopy --remove-section .note.gnu.build-id`去掉构建号后，以NDK主机端`simpleperf report --symfs`即可符号化。
+
+抽屉滚动12秒，KWin主线程（占KWin进程样本83%）包含子调用的分布：`Compositor::composite` 52.5%（场景绘制约30%；`endFrame`约15%，其中`GLVertexBuffer::endOfFrame`和本项目导出的`EGLNativeFence`各约10%，主要是Mesa线程化上下文在建fence时同步执行驱动批次，属于必要的绘制成本），客户端请求分发`Display::dispatchEvents` 12%，宿主事件`WaylandEventThread::dispatch` 9%，futex唤醒与Unix socket发送合计约10%（内核）。
+
+发现的浪费：`WaylandOutput::applyConfigure` 5.5%，经`Workspace::updateOutputConfiguration → updateOutputs → WaylandCursorImage::updateCursorTheme`重新扫描光标主题目录（大量`statx`/`readlink`与SELinux路径检查）。原因在宿主：每次触摸按下都调用`apply_focus_candidate`，无条件`toplevel.send_configure()`，焦点与状态都没变也发configure；KWin每收到一次就重新应用输出配置。修复（APK1.25）：改用Smithay的`send_pending_configure()`，只在状态实际变化时发送。
+
+结果：同样的滚动负载下`applyConfigure`与`updateCursorTheme`不再出现，KWin采样周期4.65G→4.46G（约−4%）；3轮滑动基准每帧KWin CPU约−5%，Paint p50 2.14–2.45ms、SurfaceFlinger帧间隔p95 16.7–16.8ms（一轮25.0ms，同前述两档跳动），启动检查3/3、搜索2/2通过。
+
+仍可继续看的：`QCoreApplicationPrivate::sendThroughApplicationEventFilters`自身约3%（每个事件都遍历应用级事件过滤器），来源未查。
 
 ## 宿主重启时KWin中止与客户端崩溃潮（第8、9项）
 
