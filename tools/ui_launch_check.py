@@ -69,10 +69,28 @@ def icon_for(app, timeout=5):
     raise RuntimeError(f'launcher entry {app!r} not visible or not settling')
 
 
+def scroll_drawer_to_top(app, attempts=3):
+    """The drawer keeps its scroll position (benchmarks swipe it). An entry scrolled
+    under the search field still reports extents, and a tap there hits the field."""
+    for _ in range(attempts):
+        fields = moto_agent.ui_find('plasmashell', role='text', name='Search')
+        labels = [n for n in moto_agent.ui_find('plasmashell', role='label', name=f'^{app}$')
+                  if n.get('extents', [0, 0, 0, 0])[2] > 0]
+        if not fields or not labels:
+            return
+        field_bottom = fields[0]['extents'][1] + fields[0]['extents'][3]
+        if labels[0]['extents'][1] > field_bottom:
+            return
+        run('input swipe 540 900 540 1500 400', 'shell')  # one short drag towards the top
+        time.sleep(0.8)
+
+
 def launch(app, process, search):
     press('Home')
     time.sleep(0.8)
     open_drawer()
+    if not search:
+        scroll_drawer_to_top(app)
     if search:
         # Kirigami's search field exposes no EditableText interface: focus it, type through Android input.
         field = [f for f in moto_agent.ui_find('plasmashell', role='text', name='Search')]

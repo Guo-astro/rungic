@@ -78,9 +78,30 @@ APK1.12–1.18给零拷贝事务设`setOnComplete`，用present fence实际signa
 
 “开”的第一轮KWin有约10次/秒绘制（桌面上有零星更新），所以APK仍有4.6%。抽屉滚动3轮（`kwin_pipeline_run --zerocopy on`）：KWin Paint p50 2.07–2.24ms、p95 3.83–4.35ms，SurfaceFlinger帧间隔p95三轮均16.8ms，APK CPU 13.4–15.4%（1.20为14.7–17.7%），无退化。
 
-按控件名启动/关闭检查：开关交替5次共10轮全部通过，停泊8秒后点击启动4/4、直接点击8/8。开发过程中另有两次“开”状态下的首轮失败（一次点到y=127的错误位置，一次点中图标但未启动），之后未能复现，也未能归因；检查脚本现已在启动失败时自动截图留证。
+按控件名启动/关闭检查：开关交替5次共10轮全部通过，停泊8秒后点击启动4/4、直接点击8/8。开发过程中另有两次“开”状态下的首轮失败：一次点击坐标y=127，后查明是检查脚本在抽屉列表被滚动后点到了搜索框（见第6项）；另一次点中了图标位置但应用未启动，未能复现也未归因。检查脚本现已在启动失败时自动截图留证。
 
-另外观察到plasmashell在静止时有时持续约10%单核、120–150次/秒唤醒（与本开关无关，1.22首次测量时只有0.6%），列为第6项调查。
+另外观察到plasmashell在静止时持续约10%单核、120–150次/秒唤醒，与本开关无关，原因与修复见下节（第6项）。
+
+## plasmashell静止开销（第6项）：回移上游修复
+
+现象：主屏静止时plasmashell主线程约8.5–10.5%单核、110–150次/秒运行，但KWin和plasmashell渲染线程几乎不出帧。
+
+定位过程（全部经agent接口完成，无需界面操作）：
+
+1. perfetto `frame`预设的`sched_waking`：plasmashell主线程的唤醒约100次/秒来自`swapper`（即ppoll超时，定时器到期），另有约13次/秒来自pulseaudio。
+2. gdb对`QCoreApplication::notifyInternal2`设条件断点（事件类型为Timer），经`metaObject()->className()`取接收者：8秒内302次全部发给`QSGThreadedRenderLoop`。Qt在有多个可见窗口时不能用vsync推进动画，改用主线程定时器按刷新周期推进，说明有动画在运行。
+3. 对`QAbstractAnimationJob::setCurrentTime`断点：两个`QSequentialAnimationGroupJob`（各含Pause和属性动画）已连续运行约45分钟。对照源码是快捷设置面板里的`MarqueeLabel`跑马灯：`running: charactersOverflowing && visible`。面板为了打开速度一直不设`visible: false`，关闭后Item仍“可见”；中文“录屏”状态文字和“Caffeine”状态文字溢出，所以关着的面板一直在滚动文字。
+
+修复：上游plasma-mobile在2026-09-18/19刚修复，原样回移到vendor 6.6.5：
+
+- `ce647d80` quicksettings: Ensure MarqueeLabel is off when panel is hidden（`scrollingEnabled`由面板是否打开、当前页决定；另要求`Window.window.visible`；缓存TextMetrics宽度）。
+- `0f35c4af` MarqueeLabel: Avoid masking/effects if text doesn't need marquee（不溢出时不做OpacityMask图层）。
+
+与6.6.5的差异只在上下文（状态文字表达式），手工合入后`QuickSettings.qml`与上游提交后的blob一致。在手机上以`build_on_device.py plasma-mobile targets --target mobileshellplugin`构建，经已有的dpkg-divert替换，只重启plasmashell。
+
+结果：静止主屏3次各10秒，plasmashell 0.57–0.61%单核、16–17次/秒（修复前8.5–10.5%、110–150次/秒），其中一次在打开并关闭快捷设置面板之后测得；面板打开时溢出文字仍正常滚动。抽屉滚动3轮×2次：plasmashell 28.6–33.8%（修复前36.8–43.9%），KWin Paint p50 1.97–2.36ms，SurfaceFlinger帧间隔p95在16.7/25.0ms两档间跳动，与之前相同。
+
+顺带修正了`ui_launch_check.py`：抽屉会保留滚动位置（基准会滑动它），被滚到搜索框下方的图标仍报告有效坐标，点击会落在搜索框上。第3项中点击坐标y=127的那次失败即此原因；现在点击前若图标高于搜索框下沿，先把列表拖回顶部。
 
 ## GPU频率（第4项）：本轮不改
 
