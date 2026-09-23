@@ -61,3 +61,6 @@ key4.db
 
 # Required XKB asset, with accompanying copyright file.
 !/plasma/native-apk/assets/xkb.zip
+
+# User-authorized development APK identity in this private repository.
+!/signing/development/launcher-signing.p12

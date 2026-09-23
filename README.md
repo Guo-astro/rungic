@@ -16,7 +16,8 @@ Motorola moto g100s（XT2537-4 / Adreno710）上的Android与Linux桌面适配�
 | `docs/` | 实施文档；`research/`保留可复用历史结论 |
 | `benchmarks/` | 已选定的性能原始数据与分析 |
 | `provenance/` | 上游来源、版本和校验记录 |
-| `.work/` | 不同步的下载、依赖、缓存、日志、媒体、安装包、密钥 |
+| `signing/development/` | 按用户要求同步的开发APK签名身份 |
+| `.work/` | 不同步的下载、依赖、缓存、日志、媒体、安装包和其他密钥 |
 
 完整边界与迁移说明见[目录与Git范围](docs/52-git-repository-scope.md)。远程为私有仓库[kevinzhow/range-dev](https://github.com/kevinzhow/range-dev)，默认分支为`main`。文档包含本机身份和网络配置，未作为公开发行材料脱敏。
 

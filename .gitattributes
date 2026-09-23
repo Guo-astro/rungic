@@ -8,3 +8,4 @@
 *.webp binary
 *.rgba binary
 *.dmabuf binary
+*.p12 binary

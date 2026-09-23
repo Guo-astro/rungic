@@ -17,18 +17,19 @@ moto/
 ├── kernel/ lxc/ docker/ cutout/ 内核、容器、ROM相关配置和补丁
 ├── benchmarks/                选定的性能测试原始数据与结果
 ├── provenance/                上游来源、版本、包清单和校验值
+├── signing/development/       用户指定同步的开发APK签名密钥
 └── .work/                     全部不入Git的本地工作材料
     ├── build/                 Rust等构建缓存
     ├── deps/                  Mesa、FFmpeg、Snapshot和本地依赖库
     ├── downloads/             上游原始归档
-    ├── secrets/               APK签名私钥
+    ├── secrets/               其他本地签名材料与凭据
     ├── cache/                 Python等缓存
     ├── artifacts/             其他本地产物
     ├── refs/                  原始日志、截图、媒体和历史构建材料
     └── migration/             本次路径映射、校验和删除清单
 ```
 
-`plasma/native-apk/assets/xkb.zip`是APK必需的键盘资源，连同版权说明进入Git；其他APK、DEB、镜像、压缩产物、私钥和实机媒体不入Git。工作区外已有ROM/SDK/内核工具链仍按原位置使用，本次只整理moto目录。
+`plasma/native-apk/assets/xkb.zip`是APK必需的键盘资源，连同版权说明进入Git。用户后续明确要求同步开发用APK私钥，故`signing/development/launcher-signing.p12`也进入私有Git仓库；其他APK、DEB、镜像、压缩产物、密钥和实机媒体仍不入Git。工作区外已有ROM/SDK/内核工具链仍按原位置使用，本次只整理moto目录。
 
 ## Phosh移除范围
 
@@ -40,7 +41,7 @@ moto/
 - `shared/platform/`：NetworkManager D-Bus桥和剪贴板桥。
 - `shared/graphics/`：GPU及共享缓冲诊断。
 - `native/plasma/`：Plasma正在使用的完整原生后端，含Smithay/Winit本地路径依赖及原许可证。
-- `.work/deps/`：Plasma构建继续需要的Mesa、FFmpeg、Snapshot源码和Android/libxkbcommon依赖库；签名身份保留在`.work/secrets/`。
+- `.work/deps/`：Plasma构建继续需要的Mesa、FFmpeg、Snapshot源码和Android/libxkbcommon依赖库；开发签名身份现位于`signing/development/`。
 
 28–35篇中可复用的硬件接口研究移到`docs/research/`并标明历史状态。文档中保留的Phosh历史描述不代表该桌面仍受支持；最新实现看Plasma集成文档。原始排障记录已有删除，不能把历史路径当成可执行安装步骤。
 
@@ -48,7 +49,7 @@ moto/
 
 原生构建入口仍为`bash plasma/build-native-core.sh`，现在从`native/plasma/`读源码，使用`tools/toolchains/`，输出到`.work/build/native-target/`和`.work/refs/plasma-mobile-20260923/native-libs/`。
 
-APK入口仍为`bash plasma/build-apk.sh`，输出在`.work/refs/plasma-mobile-20260923/`，使用`.work/secrets/launcher-signing.p12`签名。它不安装APK或重启手机。已有签名需独立备份，不能因仓库私有就提交密钥。
+APK入口仍为`bash plasma/build-apk.sh`，输出在`.work/refs/plasma-mobile-20260923/`，默认使用`signing/development/launcher-signing.p12`签名，也可用`MOTO_APK_KEYSTORE`指定同类型密钥路径。它不安装APK或重启手机。本次移动的是原有开发签名身份，没有重新生成密钥；`.gitignore`与审计工具仅对此指定文件增加例外。
 
 日常开发先执行：
 

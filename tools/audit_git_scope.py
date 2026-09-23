@@ -17,6 +17,8 @@ ROOT = Path(__file__).resolve().parent.parent
 SENSITIVE_NAMES = {"shadow", "gshadow", "id_rsa", "id_ed25519", ".env",
                    "cookies.sqlite", "logins.json", "key4.db"}
 SENSITIVE_SUFFIXES = {".p12", ".pfx", ".jks", ".keystore", ".key", ".pem", ".pyc"}
+# Explicitly requested by the user on 2026-09-23 for this private dev repository.
+DEVELOPMENT_KEYS = {"signing/development/launcher-signing.p12"}
 SECRET_PATTERNS = {
     "private-key": re.compile(rb"-----BEGIN (?:[A-Z0-9]+ )?PRIVATE KEY-----"),
     "github-token": re.compile(rb"\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,})\b"),
@@ -54,7 +56,7 @@ def main():
         groups[group]["files"] += 1
         groups[group]["bytes"] += size
         files.append({"path": name, "bytes": size})
-        if path.name in SENSITIVE_NAMES or path.suffix in SENSITIVE_SUFFIXES:
+        if name not in DEVELOPMENT_KEYS and (path.name in SENSITIVE_NAMES or path.suffix in SENSITIVE_SUFFIXES):
             findings.append({"path": name, "kind": "sensitive-or-generated-filename"})
         if size > 10 * 1024 * 1024:
             findings.append({"path": name, "kind": "larger-than-10-MiB"})
@@ -69,6 +71,7 @@ def main():
             if pattern.search(data):
                 findings.append({"path": name, "kind": label})
     result = {"scope": "private-repository-candidates-not-committed-or-pushed",
+              "authorized_development_keys": sorted(DEVELOPMENT_KEYS.intersection(paths)),
               "files": len(files), "bytes": sum(f["bytes"] for f in files),
               "groups": dict(groups), "findings": findings, "paths": files}
     if args.output:

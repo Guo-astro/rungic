@@ -49,4 +49,5 @@
 
 - 需要同步的源码、文档、基准数据和来源记录分别放在plasma/native/shared/tools、docs、benchmarks、provenance等目录；当前只维护Plasma桌面。
 - 下载、构建缓存、安装包、日志、截图、实机媒体、私钥与本机配置统一放在`.work/`，不得新增到源码目录。Python/Cargo开发可先`source tools/work-env.sh`。
+- 用户于2026-09-23明确要求同步开发用APK签名密钥：`signing/development/launcher-signing.p12`是上述规则的指定例外，随私有仓库跟踪，构建脚本默认使用它。此授权不包含其他密钥或`.work/`内容。
 - 目录说明见`docs/52-git-repository-scope.md`。不要恢复旧refs目录，也不要为了旧脚本重新引入Phosh；修复当前共享接口和路径。
