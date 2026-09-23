@@ -10,6 +10,7 @@ Motorola moto g100s（XT2537-4 / Adreno710）上的Android与Linux桌面适配�
 |---|---|
 | `plasma/` | KDE与Android APK适配、会话配置、构建脚本 |
 | `native/plasma/` | Rust/Smithay原生Wayland后端 |
+| `vendor/` | KWin、Mesa、Qt及桌面/媒体组件的完整源码，已包含本机适配 |
 | `shared/` | Linux媒体、网络、剪贴板与GPU公共接口 |
 | `tools/` | 管理、ROM、构建辅助和诊断工具 |
 | `kernel/`、`lxc/`、`docker/`、`cutout/` | 内核、容器与设备相关配置 |
@@ -28,7 +29,7 @@ Motorola moto g100s（XT2537-4 / Adreno710）上的Android与Linux桌面适配�
 - 媒体和显示尚有剩余验收项，以[48篇](docs/48-plasma-media-pipelines.md)、[50篇](docs/50-plasma-display-settings.md)为准，不把安装成功等同于完整验收。
 - 设备管理：`python3 tools/moto_plasma.py status`。开发环境：`source tools/work-env.sh`。APK构建：`bash plasma/build-apk.sh`，产物写入`.work/`。
 - 图形和后端架构见[40篇](docs/40-plasma-mobile-integration.md)及[共享桥说明](shared/README.md)。全新机器构建仍需准备SDK/NDK及部分依赖。
-- 远程系统功能开发的源码范围、已补漏项及构建缺口见[53篇](docs/53-remote-system-development.md)。
+- 远程源码核对和多机协作见[53篇](docs/53-remote-system-development.md)。上游组件直接修改[Vendor源码](vendor/README.md)，`python3 tools/stage_vendor.py kwin`可创建独立构建副本；历史patch不再重复应用。
 
 ## 文档索引
 

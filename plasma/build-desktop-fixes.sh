@@ -1,18 +1,12 @@
 #!/bin/sh
-# Run inside Ubuntu. Supply the corresponding verified upstream source dirs.
+# Run inside the matching Ubuntu ARM64 desktop environment, from vendor sources.
 # Preserve Ubuntu libraries; only install the three patched executables.
 set -eu
-settings_src=${1:?plasma-settings 25.12.0 source}
-keyboard_src=${2:?plasma-keyboard 6.6.6 source}
-portal_src=${3:?xdg-desktop-portal-kde 6.6.6 source}
-patch_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-patch -d "$settings_src" -p1 --forward < "$patch_dir/settings-model.patch"
-patch -d "$settings_src" -p1 --forward < "$patch_dir/settings-hardware.patch"
-patch -d "$keyboard_src" -p1 --forward < "$patch_dir/keyboard-popup.patch"
-patch -d "$keyboard_src" -p1 --forward < "$patch_dir/keyboard-focus.patch"
-patch -d "$portal_src" -p1 --forward < "$patch_dir/portal-mobile-width.patch"
-# Ubuntu ships KWayland 6.6.4 alongside Portal 6.6.6; APIs used here compile.
-sed -i 's/set(PROJECT_DEP_VERSION "6.6.6")/set(PROJECT_DEP_VERSION "6.6.4")/' "$portal_src/CMakeLists.txt"
+[ "$#" -eq 0 ] || { echo "Edit vendor sources; this script no longer accepts pristine-source arguments." >&2; exit 2; }
+task_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+settings_src=$(python3 "$task_root/tools/stage_vendor.py" plasma-settings)
+keyboard_src=$(python3 "$task_root/tools/stage_vendor.py" plasma-keyboard)
+portal_src=$(python3 "$task_root/tools/stage_vendor.py" xdg-desktop-portal-kde)
 for src in "$settings_src" "$keyboard_src" "$portal_src"; do
   cmake -S "$src" -B "$src/build" -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_TESTING=OFF
   cmake --build "$src/build" -j2

@@ -1,14 +1,14 @@
 #!/bin/sh
 # Ubuntu/glibc build of GNOME Snapshot 51.0 and the existing Moto codec patch.
 set -eu
-source_dir=${1:?Snapshot 51.0 source directory}
-patch_file=${2:?shared/media/snapshot-moto-codec.patch path}
-patch -d "$source_dir" -p1 --forward < "$patch_file"
+[ "$#" -eq 0 ] || { echo "Edit vendor sources; this script no longer accepts pristine-source arguments." >&2; exit 2; }
+task_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+source_dir=$(python3 "$task_root/tools/stage_vendor.py" snapshot)
 cd "$source_dir"
 export CARGO_BUILD_JOBS=2
 meson setup build --prefix=/usr/local -Dprofile=default -Dx11=disabled
 meson compile -C build -j2
-stage=$(mktemp -d)
+stage=$(mktemp -d "$task_root/.work/build/snapshot-stage-XXXXXX")
 DESTDIR="$stage" meson install -C build
 install -m755 "$stage/usr/local/bin/snapshot" /usr/local/libexec/moto-snapshot
 cp -a "$stage/usr/local/share/." /usr/local/share/

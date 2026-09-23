@@ -1,0 +1,663 @@
+{
+  "recorded_on": "2026-09-23",
+  "scope": "Local source archive / patch replay / saved work-tree comparison; no device rebuild or redeploy.",
+  "components": {
+    "kwin": {
+      "archive_sha256": "76314bb5053943003c089bd8997b159c70a8bc35ba87dc3a10885ade8f561953",
+      "patches_replayed": [
+        "plasma/kwin-android.patch",
+        "plasma/kwin-idle.patch",
+        "plasma/kwin-screencast.patch",
+        "plasma/kwin-screencast-shm.patch",
+        "plasma/kwin-display-settings.patch"
+      ],
+      "source_delta": {
+        "changed": [
+          "src/backends/wayland/wayland_egl_backend.cpp",
+          "src/core/gbmgraphicsbufferallocator.cpp",
+          "src/idle_inhibition.cpp",
+          "src/wayland-client/linuxdmabuf.cpp",
+          "src/opengl/egldisplay.cpp",
+          "src/wayland/linuxdmabufv1clientbuffer.cpp",
+          "src/idle_inhibition.h",
+          "src/backends/wayland/wayland_output.cpp",
+          "src/wayland-client/linuxdmabuf.h",
+          "src/backends/wayland/wayland_output.h",
+          "src/backends/wayland/wayland_backend.cpp",
+          "src/core/shmgraphicsbufferallocator.cpp",
+          "src/backends/wayland/wayland_backend.h",
+          "src/backends/wayland/wayland_layer.cpp",
+          "src/backends/wayland/wayland_display.cpp",
+          "src/plugins/screencast/screencastmanager.cpp",
+          "src/plugins/screencast/screencastutils.h"
+        ],
+        "added": [
+          "src/backends/wayland/android-display-client.h",
+          "src/core/androidgraphicsbuffer.h"
+        ],
+        "removed": []
+      },
+      "comparisons": [
+        {
+          "path": ".work/refs/plasma-mobile-20260923/build/kwin-6.6.6",
+          "vs_upstream": {
+            "changed": [
+              "src/backends/wayland/wayland_egl_backend.cpp",
+              "src/core/gbmgraphicsbufferallocator.cpp",
+              "src/idle_inhibition.cpp",
+              "src/wayland-client/linuxdmabuf.cpp",
+              "src/opengl/egldisplay.cpp",
+              "src/wayland/linuxdmabufv1clientbuffer.cpp",
+              "src/idle_inhibition.h",
+              "src/backends/wayland/wayland_output.cpp",
+              "src/wayland-client/linuxdmabuf.h",
+              "src/backends/wayland/wayland_backend.cpp",
+              "src/core/shmgraphicsbufferallocator.cpp",
+              "src/backends/wayland/wayland_layer.cpp",
+              "src/backends/wayland/wayland_display.cpp",
+              "src/plugins/screencast/screencastmanager.cpp"
+            ],
+            "added": [
+              "src/core/androidgraphicsbuffer.h"
+            ],
+            "removed": []
+          },
+          "vs_replayed": {
+            "changed": [
+              "src/backends/wayland/wayland_output.cpp",
+              "src/backends/wayland/wayland_output.h",
+              "src/backends/wayland/wayland_backend.cpp",
+              "src/backends/wayland/wayland_backend.h",
+              "src/plugins/screencast/screencastutils.h"
+            ],
+            "added": [],
+            "removed": [
+              "src/backends/wayland/android-display-client.h"
+            ]
+          }
+        }
+      ]
+    },
+    "kscreen": {
+      "archive_sha256": "753ebc00cf75359c2e7ba3aabb20ff3596d0fbbe2f0b6d3ed6098d27282a3276",
+      "patches_replayed": [
+        "plasma/kscreen-android-policy.patch"
+      ],
+      "source_delta": {
+        "changed": [
+          "kcm/kcm.cpp",
+          "CMakeLists.txt",
+          "kcm/ui/OutputPanel.qml",
+          "kcm/kcm.h",
+          "kcm/ui/main.qml"
+        ],
+        "added": [
+          "kcm/android-display-client.h"
+        ],
+        "removed": []
+      },
+      "comparisons": [
+        {
+          "path": ".work/refs/plasma-display-settings-20260923/kscreen-6.6.5",
+          "vs_upstream": {
+            "changed": [],
+            "added": [],
+            "removed": []
+          },
+          "vs_replayed": {
+            "changed": [
+              "kcm/kcm.cpp",
+              "CMakeLists.txt",
+              "kcm/ui/OutputPanel.qml",
+              "kcm/kcm.h",
+              "kcm/ui/main.qml"
+            ],
+            "added": [],
+            "removed": [
+              "kcm/android-display-client.h"
+            ]
+          }
+        },
+        {
+          "path": ".work/refs/plasma-display-settings-20260923/kscreen-moto",
+          "vs_upstream": {
+            "changed": [
+              "kcm/kcm.cpp",
+              "kcm/ui/OutputPanel.qml",
+              "kcm/kcm.h",
+              "kcm/ui/main.qml"
+            ],
+            "added": [
+              "kcm/android-display-client.h"
+            ],
+            "removed": []
+          },
+          "vs_replayed": {
+            "changed": [
+              "CMakeLists.txt"
+            ],
+            "added": [],
+            "removed": []
+          }
+        }
+      ]
+    },
+    "plasma-mobile": {
+      "archive_sha256": "164380a6e1d75dc6fb072090caa3c4e5fb80bbb3f188d305bce767c90b9e4600",
+      "patches_replayed": [],
+      "source_delta": {
+        "changed": [],
+        "added": [],
+        "removed": []
+      },
+      "comparisons": [
+        {
+          "path": ".work/refs/plasma-mobile-20260923/build/plasma-mobile-6.6.5",
+          "vs_upstream": {
+            "changed": [],
+            "added": [],
+            "removed": []
+          },
+          "vs_replayed": {
+            "changed": [],
+            "added": [],
+            "removed": []
+          }
+        }
+      ]
+    },
+    "plasma-settings": {
+      "archive_sha256": "3c8a5e5f76f005bb2284494e34610e8778505376bcf3243d8d9270c27e0f24a4",
+      "patches_replayed": [
+        "plasma/settings-model.patch",
+        "plasma/settings-hardware.patch"
+      ],
+      "source_delta": {
+        "changed": [
+          "src/settingsapp.cpp",
+          "src/modulesmodel.cpp"
+        ],
+        "added": [],
+        "removed": []
+      },
+      "comparisons": [
+        {
+          "path": ".work/refs/plasma-mobile-20260923/upstream/input/plasma-settings",
+          "vs_upstream": {
+            "changed": [],
+            "added": [],
+            "removed": []
+          },
+          "vs_replayed": {
+            "changed": [
+              "src/settingsapp.cpp",
+              "src/modulesmodel.cpp"
+            ],
+            "added": [],
+            "removed": []
+          }
+        }
+      ]
+    },
+    "plasma-keyboard": {
+      "archive_sha256": "33fece6dfd82820fed41375fe63ddd733a52574e0a127ac6c41274f5f0b68966",
+      "patches_replayed": [
+        "plasma/keyboard-popup.patch",
+        "plasma/keyboard-focus.patch"
+      ],
+      "source_delta": {
+        "changed": [
+          "src/qml/LanguagePopup.qml",
+          "src/inputlisteneritem.cpp"
+        ],
+        "added": [],
+        "removed": []
+      },
+      "comparisons": [
+        {
+          "path": ".work/refs/plasma-mobile-20260923/upstream/input/plasma-keyboard-v6.6.6",
+          "vs_upstream": {
+            "changed": [],
+            "added": [],
+            "removed": []
+          },
+          "vs_replayed": {
+            "changed": [
+              "src/qml/LanguagePopup.qml",
+              "src/inputlisteneritem.cpp"
+            ],
+            "added": [],
+            "removed": []
+          }
+        }
+      ]
+    },
+    "xdg-desktop-portal-kde": {
+      "archive_sha256": "cf40ebee88942524757ec0553b59bc321ace8774c8ebad47d4a0c23853904c2c",
+      "patches_replayed": [
+        "plasma/portal-mobile-width.patch"
+      ],
+      "source_delta": {
+        "changed": [
+          "src/PortalDialog.qml",
+          "CMakeLists.txt"
+        ],
+        "added": [],
+        "removed": []
+      },
+      "comparisons": [
+        {
+          "path": ".work/refs/plasma-mobile-20260923/upstream/input/xdg-desktop-portal-kde-v6.6.6",
+          "vs_upstream": {
+            "changed": [],
+            "added": [],
+            "removed": []
+          },
+          "vs_replayed": {
+            "changed": [
+              "src/PortalDialog.qml",
+              "CMakeLists.txt"
+            ],
+            "added": [],
+            "removed": []
+          }
+        }
+      ]
+    },
+    "libcamera": {
+      "archive_sha256": "40530d976d18678693283ccf011f4b29f5110b3ae90f2b8ec5250f18fdf2e075",
+      "patches_replayed": [
+        "plasma/libcamera/pipewire-pipeline.patch"
+      ],
+      "source_delta": {
+        "changed": [
+          "src/libcamera/dma_buf_allocator.cpp",
+          "src/libcamera/pipeline/virtual/meson.build",
+          "src/libcamera/pipeline/virtual/virtual.cpp",
+          "src/libcamera/pipeline/virtual/virtual.h",
+          "src/libcamera/pipeline/virtual/config_parser.cpp",
+          "src/libcamera/pipeline/virtual/frame_generator.h"
+        ],
+        "added": [
+          "src/libcamera/pipeline/virtual/pipewire_frame_generator.cpp",
+          "src/libcamera/pipeline/virtual/pipewire_frame_generator.h"
+        ],
+        "removed": []
+      },
+      "comparisons": [
+        {
+          "path": ".work/refs/plasma-media-20260923/upstream/libcamera-0.7.0",
+          "vs_upstream": {
+            "changed": [],
+            "added": [],
+            "removed": []
+          },
+          "vs_replayed": {
+            "changed": [
+              "src/libcamera/dma_buf_allocator.cpp",
+              "src/libcamera/pipeline/virtual/meson.build",
+              "src/libcamera/pipeline/virtual/virtual.cpp",
+              "src/libcamera/pipeline/virtual/virtual.h",
+              "src/libcamera/pipeline/virtual/config_parser.cpp",
+              "src/libcamera/pipeline/virtual/frame_generator.h"
+            ],
+            "added": [],
+            "removed": [
+              "src/libcamera/pipeline/virtual/pipewire_frame_generator.cpp",
+              "src/libcamera/pipeline/virtual/pipewire_frame_generator.h"
+            ]
+          }
+        },
+        {
+          "path": ".work/refs/plasma-media-20260923/build/libcamera-0.7.0",
+          "vs_upstream": {
+            "changed": [
+              "src/libcamera/dma_buf_allocator.cpp",
+              "src/libcamera/pipeline/virtual/meson.build",
+              "LICENSES/GPL-2.0.txt",
+              "src/libcamera/pipeline/virtual/virtual.cpp",
+              "src/libcamera/pipeline/virtual/virtual.h",
+              "src/libcamera/pipeline/virtual/config_parser.cpp",
+              "LICENSES/GPL-2.0+.txt",
+              "src/libcamera/pipeline/virtual/frame_generator.h"
+            ],
+            "added": [
+              "src/libcamera/pipeline/virtual/pipewire_frame_generator.cpp",
+              "src/libcamera/pipeline/virtual/pipewire_frame_generator.h"
+            ],
+            "removed": []
+          },
+          "vs_replayed": {
+            "changed": [
+              "LICENSES/GPL-2.0.txt",
+              "LICENSES/GPL-2.0+.txt"
+            ],
+            "added": [],
+            "removed": []
+          }
+        }
+      ]
+    },
+    "plasma-camera": {
+      "archive_sha256": "6c6738e43b89827e3d8fb7df7d6f36155851a3f0edd13e7cfa126cba852dec27",
+      "patches_replayed": [
+        "plasma/camera-frame-timestamps.patch"
+      ],
+      "source_delta": {
+        "changed": [
+          "src/plasmacameramanager.cpp",
+          "src/plasmacameramanager.h"
+        ],
+        "added": [],
+        "removed": []
+      },
+      "comparisons": [
+        {
+          "path": ".work/refs/plasma-media-20260923/upstream/plasma-camera-2.1.1",
+          "vs_upstream": {
+            "changed": [],
+            "added": [],
+            "removed": []
+          },
+          "vs_replayed": {
+            "changed": [
+              "src/plasmacameramanager.cpp",
+              "src/plasmacameramanager.h"
+            ],
+            "added": [],
+            "removed": []
+          }
+        },
+        {
+          "path": ".work/refs/plasma-media-20260923/build/plasma-camera-2.1.1",
+          "vs_upstream": {
+            "changed": [
+              "src/plasmacameramanager.cpp",
+              "src/plasmacameramanager.h",
+              ".flatpak-manifest.json"
+            ],
+            "added": [],
+            "removed": []
+          },
+          "vs_replayed": {
+            "changed": [
+              ".flatpak-manifest.json"
+            ],
+            "added": [],
+            "removed": []
+          }
+        }
+      ]
+    },
+    "qtmultimedia": {
+      "archive_sha256": "13affeeab2058beadde76b646b2a2c41b98f614fbb2a2ec40f54509bdc970ea8",
+      "patches_replayed": [
+        "plasma/qt-pulse-buffer.patch"
+      ],
+      "source_delta": {
+        "changed": [
+          "src/multimedia/pulseaudio/qpulseaudiosink.cpp"
+        ],
+        "added": [],
+        "removed": []
+      },
+      "comparisons": [
+        {
+          "path": ".work/refs/plasma-media-20260923/upstream/qtmultimedia-6.10.2",
+          "vs_upstream": {
+            "changed": [],
+            "added": [],
+            "removed": []
+          },
+          "vs_replayed": {
+            "changed": [
+              "src/multimedia/pulseaudio/qpulseaudiosink.cpp"
+            ],
+            "added": [],
+            "removed": []
+          }
+        }
+      ]
+    },
+    "snapshot": {
+      "archive_sha256": "3e64fa4cd1a742ae34b6f6d8e6d9614a2d3eab88a1b0071c11ab53617eb214c2",
+      "patches_replayed": [
+        "plasma/../shared/media/snapshot-moto-codec.patch"
+      ],
+      "source_delta": {
+        "changed": [
+          "aperture/src/utils.rs",
+          "aperture/src/viewfinder.rs",
+          "aperture/src/camera.rs"
+        ],
+        "added": [],
+        "removed": []
+      },
+      "comparisons": [
+        {
+          "path": ".work/deps/snapshot/snapshot-51.0",
+          "vs_upstream": {
+            "changed": [
+              "aperture/src/utils.rs",
+              "aperture/src/viewfinder.rs",
+              "aperture/src/camera.rs"
+            ],
+            "added": [],
+            "removed": []
+          },
+          "vs_replayed": {
+            "changed": [],
+            "added": [],
+            "removed": []
+          }
+        }
+      ]
+    },
+    "ffmpeg": {
+      "archive_sha256": "464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c",
+      "patches_replayed": [],
+      "source_delta": {
+        "changed": [
+          "libavcodec/allcodecs.c",
+          "libavcodec/libx264.c",
+          "libavcodec/Makefile"
+        ],
+        "added": [
+          "libavcodec/moto-codec-client.h",
+          "libavcodec/moto_codec.c"
+        ],
+        "removed": []
+      },
+      "comparisons": [
+        {
+          "path": ".work/deps/ffmpeg/ffmpeg-8.1.2",
+          "vs_upstream": {
+            "changed": [],
+            "added": [],
+            "removed": []
+          },
+          "vs_replayed": {
+            "changed": [
+              "libavcodec/allcodecs.c",
+              "libavcodec/libx264.c",
+              "libavcodec/Makefile"
+            ],
+            "added": [],
+            "removed": [
+              "libavcodec/moto-codec-client.h",
+              "libavcodec/moto_codec.c"
+            ]
+          }
+        }
+      ]
+    },
+    "wl-clipboard": {
+      "archive_sha256": "b4dc560973f0cd74e02f817ffa2fd44ba645a4f1ea94b7b9614dacc9f895f402",
+      "patches_replayed": [],
+      "source_delta": {
+        "changed": [],
+        "added": [],
+        "removed": []
+      },
+      "comparisons": [
+        {
+          "path": ".work/refs/plasma-mobile-20260923/build/wl-clipboard",
+          "vs_upstream": {
+            "changed": [],
+            "added": [],
+            "removed": []
+          },
+          "vs_replayed": {
+            "changed": [],
+            "added": [],
+            "removed": []
+          }
+        }
+      ]
+    }
+  },
+  "extra_comparisons": {
+    "panel-exclusive-zone": {
+      "exit_code": 0,
+      "log": "patching file shell/contents/views/Panel.qml\n"
+    },
+    "convergent-keyboard": {
+      "exit_code": 0,
+      "log": "patching file kwin/scripts/convergentwindows/contents/ui/main.qml\n"
+    },
+    "panel-fixed": {
+      "left": ".work/audits/source-sync/plasma-mobile/plasma-mobile-6.6.5/shell/contents/views/Panel.qml",
+      "right": ".work/refs/plasma-mobile-20260923/build/Panel-fixed.qml",
+      "same_content": true
+    },
+    "convergent-fixed": {
+      "left": ".work/audits/source-sync/plasma-mobile/plasma-mobile-6.6.5/kwin/scripts/convergentwindows/contents/ui/main.qml",
+      "right": ".work/refs/plasma-input-flicker-20260923/fixed-main.qml",
+      "same_content": true
+    },
+    "keyboard-fixed": {
+      "left": ".work/audits/source-sync/plasma-keyboard/plasma-keyboard-v6.6.6/src/inputlisteneritem.cpp",
+      "right": ".work/refs/plasma-input-flicker-20260923/inputlisteneritem-fixed.cpp",
+      "same_content": true
+    },
+    "settings-fixed": {
+      "left": ".work/audits/source-sync/plasma-settings/plasma-settings-v25.12.0/src/settingsapp.cpp",
+      "right": ".work/refs/plasma-mobile-20260923/build/settingsapp.cpp",
+      "same_content": true
+    },
+    "qt-video-duration-experimental": {
+      "exit_code": 0,
+      "log": "patching file src/plugins/multimedia/ffmpeg/recordingengine/qffmpegvideoencoder.cpp\n"
+    },
+    "qt-duration-fixed": {
+      "left": ".work/audits/source-sync/qtmultimedia/qtmultimedia-6.10.2/src/plugins/multimedia/ffmpeg/recordingengine/qffmpegvideoencoder.cpp",
+      "right": ".work/refs/plasma-media-20260923/qffmpegvideoencoder-fixed.cpp",
+      "same_content": true
+    },
+    "libcamera-duplicate-pipewire_frame_generator.cpp": {
+      "left": ".work/audits/source-sync/libcamera/libcamera-0.7.0/src/libcamera/pipeline/virtual/pipewire_frame_generator.cpp",
+      "right": "plasma/libcamera/pipewire_frame_generator.cpp",
+      "same_content": true
+    },
+    "libcamera-duplicate-pipewire_frame_generator.h": {
+      "left": ".work/audits/source-sync/libcamera/libcamera-0.7.0/src/libcamera/pipeline/virtual/pipewire_frame_generator.h",
+      "right": "plasma/libcamera/pipewire_frame_generator.h",
+      "same_content": true
+    },
+    "kwin-old-stage": {
+      "changed_after_undoing_last_two_patches": []
+    },
+    "native": {
+      "tracked_files": 701,
+      "unchanged": 663,
+      "modified": [
+        "Cargo.toml",
+        "build.rs",
+        "src/android/backend/smithay_backend.rs",
+        "src/android/backend/wayland/handlers.rs",
+        "src/android/backend/wayland/input_router.rs",
+        "src/android/backend/wayland/output_management.rs",
+        "src/android/backend/wayland/seat.rs",
+        "src/android/backend/wayland/x11.rs",
+        "src/android/bridge_init.rs",
+        "src/android/mod.rs",
+        "src/compositor.rs"
+      ],
+      "upstream_symlinks": [
+        "lib/winit/dpi/LICENSE",
+        "lib/winit/examples",
+        "lib/winit/winit-android/LICENSE",
+        "lib/winit/winit-android/README.md",
+        "lib/winit/winit-appkit/LICENSE",
+        "lib/winit/winit-appkit/README.md",
+        "lib/winit/winit-common/LICENSE",
+        "lib/winit/winit-common/README.md",
+        "lib/winit/winit-core/LICENSE",
+        "lib/winit/winit-core/README.md",
+        "lib/winit/winit-orbital/LICENSE",
+        "lib/winit/winit-orbital/README.md",
+        "lib/winit/winit-uikit/LICENSE",
+        "lib/winit/winit-uikit/README.md",
+        "lib/winit/winit-wayland/LICENSE",
+        "lib/winit/winit-wayland/README.md",
+        "lib/winit/winit-web/LICENSE",
+        "lib/winit/winit-web/README.md",
+        "lib/winit/winit-win32/LICENSE",
+        "lib/winit/winit-win32/README.md",
+        "lib/winit/winit-x11/LICENSE",
+        "lib/winit/winit-x11/README.md",
+        "lib/winit/winit/FEATURES.md",
+        "lib/winit/winit/LICENSE",
+        "lib/winit/winit/README.md"
+      ],
+      "added": [
+        "src/android/frame_clock.rs",
+        "src/android/gpu_allocator.rs"
+      ],
+      "upstream_symlinks_verified": true
+    },
+    "release_own_code_not_in_git": [],
+    "mesa": {
+      "source_commit": "98f3d6229d61452cef80f8563af7c56ae599dc14",
+      "local_tree_matches_archive": true
+    }
+  },
+  "vendor_validation": {
+    "production_changed_files_verified": {
+      "kwin": 19,
+      "kscreen": 6,
+      "plasma-mobile": 0,
+      "plasma-settings": 2,
+      "plasma-keyboard": 2,
+      "xdg-desktop-portal-kde": 2,
+      "libcamera": 8,
+      "plasma-camera": 2,
+      "qtmultimedia": 1,
+      "snapshot": 3,
+      "ffmpeg": 5,
+      "wl-clipboard": 0
+    },
+    "links_verified": 18,
+    "stages_verified": {
+      "kwin": ".work/audits/vendor-stage-check/kwin/source",
+      "kscreen": ".work/audits/vendor-stage-check/kscreen/source",
+      "plasma-mobile": ".work/audits/vendor-stage-check/plasma-mobile/source",
+      "plasma-settings": ".work/audits/vendor-stage-check/plasma-settings/source",
+      "plasma-keyboard": ".work/audits/vendor-stage-check/plasma-keyboard/source",
+      "xdg-desktop-portal-kde": ".work/audits/vendor-stage-check/xdg-desktop-portal-kde/source",
+      "libcamera": ".work/audits/vendor-stage-check/libcamera/source",
+      "plasma-camera": ".work/audits/vendor-stage-check/plasma-camera/source",
+      "qtmultimedia": ".work/audits/vendor-stage-check/qtmultimedia/source",
+      "snapshot": ".work/audits/vendor-stage-check/snapshot/source",
+      "ffmpeg": ".work/audits/vendor-stage-check/ffmpeg/source",
+      "wl-clipboard": ".work/audits/vendor-stage-check/wl-clipboard/source",
+      "mesa": ".work/audits/vendor-stage-check/mesa/source"
+    },
+    "kwin_dpkg_source_before_build": "",
+    "full_compilation_or_device_install": false,
+    "guards_verified": [
+      "reject output outside .work",
+      "reject existing output without overwriting"
+    ]
+  }
+}

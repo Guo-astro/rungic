@@ -3,9 +3,11 @@
 from pathlib import Path
 import shutil
 import subprocess
+import os
 
-stage = Path('/root/moto-mesa-stage')
-output = Path('/root/moto-mesa-debs')
+root = Path(__file__).resolve().parent.parent
+stage = Path(os.environ.get('MOTO_MESA_STAGE', root / '.work/stage/mesa'))
+output = Path(os.environ.get('MOTO_MESA_PACKAGES', root / '.work/packages/mesa'))
 version = '26.3.0~devel20260824+moto1'
 packages = ('mesa-libgallium', 'libegl-mesa0', 'libglx-mesa0', 'libgbm1',
             'libgbm-dev', 'libgl1-mesa-dri', 'mesa-vulkan-drivers')
@@ -47,7 +49,7 @@ def owner(path):
     return None
 
 
-output.mkdir(exist_ok=True)
+output.mkdir(parents=True, exist_ok=True)
 counts = {name: 0 for name in packages}
 for name in packages:
     directory = output / name

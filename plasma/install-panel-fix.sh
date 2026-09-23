@@ -1,15 +1,12 @@
 #!/bin/sh
-# Run inside Ubuntu; retain the distribution file for review/rebase on upgrade.
+# Install the already patched vendored QML; retain the distribution original.
 set -eu
-patch_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+task_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 view=/usr/share/plasma/shells/org.kde.plasma.mobileshell/contents/views/Panel.qml
 original=$view.distrib
-source=$view
-[ ! -f "$original" ] || source=$original
-staged=$(mktemp)
-trap 'rm -f "$staged"' EXIT HUP INT TERM
-patch --batch --forward -o "$staged" "$source" < "$patch_dir/panel-exclusive-zone.patch"
+source=$task_root/vendor/plasma-mobile/shell/contents/views/Panel.qml
+test -f "$source"
 if [ ! -f "$original" ]; then
     dpkg-divert --local --add --rename --divert "$original" "$view"
 fi
-install -m644 "$staged" "$view"
+install -m644 "$source" "$view"

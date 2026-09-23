@@ -2,6 +2,8 @@
 
 2026-09-23。按用户要求，将需要同步的文件整理为源码、文档、测试数据和来源记录；其余材料集中在`.work/`。随后按用户新要求停止维护Phosh，仅保留Plasma及其共享依赖。目录整理完成后，用户指定同步到私有仓库`https://github.com/kevinzhow/range-dev`，使用`main`分支；本次本地整理与仓库同步不操作手机。
 
+后续按用户要求已将13个上游组件及正式修改导入`vendor/`，该目录现在随Git同步；`.work/deps`中的旧源码仅为历史副本。最新源码边界与协作方式见[53篇](53-remote-system-development.md)。下方迁移统计是Vendor导入前的历史记录。
+
 ## 目录结构
 
 ```text
@@ -11,6 +13,7 @@ moto/
 │   └── research/              可复用的硬件接口与早期研究结论
 ├── plasma/                    KDE适配、Android APK、配置、构建脚本
 ├── native/plasma/             Rust/Smithay原生Wayland后端及锁定依赖
+├── vendor/                    KWin、Mesa、Qt及桌面/媒体组件的正式源码
 ├── shared/                    共享媒体、网络、剪贴板和GPU诊断代码
 ├── tools/                     管理、刷机、审计和性能测试工具
 │   └── toolchains/            Android编译器包装脚本

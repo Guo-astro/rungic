@@ -7,6 +7,7 @@ This is a limited secret-pattern check, not a guarantee that files are sanitized
 import argparse
 import collections
 import json
+import hashlib
 import os
 from pathlib import Path
 import re
@@ -43,14 +44,23 @@ def main():
                    "-c", "core.bare=false", "ls-files", "--others", "--exclude-standard", "-z"]
         raw = subprocess.check_output(command, cwd=ROOT, env=env)
         ignored_raw = subprocess.check_output(command[:-1] + ["--ignored", "-z"], cwd=ROOT, env=env)
-    paths = sorted(os.fsdecode(p) for p in raw.split(b"\0") if p)
+    tracked = set()
+    if (ROOT / ".git").exists():
+        tracked = set(subprocess.check_output(
+            ["git", "ls-files", "-z"], cwd=ROOT).decode().split("\0")) - {""}
+    paths = sorted({os.fsdecode(p) for p in raw.split(b"\0") if p} | tracked)
+    exceptions_file = ROOT / "vendor/audit-exceptions.json"
+    exceptions = json.loads(exceptions_file.read_text()) if exceptions_file.exists() else {}
     groups = collections.defaultdict(lambda: {"files": 0, "bytes": 0})
     files, findings = [], []
     for item in ignored_raw.split(b"\0"):
-        if item and not os.fsdecode(item).startswith(".work/"):
+        if item and os.fsdecode(item) not in tracked and not os.fsdecode(item).startswith(".work/"):
             findings.append({"path": os.fsdecode(item), "kind": "local-only-file-outside-work"})
     for name in paths:
         path = ROOT / name
+        if not path.exists() and not path.is_symlink():
+            findings.append({"path": name, "kind": "tracked-file-missing"})
+            continue
         size = path.lstat().st_size
         group = name.split("/", 1)[0] if "/" in name else "root-docs-and-config"
         groups[group]["files"] += 1
@@ -70,7 +80,16 @@ def main():
         for label, pattern in SECRET_PATTERNS.items():
             if pattern.search(data):
                 findings.append({"path": name, "kind": label})
-    result = {"scope": "private-repository-candidates-not-committed-or-pushed",
+    # Only exact upstream bytes with an individually reviewed reason qualify.
+    # A later edit to these files must be reviewed again; vendor/ isn't exempt.
+    verified = {}
+    for name, exception in exceptions.items():
+        path = ROOT / name
+        if path.is_file() and not path.is_symlink() and hashlib.sha256(path.read_bytes()).hexdigest() == exception["sha256"]:
+            verified[name] = exception["kinds"]
+    findings = [f for f in findings if f["kind"] not in verified.get(f["path"], [])]
+    result = {"scope": "tracked-files-and-untracked-candidates; does not push",
+              "verified_upstream_exceptions": sorted(verified),
               "authorized_development_keys": sorted(DEVELOPMENT_KEYS.intersection(paths)),
               "files": len(files), "bytes": sum(f["bytes"] for f in files),
               "groups": dict(groups), "findings": findings, "paths": files}
