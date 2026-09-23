@@ -60,6 +60,20 @@ Linux桌面通过Miracast显示到电视/显示器，外屏进入Plasma Mobile�
 3. 输入：先做宿主级触控板+手势；并行验证uinput触控板+嵌套libinput后端。
 4. 声音、断开重连、宿主重启恢复、功耗温度；然后评估引擎B（MICE/Chromecast/自有编码）。
 
+### 现有实现调研与自研边界（2026-09-24）
+
+- KDE：本轮在invent.kde.org按“miracast”“wifi display”检索未找到Miracast发送端项目（只能记为本轮未找到）。相邻组件：KDE Connect的`virtualmonitor`（把另一台装有KDE Connect的设备当扩展屏，走RDP/VNC，不面向电视）、`mousepad`/`remotekeyboard`（手机当触控板/键盘，需切到KDE Connect应用）、krfb/KRdp（VNC/RDP服务端）。
+- GNOME Network Displays：GPL-3.0，本轮查到的唯一仍在维护的Linux Miracast发送端（0.99.0，2026-09-22仍有提交）；不绑定GNOME，经portal ScreenCast取画面，可配合xdg-desktop-portal-kde。
+- 更底层的库：MiracleCast（albfan维护，2026-03有提交，以接收端为主，发送端不完整）；Intel WDS（RTSP状态机库，LGPL-2.1，2022年已归档）；gst-rtsp-server（GND在其上实现WFD）。AOSP早期的libstagefright WFD发送端已移除，现由厂商（本机为高通）闭源实现。
+- 协议本身：Wi-Fi Direct（带WFD信息元素）→ RTSP能力协商（M1–M7，保活M16）→ RTP承载MPEG-TS（H.264，LPCM/AAC）；HDCP 2.x与UIBC可选。自研最小发送端的工作量主要在接收端兼容性、P2P建链可靠性与音画同步，协议状态机与封装本身不大。
+- 自研的合理位置是宿主原生层：编码器（MediaCodec）与Wi-Fi P2P都在Android侧，且只有宿主能让KWin直接渲染进编码器输入缓冲实现零拷贝。结论：先用高通WFD栈（引擎A）打通完整体验并量化延迟，确有必要再在宿主Rust里自研引擎B，并以引擎A为基准对比。
+
+### 用户需求（2026-09-24确认）
+
+- 有一台支持的电视。
+- 投屏时手机继续显示Plasma移动界面（两个输出同时渲染）。
+- 手机屏幕上有可拖动的悬浮控制按钮，在“手机正常触控 / 触控板（控制电视指针）/ 键盘（向电视上的窗口输入）”之间切换。按钮做在宿主Activity内（Android视图层），不依赖KWin状态、响应即时；触控板模式是覆盖在手机界面上的半透明层，键盘模式在下方显示键盘、上方保留触控板区域。
+
 ## 初版方案：Android Presentation承载外屏输出（无root假设）
 
 ```
