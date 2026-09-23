@@ -157,6 +157,8 @@ def summarise(args, rounds, drivers, suffix=''):
         'sf_interval_ms_p95': med(['sf_display', 'interval_ms', 'p95']),
         'cpu_core_pct': {k: med(['cpu', k, 'core_pct']) for k in ('kwin', 'plasmashell', 'apk', 'surfaceflinger')},
         'gpu_busy_pct': med(['gpu', 'busy_pct']),
+        'bw_mbps': {dev: round(statistics.median(r.get('gpu', {}).get('bw_mbps', {}).get(dev, 0) for r in rounds), 1)
+                    for dev in sorted({d for r in rounds for d in r.get('gpu', {}).get('bw_mbps', {})})},
         'gpu_total_ms': {name: round(statistics.median(gpu_key(r, name).get('total_ms', 0) for r in rounds), 2)
                          for name in ('kwin_wayland', 'plasmashell', 'dev.moto.plasma')},
         'gpu_submission_ms_mean': {name: round(statistics.median(gpu_key(r, name).get('mean', 0) for r in rounds), 3)

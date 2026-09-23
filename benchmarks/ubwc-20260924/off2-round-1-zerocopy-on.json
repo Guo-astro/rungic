@@ -1,0 +1,119 @@
+{
+ "trace": "/home/kevinzhow/github/range-dev/.work/diag/moto-20260924-054230-kwin-pipeline-1.pftrace",
+ "window_s": 8.5,
+ "pids": {
+  "kwin": [
+   18447
+  ],
+  "plasmashell": [
+   18528
+  ],
+  "apk": [
+   23519
+  ],
+  "surfaceflinger": [
+   11550
+  ]
+ },
+ "host_queue": {
+  "buffers": 0,
+  "per_s": 0.0,
+  "interval_ms": {
+   "n": 0
+  },
+  "queueBuffer_ms": {
+   "n": 0
+  }
+ },
+ "sf_display": {
+  "frames": 329,
+  "per_s": 38.71,
+  "interval_ms": {
+   "n": 328,
+   "mean": 20.658,
+   "p50": 8.37,
+   "p95": 16.81,
+   "p99": 25.113,
+   "max": 1228.22
+  },
+  "jank_types": {
+   "None": 329
+  }
+ },
+ "kwin": {
+  "Import": {
+   "n": 345,
+   "mean": 0.061,
+   "p50": 0.05,
+   "p95": 0.109,
+   "p99": 0.18,
+   "max": 0.34
+  },
+  "Paint": {
+   "n": 345,
+   "mean": 2.437,
+   "p50": 2.201,
+   "p95": 3.926,
+   "p99": 5.422,
+   "max": 9.567
+  },
+  "batched_print_events": 0
+ },
+ "cpu": {
+  "kwin": {
+   "ms": 1624.8,
+   "core_pct": 19.1
+  },
+  "plasmashell": {
+   "ms": 2586.1,
+   "core_pct": 30.4
+  },
+  "apk": {
+   "ms": 1151.4,
+   "core_pct": 13.5
+  },
+  "surfaceflinger": {
+   "ms": 1750.5,
+   "core_pct": 20.6
+  }
+ },
+ "gpu_freq_mhz_seconds": {
+  "295": 0.051,
+  "345": 3.019,
+  "500": 0.094,
+  "600": 1.625,
+  "650": 0.545,
+  "734": 0.953,
+  "816": 2.214
+ },
+ "gpu": {
+  "busy_pct": 11.47,
+  "bw_mbps": {
+   "19091000.qcom,bwmon-ddr": 1818.4
+  },
+  "per_process": {
+   "/usr/bin/plasmashell[18528]": {
+    "n": 675,
+    "mean": 2.612,
+    "p50": 3.578,
+    "p95": 5.33,
+    "p99": 8.014,
+    "max": 8.797,
+    "total_ms": 1763.21
+   },
+   "/usr/bin/kwin_wayland[18447]": {
+    "n": 722,
+    "mean": 1.563,
+    "p50": 0.012,
+    "p95": 3.786,
+    "p99": 4.553,
+    "max": 5.21,
+    "total_ms": 1128.67
+   }
+  }
+ },
+ "thermal_before": 0,
+ "zerocopy": "on",
+ "host_native_stats": "(enabled=true available=true frames=10301 acquire_fences=10301 feedback_hw=0 feedback_latch=0 feedback_timeout=0 feedback_pending=0 feedback_implausible=0 fallback=0 last_fallback=none in_flight=1 released=10300) vsync_wanted=false parks=171",
+ "thermal_after": 0
+}

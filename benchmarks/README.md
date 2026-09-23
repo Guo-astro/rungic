@@ -3,8 +3,8 @@
 `kwin-vulkan-20260923/` holds the KWin + native Vulkan quantification (doc 56):
 real-desktop stage timing and the GLES/Vulkan compositor prototype.
 
-`zero-copy-20260924/`, `ondemand-vsync-20260924/` and `marquee-fix-20260924/` hold the zero-copy,
-explicit-sync, on-demand vsync and plasmashell marquee-fix runs (doc 57); trace files stay in `.work/diag`
+`zero-copy-20260924/`, `ondemand-vsync-20260924/`, `marquee-fix-20260924/` and `ubwc-20260924/` hold the zero-copy,
+explicit-sync, on-demand vsync, plasmashell marquee-fix and UBWC runs (doc 57); trace files stay in `.work/diag`
 and are identified by TRACES-SHA256SUMS.
 
 `plasma-vulkan-20260923/` contains the accepted GLES/Zink and native Qt Vulkan

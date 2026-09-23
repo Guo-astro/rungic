@@ -134,11 +134,21 @@ def analyse(trace, start_s=None, end_s=None):
     return result
 
 
+BWMON = re.compile(r'dev: (?P<dev>\S+), mbps = (?P<mbps>\d+), us = (?P<us>\d+)')
+
+
 def analyse_kgsl(path, t0, t1, window, names):
     owner, spans = {}, []
+    bandwidth = defaultdict(lambda: [0, 0])  # dev -> [MB, us]
     for line in path.read_text(errors='replace').splitlines():
         m = KGSL.match(line)
         if not m:
+            continue
+        if m['event'] == 'bw_hwmon_meas':
+            b = BWMON.search(m['args'])
+            if b and t0 <= float(m['ts']) < t1:
+                bandwidth[b['dev']][0] += int(b['mbps']) * int(b['us']) / 1e6
+                bandwidth[b['dev']][1] += int(b['us'])
             continue
         args = dict(kv.split('=', 1) for kv in re.findall(r'[\w/]+=[^ ,]+', m['args']))
         if m['event'] == 'adreno_cmdbatch_queued':
@@ -159,6 +169,8 @@ def analyse_kgsl(path, t0, t1, window, names):
             busy += retire - last
             last = retire
     return {'busy_pct': round(100 * busy / GPU_TICK_HZ / window, 2) if window else None,
+            # Time-weighted mean of bwmon's measured bandwidth (MB/s) over its sampled windows.
+            'bw_mbps': {dev: round(mb / (us / 1e6), 1) for dev, (mb, us) in sorted(bandwidth.items()) if us},
             'per_process': {f"{names.get(pid, '?')}[{pid}]": {**stats(d), 'total_ms': round(sum(d), 2)}
                             for pid, d in sorted(per_process.items(), key=lambda kv: -sum(kv[1]))}}
 

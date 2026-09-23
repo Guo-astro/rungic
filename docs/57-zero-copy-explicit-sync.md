@@ -1,6 +1,6 @@
 # 零拷贝呈现与显式同步
 
-2026-09-24。XT2537-4 / Android16 / APK1.10–1.22 / KWin 6.6.6+moto8。56篇的量化结论是：KWin改原生Vulkan只省CPU，更大的开销在宿主GLES合成和`glFinish`同步等待。本篇实施了其中两项共享层改动，并做同机A/B。
+2026-09-24。XT2537-4 / Android16 / APK1.10–1.24 / KWin 6.6.6+moto8–moto10。56篇的量化结论是：KWin改原生Vulkan只省CPU，更大的开销在宿主GLES合成和`glFinish`同步等待。本篇实施了其中两项共享层改动，并做同机A/B。
 
 ## 结论
 
@@ -109,6 +109,58 @@ APK1.12–1.18给零拷贝事务设`setOnComplete`，用present fence实际signa
 - 其余可行手段都是全局改动：KGSL `devfreq`的`mod_percent`（需要root、影响全机）、`min_pwrlevel`或频率锁定。它们违反49、51篇“不锁频、不改温控”的边界，未采用。
 - 必要性也下降了：显式同步后KWin不再在CPU上等待GPU，滚动时GPU只有11–13%忙碌，平均约560MHz（295–816MHz之间来回），SurfaceFlinger帧间隔p95已稳定在16.8ms。频率只影响缓冲就绪的时刻，当前数据中看不到由它造成的丢帧。
 - 以后如果出现明确由GPU低频造成的卡顿（KGSL轨迹中提交排队、`adreno_cmdbatch_retired`延后），再评估用户可选的`mod_percent`开关；默认不启用。
+
+## UBWC压缩输出缓冲（第5项）
+
+KWin输出缓冲原为线性。Adreno的UBWC（带宽压缩）可减少GPU写入与显示控制器读取的内存流量。
+
+调研与核对（实机）：
+
+- gralloc（高通snapalloc，`vendor.gralloc.disable_ubwc=0`）：AHB usage加`1<<28`（高通`GRALLOC_USAGE_PRIVATE_ALLOC_UBWC`，即`AHARDWAREBUFFER_USAGE_VENDOR_0`）且不带CPU读写位时分配UBWC；带CPU位或不带该位一律线性。1080×2400 RGBA：线性10444800字节，UBWC 10522624字节，多出的77824字节正是msm_media_info `RGBA8888_UBWC`的元数据平面（16×4像素块，宽按64、高按16对齐，4K对齐，位于像素数据之前），像素stride 1088像素。
+- Mesa gallium（fd6 layout）：显式布局下元数据平面同样在前、同样的对齐公式，pitch要求256字节对齐，与gralloc结果逐项一致。gallium不自行编程UBWC模式寄存器（highest bank bit、swizzle、macrotile由内核在GPU初始化时按平台配置写入；本机KGSL报告HBB=14、UBWC 4.0），因此Mesa写出的UBWC与显示控制器、高通GLES使用同一套配置。gallium对FD710写死的`highest_bank_bit=16`只用于CPU端tiled拷贝，不影响此路径。
+- 阻碍只在上游分支的KGSL dma-buf“窄契约”（[lfdevs/mesa-for-android-container PR #85](https://github.com/lfdevs/mesa-for-android-container/pull/85)，为XWayland定的保守约定：共享缓冲一律LINEAR，拒绝导入非线性修饰符），不是已知硬件限制。
+
+实现（三处，默认开启只影响KWin）：
+
+- Mesa（vendor，19行）：`FD_KGSL_DMABUF_UBWC=1`时允许在KGSL dma-buf路径**导入**`DRM_FORMAT_MOD_QCOM_COMPRESSED`；导出与修饰符查询仍只有LINEAR，客户端（plasmashell等）的分配行为不变。以`build_on_device.py mesa targets`（新增meson支持，选项与`build-mesa.sh`共用`plasma/mesa-meson-options`）在手机上构建libgallium并dpkg-divert替换。
+- 宿主（APK1.23）：分配协议v2带修饰符；UBWC请求用`0xB00|1<<28`分配，并按dma-buf大小核对确为UBWC布局才回报QCOM_COMPRESSED，否则回报LINEAR。dma-buf全局对XB24/AB24增加QCOM_COMPRESSED。零拷贝照常提交AHB；GLES回退对租约缓冲本来就经AHB导入，由高通驱动解码。
+- KWin（moto9）：`MOTO_KWIN_UBWC=1`且宿主提供该修饰符时按v2请求。`plasma/kwin`只为KWin导出这两个变量。
+
+验证：日志中输出缓冲均为`modifier=0x500000000000001`；HWC以`composition=DEVICE`直接扫描；以root执行`service call SurfaceFlinger 1008 i32 1`强制GPU合成（`composition=CLIENT`）并滑动、截屏，画面正确，SurfaceFlinger与system_server进程号不变，之后恢复。横竖屏各两次、启动检查3/3与搜索2/2通过。
+
+同机A/B（抽屉滚动，每组3轮，开/关交替两次，热状态0）：
+
+| 中位数 | UBWC关 | UBWC开 |
+|---|---:|---:|
+| KWin GPU时间（8.5秒） | 1129–1139 ms | **627–655 ms**（约−43%） |
+| KWin Paint p50 / p95 | 2.27–2.39 / 4.03–4.25 ms | 2.24–2.27 / 3.72–3.84 ms |
+| DDR实测带宽（bwmon） | 1883–2001 MB/s | 1738–1828 MB/s（约−8%） |
+| GPU忙碌 | 11.0–11.5% | 10.9% |
+| SurfaceFlinger帧间隔p95 | 16.8 ms | 16.8 ms |
+
+DDR带宽取自内核`dcvs/bw_hwmon_meas`事件（bwmon每个采样窗口测得的MB/s），已加入`moto_trace`的KGSL tracefs实例，报告与`kwin_pipeline_run`汇总给出时间加权平均`bw_mbps`。带宽含全机所有流量（plasmashell与客户端缓冲仍是线性），UBWC只作用于KWin输出与显示扫描。显示面板上的实际观感需人工确认；截屏只覆盖GPU合成路径。
+
+### 零拷贝横屏被裁半屏（同时发现并修复）
+
+验收旋转时发现：零拷贝打开时竖屏→横屏只显示左侧1080像素，其余全黑；关闭UBWC仍然如此，关闭零拷贝则正常。原因：零拷贝层是SurfaceView窗口层的子层，SurfaceFlinger按父层范围裁剪子层，而父层范围来自它最后一帧缓冲；零拷贝期间宿主不再向窗口提交缓冲，旋转后父层仍是旧方向的尺寸。此前零拷贝没有做过横屏验收。
+
+修复（APK1.24）：记录最近一次GLES帧实际绘入的窗口缓冲尺寸，与当前表面尺寸不一致时先走GLES（回退原因`window resized: parent frame first`），一致后恢复零拷贝。尺寸必须在绘制前用`eglQuerySurface`读取：Android在`eglSwapBuffers`时就把EGL_WIDTH/HEIGHT更新为下一块缓冲的尺寸，swap后读取会误判（第一版即因此只修好了横屏→竖屏）。实测每次旋转走2帧GLES，竖→横→竖→横→竖五次截图均完整。
+
+## 宿主重启时KWin中止与客户端崩溃潮（第8、9项）
+
+现象：每次APK更新或宿主进程重启，`kwin_wayland`以SIGABRT退出并留下约250MB核心转储（`moto-coredump-collect`随即在手机上做zstd压缩和gdb回溯）；随后`moto-plasma-keyboard`、`plasma-settings`等Qt客户端在`QtWayland::wl_compositor::create_surface()`段错误。
+
+原因：
+
+- KWin嵌套Wayland后端`WaylandEventThread::dispatch()`在宿主连接断开时调用`qFatal("Wayland connection broke")`，这是上游设计。`kwin_wayland_wrapper`把非0、非133的退出都算作崩溃，立即重启KWin；此时宿主往往还没起来，新KWin连不上又退出。wrapper的崩溃计数只在退出码133时清零，超过10次就不再重启。
+- 客户端带`QT_WAYLAND_RECONNECT=1`，在KWin重启的空窗重连到wrapper保留的socket，新连接上一个全局对象都没收到就重建surface，空的`wl_compositor`被调用。这是Qt未合并的[QTBUG-150287](https://qt-project.atlassian.net/browse/QTBUG-150287)；候选修复[Gerrit 770189](https://codereview.qt-project.org/c/qt/qtbase/+/770189)只把段错误改成`_exit(1)`，客户端仍不能存活。Ubuntu 26.04（6.10.2）和Debian sid（6.11.2）都没有修复。
+
+修复（KWin moto10，`backends/wayland/wayland_display.cpp`，仅在`MOTO_GPU_ALLOCATOR`存在即Android宿主时生效）：
+
+- 启动时最多等60秒宿主socket可连接，而不是一次失败即退出。
+- 运行中宿主断开：记录“Host connection lost”，等宿主socket重新可连接（最多120秒）后以133退出。wrapper随即重启KWin且不计崩溃，新KWin一次连上宿主；不再产生核心转储。
+
+验收：两次`am force-stop`后重新打开APK，0个新核心转储、0次段错误，桌面恢复。APK新宿主进程本来就会执行`restart-session`，客户端随会话重启，不再以崩溃方式退出。Qt重连缺陷本身未修改；它只在重连落到“没有可用KWin”的空窗时触发，本修复消除了这个空窗。
 
 ## 其他修复
 

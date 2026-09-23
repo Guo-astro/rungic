@@ -1,0 +1,128 @@
+{
+ "trace": "/home/kevinzhow/github/range-dev/.work/diag/moto-20260924-054535-kwin-pipeline-3.pftrace",
+ "window_s": 8.5,
+ "pids": {
+  "kwin": [
+   18447
+  ],
+  "plasmashell": [
+   18528
+  ],
+  "apk": [
+   23519
+  ],
+  "surfaceflinger": [
+   11550
+  ]
+ },
+ "host_queue": {
+  "buffers": 0,
+  "per_s": 0.0,
+  "interval_ms": {
+   "n": 0
+  },
+  "queueBuffer_ms": {
+   "n": 0
+  }
+ },
+ "sf_display": {
+  "frames": 374,
+  "per_s": 44.0,
+  "interval_ms": {
+   "n": 373,
+   "mean": 18.95,
+   "p50": 8.368,
+   "p95": 16.783,
+   "p99": 50.117,
+   "max": 935.747
+  },
+  "jank_types": {
+   "None": 374
+  }
+ },
+ "kwin": {
+  "Import": {
+   "n": 330,
+   "mean": 0.067,
+   "p50": 0.055,
+   "p95": 0.115,
+   "p99": 0.208,
+   "max": 0.79
+  },
+  "Paint": {
+   "n": 330,
+   "mean": 2.645,
+   "p50": 2.405,
+   "p95": 4.751,
+   "p99": 5.814,
+   "max": 8.351
+  },
+  "batched_print_events": 0
+ },
+ "cpu": {
+  "kwin": {
+   "ms": 1583.2,
+   "core_pct": 18.6
+  },
+  "plasmashell": {
+   "ms": 2424.8,
+   "core_pct": 28.5
+  },
+  "apk": {
+   "ms": 1082.4,
+   "core_pct": 12.7
+  },
+  "surfaceflinger": {
+   "ms": 2127.8,
+   "core_pct": 25.0
+  }
+ },
+ "gpu_freq_mhz_seconds": {
+  "295": 0.605,
+  "345": 2.406,
+  "500": 0.044,
+  "600": 1.427,
+  "650": 1.961,
+  "734": 0.556,
+  "816": 1.5
+ },
+ "gpu": {
+  "busy_pct": 11.7,
+  "bw_mbps": {
+   "19091000.qcom,bwmon-ddr": 1902.6
+  },
+  "per_process": {
+   "/usr/bin/plasmashell[18528]": {
+    "n": 646,
+    "mean": 2.688,
+    "p50": 3.595,
+    "p95": 5.326,
+    "p99": 8.841,
+    "max": 9.824,
+    "total_ms": 1736.71
+   },
+   "/usr/bin/kwin_wayland[18447]": {
+    "n": 690,
+    "mean": 1.593,
+    "p50": 0.012,
+    "p95": 3.876,
+    "p99": 5.006,
+    "max": 6.142,
+    "total_ms": 1099.45
+   },
+   "com.android.systemui[649]": {
+    "n": 124,
+    "mean": 0.19,
+    "p50": 0.184,
+    "p95": 0.391,
+    "p99": 0.432,
+    "max": 0.432,
+    "total_ms": 23.5
+   }
+  }
+ },
+ "thermal_before": 0,
+ "zerocopy": "on",
+ "host_native_stats": "(enabled=true available=true frames=12049 acquire_fences=12049 feedback_hw=0 feedback_latch=0 feedback_timeout=0 feedback_pending=0 feedback_implausible=0 fallback=0 last_fallback=none in_flight=1 released=12048) vsync_wanted=false parks=195",
+ "thermal_after": 0
+}

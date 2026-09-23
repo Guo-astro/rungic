@@ -11,7 +11,8 @@ what changed.
   incremental  make in the existing obj dir, then `debian/rules binary` (skips
                configure/build through debhelper's stamp) to produce .debs
   targets      for vendor trees without Debian packaging: configure once in
-               <component>/build (Ninja, /usr prefix) and build --target T...
+               <component>/build (Ninja, /usr prefix) and build --target T...;
+               a meson tree (Mesa) is configured with plasma/<component>-meson-options
   status       state of the build unit and the log tail
   install      dpkg -i the .debs of the last build (version from debian/changelog)
   divert       install built files over distribution ones with dpkg-divert
@@ -38,6 +39,9 @@ def stage(component):
     with tarfile.open(archive, 'w') as tar:
         tar.add(source, arcname='src')
         tar.add(WORKSPACE / 'plasma/build-shims', arcname='cmake-shims')
+        options = WORKSPACE / f'plasma/{component}-meson-options'
+        if options.exists():
+            tar.add(options, arcname='meson-options')
     return archive
 
 
@@ -58,15 +62,24 @@ rsync -a --checksum --delete --itemize-changes --exclude '/obj-*' --exclude '/de
   --exclude '/debian/*-build-stamp' --exclude '/debian/files' --exclude '/debian/*.substvars' \\
   --exclude '/debian/tmp' {work}/incoming/src/ {work}/src/ | grep -v '^\\.' | head -40
 rm -rf {BASE}/cmake-shims && mv {work}/incoming/cmake-shims {BASE}/cmake-shims
+if [ -f {work}/incoming/meson-options ]; then mv {work}/incoming/meson-options {work}/meson-options; fi
 rm -rf {work}/incoming
 ''', 'container', timeout=600))
+
+
+def component_uses_meson(component):
+    return (WORKSPACE / f'plasma/{component}-meson-options').exists()
 
 
 def start(component, mode, jobs, targets=(), lto=True, cmake_args=()):
     work = f'{BASE}/{component}'
     maint = '' if lto else ' DEB_BUILD_MAINT_OPTIONS=optimize=-lto'
     obj = f'{work}/src/obj-aarch64-linux-gnu'
-    if mode == 'targets':
+    if mode == 'targets' and component_uses_meson(component):
+        build = f'{work}/build'
+        steps = (f"cd {work} && (test -f {build}/build.ninja || meson setup {build} src \\$(cat {work}/meson-options)) && "
+                 f"ninja -C {build} -j {jobs} {' '.join(targets)}")
+    elif mode == 'targets':
         build = f'{work}/build'
         steps = (f"cd {work} && (test -f {build}/build.ninja || cmake -S src -B {build} -G Ninja "
                  f"-DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=OFF {' '.join(cmake_args)}) && "
@@ -88,7 +101,7 @@ systemd-run --unit=moto-build-{component} --nice=10 --property=IOSchedulingClass
 
 def status(component):
     return out(f'''systemctl show -p ActiveState -p Result -p ExecMainStartTimestamp -p ExecMainExitTimestamp moto-build-{component}
-grep -E '^\\[ *[0-9]+%\\]|error|Error|warning: unused|dpkg-deb: building' {BASE}/{component}/build.log 2>/dev/null | tail -n 8 | cut -c1-200
+grep -E '^\\[ *[0-9]+%\\]|^\\[[0-9]+/[0-9]+\\]|error|Error|warning: unused|dpkg-deb: building' {BASE}/{component}/build.log 2>/dev/null | tail -n 8 | cut -c1-200
 ls -1t {BASE}/{component}/*.deb 2>/dev/null | head -12''', 'container')
 
 

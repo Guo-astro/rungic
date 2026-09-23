@@ -8,6 +8,10 @@ if [ -f /mnt/android-wayland/android-display.ini ]; then
 fi
 export MOTO_KWIN_ANDROID_SHM=1
 export MOTO_KWIN_FLAT_OUTPUT=1
+# KWin's output buffers in Adreno UBWC: the host allocates them with gralloc and
+# Mesa imports them (docs/57). Only KWin needs these; clients keep linear buffers.
+export MOTO_KWIN_UBWC=1
+export FD_KGSL_DMABUF_UBWC=1
 # Mobile input fields should summon the OSK even after a synthetic pointer event.
 export KWIN_IM_SHOW_ALWAYS=1
 scale=$(awk -v w="$width" -v h="$height" 'BEGIN { edge=(w<h?w:h); print edge / 360 }')

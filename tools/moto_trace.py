@@ -41,8 +41,13 @@ GPU_EVENTS = ['adreno_cmdbatch_queued', 'adreno_cmdbatch_submitted', 'adreno_cmd
               'adreno_drawctxt_switch', 'kgsl_context_create', 'kgsl_pwrlevel']
 
 
+# Qualcomm bus DCVS: bwmon's measured DDR/LLCC bandwidth per sampling window.
+BW_EVENTS = ['dcvs/bw_hwmon_meas']
+
+
 def gpu_instance_start():
     enable = '\n'.join(f'echo 1 > $I/events/kgsl/{e}/enable' for e in GPU_EVENTS)
+    enable += ''.join(f'\n[ ! -e $I/events/{e}/enable ] || echo 1 > $I/events/{e}/enable' for e in BW_EVENTS)
     run(f'''set -e
 I={GPU_INSTANCE}
 [ ! -d $I ] || rmdir $I

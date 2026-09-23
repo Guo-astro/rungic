@@ -7,13 +7,8 @@ task_stage=${MOTO_MESA_STAGE:-$task_root/.work/stage/mesa}
 mkdir -p "$task_stage"
 task_stage=$(CDPATH= cd -- "$task_stage" && pwd)
 cd "$source_dir"
-meson setup build --prefix=/usr --libdir=lib/aarch64-linux-gnu --wrap-mode=nofallback \
-    -Dplatforms=x11,wayland -Dgallium-drivers=freedreno,zink \
-    -Dgallium-va=disabled -Dvulkan-drivers=freedreno -Dvulkan-layers= \
-    -Degl=enabled -Dgles2=enabled -Dglvnd=enabled -Dglx=dri \
-    -Dlibunwind=disabled -Dintel-rt=disabled -Dmicrosoft-clc=disabled \
-    -Dvalgrind=disabled -Dgles1=disabled -Dfreedreno-kmds=kgsl \
-    -Dllvm=disabled -Dbuildtype=release
+# Options are shared with tools/build_on_device.py (meson targets on the phone).
+meson setup build $(cat "$task_root/plasma/mesa-meson-options")
 ninja -C build -j2
 DESTDIR="$task_stage" meson install -C build
 printf 'Mesa stage: %s\n' "$task_stage"

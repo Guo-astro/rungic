@@ -107,9 +107,9 @@ Linux Mesa使用KGSL，Android APK使用厂商EGL。两套实现位于不同进�
 
 相关源码：Android allocator（历史材料已移除）、[Linux allocator客户端](../../shared/graphics/gpu-allocator-client.h)、Phoc/wlroots补丁（历史材料已移除）、APK GPU补丁（历史材料已移除）。
 
-当前协议v1使用小端整数：请求为magic `0x4d475055`、width、height、fourcc共16字节；回复magic、字节stride、fourcc共12字节并携带一个FD。服务限制尺寸和最多32个活动租约。该接口依赖APK私有父目录和受控挂载，**没有复制PlatformBridge的peer UID校验**，不能把两个服务的检查条件混写。
+协议使用小端整数。v1：请求为magic `0x4d475055`、width、height、fourcc共16字节；回复magic、字节stride、fourcc共12字节并携带一个FD，缓冲为LINEAR。v2（APK1.23起，KWin moto9）：magic `0x4d475056`，请求再附8字节期望修饰符，回复再附8字节实际修饰符；期望`DRM_FORMAT_MOD_QCOM_COMPRESSED`时宿主以高通私有usage位分配UBWC缓冲，并按dma-buf大小核对确为UBWC布局后才回报该修饰符，否则回报LINEAR（57篇）。服务限制尺寸和最多32个活动租约。该接口依赖APK私有父目录和受控挂载，**没有复制PlatformBridge的peer UID校验**，不能把两个服务的检查条件混写。
 
-当前两侧使用保守的 `glFinish` 同步；未做完整异步fence优化。此共享缓冲路径用于不透明桌面输出，内部透明缩略图、Phosh概览和屏幕共享还有GBM、读回或SHM路径。因此不把整个桌面称为全程零拷贝。
+KWin输出现以sync_file显式同步（`zwp_linux_explicit_synchronization_v1`），宿主把该AHB直接交给SurfaceFlinger（零拷贝，窗口尺寸变化后先走GLES帧），KWin输出默认为UBWC；细节、开关与实测见57篇。此共享缓冲路径用于不透明桌面输出，内部透明缩略图、Phosh概览和屏幕共享还有GBM、读回或SHM路径。因此不把整个桌面称为全程零拷贝。
 
 ### 2.2 保持Linux图形库一致
 
