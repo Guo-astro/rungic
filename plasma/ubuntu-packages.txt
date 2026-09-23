@@ -7,7 +7,6 @@ plasma-keyboard
 qmlkonsole
 dolphin
 koko
-elisa
 haruna
 okular
 dbus-user-session

@@ -174,6 +174,15 @@ DDR带宽取自内核`dcvs/bw_hwmon_meas`事件（bwmon每个采样窗口测得�
 
 验收：两次`am force-stop`后重新打开APK，0个新核心转储、0次段错误，桌面恢复。APK新宿主进程本来就会执行`restart-session`，客户端随会话重启，不再以崩溃方式退出。Qt重连缺陷本身未修改；它只在重连落到“没有可用KWin”的空窗时触发，本修复消除了这个空窗。
 
+## 事故：打开Elisa后宿主被低内存杀手杀死（已移除Elisa）
+
+2026-09-24 05:51与05:52，用户打开Elisa后桌面两次整体崩溃。
+
+- 经过：Android lmkd在内存耗尽时从后台一路杀到前台，`dev.moto.plasma`（oom_adj 0，TOP）被杀；KWin随即“Host connection lost”，会话重启，Marble Maps、QmlKonsole、Elisa等Qt客户端在重连空窗里于`wl_compositor::create_surface`段错误（QTBUG-150287）。容器进程不受lmkd管理，它只能杀Android应用。
+- 根因：KGSL `page_alloc_max`达4.27GB（常态约0.5GB）。`kgsl_mem_alloc`跟踪显示Elisa的QSGRenderThread单次分配730–980MB；gdb在`_mesa_TexImage2D`上抓到`QSGPlainTexture`上传13824×13824与6912×6912纹理（含mipmap约977MB）。移动端播放器的封面图`sourceSize`写成`512 * Screen.devicePixelRatio`，Qt 6再按DPR换算一次，默认封面经`image://icon`（KIconThemes的头文件实现`KQuickIconProvider`，调用`QIcon::pixmap(requestedSize)`又乘一次应用DPR）：本机DPR为3，512×27=13824。DPR为1的桌面上只有512，所以不易察觉。Elisa上游移动端代码与KIconThemes上游至今未改。
+- 处理：按用户决定直接卸载Elisa（`apt-get remove elisa`，无其他包依赖它），并从`plasma/ubuntu-packages.txt`移除；`provenance/…/packages.tsv`是当时发布的历史记录，保留。
+- 遗留风险：任何容器应用的GPU内存失控都会让lmkd杀掉前台宿主，进而连带整个会话。可选的共享层防护是在Android侧以root监视KGSL各进程内存，在可用内存过低时先结束占用最大的容器进程；尚未实施。
+
 ## 其他修复
 
 - 开机左上角黑框光标：宿主seat在触屏模式下仍声明`wl_pointer`，KWin据此在(0,0)绘制自己的光标（透明区在不透明层中显示为黑框），直到有指针事件。宿主改为只在鼠标/触控板模式声明`wl_pointer`（触屏模式只走`wl_touch`，本来就不经过指针），切换模式时增删能力。开机截图已无光标；按控件名启动/关闭应用检查3/3及改变布局2/2通过。蓝牙鼠标模式尚未实机验证。
