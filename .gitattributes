@@ -9,3 +9,6 @@
 *.rgba binary
 *.dmabuf binary
 *.p12 binary
+
+# Preserve imported source bytes and identify upstream code in GitHub.
+vendor/** -text linguist-vendored
