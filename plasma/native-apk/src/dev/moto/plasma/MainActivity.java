@@ -21,6 +21,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     private PlatformBridge platform;
     private CaptureBridge capture;
     private CodecBridge codecs;
+    private CastTest castTest;
     private TextView status;
     private volatile int bufferWidth = 720, bufferHeight = 1600;
     private FrameLayout frame;
@@ -56,6 +57,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         status.setOnClickListener(v -> { if(display.getHolder().getSurface().isValid())surfaceCreated(display.getHolder()); });
         frame.addView(status, new FrameLayout.LayoutParams(-1, -1));
         setContentView(frame);
+        castTest = new CastTest(this, frame);
         registerEdgeBack();
         display.setOnApplyWindowInsetsListener((v, insets) -> {
             captureDisplayInsets(insets);
@@ -72,6 +74,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         if(android.os.Build.VERSION.SDK_INT>=34 && edgeBackCallback!=null)
             getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(edgeBackCallback);
         pacer.stop();
+        castTest.release();
         try { capture.close(); } catch(IOException ignored) {}
         try { codecs.close(); } catch(IOException ignored) {}
         try { platform.close(); } catch(IOException ignored) {}
@@ -234,6 +237,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         publishDisplayInfo();
     }
 
+    org.json.JSONObject castTest(org.json.JSONObject request) throws Exception { return castTest.request(request); }
     org.json.JSONObject displayInfo() throws org.json.JSONException {
         Display d=display.getDisplay();
         if(d==null)throw new IllegalStateException("Display unavailable");

@@ -1,0 +1,4 @@
+#!/system/bin/sh
+# Root Wi-Fi Display control (docs/58). Installed as /data/adb/moto-wfd/moto-cast.
+[ "$(id -u)" = 0 ] || { echo '{"error":"moto-cast needs root"}'; exit 2; }
+CLASSPATH=/data/adb/moto-wfd/moto-cast.jar exec app_process /system/bin dev.moto.cast.Main "$@"

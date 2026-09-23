@@ -95,6 +95,29 @@ Miracast需要Wi-Fi Direct近距离直连；手机经VPN连到K8，K8（Intel AX
 - 连接后的状态：WFD显示`TCL 85Q6H-9E92[R1]`，1920×1080@60，`activeDisplayState=2`；Moto启动器在该显示上启动`SecondaryDisplayLauncher`（外屏是可运行Activity的副屏，而非只能镜像），这对后续由宿主接管外屏有利。
 - 未验证：`net_raw`以外的三组规则是否必要（为减少用户往返一并放行）；重启后规则自动加载需在下次重启时确认。
 
+## 第1步原型：root投屏控制与接管电视画面（2026-09-24）
+
+### root投屏控制：`moto-cast`
+
+`shared/android/moto-cast/`：Java源码经javac+d8编为`moto-cast.jar`，装在`/data/adb/moto-wfd/`，由root经`app_process`运行，反射调用`DisplayManagerGlobal`隐藏接口（root通过`CONFIGURE_WIFI_DISPLAY`检查），输出JSON：`status`、`scan [秒]`、`connect <地址|名称> [秒]`、`disconnect`、`decor <显示ID> [on|off]`。实测按名称约3–6秒连上。
+
+实现中踩到的两处框架行为：
+
+- Android 16的`DisplayManagerGlobal.startWifiDisplayScan`不再隐式注册显示回调，调用方必须先`registerDisplayListener`，否则抛`IllegalStateException`（未捕获时app_process以SIGKILL结束，表现为“Killed”）。
+- `WifiDisplayController`只连接当前发现列表中的对端，扫描开始或停止都会清空该列表，而`WifiDisplayStatus`里可能仍显示上一轮的“可用”。因此连接请求须在扫描进行中发出，并在状态仍为未连接且对端重新出现时每3秒重发。修复前的若干次“停用Ready For后连不上”实验结论因此作废并已重做。
+
+### 接管电视画面：`CastTest`（APK1.26）
+
+平台桥`cast-test`（`{"enabled":true|false}`或仅查询）：在Presentation类显示上放测试图案（彩条、毫秒时钟、帧计数、移动色块），手机中央叠加同源时钟用于拍照测延迟。
+
+- WFD显示：`FLAG_PRESENTATION | FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS | FLAG_TRUSTED | FLAG_OWN_DISPLAY_GROUP`，1920×1080@60，160dpi，type WIFI，无`FLAG_SECURE`；每次连接逻辑显示ID都会变。`screencap -d <SurfaceFlinger虚拟显示ID>`（`dumpsys SurfaceFlinger --display-id`）可截取合成后的电视画面。
+- 遮挡：Moto Ready For在首次连接时弹出模式选择`MotoDesktopSplash`（窗口类型2938），并在该显示上放任务栏`MotoTaskBar`（`com.motorola.systemui.desk`，导航栏类窗口）与副屏启动器。Presentation位于二者之下；普通窗口无法盖过导航栏层级；`setShouldShowSystemDecors(false)`被显示自身的`FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS`覆盖，无效。
+- Ready For不能整体停用：`com.motorola.mobiledesktop.core`参与P2P发现，`com.motorola.mobiledesktop`参与发起连接（Moto改过的框架把连接交给它）。只停用任务栏包`com.motorola.systemui.desk`后连接正常，任务栏消失。当前设备上该包处于`disabled-user`状态，恢复命令：`pm enable --user 0 com.motorola.systemui.desk`。
+- 窗口：改用`TYPE_APPLICATION_OVERLAY`（清单声明`SYSTEM_ALERT_WINDOW`，root下`appops set dev.moto.plasma SYSTEM_ALERT_WINDOW allow`），`FLAG_NOT_FOCUSABLE`使输入焦点始终留在手机；不能加`FLAG_NOT_TOUCHABLE`，否则Android 12+对不可触摸的悬浮窗限制最高0.8不透明度（画面透出底层）。结果：电视上为不透明、整屏1920×1080的测试图案。
+- 焦点：向电视显示注入点击会把`mTopFocusedDisplayId`切到外屏，手机上的宿主不再是顶层resumed（平台桥随即拒绝请求）；正式方案中电视上的输入必须走宿主自己的路由，不能让Android焦点切过去。
+- 帧节拍：测试图案在主线程Choreographer上重绘，跟随手机120Hz（焦点在外屏时为60Hz），而WFD显示为60Hz；正式实现须按外屏的60Hz出帧。
+- 延迟：待拍照测量。
+
 ## 初版方案：Android Presentation承载外屏输出（无root假设）
 
 ```
