@@ -1,0 +1,151 @@
+{
+ "trace": "/home/kevinzhow/github/range-dev/.work/diag/moto-20260924-004445-kwin-pipeline-2.pftrace",
+ "window_s": 8.5,
+ "pids": {
+  "kwin": [
+   19759
+  ],
+  "plasmashell": [
+   20882
+  ],
+  "apk": [
+   15102
+  ],
+  "surfaceflinger": [
+   1747
+  ]
+ },
+ "host_queue": {
+  "buffers": 369,
+  "per_s": 43.41,
+  "interval_ms": {
+   "n": 368,
+   "mean": 22.32,
+   "p50": 10.238,
+   "p95": 23.329,
+   "p99": 489.066,
+   "max": 520.501
+  },
+  "queueBuffer_ms": {
+   "n": 369,
+   "mean": 0.446,
+   "p50": 0.331,
+   "p95": 0.882,
+   "p99": 1.579,
+   "max": 2.762
+  }
+ },
+ "sf_display": {
+  "frames": 471,
+  "per_s": 55.41,
+  "interval_ms": {
+   "n": 470,
+   "mean": 17.862,
+   "p50": 8.359,
+   "p95": 33.408,
+   "p99": 300.678,
+   "max": 576.39
+  },
+  "jank_types": {
+   "None": 470,
+   "Display HAL": 1
+  }
+ },
+ "kwin": {
+  "GpuWait": {
+   "n": 283,
+   "mean": 7.258,
+   "p50": 6.432,
+   "p95": 10.384,
+   "p99": 11.419,
+   "max": 359.348
+  },
+  "Import": {
+   "n": 283,
+   "mean": 0.067,
+   "p50": 0.052,
+   "p95": 0.144,
+   "p99": 0.263,
+   "max": 0.592
+  },
+  "Paint": {
+   "n": 283,
+   "mean": 10.287,
+   "p50": 8.957,
+   "p95": 14.261,
+   "p99": 16.329,
+   "max": 361.668
+  },
+  "batched_print_events": 0
+ },
+ "cpu": {
+  "kwin": {
+   "ms": 1671.6,
+   "core_pct": 19.7
+  },
+  "plasmashell": {
+   "ms": 1530.5,
+   "core_pct": 18.0
+  },
+  "apk": {
+   "ms": 1820.3,
+   "core_pct": 21.4
+  },
+  "surfaceflinger": {
+   "ms": 2661.3,
+   "core_pct": 31.3
+  }
+ },
+ "gpu_freq_mhz_seconds": {
+  "295": 0.301,
+  "345": 4.287,
+  "500": 1.783,
+  "600": 0.534,
+  "650": 0.057,
+  "734": 0.056,
+  "816": 1.482
+ },
+ "gpu": {
+  "busy_pct": 13.09,
+  "per_process": {
+   "/usr/bin/plasmashell[20882]": {
+    "n": 303,
+    "mean": 8.723,
+    "p50": 5.655,
+    "p95": 8.53,
+    "p99": 11.153,
+    "max": 508.044,
+    "total_ms": 2643.18
+   },
+   "/usr/bin/kwin_wayland[19759]": {
+    "n": 894,
+    "mean": 0.701,
+    "p50": 0.013,
+    "p95": 2.389,
+    "p99": 2.679,
+    "max": 4.164,
+    "total_ms": 626.7
+   },
+   "dev.moto.plasma[15102]": {
+    "n": 373,
+    "mean": 1.368,
+    "p50": 1.332,
+    "p95": 1.779,
+    "p99": 2.672,
+    "max": 3.476,
+    "total_ms": 510.27
+   },
+   "com.android.systemui[3188]": {
+    "n": 126,
+    "mean": 0.195,
+    "p50": 0.177,
+    "p95": 0.324,
+    "p99": 0.339,
+    "max": 0.342,
+    "total_ms": 24.58
+   }
+  }
+ },
+ "thermal_before": 0,
+ "thermal_after": 0
+}

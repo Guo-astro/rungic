@@ -1,0 +1,30 @@
+ 1 gles:fence      fps=120.8 cpu%=20.6 wait_p50=6.32 gpu_mean=6.17
+ 2 vulkan:fence    fps=125.3 cpu%=13.1 wait_p50=6.46 gpu_mean=6.113
+ 3 vulkan:fence    fps=125.6 cpu%=13.0 wait_p50=6.41 gpu_mean=6.055
+ 4 gles:fence      fps=120.8 cpu%=20.7 wait_p50=6.29 gpu_mean=6.121
+ 5 gles:fence      fps=120.7 cpu%=20.2 wait_p50=6.35 gpu_mean=6.123
+ 6 vulkan:fence    fps=125.8 cpu%=13.1 wait_p50=6.43 gpu_mean=6.08
+{
+ "gles:fence": {
+  "runs": 3,
+  "fps": 120.75,
+  "process_cpu_core_pct": 20.64,
+  "render_cpu_ms_p50": 0.896,
+  "wait_ms_p50": 6.322,
+  "wait_ms_p95": 7.423,
+  "present_interval_ms_p95": 11.599,
+  "gpu_ms_per_submission_mean": 6.123,
+  "gpu_busy_pct": 88.11
+ },
+ "vulkan:fence": {
+  "runs": 3,
+  "fps": 125.58,
+  "process_cpu_core_pct": 13.08,
+  "render_cpu_ms_p50": 0.7,
+  "wait_ms_p50": 6.435,
+  "wait_ms_p95": 7.583,
+  "present_interval_ms_p95": 14.321,
+  "gpu_ms_per_submission_mean": 6.08,
+  "gpu_busy_pct": 89.8
+ }
+}

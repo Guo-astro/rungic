@@ -1,5 +1,8 @@
 # Reviewed benchmark evidence
 
+`kwin-vulkan-20260923/` holds the KWin + native Vulkan quantification (doc 56):
+real-desktop stage timing and the GLES/Vulkan compositor prototype.
+
 `plasma-vulkan-20260923/` contains the accepted GLES/Zink and native Qt Vulkan
 runs, clock calibration, renderer information and analysis. Raw data has not
 been rewritten to conceal its original collection paths or conditions.

@@ -1,0 +1,137 @@
+{
+ "trace": "/home/kevinzhow/github/range-dev/.work/diag/moto-20260924-004357-kwin-pipeline-1.pftrace",
+ "window_s": 8.5,
+ "pids": {
+  "kwin": [
+   19759
+  ],
+  "plasmashell": [
+   20882
+  ],
+  "apk": [
+   15102
+  ],
+  "surfaceflinger": [
+   1747
+  ]
+ },
+ "host_queue": {
+  "buffers": 374,
+  "per_s": 44.0,
+  "interval_ms": {
+   "n": 373,
+   "mean": 22.524,
+   "p50": 10.849,
+   "p95": 26.982,
+   "p99": 513.443,
+   "max": 523.116
+  },
+  "queueBuffer_ms": {
+   "n": 374,
+   "mean": 0.489,
+   "p50": 0.334,
+   "p95": 0.958,
+   "p99": 1.992,
+   "max": 7.511
+  }
+ },
+ "sf_display": {
+  "frames": 372,
+  "per_s": 43.76,
+  "interval_ms": {
+   "n": 371,
+   "mean": 22.538,
+   "p50": 8.36,
+   "p95": 25.114,
+   "p99": 509.564,
+   "max": 551.315
+  },
+  "jank_types": {
+   "None": 371,
+   "Prediction Error": 1
+  }
+ },
+ "kwin": {
+  "GpuWait": {
+   "n": 280,
+   "mean": 6.89,
+   "p50": 8.448,
+   "p95": 10.62,
+   "p99": 11.706,
+   "max": 13.231
+  },
+  "Import": {
+   "n": 280,
+   "mean": 0.064,
+   "p50": 0.054,
+   "p95": 0.128,
+   "p99": 0.173,
+   "max": 0.297
+  },
+  "Paint": {
+   "n": 280,
+   "mean": 10.147,
+   "p50": 11.431,
+   "p95": 14.651,
+   "p99": 16.372,
+   "max": 16.795
+  },
+  "batched_print_events": 0
+ },
+ "cpu": {
+  "kwin": {
+   "ms": 1746.3,
+   "core_pct": 20.5
+  },
+  "plasmashell": {
+   "ms": 1587.0,
+   "core_pct": 18.7
+  },
+  "apk": {
+   "ms": 1874.5,
+   "core_pct": 22.1
+  },
+  "surfaceflinger": {
+   "ms": 2202.1,
+   "core_pct": 25.9
+  }
+ },
+ "gpu_freq_mhz_seconds": {
+  "345": 8.158,
+  "500": 0.342
+ },
+ "gpu": {
+  "busy_pct": 11.69,
+  "per_process": {
+   "/usr/bin/plasmashell[20882]": {
+    "n": 304,
+    "mean": 6.731,
+    "p50": 7.368,
+    "p95": 7.803,
+    "p99": 9.818,
+    "max": 10.172,
+    "total_ms": 2046.25
+   },
+   "/usr/bin/kwin_wayland[19759]": {
+    "n": 861,
+    "mean": 0.761,
+    "p50": 0.014,
+    "p95": 2.541,
+    "p99": 2.889,
+    "max": 3.785,
+    "total_ms": 654.99
+   },
+   "dev.moto.plasma[15102]": {
+    "n": 384,
+    "mean": 1.454,
+    "p50": 1.389,
+    "p95": 1.809,
+    "p99": 3.05,
+    "max": 4.223,
+    "total_ms": 558.16
+   }
+  }
+ },
+ "thermal_before": 0,
+ "thermal_after": 0
+}

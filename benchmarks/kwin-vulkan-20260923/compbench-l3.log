@@ -1,0 +1,58 @@
+ 1 gles:finish     fps=40.2 cpu%=8.9 wait_p50=10.52 gpu_mean=9.521
+ 2 vulkan:finish   fps=40.1 cpu%=5.9 wait_p50=9.47 gpu_mean=9.627
+ 3 gles:fence      fps=40.0 cpu%=8.7 wait_p50=9.32 gpu_mean=9.677
+ 4 vulkan:fence    fps=40.0 cpu%=5.8 wait_p50=9.47 gpu_mean=9.637
+ 5 vulkan:fence    fps=40.0 cpu%=5.8 wait_p50=9.46 gpu_mean=9.686
+ 6 gles:fence      fps=39.9 cpu%=8.7 wait_p50=9.29 gpu_mean=9.656
+ 7 vulkan:finish   fps=40.8 cpu%=5.8 wait_p50=9.37 gpu_mean=9.383
+ 8 gles:finish     fps=40.0 cpu%=9.0 wait_p50=10.52 gpu_mean=9.531
+ 9 gles:finish     fps=40.0 cpu%=9.0 wait_p50=10.52 gpu_mean=9.556
+10 vulkan:finish   fps=40.1 cpu%=5.9 wait_p50=9.48 gpu_mean=9.687
+11 gles:fence      fps=39.9 cpu%=8.7 wait_p50=9.24 gpu_mean=9.646
+12 vulkan:fence    fps=40.7 cpu%=5.3 wait_p50=9.51 gpu_mean=9.363
+{
+ "gles:finish": {
+  "runs": 3,
+  "fps": 40.0,
+  "process_cpu_core_pct": 8.96,
+  "render_cpu_ms_p50": 0.274,
+  "wait_ms_p50": 10.519,
+  "wait_ms_p95": 12.627,
+  "present_interval_ms_p95": 26.703,
+  "gpu_ms_per_submission_mean": 9.531,
+  "gpu_busy_pct": 45.42
+ },
+ "vulkan:finish": {
+  "runs": 3,
+  "fps": 40.08,
+  "process_cpu_core_pct": 5.92,
+  "render_cpu_ms_p50": 0.89,
+  "wait_ms_p50": 9.475,
+  "wait_ms_p95": 11.59,
+  "present_interval_ms_p95": 26.48,
+  "gpu_ms_per_submission_mean": 9.627,
+  "gpu_busy_pct": 45.46
+ },
+ "gles:fence": {
+  "runs": 3,
+  "fps": 39.92,
+  "process_cpu_core_pct": 8.73,
+  "render_cpu_ms_p50": 0.945,
+  "wait_ms_p50": 9.288,
+  "wait_ms_p95": 11.372,
+  "present_interval_ms_p95": 26.581,
+  "gpu_ms_per_submission_mean": 9.656,
+  "gpu_busy_pct": 45.8
+ },
+ "vulkan:fence": {
+  "runs": 3,
+  "fps": 40.0,
+  "process_cpu_core_pct": 5.78,
+  "render_cpu_ms_p50": 0.894,
+  "wait_ms_p50": 9.474,
+  "wait_ms_p95": 11.649,
+  "present_interval_ms_p95": 26.568,
+  "gpu_ms_per_submission_mean": 9.637,
+  "gpu_busy_pct": 45.84
+ }
+}

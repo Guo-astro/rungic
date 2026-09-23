@@ -464,3 +464,7 @@ sha256sum -c .work/refs/phosh-features-20260923/SHA256SUMS
 2026-09-23桌面启动补修：发现Firefox发行版desktop三个Exec直接调用原程序，绕过编解码包装入口；之前只测命令行漏检了此路径。新增`phosh/install-firefox-launcher.py`生成同ID用户desktop覆盖，普通启动/新窗口/隐私窗口均走包装脚本。恢复步骤、原始问题证据与桌面启动复测见修复记录（历史材料已移除）。
 
 2026-09-23输入验证流程修正：Marionette仅连接显式独立测试profile，禁止用日常profile保存自动化偏好。真实屏幕键盘需独立验收：焦点/ASCII提交、中文preedit与候选、正常退出确认与新进程启动。此前残留focusmanager.testmode触发Firefox154空指针，已清理，见[36篇](../36-firefox-input-fix.md)。迁移glibc发行版时保留Android接口契约、重编Linux侧二进制并验证会话服务，详见[37篇](../37-linux-distribution-evaluation.md)。
+
+## 调试与性能观测入口（2026-09-24）
+
+Agent可直接调用的设备诊断、崩溃现场、统一追踪（perfetto + KGSL + KWin FTrace）与按控件操作见[55篇](../55-agent-native-debugging.md)；入口为工作区`.mcp.json`中的`moto` MCP服务及`tools/moto_agent.py`等命令行。桌面输出链的分段耗时与GLES/Vulkan对照见[56篇](../56-kwin-vulkan-quantification.md)。

@@ -1,0 +1,110 @@
+{
+ "api": "vulkan",
+ "sync": "fence",
+ "layers": 3,
+ "taps": 1,
+ "size": [
+  1080,
+  2400
+ ],
+ "device": "Turnip Adreno (TM) 710",
+ "throttled": true,
+ "frames": 480,
+ "seconds": 12.0,
+ "fps": 40.0,
+ "process_cpu_core_pct": 5.82,
+ "presented_frames": 480,
+ "render_cpu_ms": {
+  "n": 480,
+  "mean": 0.901,
+  "p50": 0.909,
+  "p95": 1.054,
+  "p99": 1.128,
+  "max": 1.35
+ },
+ "wait_ms": {
+  "n": 480,
+  "mean": 9.996,
+  "p50": 9.464,
+  "p95": 11.666,
+  "p99": 11.964,
+  "max": 12.149
+ },
+ "commit_interval_ms": {
+  "n": 479,
+  "mean": 24.989,
+  "p50": 24.958,
+  "p95": 27.653,
+  "p99": 28.649,
+  "max": 33.834
+ },
+ "present_interval_ms": {
+  "n": 479,
+  "mean": 24.984,
+  "p50": 25.035,
+  "p95": 26.568,
+  "p99": 28.714,
+  "max": 33.394
+ },
+ "kgsl": {
+  "n": 460,
+  "mean": 9.686,
+  "p50": 9.1,
+  "p95": 11.359,
+  "p99": 11.625,
+  "max": 11.713,
+  "total_ms": 4455.35
+ },
+ "gpu_busy_pct": 46.01,
+ "host_queue": {
+  "buffers": 460,
+  "per_s": 40.0,
+  "interval_ms": {
+   "n": 459,
+   "mean": 25.004,
+   "p50": 25.037,
+   "p95": 26.424,
+   "p99": 27.7,
+   "max": 33.316
+  },
+  "queueBuffer_ms": {
+   "n": 460,
+   "mean": 1.319,
+   "p50": 1.292,
+   "p95": 1.724,
+   "p99": 2.088,
+   "max": 2.876
+  }
+ },
+ "sf_display": {
+  "frames": 479,
+  "per_s": 41.65,
+  "interval_ms": {
+   "n": 478,
+   "mean": 24.012,
+   "p50": 25.059,
+   "p95": 25.073,
+   "p99": 25.125,
+   "max": 33.417
+  },
+  "jank_types": {
+   "None": 479
+  }
+ },
+ "cpu": {
+  "apk": {
+   "ms": 4561.4,
+   "core_pct": 39.7
+  },
+  "surfaceflinger": {
+   "ms": 4532.3,
+   "core_pct": 39.4
+  }
+ },
+ "gpu_freq_mhz_seconds": {
+  "295": 11.5
+ },
+ "trace": "/home/kevinzhow/github/range-dev/.work/diag/moto-20260924-001621-compbench-5-vulkan-fence.pftrace",
+ "thermal_before": 0,
+ "thermal_after": 0
+}

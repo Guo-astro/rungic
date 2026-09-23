@@ -25,7 +25,7 @@ Motorola moto g100s（XT2537-4 / Adreno710）上的Android与Linux桌面适配�
 ## 当前状态与入口
 
 - 原厂Android16 + Magisk31，全局SELinux Enforcing；LXC与Docker已部署。历史v3完整刷机包尚未整合当前全部容器/桌面修改。
-- Plasma独立APK和Ubuntu容器已运行；原生1080×2400与30/60/90/120Hz/自动策略已接入。正式KWin继续使用GLES，Vulkan对照与限制见[51篇](docs/51-plasma-vulkan-benchmark.md)。
+- Plasma独立APK和Ubuntu容器已运行；原生1080×2400与30/60/90/120Hz/自动策略已接入。正式KWin继续使用GLES，Vulkan对照与限制见[51篇](docs/51-plasma-vulkan-benchmark.md)，KWin原生Vulkan收益量化见[56篇](docs/56-kwin-vulkan-quantification.md)。
 - 媒体和显示尚有剩余验收项，以[48篇](docs/48-plasma-media-pipelines.md)、[50篇](docs/50-plasma-display-settings.md)为准，不把安装成功等同于完整验收。
 - 设备管理：`python3 tools/moto_plasma.py status`。开发环境：`source tools/work-env.sh`。APK构建：`bash plasma/build-apk.sh`，产物写入`.work/`。
 - 图形和后端架构见[40篇](docs/40-plasma-mobile-integration.md)及[共享桥说明](shared/README.md)。全新机器构建仍需准备SDK/NDK及部分依赖。
@@ -85,3 +85,5 @@ Vendor适配应放在哪一层、哪些可以抽离到共享后端，见[54篇�
 | [50-plasma-display-settings.md](docs/50-plasma-display-settings.md) | KDE 显示设置与 Android 原生分辨率 |
 | [51-plasma-vulkan-benchmark.md](docs/51-plasma-vulkan-benchmark.md) | Plasma Vulkan 链路与性能对照 |
 | [52-git-repository-scope.md](docs/52-git-repository-scope.md) | 私有仓库与本地工作目录 |
+| [55-agent-native-debugging.md](docs/55-agent-native-debugging.md) | Agent 原生调试：统一采集、崩溃现场、统一追踪与按控件操作 |
+| [56-kwin-vulkan-quantification.md](docs/56-kwin-vulkan-quantification.md) | KWin + 原生 Vulkan 收益量化 |

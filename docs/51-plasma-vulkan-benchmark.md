@@ -72,3 +72,5 @@
 目前KWin→Android输出仍有`glFinish`等待，宿主仍进行一次GLES呈现。更换API不会自动消除这些步骤。后续原型应直接针对这一输出链：复用上游Vulkan device/texture基础设施，完成Wayland嵌套输出、AHB/DMA-BUF导入及fence交接，先比较相同窗口纹理场景的呈现长帧与CPU成本，再决定扩成KWin分支。
 
 完整KWin原生后端还涉及ItemRenderer、GL着色器/帧缓冲特效、Qt Quick内部纹理互操作、颜色管理、旋转缩放、录屏导出及恢复。这些都不是设置QSG_RHI_BACKEND即可完成的。正式维护fork的判断应以实际桌面收益明显超过轮次波动、无输入/缩放/媒体回归、可继续跟随上游为准；本轮没有宣称已实现该原生后端。
+
+后续（2026-09-24）：在KWin输出路径上用独立GLES/Vulkan合成原型和KWin分段追踪完成了量化，结论与建议见[56篇](56-kwin-vulkan-quantification.md)。

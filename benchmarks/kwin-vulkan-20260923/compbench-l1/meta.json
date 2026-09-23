@@ -1,0 +1,105 @@
+{
+ "order": [
+  "gles:fence",
+  "vulkan:fence",
+  "vulkan:fence",
+  "gles:fence",
+  "gles:fence",
+  "vulkan:fence"
+ ],
+ "args": {
+  "out": ".work/refs/kwin-vulkan-20260923/compbench-l1",
+  "rounds": 3,
+  "variant": [
+   "gles:fence",
+   "vulkan:fence"
+  ],
+  "layers": 1,
+  "taps": 1,
+  "seconds": 12,
+  "warmup": 3,
+  "unthrottled": false,
+  "keep_session": false,
+  "max_thermal": 0
+ },
+ "status_before": {
+  "android": {
+   "time": "1790177843.792292159",
+   "uptime": "27931.48",
+   "selinux": "Enforcing",
+   "apk": "1.9",
+   "apk_pid": "15102",
+   "wakefulness": "Awake",
+   "top": "dev.moto.plasma/.MainActivity",
+   "thermal": "0",
+   "battery": "80",
+   "gpubusy": " 410468 1011191",
+   "gpu_freq": "345000000",
+   "container": "RUNNING"
+  },
+  "container": {
+   "system": "running",
+   "failed": "",
+   "kwin_wayland": "27489 rss_kib=144456 started=Wed Sep 23 23:37:14 2026",
+   "plasmashell": "27572 rss_kib=310060 started=Wed Sep 23 23:37:15 2026"
+  },
+  "desktop": {
+   "user_failed": "",
+   "renderer": " FD710"
+  },
+  "host": {
+   "foreground": true,
+   "orientation": "portrait",
+   "keepAwake": false,
+   "battery": {
+    "percent": 80,
+    "temperature": 29,
+    "status": 4,
+    "plugged": 1
+   },
+   "stats": "window_bound=true, surface=1080x2400, wl_scale=1.0, shm_enabled=true | injector(td=136,tm=4551,tu=136,tc=0,kd=10,ku=10,tx=0,gs=0,last_ms=1790176062313) | scroll_sensitivity=1 | windows=1 unmanaged=2 focus=ObjectId(wl_surface@3[0], 21) injected=4843 dispatch=touch_up id=0 focus_decision=reason=toplevel_destroyed action=no-surface windows=0 had_focus=false cursor=fallback:named:Default",
+   "presentedFrames": 40870,
+   "lastError": null
+  }
+ },
+ "status_after": {
+  "android": {
+   "time": "1790178186.513116143",
+   "uptime": "28274.20",
+   "selinux": "Enforcing",
+   "apk": "1.9",
+   "apk_pid": "15102",
+   "wakefulness": "Awake",
+   "top": "dev.moto.plasma/.MainActivity",
+   "thermal": "0",
+   "battery": "80",
+   "gpubusy": "  51149 1005417",
+   "gpu_freq": "295000000",
+   "container": "RUNNING"
+  },
+  "container": {
+   "system": "running",
+   "failed": "",
+   "kwin_wayland": "28381 rss_kib=143900 started=Wed Sep 23 23:43:03 2026",
+   "plasmashell": "28465 rss_kib=261656 started=Wed Sep 23 23:43:04 2026"
+  },
+  "desktop": {
+   "user_failed": "",
+   "renderer": " FD710"
+  },
+  "host": {
+   "foreground": true,
+   "orientation": "portrait",
+   "keepAwake": false,
+   "battery": {
+    "percent": 80,
+    "temperature": 29,
+    "status": 4,
+    "plugged": 1
+   },
+   "stats": "window_bound=true, surface=1080x2400, wl_scale=1.0, shm_enabled=true | injector(td=136,tm=4551,tu=136,tc=0,kd=10,ku=10,tx=0,gs=0,last_ms=1790176062313) | scroll_sensitivity=1 | windows=1 unmanaged=2 focus=ObjectId(wl_surface@3[0], 21) injected=4843 dispatch=touch_up id=0 focus_decision=reason=toplevel_destroyed action=no-surface windows=0 had_focus=false cursor=fallback:named:Default",
+   "presentedFrames": 46220,
+   "lastError": null
+  }
+ }
+}

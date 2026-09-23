@@ -1,0 +1,39 @@
+round 1: paint p50=11.431 gpuwait p50=8.448 host/s=44.0
+round 2: paint p50=8.957 gpuwait p50=6.432 host/s=43.41
+round 3: paint p50=7.906 gpuwait p50=5.405 host/s=16.94
+{
+ "rounds": 3,
+ "plasmashell_rhi": "vulkan",
+ "plasmashell_drivers": [
+  "libgallium-26.3.0-devel.so",
+  "libvulkan_freedreno.so"
+ ],
+ "kwin_paint_ms_p50": 8.957,
+ "kwin_paint_ms_p95": 14.651,
+ "kwin_gpuwait_ms_p50": 6.432,
+ "kwin_gpuwait_ms_p95": 10.62,
+ "kwin_import_ms_p50": 0.052,
+ "kwin_paints": 280,
+ "host_buffers_per_s": 43.41,
+ "host_interval_ms_p50": 10.849,
+ "host_interval_ms_p95": 26.982,
+ "host_queueBuffer_ms_p50": 0.334,
+ "sf_interval_ms_p95": 33.408,
+ "cpu_core_pct": {
+  "kwin": 19.7,
+  "plasmashell": 18.0,
+  "apk": 21.4,
+  "surfaceflinger": 25.9
+ },
+ "gpu_busy_pct": 11.69,
+ "gpu_total_ms": {
+  "kwin_wayland": 626.7,
+  "plasmashell": 2046.25,
+  "dev.moto.plasma": 510.27
+ },
+ "gpu_submission_ms_mean": {
+  "kwin_wayland": 0.761,
+  "plasmashell": 8.723,
+  "dev.moto.plasma": 1.454
+ }
+}

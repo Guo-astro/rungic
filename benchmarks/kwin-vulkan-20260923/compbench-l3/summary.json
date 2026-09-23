@@ -1,0 +1,46 @@
+{
+ "gles:finish": {
+  "runs": 3,
+  "fps": 40.0,
+  "process_cpu_core_pct": 8.96,
+  "render_cpu_ms_p50": 0.274,
+  "wait_ms_p50": 10.519,
+  "wait_ms_p95": 12.627,
+  "present_interval_ms_p95": 26.703,
+  "gpu_ms_per_submission_mean": 9.531,
+  "gpu_busy_pct": 45.42
+ },
+ "vulkan:finish": {
+  "runs": 3,
+  "fps": 40.08,
+  "process_cpu_core_pct": 5.92,
+  "render_cpu_ms_p50": 0.89,
+  "wait_ms_p50": 9.475,
+  "wait_ms_p95": 11.59,
+  "present_interval_ms_p95": 26.48,
+  "gpu_ms_per_submission_mean": 9.627,
+  "gpu_busy_pct": 45.46
+ },
+ "gles:fence": {
+  "runs": 3,
+  "fps": 39.92,
+  "process_cpu_core_pct": 8.73,
+  "render_cpu_ms_p50": 0.945,
+  "wait_ms_p50": 9.288,
+  "wait_ms_p95": 11.372,
+  "present_interval_ms_p95": 26.581,
+  "gpu_ms_per_submission_mean": 9.656,
+  "gpu_busy_pct": 45.8
+ },
+ "vulkan:fence": {
+  "runs": 3,
+  "fps": 40.0,
+  "process_cpu_core_pct": 5.78,
+  "render_cpu_ms_p50": 0.894,
+  "wait_ms_p50": 9.474,
+  "wait_ms_p95": 11.649,
+  "present_interval_ms_p95": 26.568,
+  "gpu_ms_per_submission_mean": 9.637,
+  "gpu_busy_pct": 45.84
+ }
+}

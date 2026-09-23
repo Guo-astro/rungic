@@ -1,0 +1,24 @@
+{
+ "gles:fence": {
+  "runs": 3,
+  "fps": 120.75,
+  "process_cpu_core_pct": 20.64,
+  "render_cpu_ms_p50": 0.896,
+  "wait_ms_p50": 6.322,
+  "wait_ms_p95": 7.423,
+  "present_interval_ms_p95": 11.599,
+  "gpu_ms_per_submission_mean": 6.123,
+  "gpu_busy_pct": 88.11
+ },
+ "vulkan:fence": {
+  "runs": 3,
+  "fps": 125.58,
+  "process_cpu_core_pct": 13.08,
+  "render_cpu_ms_p50": 0.7,
+  "wait_ms_p50": 6.435,
+  "wait_ms_p95": 7.583,
+  "present_interval_ms_p95": 14.321,
+  "gpu_ms_per_submission_mean": 6.08,
+  "gpu_busy_pct": 89.8
+ }
+}
