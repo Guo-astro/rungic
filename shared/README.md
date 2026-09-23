@@ -13,6 +13,7 @@ not required. Android-side services are in `plasma/native-apk/`.
 | `platform/network-manager.py` | Android networking → NetworkManager D-Bus interface |
 | `platform/clipboard.py` | Android clipboard ↔ Wayland clipboard |
 | `graphics/` | EGL/GBM/AHB diagnostic helpers |
+| `android/wfd.sepolicy.rule`, `android/moto-wfd-sepolicy.sh` | SELinux fixes for Qualcomm Wi-Fi Display (Miracast), loaded at boot from `/data/adb/service.d` ([docs/58](../docs/58-miracast-desktop-feasibility.md)) |
 
 Runtime service definitions and Ubuntu build scripts remain in `plasma/`.
 Detailed pipeline mapping: [media](../docs/48-plasma-media-pipelines.md) and

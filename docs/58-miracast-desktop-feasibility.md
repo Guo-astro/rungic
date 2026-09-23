@@ -84,6 +84,17 @@ Miracast需要Wi-Fi Direct近距离直连；手机经VPN连到K8，K8（Intel AX
 - 延迟：手机侧从出帧到发包自动测；电视解码显示部分需一次人工观测（手机与电视同时显示毫秒时钟并拍照）。
 - 自研发送端（引擎B）的协议调试不受距离限制：P2P只负责建链，RTSP协商与RTP传输是普通IP流量，可经VPN连K8上的软件接收端调试。
 
+## 实测：系统投屏卡在“正在准备”（已修复）
+
+2026-09-24，接收端TCL 85Q6H（广播R1与R2两个入口），另试“客厅电视”与DIRECT-9c4hVFLO，结果相同。
+
+- 现象：六次尝试都能完成Wi-Fi Direct建组（手机为组主，GO intent 15，`p2p0` 192.168.49.1/24，2.4GHz 2417MHz），但高通`ExtendedRemoteDisplay`一直停在`ESTABLISHING`，约10秒后以“Why on earth is surface null??”拆除，电视停在“正在准备”。
+- 排除：SwiftWire VPN只接管`10.77.0.0/24`与`198.18.0.1`（分流），其路由表没有IPv4默认路由，P2P流量不经隧道；用户关闭VPN后同样失败。`wfdservice64`按会话由`vendor.wfdservice64`属性启停，属正常。
+- 定位：高通WFD进程读不到调试属性，几乎不打日志。用户授权后临时`setenforce 0`，投屏立即成功；宽容模式下记录的WFD相关拒绝为：`vendor_wifidisplayhalservice_qti`的`capability net_raw`（每次会话失败前约0.7秒出现，推断用于把socket绑定到P2P网卡）与`vendor_media_data_file`目录search、`vendor_wfdservice`查找`vendor.perfservice`、`vendor_wfdservice/vendor_wfd_app`读取`vendor_wfd_sys_debug_prop`。
+- 修复：`shared/android/wfd.sepolicy.rule`只放行上述四组；`shared/android/moto-wfd-sepolicy.sh`安装为`/data/adb/service.d/moto-wfd-sepolicy.sh`，每次开机用`magiskpolicy --live --apply`加载`/data/adb/moto-wfd/wfd.sepolicy.rule`（与Docker规则同一方式）。SELinux恢复Enforcing后再次投屏成功，之后没有新的WFD拒绝；临时打开的`persist.vendor.debug.wfd*`已用`resetprop -p --delete`删除。
+- 连接后的状态：WFD显示`TCL 85Q6H-9E92[R1]`，1920×1080@60，`activeDisplayState=2`；Moto启动器在该显示上启动`SecondaryDisplayLauncher`（外屏是可运行Activity的副屏，而非只能镜像），这对后续由宿主接管外屏有利。
+- 未验证：`net_raw`以外的三组规则是否必要（为减少用户往返一并放行）；重启后规则自动加载需在下次重启时确认。
+
 ## 初版方案：Android Presentation承载外屏输出（无root假设）
 
 ```

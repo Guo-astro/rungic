@@ -1,0 +1,9 @@
+# Qualcomm Wi-Fi Display (Miracast source) on the XT2537-4 stock policy.
+# With these denied the P2P group forms but the RTSP session never leaves
+# ESTABLISHING and the receiver stays on "preparing" (docs/58). Collected from a
+# working cast in permissive mode; nothing else is widened.
+# CAP_NET_RAW: the display HAL binds its sockets to the P2P interface.
+allow vendor_wifidisplayhalservice_qti vendor_wifidisplayhalservice_qti capability net_raw
+allow vendor_wifidisplayhalservice_qti vendor_media_data_file dir search
+allow vendor_wfdservice vendor_perf_service service_manager find
+allow { vendor_wfdservice vendor_wfd_app } vendor_wfd_sys_debug_prop file { read open map getattr }
