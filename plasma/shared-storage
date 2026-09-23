@@ -1,5 +1,10 @@
 #!/bin/sh
 set -eu
+# A bindfs that died (e.g. when Android restarted underneath it) leaves a
+# disconnected FUSE mount; mkdir then fails and the unit would restart forever.
+if ! stat /home/linux/Shared >/dev/null 2>&1; then
+    fusermount3 -uz /home/linux/Shared 2>/dev/null || umount -l /home/linux/Shared 2>/dev/null || true
+fi
 mkdir -p /home/linux/Shared
 chown root:root /home/linux/Shared
 chmod 0755 /home/linux/Shared

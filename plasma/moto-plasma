@@ -61,6 +61,13 @@ case "$action" in
       exit 0
     fi
     "$BASE/android-audio" start 9>&-
+    # The container binds /storage/emulated/0/Plasma when it starts. After an Android
+    # userspace restart vold remounts storage and that bind goes stale; only a
+    # container restart recreates it (moto-plasma-shared otherwise fails forever).
+    if running && ! attach /bin/sh -c 'test -r /mnt/android-shared/.' 9>&-; then
+      echo 'Android storage was remounted; restarting the Plasma container' >&2
+      "$ENTER" /usr/bin/lxc-stop -n plasma -t 15 9>&- || true
+    fi
     if [ "$action" = restart-session ] && running; then
       attach /bin/sh -c 'systemctl restart moto-plasma-session.service' 9>&-
     fi

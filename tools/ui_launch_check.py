@@ -41,9 +41,18 @@ def press(name):
     return moto_agent.ui_press('plasmashell', buttons[0]['path'])
 
 
-def open_drawer():
+def open_drawer(timeout=6):
+    """Swipe the drawer open and wait until its search field sits still on screen."""
     run('input swipe 540 2000 540 600 250', 'shell')
-    time.sleep(1.2)
+    previous, deadline = None, time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        time.sleep(0.3)
+        fields = moto_agent.ui_find('plasmashell', role='text', name='Search')
+        current = tuple(fields[0]['extents']) if fields else None
+        if current and current == previous and current[1] >= 0:
+            return
+        previous = current
+    raise RuntimeError('app drawer did not open')
 
 
 def icon_for(app, timeout=5):
