@@ -1,5 +1,7 @@
 package dev.moto.plasma;
 
+import com.winland.server.NativeBridge;
+
 import android.app.Activity;
 import android.app.KeyguardManager;
 import android.content.*;
@@ -84,6 +86,13 @@ final class PlatformBridge implements Closeable {
         if(op.equals("network-get"))return network.snapshot();
         if(op.equals("capture-info"))return capture.info();
         if(op.equals("brightness-get"))return brightness();
+        if(op.equals("native-stats")) {
+            // Read-only compositor counters for diagnostics (tools/moto_agent.py).
+            String error=NativeBridge.getLastNativeError();
+            return new JSONObject().put("stats",NativeBridge.getWaylandRuntimeStats())
+                .put("presentedFrames",NativeBridge.getPresentedFrames())
+                .put("lastError",error==null?JSONObject.NULL:error);
+        }
         if(op.equals("keep-awake")) {
             awakeHandler.removeCallbacks(expireAwake);
             boolean enabled=request.getBoolean("enabled");
