@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Mumba (XT2537-4 / moto g100s) center punch-hole cutout.
+
+  Path origin is the center-top of the 1080x2400 panel (not @left).
+  Circle radius 32px, center 42px below the top edge.
+  Physical hole is ~4mm; 390dpi → ~32px radius, with a little padding.
+-->
+<overlay>
+  <item
+      target="string/config_mainBuiltInDisplayCutout"
+      value="M -32,42 a 32,32 0 1 0 64,0 a 32,32 0 1 0 -64,0 Z" />
+  <item
+      target="string/config_mainBuiltInDisplayCutoutRectApproximation"
+      value="M -40,0 L 40,0 L 40,80 L -40,80 Z" />
+</overlay>

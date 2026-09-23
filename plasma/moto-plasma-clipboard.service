@@ -1,0 +1,13 @@
+[Unit]
+Description=Android and Plasma plain-text clipboard
+After=plasma-kwin_wayland.service
+PartOf=graphical-session.target
+
+[Service]
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/local/bin/moto-clipboard
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=plasma-workspace.target

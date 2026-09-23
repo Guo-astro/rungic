@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+cd /root/moto-mesa-src
+meson setup build --prefix=/usr --libdir=lib/aarch64-linux-gnu --wrap-mode=nofallback \
+    -Dplatforms=x11,wayland -Dgallium-drivers=freedreno,zink \
+    -Dgallium-va=disabled -Dvulkan-drivers=freedreno -Dvulkan-layers= \
+    -Degl=enabled -Dgles2=enabled -Dglvnd=enabled -Dglx=dri \
+    -Dlibunwind=disabled -Dintel-rt=disabled -Dmicrosoft-clc=disabled \
+    -Dvalgrind=disabled -Dgles1=disabled -Dfreedreno-kmds=kgsl \
+    -Dllvm=disabled -Dbuildtype=release
+ninja -C build -j2
+DESTDIR=/root/moto-mesa-stage meson install -C build

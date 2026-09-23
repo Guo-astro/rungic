@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+mkdir -p /home/linux/Shared
+chown root:root /home/linux/Shared
+chmod 0755 /home/linux/Shared
+exec /usr/bin/bindfs -f --force-user=1000 --force-group=1000 --perms=a+rwX \
+    --create-as-mounter --create-with-perms=a+rwX \
+    --chmod-ignore --chown-ignore --chgrp-ignore --xattr-none --direct-io \
+    -o nosuid,nodev,noexec,attr_timeout=0,entry_timeout=0 \
+    /mnt/android-shared /home/linux/Shared

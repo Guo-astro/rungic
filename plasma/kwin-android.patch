@@ -1,0 +1,412 @@
+--- a/src/backends/wayland/wayland_backend.cpp
++++ b/src/backends/wayland/wayland_backend.cpp
+@@ -105,7 +105,7 @@
+         WaylandOutput *output = m_seat->backend()->findOutput(m_pointer->enteredSurface());
+         Q_ASSERT(output);
+         const auto subsurface = m_seat->backend()->findSubSurface(m_pointer->enteredSurface());
+-        const QPointF absolutePos = output->position() + relativeToSurface
++        const QPointF absolutePos = output->position() + relativeToSurface / (qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT") ? output->scale() : 1.0)
+             + (subsurface ? subsurface->position() : QPoint());
+         Q_EMIT pointerMotionAbsolute(absolutePos, std::chrono::milliseconds(time), this);
+     });
+@@ -197,13 +197,13 @@
+     connect(touch, &Touch::sequenceStarted, this, [this](TouchPoint *tp) {
+         auto o = m_seat->backend()->findOutput(tp->surface());
+         Q_ASSERT(o);
+-        const QPointF position = o->position() + tp->position();
++        const QPointF position = o->position() + tp->position() / (qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT") ? o->scale() : 1.0);
+         Q_EMIT touchDown(tp->id(), position, std::chrono::milliseconds(tp->time()), this);
+     });
+     connect(touch, &Touch::pointAdded, this, [this](TouchPoint *tp) {
+         auto o = m_seat->backend()->findOutput(tp->surface());
+         Q_ASSERT(o);
+-        const QPointF position = o->position() + tp->position();
++        const QPointF position = o->position() + tp->position() / (qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT") ? o->scale() : 1.0);
+         Q_EMIT touchDown(tp->id(), position, std::chrono::milliseconds(tp->time()), this);
+     });
+     connect(touch, &Touch::pointRemoved, this, [this](TouchPoint *tp) {
+@@ -212,7 +212,7 @@
+     connect(touch, &Touch::pointMoved, this, [this](TouchPoint *tp) {
+         auto o = m_seat->backend()->findOutput(tp->surface());
+         Q_ASSERT(o);
+-        const QPointF position = o->position() + tp->position();
++        const QPointF position = o->position() + tp->position() / (qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT") ? o->scale() : 1.0);
+         Q_EMIT touchMotion(tp->id(), position, std::chrono::milliseconds(tp->time()), this);
+     });
+ }
+@@ -438,7 +438,8 @@
+     }
+ 
+     if (WaylandClient::LinuxDmabufV1 *dmabuf = m_display->linuxDmabuf()) {
+-        m_drmDevice = DrmDevice::open(dmabuf->mainDevice());
++        const auto explicitDevice = qEnvironmentVariable("MOTO_KWIN_RENDER_DEVICE");
++        m_drmDevice = DrmDevice::open(explicitDevice.isEmpty() ? QString::fromUtf8(dmabuf->mainDevice()) : explicitDevice);
+         if (!m_drmDevice) {
+             qCWarning(KWIN_WAYLAND_BACKEND) << "Failed to open drm render node" << dmabuf->mainDevice();
+         }
+--- a/src/backends/wayland/wayland_display.cpp
++++ b/src/backends/wayland/wayland_display.cpp
+@@ -406,7 +406,7 @@
+         display->m_xdgDecorationManager = std::make_unique<KWayland::Client::XdgDecorationManager>();
+         display->m_xdgDecorationManager->setup(static_cast<zxdg_decoration_manager_v1 *>(wl_registry_bind(registry, name, &zxdg_decoration_manager_v1_interface, std::min(version, 1u))));
+     } else if (strcmp(interface, zwp_linux_dmabuf_v1_interface.name) == 0) {
+-        if (version < 4) {
++        if (version < 4 && !(version >= 3 && qEnvironmentVariableIsSet("MOTO_KWIN_RENDER_DEVICE"))) {
+             qWarning("zwp_linux_dmabuf_v1 v4 or newer is needed");
+             return;
+         }
+--- a/src/backends/wayland/wayland_egl_backend.cpp
++++ b/src/backends/wayland/wayland_egl_backend.cpp
+@@ -103,7 +103,12 @@
+     m_query->end();
+     frame->addRenderTimeQuery(std::move(m_query));
+     // Flush rendering commands to the dmabuf.
+-    glFlush();
++    if (qEnvironmentVariableIsSet("MOTO_GPU_ALLOCATOR")) {
++        // Android vendor import has no explicit synchronization protocol yet.
++        glFinish();
++    } else {
++        glFlush();
++    }
+     EGLNativeFence releaseFence{m_backend->eglDisplayObject()};
+ 
+     setBuffer(m_backend->backend()->importBuffer(m_buffer->buffer()), damagedDeviceRegion);
+@@ -115,6 +120,10 @@
+ 
+ bool WaylandEglLayer::importScanoutBuffer(GraphicsBuffer *buffer, const std::shared_ptr<OutputFrame> &frame)
+ {
++    if (qEnvironmentVariableIsSet("MOTO_GPU_ALLOCATOR")) {
++        // Client allocations are not leased Android AHardwareBuffers.
++        return false;
++    }
+     if (!test()) {
+         return false;
+     }
+@@ -199,7 +208,12 @@
+         frame->addRenderTimeQuery(std::move(m_query));
+     }
+     // Flush rendering commands to the dmabuf.
+-    glFlush();
++    if (qEnvironmentVariableIsSet("MOTO_GPU_ALLOCATOR")) {
++        // Android vendor import has no explicit synchronization protocol yet.
++        glFinish();
++    } else {
++        glFlush();
++    }
+ 
+     wl_buffer *buffer = m_backend->backend()->importBuffer(m_buffer->buffer());
+     Q_ASSERT(buffer);
+@@ -265,7 +279,7 @@
+     auto primary = std::make_unique<WaylandEglLayer>(waylandOutput, this, OutputLayerType::Primary, 0);
+     primary->subSurface()->placeAbove(waylandOutput->surface());
+     layers.push_back(std::move(primary));
+-    for (int z = 1; z < 5; z++) {
++    for (int z = 1; z < (qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT") ? 1 : 5); z++) {
+         auto layer = std::make_unique<WaylandEglLayer>(waylandOutput, this, OutputLayerType::GenericLayer, z);
+         layer->subSurface()->placeAbove(static_cast<WaylandEglLayer *>(layers.back().get())->surface());
+         layers.push_back(std::move(layer));
+--- a/src/backends/wayland/wayland_layer.cpp
++++ b/src/backends/wayland/wayland_layer.cpp
+@@ -79,12 +79,21 @@
+ 
+ void WaylandLayer::setBuffer(wl_buffer *buffer, const Region &deviceDamagedRegion)
+ {
++    if (qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT") && type() == OutputLayerType::Primary) {
++        auto surface = static_cast<WaylandOutput *>(m_output.get())->surface();
++        surface->attachBuffer(buffer);
++        surface->damageBuffer(QRegion(deviceDamagedRegion));
++        return;
++    }
+     m_surface->attachBuffer(buffer);
+     m_surface->damageBuffer(QRegion(deviceDamagedRegion));
+ }
+ 
+ void WaylandLayer::commit(PresentationMode presentationMode)
+ {
++    if (qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT") && type() == OutputLayerType::Primary) {
++        return; // Parent commit and frame callback are owned by WaylandOutput.
++    }
+     if (!isEnabled()) {
+         setBuffer(nullptr, Region{});
+         m_surface->commit(KWayland::Client::Surface::CommitFlag::None);
+--- a/src/backends/wayland/wayland_output.cpp
++++ b/src/backends/wayland/wayland_output.cpp
+@@ -306,13 +306,14 @@
+         m_cursor->setEnabled(cursorLayers.front()->isEnabled());
+         // TODO also move the actual cursor image update here too...
+     }
+-    if (!m_mapped) {
++    if (!m_mapped && !qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT")) {
+         // we only ever want a black background
+         auto buffer = wp_single_pixel_buffer_manager_v1_create_u32_rgba_buffer(m_backend->display()->singlePixelManager(), 0, 0, 0, 0xFFFFFFFF);
+         m_surface->attachBuffer(buffer);
+         m_mapped = true;
+     }
+-    m_viewport->setDestination(QSize(std::round(modeSize().width() / scale()), std::round(modeSize().height() / scale())));
++    const qreal hostScale = qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT") ? 1.0 : scale();
++    m_viewport->setDestination(QSize(std::round(modeSize().width() / hostScale), std::round(modeSize().height() / hostScale)));
+     m_surface->setScale(1);
+     // commit the subsurfaces before the main surface
+     for (OutputLayer *layer : layersToUpdate) {
+@@ -463,12 +464,13 @@
+ {
+     m_xdgShellSurface->ackConfigure(serial);
+     if (!size.isEmpty()) {
+-        auto mode = std::make_shared<OutputMode>(size * m_pendingScale, m_refreshRate);
++        const bool androidOutput = qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT");
++        auto mode = std::make_shared<OutputMode>(androidOutput ? size : size * m_pendingScale, m_refreshRate);
+ 
+         State next = m_state;
+         next.modes = {mode};
+         next.currentMode = mode;
+-        next.scale = m_pendingScale;
++        next.scale = androidOutput ? m_state.scale : m_pendingScale;
+         setState(next);
+ 
+         Q_EMIT m_backend->outputsQueried();
+--- a/src/core/gbmgraphicsbufferallocator.cpp
++++ b/src/core/gbmgraphicsbufferallocator.cpp
+@@ -9,6 +9,7 @@
+ #include "config-kwin.h"
+ 
+ #include "core/graphicsbuffer.h"
++#include "core/androidgraphicsbuffer.h"
+ #include "utils/common.h"
+ 
+ #include <drm_fourcc.h>
+@@ -203,6 +204,10 @@
+ 
+ GraphicsBuffer *GbmGraphicsBufferAllocator::allocate(const GraphicsBufferOptions &options)
+ {
++    const auto androidAllocator = qgetenv("MOTO_GPU_ALLOCATOR");
++    if (!androidAllocator.isEmpty() && !options.software) {
++        return allocateAndroidBuffer(androidAllocator, options);
++    }
+     if (options.software) {
+         return allocateDumb(m_gbmDevice, options);
+     }
+--- a/src/core/shmgraphicsbufferallocator.cpp
++++ b/src/core/shmgraphicsbufferallocator.cpp
+@@ -98,7 +98,19 @@
+     const int bufferSize = options.size.height() * stride;
+ 
+ #if HAVE_MEMFD
+-    FileDescriptor fd = FileDescriptor(memfd_create("shm", MFD_CLOEXEC | MFD_ALLOW_SEALING));
++    // Software fallback buffers need the APK-specific SELinux MCS label.
++    // The private /dev/shm mount supplies that label, without relaxing Android.
++    FileDescriptor fd;
++    const bool androidShm = qEnvironmentVariableIsSet("MOTO_KWIN_ANDROID_SHM");
++    if (androidShm) {
++        char name[] = "/dev/shm/moto-kwin-XXXXXX";
++        fd = FileDescriptor(mkostemp(name, O_CLOEXEC));
++        if (fd.isValid()) {
++            unlink(name);
++        }
++    } else {
++        fd = FileDescriptor(memfd_create("shm", MFD_CLOEXEC | MFD_ALLOW_SEALING));
++    }
+     if (!fd.isValid()) {
+         return nullptr;
+     }
+@@ -107,7 +119,9 @@
+         return nullptr;
+     }
+ 
+-    fcntl(fd.get(), F_ADD_SEALS, F_SEAL_SHRINK | F_SEAL_GROW | F_SEAL_SEAL);
++    if (!androidShm) {
++        fcntl(fd.get(), F_ADD_SEALS, F_SEAL_SHRINK | F_SEAL_GROW | F_SEAL_SEAL);
++    }
+ #else
+     char templateName[] = "/tmp/kwin-shm-XXXXXX";
+     FileDescriptor fd{mkstemp(templateName)};
+--- a/src/opengl/egldisplay.cpp
++++ b/src/opengl/egldisplay.cpp
+@@ -325,6 +325,10 @@
+ 
+ QString EglDisplay::determineRenderNode() const
+ {
++    const auto androidDevice = qEnvironmentVariable("MOTO_KWIN_RENDER_DEVICE");
++    if (!androidDevice.isEmpty()) {
++        return androidDevice;
++    }
+     const char *clientExtensions = eglQueryString(EGL_NO_DISPLAY, EGL_EXTENSIONS);
+     if (checkExtension(clientExtensions, "EGL_EXT_device_query")) {
+         EGLAttrib eglDeviceAttrib;
+--- a/src/wayland/linuxdmabufv1clientbuffer.cpp
++++ b/src/wayland/linuxdmabufv1clientbuffer.cpp
+@@ -28,7 +28,7 @@
+ static const int s_version = 5;
+ 
+ LinuxDmaBufV1ClientBufferIntegrationPrivate::LinuxDmaBufV1ClientBufferIntegrationPrivate(LinuxDmaBufV1ClientBufferIntegration *q, Display *display)
+-    : QtWaylandServer::zwp_linux_dmabuf_v1(*display, s_version)
++    : QtWaylandServer::zwp_linux_dmabuf_v1(*display, qEnvironmentVariableIsSet("MOTO_KWIN_RENDER_DEVICE") ? 3 : s_version)
+     , q(q)
+     , defaultFeedback(new LinuxDmaBufV1Feedback(this))
+ {
+--- a/src/wayland-client/linuxdmabuf.cpp
++++ b/src/wayland-client/linuxdmabuf.cpp
+@@ -172,7 +172,9 @@
+     };
+     zwp_linux_dmabuf_v1_add_listener(m_dmabuf, &dmabufListener, this);
+ 
+-    m_defaultFeedback = std::make_unique<LinuxDmabufFeedbackV1>(zwp_linux_dmabuf_v1_get_default_feedback(m_dmabuf));
++    if (version >= 4) {
++        m_defaultFeedback = std::make_unique<LinuxDmabufFeedbackV1>(zwp_linux_dmabuf_v1_get_default_feedback(m_dmabuf));
++    }
+ }
+ 
+ LinuxDmabufV1::~LinuxDmabufV1()
+@@ -187,12 +189,12 @@
+ 
+ QByteArray LinuxDmabufV1::mainDevice() const
+ {
+-    return m_defaultFeedback->devicePath();
++    return m_defaultFeedback ? m_defaultFeedback->devicePath() : QByteArray();
+ }
+ 
+ QHash<uint32_t, QList<uint64_t>> LinuxDmabufV1::formats() const
+ {
+-    return m_defaultFeedback->formats();
++    return m_defaultFeedback ? m_defaultFeedback->formats() : m_legacyFormats;
+ }
+ 
+ void LinuxDmabufV1::format(void *data, struct zwp_linux_dmabuf_v1 *zwp_linux_dmabuf_v1, uint32_t format)
+@@ -202,7 +204,11 @@
+ 
+ void LinuxDmabufV1::modifier(void *data, struct zwp_linux_dmabuf_v1 *zwp_linux_dmabuf_v1, uint32_t format, uint32_t modifier_hi, uint32_t modifier_lo)
+ {
+-    // Not sent in v4 and onward.
++    auto self = static_cast<LinuxDmabufV1 *>(data);
++    const uint64_t value = (uint64_t(modifier_hi) << 32) | modifier_lo;
++    if (!self->m_legacyFormats[format].contains(value)) {
++        self->m_legacyFormats[format].append(value);
++    }
+ }
+ 
+ wl_buffer *LinuxDmabufV1::importBuffer(GraphicsBuffer *graphicsBuffer) const
+@@ -229,6 +235,9 @@
+ 
+ std::unique_ptr<LinuxDmabufFeedbackV1> LinuxDmabufV1::getSurfaceFeedback(wl_surface *surface) const
+ {
++    if (!m_defaultFeedback) {
++        return nullptr;
++    }
+     return std::make_unique<LinuxDmabufFeedbackV1>(zwp_linux_dmabuf_v1_get_surface_feedback(m_dmabuf, surface));
+ }
+ }
+--- a/src/wayland-client/linuxdmabuf.h
++++ b/src/wayland-client/linuxdmabuf.h
+@@ -93,6 +93,7 @@
+ 
+     zwp_linux_dmabuf_v1 *m_dmabuf;
+     std::unique_ptr<LinuxDmabufFeedbackV1> m_defaultFeedback;
++    QHash<uint32_t, QList<uint64_t>> m_legacyFormats;
+ };
+ 
+ }
+--- /dev/null
++++ b/src/core/androidgraphicsbuffer.h
+@@ -0,0 +1,103 @@
++// SPDX-License-Identifier: GPL-2.0-or-later
++// Android AHardwareBuffer lease protocol shared with the Phosh APK backend.
++#pragma once
++
++#include "core/graphicsbuffer.h"
++#include "core/graphicsbufferallocator.h"
++#include <drm_fourcc.h>
++#include <sys/socket.h>
++#include <sys/time.h>
++#include <sys/un.h>
++#include <unistd.h>
++#include <cstring>
++
++namespace KWin
++{
++class AndroidGraphicsBuffer final : public GraphicsBuffer
++{
++public:
++    AndroidGraphicsBuffer(DmaBufAttributes &&attributes, FileDescriptor &&lease)
++        : m_attributes(std::move(attributes)), m_lease(std::move(lease)) {}
++    QSize size() const override { return {m_attributes.width, m_attributes.height}; }
++    bool hasAlphaChannel() const override { return alphaChannelFromDrmFormat(m_attributes.format); }
++    const DmaBufAttributes *dmabufAttributes() const override { return &m_attributes; }
++
++private:
++    DmaBufAttributes m_attributes;
++    FileDescriptor m_lease; // Keep the Android native handle alive until release.
++};
++
++static GraphicsBuffer *allocateAndroidBuffer(const QByteArray &path, const GraphicsBufferOptions &options)
++{
++    const int width = options.size.width(), height = options.size.height();
++    if (options.software || width <= 0 || height <= 0 || width > 4096 || height > 4096 || int64_t(width) * height > 4194304) {
++        return nullptr;
++    }
++    if (!options.modifiers.isEmpty() && !options.modifiers.contains(DRM_FORMAT_MOD_LINEAR) && !options.modifiers.contains(DRM_FORMAT_MOD_INVALID)) {
++        return nullptr;
++    }
++    switch (options.format) {
++    case DRM_FORMAT_ARGB8888:
++    case DRM_FORMAT_XRGB8888:
++    case DRM_FORMAT_ABGR8888:
++    case DRM_FORMAT_XBGR8888:
++        break;
++    default:
++        return nullptr;
++    }
++    sockaddr_un address{};
++    address.sun_family = AF_UNIX;
++    if (path.isEmpty() || path.size() >= sizeof(address.sun_path)) {
++        return nullptr;
++    }
++    std::memcpy(address.sun_path, path.constData(), path.size());
++    FileDescriptor lease(socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0));
++    if (!lease.isValid()) {
++        return nullptr;
++    }
++    timeval timeout{.tv_sec = 3, .tv_usec = 0};
++    setsockopt(lease.get(), SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
++    setsockopt(lease.get(), SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
++    if (connect(lease.get(), reinterpret_cast<sockaddr *>(&address), sizeof(address)) < 0) {
++        return nullptr;
++    }
++    // Both endpoints are little-endian ARM64; this is protocol v1.
++    uint32_t request[]{0x4d475055, uint32_t(width), uint32_t(height), options.format};
++    if (send(lease.get(), request, sizeof(request), MSG_NOSIGNAL) != sizeof(request)) {
++        return nullptr;
++    }
++    uint32_t reply[3]{};
++    iovec iov{.iov_base = reply, .iov_len = sizeof(reply)};
++    alignas(cmsghdr) char control[CMSG_SPACE(8 * sizeof(int))]{};
++    msghdr message{};
++    message.msg_iov = &iov;
++    message.msg_iovlen = 1;
++    message.msg_control = control;
++    message.msg_controllen = sizeof(control);
++    const auto length = recvmsg(lease.get(), &message, MSG_WAITALL | MSG_CMSG_CLOEXEC);
++    std::vector<FileDescriptor> received;
++    for (cmsghdr *c = CMSG_FIRSTHDR(&message); c; c = CMSG_NXTHDR(&message, c)) {
++        if (c->cmsg_level == SOL_SOCKET && c->cmsg_type == SCM_RIGHTS && c->cmsg_len >= CMSG_LEN(0)) {
++            const size_t count = (c->cmsg_len - CMSG_LEN(0)) / sizeof(int);
++            for (size_t i = 0; i < count; ++i) {
++                int fd;
++                std::memcpy(&fd, CMSG_DATA(c) + i * sizeof(int), sizeof(int));
++                received.emplace_back(fd);
++            }
++        }
++    }
++    if (length != sizeof(reply) || (message.msg_flags & (MSG_CTRUNC | MSG_TRUNC)) || received.size() != 1 ||
++        reply[0] != 0x4d475055 || reply[2] != options.format || reply[1] < uint32_t(width) * 4 || reply[1] > 65536) {
++        return nullptr;
++    }
++    DmaBufAttributes attributes;
++    attributes.planeCount = 1;
++    attributes.width = width;
++    attributes.height = height;
++    attributes.format = options.format;
++    attributes.modifier = DRM_FORMAT_MOD_LINEAR;
++    attributes.fd[0] = std::move(received.front());
++    attributes.pitch[0] = reply[1];
++    return new AndroidGraphicsBuffer(std::move(attributes), std::move(lease));
++}
++}

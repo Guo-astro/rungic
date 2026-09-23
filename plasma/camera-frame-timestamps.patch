@@ -1,0 +1,63 @@
+--- a/src/plasmacameramanager.cpp
++++ b/src/plasmacameramanager.cpp
+@@ -299,6 +299,8 @@
+     m_session.setRecorder(recorder);
+     connect(m_recorder, &QMediaRecorder::recorderStateChanged, this, [this]() {
+         if (m_recorder->recorderState() == QMediaRecorder::RecordingState) {
++            m_frameRecordingCount = 0;
++            m_recordingClock.start();
+             m_videoFrameTimer.start();
+         } else {
+             m_videoFrameTimer.stop();
+@@ -390,6 +392,7 @@
+     m_recorder->setVideoFrameRate(0);
+ 
+     // Set frame timer polling rate
++    m_videoFrameTimer.setTimerType(Qt::PreciseTimer);
+     m_videoFrameTimer.setInterval(static_cast<int>(1000.0f / m_videoRecordingFps));
+ }
+ 
+@@ -625,15 +628,16 @@
+ 
+ void PlasmaCameraManager::processVideoFrame()
+ {
+-    // Set the time in the video that the frame should show up.
+-    // This allows for frames to be dropped without impacting video speed.
+-    // TODO: This causes severe frame corruption on devices that drop frames, how do we make it smoother?
+-    int frameLengthMicroseconds = qRound(1000.0 * 1000.0 / m_videoRecordingFps);
+-    m_videoFrame.setStartTime(m_frameRecordingCount * frameLengthMicroseconds);
+-    m_videoFrame.setEndTime((m_frameRecordingCount + 1) * frameLengthMicroseconds - 1);
+-
+-    // Attempt to send frame
+-    bool success = m_videoInput.sendVideoFrame(m_videoFrame);
++    if (m_currentFrame.isNull() || !m_recordingClock.isValid()) return;
++    // QVideoFrame copies share their timestamps. Never mutate a frame already
++    // queued in QMediaRecorder; each submitted frame needs its own metadata.
++    QVideoFrame frame(m_currentFrame);
++    frame.setRotation(m_videoFrame.rotation());
++    frame.setMirrored(m_videoFrame.mirrored());
++    const qint64 pts = m_recordingClock.nsecsElapsed() / 1000;
++    frame.setStartTime(pts);
++    frame.setEndTime(pts + qRound(1000000.0 / m_videoRecordingFps));
++    bool success = m_videoInput.sendVideoFrame(frame);
+     if (success) {
+         m_frameRecorded = true;
+     } else {
+--- a/src/plasmacameramanager.h
++++ b/src/plasmacameramanager.h
+@@ -8,6 +8,7 @@
+ #include <QOrientationSensor>
+ #include <QQmlEngine>
+ #include <QtMultimedia>
++#include <QElapsedTimer>
+ 
+ #include <libcamera/libcamera.h>
+ #include <libcamera/camera_manager.h>
+@@ -267,6 +268,7 @@
+ 
+     QMediaCaptureSession m_session;
+     QTimer m_videoFrameTimer;
++    QElapsedTimer m_recordingClock;
+     QMediaFormat m_format;
+     QVideoFrameInput m_videoInput;
+     QMediaRecorder *m_recorder = nullptr;

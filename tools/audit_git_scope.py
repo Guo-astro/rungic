@@ -1,0 +1,83 @@
+#!/usr/bin/env python3
+"""Read-only candidate inventory using Git's actual ignore rules.
+
+Uses a disposable Git directory, never the workspace index or a remote.
+This is a limited secret-pattern check, not a guarantee that files are sanitized.
+"""
+import argparse
+import collections
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import tempfile
+
+ROOT = Path(__file__).resolve().parent.parent
+SENSITIVE_NAMES = {"shadow", "gshadow", "id_rsa", "id_ed25519", ".env",
+                   "cookies.sqlite", "logins.json", "key4.db"}
+SENSITIVE_SUFFIXES = {".p12", ".pfx", ".jks", ".keystore", ".key", ".pem", ".pyc"}
+SECRET_PATTERNS = {
+    "private-key": re.compile(rb"-----BEGIN (?:[A-Z0-9]+ )?PRIVATE KEY-----"),
+    "github-token": re.compile(rb"\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,})\b"),
+    "aws-access-key": re.compile(rb"\bAKIA[0-9A-Z]{16}\b"),
+}
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", type=Path, help="Write detailed JSON locally")
+    args = parser.parse_args()
+    with tempfile.TemporaryDirectory(prefix="moto-git-scope-") as temporary:
+        gitdir = Path(temporary) / "metadata.git"
+        env = os.environ.copy()
+        for key in list(env):
+            if key.startswith("GIT_"):
+                env.pop(key)
+        env.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull)
+        subprocess.run(["git", "init", "--bare", "--quiet", str(gitdir)],
+                       check=True, env=env)
+        command = ["git", "--git-dir=" + str(gitdir), "--work-tree=" + str(ROOT),
+                   "-c", "core.bare=false", "ls-files", "--others", "--exclude-standard", "-z"]
+        raw = subprocess.check_output(command, cwd=ROOT, env=env)
+        ignored_raw = subprocess.check_output(command[:-1] + ["--ignored", "-z"], cwd=ROOT, env=env)
+    paths = sorted(os.fsdecode(p) for p in raw.split(b"\0") if p)
+    groups = collections.defaultdict(lambda: {"files": 0, "bytes": 0})
+    files, findings = [], []
+    for item in ignored_raw.split(b"\0"):
+        if item and not os.fsdecode(item).startswith(".work/"):
+            findings.append({"path": os.fsdecode(item), "kind": "local-only-file-outside-work"})
+    for name in paths:
+        path = ROOT / name
+        size = path.lstat().st_size
+        group = name.split("/", 1)[0] if "/" in name else "root-docs-and-config"
+        groups[group]["files"] += 1
+        groups[group]["bytes"] += size
+        files.append({"path": name, "bytes": size})
+        if path.name in SENSITIVE_NAMES or path.suffix in SENSITIVE_SUFFIXES:
+            findings.append({"path": name, "kind": "sensitive-or-generated-filename"})
+        if size > 10 * 1024 * 1024:
+            findings.append({"path": name, "kind": "larger-than-10-MiB"})
+        if path.is_symlink():
+            if not path.resolve().is_relative_to(ROOT):
+                findings.append({"path": name, "kind": "symlink-outside-workspace"})
+            continue
+        data = path.read_bytes()
+        if b"\0" in data[:8192]:
+            continue
+        for label, pattern in SECRET_PATTERNS.items():
+            if pattern.search(data):
+                findings.append({"path": name, "kind": label})
+    result = {"scope": "private-repository-candidates-not-committed-or-pushed",
+              "files": len(files), "bytes": sum(f["bytes"] for f in files),
+              "groups": dict(groups), "findings": findings, "paths": files}
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n")
+    print(json.dumps({k: v for k, v in result.items() if k != "paths"},
+                     ensure_ascii=False, indent=2))
+    return bool(findings)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

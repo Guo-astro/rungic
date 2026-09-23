@@ -1,0 +1,16 @@
+#!/bin/sh
+
+set -e
+
+if [ "$1" = configure ]; then
+    # Nested compositor: no file capabilities. AT_SECURE otherwise blocks
+    # GPU loader environment and /proc access required by session portals.
+    if command -v setcap > /dev/null; then
+        setcap -r /usr/bin/kwin_wayland 2>/dev/null || true
+    fi
+fi
+
+#DEBHELPER#
+
+exit 0
+

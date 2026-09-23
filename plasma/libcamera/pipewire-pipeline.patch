@@ -1,0 +1,198 @@
+--- a/src/libcamera/dma_buf_allocator.cpp
++++ b/src/libcamera/dma_buf_allocator.cpp
+@@ -101,6 +101,8 @@
+ 			continue;
+ 
+ 		int ret = ::open(info.deviceNodeName, O_RDWR | O_CLOEXEC, 0);
++		if (ret < 0 && errno == EACCES && info.type == DmaBufAllocatorFlag::SystemHeap)
++			ret = ::open(info.deviceNodeName, O_RDONLY | O_CLOEXEC, 0);
+ 		if (ret < 0) {
+ 			ret = errno;
+ 			LOG(DmaBufAllocator, Debug)
+--- /dev/null
++++ b/src/libcamera/pipeline/virtual/pipewire_frame_generator.cpp
+@@ -0,0 +1,69 @@
++/* SPDX-License-Identifier: LGPL-2.1-or-later */
++/* libcamera standard camera API backed by an existing PipeWire Video/Source.
++ * No Android API or camera socket access is duplicated here.
++ */
++#include "pipewire_frame_generator.h"
++#include "libcamera/internal/mapped_framebuffer.h"
++#include <libcamera/base/log.h>
++#include <gst/app/gstappsink.h>
++#include <gst/video/video.h>
++#include <libyuv/planar_functions.h>
++#include <mutex>
++#include <cerrno>
++namespace libcamera {
++LOG_DECLARE_CATEGORY(Virtual)
++void PipeWireFrameGenerator::configure(const Size &size) {
++ stop();
++ static std::once_flag once;
++ std::call_once(once,[]{gst_init(nullptr,nullptr);});
++ // Use a property setter for the node name; never interpolate YAML into a pipeline.
++ const std::string graph="pipewiresrc name=source do-timestamp=true provide-clock=false "
++  "! queue max-size-buffers=2 leaky=downstream ! videoconvert ! videoscale "
++  "! video/x-raw,format=NV12,width="+std::to_string(size.width)+",height="+std::to_string(size.height)+
++  " ! appsink name=capture sync=false max-buffers=1 drop=true";
++ GError *error=nullptr;
++ pipeline_=gst_parse_launch(graph.c_str(),&error);
++ if(error){LOG(Virtual,Error)<<error->message;g_error_free(error);stop();return;}
++ GstElement *source=gst_bin_get_by_name(GST_BIN(pipeline_),"source");
++ g_object_set(source,"target-object",target_.c_str(),nullptr);
++ gst_object_unref(source);
++ sink_=gst_bin_get_by_name(GST_BIN(pipeline_),"capture");
++ // Configuration must not activate a camera. Actual capture starts on demand.
++}
++int PipeWireFrameGenerator::generateFrame(const Size &size,const FrameBuffer *buffer) {
++ if(!pipeline_) configure(size);
++ if(!pipeline_)return -EIO;
++ gst_element_set_state(pipeline_,GST_STATE_PLAYING);
++ GstSample *sample=gst_app_sink_try_pull_sample(GST_APP_SINK(sink_),3*GST_SECOND);
++ if(!sample){
++  GstBus *bus=gst_element_get_bus(pipeline_);
++  GstMessage *msg=gst_bus_pop_filtered(bus,GST_MESSAGE_ERROR);
++  if(msg){GError *error=nullptr;gchar *detail=nullptr;gst_message_parse_error(msg,&error,&detail);
++   LOG(Virtual,Error)<<"PipeWire camera: "<<error->message;g_error_free(error);g_free(detail);gst_message_unref(msg);}
++  gst_object_unref(bus);return -ETIMEDOUT;
++ }
++ GstVideoInfo info;gst_video_info_init(&info);
++ GstVideoFrame frame;
++ int result=-EINVAL;
++ if(gst_video_info_from_caps(&info,gst_sample_get_caps(sample)) &&
++    GST_VIDEO_INFO_FORMAT(&info)==GST_VIDEO_FORMAT_NV12 &&
++    GST_VIDEO_INFO_WIDTH(&info)==static_cast<int>(size.width) &&
++    GST_VIDEO_INFO_HEIGHT(&info)==static_cast<int>(size.height) &&
++    gst_video_frame_map(&frame,&info,gst_sample_get_buffer(sample),GST_MAP_READ)){
++  MappedFrameBuffer mapped(buffer,MappedFrameBuffer::MapFlag::Write);
++  const auto &planes=mapped.planes();
++  if(mapped.isValid() && planes.size()==2 && planes[0].size()>=size.width*size.height && planes[1].size()>=size.width*size.height/2)
++   result=libyuv::NV12Copy(static_cast<const uint8_t *>(GST_VIDEO_FRAME_PLANE_DATA(&frame,0)),GST_VIDEO_FRAME_PLANE_STRIDE(&frame,0),
++    static_cast<const uint8_t *>(GST_VIDEO_FRAME_PLANE_DATA(&frame,1)),GST_VIDEO_FRAME_PLANE_STRIDE(&frame,1),
++    planes[0].data(),size.width,planes[1].data(),size.width,size.width,size.height);
++  gst_video_frame_unmap(&frame);
++ }
++ gst_sample_unref(sample);return result;
++}
++void PipeWireFrameGenerator::stop(){
++ if(pipeline_)gst_element_set_state(pipeline_,GST_STATE_NULL);
++ if(sink_)gst_object_unref(sink_);
++ if(pipeline_)gst_object_unref(pipeline_);
++ sink_=nullptr;pipeline_=nullptr;
++}
++}
+--- a/src/libcamera/pipeline/virtual/virtual.cpp
++++ b/src/libcamera/pipeline/virtual/virtual.cpp
+@@ -157,6 +157,8 @@
+ 					    stream->configuration().size, buffer))
+ 					fmd.status = FrameMetadata::Status::FrameError;
+ 
++				fmd.timestamp = currentTimestamp();
++				request->_d()->metadata().set(controls::SensorTimestamp, fmd.timestamp);
+ 				bufferCompleted.emit(buffer);
+ 				break;
+ 			}
+@@ -350,6 +352,7 @@
+ 	/* Cancel pending work. */
+ 	data->exit();
+ 	data->wait();
++	for (auto &s : data->streamConfigs_) s.frameGenerator->stop();
+ 	data->removeMessages(data);
+ 
+ 	/* Process pending `bufferCompleted` signals. */
+@@ -440,7 +443,11 @@
+ 			   [&](ImageFrames &imageFrames) {
+ 				   for (auto &streamConfig : data->streamConfigs_)
+ 					   streamConfig.frameGenerator = ImageFrameGenerator::create(imageFrames);
+-			   } },
++			   },
++               [&](PipeWireFrames &frames) {
++                   for (auto &streamConfig : data->streamConfigs_)
++                       streamConfig.frameGenerator = std::make_unique<PipeWireFrameGenerator>(frames.target);
++               } },
+ 		   frame);
+ 
+ 	for (auto &streamConfig : data->streamConfigs_)
+--- /dev/null
++++ b/src/libcamera/pipeline/virtual/pipewire_frame_generator.h
+@@ -0,0 +1,20 @@
++/* SPDX-License-Identifier: LGPL-2.1-or-later */
++#pragma once
++#include "frame_generator.h"
++#include <gst/gst.h>
++#include <string>
++namespace libcamera {
++struct PipeWireFrames { std::string target; };
++class PipeWireFrameGenerator final : public FrameGenerator {
++public:
++ explicit PipeWireFrameGenerator(const std::string &target):target_(target){}
++ ~PipeWireFrameGenerator() override { stop(); }
++ void configure(const Size &size) override;
++ int generateFrame(const Size &size,const FrameBuffer *buffer) override;
++ void stop() override;
++private:
++ std::string target_;
++ GstElement *pipeline_ = nullptr;
++ GstElement *sink_ = nullptr;
++};
++}
+--- a/src/libcamera/pipeline/virtual/virtual.h
++++ b/src/libcamera/pipeline/virtual/virtual.h
+@@ -22,12 +22,13 @@
+ #include "libcamera/internal/pipeline_handler.h"
+ 
+ #include "frame_generator.h"
++#include "pipewire_frame_generator.h"
+ #include "image_frame_generator.h"
+ #include "test_pattern_generator.h"
+ 
+ namespace libcamera {
+ 
+-using VirtualFrame = std::variant<TestPattern, ImageFrames>;
++using VirtualFrame = std::variant<TestPattern, ImageFrames, PipeWireFrames>;
+ 
+ class VirtualCameraData : public Camera::Private,
+ 			  public Thread,
+--- a/src/libcamera/pipeline/virtual/config_parser.cpp
++++ b/src/libcamera/pipeline/virtual/config_parser.cpp
+@@ -154,6 +154,14 @@
+ 
+ int ConfigParser::parseFrameGenerator(const YamlObject &cameraConfigData, VirtualCameraData *data)
+ {
++	if (cameraConfigData.contains("pipewire_node")) {
++        auto node = cameraConfigData["pipewire_node"].get<std::string>("");
++        if (node.empty()) return -EINVAL;
++        data->config_.frame = PipeWireFrames{node};
++        // The PipeWire source already provides an upright image.
++        data->properties_.set(properties::Rotation, 0);
++        return 0;
++    }
+ 	const std::string testPatternKey = "test_pattern";
+ 	const std::string framesKey = "frames";
+ 	if (cameraConfigData.contains(testPatternKey)) {
+--- a/src/libcamera/pipeline/virtual/frame_generator.h
++++ b/src/libcamera/pipeline/virtual/frame_generator.h
+@@ -16,6 +16,7 @@
+ {
+ public:
+ 	virtual ~FrameGenerator() = default;
++	virtual void stop() {}
+ 
+ 	virtual void configure(const Size &size) = 0;
+ 
+--- a/src/libcamera/pipeline/virtual/meson.build
++++ b/src/libcamera/pipeline/virtual/meson.build
+@@ -5,11 +5,12 @@
+     'image_frame_generator.cpp',
+     'test_pattern_generator.cpp',
+     'virtual.cpp',
++    'pipewire_frame_generator.cpp',
+ ])
+ 
+ libjpeg = dependency('libjpeg', required : true)
+ 
+ libcamera_deps += [libyuv_dep]
+-libcamera_deps += [libjpeg]
++libcamera_deps += [libjpeg, dependency('gstreamer-app-1.0'), dependency('gstreamer-video-1.0')]
+ 
+ subdir('data')

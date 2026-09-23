@@ -1,0 +1,95 @@
+[
+  {
+    "phase": "idle",
+    "info": {
+      "version": 1,
+      "model": "XT2537-4",
+      "physicalWidth": 1080,
+      "physicalHeight": 2400,
+      "physicalWidthMM": 70,
+      "physicalHeightMM": 156,
+      "renderWidth": 1080,
+      "renderHeight": 2400,
+      "renderModes": [
+        {
+          "width": 720,
+          "height": 1600
+        },
+        {
+          "width": 1080,
+          "height": 2400
+        }
+      ],
+      "refreshRates": [
+        30,
+        60,
+        90,
+        120
+      ],
+      "refreshPolicy": 0,
+      "currentRefresh": 60.000003814697266
+    }
+  },
+  {
+    "phase": "touch",
+    "info": {
+      "version": 1,
+      "model": "XT2537-4",
+      "physicalWidth": 1080,
+      "physicalHeight": 2400,
+      "physicalWidthMM": 70,
+      "physicalHeightMM": 156,
+      "renderWidth": 1080,
+      "renderHeight": 2400,
+      "renderModes": [
+        {
+          "width": 720,
+          "height": 1600
+        },
+        {
+          "width": 1080,
+          "height": 2400
+        }
+      ],
+      "refreshRates": [
+        30,
+        60,
+        90,
+        120
+      ],
+      "refreshPolicy": 0,
+      "currentRefresh": 120.00000762939453
+    }
+  },
+  {
+    "phase": "after_touch",
+    "info": {
+      "version": 1,
+      "model": "XT2537-4",
+      "physicalWidth": 1080,
+      "physicalHeight": 2400,
+      "physicalWidthMM": 70,
+      "physicalHeightMM": 156,
+      "renderWidth": 1080,
+      "renderHeight": 2400,
+      "renderModes": [
+        {
+          "width": 720,
+          "height": 1600
+        },
+        {
+          "width": 1080,
+          "height": 2400
+        }
+      ],
+      "refreshRates": [
+        30,
+        60,
+        90,
+        120
+      ],
+      "refreshPolicy": 0,
+      "currentRefresh": 90
+    }
+  }
+]

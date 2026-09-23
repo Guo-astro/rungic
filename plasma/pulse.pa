@@ -1,0 +1,8 @@
+.fail
+load-module module-device-restore
+load-module module-stream-restore
+load-module module-native-protocol-unix auth-cookie=/etc/plasma/audio-cookie
+load-module module-tunnel-sink-new server=unix:/mnt/android-audio/native cookie=/etc/plasma/audio-cookie sink_name=android rate=48000 channels=2 reconnect_interval_ms=2000 sink_properties=device.description=Android
+load-module module-suspend-on-idle timeout=3
+# The tunnel appears asynchronously; it is the only output sink and becomes
+# the default automatically. A synchronous set-default-sink fails on startup.

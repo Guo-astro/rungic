@@ -1,0 +1,26 @@
+[
+  {
+    "file": "ffmpeg-8.1.2.tar.xz",
+    "url": "https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz",
+    "sha256": "464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c",
+    "bytes": 11710924
+  },
+  {
+    "file": "FFmpegDataDecoder.cpp",
+    "url": "https://raw.githubusercontent.com/mozilla-firefox/firefox/main/dom/media/platforms/ffmpeg/FFmpegDataDecoder.cpp",
+    "sha256": "9d055c6eca99741bf531b363c52e25777e6db6e219d893e934be83408147f16c",
+    "bytes": 18314
+  },
+  {
+    "file": "FFmpegEncoderModule.cpp",
+    "url": "https://raw.githubusercontent.com/mozilla-firefox/firefox/main/dom/media/platforms/ffmpeg/FFmpegEncoderModule.cpp",
+    "sha256": "0e311769538f7db10b5a866d8c77f100ea609349a8aca739a1726c288c681674",
+    "bytes": 7787
+  },
+  {
+    "file": "FFmpegEncoderModule.h",
+    "url": "https://raw.githubusercontent.com/mozilla-firefox/firefox/main/dom/media/platforms/ffmpeg/FFmpegEncoderModule.h",
+    "sha256": "28e573e1266f17c93f5d9901c2144331dcd77328cc8cee98ddc50a591c2dddf7",
+    "bytes": 1849
+  }
+]

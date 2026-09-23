@@ -1,0 +1,12 @@
+kwin-common
+kwin-data
+kwin-dev
+kwin-wayland
+libegl-mesa0
+libgbm-dev
+libgbm1
+libgl1-mesa-dri
+libglx-mesa0
+libkwin6
+mesa-libgallium
+mesa-vulkan-drivers

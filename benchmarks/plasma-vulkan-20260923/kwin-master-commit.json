@@ -1,0 +1,205 @@
+{
+  "sha": "a5a83437d09024c802eb6db738cfd9cbfd97e41c",
+  "node_id": "C_kwDOAovZYNoAKGE1YTgzNDM3ZDA5MDI0YzgwMmViNmRiNzM4Y2ZkOWNiZmQ5N2U0MWM",
+  "commit": {
+    "author": {
+      "name": "l10n daemon script",
+      "email": "scripty@kde.org",
+      "date": "2026-09-23T02:46:21Z"
+    },
+    "committer": {
+      "name": "l10n daemon script",
+      "email": "scripty@kde.org",
+      "date": "2026-09-23T02:46:21Z"
+    },
+    "message": "GIT_SILENT Sync po/docbooks with svn",
+    "tree": {
+      "sha": "5903f1e9c2a6c21d4c43fc26e9840bc4a94aa24d",
+      "url": "https://api.github.com/repos/KDE/kwin/git/trees/5903f1e9c2a6c21d4c43fc26e9840bc4a94aa24d"
+    },
+    "url": "https://api.github.com/repos/KDE/kwin/git/commits/a5a83437d09024c802eb6db738cfd9cbfd97e41c",
+    "comment_count": 0,
+    "verification": {
+      "verified": false,
+      "reason": "unsigned",
+      "signature": null,
+      "payload": null,
+      "verified_at": null
+    }
+  },
+  "url": "https://api.github.com/repos/KDE/kwin/commits/a5a83437d09024c802eb6db738cfd9cbfd97e41c",
+  "html_url": "https://github.com/KDE/kwin/commit/a5a83437d09024c802eb6db738cfd9cbfd97e41c",
+  "comments_url": "https://api.github.com/repos/KDE/kwin/commits/a5a83437d09024c802eb6db738cfd9cbfd97e41c/comments",
+  "author": null,
+  "committer": null,
+  "parents": [
+    {
+      "sha": "776c792df1a5e5be33bd9f5ee3aa36a6ed860944",
+      "url": "https://api.github.com/repos/KDE/kwin/commits/776c792df1a5e5be33bd9f5ee3aa36a6ed860944",
+      "html_url": "https://github.com/KDE/kwin/commit/776c792df1a5e5be33bd9f5ee3aa36a6ed860944"
+    }
+  ],
+  "stats": {
+    "total": 26,
+    "additions": 13,
+    "deletions": 13
+  },
+  "files": [
+    {
+      "sha": "e1860204d1ca3f4dce972fdaaa9a5a01f3aea8ce",
+      "filename": "po/ug/kcm_animations.po",
+      "status": "modified",
+      "additions": 1,
+      "deletions": 1,
+      "changes": 2,
+      "blob_url": "https://github.com/KDE/kwin/blob/a5a83437d09024c802eb6db738cfd9cbfd97e41c/po%2Fug%2Fkcm_animations.po",
+      "raw_url": "https://github.com/KDE/kwin/raw/a5a83437d09024c802eb6db738cfd9cbfd97e41c/po%2Fug%2Fkcm_animations.po",
+      "contents_url": "https://api.github.com/repos/KDE/kwin/contents/po%2Fug%2Fkcm_animations.po?ref=a5a83437d09024c802eb6db738cfd9cbfd97e41c",
+      "patch": "@@ -8,7 +8,7 @@ msgstr \"\"\n \"Project-Id-Version: kwin\\n\"\n \"Report-Msgid-Bugs-To: https://bugs.kde.org\\n\"\n \"POT-Creation-Date: 2026-08-19 00:48+0000\\n\"\n-\"PO-Revision-Date: 2026-09-22 18:03+0900\\n\"\n+\"PO-Revision-Date: 2026-09-23 06:56+0900\\n\"\n \"Last-Translator: Abduqadir Abliz <sahranbay@gmail.com>\\n\"\n \"Language-Team: Uyghur <kde-i18n-doc@kde.org>\\n\"\n \"Language: ug\\n\""
+    },
+    {
+      "sha": "008673a0cf78bdf4a3011edde7b710632e264a34",
+      "filename": "po/ug/kcm_kwin_effects.po",
+      "status": "modified",
+      "additions": 1,
+      "deletions": 1,
+      "changes": 2,
+      "blob_url": "https://github.com/KDE/kwin/blob/a5a83437d09024c802eb6db738cfd9cbfd97e41c/po%2Fug%2Fkcm_kwin_effects.po",
+      "raw_url": "https://github.com/KDE/kwin/raw/a5a83437d09024c802eb6db738cfd9cbfd97e41c/po%2Fug%2Fkcm_kwin_effects.po",
+      "contents_url": "https://api.github.com/repos/KDE/kwin/contents/po%2Fug%2Fkcm_kwin_effects.po?ref=a5a83437d09024c802eb6db738cfd9cbfd97e41c",
+      "patch": "@@ -8,7 +8,7 @@ msgstr \"\"\n \"Project-Id-Version: kwin\\n\"\n \"Report-Msgid-Bugs-To: https://bugs.kde.org\\n\"\n \"POT-Creation-Date: 2025-11-17 11:53+0000\\n\"\n-\"PO-Revision-Date: 2026-09-22 18:03+0900\\n\"\n+\"PO-Revision-Date: 2026-09-23 06:56+0900\\n\"\n \"Last-Translator: Abduqadir Abliz <sahranbay@gmail.com>\\n\"\n \"Language-Team: Uyghur <kde-i18n-doc@kde.org>\\n\"\n \"Language: ug\\n\""
+    },
+    {
+      "sha": "d2a4cf146c7c553ab8e2c0e854f98ad3109e3b03",
+      "filename": "po/ug/kcm_kwin_scripts.po",
+      "status": "modified",
+      "additions": 1,
+      "deletions": 1,
+      "changes": 2,
+      "blob_url": "https://github.com/KDE/kwin/blob/a5a83437d09024c802eb6db738cfd9cbfd97e41c/po%2Fug%2Fkcm_kwin_scripts.po",
+      "raw_url": "https://github.com/KDE/kwin/raw/a5a83437d09024c802eb6db738cfd9cbfd97e41c/po%2Fug%2Fkcm_kwin_scripts.po",
+      "contents_url": "https://api.github.com/repos/KDE/kwin/contents/po%2Fug%2Fkcm_kwin_scripts.po?ref=a5a83437d09024c802eb6db738cfd9cbfd97e41c",
+      "patch": "@@ -8,7 +8,7 @@ msgstr \"\"\n \"Project-Id-Version: kcm-kwin-scripts\\n\"\n \"Report-Msgid-Bugs-To: https://bugs.kde.org\\n\"\n \"POT-Creation-Date: 2025-11-17 11:53+0000\\n\"\n-\"PO-Revision-Date: 2026-09-22 18:03+0900\\n\"\n+\"PO-Revision-Date: 2026-09-23 06:56+0900\\n\"\n \"Last-Translator: Abduqadir Abliz <sahranbay@gmail.com>\\n\"\n \"Language-Team: Uyghur <kde-i18n-doc@kde.org>\\n\"\n \"Language: ug\\n\""
+    },
+    {
+      "sha": "5edc3dbcf420c0b0e54fba76031694a66bbee9bf",
+      "filename": "po/ug/kcm_kwin_virtualdesktops.po",
+      "status": "modified",
+      "additions": 1,
+      "deletions": 1,
+      "changes": 2,
+      "blob_url": "https://github.com/KDE/kwin/blob/a5a83437d09024c802eb6db738cfd9cbfd97e41c/po%2Fug%2Fkcm_kwin_virtualdesktops.po",
+      "raw_url": "https://github.com/KDE/kwin/raw/a5a83437d09024c802eb6db738cfd9cbfd97e41c/po%2Fug%2Fkcm_kwin_virtualdesktops.po",
+      "contents_url": "https://api.github.com/repos/KDE/kwin/contents/po%2Fug%2Fkcm_kwin_virtualdesktops.po?ref=a5a83437d09024c802eb6db738cfd9cbfd97e41c",
+      "patch": "@@ -8,7 +8,7 @@ msgstr \"\"\n \"Project-Id-Version: kcm_kwindesktop\\n\"\n \"Report-Msgid-Bugs-To: https://bugs.kde.org\\n\"\n \"POT-Creation-Date: 2026-04-14 00:45+0000\\n\"\n-\"PO-Revision-Date: 2026-09-22 18:03+0900\\n\"\n+\"PO-Revision-Date: 2026-09-23 06:56+0900\\n\"\n \"Last-Translator: Abduqadir Abliz <sahranbay@gmail.com>\\n\"\n \"Language-Team: Uyghur <kde-i18n-doc@kde.org>\\n\"\n \"Language: ug\\n\""
+    },
+    {
+      "sha": "1c28a8622fba1ad5236de08224a7d4f2e2ae9438",
+      "filename": "po/ug/kcm_kwindecoration.po",
+      "status": "modified",
+      "additions": 1,
+      "deletions": 1,
+      "changes": 2,
+      "blob_url": "https://github.com/KDE/kwin/blob/a5a83437d09024c802eb6db738cfd9cbfd97e41c/po%2Fug%2Fkcm_kwindecoration.po",
+      "raw_url": "https://github.com/KDE/kwin/raw/a5a83437d09024c802eb6db738cfd9cbfd97e41c/po%2Fug%2Fkcm_kwindecoration.po",
+      "contents_url": "https://api.github.com/repos/KDE/kwin/contents/po%2Fug%2Fkcm_kwindecoration.po?ref=a5a83437d09024c802eb6db738cfd9cbfd97e41c",
+      "patch": "@@ -8,7 +8,7 @@ msgstr \"\"\n \"Project-Id-Version: kcmkwindecoration\\n\"\n \"Report-Msgid-Bugs-To: https://bugs.kde.org\\n\"\n \"POT-Creation-Date: 2026-05-14 00:45+0000\\n\"\n-\"PO-Revision-Date: 2026-09-22 18:03+0900\\n\"\n+\"PO-Revision-Date: 2026-09-23 06:56+0900\\n\"\n \"Last-Translator: Abduqadir Abliz <sahranbay@gmail.com>\\n\"\n \"Language-Team: Uyghur <kde-i18n-doc@kde.org>\\n\"\n \"Language: ug\\n\""
+    },
+    {
+      "sha": "a6d440726443d570d1650a75999fb35effa35c54",
+      "filename": "po/ug/kcm_kwinrules.po",
+      "status": "modified",
+      "additions": 1,
+      "deletions": 1,
+      "changes": 2,
+      "blob_url": "https://github.com/KDE/kwin/blob/a5a83437d09024c802eb6db738cfd9cbfd97e41c/po%2Fug%2Fkcm_kwinrules.po",
+      "raw_url": "https://github.com/KDE/kwin/raw/a5a83437d09024c802eb6db738cfd9cbfd97e41c/po%2Fug%2Fkcm_kwinrules.po",
+      "contents_url": "https://api.github.com/repos/KDE/kwin/contents/po%2Fug%2Fkcm_kwinrules.po?ref=a5a83437d09024c802eb6db738cfd9cbfd97e41c",
+      "patch": "@@ -8,7 +8,7 @@ msgstr \"\"\n \"Project-Id-Version: kcmkwinrules\\n\"\n \"Report-Msgid-Bugs-To: https://bugs.kde.org\\n\"\n \"POT-Creation-Date: 2026-07-17 00:45+0000\\n\"\n-\"PO-Revision-Date: 2026-09-22 18:03+0900\\n\"\n+\"PO-Revision-Date: 2026-09-23 06:56+0900\\n\"\n \"Last-Translator: Abduqadir Abliz <sahranbay@gmail.com>\\n\"\n \"Language-Team: Uyghur <kde-i18n-doc@kde.org>\\n\"\n \"Language: ug\\n\""
+    },
+    {
+      "sha": "67b430a3293a6144a7c88a6c7fbe14ca334f3d8b",
+      "filename": "po/ug/kcm_kwintabbox.po",
+      "status": "modified",
+      "additions": 1,
+      "deletions": 1,
+      "changes": 2,
+      "blob_url": "https://github.com/KDE/kwin/blob/a5a83437d09024c802eb6db738cfd9cbfd97e41c/po%2Fug%2Fkcm_kwintabbox.po",
+      "raw_url": "https://github.com/KDE/kwin/raw/a5a83437d09024c802eb6db738cfd9cbfd97e41c/po%2Fug%2Fkcm_kwintabbox.po",
+      "contents_url": "https://api.github.com/repos/KDE/kwin/contents/po%2Fug%2Fkcm_kwintabbox.po?ref=a5a83437d09024c802eb6db738cfd9cbfd97e41c",
+      "patch": "@@ -8,7 +8,7 @@ msgstr \"\"\n \"Project-Id-Version: kcm_kwintabbox\\n\"\n \"Report-Msgid-Bugs-To: https://bugs.kde.org\\n\"\n \"POT-Creation-Date: 2026-04-14 00:45+0000\\n\"\n-\"PO-Revision-Date: 2026-09-22 18:03+0900\\n\"\n+\"PO-Revision-Date: 2026-09-23 06:56+0900\\n\"\n \"Last-Translator: Abduqadir Abliz <sahranbay@gmail.com>\\n\"\n \"Language-Team: Uyghur <kde-i18n-doc@kde.org>\\n\"\n \"Language: ug\\n\""
+    },
+    {
+      "sha": "99404ddbd1e5d5d944bf30dfb601b2249bc6bceb",
+      "filename": "po/ug/kcm_kwinxwayland.po",
+      "status": "modified",
+      "additions": 1,
+      "deletions": 1,
+      "changes": 2,
+      "blob_url": "https://github.com/KDE/kwin/blob/a5a83437d09024c802eb6db738cfd9cbfd97e41c/po%2Fug%2Fkcm_kwinxwayland.po",
+      "raw_url": "https://github.com/KDE/kwin/raw/a5a83437d09024c802eb6db738cfd9cbfd97e41c/po%2Fug%2Fkcm_kwinxwayland.po",
+      "contents_url": "https://api.github.com/repos/KDE/kwin/contents/po%2Fug%2Fkcm_kwinxwayland.po?ref=a5a83437d09024c802eb6db738cfd9cbfd97e41c",
+      "patch": "@@ -8,7 +8,7 @@ msgstr \"\"\n \"Project-Id-Version: kwin\\n\"\n \"Report-Msgid-Bugs-To: https://bugs.kde.org\\n\"\n \"POT-Creation-Date: 2026-08-04 00:46+0000\\n\"\n-\"PO-Revision-Date: 2026-09-22 18:03+0900\\n\"\n+\"PO-Revision-Date: 2026-09-23 06:56+0900\\n\"\n \"Last-Translator: Abduqadir Abliz <sahranbay@gmail.com>\\n\"\n \"Language-Team: Uyghur <kde-i18n-doc@kde.org>\\n\"\n \"Language: ug\\n\""
+    },
+    {
+      "sha": "bd7c7adc1ba919818ead181194255db624f68952",
+      "filename": "po/ug/kcm_virtualkeyboard.po",
+      "status": "modified",
+      "additions": 1,
+      "deletions": 1,
+      "changes": 2,
+      "blob_url": "https://github.com/KDE/kwin/blob/a5a83437d09024c802eb6db738cfd9cbfd97e41c/po%2Fug%2Fkcm_virtualkeyboard.po",
+      "raw_url": "https://github.com/KDE/kwin/raw/a5a83437d09024c802eb6db738cfd9cbfd97e41c/po%2Fug%2Fkcm_virtualkeyboard.po",
+      "contents_url": "https://api.github.com/repos/KDE/kwin/contents/po%2Fug%2Fkcm_virtualkeyboard.po?ref=a5a83437d09024c802eb6db738cfd9cbfd97e41c",
+      "patch": "@@ -8,7 +8,7 @@ msgstr \"\"\n \"Project-Id-Version: kwin\\n\"\n \"Report-Msgid-Bugs-To: https://bugs.kde.org\\n\"\n \"POT-Creation-Date: 2026-06-07 00:46+0000\\n\"\n-\"PO-Revision-Date: 2026-09-22 18:03+0900\\n\"\n+\"PO-Revision-Date: 2026-09-23 06:56+0900\\n\"\n \"Last-Translator: Abduqadir Abliz <sahranbay@gmail.com>\\n\"\n \"Language-Team: Uyghur <kde-i18n-doc@kde.org>\\n\"\n \"Language: ug\\n\""
+    },
+    {
+      "sha": "5ce305ff42ac775cfea45a34d516eab688f24b23",
+      "filename": "po/ug/kcmkwincommon.po",
+      "status": "modified",
+      "additions": 1,
+      "deletions": 1,
+      "changes": 2,
+      "blob_url": "https://github.com/KDE/kwin/blob/a5a83437d09024c802eb6db738cfd9cbfd97e41c/po%2Fug%2Fkcmkwincommon.po",
+      "raw_url": "https://github.com/KDE/kwin/raw/a5a83437d09024c802eb6db738cfd9cbfd97e41c/po%2Fug%2Fkcmkwincommon.po",
+      "contents_url": "https://api.github.com/repos/KDE/kwin/contents/po%2Fug%2Fkcmkwincommon.po?ref=a5a83437d09024c802eb6db738cfd9cbfd97e41c",
+      "patch": "@@ -8,7 +8,7 @@ msgstr \"\"\n \"Project-Id-Version: kwin\\n\"\n \"Report-Msgid-Bugs-To: https://bugs.kde.org\\n\"\n \"POT-Creation-Date: 2026-08-18 00:46+0000\\n\"\n-\"PO-Revision-Date: 2026-09-22 18:03+0900\\n\"\n+\"PO-Revision-Date: 2026-09-23 06:56+0900\\n\"\n \"Last-Translator: Abduqadir Abliz <sahranbay@gmail.com>\\n\"\n \"Language-Team: Uyghur <kde-i18n-doc@kde.org>\\n\"\n \"Language: ug\\n\""
+    },
+    {
+      "sha": "3a7b8296d465026b3f19fadc5bb21f36b5997ae3",
+      "filename": "po/ug/kcmkwinscreenedges.po",
+      "status": "modified",
+      "additions": 1,
+      "deletions": 1,
+      "changes": 2,
+      "blob_url": "https://github.com/KDE/kwin/blob/a5a83437d09024c802eb6db738cfd9cbfd97e41c/po%2Fug%2Fkcmkwinscreenedges.po",
+      "raw_url": "https://github.com/KDE/kwin/raw/a5a83437d09024c802eb6db738cfd9cbfd97e41c/po%2Fug%2Fkcmkwinscreenedges.po",
+      "contents_url": "https://api.github.com/repos/KDE/kwin/contents/po%2Fug%2Fkcmkwinscreenedges.po?ref=a5a83437d09024c802eb6db738cfd9cbfd97e41c",
+      "patch": "@@ -8,7 +8,7 @@ msgstr \"\"\n \"Project-Id-Version: kcmkwinscreenedges\\n\"\n \"Report-Msgid-Bugs-To: https://bugs.kde.org\\n\"\n \"POT-Creation-Date: 2026-08-18 00:46+0000\\n\"\n-\"PO-Revision-Date: 2026-09-22 18:03+0900\\n\"\n+\"PO-Revision-Date: 2026-09-23 06:56+0900\\n\"\n \"Last-Translator: Abduqadir Abliz <sahranbay@gmail.com>\\n\"\n \"Language-Team: Uyghur <kde-i18n-doc@kde.org>\\n\"\n \"Language: ug\\n\""
+    },
+    {
+      "sha": "c9ad08f8cdde4f3ce2ffef72f0bde8af79c1080e",
+      "filename": "po/ug/kcmkwm.po",
+      "status": "modified",
+      "additions": 1,
+      "deletions": 1,
+      "changes": 2,
+      "blob_url": "https://github.com/KDE/kwin/blob/a5a83437d09024c802eb6db738cfd9cbfd97e41c/po%2Fug%2Fkcmkwm.po",
+      "raw_url": "https://github.com/KDE/kwin/raw/a5a83437d09024c802eb6db738cfd9cbfd97e41c/po%2Fug%2Fkcmkwm.po",
+      "contents_url": "https://api.github.com/repos/KDE/kwin/contents/po%2Fug%2Fkcmkwm.po?ref=a5a83437d09024c802eb6db738cfd9cbfd97e41c",
+      "patch": "@@ -8,7 +8,7 @@ msgstr \"\"\n \"Project-Id-Version: kcmkwm\\n\"\n \"Report-Msgid-Bugs-To: https://bugs.kde.org\\n\"\n \"POT-Creation-Date: 2026-07-14 00:45+0000\\n\"\n-\"PO-Revision-Date: 2026-09-22 18:03+0900\\n\"\n+\"PO-Revision-Date: 2026-09-23 06:56+0900\\n\"\n \"Last-Translator: Abduqadir Abliz <sahranbay@gmail.com>\\n\"\n \"Language-Team: Uyghur <kde-i18n-doc@kde.org>\\n\"\n \"Language: ug\\n\""
+    },
+    {
+      "sha": "bb24d210a7e42f93375ff50b70c0ca59e1303f9f",
+      "filename": "po/ug/kwin.po",
+      "status": "modified",
+      "additions": 1,
+      "deletions": 1,
+      "changes": 2,
+      "blob_url": "https://github.com/KDE/kwin/blob/a5a83437d09024c802eb6db738cfd9cbfd97e41c/po%2Fug%2Fkwin.po",
+      "raw_url": "https://github.com/KDE/kwin/raw/a5a83437d09024c802eb6db738cfd9cbfd97e41c/po%2Fug%2Fkwin.po",
+      "contents_url": "https://api.github.com/repos/KDE/kwin/contents/po%2Fug%2Fkwin.po?ref=a5a83437d09024c802eb6db738cfd9cbfd97e41c",
+      "patch": "@@ -8,7 +8,7 @@ msgstr \"\"\n \"Project-Id-Version: kwin\\n\"\n \"Report-Msgid-Bugs-To: https://bugs.kde.org\\n\"\n \"POT-Creation-Date: 2026-09-18 00:47+0000\\n\"\n-\"PO-Revision-Date: 2026-09-22 18:03+0900\\n\"\n+\"PO-Revision-Date: 2026-09-23 06:56+0900\\n\"\n \"Last-Translator: Abduqadir Abliz <sahranbay@gmail.com>\\n\"\n \"Language-Team: Uyghur <kde-i18n-doc@kde.org>\\n\"\n \"Language: ug\\n\""
+    }
+  ]
+}

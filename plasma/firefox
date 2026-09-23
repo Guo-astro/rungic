@@ -1,0 +1,6 @@
+#!/bin/sh
+# Private FFmpeg; all other applications keep the distribution libraries.
+export LD_LIBRARY_PATH=/usr/lib/firefox:/usr/local/lib/moto-codec/ffmpeg/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+export LD_PRELOAD=/usr/local/lib/moto-codec/libmotocodec.so:/usr/lib/firefox/libavcodec.so.62${LD_PRELOAD:+:$LD_PRELOAD}
+export MOTO_CODEC_PRECONNECT=1
+exec /usr/lib/firefox/firefox "$@"

@@ -1,0 +1,34 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Phone-side shortcut for the existing alpine container, using Magisk root.
+set -eu
+
+if [[ ${1:-} == help || ${1:-} == --help || ${1:-} == -h ]]; then
+    cat <<'HELP'
+Usage: lxc {status|start|shell|stop|log|exec COMMAND...}
+
+  lxc status       Show Alpine container status
+  lxc start        Start the container
+  lxc shell        Enter Alpine; exit leaves the container running
+  lxc stop         Stop the container
+  lxc log          Show the last 80 LXC log lines
+  lxc exec COMMAND Run a command inside Alpine
+
+This shortcut manages /data/adb/moto-lxc via Magisk.
+HELP
+    exit 0
+fi
+
+root_command='PATH=/product/bin:/system/bin:/system/xbin:/vendor/bin /data/adb/moto-lxc/moto-lxc'
+for arg in "$@"; do
+    # Quote each argument for Android's shell without evaluating its contents.
+    escaped=${arg//\'/\'\\\'\'}
+    root_command+=" '$escaped'"
+done
+
+# Android binaries must not inherit Termux's dynamic linker overrides.
+unset LD_PRELOAD LD_LIBRARY_PATH
+if [[ ${1:-} == shell ]]; then
+    # Magisk otherwise pipes -c sessions, which prevents an interactive attach.
+    exec /product/bin/su -i -c "$root_command"
+fi
+exec /product/bin/su -c "$root_command"

@@ -1,0 +1,60 @@
+{
+  "recorded_on": "2026-09-23",
+  "status": "Native 1080x2400 display and Android refresh controls deployed; paired GLES/Zink and native Vulkan benchmarks completed, production KWin remains GLES; media validation and remaining display GUI regression continue",
+  "architecture": "arm64",
+  "container": "plasma",
+  "android_application_id": "dev.moto.plasma",
+  "base_preference": "Ubuntu 26.04 LTS (resolute), deployed",
+  "selected_upstream_release": "6.6.5",
+  "upstream_minimums": {
+    "qt": "6.9.0",
+    "kde_frameworks": "6.18.0",
+    "wayland_for_kwin": "1.24",
+    "wayland_protocols_for_kwin": "1.45"
+  },
+  "matched_plasma_components": [
+    "plasma-mobile",
+    "kwin",
+    "plasma-workspace",
+    "libplasma",
+    "kpipewire",
+    "kdecoration"
+  ],
+  "binary_repository": "Ubuntu resolute + resolute-updates + resolute-backports, arm64; authenticated APT install completed",
+  "notes": [
+    "User allows stable Plasma 6.5 or newer.",
+    "Independent Ubuntu rootfs deployed; forky bootstrap archived separately.",
+    "Plasma Mobile 6.6.5, KWin/Workspace/Keyboard 6.6.6, Qt 6.10.2, KF6 6.24.",
+    "Mesa KGSL rebuilt for glibc as a coherent set of Debian packages; GPU render/readback and DMA-BUF export passed as linux UID 1000.",
+    "KWin moto5 with standard KScreen modes/scaling; physical 30/60/90/120 Hz verified. Vulkan via Turnip and Zink AHB import verified; no claim of full native Vulkan compositor.",
+    "Local project now maintains Plasma only; reusable Android/Linux bridges live in shared/."
+  ],
+  "minimum_plasma_series": "6.5",
+  "allow_newer_stable": true,
+  "upstream_minimums_reference": "6.5.6 historical baseline; recheck chosen distribution sources before building",
+  "observed_arm64_package_versions": {
+    "kwin-wayland": "4:6.6.6-0ubuntu0.1+moto5",
+    "libkf6coreaddons6": "6.24.0-0ubuntu1",
+    "libqt6core6t64": "6.10.2+dfsg-7",
+    "maliit-keyboard": "2.3.1-6build1",
+    "plasma-keyboard": "6.6.6-0ubuntu0.1",
+    "plasma-mobile": "6.6.5-0ubuntu0.1",
+    "plasma-mobile-core": "9build1",
+    "plasma-mobile-phone": "9build1",
+    "plasma-workspace": "4:6.6.6-0ubuntu0.1",
+    "libcamera0.7": "0.7.0-1ubuntu2+moto1",
+    "libqt6multimedia6": "6.10.2-2+moto1",
+    "plasma-camera": "2.1.1-2build1+moto1",
+    "kscreen": "4:6.6.5-0ubuntu0.1+moto2"
+  },
+  "installed_custom_mesa": "26.3.0~devel20260824+moto1",
+  "firefox": "156.0.1~build1 (Mozilla official APT repository)",
+  "android_apk": "1.8 (versionCode 9, installed; native 1080x2400, shared refresh policy)",
+  "input_method": "Plasma Keyboard 6.6.6 + librime 1.16.1 / luna_pinyin_simp",
+  "private_app_builds": {
+    "Snapshot": "51.0 + Moto codec patch",
+    "plasma-settings": "25.12.0 + upstream ModulesModel fix + Android hardware routing",
+    "plasma-keyboard": "6.6.6 + language popup lifetime fix",
+    "xdg-desktop-portal-kde": "6.6.6 + mobile width fix"
+  }
+}

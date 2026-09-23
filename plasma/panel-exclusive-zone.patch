@@ -1,0 +1,36 @@
+--- a/shell/contents/views/Panel.qml
++++ b/shell/contents/views/Panel.qml
+@@ -15,6 +15,7 @@
+ import org.kde.kwindowsystem 1.0
+ import org.kde.kirigami as Kirigami
+ import org.kde.plasma.shell.panel 0.1 as Panel
++import org.kde.layershell 1.0 as LayerShell
+ 
+ import org.kde.plasma.plasmoid 2.0
+ 
+@@ -31,6 +32,25 @@
+                 containment.panel = panel;
+             }
+         }
++    }
++
++    // Android cutout metadata can change the top panel thickness after its
++    // initial Wayland configure. Keep the reserved application area in sync;
++    // resizing the visible panel alone can leave the original exclusive zone.
++    // Use the real (integer) PanelView thickness, not a second safe-area margin.
++    function syncTopPanelExclusion() {
++        if (containment?.plasmoid?.location === PlasmaCore.Types.TopEdge
++                && panel.visibilityMode === Panel.Global.NormalPanel
++                && !panel.floating) {
++            panel.LayerShell.Window.exclusionZone = panel.thickness;
++            panel.requestUpdate();
++        }
++    }
++    Component.onCompleted: Qt.callLater(root.syncTopPanelExclusion)
++    Connections {
++        target: panel
++        function onThicknessChanged() { Qt.callLater(root.syncTopPanelExclusion); }
++        function onVisibilityModeChanged() { Qt.callLater(root.syncTopPanelExclusion); }
+     }
+ 
+     // NOTE: Below is taken straight out of Plasma Desktop so that we can

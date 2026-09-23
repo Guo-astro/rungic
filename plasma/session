@@ -1,0 +1,33 @@
+#!/bin/sh
+set -eu
+export HOME=/home/linux
+export XDG_RUNTIME_DIR=/run/user/1000
+export DBUS_SESSION_BUS_ADDRESS=unix:path=$XDG_RUNTIME_DIR/bus
+export XDG_SESSION_TYPE=wayland
+export XDG_CURRENT_DESKTOP=KDE
+export XDG_SESSION_DESKTOP=KDE
+export XDG_MENU_PREFIX=plasma-
+export LANG=zh_CN.UTF-8
+export QT_QPA_PLATFORM=wayland
+export GDK_BACKEND=wayland
+export MOZ_ENABLE_WAYLAND=1
+export QT_QUICK_BACKEND=software
+export KWIN_COMPOSE=Q
+export MOTO_ANDROID_DISPLAY=/mnt/android-wayland/android-display.ini
+export PULSE_SERVER=unix:$XDG_RUNTIME_DIR/pulse/native
+export PULSE_COOKIE=/etc/plasma/audio-cookie
+. /etc/profile.d/proxy.sh
+[ ! -f /etc/plasma/gpu-env ] || . /etc/plasma/gpu-env
+unset DISPLAY WAYLAND_DISPLAY
+while [ ! -S /mnt/android-wayland/wayland-0 ]; do sleep 1; done
+mkdir -p "$HOME/.config"
+# Android owns device locking. Never present a Linux password prompt that has
+# no configured password or hide the desktop behind an idle screen lock.
+kwriteconfig6 --file kscreenlockerrc --group Daemon --key Autolock false
+kwriteconfig6 --file kscreenlockerrc --group Daemon --key LockOnResume false
+umask 077
+env | python3 -c 'import sys,shlex; print("".join("export "+k+"="+shlex.quote(v)+"\n" for k,v in (line.rstrip("\n").split("=",1) for line in sys.stdin) if k in ("HOME","XDG_RUNTIME_DIR","DBUS_SESSION_BUS_ADDRESS","XDG_SESSION_TYPE","XDG_CURRENT_DESKTOP","XDG_SESSION_DESKTOP","XDG_MENU_PREFIX","LANG","QT_QPA_PLATFORM","QT_QUICK_BACKEND","GDK_BACKEND","MOZ_ENABLE_WAYLAND","MESA_LOADER_DRIVER_OVERRIDE","FD_KGSL_ENABLE_DMABUF","VK_DRIVER_FILES","QSG_RHI_BACKEND","GSK_RENDERER","PULSE_SERVER","PULSE_COOKIE","http_proxy","https_proxy","HTTP_PROXY","HTTPS_PROXY","no_proxy")))' > "$XDG_RUNTIME_DIR/moto-session.env"
+printf '%s\n' 'export WAYLAND_DISPLAY=wayland-0' >> "$XDG_RUNTIME_DIR/moto-session.env"
+# Repair stale bootstrap menu caches before the shell reads them.
+kbuildsycoca6 --noincremental
+exec /usr/bin/startplasmamobile

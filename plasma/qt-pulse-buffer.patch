@@ -1,0 +1,16 @@
+--- a/src/multimedia/pulseaudio/qpulseaudiosink.cpp
++++ b/src/multimedia/pulseaudio/qpulseaudiosink.cpp
+@@ -244,8 +244,11 @@
+ bool QPulseAudioSinkStream::startStream(StreamType streamType)
+ {
+     pa_buffer_attr attr{
+-        .maxlength = uint32_t(m_format.bytesForFrames(m_hardwareBufferFrames.value_or(1024))),
+-        .tlength = uint32_t(-1),
++        // Negotiate a target latency, not a hard maximum below the server's
++        // render quantum. A tunnel may consume a block larger than 1024 frames;
++        // capping maxlength at 1024 inserts silence after every such block.
++        .maxlength = uint32_t(-1),
++        .tlength = uint32_t(m_format.bytesForFrames(m_hardwareBufferFrames.value_or(1024))),
+         .prebuf = uint32_t(-1),
+         .minreq = uint32_t(-1),
+         .fragsize = uint32_t(-1),

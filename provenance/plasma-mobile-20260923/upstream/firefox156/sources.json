@@ -1,0 +1,27 @@
+[
+  {
+    "url": "https://raw.githubusercontent.com/mozilla-firefox/firefox/FIREFOX_156_0_1_RELEASE/dom/media/platforms/ffmpeg/FFmpegRuntimeLinker.cpp",
+    "sha256": "505403a10927a152105a3c15494a41ea1fa2c5d8bfe5250e8b95162850ca0eb1",
+    "bytes": 10443
+  },
+  {
+    "url": "https://raw.githubusercontent.com/mozilla-firefox/firefox/FIREFOX_156_0_1_RELEASE/dom/media/platforms/ffmpeg/FFmpegLibWrapper.cpp",
+    "sha256": "3c39099218082726499098dabb04b7352392af53cf51424976bacb82e65aaa62",
+    "bytes": 22092
+  },
+  {
+    "url": "https://raw.githubusercontent.com/mozilla-firefox/firefox/FIREFOX_156_0_1_RELEASE/dom/media/platforms/ffmpeg/FFmpegEncoderModule.cpp",
+    "sha256": "0e311769538f7db10b5a866d8c77f100ea609349a8aca739a1726c288c681674",
+    "bytes": 7787
+  },
+  {
+    "url": "https://raw.githubusercontent.com/mozilla-firefox/firefox/FIREFOX_156_0_1_RELEASE/dom/media/platforms/PEMFactory.cpp",
+    "sha256": "9583c4cdcb23eab498c933b7096ea8c5cfbf3ff4f7086c5c7784ab032f0650dc",
+    "bytes": 17957
+  },
+  {
+    "url": "https://raw.githubusercontent.com/mozilla-firefox/firefox/FIREFOX_156_0_1_RELEASE/modules/libpref/init/StaticPrefList.yaml",
+    "sha256": "f71597ad96401a5ebdbf917344a211359694e81d158ed563b2d0b49c6c0147e4",
+    "bytes": 628090
+  }
+]

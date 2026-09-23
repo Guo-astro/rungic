@@ -1,0 +1,10 @@
+# Keep original bytes/line endings for source imports and existing patches.
+# Deliberately no LFS filters: firmware and build artifacts are outside Git.
+*.apk binary
+*.deb binary
+*.img binary
+*.zip binary
+*.png binary
+*.webp binary
+*.rgba binary
+*.dmabuf binary

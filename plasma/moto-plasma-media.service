@@ -1,0 +1,13 @@
+[Unit]
+Description=Android microphone and cameras
+After=pulseaudio.service pipewire.service plasma-kwin_wayland.service
+Wants=pulseaudio.service pipewire.service
+PartOf=graphical-session.target
+
+[Service]
+ExecStart=/usr/local/bin/moto-media-bridge
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=plasma-workspace.target

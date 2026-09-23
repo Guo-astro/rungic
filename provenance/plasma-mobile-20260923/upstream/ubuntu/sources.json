@@ -1,0 +1,13 @@
+{
+  "SHA256SUMS": "https://cloud-images.ubuntu.com/minimal/releases/resolute/release-20260908/SHA256SUMS",
+  "SHA256SUMS.gpg": "https://cloud-images.ubuntu.com/minimal/releases/resolute/release-20260908/SHA256SUMS.gpg",
+  "ubuntu-26.04-minimal-cloudimg-arm64-root.tar.xz": "https://cloud-images.ubuntu.com/minimal/releases/resolute/release-20260908/ubuntu-26.04-minimal-cloudimg-arm64-root.tar.xz",
+  "ubuntu-26.04-minimal-cloudimg-arm64-root.manifest": "https://cloud-images.ubuntu.com/minimal/releases/resolute/release-20260908/ubuntu-26.04-minimal-cloudimg-arm64-root.manifest",
+  "kwin-wayland_egl_backend.cpp": "https://raw.githubusercontent.com/KDE/kwin/v6.6.6/src/backends/wayland/wayland_egl_backend.cpp",
+  "kwin-wayland_backend.cpp": "https://raw.githubusercontent.com/KDE/kwin/v6.6.6/src/backends/wayland/wayland_backend.cpp",
+  "kwin-wayland_qpainter_backend.cpp": "https://raw.githubusercontent.com/KDE/kwin/v6.6.6/src/backends/wayland/wayland_qpainter_backend.cpp",
+  "kwin-main_wayland.cpp": "https://raw.githubusercontent.com/KDE/kwin/v6.6.6/src/main_wayland.cpp",
+  "plasma-workspace-startplasma-wayland.cpp": "https://raw.githubusercontent.com/KDE/plasma-workspace/v6.6.6/startkde/startplasma-wayland.cpp",
+  "plasma-workspace-startplasma.cpp": "https://raw.githubusercontent.com/KDE/plasma-workspace/v6.6.6/startkde/startplasma.cpp",
+  "plasma-mobile-startplasmamobile.in": "https://raw.githubusercontent.com/KDE/plasma-mobile/v6.6.5/bin/startplasmamobile.in"
+}

@@ -1,0 +1,34 @@
+--- a/src/modulesmodel.cpp
++++ b/src/modulesmodel.cpp
+@@ -133,7 +133,7 @@
+ 
+ QVariant ModulesModel::data(const QModelIndex &index, int role) const
+ {
+-    if (!index.isValid() || index.row() < 0 || index.row() >= rowCount()) {
++    if (!index.isValid()) {
+         return {};
+     }
+ 
+@@ -276,14 +276,16 @@
+ 
+ QList<MenuItem *> ModulesModel::childrenList(MenuItem *parent) const
+ {
+-    QList<MenuItem *> children = parent->children();
++    QList<MenuItem *> result;
++    const auto children = parent->children();
+     for (MenuItem *child : children) {
+         if (m_exceptions.contains(child)) {
+-            children.removeOne(child);
+-            children.append(child->children());
+-        }
+-    }
+-    return children;
++            result.append(child->children());
++        } else {
++            result.append(child);
++        }
++    }
++    return result;
+ }
+ 
+ MenuItem *ModulesModel::parentItem(MenuItem *child) const

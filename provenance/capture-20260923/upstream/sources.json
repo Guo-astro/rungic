@@ -1,0 +1,107 @@
+[
+  {
+    "file": "snapshot-APKBUILD",
+    "url": "https://raw.githubusercontent.com/alpinelinux/aports/master/community/snapshot/APKBUILD",
+    "sha256": "4e4bdf53d6b4b575221019b1c098208e46f95b3320984509f7975f2308bf88b6",
+    "bytes": 1609
+  },
+  {
+    "file": "snapshot-Cargo.toml",
+    "url": "https://raw.githubusercontent.com/GNOME/snapshot/main/Cargo.toml",
+    "sha256": "5faf0e7e801b5fdd3468ea6ac1e560d8019fb3abf937ddebcbf0575492d94bf3",
+    "bytes": 1529
+  },
+  {
+    "file": "aperture-viewfinder.rs",
+    "url": "https://raw.githubusercontent.com/GNOME/snapshot/main/aperture/src/viewfinder.rs",
+    "sha256": "bf65607a3f2b4006ca1f02b1ac881d8e68f0911fb659491c9e28c1e5d8cdcac9",
+    "bytes": 46116
+  },
+  {
+    "file": "aperture-device.rs",
+    "url": "https://raw.githubusercontent.com/GNOME/snapshot/main/aperture/src/device.rs",
+    "error": "HTTP Error 404: Not Found"
+  },
+  {
+    "file": "aperture-device_provider.rs",
+    "url": "https://raw.githubusercontent.com/GNOME/snapshot/main/aperture/src/device_provider.rs",
+    "sha256": "d017b49a5da74796251538e4842a9edf53c539ac5aa3406c3fd0b6b557f51fc9",
+    "bytes": 14324
+  },
+  {
+    "file": "scrcpy-CameraCapture.java",
+    "url": "https://raw.githubusercontent.com/Genymobile/scrcpy/v4.0/server/src/main/java/com/genymobile/scrcpy/video/CameraCapture.java",
+    "sha256": "d8d7d82d329203ee70305186d557d13ac30980f604304e68e7266f0195a053d5",
+    "bytes": 20149
+  },
+  {
+    "file": "scrcpy-AudioDirectCapture.java",
+    "url": "https://raw.githubusercontent.com/Genymobile/scrcpy/v4.0/server/src/main/java/com/genymobile/scrcpy/audio/AudioDirectCapture.java",
+    "sha256": "9bc6afa38b1af4e9364fe59f2070426c1e7e764e56b1c5e5bbee2af593095ec1",
+    "bytes": 5755
+  },
+  {
+    "file": "pipewire-video-src.c",
+    "url": "https://raw.githubusercontent.com/PipeWire/pipewire/1.6.8/src/examples/video-src.c",
+    "sha256": "920e843c119a9c8f84a15002b4f56d7ebab1e6f23bd468350cacc36ad79c627a",
+    "bytes": 10295
+  },
+  {
+    "file": "pipewire-gstpipewiresink.c",
+    "url": "https://raw.githubusercontent.com/PipeWire/pipewire/1.6.8/src/gst/gstpipewiresink.c",
+    "sha256": "8659aa72b5e265e77aa8bed24716c3f9aaadfb8a5e37cb4b384ff612b4e80b11",
+    "bytes": 44042
+  },
+  {
+    "file": "pipewire-gstpipewiredeviceprovider.c",
+    "url": "https://raw.githubusercontent.com/PipeWire/pipewire/1.6.8/src/gst/gstpipewiredeviceprovider.c",
+    "sha256": "3db196e515071e86cfc26ce2c84af117f7290cf46a7ff8f363881f7f15f02e34",
+    "bytes": 28219
+  },
+  {
+    "file": "portal-camera.c",
+    "url": "https://raw.githubusercontent.com/flatpak/xdg-desktop-portal/main/src/camera.c",
+    "error": "HTTP Error 404: Not Found"
+  },
+  {
+    "file": "portal-pipewire.c",
+    "url": "https://raw.githubusercontent.com/flatpak/xdg-desktop-portal/main/src/pipewire.c",
+    "error": "HTTP Error 404: Not Found"
+  },
+  {
+    "file": "pulseaudio-build.sh",
+    "url": "https://raw.githubusercontent.com/termux/termux-packages/master/packages/pulseaudio/build.sh",
+    "sha256": "4fa38f213ca97d6bbb5fb0035d0ca90bbf57872576db6a28cdbb9cc779062e17",
+    "bytes": 3173
+  },
+  {
+    "file": "pulseaudio-module-pipe-source.c",
+    "url": "https://raw.githubusercontent.com/pulseaudio/pulseaudio/v17.0/src/modules/module-pipe-source.c",
+    "sha256": "b9e1044a8dedabcffbf93b2e2c4ecc84079366e70f7f42c3dea9e8baa01d37ef",
+    "bytes": 10094
+  },
+  {
+    "file": "snapshot-51.0.tar.xz",
+    "url": "https://download.gnome.org/sources/snapshot/51/snapshot-51.0.tar.xz",
+    "sha256": "3e64fa4cd1a742ae34b6f6d8e6d9614a2d3eab88a1b0071c11ab53617eb214c2",
+    "bytes": 8477140
+  },
+  {
+    "file": "portal-camera.c",
+    "url": "https://raw.githubusercontent.com/flatpak/xdg-desktop-portal/fd54e7fe8a41b22bf9c78626effe4bcb9d214d16/desktop-portal/camera.c",
+    "sha256": "4236c64b0facacf23afe543230b38e1904ce54885af31e508cf2be778fbd29f2",
+    "bytes": 18474
+  },
+  {
+    "file": "portal-pipewire.c",
+    "url": "https://raw.githubusercontent.com/flatpak/xdg-desktop-portal/fd54e7fe8a41b22bf9c78626effe4bcb9d214d16/desktop-portal/pipewire.c",
+    "sha256": "d3c1820152901598a13372f45be69036e1485c562d2518493680dcef1c00bba0",
+    "bytes": 9485
+  },
+  {
+    "file": "libyuv-convert_argb.h",
+    "url": "https://raw.githubusercontent.com/lemenkov/libyuv/master/include/libyuv/convert_argb.h",
+    "sha256": "b3ddfac5f8a3ea55c0bfb7ca33e1e099c2d956e7bb737b784ae10a71d524bf64",
+    "bytes": 79005
+  }
+]

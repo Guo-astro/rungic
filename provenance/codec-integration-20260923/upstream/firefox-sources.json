@@ -1,0 +1,36 @@
+[
+  {
+    "url": "https://raw.githubusercontent.com/mozilla-firefox/firefox/main/dom/media/platforms/ffmpeg/FFmpegVideoDecoder.cpp",
+    "file": "FFmpegVideoDecoder.cpp",
+    "sha256": "bb708579084b121e3970cb2bc2f9f2d83ba9ebf0f90f6e9de7dbb3152d9312b7"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/mozilla-firefox/firefox/main/dom/media/platforms/ffmpeg/FFmpegVideoEncoder.cpp",
+    "file": "FFmpegVideoEncoder.cpp",
+    "sha256": "72b6b186da9414fda031bca59d0aebf1875891b3b727ac0e53a10100d6b0d3e5"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/mozilla-firefox/firefox/main/dom/media/platforms/ffmpeg/FFmpegLibWrapper.cpp",
+    "file": "FFmpegLibWrapper.cpp",
+    "sha256": "5124bb255bbfa2ab79aca621286b9a9a313d7f32cab24becb4616cbd9af5fbe3"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/mozilla-firefox/firefox/main/dom/media/platforms/ffmpeg/FFmpegRuntimeLinker.cpp",
+    "file": "FFmpegRuntimeLinker.cpp",
+    "sha256": "505403a10927a152105a3c15494a41ea1fa2c5d8bfe5250e8b95162850ca0eb1"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/mozilla-firefox/firefox/main/security/sandbox/linux/SandboxFilter.cpp",
+    "file": "SandboxFilter.cpp",
+    "sha256": "d60004d815a980192d5f7b431fffecc6aa2a85233323e5ae76d913960b26f25b"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/mozilla-firefox/firefox/main/dom/media/webrtc/libwebrtcglue/WebrtcVideoEncoderFactory.cpp",
+    "error": "HTTP Error 404: Not Found"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/mozilla-firefox/firefox/main/modules/libpref/init/StaticPrefList.yaml",
+    "file": "StaticPrefList.yaml",
+    "sha256": "356a429e4b476df594f4bbe5a7060e6b6d6aad00dc4c4770935898648b5242db"
+  }
+]

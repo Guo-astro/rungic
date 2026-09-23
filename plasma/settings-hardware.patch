@@ -1,0 +1,39 @@
+--- a/src/settingsapp.cpp
++++ b/src/settingsapp.cpp
+@@ -9,6 +9,8 @@
+ #include "settingsapp.h"
+ 
+ #include <QDebug>
++#include <QFileInfo>
++#include <QProcess>
+ #include <QQmlContext>
+ #include <QQmlEngine>
+ 
+@@ -257,6 +259,27 @@
+         return;
+     }
+ 
++    // Physical network/radio/suspend ownership stays with the Android host.
++    // The normal desktop modules remain available on non-Android sessions.
++    if (QFileInfo::exists(QStringLiteral("/mnt/android-wayland/platform.sock"))) {
++        const QString id = QFileInfo(mi->id()).baseName();
++        QString target;
++        if (id == u"kcm_mobile_wifi"_s || id == u"kcm_networkmanagement"_s || id == u"kcm_cellular_network"_s) {
++            target = u"network"_s;
++        } else if (id == u"kcm_bluetooth"_s || id == u"kcm_mobile_bluetooth"_s || id == u"kcm_bluetooth_power"_s) {
++            target = u"bluetooth"_s;
++        }
++        if (!target.isEmpty()) {
++            QProcess::startDetached(u"/usr/local/bin/moto-platform"_s,
++                {u"--request"_s, u"{\"op\":\"settings\",\"target\":\""_s + target + u"\"}"_s});
++            return;
++        }
++        if (id == u"kcm_mobile_power"_s || id == u"kcm_powerdevilprofilesconfig"_s) {
++            QProcess::startDetached(u"/usr/local/bin/moto-platform"_s, {});
++            return;
++        }
++    }
++
+     // Load KCM
+     m_activeModule->setPath(mi->id());
+ }

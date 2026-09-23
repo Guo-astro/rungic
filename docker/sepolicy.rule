@@ -1,0 +1,56 @@
+# The kernel loop worker needs access only to our ext4 backing image.
+type moto_docker_image file_type
+typeattribute moto_docker_image data_file_type
+allow kernel moto_docker_image file { open read write getattr ioctl lock map }
+
+# Dedicated compatibility domain for the user's trusted Docker workloads.
+# Other Android domains remain enforcing. Retain established allow rules
+# to reduce audit noise and preserve the option to return to enforcing.
+type moto_docker domain
+typeattribute moto_docker mlstrustedsubject
+typeattribute moto_docker netdomain
+permissive moto_docker
+type moto_docker_file file_type
+typeattribute moto_docker_file data_file_type
+allow moto_docker moto_docker * *
+allow moto_docker moto_docker_file * *
+allowxperm moto_docker moto_docker_file file ioctl *
+allow moto_docker magisk { fd fifo_file unix_stream_socket } *
+allow moto_docker magisk process sigchld
+allow moto_docker { adbd shell untrusted_app_27 } fd use
+# Termux command substitution and redirection use app-labelled anonymous pipes.
+allow moto_docker untrusted_app_27 fifo_file { read write getattr ioctl }
+allowxperm moto_docker untrusted_app_27 fifo_file ioctl { 0x5401 0x5413 }
+allow moto_docker adbd unix_stream_socket { read write getattr ioctl }
+allow magisk moto_docker process { transition dyntransition signal sigkill sigstop getattr getcap ptrace }
+allow moto_docker { rootfs tmpfs proc proc_type sysfs sysfs_type } dir { open read getattr search mounton }
+allow moto_docker { rootfs tmpfs proc proc_type sysfs sysfs_type } file { open read getattr map }
+allow moto_docker { rootfs tmpfs proc proc_type sysfs sysfs_type } lnk_file { open read getattr }
+allow moto_docker { cgroup cgroup_v2 } { dir file } *
+allow moto_docker { tmpfs devpts } filesystem { mount remount unmount getattr associate }
+allow moto_docker fs_type filesystem { mount remount unmount getattr associate }
+allow moto_docker { device devpts } dir { open read getattr search mounton }
+allow moto_docker { null_device zero_device random_device ptmx_device devpts } chr_file *
+# runc allocates and unlocks a container PTY for docker exec/run -t.
+allowxperm moto_docker devpts chr_file ioctl { 0x5430 0x5431 0x5441 }
+allow moto_docker selinuxfs dir { open read getattr search }
+allow moto_docker selinuxfs file { open read getattr }
+allow moto_docker proc_net file { open read write getattr }
+allow moto_docker port_type { tcp_socket udp_socket } *
+allow moto_docker node_type { tcp_socket udp_socket rawip_socket } *
+# Android labels nsfs namespace handles as unlabeled on this kernel.
+allow moto_docker unlabeled file { open read getattr ioctl }
+allow moto_docker labeledfs filesystem quotaget
+# Label Docker-created tmpfs/memfd objects, including runc's sealed self-copy.
+type_transition moto_docker tmpfs file moto_docker_file
+type_transition moto_docker tmpfs dir moto_docker_file
+type_transition moto_docker tmpfs chr_file moto_docker_file
+type_transition moto_docker tmpfs blk_file moto_docker_file
+type_transition moto_docker tmpfs lnk_file moto_docker_file
+type_transition moto_docker tmpfs sock_file moto_docker_file
+type_transition moto_docker tmpfs fifo_file moto_docker_file
+allow moto_docker tmpfs dir { write add_name remove_name create setattr rmdir }
+allow moto_docker proc_type file mounton
+allow moto_docker unlabeled filesystem { mount remount unmount getattr associate }
+allow moto_docker init file { open read getattr }
+allowxperm moto_docker moto_docker fifo_file ioctl { 0x5401 0x5413 }

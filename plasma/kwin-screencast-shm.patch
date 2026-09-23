@@ -1,0 +1,14 @@
+--- a/src/plugins/screencast/screencastutils.h
++++ b/src/plugins/screencast/screencastutils.h
+@@ -47,7 +47,10 @@
+ 
+     const auto context = EglContext::currentContext();
+     const QSize size = texture->size();
+-    const bool invertNeeded = context->isOpenGLES() ^ (texture->contentTransform() != OutputTransform::FlipY);
++    // Android's nested GLES framebuffer follows the same bottom-left readback
++    // convention as GL. Correct it here for every SHM screencast consumer.
++    const bool glesReadbackCorrection = context->isOpenGLES() && !qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT");
++    const bool invertNeeded = glesReadbackCorrection ^ (texture->contentTransform() != OutputTransform::FlipY);
+     const bool invertNeededAndSupported = invertNeeded && context->supportsPackInvert();
+     GLboolean prev;
+     if (invertNeededAndSupported) {

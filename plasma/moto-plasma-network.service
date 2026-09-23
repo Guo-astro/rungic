@@ -1,0 +1,12 @@
+[Unit]
+Description=Android network status for the Plasma desktop
+After=dbus.service
+Requires=dbus.service
+
+[Service]
+ExecStart=/usr/local/libexec/moto-android-network
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

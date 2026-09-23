@@ -1,0 +1,91 @@
+#!/system/bin/sh
+# Root control; audio itself runs as the installed Termux application user.
+set -eu
+PREFIX=/data/data/com.termux/files/usr
+STATE=$PREFIX/tmp/moto-plasma-audio
+ROOT=/data/adb/moto-lxc/runtime/var/lib/lxc/plasma/rootfs
+BASE=/data/adb/moto-plasma
+uid=$(stat -c %u /data/data/com.termux/files)
+[ "$uid" -ge 10000 ] || exit 1
+[ -x "$PREFIX/bin/pulseaudio" ] || { echo 'Termux pulseaudio is missing' >&2; exit 1; }
+mkdir -p "$STATE/runtime" "$STATE/state"
+chown "$uid:1000" "$STATE"
+chmod 750 "$STATE"
+chown "$uid:$uid" "$STATE/runtime" "$STATE/state"
+chmod 700 "$STATE/runtime" "$STATE/state"
+run() {
+    su "$uid" -c "env HOME=/data/data/com.termux/files/home PATH=$PREFIX/bin:/system/bin TMPDIR=$PREFIX/tmp PULSE_RUNTIME_PATH=$STATE/runtime PULSE_STATE_PATH=$STATE/state PULSE_COOKIE=$STATE/cookie $*"
+}
+healthy() {
+    run "timeout -s KILL 3 pactl -s unix:$STATE/native info" >/dev/null 2>&1
+}
+private_pid() {
+    pid=$(cat "$STATE/runtime/pid" 2>/dev/null) || return 1
+    case "$pid" in ''|*[!0-9]*) return 1;; esac
+    [ "$(stat -c %u "/proc/$pid" 2>/dev/null)" = "$uid" ] || return 1
+    [ "$(readlink "/proc/$pid/exe" 2>/dev/null)" = "$PREFIX/bin/pulseaudio" ] || return 1
+    command=$(tr '\000' ' ' <"/proc/$pid/cmdline")
+    case "$command" in *"-nF $STATE/default.pa "*) return 0;; *) return 1;; esac
+}
+stop_private() {
+    if private_pid; then
+        kill -TERM "$pid" 2>/dev/null || true
+        sleep 1
+        if private_pid; then kill -KILL "$pid" 2>/dev/null || true; fi
+    fi
+}
+ensure_audio() {
+    if ! healthy; then
+        stop_private
+        cp "$BASE/android-audio.pa" "$STATE/default.pa"
+        chown "$uid:$uid" "$STATE/default.pa"
+        chmod 600 "$STATE/default.pa"
+        run "pulseaudio --daemonize=yes --exit-idle-time=-1 --log-target=file:$STATE/pulse.log -nF $STATE/default.pa"
+        # New native-protocol clients may connect while AAudio is opening.
+        healthy || { echo 'Android audio server did not become responsive' >&2; return 1; }
+    fi
+    cp "$STATE/cookie" "$ROOT/etc/plasma/audio-cookie"
+    chown 1000:1000 "$ROOT/etc/plasma/audio-cookie"
+    chmod 600 "$ROOT/etc/plasma/audio-cookie"
+}
+case "${1:-start}" in
+ start)
+    exec 7>"$BASE/audio-control.lock"
+    flock 7 7>&7
+    ensure_audio 7>&-
+    touch "$BASE/audio-watch.enabled"
+    # A private flock in watch prevents duplicate monitors on Activity resumes.
+    nohup "$BASE/android-audio" watch >>"$BASE/audio-watch.log" 2>&1 </dev/null 7>&- &
+    ;;
+ watch)
+    exec 8>"$BASE/audio-watch.lock"
+    flock -n 8 8>&8 || exit 0
+    failures=0
+    while [ -f "$BASE/audio-watch.enabled" ]; do
+        sleep 10
+        [ -f "$BASE/audio-watch.enabled" ] || break
+        if healthy 8>&-; then failures=0; continue; fi
+        failures=$((failures+1))
+        [ "$failures" -ge 2 ] || continue
+        # Serialized with explicit start/stop. Recover only this private daemon;
+        # module-tunnel-sink-new reconnects the Linux client automatically.
+        exec 7>"$BASE/audio-control.lock"
+        flock 7 7>&7
+        if [ -f "$BASE/audio-watch.enabled" ]; then
+            echo "$(date -Iseconds): unresponsive Android output; recovering"
+            ensure_audio 7>&- 8>&- || true
+        fi
+        flock -u 7 7>&7
+        exec 7>&-
+        failures=0
+    done
+    ;;
+ stop)
+    exec 7>"$BASE/audio-control.lock"
+    flock 7 7>&7
+    rm -f "$BASE/audio-watch.enabled"
+    stop_private
+    ;;
+ status) run "timeout -s KILL 3 pactl -s unix:$STATE/native list short sinks" ;;
+ *) exit 2 ;;
+esac

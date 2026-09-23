@@ -1,0 +1,71 @@
+--- a/kwin/scripts/convergentwindows/contents/ui/main.qml
++++ b/kwin/scripts/convergentwindows/contents/ui/main.qml
+@@ -9,7 +9,7 @@
+ Loader {
+     id: root
+ 
+-    property var currentWindow
++    property var currentWindow: KWinComponents.Workspace.activeWindow
+ 
+     function run(window) {
+         // HACK: don't maximize xwaylandvideobridge
+@@ -25,7 +25,10 @@
+         if (ShellSettings.Settings.convergenceModeEnabled) {
+             window.noBorder = false;
+         } else {
+-            if (!window.fullScreen) {
++            // The direct resize only works around a decoration change. Once
++            // borderless, KWin owns the maximized geometry, including the OSK.
++            // Reapplying MaximizeArea on activation discards keyboard avoidance.
++            if (!window.fullScreen && !window.noBorder) {
+                 const output = window.output;
+                 const desktop = window.desktops[0]; // assume it's the first desktop that the window is on
+                 if (desktop === undefined) {
+@@ -52,10 +55,11 @@
+     Connections {
+         target: currentWindow
+ 
++        function onInteractiveMoveResizeFinished() {
++            root.run(currentWindow);
++        }
++
+         function onFullScreenChanged() {
+-            currentWindow.interactiveMoveResizeFinished.connect((currentWindow) => {
+-                root.run(currentWindow);
+-            });
+             root.run(currentWindow);
+         }
+ 
+@@ -63,9 +67,6 @@
+             if (!currentWindow.maximizable) {
+                 return;
+             }
+-            currentWindow.interactiveMoveResizeFinished.connect((currentWindow) => {
+-                root.run(currentWindow);
+-            });
+             root.run(currentWindow);
+         }
+     }
+@@ -88,20 +89,13 @@
+         target: KWinComponents.Workspace
+ 
+         function onWindowAdded(window) {
+-            if (window.normalWindow) {
+-                window.interactiveMoveResizeFinished.connect((window) => {
+-                    root.run(window);
+-                });
++            if (window && window.normalWindow) {
+                 root.run(window);
+             }
+         }
+ 
+         function onWindowActivated(window) {
+-            if (window.normalWindow) {
+-                currentWindow = window;
+-                window.interactiveMoveResizeFinished.connect((window) => {
+-                    root.run(window);
+-                });
++            if (window && window.normalWindow) {
+                 root.run(window);
+             }
+         }

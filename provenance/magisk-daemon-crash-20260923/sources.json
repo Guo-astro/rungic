@@ -1,0 +1,92 @@
+[
+  {
+    "file": "upstream/Cargo.lock",
+    "url": "https://raw.githubusercontent.com/topjohnwu/Magisk/v31.0/native/src/Cargo.lock",
+    "sha256": "4995a00ee54181303afd4e1da7f3300c59e6da23186da3cbda36bd21fec7f6ee"
+  },
+  {
+    "file": "upstream/current-sqlite.cpp",
+    "url": "https://raw.githubusercontent.com/topjohnwu/Magisk/master/native/src/core/sqlite.cpp",
+    "sha256": "a45837290bc6b0b7def49d34ecea6b90f42bd886a1976fca892a23c5c18f53e1"
+  },
+  {
+    "file": "upstream/current-sqlite.hpp",
+    "url": "https://raw.githubusercontent.com/topjohnwu/Magisk/master/native/src/core/include/sqlite.hpp",
+    "sha256": "856f1399ac956060b2421324591c6fec6cf51db52f7c07c6117f79a88904f286"
+  },
+  {
+    "file": "upstream/cxx-pinned/include/cxx.h",
+    "url": "https://raw.githubusercontent.com/topjohnwu/cxx/b09b91554b392523f633b9e3cbe0b43273528c71/include/cxx.h",
+    "sha256": "ea2c1f9fe95b02f055836dd75e22b558f616385a522ec9beeaba8d043c3a32d8"
+  },
+  {
+    "file": "upstream/cxx-pinned/src/cxx.cc",
+    "url": "https://raw.githubusercontent.com/topjohnwu/cxx/b09b91554b392523f633b9e3cbe0b43273528c71/src/cxx.cc",
+    "sha256": "6a64476a783ef8a42da9f30a9e3d48deb7757b87442f6ed68b9d2c38f2768866"
+  },
+  {
+    "file": "upstream/cxx.cc",
+    "url": "https://raw.githubusercontent.com/dtolnay/cxx/master/src/cxx.cc",
+    "sha256": "d4098d18e7214aaffe14c7c368bccaf633f419e1418af0455f7214ab1daa2d3f"
+  },
+  {
+    "file": "upstream/gitmodules",
+    "url": "https://raw.githubusercontent.com/topjohnwu/Magisk/v31.0/.gitmodules",
+    "sha256": "ec1f2be281362e71d1c5169b8e1e488f59764d13cec2c477f34ad73a6e1bb0c4"
+  },
+  {
+    "file": "upstream/native__src__base__cstr.rs",
+    "url": "https://raw.githubusercontent.com/topjohnwu/Magisk/v31.0/native/src/base/cstr.rs",
+    "sha256": "fe031e54b0bf395e9bc41ebd058348c765836bc22ea2f2667c1ab0375fcaa8c7"
+  },
+  {
+    "file": "upstream/native__src__base__lib.rs",
+    "url": "https://raw.githubusercontent.com/topjohnwu/Magisk/v31.0/native/src/base/lib.rs",
+    "sha256": "5b13655b81e6a93f1582e099526f449376cfb7722f583b12209e1b4ba0847f96"
+  },
+  {
+    "file": "upstream/native__src__base__logging.rs",
+    "url": "https://raw.githubusercontent.com/topjohnwu/Magisk/v31.0/native/src/base/logging.rs",
+    "sha256": "fafa32c2ce8136c91537597a5207328d8797c03b49c8ee944e990690845f8987"
+  },
+  {
+    "file": "upstream/native__src__core__daemon.rs",
+    "url": "https://raw.githubusercontent.com/topjohnwu/Magisk/v31.0/native/src/core/daemon.rs",
+    "sha256": "9b5c9727e76b6b3a4d0a2e398be277d9b49e804dd03bf96a9738ba67bc342e93"
+  },
+  {
+    "file": "upstream/native__src__core__db.rs",
+    "url": "https://raw.githubusercontent.com/topjohnwu/Magisk/v31.0/native/src/core/db.rs",
+    "sha256": "c10e3efbe44c1950a417a4d65e2ad62dc4d65faa75e4691a2839f3ab7af96783"
+  },
+  {
+    "file": "upstream/native__src__core__include__sqlite.hpp",
+    "url": "https://raw.githubusercontent.com/topjohnwu/Magisk/v31.0/native/src/core/include/sqlite.hpp",
+    "sha256": "856f1399ac956060b2421324591c6fec6cf51db52f7c07c6117f79a88904f286"
+  },
+  {
+    "file": "upstream/native__src__core__lib.rs",
+    "url": "https://raw.githubusercontent.com/topjohnwu/Magisk/v31.0/native/src/core/lib.rs",
+    "sha256": "4566f413069e407248c6ad6edd9e0d6ee71bae16e2394f40d01bbcc2e7fc2b40"
+  },
+  {
+    "file": "upstream/native__src__core__logging.rs",
+    "url": "https://raw.githubusercontent.com/topjohnwu/Magisk/v31.0/native/src/core/logging.rs",
+    "sha256": "db6eff36975b3322959197fb0847babdafc8fc201d21c511c41ca8a5330ffb7a"
+  },
+  {
+    "file": "upstream/native__src__core__socket.rs",
+    "url": "https://raw.githubusercontent.com/topjohnwu/Magisk/v31.0/native/src/core/socket.rs",
+    "sha256": "80e8fe9608f9aea6eca31e358fed69f00aca644fc4e49835fdcf8b616385250e"
+  },
+  {
+    "file": "upstream/native__src__core__sqlite.cpp",
+    "url": "https://raw.githubusercontent.com/topjohnwu/Magisk/v31.0/native/src/core/sqlite.cpp",
+    "sha256": "a45837290bc6b0b7def49d34ecea6b90f42bd886a1976fca892a23c5c18f53e1"
+  },
+  {
+    "file": "upstream/native__src__core__su__daemon.rs",
+    "url": "https://raw.githubusercontent.com/topjohnwu/Magisk/v31.0/native/src/core/su/daemon.rs",
+    "sha256": "5151979f34d4c8c2f348b87c5623f8d9f6cc5d5940895ff9b1d6d478317bafd3"
+  }
+]

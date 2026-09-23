@@ -1,0 +1,12 @@
+{
+  "stock_boot_sha256": "f0af1c76dba07456d4b3f33342e58efecac18f54c0590705402771fec5a3139e",
+  "input_boot_sha256": "e6e7f697749db66e253f659c2460420069406ab40c67b3cf77ec286fdd8fc184",
+  "output_boot_sha256": "e158018b80b409df94254110ca3b82f09235b1a8ad901f478f61bae83767ae13",
+  "output": "/home/kevinzhow/moto/refs/lxc-install-20260922/boot-gki-userns-stockcert.img",
+  "certificate_boot_offset": 34319104,
+  "certificate_length": 1357,
+  "stock_certificate_sha256": "bbbf7a9e9bb97308d30d5711bb940c3766e545fb6ab56d58f8444b18f96f5dd3",
+  "replaced_certificate_sha256": "0d054ed3694704535de15b65068385c3ee7ea0eaaaa081e9a9f51e7830d8cb15",
+  "changed_bytes": 1096,
+  "change": "Equal-length replacement of built-in X.509 certificate only"
+}

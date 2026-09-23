@@ -1,0 +1,110 @@
+[
+  {
+    "file": "cc-network-panel.c",
+    "url": "https://raw.githubusercontent.com/GNOME/gnome-control-center/51.0/panels/network/cc-network-panel.c",
+    "sha256": "ca3d3bb85c4a5a80b602847b84246c77649c4735ea584bbcd8caa810e7e1d18f",
+    "bytes": 25640
+  },
+  {
+    "file": "cc-wifi-panel.c",
+    "url": "https://raw.githubusercontent.com/GNOME/gnome-control-center/51.0/panels/network/cc-wifi-panel.c",
+    "sha256": "519d711f0d69254a61e267817524ad0967544884109481f4949d81595621e489",
+    "bytes": 25892
+  },
+  {
+    "file": "net-device-wifi.c",
+    "url": "https://raw.githubusercontent.com/GNOME/gnome-control-center/51.0/panels/network/net-device-wifi.c",
+    "sha256": "466804e4b9c714a9bf4ce35c51a606cec0f592c7c00ce1785f10a1aecee00aca",
+    "bytes": 37859
+  },
+  {
+    "file": "ce-page-details.c",
+    "url": "https://raw.githubusercontent.com/GNOME/gnome-control-center/51.0/panels/network/connection-editor/ce-page-details.c",
+    "sha256": "ac1758ac0b35fb46a5428b390c2d9f127c618ff9601c13a09fe88bdff6b68832",
+    "bytes": 24257
+  },
+  {
+    "file": "connman-nmcompat.c",
+    "url": "https://raw.githubusercontent.com/aldebaran/connman/master/plugins/nmcompat.c",
+    "sha256": "756671e3b5f435463f2e1b3e120ace757d563feb52200fbb0396bf61efd4dfb4",
+    "bytes": 7212
+  },
+  {
+    "file": "dbusmock-networkmanager.py",
+    "url": "https://raw.githubusercontent.com/martinpitt/python-dbusmock/main/dbusmock/templates/networkmanager.py",
+    "sha256": "679d58a4aaf1dd61c66cce1839cc7c643d6ee4f66c7f3ce10403db8ff51865e7",
+    "bytes": 34068
+  },
+  {
+    "file": "WifiShellCommand.java",
+    "url": "https://android.googlesource.com/platform/packages/modules/Wifi/+/refs/heads/android16-release/service/java/com/android/server/wifi/WifiShellCommand.java?format=TEXT",
+    "sha256": "ee1ecddaa16191d846380c33aebf5bfc021393b61fa6b109b75a6bc62fb33cd1",
+    "bytes": 188228
+  },
+  {
+    "file": "org.freedesktop.NetworkManager.xml",
+    "url": "https://raw.githubusercontent.com/NetworkManager/NetworkManager/1.54.0/introspection/org.freedesktop.NetworkManager.xml",
+    "sha256": "d323a08e8b0c6c827ee20831c77bda45c65fdf63a78b6054a3998d9189f642c4",
+    "bytes": 26336
+  },
+  {
+    "file": "org.freedesktop.NetworkManager.Device.xml",
+    "url": "https://raw.githubusercontent.com/NetworkManager/NetworkManager/1.54.0/introspection/org.freedesktop.NetworkManager.Device.xml",
+    "sha256": "6525dcb6ba0355103f0f5c876a5cfc4b840a238701250f28e73f94ad61f488c9",
+    "bytes": 15262
+  },
+  {
+    "file": "org.freedesktop.NetworkManager.Device.Wireless.xml",
+    "url": "https://raw.githubusercontent.com/NetworkManager/NetworkManager/1.54.0/introspection/org.freedesktop.NetworkManager.Device.Wireless.xml",
+    "sha256": "afd12c28910e8029267348a1a556f97fb8e1ebe2a72bd67fcff613ec4823e94c",
+    "bytes": 3909
+  },
+  {
+    "file": "org.freedesktop.NetworkManager.AccessPoint.xml",
+    "url": "https://raw.githubusercontent.com/NetworkManager/NetworkManager/1.54.0/introspection/org.freedesktop.NetworkManager.AccessPoint.xml",
+    "sha256": "56c707700dab511206f139eda48a8c00ef2ab0763f9df8e98379301fc982ef56",
+    "bytes": 2747
+  },
+  {
+    "file": "org.freedesktop.NetworkManager.IP4Config.xml",
+    "url": "https://raw.githubusercontent.com/NetworkManager/NetworkManager/1.54.0/introspection/org.freedesktop.NetworkManager.IP4Config.xml",
+    "sha256": "caa7c8c0ed1c472bee2050e8ca0f1a34b675c50c29c0d1039c8fccaa0467661a",
+    "bytes": 3353
+  },
+  {
+    "file": "org.freedesktop.NetworkManager.IP6Config.xml",
+    "url": "https://raw.githubusercontent.com/NetworkManager/NetworkManager/1.54.0/introspection/org.freedesktop.NetworkManager.IP6Config.xml",
+    "sha256": "fbb4f32ef71707ac577852ac4ee1f48b83f64a5674ab64c9091e2df24ea60c66",
+    "bytes": 2400
+  },
+  {
+    "file": "org.freedesktop.NetworkManager.Connection.Active.xml",
+    "url": "https://raw.githubusercontent.com/NetworkManager/NetworkManager/1.54.0/introspection/org.freedesktop.NetworkManager.Connection.Active.xml",
+    "sha256": "dffc18e5923f04af47e5671e82ab8a85fc1e50f11429539f9de5c583eab60115",
+    "bytes": 5989
+  },
+  {
+    "file": "org.freedesktop.NetworkManager.Settings.xml",
+    "url": "https://raw.githubusercontent.com/NetworkManager/NetworkManager/1.54.0/introspection/org.freedesktop.NetworkManager.Settings.xml",
+    "sha256": "63148f415615768c5ef7f2e97da211b2983311bb52d88e66e8f21922af89189a",
+    "bytes": 9352
+  },
+  {
+    "file": "org.freedesktop.NetworkManager.Settings.Connection.xml",
+    "url": "https://raw.githubusercontent.com/NetworkManager/NetworkManager/1.54.0/introspection/org.freedesktop.NetworkManager.Settings.Connection.xml",
+    "sha256": "c81e5720b27d137d6eb18a6c8239914e23dff583f5a1aa6cd7cdaad26e24f761",
+    "bytes": 8802
+  },
+  {
+    "file": "org.freedesktop.NetworkManager.AgentManager.xml",
+    "url": "https://raw.githubusercontent.com/NetworkManager/NetworkManager/1.54.0/introspection/org.freedesktop.NetworkManager.AgentManager.xml",
+    "sha256": "1e021f3c056458d75bfff81c9c1f893844001fb9b13321edf77ee3e9c6c89203",
+    "bytes": 1785
+  },
+  {
+    "file": "org.freedesktop.NetworkManager.Device.Wired.xml",
+    "url": "https://raw.githubusercontent.com/NetworkManager/NetworkManager/1.54.0/introspection/org.freedesktop.NetworkManager.Device.Wired.xml",
+    "sha256": "d9ad57a8a423146275995f211aeacf8e6e9616c66337e1cde8171b841619d7ee",
+    "bytes": 1447
+  }
+]

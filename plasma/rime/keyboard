@@ -1,0 +1,7 @@
+#!/bin/sh
+set -eu
+# Only this process receives the QML plugin and layout search paths.
+export QML_IMPORT_PATH=/usr/local/lib/moto-rime/qml${QML_IMPORT_PATH:+:$QML_IMPORT_PATH}
+export XDG_DATA_DIRS=/usr/local/share/moto-rime:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}
+export QT_LOGGING_RULES='qt.virtualkeyboard.*.debug=false'
+exec /usr/local/libexec/moto-plasma-keyboard "$@"

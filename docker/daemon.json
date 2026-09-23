@@ -1,0 +1,39 @@
+{
+  "hosts": [
+    "unix:///run/docker.sock"
+  ],
+  "data-root": "/var/lib/docker",
+  "exec-root": "/run/docker",
+  "pidfile": "/run/dockerd.pid",
+  "storage-driver": "overlayfs",
+  "features": {
+    "containerd-snapshotter": true
+  },
+  "iptables": false,
+  "ip6tables": false,
+  "ip-forward": false,
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  },
+  "group": "root",
+  "bip": "172.30.240.1/24",
+  "default-address-pools": [
+    {
+      "base": "172.30.0.0/16",
+      "size": 24
+    }
+  ],
+  "userland-proxy": true,
+  "dns": [
+    "1.1.1.1",
+    "8.8.8.8"
+  ],
+  "proxies": {
+    "http-proxy": "http://192.168.5.45:6152",
+    "https-proxy": "http://192.168.5.45:6152",
+    "no-proxy": "localhost,127.0.0.1,::1,172.30.0.0/16,192.168.5.0/24"
+  },
+  "containerd": "/run/containerd/containerd.sock"
+}

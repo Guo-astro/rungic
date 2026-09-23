@@ -1,0 +1,13 @@
+--- a/src/plugins/multimedia/ffmpeg/recordingengine/qffmpegvideoencoder.cpp
++++ b/src/plugins/multimedia/ffmpeg/recordingengine/qffmpegvideoencoder.cpp
+@@ -214,6 +214,10 @@
+     m_lastFrameTime = endTime;
+ 
+     setAVFrameTime(*avFrame, m_frameEncoder->getPts(time), m_frameEncoder->getTimeBase());
++    // Preserve each input frame's presentation duration through encoder reorder.
++    // Estimating from consecutive packet PTS becomes negative for B-frames.
++    if (endTime > startTime)
++        avFrame->duration = qMax<qint64>(1, m_frameEncoder->getPts(endTime - startTime));
+ 
+     m_recordingEngine.newTimeStamp(time / 1000);
+ 

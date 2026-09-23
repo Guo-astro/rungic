@@ -1,0 +1,22 @@
+name: moto-storage-demo
+services:
+  web:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "18089:80"
+    volumes:
+      # Native Linux volume: preserves ownership, modes and links.
+      - cache:/var/cache/nginx
+      # Shared files: visible in the phone's normal file manager.
+      - ./shared/web-example:/usr/share/nginx/html:ro
+      # Named volume backed by a chosen shared directory.
+      - shared_named:/srv/shared
+volumes:
+  cache:
+  shared_named:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /sdcard/Docker/shared/named-example

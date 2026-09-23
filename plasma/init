@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+exec >>/var/log/plasma/init.log 2>&1
+# These mounts are in LXC's private mount namespace.
+mount -o remount,bind,suid,nodev / /
+context=$(cat /etc/plasma/android-shm-context)
+umount /dev/shm
+mount -t tmpfs -o "nosuid,nodev,mode=1777,fscontext=u:object_r:tmpfs:s0,context=\"$context\"" tmpfs /dev/shm
+[ -c /dev/fuse ] || mknod /dev/fuse c 10 229
+chmod 0666 /dev/fuse
+export container=lxc
+exec /sbin/init

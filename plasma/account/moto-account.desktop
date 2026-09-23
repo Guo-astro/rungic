@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=User Accounts
+Name[zh_CN]=用户与密码
+Comment=Manage your Linux account and password
+Comment[zh_CN]=管理 Linux 账户和密码
+Exec=kcmshell6 kcm_users
+Icon=preferences-system-users
+Categories=Settings;System;
+X-KDE-FormFactor=handset;tablet;desktop;

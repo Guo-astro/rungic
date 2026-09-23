@@ -1,0 +1,3 @@
+#!/bin/sh
+# Snapshot 51 with Android MediaCodec included in its hardware-encoding switch.
+exec /usr/local/libexec/moto-snapshot "$@"

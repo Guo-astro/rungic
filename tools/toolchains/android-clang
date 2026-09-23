@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+task_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+task_clang=${MOTO_ANDROID_CLANG:-/home/kevinzhow/android-kernel/prebuilts/clang/host/linux-x86/clang-r510928/bin/clang}
+task_sysroot=${MOTO_ANDROID_SYSROOT:-/home/kevinzhow/android-kernel/prebuilts/ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot}
+exec "$task_clang" --target=aarch64-linux-android31 --sysroot="$task_sysroot" \
+  -L"$task_root/.work/deps/android-link-libs" \
+  -L"$task_root/.work/refs/plasma-mobile-20260923/native-libs/lib/arm64-v8a" \
+  -Wl,--allow-shlib-undefined "$@"

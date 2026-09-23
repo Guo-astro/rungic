@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+if [ "$(id -u)" = 0 ]; then
+    desktop_user=$(getent passwd 1000 | cut -d: -f1)
+    [ -n "$desktop_user" ] || exit 1
+    exec runuser -u "$desktop_user" -- /usr/local/bin/moto-plasma-user-exec "$@"
+fi
+[ "$(id -u)" = 1000 ] || exit 1
+. /run/user/1000/moto-session.env
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+cd "$HOME"
+exec "$@"

@@ -1,0 +1,647 @@
+[
+  {
+    "requested": 30,
+    "result": 0,
+    "stderr": "kscreen.doctor: Taddaaa! Found mode \"5\" \"1080x2400@30\"\nkscreen.doctor: Output 1 set mode \"5\"\n",
+    "stdout": "",
+    "android": {
+      "version": 1,
+      "model": "XT2537-4",
+      "physicalWidth": 1080,
+      "physicalHeight": 2400,
+      "physicalWidthMM": 70,
+      "physicalHeightMM": 156,
+      "renderWidth": 1080,
+      "renderHeight": 2400,
+      "renderModes": [
+        {
+          "width": 720,
+          "height": 1600
+        },
+        {
+          "width": 1080,
+          "height": 2400
+        }
+      ],
+      "refreshRates": [
+        30,
+        60,
+        90,
+        120
+      ],
+      "refreshPolicy": 30,
+      "currentRefresh": 30.000001907348633
+    },
+    "kscreen": {
+      "features": 255,
+      "outputs": [
+        {
+          "clones": [],
+          "connected": true,
+          "currentModeId": "5",
+          "enabled": true,
+          "followPreferredMode": false,
+          "icon": "",
+          "id": 1,
+          "modes": [
+            {
+              "id": "1",
+              "name": "720x1600@30",
+              "refreshRate": 30,
+              "size": {
+                "height": 1600,
+                "width": 720
+              }
+            },
+            {
+              "id": "2",
+              "name": "720x1600@60",
+              "refreshRate": 60,
+              "size": {
+                "height": 1600,
+                "width": 720
+              }
+            },
+            {
+              "id": "3",
+              "name": "720x1600@90",
+              "refreshRate": 90,
+              "size": {
+                "height": 1600,
+                "width": 720
+              }
+            },
+            {
+              "id": "4",
+              "name": "720x1600@120",
+              "refreshRate": 120,
+              "size": {
+                "height": 1600,
+                "width": 720
+              }
+            },
+            {
+              "id": "5",
+              "name": "1080x2400@30",
+              "refreshRate": 30,
+              "size": {
+                "height": 2400,
+                "width": 1080
+              }
+            },
+            {
+              "id": "6",
+              "name": "1080x2400@60",
+              "refreshRate": 60,
+              "size": {
+                "height": 2400,
+                "width": 1080
+              }
+            },
+            {
+              "id": "7",
+              "name": "1080x2400@90",
+              "refreshRate": 90,
+              "size": {
+                "height": 2400,
+                "width": 1080
+              }
+            },
+            {
+              "id": "8",
+              "name": "1080x2400@120",
+              "refreshRate": 120,
+              "size": {
+                "height": 2400,
+                "width": 1080
+              }
+            }
+          ],
+          "name": "WL-0",
+          "pos": {
+            "x": 0,
+            "y": 0
+          },
+          "preferredModes": [],
+          "priority": 1,
+          "replicationSource": 0,
+          "rotation": 1,
+          "scale": 3,
+          "size": {
+            "height": 2400,
+            "width": 1080
+          },
+          "sizeMM": {
+            "height": 156,
+            "width": 70
+          },
+          "type": 0
+        }
+      ],
+      "screen": {
+        "currentSize": {
+          "height": 800,
+          "width": 360
+        },
+        "id": 0,
+        "maxActiveOutputsCount": 1,
+        "maxSize": {
+          "height": 64000,
+          "width": 64000
+        },
+        "minSize": {
+          "height": 0,
+          "width": 0
+        }
+      },
+      "tabletModeAvailable": false,
+      "tabletModeEngaged": false
+    }
+  },
+  {
+    "requested": 60,
+    "result": 0,
+    "stderr": "kscreen.doctor: Taddaaa! Found mode \"6\" \"1080x2400@60\"\nkscreen.doctor: Output 1 set mode \"6\"\n",
+    "stdout": "",
+    "android": {
+      "version": 1,
+      "model": "XT2537-4",
+      "physicalWidth": 1080,
+      "physicalHeight": 2400,
+      "physicalWidthMM": 70,
+      "physicalHeightMM": 156,
+      "renderWidth": 1080,
+      "renderHeight": 2400,
+      "renderModes": [
+        {
+          "width": 720,
+          "height": 1600
+        },
+        {
+          "width": 1080,
+          "height": 2400
+        }
+      ],
+      "refreshRates": [
+        30,
+        60,
+        90,
+        120
+      ],
+      "refreshPolicy": 60,
+      "currentRefresh": 60.000003814697266
+    },
+    "kscreen": {
+      "features": 255,
+      "outputs": [
+        {
+          "clones": [],
+          "connected": true,
+          "currentModeId": "9",
+          "enabled": true,
+          "followPreferredMode": false,
+          "icon": "",
+          "id": 1,
+          "modes": [
+            {
+              "id": "1",
+              "name": "720x1600@30",
+              "refreshRate": 30,
+              "size": {
+                "height": 1600,
+                "width": 720
+              }
+            },
+            {
+              "id": "2",
+              "name": "720x1600@60",
+              "refreshRate": 60,
+              "size": {
+                "height": 1600,
+                "width": 720
+              }
+            },
+            {
+              "id": "3",
+              "name": "720x1600@90",
+              "refreshRate": 90,
+              "size": {
+                "height": 1600,
+                "width": 720
+              }
+            },
+            {
+              "id": "4",
+              "name": "720x1600@120",
+              "refreshRate": 120,
+              "size": {
+                "height": 1600,
+                "width": 720
+              }
+            },
+            {
+              "id": "5",
+              "name": "1080x2400@30",
+              "refreshRate": 30,
+              "size": {
+                "height": 2400,
+                "width": 1080
+              }
+            },
+            {
+              "id": "6",
+              "name": "1080x2400@60",
+              "refreshRate": 60,
+              "size": {
+                "height": 2400,
+                "width": 1080
+              }
+            },
+            {
+              "id": "7",
+              "name": "1080x2400@90",
+              "refreshRate": 90,
+              "size": {
+                "height": 2400,
+                "width": 1080
+              }
+            },
+            {
+              "id": "8",
+              "name": "1080x2400@120",
+              "refreshRate": 120,
+              "size": {
+                "height": 2400,
+                "width": 1080
+              }
+            },
+            {
+              "id": "9",
+              "name": "1080x2400@60",
+              "refreshRate": 59.999000549316406,
+              "size": {
+                "height": 2400,
+                "width": 1080
+              }
+            }
+          ],
+          "name": "WL-0",
+          "pos": {
+            "x": 0,
+            "y": 0
+          },
+          "preferredModes": [],
+          "priority": 1,
+          "replicationSource": 0,
+          "rotation": 1,
+          "scale": 3,
+          "size": {
+            "height": 2400,
+            "width": 1080
+          },
+          "sizeMM": {
+            "height": 156,
+            "width": 70
+          },
+          "type": 0
+        }
+      ],
+      "screen": {
+        "currentSize": {
+          "height": 800,
+          "width": 360
+        },
+        "id": 0,
+        "maxActiveOutputsCount": 1,
+        "maxSize": {
+          "height": 64000,
+          "width": 64000
+        },
+        "minSize": {
+          "height": 0,
+          "width": 0
+        }
+      },
+      "tabletModeAvailable": false,
+      "tabletModeEngaged": false
+    }
+  },
+  {
+    "requested": 90,
+    "result": 0,
+    "stderr": "kscreen.doctor: Taddaaa! Found mode \"7\" \"1080x2400@90\"\nkscreen.doctor: Output 1 set mode \"7\"\n",
+    "stdout": "",
+    "android": {
+      "version": 1,
+      "model": "XT2537-4",
+      "physicalWidth": 1080,
+      "physicalHeight": 2400,
+      "physicalWidthMM": 70,
+      "physicalHeightMM": 156,
+      "renderWidth": 1080,
+      "renderHeight": 2400,
+      "renderModes": [
+        {
+          "width": 720,
+          "height": 1600
+        },
+        {
+          "width": 1080,
+          "height": 2400
+        }
+      ],
+      "refreshRates": [
+        30,
+        60,
+        90,
+        120
+      ],
+      "refreshPolicy": 90,
+      "currentRefresh": 90
+    },
+    "kscreen": {
+      "features": 255,
+      "outputs": [
+        {
+          "clones": [],
+          "connected": true,
+          "currentModeId": "7",
+          "enabled": true,
+          "followPreferredMode": false,
+          "icon": "",
+          "id": 1,
+          "modes": [
+            {
+              "id": "1",
+              "name": "720x1600@30",
+              "refreshRate": 30,
+              "size": {
+                "height": 1600,
+                "width": 720
+              }
+            },
+            {
+              "id": "2",
+              "name": "720x1600@60",
+              "refreshRate": 60,
+              "size": {
+                "height": 1600,
+                "width": 720
+              }
+            },
+            {
+              "id": "3",
+              "name": "720x1600@90",
+              "refreshRate": 90,
+              "size": {
+                "height": 1600,
+                "width": 720
+              }
+            },
+            {
+              "id": "4",
+              "name": "720x1600@120",
+              "refreshRate": 120,
+              "size": {
+                "height": 1600,
+                "width": 720
+              }
+            },
+            {
+              "id": "5",
+              "name": "1080x2400@30",
+              "refreshRate": 30,
+              "size": {
+                "height": 2400,
+                "width": 1080
+              }
+            },
+            {
+              "id": "6",
+              "name": "1080x2400@60",
+              "refreshRate": 60,
+              "size": {
+                "height": 2400,
+                "width": 1080
+              }
+            },
+            {
+              "id": "7",
+              "name": "1080x2400@90",
+              "refreshRate": 90,
+              "size": {
+                "height": 2400,
+                "width": 1080
+              }
+            },
+            {
+              "id": "8",
+              "name": "1080x2400@120",
+              "refreshRate": 120,
+              "size": {
+                "height": 2400,
+                "width": 1080
+              }
+            }
+          ],
+          "name": "WL-0",
+          "pos": {
+            "x": 0,
+            "y": 0
+          },
+          "preferredModes": [],
+          "priority": 1,
+          "replicationSource": 0,
+          "rotation": 1,
+          "scale": 3,
+          "size": {
+            "height": 2400,
+            "width": 1080
+          },
+          "sizeMM": {
+            "height": 156,
+            "width": 70
+          },
+          "type": 0
+        }
+      ],
+      "screen": {
+        "currentSize": {
+          "height": 800,
+          "width": 360
+        },
+        "id": 0,
+        "maxActiveOutputsCount": 1,
+        "maxSize": {
+          "height": 64000,
+          "width": 64000
+        },
+        "minSize": {
+          "height": 0,
+          "width": 0
+        }
+      },
+      "tabletModeAvailable": false,
+      "tabletModeEngaged": false
+    }
+  },
+  {
+    "requested": 120,
+    "result": 0,
+    "stderr": "kscreen.doctor: Taddaaa! Found mode \"8\" \"1080x2400@120\"\nkscreen.doctor: Output 1 set mode \"8\"\n",
+    "stdout": "",
+    "android": {
+      "version": 1,
+      "model": "XT2537-4",
+      "physicalWidth": 1080,
+      "physicalHeight": 2400,
+      "physicalWidthMM": 70,
+      "physicalHeightMM": 156,
+      "renderWidth": 1080,
+      "renderHeight": 2400,
+      "renderModes": [
+        {
+          "width": 720,
+          "height": 1600
+        },
+        {
+          "width": 1080,
+          "height": 2400
+        }
+      ],
+      "refreshRates": [
+        30,
+        60,
+        90,
+        120
+      ],
+      "refreshPolicy": 120,
+      "currentRefresh": 120.00000762939453
+    },
+    "kscreen": {
+      "features": 255,
+      "outputs": [
+        {
+          "clones": [],
+          "connected": true,
+          "currentModeId": "8",
+          "enabled": true,
+          "followPreferredMode": false,
+          "icon": "",
+          "id": 1,
+          "modes": [
+            {
+              "id": "1",
+              "name": "720x1600@30",
+              "refreshRate": 30,
+              "size": {
+                "height": 1600,
+                "width": 720
+              }
+            },
+            {
+              "id": "2",
+              "name": "720x1600@60",
+              "refreshRate": 60,
+              "size": {
+                "height": 1600,
+                "width": 720
+              }
+            },
+            {
+              "id": "3",
+              "name": "720x1600@90",
+              "refreshRate": 90,
+              "size": {
+                "height": 1600,
+                "width": 720
+              }
+            },
+            {
+              "id": "4",
+              "name": "720x1600@120",
+              "refreshRate": 120,
+              "size": {
+                "height": 1600,
+                "width": 720
+              }
+            },
+            {
+              "id": "5",
+              "name": "1080x2400@30",
+              "refreshRate": 30,
+              "size": {
+                "height": 2400,
+                "width": 1080
+              }
+            },
+            {
+              "id": "6",
+              "name": "1080x2400@60",
+              "refreshRate": 60,
+              "size": {
+                "height": 2400,
+                "width": 1080
+              }
+            },
+            {
+              "id": "7",
+              "name": "1080x2400@90",
+              "refreshRate": 90,
+              "size": {
+                "height": 2400,
+                "width": 1080
+              }
+            },
+            {
+              "id": "8",
+              "name": "1080x2400@120",
+              "refreshRate": 120,
+              "size": {
+                "height": 2400,
+                "width": 1080
+              }
+            }
+          ],
+          "name": "WL-0",
+          "pos": {
+            "x": 0,
+            "y": 0
+          },
+          "preferredModes": [],
+          "priority": 1,
+          "replicationSource": 0,
+          "rotation": 1,
+          "scale": 3,
+          "size": {
+            "height": 2400,
+            "width": 1080
+          },
+          "sizeMM": {
+            "height": 156,
+            "width": 70
+          },
+          "type": 0
+        }
+      ],
+      "screen": {
+        "currentSize": {
+          "height": 800,
+          "width": 360
+        },
+        "id": 0,
+        "maxActiveOutputsCount": 1,
+        "maxSize": {
+          "height": 64000,
+          "width": 64000
+        },
+        "minSize": {
+          "height": 0,
+          "width": 0
+        }
+      },
+      "tabletModeAvailable": false,
+      "tabletModeEngaged": false
+    }
+  }
+]

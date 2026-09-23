@@ -1,0 +1,24 @@
+--- a/src/qml/LanguagePopup.qml
++++ b/src/qml/LanguagePopup.qml
+@@ -40,10 +40,19 @@
+         languageListView.currentIndex = currentIndex
+         languageListView.positionViewAtIndex(currentIndex, ListView.Center)
+ 
+-        root.x = Qt.binding(() => keyboardPanel.mapFromItem(parentItem, 0, 0).x);
+-        root.y = Qt.binding(() => keyboardPanel.mapFromItem(parentItem, 0, -root.height).y);
++        // A language change destroys its old key. Do not retain that item in
++        // live bindings after the popup closes or the screen rotates.
++        const position = keyboardPanel.mapFromItem(parentItem, 0, -root.height);
++        root.x = position.x;
++        root.y = position.y;
+ 
+         root.visible = true
++    }
++
++    Connections {
++        target: root.keyboardPanel
++        function onWidthChanged() { root.close(); }
++        function onHeightChanged() { root.close(); }
+     }
+ 
+     TextMetrics {

@@ -1,0 +1,24 @@
+1-gles {'count': 1228, 'median_ms': 8.354999999937718, 'p95_ms': 8.390988999963156, 'p99_ms': 8.498906001477735, 'over_12_6_pct': 0.5700325732899023, 'over_16_9_pct': 0.0, 'over_33_7_pct': 0.0} {'kwin_wayland': {'cpu_pct_one_core': 29.96852690340115, 'rss_MiB': 141.60546875}, 'plasmashell': {'cpu_pct_one_core': 46.635303424315126, 'rss_MiB': 336.01171875}}
+2-zink {'count': 1165, 'median_ms': 8.355938000022434, 'p95_ms': 9.227135000401177, 'p99_ms': 16.72390599924256, 'over_12_6_pct': 5.064377682403434, 'over_16_9_pct': 0.0, 'over_33_7_pct': 0.0} {'kwin_wayland': {'cpu_pct_one_core': 31.251583179235183, 'rss_MiB': 157.66796875}, 'plasmashell': {'cpu_pct_one_core': 36.65012921787466, 'rss_MiB': 326.421875}}
+3-zink {'count': 1170, 'median_ms': 8.35614600146073, 'p95_ms': 8.696406001035939, 'p99_ms': 16.712708998966264, 'over_12_6_pct': 4.444444444444445, 'over_16_9_pct': 0.08547008547008547, 'over_33_7_pct': 0.0} {'kwin_wayland': {'cpu_pct_one_core': 31.463966229488662, 'rss_MiB': 152.3671875}, 'plasmashell': {'cpu_pct_one_core': 36.27261012493881, 'rss_MiB': 317.02734375}}
+4-gles {'count': 1228, 'median_ms': 8.355156998732127, 'p95_ms': 8.387343999856967, 'p99_ms': 8.46328100124083, 'over_12_6_pct': 0.24429967426710097, 'over_16_9_pct': 0.0, 'over_33_7_pct': 0.0} {'kwin_wayland': {'cpu_pct_one_core': 29.77781829429939, 'rss_MiB': 137.125}, 'plasmashell': {'cpu_pct_one_core': 41.63343436619755, 'rss_MiB': 285.04296875}}
+5-gles {'count': 1220, 'median_ms': 8.355259999007103, 'p95_ms': 8.391875000597793, 'p99_ms': 8.534530999895651, 'over_12_6_pct': 0.5737704918032787, 'over_16_9_pct': 0.0, 'over_33_7_pct': 0.0} {'kwin_wayland': {'cpu_pct_one_core': 30.269091821714078, 'rss_MiB': 136.0390625}, 'plasmashell': {'cpu_pct_one_core': 46.97270482831614, 'rss_MiB': 318.10546875}}
+6-zink {'count': 1155, 'median_ms': 8.356301999810967, 'p95_ms': 16.686301998561248, 'p99_ms': 16.721198000595905, 'over_12_6_pct': 6.926406926406926, 'over_16_9_pct': 0.08658008658008658, 'over_33_7_pct': 0.0} {'kwin_wayland': {'cpu_pct_one_core': 30.90718191895033, 'rss_MiB': 149.04296875}, 'plasmashell': {'cpu_pct_one_core': 35.955686232399444, 'rss_MiB': 312.12890625}}
+layers-1-opengl fps 77.61 p95 14.939 CPU 29.2 CPU/frame 3.765
+layers-2-vulkan fps 85.46 p95 16.092 CPU 25.93 CPU/frame 3.034
+layers-3-vulkan fps 86.44 p95 16.185 CPU 25.69 CPU/frame 2.975
+layers-4-opengl fps 60.07 p95 18.449 CPU 26.46 CPU/frame 4.403
+layers-5-opengl fps 77.36 p95 15.045 CPU 28.87 CPU/frame 3.73
+layers-6-vulkan fps 84.48 p95 16.774 CPU 25.72 CPU/frame 3.046
+scroll-1-opengl fps 113.47 p95 12.809 CPU 69.36 CPU/frame 6.117
+scroll-2-vulkan fps 99.14 p95 15.504 CPU 41.41 CPU/frame 4.174
+scroll-3-vulkan fps 116.56 p95 11.522 CPU 48.83 CPU/frame 4.187
+scroll-4-opengl fps 114.9 p95 12.493 CPU 69.44 CPU/frame 6.045
+scroll-5-opengl fps 101.8 p95 16.021 CPU 62.93 CPU/frame 6.186
+scroll-6-vulkan fps 116.53 p95 11.496 CPU 48.4 CPU/frame 4.154
+layers-1-opengl fps 76.76 p95 15.197 CPU 30.26 CPU/frame 3.943
+layers-2-vulkan fps 84.66 p95 16.16 CPU 26.79 CPU/frame 3.165
+layers-3-vulkan fps 82.77 p95 16.417 CPU 26.86 CPU/frame 3.246
+layers-4-opengl fps 77.29 p95 15.064 CPU 29.53 CPU/frame 3.818
+layers-5-opengl fps 61.68 p95 18.272 CPU 27.64 CPU/frame 4.481
+layers-6-vulkan fps 84.86 p95 15.669 CPU 26.92 CPU/frame 3.17

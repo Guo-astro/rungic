@@ -1,0 +1,11 @@
+--- a/src/PortalDialog.qml
++++ b/src/PortalDialog.qml
+@@ -183,6 +183,8 @@
+             anchors.fill: Kirigami.Settings.isMobile ? undefined : parent
+             anchors.centerIn: Kirigami.Settings.isMobile ? parent : undefined
+             anchors.margins: Kirigami.Settings.isMobile ? glow.cornerRadius : 0
++            // A mobile dialog must wrap within the available screen width.
++            width: Kirigami.Settings.isMobile ? Math.min(implicitWidth, Math.max(1, parent.width - 2 * Kirigami.Units.largeSpacing)) : parent.width
+             topPadding: 0
+             bottomPadding: 0
+             rightPadding: 0

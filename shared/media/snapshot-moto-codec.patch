@@ -1,0 +1,67 @@
+--- a/aperture/src/utils.rs
++++ b/aperture/src/utils.rs
+@@ -173,7 +173,9 @@
+ // Whether the system supports h264 video encoding.
+ pub fn is_h264_encoding_supported() -> bool {
+     let registry = gst::Registry::get();
+-    registry.lookup_feature("openh264enc").is_some() || registry.lookup_feature("x264enc").is_some()
++    registry.lookup_feature("motoh264enc").is_some()
++        || registry.lookup_feature("openh264enc").is_some()
++        || registry.lookup_feature("x264enc").is_some()
+ }
+ 
+ // Whether the system supports hardware video encoding for a given format.
+@@ -184,6 +186,7 @@
+             registry.lookup_feature("vah264lpenc").is_some()
+                 || registry.lookup_feature("vah264enc").is_some()
+                 || registry.lookup_feature("v4l2h264enc").is_some()
++                || registry.lookup_feature("motoh264enc").is_some()
+         }
+         crate::VideoFormat::Vp8Webm => {
+             registry.lookup_feature("vavp8lpenc").is_some()
+--- a/aperture/src/viewfinder.rs
++++ b/aperture/src/viewfinder.rs
+@@ -907,6 +907,11 @@
+ 
+         // Video encoder properties
+         let video_properties_map = ElementProperties::builder_map()
++            .item(
++                ElementPropertiesMapItem::builder("motoh264enc")
++                    .field("bitrate", 4000u32)
++                    .build(),
++            )
+             .item(
+                 ElementPropertiesMapItem::builder("x264enc")
+                     .field("bitrate", DEFAULT_BITRATE)
+@@ -994,6 +999,14 @@
+                     }
+                     hw_encoder_found = true;
+                 }
++                if let Some(encoder) = registry.lookup_feature("motoh264enc") {
++                    encoder.set_rank(if self.enable_hw_encoding() {
++                        gst::Rank::PRIMARY + 32
++                    } else {
++                        gst::Rank::NONE
++                    });
++                    hw_encoder_found = true;
++                }
+                 if let Some(encoder) = registry.lookup_feature("openh264enc") {
+                     encoder.set_rank(gst::Rank::PRIMARY);
+                 }
+--- a/aperture/src/camera.rs
++++ b/aperture/src/camera.rs
+@@ -148,6 +148,14 @@
+     pub(crate) fn create_element(&self) -> Result<gst::Element, glib::BoolError> {
+         let element = self.device().create_element(None)?;
+         element.set_property("client-name", crate::APP_ID.get().unwrap());
++        if self.properties().get("device.api").and_then(|v| v.get::<String>().ok()).as_deref()
++            == Some("moto-android")
++        {
++            // The Android source uses CLOCK_MONOTONIC. Keep camerabin on a
++            // stable system clock when it adds/removes the audio recorder.
++            element.set_property("provide-clock", false);
++            element.set_property("do-timestamp", true);
++        }
+         Ok(element)
+     }
+ 
