@@ -14,7 +14,9 @@ import subprocess
 import threading
 import time
 
-ADB = [str(Path.home() / 'Android/Sdk/platform-tools/adb'), '-s', 'ZY32MVJS25', 'shell']
+import moto_device
+
+ADB = moto_device.adb('shell')
 
 def shell(*args):
     return subprocess.check_output(ADB + [shlex.join(args)], text=True)

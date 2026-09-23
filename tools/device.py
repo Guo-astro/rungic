@@ -1,5 +1,6 @@
 import subprocess,shlex,pathlib
-ADB=['/home/kevinzhow/Android/Sdk/platform-tools/adb','-s','ZY32MVJS25']
+import moto_device
+ADB=moto_device.adb()
 ROOT='/data/adb/moto-lxc/runtime/var/lib/lxc/plasma/rootfs'
 def root(cmd,**kwargs):
  return subprocess.run(ADB+['shell','su -c '+shlex.quote(cmd)],check=True,**kwargs)

@@ -7,7 +7,9 @@ One device at a time. No clock locking, thermal changes, or security changes.
 import argparse, json, shlex, subprocess, time
 from pathlib import Path
 
-ADB=[str(Path.home()/'Android/Sdk/platform-tools/adb'),'-s','ZY32MVJS25']
+import moto_device
+
+ADB=moto_device.adb()
 PLASMA=['python3','tools/moto_plasma.py']
 DROP='/run/user/1000/systemd/user/plasma-kwin_wayland.service.d/90-moto-zink-audit.conf'
 def user(*args,check=True,combined=False):

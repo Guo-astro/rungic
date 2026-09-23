@@ -3,13 +3,13 @@
 import argparse
 import shlex
 import subprocess
-from pathlib import Path
+
+import moto_device
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--serial", default="ZY32MVJS25")
-    parser.add_argument("--adb", default=str(Path.home() / "Android/Sdk/platform-tools/adb"))
+    parser.add_argument("--transport", help="adb transport id; default: resolved by moto_device")
     parser.add_argument("action", choices=("start", "stop", "restart-session", "status", "shell", "exec", "user-exec", "open", "log", "home", "hide-keyboard"), nargs="?", default="status")
     parser.add_argument("args", nargs=argparse.REMAINDER)
     args = parser.parse_args()
@@ -19,7 +19,7 @@ def main():
         parser.error("exec requires a command")
     command = shlex.join(["/data/adb/moto-plasma/moto-plasma", args.action, *args.args])
     return subprocess.call([
-        args.adb, "-s", args.serial, "shell",
+        *(moto_device.adb() if args.transport is None else [moto_device.adb_path(), "-s", args.transport]), "shell",
         "-tt" if args.action == "shell" else "-T",
         "su -c " + shlex.quote(command),
     ])

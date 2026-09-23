@@ -8,9 +8,11 @@ import subprocess
 import time
 
 from build_clean_product import APPS
+import moto_device
 
 OUT = Path('/home/kevinzhow/moto-clean-W1WAA36/offline-v3')
-ADB = ['/home/kevinzhow/Android/Sdk/platform-tools/adb', '-s', 'ZY32MVJS25']
+# The phone may be rebooting, so use its USB serial instead of resolving a transport.
+ADB = [moto_device.adb_path(), '-s', moto_device.config().get('MOTO_TRANSPORT', moto_device.serial())]
 
 
 def shell(cmd, timeout=30):
