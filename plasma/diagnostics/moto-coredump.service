@@ -1,0 +1,9 @@
+[Unit]
+Description=Collect desktop core dumps with a gdb backtrace
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/moto-coredump-collect
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=15min

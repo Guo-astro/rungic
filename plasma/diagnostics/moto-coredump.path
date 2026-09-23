@@ -1,0 +1,8 @@
+[Unit]
+Description=Watch for desktop core dumps in /data/app_dump
+
+[Path]
+DirectoryNotEmpty=/data/app_dump
+
+[Install]
+WantedBy=paths.target

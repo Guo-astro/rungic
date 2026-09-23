@@ -18,8 +18,10 @@ ExecStopPost=-/usr/bin/systemctl --user stop graphical-session.target
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=20
-StandardOutput=append:/var/log/plasma/session.log
+# Journal, so session messages share the merged, timestamped agent timeline.
+StandardOutput=journal
 StandardError=inherit
+SyslogIdentifier=moto-plasma-session
 
 [Install]
 WantedBy=multi-user.target
