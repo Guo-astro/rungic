@@ -88,3 +88,4 @@ Vendor适配应放在哪一层、哪些可以抽离到共享后端，见[54篇�
 | [55-agent-native-debugging.md](docs/55-agent-native-debugging.md) | Agent 原生调试：统一采集、崩溃现场、统一追踪与按控件操作 |
 | [56-kwin-vulkan-quantification.md](docs/56-kwin-vulkan-quantification.md) | KWin + 原生 Vulkan 收益量化 |
 | [57-zero-copy-explicit-sync.md](docs/57-zero-copy-explicit-sync.md) | 零拷贝呈现与显式同步 |
+| [58-miracast-desktop-feasibility.md](docs/58-miracast-desktop-feasibility.md) | Miracast投屏桌面与手机触控板可行性 |
