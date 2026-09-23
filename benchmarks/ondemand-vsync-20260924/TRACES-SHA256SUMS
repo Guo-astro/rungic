@@ -1,0 +1,11 @@
+ac3120ecd6529c77bf3ce1be194663c4ec3eedd8465be798e5420a6cbc0c2f8e  .work/diag/moto-20260924-033125-idle122.pftrace
+bd6f860203ab88144776330452ff2b5932472eb832a87228437e36097e9734e7  .work/diag/moto-20260924-033319-ondemand0.pftrace
+5c70455cdf0c785ba3d40f65448740e6207ebac52f341ef271e3565a5299fdc3  .work/diag/moto-20260924-033354-ondemand1.pftrace
+04b6e906022a27e54eafd424e409468ee2bfeb9dbe7eab54df1f8313ebbf0f74  .work/diag/moto-20260924-033428-ondemand0.pftrace
+0a5d2f4c66d0b6d74663192af80ad10a78965fb63bb8ee801b0f390ef1b8f9d1  .work/diag/moto-20260924-033504-ondemand1.pftrace
+a4acbd7cafd4ff183f2c63bcd44774f60067cfb05e46c1d86cc14f7e668bc601  .work/diag/moto-20260924-040500-kwin-pipeline-1.pftrace
+13aaf18ccf14ef65e8961bc3cc24cf8a9eabf837fbc70a1f957013d775a48161  .work/diag/moto-20260924-040500-kwin-pipeline-1.pftrace.kgsl.txt
+63bdaceb4b36643b39be7866a844708385e85eac738ebbc41b8826dcfe4e4a5d  .work/diag/moto-20260924-040622-kwin-pipeline-2.pftrace
+55cffe1dc17042f4fa683ba21c5424ade1068f8f5320d2650d4aebbc807db34f  .work/diag/moto-20260924-040622-kwin-pipeline-2.pftrace.kgsl.txt
+544c25c3e59f6295d01383278c87e0d45c9b0983a2330d8d5895a34da5445d9f  .work/diag/moto-20260924-040744-kwin-pipeline-3.pftrace
+8feb729bc4dd95e80da2d432a3043a9e83f3883e0c2bd059d843e4f85594cf27  .work/diag/moto-20260924-040744-kwin-pipeline-3.pftrace.kgsl.txt

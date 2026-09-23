@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.hardware.display.DisplayManager;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.MessageQueue;
+import android.os.ParcelFileDescriptor;
 import android.os.SystemClock;
 import android.view.Choreographer;
 import android.view.Display;
@@ -31,7 +33,15 @@ final class DisplayPacer implements Choreographer.FrameCallback, DisplayManager.
     private final Runnable changed;
     private final Executor worker;
     private final File status;
-    private boolean running;
+    private boolean running, parked;
+    private ParcelFileDescriptor wakeFd;
+    // On-demand vsync: the compositor signals this eventfd when it leaves the
+    // parked state; callbacks resume from the next vsync.
+    private final MessageQueue.OnFileDescriptorEventListener wake = (fd, events) -> {
+        try { android.system.Os.read(fd, new byte[8], 0, 8); } catch(Exception e) { }
+        resume();
+        return MessageQueue.OnFileDescriptorEventListener.EVENT_INPUT;
+    };
     private float requested = -1, current = 60, maximum = 60, minimum = 60;
     private float nativeRate = -1;
     private long sampledAt, sampledFrames, lastTouch, lastBusy;
@@ -52,6 +62,17 @@ final class DisplayPacer implements Choreographer.FrameCallback, DisplayManager.
         updateRequest();
         sampledAt=SystemClock.elapsedRealtime();
         sampledFrames=ready.getAsBoolean()?NativeBridge.getPresentedFrames():0;
+        try {
+            if(wakeFd==null)wakeFd=ParcelFileDescriptor.fromFd(NativeBridge.vsyncWakeFd());
+            Looper.getMainLooper().getQueue().addOnFileDescriptorEventListener(wakeFd.getFileDescriptor(),
+                MessageQueue.OnFileDescriptorEventListener.EVENT_INPUT,wake);
+        } catch(Exception e) { Log.w("MotoRefresh","On-demand vsync unavailable",e); }
+        parked=false;
+        Choreographer.getInstance().postFrameCallback(this);
+    }
+    private void resume() {
+        if(!running || !parked)return;
+        parked=false;
         Choreographer.getInstance().postFrameCallback(this);
     }
     void stop() {
@@ -60,6 +81,7 @@ final class DisplayPacer implements Choreographer.FrameCallback, DisplayManager.
         handler.removeCallbacks(release);
         requestRate(0);
         manager.unregisterDisplayListener(this);
+        if(wakeFd!=null)Looper.getMainLooper().getQueue().removeOnFileDescriptorEventListener(wakeFd.getFileDescriptor());
         Choreographer.getInstance().removeFrameCallback(this);
     }
     void touch() {
@@ -171,6 +193,15 @@ final class DisplayPacer implements Choreographer.FrameCallback, DisplayManager.
                     current,maximum,minimum,requested,fps,frames,now);
                 worker.execute(() -> publish(value));
                 sampledAt=now;sampledFrames=frames;
+            }
+            if(!NativeBridge.wantsVsync()) {
+                // Static desktop: stop waking every vsync until the compositor
+                // signals the wake fd. Re-evaluate the frame-rate vote once the
+                // busy window has passed, as the per-second sampling would have.
+                parked=true;
+                handler.removeCallbacks(release);
+                handler.postDelayed(release,2600);
+                return;
             }
         }
         Choreographer.getInstance().postFrameCallback(this);

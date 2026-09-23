@@ -1,6 +1,6 @@
 # 零拷贝呈现与显式同步
 
-2026-09-24。XT2537-4 / Android16 / APK1.10–1.21 / KWin 6.6.6+moto8。56篇的量化结论是：KWin改原生Vulkan只省CPU，更大的开销在宿主GLES合成和`glFinish`同步等待。本篇实施了其中两项共享层改动，并做同机A/B。
+2026-09-24。XT2537-4 / Android16 / APK1.10–1.22 / KWin 6.6.6+moto8。56篇的量化结论是：KWin改原生Vulkan只省CPU，更大的开销在宿主GLES合成和`glFinish`同步等待。本篇实施了其中两项共享层改动，并做同机A/B。
 
 ## 结论
 
@@ -57,6 +57,30 @@ APK1.12–1.18给零拷贝事务设`setOnComplete`，用present fence实际signa
 3. 结论：默认恢复“提交后立即报告”（APK1.19+），真实时间保留在`setprop debug.moto.present_feedback hw`下，且只有打开时才注册完成回调（每帧少一次binder往返）。要利用真实时间，需要同时修改KWin嵌套后端的余量逻辑，另行评估。
 
 最终版本APK1.20（零拷贝+fence，立即反馈）3轮：KWin Paint p50/p95 2.03/3.81ms，每轮365帧，与1.11一致；SurfaceFlinger p95在16.7/25.0ms两档之间逐轮跳动（1.11同样出现过25ms），属于边界上的量化噪声。
+
+## 按需vsync（第3项）
+
+原来Java `DisplayPacer`每个vsync都重新注册Choreographer回调并调用`frameTick`，合成线程每个vsync跑一遍（排空命令、检查socket、dispatch、flush），桌面静止时也一样。APK1.22改为按需：
+
+- 原生（`frame_clock.rs`、`compositor.rs`）：最近400ms内没有客户端commit、JNI命令（输入等）、按下的触点、未决的SurfaceFlinger释放fence/呈现反馈，就进入停泊状态。停泊时不再等vsync条件变量，而是`poll()` Wayland display fd、监听socket、XWayland事件循环和一个kick eventfd，最长1秒做一次例行检查；`send_command`和SurfaceFlinger的释放/完成回调都会kick。停泊时不再做500ms心跳重绘（它会重复提交同一缓冲）。唤醒后先立即处理本次事件，再回到vsync节拍。
+- Java：`doFrame`中`NativeBridge.wantsVsync()`为false时不再重新注册回调；主Looper用`MessageQueue.addOnFileDescriptorEventListener`监听原生`vsyncWakeFd`（eventfd），原生离开停泊时写入它，Java排空后恢复回调。原生先置位再发信号，两边的先后顺序不会丢失恢复。停泊时补一次2.6秒后的刷新率投票复核，替代原来每秒采样的释放逻辑。
+- 调研：Android官方做法就是按需`postFrameCallback`（Choreographer不会自行持续回调）；桌面合成器（KWin、wlroots、Weston）同样只在有损伤或frame callback时调度重绘，事件循环空闲时阻塞在Wayland fd上。本改动把宿主对齐到这一模型，没有引入新组件。
+- 开关：`setprop debug.moto.ondemand_vsync 0`恢复每vsync唤醒；`native-stats`末尾显示`vsync_wanted`与累计停泊次数`parks`。
+
+同一APK交替开关、主屏静止各10秒（热状态0，a11y按当时状态）：
+
+| 单核% / 每秒运行次数 | 关 | 开 |
+|---|---:|---:|
+| APK合计 | 10.14 / 10.09 | **4.62 / 2.16**（首次测量2.67） |
+| APK主线程 | 6.5% / 79–82次 | 1.4–2.6% / 16–30次 |
+| APK合成线程 | 2.4% / 85–87次 | 0.1–0.7% / 1–21次 |
+| SurfaceFlinger `app`（应用vsync分发） | 4.8–5.0% / 67–69次 | 0.7–1.3% / 14–20次 |
+
+“开”的第一轮KWin有约10次/秒绘制（桌面上有零星更新），所以APK仍有4.6%。抽屉滚动3轮（`kwin_pipeline_run --zerocopy on`）：KWin Paint p50 2.07–2.24ms、p95 3.83–4.35ms，SurfaceFlinger帧间隔p95三轮均16.8ms，APK CPU 13.4–15.4%（1.20为14.7–17.7%），无退化。
+
+按控件名启动/关闭检查：开关交替5次共10轮全部通过，停泊8秒后点击启动4/4、直接点击8/8。开发过程中另有两次“开”状态下的首轮失败（一次点到y=127的错误位置，一次点中图标但未启动），之后未能复现，也未能归因；检查脚本现已在启动失败时自动截图留证。
+
+另外观察到plasmashell在静止时有时持续约10%单核、120–150次/秒唤醒（与本开关无关，1.22首次测量时只有0.6%），列为第6项调查。
 
 ## 其他修复
 

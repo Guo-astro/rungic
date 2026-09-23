@@ -1,0 +1,126 @@
+{
+ "trace": "/home/kevinzhow/github/range-dev/.work/diag/moto-20260924-040500-kwin-pipeline-1.pftrace",
+ "window_s": 8.5,
+ "pids": {
+  "kwin": [
+   17588
+  ],
+  "plasmashell": [
+   17666
+  ],
+  "apk": [
+   17284
+  ],
+  "surfaceflinger": [
+   11550
+  ]
+ },
+ "host_queue": {
+  "buffers": 0,
+  "per_s": 0.0,
+  "interval_ms": {
+   "n": 0
+  },
+  "queueBuffer_ms": {
+   "n": 0
+  }
+ },
+ "sf_display": {
+  "frames": 336,
+  "per_s": 39.53,
+  "interval_ms": {
+   "n": 335,
+   "mean": 21.0,
+   "p50": 8.368,
+   "p95": 16.754,
+   "p99": 484.594,
+   "max": 894.003
+  },
+  "jank_types": {
+   "None": 335,
+   "Prediction Error": 1
+  }
+ },
+ "kwin": {
+  "Import": {
+   "n": 331,
+   "mean": 0.063,
+   "p50": 0.052,
+   "p95": 0.107,
+   "p99": 0.197,
+   "max": 0.466
+  },
+  "Paint": {
+   "n": 331,
+   "mean": 2.466,
+   "p50": 2.24,
+   "p95": 4.269,
+   "p99": 5.218,
+   "max": 9.598
+  },
+  "batched_print_events": 0
+ },
+ "cpu": {
+  "kwin": {
+   "ms": 1603.5,
+   "core_pct": 18.9
+  },
+  "plasmashell": {
+   "ms": 3126.6,
+   "core_pct": 36.8
+  },
+  "apk": {
+   "ms": 1175.1,
+   "core_pct": 13.8
+  },
+  "surfaceflinger": {
+   "ms": 1888.8,
+   "core_pct": 22.2
+  }
+ },
+ "gpu_freq_mhz_seconds": {
+  "295": 0.337,
+  "345": 3.051,
+  "500": 0.466,
+  "600": 1.201,
+  "650": 0.513,
+  "734": 0.553,
+  "816": 2.38
+ },
+ "gpu": {
+  "busy_pct": 11.58,
+  "per_process": {
+   "/usr/bin/plasmashell[17666]": {
+    "n": 660,
+    "mean": 2.767,
+    "p50": 3.6,
+    "p95": 5.891,
+    "p99": 8.528,
+    "max": 11.334,
+    "total_ms": 1826.2
+   },
+   "/usr/bin/kwin_wayland[17588]": {
+    "n": 953,
+    "mean": 1.167,
+    "p50": 0.007,
+    "p95": 3.735,
+    "p99": 4.476,
+    "max": 7.113,
+    "total_ms": 1112.4
+   },
+   "com.android.systemui[649]": {
+    "n": 56,
+    "mean": 0.068,
+    "p50": 0.033,
+    "p95": 0.181,
+    "p99": 0.187,
+    "max": 0.188,
+    "total_ms": 3.81
+   }
+  }
+ },
+ "thermal_before": 0,
+ "zerocopy": "on",
+ "host_native_stats": "(enabled=true available=true frames=24305 acquire_fences=24305 feedback_hw=0 feedback_latch=0 feedback_timeout=0 feedback_pending=0 feedback_implausible=0 fallback=0 last_fallback=none in_flight=1 released=24302) vsync_wanted=false parks=242",
+ "thermal_after": 1
+}

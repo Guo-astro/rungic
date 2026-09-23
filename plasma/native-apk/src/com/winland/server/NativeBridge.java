@@ -26,6 +26,10 @@ public final class NativeBridge {
     public static native void setRefreshRate(float rate);
     public static native void frameTick(long frameTimeNanos);
     public static native long getPresentedFrames();
+    /** False while the compositor is parked on a static desktop (on-demand vsync). */
+    public static native boolean wantsVsync();
+    /** eventfd that becomes readable when the compositor wants vsync again. */
+    public static native int vsyncWakeFd();
     public static native String getLastNativeError();
     public static native String getWaylandRuntimeStats();
     public static native void sendClipboardTextToWayland(String text);

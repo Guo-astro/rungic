@@ -84,7 +84,10 @@ def launch(app, process, search):
     tap = moto_agent.ui_tap('plasmashell', icon_for(app))
     started = wait_for(lambda: running(process), 10)
     registered = wait_for(lambda: any(a['name'] == process for a in moto_agent.a11y('apps')), 10)
-    return {'tap': tap['tap'], 'started': started, 'registered': registered}
+    step = {'tap': tap['tap'], 'started': started, 'registered': registered}
+    if not started:
+        step['screenshot'] = moto_agent.screenshot()  # evidence of what the tap hit
+    return step
 
 
 def close(process):

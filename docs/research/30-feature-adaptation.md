@@ -74,7 +74,7 @@ Firefox因KGSL没有DRM render节点误判软件显卡，初始为WebRender(Soft
 
 ### 3. 显示、旋转与亮度
 
-Java `DisplayPacer` 的Choreographer回调驱动Rust frame clock，替换固定60Hz sleep。Wayland frame callback使用单调vsync时间，移除commit立即返回零时间戳的路径；成功EGL提交单独计数。
+Java `DisplayPacer` 的Choreographer回调驱动Rust frame clock，替换固定60Hz sleep。APK1.22起静止桌面不再每个vsync唤醒：原生层空闲400ms后停止请求Choreographer回调，有Wayland请求、Android输入或SurfaceFlinger回调时立即恢复（见57篇）。Wayland frame callback使用单调vsync时间，移除commit立即返回零时间戳的路径；成功EGL提交单独计数。
 
 触摸请求最高120Hz并保持2秒；持续提交≥8fps时请求至少60Hz，2.5秒迟滞后释放。静止实测物理30Hz、桌面约2fps空闲提交。`android-refresh.ini`分别记录系统报告Hz、支持范围、请求值与实际提交fps。Android省电和温控仍有最终决定权。
 
