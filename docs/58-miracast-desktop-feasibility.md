@@ -1,6 +1,6 @@
 # Miracast投屏桌面与手机触控板：可行性分析
 
-2026-09-24，XT2537-4 / Android16 / APK1.25 / KWin 6.6.6+moto10 / Plasma Mobile 6.6.5。本篇只做调研与方案，尚未实现；“已核实”指本机或源码中确认过的事实，其余为推断，需原型验证。
+2026-09-24（含root条件下的补充），XT2537-4 / Android16 / APK1.25 / KWin 6.6.6+moto10 / Plasma Mobile 6.6.5。本篇只做调研与方案，尚未实现；“已核实”指本机或源码中确认过的事实，其余为推断，需原型验证。
 
 ## 目标
 
@@ -18,7 +18,49 @@ Linux桌面通过Miracast显示到电视/显示器，外屏进入Plasma Mobile�
 | KWin运行时增加输出 | Wayland嵌套后端已有`createVirtualOutput/removeVirtualOutput`（KDE虚拟显示器投屏使用），每个输出在宿主上是一个独立的xdg_toplevel | `vendor/kwin/src/backends/wayland/wayland_backend.cpp` |
 | 宿主输入 | 已有Touch/Trackpad/Mouse三种模式、相对位移与点击注入、Android按键与文本提交通道 | `native/plasma/src/compositor.rs`、`input_router.rs` |
 
-## 推荐方案：Android Presentation承载外屏输出
+## Root条件下的目标架构（2026-09-24补充）
+
+原则：Linux拥有桌面、设备语义和用户交互；Android只当“显示/无线/编码驱动”。外屏在Linux里应像插上一台显示器，手机应像接上一块触控板和键盘，接收端在Plasma里选择。
+
+补充核实（root）：
+
+| 项 | 结果 |
+|---|---|
+| 网络 | 容器`lxc.net.0.type = none`，与Android共用网络命名空间，能直接使用P2P组网卡上的连接 |
+| Wi-Fi P2P | Android wpa_supplicant控制socket在`/data/vendor/wifi/wpa/sockets/wlan0`，`p2p0`网卡存在 |
+| 触摸屏 | `chipone-tddi`（event8，TDDI液晶，触摸依赖面板供电）；`/dev/uinput`在Android侧可用 |
+| 容器设备 | 容器内暂无`/dev/input`、`/dev/uinput`，未运行udevd；需在LXC配置直通并处理设备属性 |
+| KWin输入 | `InputRedirection`支持同时挂多个输入后端；libinput后端目前只在DRM后端创建，只依赖Session，可在嵌套模式下额外挂载 |
+| Linux Miracast发送端 | GNOME Network Displays 0.99.0（2026-01）：WFD P2P（经NetworkManager+wpa_supplicant）、MICE（Miracast over Infrastructure，无需P2P）、Chromecast；无界面守护进程与D-Bus管理接口；画面来自portal ScreenCast，GStreamer编码 |
+| 发起WFD连接 | root进程通过`CONFIGURE_WIFI_DISPLAY`检查（AOSP对root/system uid直接放行），可用`app_process`调用DisplayManager隐藏接口（scrcpy同类做法），待实测 |
+
+### 输出：外屏作为KWin的热插拔输出
+
+- 触发：宿主检测到外屏后，经平台桥调用KWin（本地补丁，D-Bus）`createVirtualOutput`；断开时`removeVirtualOutput`。KScreen、每输出缩放（电视宜1.5–2）、Plasma Docked模式全部按标准路径生效。
+- 传输引擎A（默认）：Android高通WFD栈。宿主在WFD显示上建`Presentation`，第二个toplevel经零拷贝（UBWC）子层提交；SurfaceFlinger合成进WFD编码面（一次GPU/HWC合成），硬件编码、音频、HDCP由厂商栈负责，接收端兼容性最好。
+- 传输引擎B（进阶）：Linux侧自有发送端。基于GNOME Network Displays的RTSP/WFD协商与封装，P2P改由Android wpa_supplicant（root下经控制socket设置WFD IE与发现/连接，或经宿主`WifiP2pManager`）提供；另可直接走MICE（无P2P，保留现有Wi-Fi与VPN）和Chromecast。画面从KWin输出取：最短路径是让KWin直接渲染进MediaCodec输入Surface的缓冲（宿主出租这些AHB，零拷贝编码），可设低延迟编码参数（无B帧、帧内刷新、60fps）。
+- 两者共用同一个Linux侧D-Bus服务（接收端列表、连接、断开、状态），Plasma快捷设置与设置模块只面向该服务；引擎A的扫描/连接由root辅助进程调用隐藏接口实现。
+
+### 输入：手机作为真实的Linux触控板与键盘
+
+- 极致路线：投屏期间root守护进程`EVIOCGRAB`独占触摸屏（Android不再响应），把多点触控原始事件写入一个带`INPUT_PROP_POINTER/BUTTONPAD`与物理分辨率的uinput触控板；该设备直通进容器，KWin在嵌套模式下额外挂libinput后端读取它。由此得到libinput级的加速曲线、防误触、轻点/拖拽、双指滚动与KWin三/四指手势，系统设置里的触控板模块也直接可用。需要处理：Android InputReader也会看到新uinput设备（root下经隐藏接口禁用该设备）、容器内设备节点与udev属性（`ID_INPUT_TOUCHPAD`）。
+- 稳妥路线：宿主把Android MotionEvent处理成wl_pointer相对位移、带finger来源的滚动和`zwp_pointer_gestures_v1`手势发给KWin（嵌套后端已绑定宿主的手势协议）。无内核改动，但加速与轻点逻辑要自己实现或移植libinput算法。
+- 键盘：APK内自带键盘视图，发送evdev键码（同样可走uinput键盘或wl_keyboard），由Linux侧Rime组字，Ctrl/Alt/Meta快捷键完整；蓝牙实体键盘照常可用。
+- 手机屏幕：TDDI触摸依赖面板供电，不能关屏；投屏时用root把背光降到0并显示纯黑，省电且触摸仍有效（待实测）。
+
+### Root带来的系统保障
+
+- 投屏是长时间高负载场景：宿主启动后由root把其`oom_score_adj`设为-1000，避免重演57篇Elisa事故中前台宿主被lmkd杀死；另加容器GPU内存看门狗。
+- P2P与STA同信道（root下设置P2P操作信道等于当前Wi-Fi信道），避免多信道切换带来的带宽与延迟损失。
+
+### 分阶段验证（每步都是小原型）
+
+1. root辅助进程扫描/连接接收端；宿主在外屏显示Presentation测试图；记录显示标志、分辨率、端到端延迟（需要一台Miracast接收端）。
+2. KWin热插拔第二输出+宿主多窗口绑定，外屏出现Plasma并自动进入Docked模式。
+3. 输入：先做宿主级触控板+手势；并行验证uinput触控板+嵌套libinput后端。
+4. 声音、断开重连、宿主重启恢复、功耗温度；然后评估引擎B（MICE/Chromecast/自有编码）。
+
+## 初版方案：Android Presentation承载外屏输出（无root假设）
 
 ```
 电视 ◀─Miracast(Android WFD编码)─ Android WFD显示(Presentation类)
