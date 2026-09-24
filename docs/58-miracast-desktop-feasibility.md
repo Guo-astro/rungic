@@ -318,6 +318,108 @@ KWin(moto12) 嵌套后端：Pointer::motion → 输出CAST-n上的绝对位置�
   - 触控板功耗需排除后台负载后重测。
   - 端到端延迟未测。
 
+## 第5步：从Linux发起投屏、自动重连、不再显示摩托副屏桌面（2026-09-24）
+
+用户要求：
+- 电视上不要再闪出摩托的投屏桌面（选方案A：停用该组件）。
+- 从Linux一侧发起投屏：快捷开关、语音助手、电视端断开后自动重连，三种入口都要。
+- 用户自己断开的不要重连。
+
+### 调研
+
+- **AOSP**：`WifiDisplayController`只在连接过程中失败时重试（`mConnectionRetriesLeft`）。本机日志中，电视关闭RTSP后立即`Disconnecting`，没有重试。
+- **Android与Moto设置**：本轮未找到“断线自动重连”的系统设置或公开接口。
+- **Plasma Mobile上游**：只有KScreen的“显示配置”快捷设置，没有投屏入口。
+- **GNOME Network Displays**：它是Linux自己的Miracast发送端，要求Linux直接掌握Wi-Fi P2P。本机的Wi-Fi归Android所有，因此不适用。
+- **结论**：继续用Android自带的WFD栈（`moto-cast`），只在其上补入口和重连。
+
+### 电视上不再出现摩托副屏桌面
+
+- **原因**：WFD显示带`FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS`，Android在它上面启动`SECONDARY_HOME`。本机只有`com.motorola.launcher3/com.android.launcher3.secondarydisplay.SecondaryDisplayLauncher`能响应。在宿主悬浮窗盖上之前，它会显示一会儿；每次重连都会闪。
+- **处理**：`pm disable --user 0`停用该组件。
+  - 之后Android记录`No home screen found … SECONDARY_HOME`（以`am_wtf`记入日志，无其他影响），电视上不再启动任何主屏。
+  - 主手机桌面是同包的其他组件，不受影响。
+  - 恢复命令：`pm enable --user 0 <上述组件>`。
+- **开机检查**：`shared/android/moto-cast-watch.sh`（`/data/adb/service.d`）开机时检查。仍能解析到该组件时才停用，避免每次开机都杀一次启动器进程。
+- **实测**：
+  - 重连后`PlasmaCastDesktop`在`Connected`之后约0.6秒绑定，其间没有`SecondaryDisplayLauncher`的`wm_create_activity`。
+  - `mTopFocusedDisplayId=0`，焦点仍在手机上。
+  - 第4步“投屏绑定后15秒内抢回焦点”的逻辑保留，作为其他应用抢焦点时的保护。
+
+### 区分用户断开与电视端断开
+
+`WifiDisplayController`日志（Slog，`system`缓冲区）中两种断开的顺序不同：
+
+| 情况 | 顺序 |
+|---|---|
+| 手机端请求断开（`moto-cast disconnect`、快捷开关、Android投屏控制） | `Stopped listening for RTSP connection` → `Closed RTSP connection …` → `Disconnecting` |
+| 电视端结束会话（2026-09-24 22:40实例） | `Closed RTSP connection …` → `Stopped listening …` → `Disconnecting` |
+
+手机端的请求先把`mDesiredDevice`清空，随后停止监听，之后会话才关闭。电视端结束时，RTSP先关闭，才触发断开。
+
+### 自动重连：`moto-cast-watch`
+
+`shared/android/moto-cast/moto-cast-watch`由root运行，开机时由`/data/adb/service.d/moto-cast-watch.sh`启动：
+
+- 用`logcat -b system -v raw -s WifiDisplayController:I`等待日志行，不轮询。启动时用`moto-cast status`取得初始状态。用PID文件保证只运行一份：mksh会在子进程中关闭`exec 9>`打开的描述符，无法用`flock`。
+- 在“已连接”状态下先看到`Closed RTSP connection`，才判定为电视端断开。此时以`reconnect`模式启动自身：
+  - 3秒后开始，每次`moto-cast connect last 40`，最长180秒。第4步实测，电视断开后可能要一分钟才能重新连接。
+  - `moto-cast status`在此期间报告`"reconnecting":true`。
+  - 自动重连成功后120秒内，电视又一次结束会话，就不再重连，按用户在电视上主动退出处理。
+- 用户发出的`moto-cast connect/disconnect`都会写入`run/cancel-reconnect`，并结束正在进行的连接进程。重连循环每次尝试前后都检查该标记。
+  - 自动重连调用时带`MOTO_CAST_AUTO=1`，不写入取消标记。
+  - 较新的请求优先：连接进程的PID记在`run/connect.pid`。
+- 日志：`/data/adb/moto-wfd/run/watch.log`。
+
+### `moto-cast`的补充
+
+- `connect`省略目标（或写`last`）：
+  - 连上次成功连接的电视。连接成功时，地址和名称写入`/data/adb/moto-wfd/last-sink`。
+  - 没有记录时，若Android只记住一台电视，就连这一台；有多台时报错，要求给出名称。
+  - 连接成功的判断改为：已连接设备的地址或名称与目标一致。
+- `status`增加`reconnecting`。
+
+### Linux入口
+
+```
+Plasma快捷开关“投屏” ─┐
+语音助手（Codex执行）  ─┼→ /usr/local/bin/moto-cast（Linux，plasma/cast）
+                        │     └ 平台桥 {"op":"cast","args":[…]}（APK 1.35，独立线程，最长60秒）
+                        │          └ su -c /data/adb/moto-wfd/moto-cast …（root，app_process）
+moto-cast-watch（root） ┘ ← 电视端断开时自动重连
+```
+
+- **平台桥`cast`**：
+  - 只允许`status`、`scan`、`connect [电视]`、`disconnect`；电视名按shell单引号转义。
+  - 在单独线程里应答：连接要几秒到一分钟，不能阻塞剪贴板、亮度等请求的单线程循环。
+  - 不要求宿主有焦点，后台时也能断开或连接。
+- **Linux命令**：`moto-cast status|scan|connect [电视]|disconnect`，输出工具的JSON，失败时退出码为1。查询约0.6秒。
+- **快捷开关**：`plasma/cast/quicksetting`，纯QML，Id为`dev.moto.quicksetting.cast`，由`plasma/cast/install.sh`安装，并排在蓝牙之后。
+  - 是否在投屏以`Qt.application.screens.length > 1`判断（电视即会话的CAST-1）。
+  - 用Plasma5Support的`executable`引擎调用`moto-cast`。
+  - 状态文字：未连接／正在连接…／电视名／正在断开…／电视断开，正在重连…（此时点一下即取消）。
+  - 电视消失2秒后查询一次`status`；重连期间每8秒查询一次。
+  - 长按打开KScreen显示设置。
+- **语音助手**：技能说明新增`moto-cast`一节，Agent提示词也写明用它连接和断开；实时模型把“投屏”“断开投屏”交给Agent执行。见[59篇](59-voice-agent.md)。
+
+### 实测（2026-09-24，TCL 85Q6H）
+
+| 场景 | 结果 |
+|---|---|
+| `moto-cast disconnect`后等待20秒 | 保持断开，`reconnecting:false`，watch.log没有重连记录 |
+| `moto-cast connect`（不指定电视） | 按唯一记住的电视连接，6.7秒连上，并写入`last-sink` |
+| 模拟电视端断开：`iptables -I OUTPUT -o p2p0 -p tcp --sport 7236 -j REJECT --reject-with tcp-reset`，出现`Closed RTSP`后删除规则 | 36秒后RTSP关闭，日志顺序与22:40的真实断开相同。watch.log记录“TV ended the session”，11秒后“reconnected”，电视恢复Linux桌面 |
+| 快捷开关断开与连接 | 断开后保持断开。连接时显示“正在连接…”，连上后显示“TCL 85Q6H-9E92”；`kscreen-doctor`中有CAST-1（缩放1.5），电视截图为Linux桌面 |
+| 语音“把投屏断开。” | Agent执行`moto-cast disconnect`，从说完到口头确认约6秒 |
+| 语音“投到电视上。” | Agent执行`moto-cast connect`并用`status`确认，约26秒后口头确认已连上 |
+
+### 限制
+
+- 用户在电视遥控器上退出投屏时，电视同样先关闭RTSP，与电视端故障无法区分，因此会被自动重连一次；两分钟内再次退出就不再重连。要断开投屏，请用快捷开关、语音助手或Android投屏控制。
+- Wi-Fi P2P链路直接丢失（而不是RTSP先关闭）时，日志顺序可能与手机端断开相同，这种情况不会重连。本轮无法模拟，未验证。
+- 连接时Moto“超级互联显示”仍会在手机上弹出“已连接至…”横幅（`com.motorola.mobiledesktop`）。第1步确认它参与连接，不能停用。
+- 快捷开关不提供选择电视的界面：它连上次的电视。连其他电视用`moto-cast connect "<名称>"`，或对语音助手说出电视名。
+
 ## 初版方案：Android Presentation承载外屏输出（无root假设）
 
 ```

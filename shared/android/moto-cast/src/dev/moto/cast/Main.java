@@ -4,8 +4,11 @@ package dev.moto.cast;
 import android.hardware.display.DisplayManager;
 import android.os.Handler;
 import android.os.Looper;
+import java.io.File;
 import java.lang.reflect.Array;
 import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.Locale;
 import java.util.concurrent.Executor;
 
@@ -18,7 +21,7 @@ import java.util.concurrent.Executor;
  *
  *   moto-cast status
  *   moto-cast scan [seconds]
- *   moto-cast connect <address|name> [seconds]
+ *   moto-cast connect [address|name|last] [seconds]   default: the TV used last
  *   moto-cast disconnect [seconds]
  *   moto-cast decor <display-id> [on|off]   system decorations (vendor taskbar,
  *                                            secondary launcher) on a display
@@ -26,6 +29,11 @@ import java.util.concurrent.Executor;
 public final class Main {
     private static final int CONNECTED = 2; // WifiDisplayStatus.DISPLAY_STATE_CONNECTED
     private static Object dmg;
+    private static final File DIR = new File("/data/adb/moto-wfd");
+    /** Address and name of the sink connected last, for "connect" without a target. */
+    private static final File LAST_SINK = new File(DIR, "last-sink");
+    /** PID of moto-cast-watch while it reconnects after the TV dropped the session. */
+    private static final File RECONNECTING = new File(DIR, "run/reconnecting");
     private static final boolean DEBUG = System.getenv("MOTO_CAST_DEBUG") != null;
 
     private static void debug(String message) {
@@ -57,10 +65,13 @@ public final class Main {
             case "scan":
                 System.out.println(scan(seconds(args, 1, 8)));
                 break;
-            case "connect":
-                if (args.length < 2) fail("connect needs an address or a name");
-                System.out.println(connect(args[1], seconds(args, 2, 30)));
+            case "connect": {
+                // "connect 40" (seconds only) and "connect last" use the TV connected last.
+                boolean named = args.length > 1 && !args[1].equals("last") && !args[1].matches("\\d+");
+                int secondsAt = named || (args.length > 1 && args[1].equals("last")) ? 2 : 1;
+                System.out.println(connect(named ? args[1] : lastSink(), seconds(args, secondsAt, 30)));
                 break;
+            }
             case "disconnect":
                 System.out.println(disconnect(seconds(args, 1, 10)));
                 break;
@@ -157,8 +168,12 @@ public final class Main {
             while (System.currentTimeMillis() < deadline) {
                 Object s = wfdStatus();
                 Object active = call(s, "getActiveDisplay");
-                if (address != null && (int) call(s, "getActiveDisplayState") == CONNECTED && active != null
-                        && address.equalsIgnoreCase((String) call(active, "getDeviceAddress"))) {
+                if ((int) call(s, "getActiveDisplayState") == CONNECTED && active != null
+                        && (target.equalsIgnoreCase((String) call(active, "getDeviceAddress"))
+                            || target.equals(call(active, "getDeviceName"))
+                            || (address != null && address.equalsIgnoreCase((String) call(active, "getDeviceAddress"))))) {
+                    Files.write(LAST_SINK.toPath(), (call(active, "getDeviceAddress") + "\n"
+                            + call(active, "getDeviceName") + "\n").getBytes(StandardCharsets.UTF_8));
                     return status();
                 }
                 String found = findAvailable(address != null ? address : target);
@@ -177,6 +192,36 @@ public final class Main {
         }
         fail("timed out connecting to " + (address != null ? address : target));
         return null;
+    }
+
+    /**
+     * Target of a plain "connect": the sink connected last, else the only sink
+     * Android remembers from its own cast settings.
+     */
+    private static String lastSink() throws Exception {
+        if (LAST_SINK.exists()) {
+            String address = new String(Files.readAllBytes(LAST_SINK.toPath()), StandardCharsets.UTF_8).split("\n")[0].trim();
+            if (!address.isEmpty()) return address;
+        }
+        String found = null;
+        Object displays = call(wfdStatus(), "getDisplays");
+        for (int i = 0; i < Array.getLength(displays); i++) {
+            Object d = Array.get(displays, i);
+            if (!(boolean) call(d, "isRemembered")) continue;
+            if (found != null) fail("several TVs are known; name one (moto-cast scan lists them)");
+            found = (String) call(d, "getDeviceAddress");
+        }
+        if (found == null) fail("no TV used before; name one (moto-cast scan lists them)");
+        return found;
+    }
+
+    private static boolean reconnecting() {
+        try {
+            String pid = new String(Files.readAllBytes(RECONNECTING.toPath()), StandardCharsets.UTF_8).trim();
+            return !pid.isEmpty() && new File("/proc/" + pid).exists();
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private static String disconnect(int secs) throws Exception {
@@ -221,6 +266,7 @@ public final class Main {
         Object active = call(s, "getActiveDisplay");
         out.append(",\"active\":").append(active == null ? "null" : display(active));
         out.append(",\"android_display_id\":").append(activeDisplayId(active));
+        out.append(",\"reconnecting\":").append(reconnecting());
         out.append(",\"displays\":[");
         Object displays = call(s, "getDisplays");
         for (int i = 0; i < Array.getLength(displays); i++) {

@@ -43,7 +43,9 @@ final class PlatformBridge implements Closeable {
         network.start();
         Thread thread=new Thread(() -> {
             while(running) {
-                try(LocalSocket client=server.accept()) {
+                LocalSocket client=null;
+                try {
+                    client=server.accept();
                     int uid=client.getPeerCredentials().getUid();
                     if(uid!=1000 && uid!=0)continue;
                     client.setSoTimeout(3000);
@@ -62,6 +64,12 @@ final class PlatformBridge implements Closeable {
                         client.getOutputStream().write((result.toString()+"\n").getBytes(StandardCharsets.UTF_8));
                         continue;
                     }
+                    if(request.optString("op").equals("cast")) {
+                        // Connecting to a TV takes seconds to a minute: answer on its own thread.
+                        LocalSocket owned=client;client=null;
+                        Thread cast=new Thread(() -> answerCast(owned,request),"moto-cast");cast.setDaemon(true);cast.start();
+                        continue;
+                    }
                     if(request.optString("op").equals("network-wifi")) {
                         JSONObject result;
                         try { result=network.setEnabled(request.getBoolean("enabled")); }
@@ -76,8 +84,34 @@ final class PlatformBridge implements Closeable {
                     catch(Exception e) { task.cancel(false);result=new JSONObject().put("error",e.getMessage()); }
                     client.getOutputStream().write((result.toString()+"\n").getBytes(StandardCharsets.UTF_8));
                 } catch(Exception e) { if(running)Log.w("MotoPlatform","Request failed: "+e.getClass().getSimpleName()); }
+                finally { if(client!=null)try { client.close(); } catch(IOException ignored) {} }
             }
         },"moto-platform");thread.setDaemon(true);thread.start();
+    }
+    /**
+     * TV casting through the root tool moto-cast (docs/58): {"op":"cast","args":["status"|"scan"|
+     * "connect"[,"<name|address>"]|"disconnect"]}. The tool prints one JSON object.
+     */
+    private static void answerCast(LocalSocket client,JSONObject request) {
+        try(LocalSocket c=client) {
+            JSONObject result;
+            try {
+                JSONArray args=request.optJSONArray("args");
+                String command=args==null||args.length()==0?"status":args.getString(0);
+                if(!command.matches("status|scan|connect|disconnect"))throw new IllegalArgumentException("Unsupported cast command");
+                StringBuilder line=new StringBuilder("/data/adb/moto-wfd/moto-cast ").append(command);
+                if(args!=null && args.length()>1) {
+                    if(!command.equals("connect"))throw new IllegalArgumentException("Only connect takes a TV");
+                    line.append(" '").append(args.getString(1).replace("'","'\\''")).append("'");
+                }
+                java.lang.Process process=new ProcessBuilder("su","-c",line.toString()).redirectErrorStream(true).start();
+                if(!process.waitFor(60,TimeUnit.SECONDS)) { process.destroy();throw new IOException("投屏命令超时"); }
+                String out=new String(process.getInputStream().readAllBytes(),StandardCharsets.UTF_8).trim();
+                String last=out.substring(out.lastIndexOf('\n')+1);
+                result=last.startsWith("{")?new JSONObject(last):new JSONObject().put("error",out.isEmpty()?"moto-cast failed":out);
+            } catch(Exception e) { result=new JSONObject().put("error",e.getMessage()==null?"投屏请求失败":e.getMessage()); }
+            c.getOutputStream().write((result.toString()+"\n").getBytes(StandardCharsets.UTF_8));
+        } catch(Exception e) { Log.w("MotoPlatform","Cast request failed: "+e.getClass().getSimpleName()); }
     }
     private JSONObject handle(JSONObject request) throws Exception {
         String op=request.optString("op");

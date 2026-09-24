@@ -14,6 +14,7 @@ not required. Android-side services are in `plasma/native-apk/`.
 | `platform/clipboard.py` | Android clipboard ↔ Wayland clipboard |
 | `graphics/` | EGL/GBM/AHB diagnostic helpers |
 | `android/moto-cast/` | Root Wi-Fi Display control (scan/connect/disconnect/decor) through Android's WFD stack, run with `app_process` ([docs/58](../docs/58-miracast-desktop-feasibility.md)) |
+| `android/moto-cast/moto-cast-watch`, `android/moto-cast-watch.sh` | Reconnects the TV when the TV side ends the session (never after a user disconnect); boot script also keeps Moto's secondary-display launcher off the TV ([docs/58](../docs/58-miracast-desktop-feasibility.md) step 5) |
 | `android/wfd.sepolicy.rule`, `android/moto-wfd-sepolicy.sh` | SELinux fixes for Qualcomm Wi-Fi Display (Miracast), loaded at boot from `/data/adb/service.d` ([docs/58](../docs/58-miracast-desktop-feasibility.md)) |
 
 Runtime service definitions and Ubuntu build scripts remain in `plasma/`.

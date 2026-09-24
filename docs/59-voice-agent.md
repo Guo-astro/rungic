@@ -162,6 +162,14 @@
 - **环境说明**：用户在Linux桌面里工作，“安装、打开、文件、应用”默认都指Linux一侧。用户要装的软件直接安装（`.deb`用`pkcon install-local`，Flatpak用`flatpak install`）；系统要密码时，由Agent触发授权框并说明它在哪块屏幕上。
   - 起因：一次测试中，Agent查清了微信包是arm64的`.deb`，却按安卓理解，结论成了“手机装不了，请下载安卓版”。
 
+## 语音投屏（2026-09-24）
+
+- **用法**：用户说“投屏”“投到电视”“断开投屏”时，实时模型交给Agent执行。Agent按技能说明运行`moto-cast connect`或`moto-cast disconnect`，可用`moto-cast status`确认。链路与自动重连见[58篇](58-miracast-desktop-feasibility.md)第5步。
+- **实测**（合成语音，从手机发起）：
+  - “把投屏断开。”：先口头回应，Agent执行`moto-cast disconnect`，约6秒后确认。
+  - “投到电视上。”：Agent读技能说明、执行`moto-cast connect`、再用`status`确认，约26秒后说“已经投到那台TCL 85Q6H电视上了”。
+- **耗时**：主要花在Agent的推理轮次（读技能说明、多一次`status`），连接本身约7秒。
+
 ## 待办
 
 - **输入转写为繁体**：app-server不能设置转写语言，只影响显示；显示时做简繁转换。

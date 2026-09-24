@@ -21,10 +21,26 @@ The Android app that hosts the desktop answers these (it must be in the foregrou
 | `{"op":"orientation","mode":"portrait"}` | `system`, `portrait` or `landscape` |
 | `{"op":"vibrate"}` | short vibration |
 | `{"op":"settings","target":"network"}` | open an Android settings panel: `network`, `bluetooth`, `display`, `sound`, `datetime`, `location` |
-| `{"op":"cast-desktop"}` / `{"op":"cast-desktop","enabled":true}` | TV desktop state / on-off (a TV must already be connected via Android casting) |
+| `{"op":"cast-desktop"}` / `{"op":"cast-desktop","enabled":true}` | whether a connected TV shows the Linux desktop (on by default; to connect a TV use `moto-cast`) |
 | `{"op":"cast-controls","mode":"touchpad"}` | phone as TV touchpad: `phone`, `touchpad`, `keyboard` |
 
 Battery, CPU, memory and storage come from Linux: `upower -d`, `free -h`, `df -h /`, `/sys/class/power_supply/*`.
+
+## TV casting: `moto-cast`
+
+Casting connects the phone to the TV over Wi-Fi Display; the TV then becomes the desktop's second screen (`CAST-1`). Run it yourself when the user asks to cast or stop casting ("投屏", "投到电视", "断开投屏").
+
+| Command | Effect |
+|---|---|
+| `moto-cast connect` | connect the TV used last (about 5-10 s; up to a minute if the TV was just disconnected) |
+| `moto-cast connect "<name>"` | a specific TV, by name as `moto-cast scan` lists it |
+| `moto-cast disconnect` | stop casting; windows return to the phone |
+| `moto-cast status` | `active_state` 2 = connected, `active.name`, `reconnecting` |
+| `moto-cast scan` | TVs in reach (about 8 s) |
+
+- A failed connect prints `{"error": ...}`: run `moto-cast scan`; if the TV is not listed, it is off or its screen-mirroring input is closed; say so.
+- When the TV drops the session by itself, the phone reconnects automatically for up to three minutes (`reconnecting: true`). A disconnect by the user (this command, the quick-settings "投屏" button, Android's cast controls) is never reconnected.
+- The quick-settings "投屏" button does the same by hand.
 
 ## Operating apps on screen: the `moto-desktop` MCP tools (preferred)
 
