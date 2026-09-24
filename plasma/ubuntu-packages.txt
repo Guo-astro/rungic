@@ -73,3 +73,4 @@ kde-spectacle
 libnotify-bin
 python3-websocket
 python3-pypinyin
+python3-opencc
