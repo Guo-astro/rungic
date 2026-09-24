@@ -118,6 +118,7 @@ final class PlatformBridge implements Closeable {
         if(!activity.hasWindowFocus())return new JSONObject().put("error","请先返回 Plasma Mobile");
         if(op.equals("display-set"))return ((MainActivity)activity).setDisplayInfo(request);
         if(op.equals("cast-test"))return ((MainActivity)activity).castTest(request);
+        if(op.equals("cast-desktop"))return ((MainActivity)activity).castDesktop(request);
         if(op.equals("clipboard-set")) {
             ClipboardManager clipboard=activity.getSystemService(ClipboardManager.class);
             String text=request.isNull("text")?null:request.getString("text");

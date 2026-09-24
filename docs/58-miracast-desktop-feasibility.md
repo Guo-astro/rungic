@@ -118,6 +118,35 @@ Miracast需要Wi-Fi Direct近距离直连；手机经VPN连到K8，K8（Intel AX
 - 帧节拍：测试图案在主线程Choreographer上重绘，跟随手机120Hz（焦点在外屏时为60Hz），而WFD显示为60Hz；正式实现须按外屏的60Hz出帧。
 - 延迟：待拍照测量。
 
+## 第2步：电视成为KWin的第二个输出（2026-09-24）
+
+结果：手机继续显示Plasma移动界面，电视上是同一会话的第二个输出`CAST-1`（1920×1080，缩放1.5，逻辑1280×720，位于手机输出右侧）；Plasma Mobile自动进入docked（convergence）模式，窗口可移到电视上并带标题栏。断开/重连多次，KWin、plasmashell保持运行，docked模式随之开关。延迟未测（按用户要求暂缓）。
+
+```
+电视 ◀─WFD─ Android WFD显示 ◀─ 宿主悬浮窗PlasmaCastDesktop（SurfaceView，Presenter零拷贝）
+                                              ▲ dmabuf/AHB
+宿主Smithay：wl_output "Moto Cast" ◀─bind─ KWin(moto11)：输出CAST-1的xdg_toplevel
+                                              set_fullscreen(该wl_output) → 宿主认领为投屏窗口
+手机屏幕：宿主原有窗口/Presenter ◀── KWin输出WL-0（不变）
+```
+
+链路：
+
+1. 宿主平台桥`cast-desktop`（`{"enabled":true|false}`）：`CastDesktop`在Presentation类显示上加`TYPE_APPLICATION_OVERLAY`悬浮窗（与第1步相同的不透明、不可聚焦参数），内含固定为显示模式尺寸的SurfaceView；`surfaceChanged`经JNI`bindCastSurface(surface,w,h,刷新mHz)`交给原生层，`surfaceDestroyed`调用`releaseCastSurface`。显示移除（断开投屏）时悬浮窗随之移除。
+2. 原生宿主（`native/plasma/src/android/backend/wayland/cast.rs`）：绑定后新增wl_output全局（make“Moto”、model“Cast”、1000×563mm、缩放1），释放时撤回该全局。KWin对它的xdg_toplevel发出`set_fullscreen(该输出)`时，`fullscreen_request`把它认领为投屏窗口：配置为电视尺寸、映射在空间坐标(100000,0)、不参与手机的渲染列表、触摸命中和焦点选择（新窗口抢到的键盘焦点还给手机窗口）。每帧`render_all`把它的dmabuf留给`present_cast`，经独立的`Presenter`送到电视SurfaceView，完成后同样调用`finish_presentation`回帧回调；帧时钟停摆判断把未结清的投屏Presenter视为忙。
+3. KWin嵌套后端（vendor/kwin，`6.6.6-0ubuntu0.1+moto11`）：`WaylandDisplay`以KWayland `Output`绑定宿主的wl_output并跟踪增删；`WaylandBackend`对make/model为Moto/Cast的宿主输出创建`CAST-n`输出（热插拔，发`outputAdded`与`outputsQueried`），其xdg_toplevel以该宿主wl_output请求全屏；制造商、型号、物理尺寸、刷新率取自宿主输出。`MOTO_KWIN_FLAT_OUTPUT`的Android主屏模式与`internal`标记只作用于手机输出，投屏输出按外接显示器处理。
+4. Plasma Mobile（vendor/plasma-mobile）：`KScreenOSDProvider`在输出数>1时打开convergence模式，但上游`KScreenOSDUtil`构造时从未调用`retrieveKScreen()`，输出数恒为0，插入外屏也不会切换（上游master同样未修复）。本地在构造函数中调用它；插件在手机上编译后以dpkg-divert覆盖`/usr/lib/aarch64-linux-gnu/qt6/qml/org/kde/plasma/quicksetting/kscreenosd/libkscreenosdplugin.so`。
+
+问题与处理：
+
+- **断开时KWin被宿主断开**：KWin最初以`wl_output` v2绑定，KWayland `Output`销毁时发送`release`（v3起才有），宿主判定协议错误`invalid method 0 (since 2 < 3), object wl_output#44`并断开KWin，会话里的plasmashell、portal等随之以255退出重启。改为绑定v3（KWayland不处理v4的name/description事件）后断开/重连正常。
+- **docked模式持久值**：`KScreenOSDProvider`把“插入前的模式”记在持久设置本身，会话在docked状态下重启会把`true`当成初始值，之后拔出外屏也不再退出docked。上面的崩溃期间出现过一次，已手动写回`false`（`kwriteconfig6 --file plasmamobilerc --group General --key convergenceModeEnabled --notify false`）。只要会话不在投屏中重启就不会触发；未改上游逻辑。
+- **缩放**：KWin的`chooseScale`对高度>500mm的外接屏按电视目标30.5dpi计算，1000×563mm下给1.35；首次出现时曾以其他模式记下缩放1。现已用`kscreen-doctor output.CAST-1.scale.1.5`设为1.5，写入`kwinoutputconfig.json`并按输出UUID保留；用户可在显示设置中改。
+- **Android焦点不能切到电视**：用`input -d <电视显示> tap`调试会把Android顶层焦点移到外屏，之后`am start`会把宿主Activity以自由窗口启动到电视上。宿主`MainActivity`在非默认显示上创建时改为在显示0上重新启动自身并结束（APK1.27）。电视上的指针输入由第3步经宿主路由，不依赖Android的外屏触摸。
+- **帧节拍**：投屏窗口目前跟随手机输出的帧时钟出帧，未按电视60Hz单独节拍；Presenter统计计数由两个Presenter共用。
+
+验收方法：`moto-cast connect <电视>`连上后调用`cast-desktop`；`kscreen-doctor -o`应列出WL-0与CAST-1；`screencap -d <电视的SurfaceFlinger虚拟显示ID>`截取电视画面；用KWin脚本（`workspace.sendClientToScreen`）把窗口移到CAST-1确认应用显示在电视上；关闭再打开`cast-desktop`，确认`pgrep kwin_wayland/plasmashell`不变、输出与`convergenceModeEnabled`随之变化。
+
 ## 初版方案：Android Presentation承载外屏输出（无root假设）
 
 ```

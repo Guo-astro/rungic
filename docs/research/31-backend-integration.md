@@ -314,6 +314,7 @@ Firefox getDisplayMedia
 | 文档共享 | GNOME/portal → 容器私有FUSE → 文档导出；公共文件另经bindfs访问 | init.sh（历史材料已移除）。容器节点10:229/0666，Android原 `/dev/fuse` 仍0600 |
 | 相机/麦克风 | Android普通授权 → 私有capture.sock → 标准PA source / PW Video/Source → GNOME/Firefox | [media-bridge.py](../../shared/media/media-bridge.py)、[camera-source.cpp](../../shared/media/camera-source.cpp)。session-apps自动启动，flock防重复；后台释放设备 |
 | 网络文件 | Nautilus/GIO → GVfs对应协议后端 → WebDAV/SMB/NFS服务器 | WebDAV中文读写已实测；SMB/NFS仅安装后端，未验用户网络盘 |
+| 外接显示（Miracast） | Android WFD显示 ← 宿主悬浮窗SurfaceView/Presenter ← 宿主额外wl_output“Moto Cast” ← KWin(moto11)输出CAST-n的全屏toplevel；Plasma经KScreen进入docked模式 | [58篇](../58-miracast-desktop-feasibility.md)第2步；宿主`cast.rs`、KWin `wayland_display/backend/output`、kscreenosd补丁。连接由root工具`moto-cast`，输入路由待第3步 |
 | 凭据 | GNOME应用/libsecret → session D-Bus Secret Service → GNOME Keyring；Seahorse管理 | 使用上游服务；首次持久钥匙串由用户设密码，容器没有可用于PAM自动解锁的真实登录口令 |
 
 显示元数据有两个文件：`/mnt/android-wayland/android-display.ini` 保存安全区域，坐标单位是Wayland帧缓冲像素；`android-refresh.ini` 保存Android报告Hz、支持范围、请求Hz与APK成功提交fps。两者都通过AtomicFile发布，避免读到半写入文件。

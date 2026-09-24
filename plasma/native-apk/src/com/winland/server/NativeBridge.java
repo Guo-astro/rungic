@@ -30,6 +30,9 @@ public final class NativeBridge {
     public static native boolean wantsVsync();
     /** eventfd that becomes readable when the compositor wants vsync again. */
     public static native int vsyncWakeFd();
+    /** Cast display (Miracast TV) window, in pixels; refresh in mHz (docs/58). */
+    public static native void bindCastSurface(Surface surface, int width, int height, int refreshMhz);
+    public static native void releaseCastSurface();
     public static native String getLastNativeError();
     public static native String getWaylandRuntimeStats();
     public static native void sendClipboardTextToWayland(String text);

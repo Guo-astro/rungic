@@ -1,0 +1,120 @@
+package dev.moto.plasma;
+
+import android.app.Activity;
+import android.content.Context;
+import android.graphics.PixelFormat;
+import android.hardware.display.DisplayManager;
+import android.os.Handler;
+import android.os.Looper;
+import android.util.Log;
+import android.view.Display;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
+import android.view.WindowManager;
+import com.winland.server.NativeBridge;
+import java.util.function.BooleanSupplier;
+import org.json.JSONObject;
+
+/**
+ * Linux desktop on a cast display (docs/58 step 2). A non-focusable overlay on
+ * the Presentation-class display (Wi-Fi Display) holds a SurfaceView; its window
+ * is handed to the compositor, which offers KWin a second output for it.
+ * Controlled through the platform bridge op "cast-desktop".
+ */
+final class CastDesktop implements DisplayManager.DisplayListener, SurfaceHolder.Callback {
+    private final Activity activity;
+    private final BooleanSupplier ready;
+    private final DisplayManager displays;
+    private boolean enabled;
+    private SurfaceView view;
+    private WindowManager windowManager;
+    private int displayId = -1;
+    private int boundWidth, boundHeight;
+
+    CastDesktop(Activity activity, BooleanSupplier ready) {
+        this.activity = activity;
+        this.ready = ready;
+        displays = activity.getSystemService(DisplayManager.class);
+        displays.registerDisplayListener(this, new Handler(Looper.getMainLooper()));
+    }
+
+    boolean enabled() { return enabled; }
+
+    JSONObject request(JSONObject request) throws Exception {
+        if (request.has("enabled")) {
+            enabled = request.getBoolean("enabled");
+            update();
+        }
+        JSONObject out = new JSONObject().put("enabled", enabled).put("displayId", displayId)
+            .put("bound", boundWidth > 0 ? boundWidth + "x" + boundHeight : JSONObject.NULL);
+        return out;
+    }
+
+    void release() {
+        enabled = false;
+        update();
+        displays.unregisterDisplayListener(this);
+    }
+
+    private Display target() {
+        for (Display d : displays.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION)) {
+            if (d.getDisplayId() != Display.DEFAULT_DISPLAY) return d;
+        }
+        return null;
+    }
+
+    private void update() {
+        Display display = enabled && ready.getAsBoolean() ? target() : null;
+        if (view != null && (display == null || display.getDisplayId() != displayId)) {
+            windowManager.removeView(view);
+            view = null;
+            displayId = -1;
+            unbind();
+        }
+        if (display == null || view != null || !android.provider.Settings.canDrawOverlays(activity)) return;
+        Context windowContext = activity.createDisplayContext(display)
+            .createWindowContext(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, null);
+        windowManager = windowContext.getSystemService(WindowManager.class);
+        Display.Mode mode = display.getMode();
+        view = new SurfaceView(windowContext);
+        view.getHolder().setFixedSize(mode.getPhysicalWidth(), mode.getPhysicalHeight());
+        view.getHolder().addCallback(this);
+        // Above the vendor desktop, never focused (input stays with the phone), fully
+        // opaque (not FLAG_NOT_TOUCHABLE, which Android caps at 0.8 opacity).
+        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(-1, -1,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.OPAQUE);
+        lp.setFitInsetsTypes(0);
+        lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+        lp.setTitle("PlasmaCastDesktop");
+        windowManager.addView(view, lp);
+        displayId = display.getDisplayId();
+        Log.i("MotoCast", "cast desktop on display " + displayId + " " + mode.getPhysicalWidth() + "x" + mode.getPhysicalHeight());
+    }
+
+    private void unbind() {
+        if (boundWidth > 0) {
+            NativeBridge.releaseCastSurface();
+            boundWidth = boundHeight = 0;
+        }
+    }
+
+    @Override public void surfaceCreated(SurfaceHolder holder) {}
+
+    @Override public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+        Display display = displays.getDisplay(displayId);
+        int refresh = display == null ? 60000 : Math.round(display.getRefreshRate() * 1000);
+        NativeBridge.bindCastSurface(holder.getSurface(), width, height, refresh);
+        boundWidth = width;
+        boundHeight = height;
+    }
+
+    @Override public void surfaceDestroyed(SurfaceHolder holder) { unbind(); }
+
+    @Override public void onDisplayAdded(int id) { update(); }
+    @Override public void onDisplayRemoved(int id) { update(); }
+    @Override public void onDisplayChanged(int id) {}
+}

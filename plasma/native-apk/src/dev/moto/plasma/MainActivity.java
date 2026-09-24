@@ -22,6 +22,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     private CaptureBridge capture;
     private CodecBridge codecs;
     private CastTest castTest;
+    private CastDesktop castDesktop;
     private TextView status;
     private volatile int bufferWidth = 720, bufferHeight = 1600;
     private FrameLayout frame;
@@ -34,6 +35,15 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        if (getDisplay() != null && getDisplay().getDisplayId() != android.view.Display.DEFAULT_DISPLAY) {
+            // Launched on a cast display (input focus had moved there): the desktop's
+            // host window belongs on the phone; the TV gets its own window (docs/58).
+            android.app.ActivityOptions options = android.app.ActivityOptions.makeBasic()
+                .setLaunchDisplayId(android.view.Display.DEFAULT_DISPLAY);
+            startActivity(new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), options.toBundle());
+            finish();
+            return;
+        }
         getWindow().setDecorFitsSystemWindows(false);
         getWindow().setNavigationBarColor(android.graphics.Color.TRANSPARENT);
         getWindow().setStatusBarColor(android.graphics.Color.TRANSPARENT);
@@ -58,6 +68,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         frame.addView(status, new FrameLayout.LayoutParams(-1, -1));
         setContentView(frame);
         castTest = new CastTest(this, frame);
+        castDesktop = new CastDesktop(this, () -> initialized);
         registerEdgeBack();
         display.setOnApplyWindowInsetsListener((v, insets) -> {
             captureDisplayInsets(insets);
@@ -71,10 +82,12 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     }
 
     @Override public void onDestroy() {
+        if (pacer == null) { super.onDestroy(); return; } // finished before setup (onCreate)
         if(android.os.Build.VERSION.SDK_INT>=34 && edgeBackCallback!=null)
             getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(edgeBackCallback);
         pacer.stop();
         castTest.release();
+        castDesktop.release();
         try { capture.close(); } catch(IOException ignored) {}
         try { codecs.close(); } catch(IOException ignored) {}
         try { platform.close(); } catch(IOException ignored) {}
@@ -238,6 +251,10 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     }
 
     org.json.JSONObject castTest(org.json.JSONObject request) throws Exception { return castTest.request(request); }
+    org.json.JSONObject castDesktop(org.json.JSONObject request) throws Exception {
+        if (request.optBoolean("enabled")) castTest.request(new org.json.JSONObject().put("enabled", false));
+        return castDesktop.request(request);
+    }
     org.json.JSONObject displayInfo() throws org.json.JSONException {
         Display d=display.getDisplay();
         if(d==null)throw new IllegalStateException("Display unavailable");
