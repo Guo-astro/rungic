@@ -68,3 +68,4 @@ kalk
 krecorder
 kclock
 kweather
+plasma-desktop

@@ -257,6 +257,27 @@ KWin(moto12) 嵌套后端：Pointer::motion → 输出CAST-n上的绝对位置�
   - 触控板模式：约2.16W，但期间有Firefox页面在后台占用约24%，不能单独归因。
   - 温度：CPU 36–46°C，`quiet-therm`约36–39°C。
   - 未锁频、未改温控。
+- **外接屏的电脑版桌面**：
+  - **调研**：上游Plasma Mobile（6.5、6.6.5、2026-09-24的master `7606a3ef`）在外接屏上只放第二份Folio移动主屏，没有状态栏和任务栏。
+    - `layout.js`只在第0屏建两块移动面板；`ShellCorona::addOutput`给新屏用shell默认容器（folio）。
+    - docked模式只改KWin窗口行为（标题栏、不强制最大化、放置方式）。
+    - “外接屏换成桌面面板”只见于未合并的草案plasma-mobile!548（2024-07起，会同时替换手机的导航栏，且撤销docked后面板设置丢失）；plasma-workspace!4802（面板`screen`可由脚本设置）为它而做，已合并。
+  - **实现**：手机保持移动shell，第1屏及以后改成Plasma Desktop式外观。
+    - **布局脚本**：`vendor/plasma-mobile/shell/contents/external-desktop.js`（幂等），经`org.kde.PlasmaShell.evaluateScript`执行。
+      - 桌面容器：把Folio换成`org.kde.plasma.folder`。脚本不能直接创建桌面容器，但把Folio挪到一个不存在的屏号时，`ShellCorona::setScreenForContainment`会在原屏新建folder容器并与其交换，随后删除换下的Folio。
+      - 桌面文件夹：本机XDG桌面目录被设为`$HOME`，改为显示`~/Desktop`。
+      - 底部面板`org.kde.panel`：kickoff、icontasks（只显示本屏任务）、系统托盘、时钟、显示桌面。
+      - 结果保存在shell配置中，拔出后保留（screen=-1），插回自动恢复。
+    - **自动触发**：`KScreenOSDUtil`在输出数大于1或新增屏幕1秒后，异步调用plasmashell自身的`evaluateScript`执行该脚本。已验证：删除面板后插拔一次屏幕，面板自动重建。
+    - **小部件弹窗**：移动shell的`CompactApplet.qml`把弹窗做成全屏遮罩窗口，新窗口默认出现在主屏（手机）上，开始菜单因此弹到手机上并占满手机屏。
+      - 现在按容器分流：桌面面板和folder桌面里的小部件用Plasma Desktop的`CompactApplet`（`AppletPopup`贴面板弹出，复制自plasma-desktop 6.6.6）；手机上的移动面板保留原实现。
+      - `AppletPopup`按所在屏的95%限定尺寸，新窗口先落在手机屏，到电视后只放宽上限不放大。桌面版在`screenChanged`后按内容撑开。
+    - **依赖**：新增`plasma-desktop`（kickoff、icontasks等，12个包），已列入`plasma/ubuntu-packages.txt`。
+    - **部署**：`libkscreenosdplugin.so`、`libmobileshellplugin.so`与`CompactApplet.qml`以dpkg-divert覆盖，`CompactAppletDesktop.qml`、`CompactAppletMobile.qml`、`external-desktop.js`直接装入shell包目录。
+  - **实测**：
+    - 电视显示Plasma Desktop式桌面。
+    - 开始菜单在电视上贴任务栏弹出且大小完整；从中打开Dolphin，窗口带标题栏出现在电视上，并在电视任务栏高亮。
+    - 手机仍是移动界面。
 - **仍待处理**：
   - 按电源键熄屏后电视冻结：帧时钟由手机的Choreographer驱动，需改为在手机不可见时由投屏窗口驱动。
   - 触控板功耗需排除后台负载后重测。
