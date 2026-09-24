@@ -41,6 +41,30 @@
   - PackageKit（apt）安装：`auth_admin_keep`，输入一次后同一进程约5分钟内不再询问。
   - apt卸载：上游默认`auth_admin`，每次都要密码。
 
+**Flatpak在LXC中的沙箱（2026-09-24修复）**：在Discover中安装VSCode（`com.visualstudio.code`，extra-data类型）时，所有运行时都已下载，部署应用本体这一步失败，flatpak随后回滚删除了刚装的运行时。根因是两处容器限制，与bubblewrap 0.11.1、flatpak 1.16.6源码核对如下：
+
+1. **`bwrap: cannot open /proc/sys/user/max_user_namespaces: Read-only file system`**
+   - flatpak给每个新沙箱加`--unshare-user --disable-userns`，用来禁止沙箱内再建用户命名空间（防逃逸），不应去掉。
+   - bwrap实现时在自己的子用户命名空间里，经原`/proc`写该sysctl。这个值按用户命名空间独立，只影响沙箱本身。
+   - LXC的`proc:mixed`把`/proc/sys`挂为只读，所以写入失败。
+2. **`bwrap: Can't mount proc on /newroot/proc: Operation not permitted`**
+   - 沙箱新建PID命名空间时要挂新proc。内核只在该挂载命名空间里已有“完全可见”的proc时才允许。
+   - LXC在`/proc`上叠加了`/proc/sys`、`sysrq-trigger`、`boot_id`等遮盖挂载，使`/proc`不完全可见。
+   - 不带新PID命名空间的bwrap可以运行，带了就失败。
+
+**修复**：在容器init（`plasma/init`）中处理，其余部分不变：
+
+- 只把`/proc/sys/user`重新挂为可写，`/proc/sys`其余部分保持只读。
+- 在仅root可进入的`/run/moto-proc`再挂一个未遮盖的proc，满足内核的可见性检查。
+- 失败时只记日志，不阻止容器启动。
+
+**实测**（容器重启后）：
+
+- 沙箱内写全局sysctl被拒（Permission denied），嵌套`unshare -U`被禁止。
+- VSCode完整安装，`flatpak run`可进入沙箱，图形窗口正常出现。
+
+**剩余**：flatpak以root执行的安装后触发器（桌面文件关联、图标缓存、MIME数据库）使用`--unshare-net`，root在新网络命名空间中配置回环需要`net_admin`，而容器按设计去掉了该能力（保护Android网络），因此这些缓存更新会报`loopback: Failed RTM_NEWADDR`。应用本身以普通用户身份在用户命名空间中运行，不受影响；应用照常出现在菜单中。
+
 用户指定代理仍为`http://192.168.5.45:6152`，APT全局代理有效。PackageKit1.3.4的命令行是`pkgcli`；带http_proxy的CLI会尝试按logind会话设置代理，在LXC attach上下文返回“failed to get the session”，所以批量CLI去掉其代理环境，由APT已配置的代理负责下载。桌面/浏览器的代理环境不删除。
 
 定制Mesa7包与KWin5包整体hold，避免通用更新覆盖图形桥。当前PackageKit更新清单未提出替换它们，见`packagekit-updates.json`；不意味着未来所有第三方软件源的依赖求解都已测试。
