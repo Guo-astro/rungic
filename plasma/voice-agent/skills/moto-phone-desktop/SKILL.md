@@ -1,6 +1,6 @@
 ---
 name: moto-phone-desktop
-description: Operate this phone's Linux desktop (KDE Plasma Mobile on Android) and Android-side device functions - brightness, clipboard, orientation, vibration, network/display info, Android settings panels, TV casting, screen recording, GUI apps via AT-SPI, KWin windows and screenshots. Use whenever a request is about the phone, the desktop, apps on screen, or the TV.
+description: Operate this phone's Linux desktop (KDE Plasma Mobile on Android) and Android-side device functions - brightness, clipboard, orientation, vibration, network/display info, Android settings panels, TV casting, screen recording, operating GUI apps (moto-desktop MCP tools: launch, observe, run UI subtasks), windows and screenshots. Use whenever a request is about the phone, the desktop, apps on screen, or the TV.
 ---
 
 # Phone and desktop control
@@ -26,20 +26,27 @@ The Android app that hosts the desktop answers these (it must be in the foregrou
 
 Battery, CPU, memory and storage come from Linux: `upower -d`, `free -h`, `df -h /`, `/sys/class/power_supply/*`.
 
-## Desktop windows and screenshots
+## Operating apps on screen: the `moto-desktop` MCP tools (preferred)
 
-- Windows with output and geometry: `moto-a11y windows`.
-- Screenshot of everything: `spectacle -b -n -f -o /tmp/shot.png` (use `-m` for the active screen). Look at the image to understand what is on screen.
-- Launch an app: `kstart --application <desktop-file-id>` (IDs: `ls /usr/share/applications ~/.local/share/applications /var/lib/flatpak/exports/share/applications`), or `xdg-open <file-or-url>`.
+Your shell sandbox cannot reach the desktop (D-Bus, Wayland). Use these tools instead; they run outside the sandbox and act with ordinary pointer/keyboard input, like the user's own hands:
+
+1. `desktop_windows` - open windows, which is active, on which screen (`WL-0` phone, `CAST-1` TV).
+2. `desktop_launch {"app": "系统设置" | "org.kde.dolphin" | "Firefox"}` to start an app, or `desktop_activate {"window_id": ...}` to bring one to the front. The tools always work on the ACTIVE window.
+3. `desktop_observe` (optional) - the active window's controls (role, name, value, state) to plan the step.
+4. `desktop_run` - one bounded UI subtask executed by a fast model (JEV):
+   `{"goal": "Search System Settings for the query", "verification": ["The search field contains the query", "Results are listed"], "inputs": {"query": "声音"}, "max_actions": 8}`
+   - Put every literal text in `inputs`; the executor never invents text.
+   - `verification` must be observable in the UI. Split long tasks into several subtasks.
+   - Status `SUBTASK_COMPLETE` = done; `NEEDS_AGENT` = look at `final_window` (or a screenshot) and decide the next subtask; `BLOCKED` = no way forward.
+   - Before a step that deletes, sends, publishes, pays or changes an account, ask the user to confirm first; never make that the goal of a subtask without their explicit OK.
+5. Apps without accessibility (some Electron/Flatpak apps, games) show few controls; take a screenshot and tell the user what you see.
+
+## Desktop windows and screenshots (shell)
+
+- Screenshot of everything: `spectacle -b -n -f -o /tmp/shot.png` (use `-m` for the active screen). Look at the image to understand what is on screen. Needs approval (outside the sandbox).
+- `xdg-open <file-or-url>` opens a file or URL in its default app.
 - Send a notification: `notify-send "标题" "内容"`.
-
-## Operating GUI apps (AT-SPI)
-
-1. `moto-a11y enable` (accessibility is off by default for performance; apps started before enabling may need a restart).
-2. `moto-a11y apps` -> `moto-a11y find APP --name '正则' [--role 'push button']` -> path like `0/2/5`.
-3. `moto-a11y act APP PATH` presses/activates; `moto-a11y text APP PATH '文字'` sets text.
-4. Paths change after the UI changes: find again after each action.
-5. `moto-a11y disable` when done.
+- Low-level AT-SPI tool for debugging only: `moto-a11y` (apps/tree/find/act/text/windows).
 
 ## Screen recording
 

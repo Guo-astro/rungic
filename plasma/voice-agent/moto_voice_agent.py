@@ -542,6 +542,21 @@ class VoiceAgent:
             self.emit({'type': 'command', 'id': item.get('id'), 'command': item.get('command', ''),
                        'status': 'done' if completed else 'running', 'exitCode': item.get('exitCode'),
                        'output': (item.get('aggregatedOutput') or '')[-4000:]}, keep=completed)
+        elif kind == 'mcpToolCall':
+            # Desktop operations (moto-desktop MCP) shown like command cards.
+            arguments = item.get('arguments') or {}
+            label = arguments.get('goal') or arguments.get('app') or arguments.get('window_id') or ''
+            if not completed:
+                self.current_step = f"{item.get('tool')} {label}".strip()
+            output = ''
+            if item.get('error'):
+                output = str(item['error'].get('message', item['error']))
+            elif item.get('result'):
+                output = ''.join(c.get('text', '') for c in (item['result'].get('content') or []) if isinstance(c, dict))
+            failed = item.get('status') == 'failed' or bool(item.get('error'))
+            self.emit({'type': 'command', 'id': item.get('id'), 'command': f"{item.get('tool')} {label}".strip(),
+                       'status': 'done' if completed else 'running', 'exitCode': (1 if failed else 0) if completed else None,
+                       'output': output[-4000:]}, keep=completed)
         elif kind == 'fileChange' and completed:
             paths = [c.get('path', '') for c in item.get('changes', [])]
             self.emit({'type': 'files', 'id': item.get('id'), 'paths': paths, 'status': item.get('status')})

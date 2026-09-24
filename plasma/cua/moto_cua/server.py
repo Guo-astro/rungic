@@ -1,0 +1,271 @@
+"""moto-cua: desktop computer use for Codex, as an MCP server or a CLI (docs/60).
+
+The voice agent's Codex runs commands in a sandbox that cannot reach D-Bus or
+Wayland. Codex starts MCP servers outside that sandbox, so desktop operations
+(AT-SPI, KWin, the RemoteDesktop portal) and the JEV network calls live here.
+
+  moto-cua mcp                 MCP server on stdio (newline-delimited JSON-RPC)
+  moto-cua windows|observe     print JSON
+  moto-cua launch APP | activate WINDOW_ID
+  moto-cua run '<subtask json>'
+"""
+from __future__ import annotations
+
+import json
+import logging
+import os
+import subprocess
+import sys
+import threading
+import time
+from pathlib import Path
+
+from arc_cua import DesktopExecutor, RuntimeConfig, result_to_dict, subtask_from_dict
+from arc_cua.policies import TypeSafeJevPolicy
+
+from .backend import LinuxAtspiBackend
+
+logger = logging.getLogger('moto-cua')
+KEY_FILES = (Path.home() / '.config/moto-cua/typesafe-api-key',
+             Path.home() / '.config/moto-voice-agent/typesafe-api-key')
+MAX_ELEMENTS_SHOWN = 150
+
+SUBTASK_SCHEMA = {
+    'type': 'object',
+    'properties': {
+        'goal': {'type': 'string', 'description': 'What to achieve in the active window, one concrete UI step sequence.'},
+        'verification': {'type': 'array', 'items': {'type': 'string'},
+                         'description': 'Observable conditions that mean the goal is done.'},
+        'inputs': {'type': 'object', 'additionalProperties': {'type': ['string', 'number', 'boolean']},
+                   'description': 'Named literal values the executor may type or set; it never invents text.'},
+        'constraints': {'type': 'array', 'items': {'type': 'string'}},
+        'shortcuts': {'type': 'object', 'additionalProperties': {'type': 'string'},
+                      'description': 'Extra keyboard chords allowed, e.g. {"CTRL+L": "focus the address bar"}.'},
+        'max_actions': {'type': 'integer', 'minimum': 1, 'maximum': 40},
+        'timeout_s': {'type': 'number', 'minimum': 5, 'maximum': 300},
+    },
+    'required': ['goal', 'verification'],
+}
+
+TOOLS = [
+    {'name': 'desktop_windows',
+     'description': 'List the open desktop windows (phone screen WL-0, TV CAST-n) and which one is active.',
+     'inputSchema': {'type': 'object', 'properties': {}}, 'annotations': {'readOnlyHint': True}},
+    {'name': 'desktop_activate',
+     'description': 'Bring a window (id from desktop_windows) to the front and make it active.',
+     'inputSchema': {'type': 'object', 'properties': {'window_id': {'type': 'string'}}, 'required': ['window_id']},
+     'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False}},
+    {'name': 'desktop_launch',
+     'description': ('Start an application by desktop-file id or name (e.g. "org.kde.dolphin", "Firefox", "系统设置"); '
+                     'its window becomes active. Returns the matched application.'),
+     'inputSchema': {'type': 'object', 'properties': {'app': {'type': 'string'}}, 'required': ['app']},
+     'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False}},
+    {'name': 'desktop_observe',
+     'description': 'Accessibility snapshot of the active window: controls with role, name, value and state.',
+     'inputSchema': {'type': 'object', 'properties': {}}, 'annotations': {'readOnlyHint': True}},
+    {'name': 'desktop_run',
+     'description': ('Operate the ACTIVE window with the fast JEV executor until the verification holds: clicks, '
+                     'text entry, keys, scrolling. Give literal text only through `inputs`. Returns status '
+                     '(SUBTASK_COMPLETE, BLOCKED or NEEDS_AGENT), the actions taken and the final UI state. '
+                     'Activate or launch the target app first.'),
+     'inputSchema': SUBTASK_SCHEMA,
+     # UI operation on the user's behalf, inside this device. Codex would otherwise ask for approval on
+     # every call, which the voice assistant cannot answer; the agent prompt makes it confirm deletions,
+     # sending and payments with the user first.
+     'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False}},
+]
+
+
+def find_application(query: str) -> dict | None:
+    """Installed .desktop entry by id or (localized) name, with the names its window may carry."""
+    from gi.repository import Gio
+    query_folded = query.casefold().removesuffix('.desktop')
+    best = None
+    for info in Gio.AppInfo.get_all():
+        if not info.should_show():
+            continue
+        app_id = (info.get_id() or '').removesuffix('.desktop')
+        names = {app_id.casefold(), (info.get_name() or '').casefold(), (info.get_display_name() or '').casefold()}
+        classes = {app_id.split('.')[-1].casefold(), os.path.basename(info.get_executable() or '').casefold()}
+        if isinstance(info, Gio.DesktopAppInfo) and info.get_startup_wm_class():
+            classes.add(info.get_startup_wm_class().casefold())
+        entry = {'id': app_id, 'name': info.get_display_name(), 'classes': sorted(c for c in classes if c)}
+        if query_folded in names:
+            return entry
+        if best is None and any(query_folded in n for n in names if n):
+            best = entry
+    return best
+
+
+def api_key() -> str:
+    if os.environ.get('TYPESAFE_API_KEY'):
+        return os.environ['TYPESAFE_API_KEY']
+    for path in KEY_FILES:
+        if path.exists():
+            return path.read_text().strip()
+    raise RuntimeError('No JEV (TypeSafe) API key: put it in ~/.config/moto-cua/typesafe-api-key')
+
+
+IDLE_A11Y_OFF_S = 600
+
+
+class Cua:
+    def __init__(self) -> None:
+        self._backend: LinuxAtspiBackend | None = None
+        self._policy: TypeSafeJevPolicy | None = None
+        self._idle: threading.Timer | None = None
+
+    def _touch(self) -> None:
+        """Accessibility costs every registered app: switch it off after a quiet period."""
+        if self._idle:
+            self._idle.cancel()
+        self._idle = threading.Timer(IDLE_A11Y_OFF_S, self._idle_off)
+        self._idle.daemon = True
+        self._idle.start()
+
+    def _idle_off(self) -> None:
+        if self._backend is not None and self._backend.enabled_by_us:
+            self._backend.set_accessibility(False)
+
+    @property
+    def backend(self) -> LinuxAtspiBackend:
+        if self._backend is None:
+            self._backend = LinuxAtspiBackend()
+        return self._backend
+
+    def windows(self) -> dict:
+        info = self.backend.kwin.windows()
+        active = (info.get('active') or {}).get('id')
+        return {'windows': [{'id': w['id'], 'caption': w['caption'], 'app': w['resource_class'], 'screen': w['output'],
+                             'active': w['id'] == active, 'minimized': w['minimized']} for w in info['windows']]}
+
+    def activate(self, window_id: str) -> dict:
+        ok = self.backend.kwin.activate(window_id)
+        time.sleep(0.3)
+        return {'activated': ok}
+
+    def launch(self, app: str) -> dict:
+        entry = find_application(app)
+        if entry is None:
+            raise ValueError(f'No installed application matches {app!r}')
+        subprocess.Popen(['kstart', '--application', entry['id']], stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, start_new_session=True)
+        # Wait for its window to become active (up to ~8 s).
+        classes = entry.pop('classes')
+        for _ in range(16):
+            time.sleep(0.5)
+            active = self.backend.kwin.windows().get('active') or {}
+            if (active.get('resource_class') or '').casefold() in classes:
+                return {'launched': entry, 'active_window': active.get('caption')}
+        return {'launched': entry, 'active_window': None, 'note': 'window not active yet'}
+
+    def observe(self) -> dict:
+        snapshot = self.backend.observe()
+        data = snapshot.compact()
+        data.pop('revision', None)
+        if len(data['elements']) > MAX_ELEMENTS_SHOWN:
+            data['elements_truncated'] = len(data['elements']) - MAX_ELEMENTS_SHOWN
+            data['elements'] = data['elements'][:MAX_ELEMENTS_SHOWN]
+        return data
+
+    def run(self, payload: dict) -> dict:
+        payload = dict(payload)
+        timeout = float(payload.pop('timeout_s', 120))
+        payload.setdefault('max_actions', 20)
+        subtask = subtask_from_dict(payload)
+        if self._policy is None:
+            self._policy = TypeSafeJevPolicy(api_key=api_key())
+        executor = DesktopExecutor(self.backend, self._policy, config=RuntimeConfig(timeout_s=timeout))
+        started = time.perf_counter()
+        result = result_to_dict(executor.run(subtask))
+        result['elapsed_ms'] = round((time.perf_counter() - started) * 1000)
+        final = result.pop('final_snapshot')
+        elements = final.get('elements', [])
+        result['final_window'] = {'application': final.get('application'), 'window': final.get('window'),
+                                  'elements': elements[:MAX_ELEMENTS_SHOWN]}
+        for record in result['history']:
+            for key in ('before_revision', 'after_revision', 'target_bounds'):
+                record.pop(key, None)
+        return result
+
+    def call(self, name: str, arguments: dict) -> dict:
+        self.backend.set_accessibility(True)
+        self._touch()
+        if name == 'desktop_windows':
+            return self.windows()
+        if name == 'desktop_activate':
+            return self.activate(str(arguments['window_id']))
+        if name == 'desktop_launch':
+            return self.launch(str(arguments['app']))
+        if name == 'desktop_observe':
+            return self.observe()
+        if name == 'desktop_run':
+            return self.run(arguments)
+        raise ValueError(f'Unknown tool {name}')
+
+
+def serve() -> None:
+    """MCP over stdio: one JSON-RPC message per line."""
+    cua = Cua()
+    out = sys.stdout
+
+    def send(message: dict) -> None:
+        out.write(json.dumps(message, ensure_ascii=False) + '\n')
+        out.flush()
+
+    for line in sys.stdin:
+        if not line.strip():
+            continue
+        request = json.loads(line)
+        method, rid = request.get('method'), request.get('id')
+        if rid is None:
+            continue  # notifications (initialized, cancelled)
+        try:
+            if method == 'initialize':
+                version = request.get('params', {}).get('protocolVersion', '2025-06-18')
+                result = {'protocolVersion': version, 'capabilities': {'tools': {}},
+                          'serverInfo': {'name': 'moto-cua', 'version': '0.1.0'}}
+            elif method == 'tools/list':
+                result = {'tools': TOOLS}
+            elif method == 'tools/call':
+                params = request.get('params', {})
+                try:
+                    data = cua.call(params.get('name', ''), params.get('arguments') or {})
+                    result = {'content': [{'type': 'text', 'text': json.dumps(data, ensure_ascii=False)}]}
+                except Exception as error:  # reported to the model, not a protocol error
+                    logger.exception('tool %s failed', params.get('name'))
+                    result = {'content': [{'type': 'text', 'text': f'{type(error).__name__}: {error}'}],
+                              'isError': True}
+            elif method == 'ping':
+                result = {}
+            else:
+                send({'jsonrpc': '2.0', 'id': rid, 'error': {'code': -32601, 'message': f'Unknown method {method}'}})
+                continue
+            send({'jsonrpc': '2.0', 'id': rid, 'result': result})
+        except Exception as error:
+            send({'jsonrpc': '2.0', 'id': rid, 'error': {'code': -32603, 'message': str(error)}})
+
+
+def main() -> None:
+    logging.basicConfig(level=os.environ.get('MOTO_CUA_LOG', 'WARNING'), stream=sys.stderr,
+                        format='%(asctime)s %(name)s %(message)s')
+    command = sys.argv[1] if len(sys.argv) > 1 else 'mcp'
+    if command == 'mcp':
+        serve()
+        return
+    cua = Cua()
+    if command == 'windows':
+        data = cua.windows()
+    elif command == 'observe':
+        data = cua.observe()
+    elif command == 'activate':
+        data = cua.activate(sys.argv[2])
+    elif command == 'launch':
+        data = cua.launch(sys.argv[2])
+    elif command == 'run':
+        data = cua.run(json.loads(sys.argv[2]))
+    else:
+        raise SystemExit(__doc__)
+    print(json.dumps(data, ensure_ascii=False, indent=1))
+    if cua._backend is not None:
+        cua._backend.set_accessibility(False)  # only if this run switched it on
