@@ -1,6 +1,10 @@
 .fail
 load-module module-device-restore
-load-module module-stream-restore
+# Streams follow the default devices instead of a per-application memory
+# (docs/62): moving a call app to the Linux devices was remembered under the
+# app name WeChat's calls share with every Chromium-based program ("Chromium"),
+# so later calls opened on the virtual devices, silent. Volumes are still kept.
+load-module module-stream-restore restore_device=false
 load-module module-native-protocol-unix auth-cookie=/etc/plasma/audio-cookie
 load-module module-tunnel-sink-new server=unix:/mnt/android-audio/native cookie=/etc/plasma/audio-cookie sink_name=android rate=48000 channels=2 reconnect_interval_ms=2000 sink_properties=device.description=Android
 load-module module-suspend-on-idle timeout=3

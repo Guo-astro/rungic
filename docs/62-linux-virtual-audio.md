@@ -48,7 +48,7 @@
 - 用法：`moto-audio-route --binary wechat --microphone [--speaker]`。
 - 行为：运行期间，把该程序（按`application.process.binary`匹配）的录音流移到 Linux 麦克风，加`--speaker`时播放流移到 Linux 扬声器。靠`pactl subscribe`，程序之后新建的流也会跟上。收到SIGTERM/SIGINT，或调用方关闭标准输入管道时，把每条流移回原设备。
 - 输出：启动后打印`ready`，每次移动打印`routed …`或`restored …`。
-- stream-restore会按应用名记住移动。结束时移回原设备，应用在之后的默认设备与原来相同。
+- stream-restore已改为不记忆设备（`restore_device=false`，见[63篇](63-call-proxy.md)）。已经在目标设备上的流也会记录，结束时移回默认设备。`ready`总是第一行输出。
 
 ## 语音代发（2026-09-25）
 

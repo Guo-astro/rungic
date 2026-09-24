@@ -170,7 +170,8 @@ Item {
         id: callCard
         Rectangle {
             id: callBox
-            readonly property bool live: entry.status === "running"
+            readonly property bool live: entry.status === "running" || entry.status === "user"
+            readonly property bool userTalks: entry.status === "user"
             implicitWidth: entry.width * 0.9
             implicitHeight: callColumn.implicitHeight + Kirigami.Units.largeSpacing * 2
             radius: Kirigami.Units.cornerRadius * 2
@@ -185,8 +186,9 @@ Item {
                     QQC2.Label {
                         Layout.fillWidth: true
                         font.bold: true
-                        text: (callBox.live ? "助理通话中" : entry.status === "handover" ? "已交给你接听" : "通话结束")
+                        text: (callBox.userTalks ? "你在通话中" : callBox.live ? "助理通话中" : "通话结束")
                               + (entry.role ? " · " + entry.role : "")
+                              + (callBox.userTalks ? " · 语音助手已暂停" : "")
                     }
                 }
                 QQC2.Label {
@@ -220,11 +222,12 @@ Item {
                 RowLayout {
                     visible: callBox.live
                     QQC2.Button {
+                        visible: !callBox.userTalks
                         text: entry.callMonitor ? "停止旁听" : "旁听"
                         icon.name: "audio-headphones"
                         onClicked: AgentClient.callCommand(entry.callMonitor ? "monitor-off" : "monitor-on")
                     }
-                    QQC2.Button { text: "我来接"; icon.name: "call-start"; onClicked: AgentClient.callCommand("take-over") }
+                    QQC2.Button { visible: !callBox.userTalks; text: "我来接"; icon.name: "call-start"; onClicked: AgentClient.callCommand("take-over") }
                     QQC2.Button { text: "挂断"; icon.name: "call-stop"; onClicked: AgentClient.callCommand("hang-up") }
                 }
             }

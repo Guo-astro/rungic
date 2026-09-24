@@ -64,18 +64,24 @@ class Router:
         self.binary = binary
         self.targets = {}
         if microphone:
-            self.targets['source-outputs'] = ('move-source-output', 'sources', MIC)
+            self.targets['source-outputs'] = ('move-source-output', 'sources', MIC, '@DEFAULT_SOURCE@')
         if speaker:
-            self.targets['sink-inputs'] = ('move-sink-input', 'sinks', SPEAKER)
+            self.targets['sink-inputs'] = ('move-sink-input', 'sinks', SPEAKER, '@DEFAULT_SINK@')
         self.moved = {}     # (kind, index) -> original device name
         self.lock = threading.Lock()
 
     def sweep(self):
         with self.lock:
-            for kind, (command, devices, target) in self.targets.items():
+            for kind, (command, devices, target, default) in self.targets.items():
                 by_index = names(devices)
                 for index, device in streams(kind, self.binary).items():
-                    if (kind, index) in self.moved or by_index.get(device) == target:
+                    if (kind, index) in self.moved:
+                        continue
+                    if by_index.get(device) == target:
+                        # Already there (put there by someone else): it still has to
+                        # go back, to the default device, when routing ends.
+                        self.moved[(kind, index)] = default
+                        print(f'routed {kind[:-1]} {index} (already) -> {target}', flush=True)
                         continue
                     if pactl(command, index, target).returncode == 0:
                         self.moved[(kind, index)] = by_index.get(device, device)
@@ -88,7 +94,7 @@ class Router:
 
     def restore(self):
         with self.lock:
-            commands = {kind: command for kind, (command, _, _) in self.targets.items()}
+            commands = {kind: command for kind, (command, _, _, _) in self.targets.items()}
             for (kind, index), original in self.moved.items():
                 if pactl(commands[kind], index, original).returncode == 0:
                     print(f'restored {kind[:-1]} {index} -> {original}', flush=True)
@@ -112,8 +118,8 @@ def main():
     # A caller holding a pipe to stdin ends the routing by closing it (or dying).
     inputs = [watch.stdout] + ([sys.stdin] if stat.S_ISFIFO(os.fstat(0).st_mode) else [])
     try:
+        print('ready', flush=True)   # first line, before any "routed" line
         router.sweep()
-        print('ready', flush=True)
         while not stop.is_set():
             ready = select.select(inputs, [], [], 0.5)[0]
             if sys.stdin in ready and not sys.stdin.readline():

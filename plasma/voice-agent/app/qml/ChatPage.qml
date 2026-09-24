@@ -31,6 +31,7 @@ Kirigami.Page {
     property real lastTime: 0        // of the latest event (a turn the history left open ends there)
     property int callAt: -1          // the proxied call entry (docs/63)
     property bool inCall: false      // talking goes to the call agent
+    property string callPhase: ""    // "agent": the assistant talks; "user": the user talks, assistant paused
     property bool callMonitor: false
 
     function entry(fields) {
@@ -183,6 +184,10 @@ Kirigami.Page {
             break
         }
         case "call-monitor": page.callMonitor = !!e.on; break
+        case "call-phase":
+            if (page.callAt >= 0 && e.phase === "user") chat.setProperty(page.callAt, "status", "user")
+            page.callMonitor = false
+            break
         case "call-ended":
             if (page.callAt >= 0) {
                 chat.setProperty(page.callAt, "status", e.reason === "handover" ? "handover" : "done")
@@ -193,7 +198,10 @@ Kirigami.Page {
             page.callMonitor = false
             break
         case "error": case "call-error": chat.append(entry({ kind: "error", text: e.text })); break
-        case "state": page.phase = e.phase; page.agentBusy = !!e.agentBusy; page.inCall = !!e.call; break
+        case "state":
+            page.phase = e.phase; page.agentBusy = !!e.agentBusy; page.inCall = !!e.call
+            page.callPhase = e.callPhase || ""
+            break
         }
     }
 
@@ -264,14 +272,15 @@ Kirigami.Page {
                 spacing: Kirigami.Units.smallSpacing
                 QQC2.Label {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: page.inCall ? (talk.holding ? "正在听，松开后转给通话助理" : "按住对通话助理说（对方听不到）")
+                    text: page.callPhase === "user" ? "你正在通话中，挂断后语音助手自动恢复"
+                        : page.inCall ? (talk.holding ? "正在听，松开后转给通话助理" : "按住对通话助理说（对方听不到）")
                         : talk.holding ? page.phaseText.listening : (page.phaseText[page.phase] || "")
                     opacity: 0.7
                 }
                 TalkButton {
                     id: talk
                     anchors.horizontalCenter: parent.horizontalCenter
-                    enabled: page.conversationId.length > 0
+                    enabled: page.conversationId.length > 0 && page.callPhase !== "user"
                 }
             }
             // Stops the running task (and the reply being spoken); speaking works as well.

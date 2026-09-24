@@ -349,8 +349,9 @@ class VoiceAgent:
             phase = 'connecting'
         else:
             phase = 'ready'
+        call_phase = self.call.phase if self.call and self.call.phase in ('agent', 'user') else None
         return {'conversation': self.thread_id, 'phase': phase, 'agentBusy': self.agent_busy,
-                'call': bool(self.call and self.call.active)}
+                'call': call_phase == 'agent', 'callPhase': call_phase}
 
     # ---- conversations ----------------------------------------------------------
     def thread_settings(self):
@@ -463,6 +464,8 @@ class VoiceAgent:
         return False
 
     def start_talking(self, sink=None):
+        if self.call and self.call.phase == 'user':
+            return False     # the user is on the phone themselves: the assistant is paused
         self.last_activity = time.monotonic()
         self.muted = False
         self.reply_sink = sink
@@ -730,7 +733,14 @@ class VoiceAgent:
         app = params.get('app') or 'wechat'
 
         def emit(event, keep=True):
-            if event.get('type') == 'call-ended':
+            kind = event.get('type')
+            if kind == 'call-phase' and event.get('phase') == 'user':
+                # The user talks on the phone now: pause the assistant (its realtime
+                # session would otherwise keep listening and could speak into the call).
+                threading.Thread(target=self.stop_realtime, daemon=True).start()
+            elif kind == 'call-ended' and self.thread_id:
+                threading.Thread(target=self.start_realtime, daemon=True).start()   # resume
+            if kind in ('call-phase', 'call-ended'):
                 GLib.idle_add(self.set_state)
             self.emit(event, keep)
 
@@ -745,11 +755,28 @@ class VoiceAgent:
                                          hang_up=hang_up)
         self.call.start()
         GLib.idle_add(self.set_state)
-        return {'started': True, 'contact': params.get('contact', ''), 'app': app}
+        # Dial only once the call agent can listen: the other side is heard from
+        # their first word instead of after the setup (10-20 s when set up later).
+        ready = self.call.ready.wait(20)
+        dialed = None
+        if params.get('dial') and ready:
+            result = subprocess.run(['moto-cua', 'press-control', app, params['dial']], capture_output=True,
+                                    text=True, timeout=60)
+            try:
+                dialed = json.loads(result.stdout).get('pressed')
+            except ValueError:
+                dialed = None
+        return {'started': True, 'ready': ready, 'dialed': dialed, 'contact': params.get('contact', ''), 'app': app}
 
     def call_command(self, command):
         call = self.call
-        if not (call and call.active):
+        if not (call and call.phase in ('agent', 'user')):
+            return
+        if call.phase == 'user':
+            # The user is on the phone themselves: only hanging up applies.
+            if command == 'hang-up':
+                call.hang_up()
+                GLib.idle_add(self.set_state)
             return
         if command in ('monitor-on', 'monitor-off'):
             call.set_monitor(command == 'monitor-on')
@@ -927,7 +954,8 @@ def main():
     parser.add_argument('--raw', action='store_true', help='test: send the file without shortening pauses')
     parser.add_argument('--start-call', metavar='JSON',
                         help='let the assistant take part in the call just placed or received: '
-                             '{"contact": ..., "goal": ..., "app": "wechat", "incoming": false, "monitor": false}')
+                             '{"contact": ..., "goal": ..., "app": "wechat", "incoming": false, "monitor": false, '
+                             '"dial": "<control that places the call, e.g. Voice Call>"}')
     parser.add_argument('--call-command', choices=['monitor-on', 'monitor-off', 'take-over', 'hang-up'])
     args = parser.parse_args()
     if args.start_call or args.call_command:

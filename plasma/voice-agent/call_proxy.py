@@ -169,7 +169,9 @@ class CallProxy:
                  owner: str = '凯文', monitor: bool = False, incoming: bool = False, hang_up=None):
         self.emit, self.tell_owner, self.hang_up_ui = emit, tell_owner, hang_up
         self.app, self.contact, self.goal, self.owner, self.incoming = app, contact, goal, owner, incoming
-        self.active = False
+        self.active = False                    # the call agent talks (phase 'agent')
+        self.phase = 'idle'                    # idle -> agent -> (user ->) ended
+        self.ready = threading.Event()         # the realtime session is set up: safe to dial
         self.responding = False
         self.pending: list[str] = []           # messages for the voice model, waiting for its current response
         self.loopbacks: list[str] = []
@@ -188,6 +190,19 @@ class CallProxy:
 
     # ---- lifecycle ------------------------------------------------------------------------
     def start(self) -> None:
+        try:
+            self._start()
+        except Exception:
+            # Never leave the app on the Linux devices: an orphaned router kept
+            # calls silent.
+            self.active = False
+            self.phase = 'ended'
+            if self.router is not None:
+                self.router.stdin.close()
+                self.router.wait(5)
+            raise
+
+    def _start(self) -> None:
         Gst.init(None)
         self.router = subprocess.Popen(['moto-audio-route', '--binary', self.app, '--microphone', '--speaker'],
                                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
@@ -202,6 +217,7 @@ class CallProxy:
                                          on_close=lambda ws, *a: self._closed())
         threading.Thread(target=self.ws.run_forever, kwargs=proxy_settings(), daemon=True).start()
         self.active = True
+        self.phase = 'agent'
         if self.monitor_wanted:
             self.set_monitor(True)
         self.emit({'type': 'call-started', 'contact': self.contact, 'goal': self.goal, 'monitor': self.monitor_wanted})
@@ -223,6 +239,17 @@ class CallProxy:
         time.sleep(3)
         if self.active and not self.ending and not self._app_streams():
             self.stop('ended')
+
+    def _watch_user_call(self):
+        """While the user talks themselves: the call is over when the app's call
+        audio has been closed for 3 s (either side hung up)."""
+        missing = 0
+        while self.phase == 'user':
+            missing = 0 if self._app_streams() else missing + 1
+            if missing >= 3:
+                self._end('ended')
+                return
+            time.sleep(1)
 
     def _app_streams(self) -> bool:
         out = subprocess.run(['pactl', 'list', 'source-outputs'], capture_output=True, text=True,
@@ -259,10 +286,24 @@ class CallProxy:
         return Gst.FlowReturn.OK
 
     def stop(self, reason: str = 'stopped') -> None:
+        """End the proxied call for good (the call agent's part and the call)."""
         with self.lock:
             if not self.active:
+                if self.phase == 'user':
+                    self._end(reason)
                 return
             self.active = False
+        self._teardown_agent(reason)
+        self._end(reason)
+
+    def _end(self, reason: str) -> None:
+        if self.phase == 'ended':
+            return
+        self.phase = 'ended'
+        self.emit({'type': 'call-ended', 'reason': reason, 'summary': self.summary})
+
+    def _teardown_agent(self, reason: str) -> None:
+        """Stop listening and speaking and give the app its devices back."""
         self.set_monitor(False)
         if self.capture is not None:
             self.capture.set_state(Gst.State.NULL)
@@ -274,17 +315,16 @@ class CallProxy:
                 self.router.wait(5)
             except subprocess.TimeoutExpired:
                 self.router.kill()
-        if reason in ('ended', 'hung up', 'handover'):
+        if reason in ('ended', 'hung up', 'handover') and self.transcript:
             self.summary = self.summary or self._summarize()
         if self.ws is not None:
             try:
                 self.ws.close()
             except Exception:  # noqa: BLE001
                 pass
-        self.emit({'type': 'call-ended', 'reason': reason, 'summary': self.summary})
 
     def _closed(self):
-        if self.active:
+        if self.active and self.phase == 'agent':
             self.stop('connection closed')
 
     def _summarize(self) -> str:
@@ -351,8 +391,16 @@ class CallProxy:
         self.emit({'type': 'call-monitor', 'on': bool(self.loopbacks)}, keep=False)
 
     def take_over(self) -> None:
-        """The user talks themselves: the app gets the real microphone and speaker back."""
-        self.stop('handover')
+        """The user talks themselves: the app gets the real microphone and speaker
+        back and the call goes on (phase 'user') until either side hangs up."""
+        with self.lock:
+            if not self.active:
+                return
+            self.active = False
+        self._teardown_agent('handover')
+        self.phase = 'user'
+        self.emit({'type': 'call-phase', 'phase': 'user', 'summary': self.summary})
+        threading.Thread(target=self._watch_user_call, daemon=True).start()
 
     def hang_up(self) -> None:
         if self.hang_up_ui is not None:
@@ -450,7 +498,7 @@ class CallProxy:
         while (self.responding or self.player.busy()) and time.monotonic() < deadline:
             time.sleep(0.1)
         if self.ending == 'handover':
-            self.stop('handover')
+            self.take_over()
         else:
             if self.hang_up_ui is not None:
                 self.hang_up_ui()
@@ -474,6 +522,8 @@ class CallProxy:
         response = event.get('response') or {}
         if kind == 'response.output_audio.delta':
             GLib.idle_add(self.player.push, base64.b64decode(event['delta']))
+        elif kind == 'session.updated':
+            self.ready.set()
         elif kind == 'response.output_text.delta' and hasattr(self, '_summary_parts'):
             self._summary_parts.append(event.get('delta', ''))
         elif kind == 'input_audio_buffer.speech_started':

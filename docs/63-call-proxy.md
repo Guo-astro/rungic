@@ -67,7 +67,35 @@
   - 状态`call: true`；旁听建立2个回环。
   - `hang-up`后`call: false`，回环与路由进程都已清除。
 
-## 待验证
+## 首次真实通话后的修正（2026-09-25）
+
+用户实测后反馈了四个问题：
+1. 接通后十几到二十秒没有反应；
+2. 点“我来接”后双方都听不到；
+3. “我来接”之后卡片里没有了挂断按钮，状态结束不了，语音助手也可能用不了；
+4. 分不清是自己在打电话，还是在和语音助手说话。
+
+- **听不到的原因**：
+  - 代理把微信通话流移到 Linux 设备时，PulseAudio的`module-stream-restore`按应用名记住了这次移动；微信通话流的应用名是通用的“Chromium”和“Chromium input”。
+  - 微信重建通话流时，新流被直接放到 Linux 设备上。路由工具认为它“已经在目标设备上”，没有记录，挂断或接管时也就不会还原。
+  - 当时查证：新建的“Chromium”播放流直接落在`linux_speaker`上，也就是说，此后普通的微信通话也会没有声音。
+- **修复**：
+  - `plasma/pulse.pa`改为`module-stream-restore restore_device=false`，并在运行中重新加载该模块。现在各应用跟随默认设备，只保留音量记忆；复查确认“Chromium”落在`android`、“Chromium input”落在`android_microphone`。
+  - `moto-audio-route`：已经在目标设备上的流也记录下来，结束时还原到默认设备（`@DEFAULT_SINK@`、`@DEFAULT_SOURCE@`）；`ready`改为第一行输出。原先这类流会在`ready`之前输出一行，调用方于是判定路由没有启动。
+  - 旧代码在这种情况下留下了孤儿路由进程；现在通话代理启动失败时会撤掉路由。
+- **先准备，再拨号**：`StartCall`等Realtime会话`session.updated`之后才返回，并可带`"dial": "Voice Call"`，由代理自己用`moto-cua press-control`拨号。技能说明改为不再手动点拨号。
+- **三个状态**：
+  - `agent`：助理通话中。
+  - `user`：你在通话中。点“我来接”后路由撤掉，语音助手的实时会话暂停，按住说话不可用，并提示“你正在通话中，挂断后语音助手自动恢复”；卡片只保留“挂断”；每秒检查一次微信通话音频，连续3秒不存在即判定通话结束。
+  - `ended`：通话结束，语音助手自动重新连上。
+  - `State`增加`callPhase`字段。
+- **自动测试**（`fakecall`，即改名后的`pacat`，作为独立的通话应用）：
+  - 预先把一条录音流放在 Linux 麦克风上，再启动代理：播放和录音都在 Linux 设备上，`callPhase: agent`。
+  - 执行`take-over`后，两路都回到`android`和`android_microphone`，`callPhase: user`。
+  - 关闭流后`callPhase`为空，也没有残留的路由进程。
+  - 打开一个对话后重复上述流程：语音助手的状态依次为`ready`（助理通话中）→`connecting`（你在通话中，已暂停）→`ready`（结束后自动恢复）。
+
+## 待验证## 待验证
 
 - 与真人进行微信通话：接通前的铃声是否会被当成说话（提示词要求对方先开口后助手才说话）；微信通话窗口挂断按钮的名称；来电接管；端到端延迟。
 - 已知的语音问题：mini模型偶尔有生硬措辞或多一句过渡语。如果真实通话中明显，可以试完整版`gpt-realtime-2.1`（`MOTO_CALL_MODEL`）。

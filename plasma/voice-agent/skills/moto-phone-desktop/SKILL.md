@@ -86,11 +86,12 @@ When the user asks you to send a voice message (发语音, 用语音告诉…):
 
 When the user asks you to call someone for a purpose ("帮我给张三打个微信电话，问他…"), or, during a call they are in, says "你来接" / "你来跟他说":
 
-1. Placing a call: open the chat by the SOUND of the name (WeChat section above), check the chat header, then click `Voice Call` in the chat header (`desktop_run`, goal "Click the Voice Call button").
-2. Right after the call starts (or at once when taking over a call that is already going):
-   `moto-voice-agent --start-call '{"contact": "<the contact's real name>", "goal": "<what to find out or tell, in the user's words, and what must be confirmed with them first>", "incoming": <true if the other side called>}'`
+1. Placing a call: open the chat by the SOUND of the name (WeChat section above) and check the chat header. Do NOT click `Voice Call` yourself.
+2. `moto-voice-agent --start-call '{"contact": "<the contact's real name>", "goal": "<what to find out or tell, in the user's words, and what must be confirmed with them first>", "dial": "Voice Call"}'`
+   It first sets up the call assistant (audio routing, voice session), then presses `Voice Call` itself, so the other side is heard from their first word (set up after dialing, the first 10-20 s went unanswered). The reply shows `"dialed": "Voice Call"`; if `dialed` is null, the button was not found: report it.
+   Taking over a call that is already going: the same without `dial`, with `"incoming": true` if the other side called.
    The call assistant then talks: it introduces itself as the user's AI assistant, sends questions it may not decide to the user, relays their answers, hangs up at the end and reports a summary in this chat. The app's microphone and speaker are switched to the Linux devices only for the call.
-3. Tell the user in one sentence that the assistant is on the call; while it is, what they say goes to the call assistant (the other side does not hear it), and the chat has 旁听 / 我来接 / 挂断 buttons. `moto-voice-agent --call-command take-over|hang-up|monitor-on|monitor-off` does the same.
+3. Tell the user in one sentence that the assistant is on the call; while it is, what they say goes to the call assistant (the other side does not hear it), and the chat has 旁听 / 我来接 / 挂断 buttons. After 我来接 the user talks on the phone themselves and this assistant is paused until the call ends. `moto-voice-agent --call-command take-over|hang-up|monitor-on|monitor-off` does the same.
 4. Never call anyone the user did not ask you to call.
 
 ## Desktop windows and screenshots (shell)
