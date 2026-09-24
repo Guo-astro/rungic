@@ -227,6 +227,41 @@ KWin(moto12) 嵌套后端：Pointer::motion → 输出CAST-n上的绝对位置�
 4. 键盘模式下用`input text`和`text-commit`分别验证按键与中文提交。
 5. 每一步后`pgrep kwin_wayland`，确认进程ID不变。
 
+## 第4步：自动接管、断开重连、宿主重启、声音与功耗（2026-09-24）
+
+- **自动接管**：
+  - `cast-desktop`默认开启，选择记在宿主偏好里。电视一连上（Presentation类显示出现）就显示Linux桌面，无需调用平台桥。
+  - 宿主启动或重启时，若电视已经连着，会在合成器就绪后立即接管（`MainActivity`在`resumeRendering`后调用`CastDesktop.refresh`）。
+- **焦点**：
+  - 连接时Android会在电视上启动副屏主屏（`com.motorola.launcher3/...SecondaryDisplayLauncher`，`startHomeActivity: displayAdded`），并把输入焦点移到电视，导致宿主失去焦点，平台桥拒绝请求（“请先返回 Plasma Mobile”）。
+  - 现在宿主在投屏中失去顶层焦点、而自身仍可见时，会在手机显示上把自己重新排到前台，30秒内最多3次，避免与其他程序反复争抢。回到手机桌面等宿主不可见的情况不处理。
+- **docked模式随插拔正确切换**：
+  - 上游`KScreenOSDProvider`把“插入前的模式”从`convergenceModeEnabled`本身读回。宿主重启会让plasmashell在docked状态下重启，于是拔出后仍停在docked。
+  - 现在“是否由本开关进入docked”和“进入前的模式”存在独立的`KScreenOSDAutoDock`设置里（QtCore `Settings`）。输出数为0（KScreen配置未到）时不动作。
+  - 重新构建`mobileshellplugin`，并以dpkg-divert覆盖。
+- **实测**：
+  - 投屏中重装APK（宿主重启），约2秒内电视恢复为CAST-1、1.5倍、docked。
+  - `moto-cast disconnect`后电视输出移除、控制条消失、docked关闭。
+  - 重连后电视恢复Linux桌面、docked打开，焦点回到手机（`mTopFocusedDisplayId=0`）。
+  - 电视断开后需要更久才重新可连：40秒超时一次，60秒成功。
+- **声音**：
+  - Linux经PulseAudio隧道进入Termux的pulseaudio（uid 10348），其AudioTrack由AudioFlinger放在`AUDIO_DEVICE_OUT_PROXY`（“WFD proxy device”）输出线程上，随WFD送到电视，无需改动。
+  - 投屏期间媒体音量按proxy设备单独记忆（本机为5级），手机音量键调节的就是它。
+  - 本机无法当场听到，以路由证据为准。
+- **功耗**：
+  - 投屏中手机屏幕保持常亮，因为手机熄屏会使宿主暂停渲染、电视画面冻结。触控板/键盘模式下窗口亮度降到0.08，回到手机模式后恢复。
+  - `FLAG_KEEP_SCREEN_ON`原先还被Linux侧`keep-awake`操作（视频播放等）单独开关，12秒后被清除，会顶掉投屏常亮。现改为由`MainActivity.setKeepAwake`合并两个来源。
+- **功耗实测**：
+  - 手机接电源、充电暂停，以USB输入功率计整机。
+  - 投屏+手机模式静止：约1.48W。主要占用为`wifidisplayhalservice`约22%，宿主、plasmashell、kwin各约3–4%。
+  - 触控板模式：约2.16W，但期间有Firefox页面在后台占用约24%，不能单独归因。
+  - 温度：CPU 36–46°C，`quiet-therm`约36–39°C。
+  - 未锁频、未改温控。
+- **仍待处理**：
+  - 按电源键熄屏后电视冻结：帧时钟由手机的Choreographer驱动，需改为在手机不可见时由投屏窗口驱动。
+  - 触控板功耗需排除后台负载后重测。
+  - 端到端延迟未测。
+
 ## 初版方案：Android Presentation承载外屏输出（无root假设）
 
 ```

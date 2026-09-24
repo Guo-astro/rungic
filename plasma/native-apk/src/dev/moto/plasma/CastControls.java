@@ -1,5 +1,6 @@
 package dev.moto.plasma;
 
+import android.app.Activity;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -13,6 +14,7 @@ import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
+import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -27,6 +29,8 @@ import org.json.JSONObject;
  * (touchpad plus the Android keyboard, whose keys reach the focused Linux window).
  * Touchpad gestures: one finger moves, tap clicks, tap then touch again drags,
  * two fingers scroll, two-finger tap right-clicks, three-finger tap middle-clicks.
+ * While casting the phone screen stays on (screen off stops the desktop's
+ * rendering, freezing the TV) and is dimmed in touchpad and keyboard modes.
  */
 final class CastControls {
     enum Mode { PHONE, TOUCHPAD, KEYBOARD }
@@ -34,7 +38,10 @@ final class CastControls {
     private static final int BTN_LEFT = 0x110, BTN_RIGHT = 0x111, BTN_MIDDLE = 0x112;
     private static final String[] LABELS = {"手机", "触控板", "键盘"};
 
-    private final Context context;
+    /** Phone screen brightness while it serves as touchpad or keyboard. */
+    private static final float PAD_BRIGHTNESS = 0.08f;
+
+    private final Activity context;
     private final FrameLayout frame;
     private final Consumer<Boolean> keyboard;
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -43,7 +50,7 @@ final class CastControls {
     private boolean available, imeShown;
     private Mode mode = Mode.PHONE;
 
-    CastControls(Context context, FrameLayout frame, Consumer<Boolean> keyboard) {
+    CastControls(Activity context, FrameLayout frame, Consumer<Boolean> keyboard) {
         this.context = context;
         this.frame = frame;
         this.keyboard = keyboard;
@@ -56,6 +63,7 @@ final class CastControls {
         if (available == value) return;
         available = value;
         if (!value) setMode(Mode.PHONE);
+        ((MainActivity) context).setKeepAwake(MainActivity.AWAKE_CAST, value);
         if (value) {
             FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(-2, -2, Gravity.END | Gravity.TOP);
             lp.topMargin = frame.getHeight() / 3;
@@ -68,6 +76,8 @@ final class CastControls {
     }
 
     Mode mode() { return mode; }
+
+    boolean available() { return available; }
 
     void setMode(Mode next) {
         if (!available) next = Mode.PHONE;
@@ -83,7 +93,12 @@ final class CastControls {
             touchpad.reset();
             frame.removeView(touchpad);
         }
-        if (pad != (previous != Mode.PHONE)) NativeBridge.castPointer(0, pad ? 1 : 0, 0);
+        if (pad != (previous != Mode.PHONE)) {
+            NativeBridge.castPointer(0, pad ? 1 : 0, 0);
+            WindowManager.LayoutParams attrs = context.getWindow().getAttributes();
+            attrs.screenBrightness = pad ? PAD_BRIGHTNESS : WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
+            context.getWindow().setAttributes(attrs);
+        }
         if ((next == Mode.KEYBOARD) != (previous == Mode.KEYBOARD)) keyboard.accept(next == Mode.KEYBOARD);
         bar.refresh();
         touchpad.invalidate();
@@ -101,7 +116,9 @@ final class CastControls {
     }
 
     JSONObject status() throws Exception {
-        return new JSONObject().put("available", available).put("mode", mode.name().toLowerCase());
+        return new JSONObject().put("available", available).put("mode", mode.name().toLowerCase())
+            .put("keepScreenOn", (context.getWindow().getAttributes().flags & WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) != 0)
+            .put("brightness", context.getWindow().getAttributes().screenBrightness);
     }
 
     private int dp(float value) {

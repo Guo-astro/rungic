@@ -20,7 +20,9 @@ import org.json.JSONObject;
  * Linux desktop on a cast display (docs/58 step 2). A non-focusable overlay on
  * the Presentation-class display (Wi-Fi Display) holds a SurfaceView; its window
  * is handed to the compositor, which offers KWin a second output for it.
- * Controlled through the platform bridge op "cast-desktop".
+ * On by default (docs/58 step 4): a cast display that appears, or is already
+ * there when the desktop starts, gets the desktop; the platform bridge op
+ * "cast-desktop" turns it off or on and the choice is remembered.
  */
 final class CastDesktop implements DisplayManager.DisplayListener, SurfaceHolder.Callback {
     private final Activity activity;
@@ -37,6 +39,7 @@ final class CastDesktop implements DisplayManager.DisplayListener, SurfaceHolder
         this.activity = activity;
         this.ready = ready;
         this.bound = bound;
+        enabled = activity.getPreferences(Context.MODE_PRIVATE).getBoolean("cast_desktop", true);
         displays = activity.getSystemService(DisplayManager.class);
         displays.registerDisplayListener(this, new Handler(Looper.getMainLooper()));
     }
@@ -46,6 +49,7 @@ final class CastDesktop implements DisplayManager.DisplayListener, SurfaceHolder
     JSONObject request(JSONObject request) throws Exception {
         if (request.has("enabled")) {
             enabled = request.getBoolean("enabled");
+            activity.getPreferences(Context.MODE_PRIVATE).edit().putBoolean("cast_desktop", enabled).apply();
             update();
         }
         JSONObject out = new JSONObject().put("enabled", enabled).put("displayId", displayId)
@@ -58,6 +62,9 @@ final class CastDesktop implements DisplayManager.DisplayListener, SurfaceHolder
         update();
         displays.unregisterDisplayListener(this);
     }
+
+    /** The desktop became ready (compositor up): take a cast display that is already there. */
+    void refresh() { update(); }
 
     private Display target() {
         for (Display d : displays.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION)) {

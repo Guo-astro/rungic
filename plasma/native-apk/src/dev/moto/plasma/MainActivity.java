@@ -70,7 +70,11 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         setContentView(frame);
         castTest = new CastTest(this, frame);
         castControls = new CastControls(this, frame, this::setAndroidKeyboard);
-        castDesktop = new CastDesktop(this, () -> initialized, castControls::setAvailable);
+        castDesktop = new CastDesktop(this, () -> initialized, bound -> {
+            castControls.setAvailable(bound);
+            // The secondary home may have taken the focus before the TV got the desktop.
+            if (bound) display.postDelayed(this::reclaimFocus, 400);
+        });
         registerEdgeBack();
         display.setOnApplyWindowInsetsListener((v, insets) -> {
             captureDisplayInsets(insets);
@@ -97,12 +101,50 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         super.onDestroy();
     }
 
+    // FLAG_KEEP_SCREEN_ON has two owners: the Linux session (keep-awake op, e.g.
+    // video playback) and a running cast; the flag is the union of both.
+    static final int AWAKE_LINUX = 1, AWAKE_CAST = 2;
+    private int keepAwake;
+
+    void setKeepAwake(int source, boolean on) {
+        keepAwake = on ? keepAwake | source : keepAwake & ~source;
+        if (keepAwake != 0) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+    }
+
+    private boolean started, topResumed;
+    private long focusReclaimWindowStart;
+    private int focusReclaims;
+
+    // When a cast display connects, Android starts the vendor's secondary-display
+    // home there and moves input focus to that display; the desktop host (still
+    // visible on the phone) then loses focus, the platform bridge refuses requests
+    // and phone input may go astray. Take the focus back on the phone (docs/58 step 4),
+    // a few times at most so two parties never fight over it.
+    @Override public void onTopResumedActivityChanged(boolean top) {
+        super.onTopResumedActivityChanged(top);
+        topResumed = top;
+        if (!top && castControls != null && castControls.available()) display.postDelayed(this::reclaimFocus, 400);
+    }
+
+    private void reclaimFocus() {
+        if (!started || topResumed || !castControls.available()) return;
+        long now = android.os.SystemClock.uptimeMillis();
+        if (now - focusReclaimWindowStart > 30000) { focusReclaimWindowStart = now; focusReclaims = 0; }
+        if (++focusReclaims > 3) return;
+        Log.i("MotoCast", "taking input focus back from the cast display");
+        startActivity(new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
+            android.app.ActivityOptions.makeBasic().setLaunchDisplayId(android.view.Display.DEFAULT_DISPLAY).toBundle());
+    }
+
     @Override public void onStart() {
         super.onStart();
+        started = true;
         if(capture!=null)capture.setVisible(true);
         if(pacer!=null && display.getHolder().getSurface().isValid())pacer.start();
     }
     @Override public void onStop() {
+        started = false;
         if(pacer!=null)pacer.stop();
         if(capture!=null)capture.setVisible(false);
         super.onStop();
@@ -224,6 +266,8 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
                     NativeBridge.setRefreshRate(display.getDisplay().getRefreshRate());
                 } else NativeBridge.rebindSurface(holder.getSurface());
                 NativeBridge.resumeRendering();
+                // A TV that was connected before the desktop (re)started gets it now.
+                runOnUiThread(castDesktop::refresh);
                 android.system.Os.chmod(new File(getFilesDir(), "tmp").getAbsolutePath(), 0755);
                 if (!NativeBridge.startGpuAllocator(new File(getFilesDir(), "tmp/moto-gpu-alloc").getAbsolutePath())) throw new IOException("GPU 缓冲服务启动失败");
                 updateSize();

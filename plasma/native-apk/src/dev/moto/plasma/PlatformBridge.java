@@ -28,7 +28,7 @@ final class PlatformBridge implements Closeable {
     private volatile boolean running;
     private final Handler awakeHandler = new Handler(Looper.getMainLooper());
     private final Runnable expireAwake = this::clearAwake;
-    private void clearAwake() { activity.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); }
+    private void clearAwake() { ((MainActivity)activity).setKeepAwake(MainActivity.AWAKE_LINUX,false); }
     private final AndroidNetworkBridge network;
     private final CaptureBridge capture;
     PlatformBridge(Activity activity,CaptureBridge capture) { this.activity=activity;this.capture=capture;path=new File(activity.getFilesDir(),"tmp/platform.sock");network=new AndroidNetworkBridge(activity); }
@@ -97,7 +97,7 @@ final class PlatformBridge implements Closeable {
             awakeHandler.removeCallbacks(expireAwake);
             boolean enabled=request.getBoolean("enabled");
             if(enabled) {
-                activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                ((MainActivity)activity).setKeepAwake(MainActivity.AWAKE_LINUX,true);
                 // A failed Linux bridge must not leave a permanently bright screen.
                 awakeHandler.postDelayed(expireAwake,12000);
             } else expireAwake.run();
