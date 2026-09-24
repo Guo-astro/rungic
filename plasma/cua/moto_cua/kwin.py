@@ -27,8 +27,12 @@ function info(w) {
     client: [c.x, c.y, c.width, c.height], frame: [f.x, f.y, f.width, f.height], id: String(w.internalId)};
 }
 const wins = workspace.windowList();
-const out = {active: info(workspace.activeWindow), windows: [], screens: []};
-for (let i = 0; i < workspace.screens.length; i++) out.screens.push(String(workspace.screens[i].name));
+const out = {active: info(workspace.activeWindow), windows: [], screens: [], outputs: []};
+for (let i = 0; i < workspace.screens.length; i++) {
+  const s = workspace.screens[i], g = s.geometry;
+  out.screens.push(String(s.name));
+  out.outputs.push({name: String(s.name), geometry: [g.x, g.y, g.width, g.height], scale: s.devicePixelRatio});
+}
 for (let i = 0; i < wins.length; i++) if (wins[i].normalWindow) out.windows.push(info(wins[i]));
 callDBus("SERVICE", "/dev/moto/Cua", "dev.moto.Cua", "Report", JSON.stringify(out));
 '''
@@ -143,7 +147,8 @@ class KWin:
         return len(self.reports) >= count
 
     def windows(self) -> dict:
-        """{'active': window or None, 'windows': [normal windows]}; geometry is global logical."""
+        """{'active': window or None, 'windows': [normal windows], 'screens': [names],
+        'outputs': [{name, geometry, scale}]}; geometry is global logical."""
         return self._script(WINDOW_JS)
 
     def cursor(self) -> tuple[float, float]:

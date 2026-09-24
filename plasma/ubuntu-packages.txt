@@ -74,3 +74,8 @@ libnotify-bin
 python3-websocket
 python3-pypinyin
 python3-opencc
+python3-pil
+python3-venv
+python3-onnxruntime
+gcc
+libglib2.0-dev

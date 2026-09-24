@@ -8,6 +8,7 @@ Wayland. Codex starts MCP servers outside that sandbox, so desktop operations
   moto-cua windows|observe     print JSON
   moto-cua launch APP | activate WINDOW_ID | window WINDOW_ID ACTION
   moto-cua run '<subtask json>'
+  moto-cua goal '{"goal": ..., "app": ...}'   whole task, JEV per step (moto-clicker)
 """
 from __future__ import annotations
 
@@ -87,6 +88,24 @@ TOOLS = [
      # UI operation on the user's behalf, inside this device. Codex would otherwise ask for approval on
      # every call, which the voice assistant cannot answer; the agent prompt makes it confirm deletions,
      # sending and payments with the user first.
+     'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False}},
+    {'name': 'desktop_goal',
+     'description': ('Do a whole task on the desktop: every step (what to click, type, scroll, when it is done) is '
+                     'chosen by JEV from the screen (OCR + accessibility), text is written only when needed. Give '
+                     'the goal as the user would say it, with every literal value (names, message text) in it. '
+                     'With `app`, that application is opened or brought forward first. Returns outcome, achieved, '
+                     'answer (what the screen shows about the goal) and the steps taken. Outcome "question": the '
+                     'task needs information only the user has; ask the user `question` and call again with the '
+                     'same goal and the reply in `replies`. Sending, paying or deleting still needs the user\'s OK '
+                     'before you call this.'),
+     'inputSchema': {'type': 'object', 'properties': {
+         'goal': {'type': 'string'},
+         'app': {'type': 'string', 'description': 'Application to open or activate first (as for desktop_launch).'},
+         'replies': {'type': 'array', 'items': {'type': 'object', 'properties': {
+             'question': {'type': 'string'}, 'answer': {'type': 'string'}}, 'required': ['question', 'answer']},
+             'description': "The user's answers to questions earlier runs of this goal asked."},
+         'steps': {'type': 'integer', 'minimum': 1, 'maximum': 60, 'description': 'Most actions to take (default 25).'}},
+         'required': ['goal']},
      'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False}},
     {'name': 'desktop_find_name',
      'description': ('Find a person, chat or item in the ACTIVE window (and its open popups, e.g. search results) '
@@ -173,6 +192,7 @@ def api_key() -> str:
 
 
 IDLE_A11Y_OFF_S = 600
+GOAL_TIMEOUT_S = 290  # inside Codex's tool timeout (320 s, install.sh)
 
 
 class Cua:
@@ -281,6 +301,23 @@ class Cua:
             for key in ('before_revision', 'after_revision', 'target_bounds'):
                 record.pop(key, None)
         return result
+
+    def goal(self, args: dict) -> dict:
+        """A whole task through moto-clicker (typesafe-computer-use, JEV per step; docs/64)."""
+        if args.get('app'):
+            self.launch(str(args['app']))
+            time.sleep(0.8)
+        command = ['moto-clicker', 'run', str(args['goal']), '--steps', str(int(args.get('steps') or 25))]
+        for reply in args.get('replies') or []:
+            command += ['--reply', f"{reply['question']}={reply['answer']}"]
+        try:
+            done = subprocess.run(command, capture_output=True, text=True, timeout=GOAL_TIMEOUT_S)
+        except subprocess.TimeoutExpired:
+            subprocess.run(['moto-clicker', 'stop'], capture_output=True, timeout=30)
+            return {'outcome': 'timeout', 'note': f'Stopped after {GOAL_TIMEOUT_S} s; check the screen.'}
+        if done.returncode != 0:
+            raise RuntimeError(f'moto-clicker failed: {done.stderr.strip()[-800:]}')
+        return json.loads(done.stdout)
 
     def press_control(self, binary: str, names: list[str]) -> dict:
         """Click the first control named one of `names` in any window of the app
@@ -448,6 +485,8 @@ class Cua:
             return self.run(arguments)
         if name == 'desktop_voice_message':
             return self.voice_message(arguments)
+        if name == 'desktop_goal':
+            return self.goal(arguments)
         if name == 'desktop_find_name':
             return self.find_name(str(arguments['name']))
         raise ValueError(f'Unknown tool {name}')
@@ -538,6 +577,8 @@ def main() -> None:
         data = cua.find_name(sys.argv[2])
     elif command == 'press-control':
         data = cua.press_control(sys.argv[2], sys.argv[3:])
+    elif command == 'goal':
+        data = cua.goal(json.loads(sys.argv[2]))
     elif command == 'focus-showing':
         data = cua.focus_showing(sys.argv[2], sys.argv[3])
     else:
