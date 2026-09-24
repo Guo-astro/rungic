@@ -19,9 +19,11 @@ Realtime runs over WebSocket so all traffic goes through the proxy that the
 ChatGPT sign-in.
 """
 import argparse
+import array
 import base64
 import itertools
 import json
+import math
 import os
 from pathlib import Path
 import queue
@@ -39,6 +41,12 @@ CHUNK_MS = 100
 MIC = 'android_microphone'
 PHONE_SINK = 'android_phone'     # always the phone itself (shared/media/media-bridge.py)
 END_SILENCE_MS = 900         # after release, so the server VAD sees the end of speech
+# Codex fixes the realtime session's turn detection to server VAD with 500 ms of
+# silence (codex-api realtime_websocket/methods_v2.rs). A pause while the button is
+# still held would end the user's turn and the model would answer half a sentence.
+# While held, pauses are shortened so the server never sees 500 ms of silence.
+PAUSE_KEEP_MS = 200          # the start of a pause is sent as is
+PAUSE_PREROLL_MS = 140       # and the end of a longer one, before speech resumes
 IDLE_STOP_S = 600            # stop an unused realtime session (cost)
 # The agent (Codex): the fast model; tasks here are short device operations.
 AGENT_MODEL = 'gpt-6-sol'
@@ -199,6 +207,69 @@ class Store:
         return sorted(items, key=lambda e: e.get('updated', 0), reverse=True)
 
 
+class PauseGate:
+    """Shortens pauses in push-to-talk audio (see PAUSE_KEEP_MS).
+
+    A 20 ms frame counts as a pause when it is quieter than the press's noise
+    floor (a low percentile of the levels so far) by less than 10 dB, and at
+    least 12 dB below its loudest speech. Only the middle of a pause is dropped:
+    its first PAUSE_KEEP_MS and its last PAUSE_PREROLL_MS (soft onsets) are sent.
+    """
+    FRAME = RATE * 2 * 20 // 1000
+
+    def __init__(self):
+        self.levels = []
+        self.peak = -120.0
+        self.quiet_ms = 0
+        self.held = []           # dropped frames kept for the preroll
+        self.dropped_ms = 0
+        self.rest = b''
+
+    @staticmethod
+    def level(frame):
+        samples = array.array('h', frame)
+        rms = math.sqrt(sum(x * x for x in samples) / max(1, len(samples)))
+        return 20 * math.log10(max(rms, 1.0) / 32768)
+
+    def quiet(self, db):
+        self.levels.append(db)
+        if len(self.levels) > 500:           # the last 10 s
+            del self.levels[0]
+        self.peak = max(self.peak, db)
+        ordered = sorted(self.levels)
+        floor = ordered[len(ordered) // 5]
+        return db < min(max(floor + 10, -55.0), self.peak - 12)
+
+    def feed(self, data):
+        """Audio to send for this input (possibly less, possibly held frames first)."""
+        data = self.rest + data
+        cut = len(data) - len(data) % self.FRAME
+        self.rest = data[cut:]
+        out = []
+        for i in range(0, cut, self.FRAME):
+            frame = data[i:i + self.FRAME]
+            if not self.quiet(self.level(frame)):
+                out.extend(self.held)
+                self.held = []
+                self.quiet_ms = 0
+                out.append(frame)
+                continue
+            self.quiet_ms += 20
+            if self.quiet_ms <= PAUSE_KEEP_MS:
+                out.append(frame)
+            else:
+                self.held.append(frame)
+                if len(self.held) > PAUSE_PREROLL_MS // 20:
+                    self.held.pop(0)
+                    self.dropped_ms += 20
+        return b''.join(out)
+
+    def finish(self):
+        """At release: the rest of the input; the pause that follows ends the turn."""
+        rest, self.rest, self.held = self.rest, b'', []
+        return rest
+
+
 class VoiceAgent:
     def __init__(self, emit):
         Gst.init(None)
@@ -227,6 +298,10 @@ class VoiceAgent:
         self.player = None
         self.recorder = None
         self.mic_buffer = b''
+        self.gate = PauseGate()
+        # Id of the current push-to-talk press: the UI shows all transcript pieces
+        # of one press as one message, however the server split them.
+        self.press = 0
         # Audio must reach the server in order: one sender thread, fixed chunks.
         self.uploads = queue.Queue()
         threading.Thread(target=self.upload_loop, daemon=True).start()
@@ -390,6 +465,8 @@ class VoiceAgent:
                 f'! appsink name=sink emit-signals=true sync=false blocksize={RATE * 2 * CHUNK_MS // 1000}')
             self.recorder.get_by_name('sink').connect('new-sample', self.on_microphone)
         self.mic_buffer = b''
+        self.gate = PauseGate()
+        self.press = int(time.time() * 1000)
         self.recorder.set_state(Gst.State.PLAYING)
         self.mic_chunks = 0
         log('talk: start, reply on', self.reply_sink or 'default sink')
@@ -403,10 +480,11 @@ class VoiceAgent:
         self.last_activity = time.monotonic()
         if self.recorder is not None:
             self.recorder.set_state(Gst.State.NULL)   # the microphone is open only while pressed
-        log(f'talk: stop after {self.mic_chunks * CHUNK_MS} ms of audio')
-        if self.mic_buffer:
-            self.uploads.put(self.mic_buffer)
-            self.mic_buffer = b''
+        log(f'talk: stop after {self.mic_chunks * CHUNK_MS} ms of audio, {self.gate.dropped_ms} ms of pauses left out')
+        rest = self.gate.feed(self.mic_buffer) + self.gate.finish()
+        self.mic_buffer = b''
+        if rest:
+            self.uploads.put(rest)
         self.uploads.put(bytes(RATE * 2 * END_SILENCE_MS // 1000))
         self.set_state()
         return False
@@ -422,7 +500,9 @@ class VoiceAgent:
             buf.unmap(info)
             chunk = RATE * 2 * CHUNK_MS // 1000
             while len(self.mic_buffer) >= chunk:
-                self.uploads.put(self.mic_buffer[:chunk])
+                send = self.gate.feed(self.mic_buffer[:chunk])
+                if send:
+                    self.uploads.put(send)
                 self.mic_buffer = self.mic_buffer[chunk:]
                 self.mic_chunks += 1
         return Gst.FlowReturn.OK
@@ -527,16 +607,21 @@ class VoiceAgent:
         elif method == 'thread/realtime/error':
             self.emit({'type': 'error', 'text': params.get('message', '')})
         elif method == 'thread/realtime/transcript/delta':
-            self.emit({'type': 'delta', 'role': params.get('role'), 'text': params.get('delta', '')}, keep=False)
+            event = {'type': 'delta', 'role': params.get('role'), 'text': params.get('delta', '')}
+            if params.get('role') == 'user':
+                event['press'] = self.press
+            self.emit(event, keep=False)
         elif method == 'thread/realtime/transcript/done':
             if params.get('role') != 'user':
                 self.muted = False      # the reply cut by the stop button has ended
             text = params.get('text', '').strip()
             if text:
                 role = 'user' if params.get('role') == 'user' else 'assistant'
+                event = {'type': 'message', 'role': role, 'text': text}
                 if role == 'user':
                     self.store.touch(self.thread_id, text)
-                self.emit({'type': 'message', 'role': role, 'text': text})
+                    event['press'] = self.press
+                self.emit(event)
         elif method == 'turn/started':
             self.turn_id = (params.get('turn') or {}).get('id')
             self.agent_busy = True
@@ -585,7 +670,8 @@ class VoiceAgent:
             if item.get('phase') != 'final_answer':
                 self.progress_text = item['text']
                 self.progress_at = time.monotonic()
-            self.emit({'type': 'agent-message', 'id': item.get('id'), 'text': item['text']})
+            self.emit({'type': 'agent-message', 'id': item.get('id'), 'text': item['text'],
+                       'final': item.get('phase') == 'final_answer'})
 
     def on_request(self, request_id, method, params):
         if method in ('item/commandExecution/requestApproval', 'item/fileChange/requestApproval'):
@@ -710,7 +796,7 @@ def reply_sink(screen):
     return None
 
 
-def test_turn(audio_file, seconds, screen, stop_after=None):
+def test_turn(audio_file, seconds, screen, stop_after=None, raw=False):
     """Open a new conversation and speak a recording, printing events."""
     agent = VoiceAgent(lambda e: log(json.dumps(e, ensure_ascii=False)[:300]))
     agent.reply_sink = reply_sink(screen)
@@ -719,12 +805,17 @@ def test_turn(audio_file, seconds, screen, stop_after=None):
     agent.realtime_ready.wait(20)
     data = Path(audio_file).read_bytes()
     agent.talking = True
+    agent.press = int(time.time() * 1000)
     chunk = RATE * 2 * CHUNK_MS // 1000
+    gate = PauseGate()
     for offset in range(0, len(data), chunk):
-        agent.append_audio(data[offset:offset + chunk])
+        send = gate.feed(data[offset:offset + chunk]) if not raw else data[offset:offset + chunk]
+        if send:
+            agent.append_audio(send)
         time.sleep(CHUNK_MS / 1000)
     agent.talking = False
-    agent.append_audio(bytes(RATE * 2 * END_SILENCE_MS // 1000))
+    log(f'test: {gate.dropped_ms} ms of pauses left out')
+    agent.append_audio(gate.finish() + bytes(RATE * 2 * END_SILENCE_MS // 1000))
     loop = GLib.MainLoop()
     GLib.timeout_add(int(seconds * 1000), loop.quit)
     if stop_after:
@@ -742,9 +833,10 @@ def main():
     parser.add_argument('--seconds', type=float, default=60)
     parser.add_argument('--screen', default='', help='test: screen the turn starts from (reply routing)')
     parser.add_argument('--stop-after', type=float, help='test: press the stop button after this many seconds')
+    parser.add_argument('--raw', action='store_true', help='test: send the file without shortening pauses')
     args = parser.parse_args()
     if args.audio_file:
-        test_turn(args.audio_file, args.seconds, args.screen, args.stop_after)
+        test_turn(args.audio_file, args.seconds, args.screen, args.stop_after, args.raw)
     elif args.service:
         Service()
         GLib.MainLoop().run()

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// One entry of the chat: speech bubbles, agent messages, commands, files, approvals.
+// One entry of the chat: speech bubbles, an agent turn's work (folded), approvals.
 import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
@@ -17,6 +17,10 @@ Item {
     required property string output
     required property string status
     required property string exitCode
+    required property real started
+    required property real finished
+    required property bool expanded
+    required property var steps
     width: ListView.view.width
     implicitHeight: loader.implicitHeight + Kirigami.Units.smallSpacing * 2
 
@@ -29,8 +33,7 @@ Item {
         width: Math.min(implicitWidth, entry.width - Kirigami.Units.gridUnit * 3)
         sourceComponent: {
             switch (entry.kind) {
-            case "command": return commandCard
-            case "files": return filesCard
+            case "work": return workCard
             case "approval": return approvalCard
             case "marker": return marker
             case "error": return errorCard
@@ -44,20 +47,17 @@ Item {
         Rectangle {
             readonly property real padding: Kirigami.Units.largeSpacing
             readonly property real maxTextWidth: entry.width * 0.8 - padding * 2
-            readonly property bool markdown: entry.kind === "agent"
             // Natural (unwrapped) width decides the bubble width; the label wraps inside.
             implicitWidth: Math.min(measure.implicitWidth, maxTextWidth) + padding * 2
             implicitHeight: label.implicitHeight + padding * 1.5
             radius: Kirigami.Units.cornerRadius * 2
             color: entry.mine ? Kirigami.Theme.highlightColor
-                 : markdown ? Kirigami.Theme.alternateBackgroundColor
                  : Kirigami.ColorUtils.tintWithAlpha(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, 0.08)
             opacity: entry.kind.startsWith("live") ? 0.7 : 1
             Text {
                 id: measure
                 visible: false
                 text: entry.text
-                textFormat: label.textFormat
                 font: label.font
             }
             QQC2.Label {
@@ -67,9 +67,8 @@ Item {
                 width: parent.width - parent.padding * 2
                 text: entry.text
                 wrapMode: Text.Wrap
-                textFormat: parent.markdown ? Text.MarkdownText : Text.PlainText
+                textFormat: Text.PlainText
                 color: entry.mine ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
-                font.pointSize: parent.markdown ? Kirigami.Theme.smallFont.pointSize : Kirigami.Theme.defaultFont.pointSize
             }
         }
     }
@@ -95,69 +94,127 @@ Item {
         }
     }
 
+    // An agent turn, folded like ChatGPT/Codex: a status line while it runs, a
+    // summary when done; tap to see each step (what was said, the agent's notes,
+    // commands with their output, file changes).
     Component {
-        id: commandCard
+        id: workCard
         Rectangle {
-            property bool expanded: false
+            id: card
+            readonly property bool running: entry.status === "running" || entry.status === "live"
+            property real now: Date.now() / 1000
+            readonly property int seconds: Math.max(0, Math.round((running ? now : entry.finished) - entry.started))
             implicitWidth: entry.width * 0.85
-            implicitHeight: column.implicitHeight + Kirigami.Units.largeSpacing
-            radius: Kirigami.Units.cornerRadius
+            implicitHeight: workColumn.implicitHeight + Kirigami.Units.smallSpacing * 4
+            radius: Kirigami.Units.cornerRadius * 2
             color: Kirigami.Theme.alternateBackgroundColor
-            border.color: Kirigami.ColorUtils.tintWithAlpha(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, 0.15)
+            border.color: Kirigami.ColorUtils.tintWithAlpha(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, 0.12)
+            Timer { interval: 1000; repeat: true; running: card.running; onTriggered: card.now = Date.now() / 1000 }
             ColumnLayout {
-                id: column
+                id: workColumn
                 anchors { left: parent.left; right: parent.right; top: parent.top; margins: Kirigami.Units.smallSpacing * 2 }
+                spacing: Kirigami.Units.smallSpacing
                 RowLayout {
-                    QQC2.BusyIndicator { visible: entry.status === "running"; running: visible; implicitWidth: Kirigami.Units.iconSizes.small; implicitHeight: implicitWidth }
-                    // A non-zero exit is often just a probe that found nothing: keep it quiet.
-                    Kirigami.Icon {
-                        visible: entry.status !== "running"
-                        source: entry.exitCode === "0" ? "emblem-success" : "dialog-information"
-                        opacity: entry.exitCode === "0" ? 1 : 0.5
+                    Layout.fillWidth: true
+                    QQC2.BusyIndicator {
+                        visible: card.running; running: visible
                         implicitWidth: Kirigami.Units.iconSizes.small; implicitHeight: implicitWidth
                     }
-                    QQC2.Label {
-                        Layout.fillWidth: true
-                        text: entry.command.replace(/^\/bin\/bash -lc '([\s\S]*)'$/, "$1")
-                        font.family: "monospace"
-                        font.pointSize: Kirigami.Theme.smallFont.pointSize
-                        elide: Text.ElideRight
-                        maximumLineCount: 2
-                        wrapMode: Text.WrapAnywhere
+                    Kirigami.Icon {
+                        visible: !card.running
+                        source: entry.status === "stopped" ? "media-playback-stop" : "emblem-success"
+                        implicitWidth: Kirigami.Units.iconSizes.small; implicitHeight: implicitWidth
                     }
-                    QQC2.Label {
-                        visible: entry.status !== "running" && entry.exitCode !== "0" && entry.exitCode !== ""
-                        text: "退出码 " + entry.exitCode
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 0
+                        QQC2.Label {
+                            Layout.fillWidth: true
+                            text: card.running ? "正在处理 · " + card.seconds + " 秒"
+                                : (entry.status === "stopped" ? "已停止" : "已处理") + " · " + entry.steps.count + " 步 · 用时 " + card.seconds + " 秒"
+                            font.pointSize: Kirigami.Theme.smallFont.pointSize
+                            font.bold: true
+                        }
+                        // The latest step while running; folded, a reminder of what it did.
+                        QQC2.Label {
+                            Layout.fillWidth: true
+                            visible: text.length > 0 && (card.running || !entry.expanded)
+                            text: entry.text.replace(/^\/bin\/bash -lc '([\s\S]*)'$/, "$1").split("\n")[0]
+                            elide: Text.ElideRight
+                            opacity: 0.7
+                            font.pointSize: Kirigami.Theme.smallFont.pointSize
+                        }
+                    }
+                    Kirigami.Icon {
+                        source: entry.expanded ? "arrow-up" : "arrow-down"
+                        implicitWidth: Kirigami.Units.iconSizes.small; implicitHeight: implicitWidth
                         opacity: 0.6
-                        font.pointSize: Kirigami.Theme.smallFont.pointSize
+                    }
+                    TapHandler {
+                        onTapped: entry.ListView.view.model.setProperty(entry.index, "expanded", !entry.expanded)
                     }
                 }
-                QQC2.Label {
-                    Layout.fillWidth: true
-                    visible: parent.parent.expanded && entry.output.length > 0
-                    text: entry.output
-                    font.family: "monospace"
-                    font.pointSize: Kirigami.Theme.smallFont.pointSize
-                    wrapMode: Text.WrapAnywhere
+                Repeater {
+                    model: entry.expanded ? entry.steps : null
+                    delegate: stepDelegate
                 }
             }
-            MouseArea { anchors.fill: parent; onClicked: parent.expanded = !parent.expanded }
         }
     }
 
     Component {
-        id: filesCard
-        Rectangle {
-            implicitWidth: entry.width * 0.85
-            implicitHeight: filesLabel.implicitHeight + Kirigami.Units.largeSpacing
-            radius: Kirigami.Units.cornerRadius
-            color: Kirigami.Theme.alternateBackgroundColor
+        id: stepDelegate
+        ColumnLayout {
+            id: stepItem
+            required property string kind
+            required property string text
+            required property string command
+            required property string output
+            required property string status
+            required property string exitCode
+            property bool open: false
+            Layout.fillWidth: true
+            spacing: 2
+            RowLayout {
+                Layout.fillWidth: true
+                Kirigami.Icon {
+                    Layout.alignment: Qt.AlignTop
+                    source: stepItem.kind === "said" ? "audio-speakers-symbolic"
+                          : stepItem.kind === "command" ? (stepItem.status === "running" ? "system-run"
+                                                          : stepItem.exitCode === "0" ? "emblem-success" : "dialog-information")
+                          : stepItem.kind === "files" ? "document-edit" : "documentinfo"
+                    // A non-zero exit is often just a probe that found nothing: keep it quiet.
+                    opacity: stepItem.kind === "command" && stepItem.exitCode !== "0" ? 0.5 : 0.8
+                    implicitWidth: Kirigami.Units.iconSizes.small; implicitHeight: implicitWidth
+                }
+                QQC2.Label {
+                    Layout.fillWidth: true
+                    text: stepItem.kind === "command" ? stepItem.command.replace(/^\/bin\/bash -lc '([\s\S]*)'$/, "$1")
+                        : stepItem.kind === "files" ? "修改了文件\n" + stepItem.text : stepItem.text
+                    textFormat: stepItem.kind === "note" || stepItem.kind === "answer" ? Text.MarkdownText : Text.PlainText
+                    font.family: stepItem.kind === "command" ? "monospace" : Kirigami.Theme.defaultFont.family
+                    font.italic: stepItem.kind === "said"
+                    font.pointSize: Kirigami.Theme.smallFont.pointSize
+                    wrapMode: stepItem.kind === "command" ? Text.WrapAnywhere : Text.Wrap
+                    maximumLineCount: stepItem.kind === "command" && !stepItem.open ? 2 : 1000
+                    elide: Text.ElideRight
+                }
+                QQC2.Label {
+                    visible: stepItem.kind === "command" && stepItem.status !== "running" && stepItem.exitCode !== "0" && stepItem.exitCode !== ""
+                    text: "退出码 " + stepItem.exitCode
+                    opacity: 0.6
+                    font.pointSize: Kirigami.Theme.smallFont.pointSize
+                }
+                TapHandler { enabled: stepItem.kind === "command"; onTapped: stepItem.open = !stepItem.open }
+            }
             QQC2.Label {
-                id: filesLabel
-                anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; margins: Kirigami.Units.smallSpacing * 2 }
-                text: "📝 修改了文件\n" + entry.text
-                wrapMode: Text.WrapAnywhere
+                Layout.fillWidth: true
+                Layout.leftMargin: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing
+                visible: stepItem.open && stepItem.output.length > 0
+                text: stepItem.output
+                font.family: "monospace"
                 font.pointSize: Kirigami.Theme.smallFont.pointSize
+                wrapMode: Text.WrapAnywhere
             }
         }
     }

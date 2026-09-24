@@ -20,53 +20,138 @@ Kirigami.Page {
 
     ListModel { id: chat }
 
+    // The chat groups what happens in a turn, like ChatGPT/Codex (docs/59):
+    // - all transcript pieces of one push-to-talk press form one user message;
+    // - an agent turn is one collapsible "work" entry holding what the assistant
+    //   said meanwhile, the agent's notes, commands and file changes;
+    // - only replies outside agent work (the answer afterwards) are bubbles.
+    property int workAt: -1          // the work entry receiving agent activity
+    property bool workOpen: false    // an agent turn is running
+    property real lastTime: 0        // of the latest event (a turn the history left open ends there)
+
     function entry(fields) {
         return Object.assign({ kind: "", role: "", text: "", itemId: "", command: "", output: "",
-                               status: "", exitCode: "" }, fields)
+                               status: "", exitCode: "", press: 0, started: 0, finished: 0,
+                               expanded: false, steps: [] }, fields)
     }
-    function find(kind, id) {
+    function step(fields) {
+        return Object.assign({ kind: "", text: "", itemId: "", command: "", output: "", status: "", exitCode: "" }, fields)
+    }
+    function lastOf(kind, role) {
         for (let i = chat.count - 1; i >= 0; i--) {
             const e = chat.get(i)
-            if (e.kind === kind && e.itemId === id) return i
+            if (e.kind === kind && (role === undefined || e.role === role)) return i
         }
         return -1
     }
+    // Chinese needs no space between pieces; Latin words do.
+    function join(a, b) {
+        return /[A-Za-z0-9,.!?]$/.test(a) && /^[A-Za-z0-9]/.test(b) ? a + " " + b : a + b
+    }
+    function addStep(fields) {
+        if (page.workAt < 0) return
+        chat.get(page.workAt).steps.append(step(fields))
+        if (fields.kind !== "command" || !fields.status || fields.status === "running")
+            chat.setProperty(page.workAt, "text", fields.kind === "command" ? fields.command : fields.text)
+    }
+    function removeAt(i) {
+        chat.remove(i)
+        if (page.workAt > i) page.workAt--
+        else if (page.workAt === i) page.workAt = -1
+    }
+    function insertAt(i, fields) {
+        chat.insert(i, entry(fields))
+        if (page.workAt >= i) page.workAt++
+    }
+
     function apply(e, live) {
+        if (e.time && e.type !== "state") page.lastTime = e.time
         switch (e.type) {
         case "delta": {
             if (!live || !e.text) return
-            const kind = e.role === "user" ? "live-user" : "live-assistant"
-            const last = chat.count > 0 ? chat.get(chat.count - 1) : null
-            if (last && last.kind === kind) chat.setProperty(chat.count - 1, "text", last.text + e.text)
-            else chat.append(entry({ kind: kind, role: e.role === "user" ? "user" : "assistant", text: e.text }))
+            if (e.role === "user") {
+                const at = lastOf("live-user")
+                if (at >= 0 && chat.get(at).press === (e.press || 0)) chat.setProperty(at, "text", chat.get(at).text + e.text)
+                else chat.append(entry({ kind: "live-user", role: "user", text: e.text, press: e.press || 0 }))
+            } else if (page.workOpen && page.workAt >= 0) {
+                // Spoken progress streams into the work entry's status line.
+                const w = chat.get(page.workAt)
+                chat.setProperty(page.workAt, "text", w.status === "live" ? w.text + e.text : e.text)
+                chat.setProperty(page.workAt, "status", "live")
+            } else {
+                const last = chat.count > 0 ? chat.get(chat.count - 1) : null
+                if (last && last.kind === "live-assistant") chat.setProperty(chat.count - 1, "text", last.text + e.text)
+                else chat.append(entry({ kind: "live-assistant", role: "assistant", text: e.text }))
+            }
             break
         }
         case "message": {
-            const kind = e.role === "user" ? "live-user" : "live-assistant"
-            for (let i = chat.count - 1; i >= 0 && i >= chat.count - 4; i--) {
-                if (chat.get(i).kind === kind) { chat.remove(i); break }
+            const liveAt = lastOf(e.role === "user" ? "live-user" : "live-assistant")
+            if (liveAt >= 0 && liveAt >= chat.count - 4) page.removeAt(liveAt)
+            if (e.role === "user") {
+                const at = lastOf("message", "user")
+                if (e.press && at >= 0 && chat.get(at).press === e.press) {
+                    chat.setProperty(at, "text", page.join(chat.get(at).text, e.text))
+                } else if (page.workAt >= 0 && page.workAt === chat.count - 1 && live
+                           && chat.get(page.workAt).steps.count <= 1 && e.time - chat.get(page.workAt).started < 8) {
+                    // The agent can start before the transcript of what started it arrives.
+                    page.insertAt(page.workAt, { kind: "message", role: "user", text: e.text, press: e.press || 0 })
+                } else {
+                    chat.append(entry({ kind: "message", role: "user", text: e.text, press: e.press || 0 }))
+                }
+                if (page.title === "新对话") page.title = e.text.slice(0, 20)
+            } else if (page.workOpen && page.workAt >= 0) {
+                if (chat.get(page.workAt).status === "live") chat.setProperty(page.workAt, "status", "running")
+                page.addStep({ kind: "said", text: e.text })
+            } else {
+                chat.append(entry({ kind: "message", role: "assistant", text: e.text }))
             }
-            const last = chat.count > 0 ? chat.get(chat.count - 1) : null
-            // The agent can start before the transcript of what started it arrives.
-            if (e.role === "user" && last && last.kind === "marker" && last.text === "开始处理")
-                chat.insert(chat.count - 1, entry({ kind: "message", role: e.role, text: e.text }))
-            else
-                chat.append(entry({ kind: "message", role: e.role, text: e.text }))
-            if (e.role === "user" && page.title === "新对话") page.title = e.text.slice(0, 20)
             break
         }
-        case "agent-started": chat.append(entry({ kind: "marker", text: "开始处理" })); break
-        case "agent-finished": chat.append(entry({ kind: "marker", text: "处理完成" })); break
-        case "agent-message": chat.append(entry({ kind: "agent", text: e.text, itemId: e.id || "" })); break
+        case "agent-started": {
+            // What the assistant said just before handing over ("好的，我来…") belongs to the work.
+            const steps = []
+            const last = chat.count > 0 ? chat.get(chat.count - 1) : null
+            if (last && last.kind === "message" && last.role === "assistant") {
+                steps.push(page.step({ kind: "said", text: last.text }))
+                page.removeAt(chat.count - 1)
+            }
+            chat.append(entry({ kind: "work", status: "running", started: e.time || Date.now() / 1000,
+                                text: steps.length ? steps[0].text : "", steps: steps }))
+            page.workAt = chat.count - 1
+            page.workOpen = true
+            break
+        }
+        case "agent-finished":
+            if (page.workAt >= 0) {
+                if (chat.get(page.workAt).status !== "stopped") chat.setProperty(page.workAt, "status", "done")
+                chat.setProperty(page.workAt, "finished", e.time || Date.now() / 1000)
+            }
+            page.workOpen = false
+            break
+        case "task-stopped":
+            if (page.workAt >= 0 && page.workOpen) chat.setProperty(page.workAt, "status", "stopped")
+            else chat.append(entry({ kind: "marker", text: "已停止" }))
+            break
+        case "agent-message":
+            if (page.workAt < 0) {
+                chat.append(entry({ kind: "work", status: "done", started: e.time || 0, finished: e.time || 0 }))
+                page.workAt = chat.count - 1
+            }
+            page.addStep({ kind: e.final ? "answer" : "note", text: e.text, itemId: e.id || "" })
+            break
         case "command": {
+            if (page.workAt < 0) return
             const fields = { status: e.status, exitCode: e.exitCode === null || e.exitCode === undefined ? "" : String(e.exitCode),
                              output: e.output || "" }
-            const at = find("command", e.id)
-            if (at >= 0) { for (const k in fields) chat.setProperty(at, k, fields[k]) }
-            else chat.append(entry(Object.assign({ kind: "command", itemId: e.id, command: e.command }, fields)))
+            const steps = chat.get(page.workAt).steps
+            let at = -1
+            for (let i = steps.count - 1; i >= 0; i--) if (steps.get(i).kind === "command" && steps.get(i).itemId === e.id) { at = i; break }
+            if (at >= 0) { for (const k in fields) steps.setProperty(at, k, fields[k]) }
+            else page.addStep(Object.assign({ kind: "command", itemId: e.id, command: e.command }, fields))
             break
         }
-        case "files": chat.append(entry({ kind: "files", text: (e.paths || []).join("\n") })); break
+        case "files": page.addStep({ kind: "files", text: (e.paths || []).join("\n") }); break
         case "approval": {
             const pending = e.status === "pending" && live
             chat.append(entry({ kind: "approval", itemId: e.id, text: e.reason || "",
@@ -74,13 +159,16 @@ Kirigami.Page {
             break
         }
         case "approval-result": {
-            const at = find("approval", e.id)
-            if (at >= 0) chat.setProperty(at, "status", e.decision === "decline" ? "decline" : "accept")
+            for (let i = chat.count - 1; i >= 0; i--) {
+                if (chat.get(i).kind === "approval" && chat.get(i).itemId === e.id) {
+                    chat.setProperty(i, "status", e.decision === "decline" ? "decline" : "accept")
+                    break
+                }
+            }
             break
         }
         case "error": chat.append(entry({ kind: "error", text: e.text })); break
         case "state": page.phase = e.phase; page.agentBusy = !!e.agentBusy; break
-        case "task-stopped": chat.append(entry({ kind: "marker", text: "已停止" })); break
         }
     }
 
@@ -91,7 +179,15 @@ Kirigami.Page {
             page.conversationId = opened.conversation
             page.title = opened.title
             chat.clear()
+            page.workAt = -1
+            page.workOpen = false
             for (const e of opened.history) page.apply(e, false)
+            // A turn that was running when the history was saved is not running now.
+            if (page.workOpen && page.workAt >= 0) {
+                chat.setProperty(page.workAt, "status", "done")
+                chat.setProperty(page.workAt, "finished", page.lastTime)
+                page.workOpen = false
+            }
             view.positionViewAtEnd()
         }
         function onEvent(json) {
