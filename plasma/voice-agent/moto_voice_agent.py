@@ -48,6 +48,10 @@ END_SILENCE_MS = 900         # after release, so the server VAD sees the end of 
 PAUSE_KEEP_MS = 200          # the start of a pause is sent as is
 PAUSE_PREROLL_MS = 140       # and the end of a longer one, before speech resumes
 IDLE_STOP_S = 600            # stop an unused realtime session (cost)
+# The voice (Realtime API): Codex's default is gpt-realtime-1.5. The emotion of
+# the voice is chosen by the model per response from prompts/realtime.md; the
+# API has no emotion parameter, it follows instructions.
+REALTIME_MODEL = 'gpt-realtime-2.1-mini'
 # The agent (Codex): the fast model; tasks here are short device operations.
 AGENT_MODEL = 'gpt-6-sol'
 AGENT_EFFORT = 'medium'
@@ -373,7 +377,8 @@ class VoiceAgent:
             self.realtime_ready.clear()
             try:
                 self.server.call('thread/realtime/start', {
-                    'threadId': self.thread_id, 'outputModality': 'audio', 'transport': {'type': 'websocket'},
+                    'threadId': self.thread_id, 'model': REALTIME_MODEL,
+                    'outputModality': 'audio', 'transport': {'type': 'websocket'},
                     # Instructions of the realtime model itself (replaces Codex's default,
                     # which prompts/realtime.md includes).
                     'prompt': prompt('realtime.md')})
@@ -570,12 +575,13 @@ class VoiceAgent:
             self.progress_text = None
         if self.progress_text and now - self.last_voice >= PROGRESS_GAP_S:
             text = (f'进度（已用时{elapsed}秒，任务仍在进行）：{self.progress_text}\n'
-                    '用一句很短的话告诉用户现在在做什么，不要说成结果。')
+                    '用一句很短的话告诉用户现在在做什么，不要说成结果。语气平稳、让人安心。')
         elif now - self.last_voice >= min(60, QUIET_UPDATE_S * 1.5 ** self.quiet_updates):
             self.quiet_updates += 1
             step = command_summary(self.current_step) if self.current_step else '分析中'
             text = (f'进度（已用时{elapsed}秒，任务仍在进行，当前步骤：{step}）\n'
-                    '用一句很短的话告诉用户还在处理，不要说成结果。')
+                    '用一句很短的话告诉用户还在处理，不要说成结果。'
+                    + ('语气平稳。' if elapsed < 45 else '已经等了一阵，语气平和，简短地为久等致歉。'))
         else:
             return True
         self.progress_text = None

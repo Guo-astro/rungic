@@ -138,7 +138,7 @@
 - **模型**：
   - Agent的模型与推理强度由`thread/start`与`thread/resume`的`model`和`config.model_reasoning_effort`指定，已有对话恢复时同样切换。先改为`gpt-6-luna` medium以求更快，用户认为其推理太弱，改回`gpt-6-sol` medium（`AGENT_MODEL`/`AGENT_EFFORT`）。
   - 账号可用模型（`model/list`）：gpt-6-sol（默认）、gpt-6-astra、gpt-6-luna（“快速、便宜，适合简单任务”），以及5.6系列。
-  - 实时语音仍为Codex默认的`gpt-realtime-1.5`。输入转写`gpt-4o-mini-transcribe`由Codex固定，只用于显示和交给Agent的上下文；交给Agent的任务文字由实时模型自己写入`background_agent`的参数。
+  - 实时语音起初为Codex默认的`gpt-realtime-1.5`，2026-09-25改为`gpt-realtime-2.1-mini`（见下文）。输入转写`gpt-4o-mini-transcribe`由Codex固定，只用于显示和交给Agent的上下文；交给Agent的任务文字由实时模型自己写入`background_agent`的参数。
 - **权限**：用户要求去掉所有授权，改为`approvalPolicy: never`、`sandbox: danger-full-access`，即Codex的YOLO模式。
   - Agent以桌面用户身份不受限制地执行命令，也能直接访问D-Bus和Wayland。
   - 破坏性操作由提示词约束：删除、覆盖、卸载、发送、发布、付款、改账户或系统设置，都需要用户明确要求并先确认。实时模型的提示词也去掉了“授权卡片”的说法。
@@ -199,6 +199,25 @@
     - 默认：省略1520 ms停顿，服务端只收到一条“帮我看一下，手机现在还剩多少电？”，只回应一次。
   - 界面：在电视上打开用户的真实对话，两轮工作分别折叠为“已处理 · 32步 · 用时126秒”和“已处理 · 19步”。展开后依次是说过的话、Agent说明和命令。
 - **未验证**：真人说话、环境嘈杂（例如电视正在出声）时的停顿判定。如果服务端仍把静音判定成停顿而切开，气泡会合并，但助手可能会先回应前半句。
+
+## 实时语音模型换成gpt-realtime-2.1-mini；语气自动控制（2026-09-25）
+
+- **模型**：`thread/realtime/start`传入`model: gpt-realtime-2.1-mini`（常量`REALTIME_MODEL`），替换Codex默认的`gpt-realtime-1.5`。
+  - Codex 0.156.1的app-server接受该参数（`generate-json-schema --experimental`的`ThreadRealtimeStartParams`中有`model`）。
+  - 用独立探针开启`RUST_LOG=debug`启动实时会话：日志里出现的是`gpt-realtime-2.1-mini`，会话以v2启动。
+  - 官方模型页：只支持`v1/realtime`，支持工具调用和推理。发布公告称该模型支持可配置的推理强度，但Codex不发送这一项。
+- **情绪（emotion）**：
+  - OpenAI模型页、发布公告和Realtime参考中都没有叫emotion的会话参数（本轮检索范围内）。语气、语速和情绪靠指令控制。
+  - 做法：`realtime.md`新增“Voice and emotion”规则，由模型按每次回答的内容和用户的状态自选语气：
+    - 好消息：轻快、温暖。坏消息或失败：平静、诚恳，略带歉意。不可撤销操作或警告：严肃、放慢。
+    - 进度：平稳；久等后简短致歉。
+    - 用户烦躁：平静、简短、不开玩笑。用户放松：可以轻松一些。用户着急：更快更干脆。
+    - 情绪只影响声音，不增加话语。
+  - 我们主动让它播报进度时（`appendSpeech`），也附上语气提示：前45秒“平稳、让人安心”，之后“平和，简短为久等致歉”。
+- **实测**：用合成的烦躁语音“怎么还没好啊，烦死了，电量到底还剩多少？”测试。
+  - 首版规则下，最终答复13.7 s，还加了没有依据的推测。
+  - 补上“情绪不增加话语、一句给结果、不安抚不猜测”后，答复变为5.75 s，但仍带一句安抚，mini模型对这条规则执行得不够严格。
+  - 语气本身未经人耳评估（本机无法听到）。
 
 ## 待办
 
