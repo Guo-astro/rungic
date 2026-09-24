@@ -47,6 +47,32 @@ callDBus("SERVICE", "/dev/moto/Cua", "dev.moto.Cua", "Report", JSON.stringify({a
 '''
 
 
+WINDOW_ACTION_JS = '''
+const wins = workspace.windowList();
+let result = {found: false};
+for (let i = 0; i < wins.length; i++) {
+  const w = wins[i];
+  if (String(w.internalId) !== "TARGET") continue;
+  result.found = true;
+  const action = "ACTION";
+  if (action === "close") w.closeWindow();
+  else if (action === "minimize") w.minimized = true;
+  else if (action === "maximize") { w.minimized = false; w.setMaximize(true, true); }
+  else if (action === "restore") { w.minimized = false; w.setMaximize(false, false); workspace.activeWindow = w; }
+  else if (action === "to_phone" || action === "to_tv") {
+    const screens = workspace.screens;
+    for (let j = 0; j < screens.length; j++) {
+      const name = String(screens[j].name);
+      if ((action === "to_tv") === (name.indexOf("CAST") === 0)) { workspace.sendClientToScreen(w, screens[j]); result.screen = name; break; }
+    }
+  }
+}
+callDBus("SERVICE", "/dev/moto/Cua", "dev.moto.Cua", "Report", JSON.stringify(result));
+'''
+
+WINDOW_ACTIONS = ('close', 'minimize', 'maximize', 'restore', 'to_phone', 'to_tv')
+
+
 class KWin:
     def __init__(self) -> None:
         self.session = Gio.bus_get_sync(Gio.BusType.SESSION)
@@ -94,6 +120,13 @@ class KWin:
     def cursor(self) -> tuple[float, float]:
         position = self._script(CURSOR_JS)
         return float(position['x']), float(position['y'])
+
+    def window_action(self, window_id: str, action: str) -> dict:
+        """Window management through KWin itself. `close` is the title bar's close
+        button: the application may still ask to save."""
+        if action not in WINDOW_ACTIONS or not window_id.replace('-', '').strip('{}').isalnum():
+            raise ValueError(f'Unsupported window action {action!r}')
+        return self._script(WINDOW_ACTION_JS.replace('TARGET', window_id).replace('ACTION', action))
 
     def activate(self, window_id: str) -> bool:
         return bool(self._script(ACTIVATE_JS.replace('TARGET', window_id)).get('activated'))

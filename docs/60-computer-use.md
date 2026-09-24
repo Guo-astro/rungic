@@ -63,6 +63,7 @@ arc-cua的接口：`observe() -> DesktopSnapshot`、`is_fresh(snapshot, action)`
   - `desktop_windows`、`desktop_observe`：只读。
   - `desktop_launch`：按桌面文件id或名称启动应用，按WM类或可执行名等待窗口激活。
   - `desktop_activate`。
+  - `desktop_window`：经KWin关闭、最小化、最大化、还原窗口，或移到手机/电视。关闭等同于标题栏的关闭按钮，应用仍可能询问是否保存，此时返回`still_open`。
   - `desktop_run`：一个有界子任务，参数为goal、verification、inputs、constraints、shortcuts、max_actions、timeout_s。
 - **审批**：Codex 0.156对没有注解的MCP工具默认每次都要审批（`requires_mcp_tool_approval`），语音服务无法应答。
   - 因此只读工具标`readOnlyHint`；launch、activate、run标`destructiveHint: false`、`openWorldHint: false`。
@@ -80,6 +81,15 @@ arc-cua的接口：`observe() -> DesktopSnapshot`、`is_fresh(snapshot, action)`
 | 搜索框输入“声音” | 输入法提交，结果列出“声音”“系统声音”“通知”，SUBTASK_COMPLETE，6.2 s |
 | `desktop_launch 系统设置` | 1.15 s，返回已激活窗口 |
 | 语音端到端：“帮我打开系统设置，然后在里面搜索蓝牙” | 回应 → 读技能 → `desktop_launch` → `desktop_windows` → `desktop_run`（输入“蓝牙”）→ 播报“没有找到蓝牙相关项目”（本机未装蓝牙设置模块，结果属实）。约50 s，其中launch匹配超时占8 s，已修正 |
+
+## 关闭窗口反复失败（2026-09-24）
+
+- **现象**：用户让助手关闭电视上的系统设置，Agent试了几次才关上。
+  - 它先让JEV“点窗口的关闭按钮”：标题栏是KWin画的窗口装饰，不在应用的无障碍树里，JEV看不到。
+  - 接着在shell里`pgrep`：Agent沙箱有自己的进程命名空间，看不到桌面进程。
+  - 最后在`shortcuts`里给了Ctrl+Q才关上。arc-cua默认只开放MOD+A/C/V/Z/SHIFT+Z/F。
+- **修复**：窗口管理交给窗口管理器。新增`desktop_window`工具（KWin脚本：`closeWindow`、`minimized`、`setMaximize`、`sendClientToScreen`）。技能里写明：窗口的关闭、最小化、最大化、移屏用这个工具，不要走`desktop_run`；沙箱中的`ps`/`pgrep`看不到桌面应用。
+- **实测**：`moto-cua window <id> close`一次关闭，窗口列表中不再有该窗口。
 
 ## 限制与待办
 - 只操作活动窗口；弹出菜单等若属于另一个窗口，需要Agent先激活或再观察。

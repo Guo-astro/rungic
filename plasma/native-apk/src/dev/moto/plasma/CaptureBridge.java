@@ -212,7 +212,9 @@ final class CaptureBridge implements Closeable {
             final AudioTrack out=track=new AudioTrack.Builder()
                 .setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).build())
                 .setAudioFormat(new AudioFormat.Builder().setSampleRate(48000).setChannelMask(AudioFormat.CHANNEL_OUT_STEREO).setEncoding(AudioFormat.ENCODING_PCM_16BIT).build())
-                .setTransferMode(AudioTrack.MODE_STREAM).setBufferSizeInBytes(Math.max(min,7680)).build();
+                // ~150 ms: playback here is speech and media, not latency critical, and the
+                // Linux side forwards it from a Python thread that a busy phone may delay.
+                .setTransferMode(AudioTrack.MODE_STREAM).setBufferSizeInBytes(Math.max(min,28800)).build();
             if(out.getState()!=AudioTrack.STATE_INITIALIZED)throw new IOException("Phone output unavailable");
             out.setPreferredDevice(localOutput(audio));
             callback=new AudioDeviceCallback() {
@@ -237,7 +239,10 @@ final class CaptureBridge implements Closeable {
         } catch(Exception e) { if(!header)json(socket.getOutputStream(),new JSONObject().put("error",e.getMessage()==null?"Phone output unavailable":e.getMessage())); }
         finally {
             if(callback!=null)audio.unregisterAudioDeviceCallback(callback);
-            if(track!=null) { try { track.stop(); } catch(Exception ignored) {}track.release(); }
+            if(track!=null) {
+                android.util.Log.i("MotoAudio","phone output ended, underruns="+track.getUnderrunCount());
+                try { track.stop(); } catch(Exception ignored) {}track.release();
+            }
             phoneOutputBusy.set(false);
         }
     }

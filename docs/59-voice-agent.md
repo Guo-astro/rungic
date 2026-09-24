@@ -124,6 +124,15 @@
   - “截屏并告诉我屏幕上有什么”：先回应，第8 s播报进度，第19 s出现审批，2 s后播报“请在屏幕上的提示卡里点一下‘允许’或‘拒绝’”。
 - **发现的问题**：Agent的`workspace-write`沙箱禁止连接Unix socket（D-Bus、Wayland、平台桥都返回EPERM），因此截图、AT-SPI、`moto-platform`等桌面操作每次都要审批提权。可以用“本次对话都允许”，根本解决办法是第3步把桌面工具放在沙箱外作为MCP提供（已完成，60篇）。
 
+## 回复播放断续（2026-09-24）
+
+用户反映回复播放时会突然快进、突然卡顿。
+
+- **原因**：播放管线用`appsrc is-live=true do-timestamp=true`，按到达时间给音频打时间戳。实时API的音频是一阵一阵到的，到达时间与音频时长对不上，pulsesink（audiobasesink）便判定不连续并重新同步。
+  - 一段回复的`GST_DEBUG=audiobasesink:5`日志中，有3次“Unexpected discontinuity in audio timestamps”，其中−1.08 s即丢掉约1秒语音，另有多次数千到五万多样本的对齐调整。
+- **修复**：按顺序播放样本，不再打到达时间戳（`do-timestamp=false`，pulsesink `sync=false`，`buffer-time` 300 ms），由PulseAudio按采样率连续播放。复测同一类回复，没有任何不连续或重新同步记录。
+- **手机本机输出**：APK 1.34把AudioTrack缓冲从约40 ms加到约150 ms。语音与媒体播放不需要低延迟，而Linux侧由Python线程转发，手机繁忙时会被延迟。每次播放结束时，在`MotoAudio`日志中记录欠载次数：一段约35 s的回复只有1次，是开始播放时缓冲为空的那一次。
+
 ## 待办
 
 - **输入转写为繁体**：app-server不能设置转写语言，只影响显示；显示时做简繁转换。

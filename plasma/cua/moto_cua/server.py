@@ -6,7 +6,7 @@ Wayland. Codex starts MCP servers outside that sandbox, so desktop operations
 
   moto-cua mcp                 MCP server on stdio (newline-delimited JSON-RPC)
   moto-cua windows|observe     print JSON
-  moto-cua launch APP | activate WINDOW_ID
+  moto-cua launch APP | activate WINDOW_ID | window WINDOW_ID ACTION
   moto-cua run '<subtask json>'
 """
 from __future__ import annotations
@@ -54,6 +54,15 @@ TOOLS = [
     {'name': 'desktop_activate',
      'description': 'Bring a window (id from desktop_windows) to the front and make it active.',
      'inputSchema': {'type': 'object', 'properties': {'window_id': {'type': 'string'}}, 'required': ['window_id']},
+     'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False}},
+    {'name': 'desktop_window',
+     'description': ('Window management through the window manager (use this, not desktop_run, for these): '
+                     'close (like the title-bar close button; the app may still ask to save), minimize, maximize, '
+                     'restore, to_phone, to_tv (move to that screen).'),
+     'inputSchema': {'type': 'object', 'properties': {
+         'window_id': {'type': 'string'},
+         'action': {'type': 'string', 'enum': ['close', 'minimize', 'maximize', 'restore', 'to_phone', 'to_tv']}},
+         'required': ['window_id', 'action']},
      'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False}},
     {'name': 'desktop_launch',
      'description': ('Start an application by desktop-file id or name (e.g. "org.kde.dolphin", "Firefox", "系统设置"); '
@@ -139,6 +148,17 @@ class Cua:
         return {'windows': [{'id': w['id'], 'caption': w['caption'], 'app': w['resource_class'], 'screen': w['output'],
                              'active': w['id'] == active, 'minimized': w['minimized']} for w in info['windows']]}
 
+    def window(self, window_id: str, action: str) -> dict:
+        result = self.backend.kwin.window_action(window_id, action)
+        if not result.get('found'):
+            raise ValueError(f'No window {window_id}; list them with desktop_windows')
+        time.sleep(0.5)
+        still_open = any(w['id'] == window_id for w in self.backend.kwin.windows()['windows'])
+        result['still_open'] = still_open
+        if action == 'close' and still_open:
+            result['note'] = 'The window is still open: it may be asking something (e.g. to save); observe it.'
+        return result
+
     def activate(self, window_id: str) -> dict:
         ok = self.backend.kwin.activate(window_id)
         time.sleep(0.3)
@@ -195,6 +215,8 @@ class Cua:
             return self.windows()
         if name == 'desktop_activate':
             return self.activate(str(arguments['window_id']))
+        if name == 'desktop_window':
+            return self.window(str(arguments['window_id']), str(arguments['action']))
         if name == 'desktop_launch':
             return self.launch(str(arguments['app']))
         if name == 'desktop_observe':
@@ -262,6 +284,8 @@ def main() -> None:
         data = cua.activate(sys.argv[2])
     elif command == 'launch':
         data = cua.launch(sys.argv[2])
+    elif command == 'window':
+        data = cua.window(sys.argv[2], sys.argv[3])
     elif command == 'run':
         data = cua.run(json.loads(sys.argv[2]))
     else:

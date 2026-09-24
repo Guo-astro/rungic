@@ -336,10 +336,15 @@ class VoiceAgent:
     # ---- audio (main loop thread) ------------------------------------------------
     def ensure_player(self):
         if self.player is None:
+            # Reply audio arrives in bursts, faster or slower than it plays. Stamping
+            # buffers with their arrival time (do-timestamp) made pulsesink "resync":
+            # it dropped up to a second of speech or inserted silence. Play the samples
+            # strictly in order instead and let PulseAudio pace them (sync=false).
             self.player = Gst.parse_launch(
-                'appsrc name=src is-live=true format=time do-timestamp=true '
+                'appsrc name=src format=bytes do-timestamp=false block=false '
                 f'caps=audio/x-raw,format=S16LE,rate={RATE},channels=1,layout=interleaved '
-                '! queue ! audioconvert ! audioresample ! pulsesink name=out')
+                '! queue max-size-time=0 max-size-bytes=0 max-size-buffers=0 '
+                '! audioconvert ! audioresample ! pulsesink name=out sync=false buffer-time=300000')
             if self.reply_sink:
                 self.player.get_by_name('out').set_property('device', self.reply_sink)
             self.player_src = self.player.get_by_name('src')
