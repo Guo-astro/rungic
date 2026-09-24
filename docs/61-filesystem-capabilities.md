@@ -22,11 +22,11 @@
 ## 挂载链路
 
 ```
-~/Desktop ~/Documents ~/Downloads ~/Music ~/Pictures ~/Videos ~/Templates ~/Public（链接）
+~/Downloads ~/Music ~/Pictures ~/Videos ~/Templates ~/Public（链接）
   → ~/Shared  fuse.bindfs（映射为uid 1000、权限一律a+rwX、忽略chmod/chown、无xattr、noexec）
   → /mnt/android-shared  Android MediaProvider FUSE（/dev/fuse，/storage/emulated/0/Plasma，noexec）
   → 手机存储
-家目录、~/.cache、~/.local/share、/var/tmp → 容器根目录 f2fs（本地）
+家目录、~/Documents、~/Desktop、~/.cache、~/.local/share、/var/tmp → 容器根目录 f2fs（本地）
 /tmp、/dev/shm、/run/user/1000 → tmpfs
 /run/user/1000/doc → xdg-document-portal（fuse.portal，Flatpak应用经它访问文件）
 ```
@@ -78,10 +78,14 @@
 2. **共享存储上能在挂载层补上的能力就补**（本次的共享映射）。补不上的，是Android FUSE本身的限制，应在文档和应用放置策略里说明，不要逐个修应用。
 3. **新增挂载先跑`moto-fs-audit`**，结果记入本篇。
 
+## 文档和桌面改为本地目录（2026-09-25，用户决定）
+
+- `~/Documents`、`~/Desktop`由指向`Shared/…`的链接改为本地目录，路径不变，所以应用配置和`user-dirs.dirs`都不用改。原有内容已搬过来：文档417个文件、131,724,171字节，桌面1个文件，逐一核对了文件数和字节数。之后删除了共享存储里的`Plasma/Documents`和`Plasma/Desktop`，权限统一为目录755、文件644。
+- 这两个目录在Android上不再可见。下载、图片、视频、音乐、模板、公共仍在共享存储。
+- 验收：`moto-fs-audit ~/Documents ~/Desktop`两处都是24/24。微信（`~/Documents/xwechat_files`）重新打开后，直接进入主界面，没有提示修复数据库。
+- 数据迁移是一次性操作；会话脚本只在目录存在时固定XDG路径，不会重新创建链接。
+
 ## 待决定
 
-- **`~/Documents`、`~/Desktop`、`~/Templates`、`~/Public`是否改到本地**：
-  - 改到本地后，“文档”在Android上就看不到了；好处是Linux应用放在这里的数据库、仓库和脚本都能正常工作。
-  - 下载、图片、视频、音乐仍放在共享存储，用于和Android交换文件。
 - **下载的AppImage无法直接运行**：需要应用或用户把它放到本地目录，或者去掉两层noexec并允许执行位（Android FUSE存不下执行位）。
 - **`nofile`硬上限、`vm.max_map_count`、inotify上限**：是否在Android一侧调高。其中`vm.max_map_count`和inotify是内核全局设置，会影响Android。

@@ -21,8 +21,10 @@ export PULSE_COOKIE=/etc/plasma/audio-cookie
 unset DISPLAY WAYLAND_DISPLAY
 while [ ! -S /mnt/android-wayland/wayland-0 ]; do sleep 1; done
 mkdir -p "$HOME/.config"
-# The standard folders are links to Android shared storage (~/Videos ->
-# Shared/Videos). xdg-user-dirs-update resets any whose target is missing to
+# Downloads, Music, Pictures, Videos, Templates and Public are links to Android
+# shared storage (~/Videos -> Shared/Videos); Documents and Desktop are local
+# directories, since application data kept there needs Linux file semantics
+# (docs/61). xdg-user-dirs-update resets any whose target is missing to
 # $HOME, e.g. while the storage is not mounted yet, sending recordings,
 # screenshots and downloads to the home directory. Keep the fixed mapping.
 if mountpoint -q "$HOME/Shared"; then
