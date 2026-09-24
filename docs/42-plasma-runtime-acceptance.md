@@ -74,6 +74,21 @@ flowchart LR
 
 测试数据不会替代长期稳定性验证。相机首次拍照延迟、后台冻结后的媒体恢复、PC界面最小尺寸等仍需按实际使用继续改善；本轮没有把“应用进程存在”当成视频可播放或硬件已接通。
 
+## 窗口最小尺寸大于最大尺寸时不再断开应用（KWin moto16，2026-09-25）
+
+- **现象**：微信4.1（Linux ARM64版，4.1.13.23）登录后立即退出。系统日志：`xdg_toplevel#34: error 2: minimum width can't be bigger than the maximum width`，KWin随即报`error in client communication`。
+- **原因**：
+  - 微信把Qt 6静态编译进程序，不支持`kde_primary_output_v1`，也不支持分数缩放。它的Qt把KWin最先通告的`wl_output`（手机WL-0，逻辑360×800）当作主屏幕，程序中有`primaryScreen`调用。
+  - Wayland客户端在窗口映射、收到`wl_surface.enter`之前，无法知道窗口会在哪块屏幕上。
+  - 推断：登录后新建主窗口时，最大尺寸取自主屏幕（手机），而最小宽度大于360。
+  - 登录窗口本身是固定的280×380，没有问题（WAYLAND_DEBUG记录）。主窗口的具体数值还需要一次登录来抓取。
+  - KWin在提交时检查尺寸并发出协议错误`invalid_size`（`XdgToplevelInterfacePrivate::apply`，符合xdg-shell规定），连接因此断开。
+- **考虑过的方案**：
+  - 投屏时把电视通告为第一个输出：会影响所有同类客户端，还要重新创建手机的`wl_output`，已打开的窗口会重排。未采用。
+  - 让微信经XWayland运行，并把X11主屏设为电视：会话目前未启用XWayland。未采用。
+  - 采用：KWin遇到“最小值大于最大值”时，记录警告并丢弃冲突维度上的最大值（设为0，即不限），不再断开客户端。最小值代表内容的需要，错误的最大值来自客户端误判的屏幕。这不符合协议“必须报错”的要求，是本机为兼容这类客户端做的放宽。
+- **验收**：`.work/diag/minmax-probe.c`（wayland-client + xdg-shell）提交最小700×400、最大360×800，并附上缓冲区。moto16下它在2秒后仍保持连接，KWin日志记录`xdg_toplevel minimum size QSize(700, 400) exceeds maximum size QSize(360, 800) … ignoring the maximum width`。微信登录后的实测待用户登录一次后补充。
+
 ## 本地保存与恢复边界
 
 `.work/refs/plasma-mobile-20260923/release/` 保存最终定制Mesa/KWin deb、私有运行文件、版本/hold清单和适配源码；SHA256SUMS用于本地完整性检查。APK为上级目录的 `Plasma-Mobile-1.4.apk`。全部是本机恢复材料，**不是已经验证的空白设备一键安装包，也不是Fastboot ROM**。
