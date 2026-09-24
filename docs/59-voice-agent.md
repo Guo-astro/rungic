@@ -136,7 +136,7 @@
 ## Agent模型、权限与停止按钮（2026-09-24）
 
 - **模型**：
-  - Agent固定为`gpt-6-luna`，推理强度medium，由`thread/start`与`thread/resume`的`model`和`config.model_reasoning_effort`指定，已有对话恢复时同样切换。此前用的是账号默认的`gpt-6-sol`。
+  - Agent的模型与推理强度由`thread/start`与`thread/resume`的`model`和`config.model_reasoning_effort`指定，已有对话恢复时同样切换。先改为`gpt-6-luna` medium以求更快，用户认为其推理太弱，改回`gpt-6-sol` medium（`AGENT_MODEL`/`AGENT_EFFORT`）。
   - 账号可用模型（`model/list`）：gpt-6-sol（默认）、gpt-6-astra、gpt-6-luna（“快速、便宜，适合简单任务”），以及5.6系列。
   - 实时语音仍为Codex默认的`gpt-realtime-1.5`。输入转写`gpt-4o-mini-transcribe`由Codex固定，只用于显示和交给Agent的上下文；交给Agent的任务文字由实时模型自己写入`background_agent`的参数。
 - **权限**：用户要求去掉所有授权，改为`approvalPolicy: never`、`sandbox: danger-full-access`，即Codex的YOLO模式。
@@ -148,6 +148,19 @@
   - 实测：截屏任务开始3 s后按停止，Codex记录`turn_aborted interrupted`，界面出现“已停止”，之后没有再播出残句。
   - 用语音说“停”仍会作为补充指示交给正在进行的任务（steer），不是强制停止。
 - **测试参数**：`--stop-after N`在N秒后模拟按下停止。
+
+## 主动解决问题（2026-09-24）
+
+用户反映助手总让用户自己去做事，不够主动。提示词改为：
+- Agent（`agent.md`）：
+  - 由它负责把事做成：出错时自己查日志和状态、找原因、能修就修。
+  - 能用工具完成的事不让用户做；普通步骤不征求许可。
+  - 需要用户决定时，给出2–3个选项并把推荐放在第一个。
+  - 只有密码（让用户在对话框里输入，不要说出来）、删除、卸载、发送、付款、改账户这些才交给用户。
+  - 只报告核实过的结果。
+- 实时模型（`realtime.md`）：不指挥用户动手，问题转交执行端处理；有选项时念出推荐项；不声称执行端没有确认过的结果。
+- **环境说明**：用户在Linux桌面里工作，“安装、打开、文件、应用”默认都指Linux一侧。用户要装的软件直接安装（`.deb`用`pkcon install-local`，Flatpak用`flatpak install`）；系统要密码时，由Agent触发授权框并说明它在哪块屏幕上。
+  - 起因：一次测试中，Agent查清了微信包是arm64的`.deb`，却按安卓理解，结论成了“手机装不了，请下载安卓版”。
 
 ## 待办
 

@@ -41,7 +41,7 @@ PHONE_SINK = 'android_phone'     # always the phone itself (shared/media/media-b
 END_SILENCE_MS = 900         # after release, so the server VAD sees the end of speech
 IDLE_STOP_S = 600            # stop an unused realtime session (cost)
 # The agent (Codex): the fast model; tasks here are short device operations.
-AGENT_MODEL = 'gpt-6-luna'
+AGENT_MODEL = 'gpt-6-sol'
 AGENT_EFFORT = 'medium'
 # Spoken progress while the agent works: Codex hands agent updates to the voice
 # model as context only (no response), so it would stay silent until the end.
