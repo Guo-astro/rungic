@@ -5,8 +5,8 @@ Execution uses ordinary input events, so applications see a user's input:
   - pointer clicks, scrolling and keys through the RemoteDesktop portal (KWin
     fake input), at global positions = KWin client geometry + window-relative
     AT-SPI extents, gliding instead of jumping;
-  - text through the Android host's keyboard path (platform.sock `text-commit`:
-    key events for Latin text, an input-method commit otherwise).
+  - text committed by KWin the way an input method does (VirtualKeyboard
+    commitText, moto15): text-input for any language, key events otherwise.
 Clients receive these as plain Wayland keyboard/pointer events, the same as a
 finger on the phone or a real (uinput/HID) device would produce in this nested
 compositor. AT-SPI actions (Action, EditableText, Value) are only a fallback
@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import socket
 import time
 from typing import Any
 
@@ -29,8 +28,6 @@ from . import a11y
 from .a11y import A11yBus, Node
 from .kwin import KWin
 from .portal import BTN_LEFT, BTN_RIGHT, RemoteInput
-
-PLATFORM_SOCKET = '/mnt/android-wayland/platform.sock'
 
 CLICK_ACTIONS = ('press', 'click', 'activate', 'toggle', 'jump', 'open', 'showmenu', 'expand or collapse')
 POINTER_ROLES = {'push button', 'toggle button', 'check box', 'radio button', 'menu item', 'check menu item',
@@ -273,9 +270,9 @@ class LinuxAtspiBackend:
         self.input.click(x, y, button=button, count=count)
 
     def _type_text(self, node: Node, text: str) -> None:
-        """Type like a user: click into the field, select all, then enter the text
-        through the Android keyboard path (keys for Latin text, an input-method
-        commit otherwise). Accessibility text replacement is the last resort."""
+        """Type like a user: click into the field, select all, then commit the text
+        the way an input method does (KWin, any language). Accessibility text
+        replacement is the last resort."""
         try:
             self._pointer(node, BTN_LEFT, 1)
         except UnsupportedDesktopAction:
@@ -288,10 +285,9 @@ class LinuxAtspiBackend:
         self.input.chord(['CTRL', 'A'])
         time.sleep(0.05)
         try:
-            _host_text(text)
-        except OSError:
-            # The host keyboard path needs the Plasma app in front; with it in the
-            # background type Latin text as key events, anything else directly.
+            self.kwin.commit_text(text)
+        except a11y.GLib.Error:
+            # A KWin without commitText (before moto15): Latin text as key events.
             if text.isascii() and text.isprintable():
                 self.input.type_text(text)
             else:
@@ -299,9 +295,9 @@ class LinuxAtspiBackend:
 
     def _no_virtual_keyboard(self) -> None:
         """A text field on the phone's own screen summons the on-screen keyboard
-        (KWIN_IM_SHOW_ALWAYS), which pushes the window up. The agent types through
-        the host instead, so put the keyboard away; the user's next touch on a text
-        field brings it back."""
+        (KWIN_IM_SHOW_ALWAYS), which pushes the window up. The agent commits text
+        directly, so put the keyboard away; the user's next touch on a text field
+        brings it back."""
         if self._window is None or not str(self._window.get('output', '')).startswith('WL'):
             return
         try:
@@ -314,14 +310,3 @@ class LinuxAtspiBackend:
         if 'org.a11y.atspi.EditableText' not in node.interfaces or not self.bus.call(
                 node.bus, node.path, 'org.a11y.atspi.EditableText', 'SetTextContents', a11y.GLib.Variant('(s)', (text,)))[0]:
             raise UnsupportedDesktopAction('Cannot enter text into this target')
-
-def _host_text(text: str) -> None:
-    """Commit text through the Android host, like its on-screen keyboard."""
-    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
-        conn.settimeout(4)
-        conn.connect(PLATFORM_SOCKET)
-        conn.sendall(json.dumps({'op': 'text-commit', 'text': text}, ensure_ascii=False).encode() + b'\n')
-        reply = json.loads(conn.makefile('rb').readline(65537))
-    if 'error' in reply:
-        raise UnsupportedDesktopAction(f'Host text input failed: {reply["error"]}')
-

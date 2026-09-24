@@ -163,5 +163,9 @@ class KWin:
             raise ValueError(f'Unsupported window action {action!r}')
         return self._script(WINDOW_ACTION_JS.replace('TARGET', window_id).replace('ACTION', action))
 
+    def commit_text(self, text: str) -> None:
+        """Commit text to the focused field as an input method would (KWin moto15)."""
+        self._kwin('commitText', '/VirtualKeyboard', 'org.kde.kwin.VirtualKeyboard', GLib.Variant('(s)', (text,)))
+
     def activate(self, window_id: str) -> bool:
         return bool(self._script(ACTIVATE_JS.replace('TARGET', window_id)).get('activated'))

@@ -43,8 +43,9 @@ arc-cua的接口：`observe() -> DesktopSnapshot`、`is_fresh(snapshot, action)`
 - **点击**：
   - 用XDG RemoteDesktop门户（标准接口，KDE上由KWin fake-input实现）把光标滑到控件中心：分6步缓动约0.1 s，然后按下、抬起，间隔随机。
   - 控件没有屏幕位置时，才用AT-SPI的Action兜底。
-- **文字**：点击聚焦 → Ctrl+A → 宿主平台桥`text-commit`。这与Android屏幕键盘是同一条路：拉丁字符为按键事件，中文等为输入法（text-input-v3）提交。
-  - Plasma在后台时宿主没有键盘焦点：ASCII改用门户逐键输入（带节奏）；其他文字最后才用AT-SPI的EditableText兜底。
+- **文字**：点击聚焦 → Ctrl+A → KWin的`org.kde.kwin.VirtualKeyboard.commitText`（KWin moto15新增），由KWin像输入法一样把整段文字提交给当前焦点的输入框：text-input v1/v2/v3，任何语言都可以；应用不支持text-input时退回按键事件。全程在Linux内完成，Plasma在后台时同样可用。
+  - 起初复用了宿主平台桥`text-commit`（Android键盘的路径）来输入中文。那条路绕经Android宿主再回到KWin，而且Plasma退到后台时宿主没有键盘焦点，已废弃。
+  - 没有`commitText`的旧KWin上，ASCII改用门户逐键输入，其他文字用AT-SPI的EditableText兜底。
 - **滑块**：AT-SPI `Value.CurrentValue`。
 - **按键和快捷键**：门户的keysym，MOD映射为Ctrl。
 - **滚动**：光标滑到窗口中心后发离散滚轮事件。
@@ -79,6 +80,7 @@ arc-cua的接口：`observe() -> DesktopSnapshot`、`is_fresh(snapshot, action)`
 | “打开键盘设置页” | 1步CLICK“键盘”，SUBTASK_COMPLETE，4.3 s；页面标题变为“键盘 — 系统设置” |
 | 搜索框输入“WLAN” | 点击聚焦、键盘通道输入，框内为WLAN；中文界面无结果，JEV返回NEEDS_AGENT（合理） |
 | 搜索框输入“声音” | 输入法提交，结果列出“声音”“系统声音”“通知”，SUBTASK_COMPLETE，6.2 s |
+| KWin `commitText`：搜索框输入“蓝牙 bluetooth” | SUBTASK_COMPLETE，5.1 s，读回值一致；Plasma在后台时输入“显示”同样成功 |
 | `desktop_launch 系统设置` | 1.15 s，返回已激活窗口 |
 | 语音端到端：“帮我打开系统设置，然后在里面搜索蓝牙” | 回应 → 读技能 → `desktop_launch` → `desktop_windows` → `desktop_run`（输入“蓝牙”）→ 播报“没有找到蓝牙相关项目”（本机未装蓝牙设置模块，结果属实）。约50 s，其中launch匹配超时占8 s，已修正 |
 
@@ -117,6 +119,7 @@ arc-cua的接口：`observe() -> DesktopSnapshot`、`is_fresh(snapshot, action)`
   - moto-cua启动时，从systemd用户管理器读入图形会话环境（`busctl --user -j get-property … Manager Environment`），与桌面启动应用时相同。等窗口的时间放宽到25 s。
   - 技能中规定：不要从shell启动图形应用或`xdg-open`；`desktop_launch`报告失败时查一次`desktop_windows`，然后告诉用户，不要换别的方式重试。
   - 在手机屏上输入文字时，聚焦后把`org.kde.kwin.VirtualKeyboard.active`设为false，再走宿主键盘通道输入。用户下次触摸输入框时键盘会照常弹出。
+- **应用名匹配**：会话语言是`en_US`（`plasma-localerc`），因此从桌面环境启动的应用是英文界面，与Plasma启动器一致。`desktop_launch`匹配.desktop中所有语言的Name/GenericName，所以用中文名也能找到应用。
 - **实测**：
   - 以Codex同样的精简环境（`env -i`）调用`launch Firefox`：3.5 s，出现在CAST-1并处于活动状态。
   - 语音“帮我打开火狐浏览器”：Agent调用`desktop_launch`，Firefox出现在电视上。
@@ -126,6 +129,5 @@ arc-cua的接口：`observe() -> DesktopSnapshot`、`is_fresh(snapshot, action)`
 - 只操作活动窗口；弹出菜单等若属于另一个窗口，需要Agent先激活或再观察。
 - 没有无障碍树的应用（部分Electron、游戏）只能看截图，arc-cua的OCR后端是macOS Vision实现，Linux暂无对应。
 - `DRAG_TO`/`DRAG_BY`未实现（与上游macOS AX后端一致）。
-- Plasma在后台时，中文输入只能用EditableText兜底。
 - 快照里的`metadata.id`取AccessibleId末48字符，仍较长，可再压缩以省token。
 - 进度播报偶尔在任务刚完成时说出“还在处理”（appendSpeech已排队，无法撤回）。
