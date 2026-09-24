@@ -292,8 +292,29 @@ KWin(moto12) 嵌套后端：Pointer::motion → 输出CAST-n上的绝对位置�
     - 电视上的窗口有边框。Discover送到电视后得到896×541居中窗口，并自动切成宽布局；Firefox送回手机后无边框、最大化。
     - 断开电视后所有窗口回到手机，均为移动样式。
   - **仍为全局、未区分屏幕**：KWin的TabletMode，以及应用自身的移动/桌面形态（会话环境变量，每进程一份）。
+- **后台与熄屏时继续投屏（APK 1.33、KWin moto14）**：用户要求Plasma退到后台后电视照常可用。
+  - **原先**：Activity进入后台（`onStop`/`surfaceDestroyed`）会挂起渲染（`rendering_active=false`），`render_all`直接返回，电视那一帧也不再收取，电视画面冻结。熄屏同理。
+  - **宿主改动**：
+    - 挂起期间`render_all`只处理投屏窗口（`render_cast_only`）：取它的新缓冲区交给电视Presenter，只给它发帧回调；手机上的窗口收不到帧回调，KWin随之停画手机输出。
+    - 这时合成循环不再跟随手机的Choreographer（后台和熄屏时都没有），而是在Wayland fd与kick上等待，KWin每提交一帧就立即送给电视。电视的节奏由KWin按电视60 Hz自行控制。
+    - 投屏窗口的presentation feedback改为按投屏输出和它的刷新率上报（`finish_cast_presentation`）。原先一律用手机的刷新率，KWin会跟着把CAST-1切成120 Hz，后台时又切成30 Hz。每个投屏提交都立即回报，即使没有带来新缓冲区。
+    - 同一缓冲区不再重复送往电视。原先手机每渲染一次，都会把电视当前帧重新提交一次；重新绑定Presenter或重新认领窗口后，会补送一次当前帧。
+    - 尺寸与缩放不变时，`update_output_mode`不再重新配置窗口。
+    - 运行统计（`native-stats`）新增`cast(frames new skipped …)`，其中`new`是电视实际收到的新帧数。
+  - **KWin（moto14）**：嵌套后端收到尺寸不变的configure时，只ack，不再`outputsQueried`。
+    - 回到前台时宿主会重发这类configure，KWin随之连续多次重建所有输出的scene view。
+    - 调试版KWin记录到：此后电视输出不再合成，电视上的客户端收不到帧回调，电视冻结，而且一直不恢复。
+    - 这是时序竞争：修复前大多数前台→后台→前台的循环会卡住，偶尔不会。
+  - **测试方法**：
+    - 电视上放一个30 fps的`gst-launch-1.0 videotestsrc pattern=ball ! waylandsink`窗口（由KWin脚本`workspace.sendClientToScreen`送到CAST-1），读`native-stats`里的`new`计数。
+    - 不能用SurfaceFlinger图层帧数：修复前电视帧会随手机渲染重复提交，图层帧数不代表电视有新内容。
+    - KWin脚本中的`workspace.screens`不能用for-of遍历，`Qt.rect`也不可用。
+  - **实测**（投屏中）：
+    - 前台约40帧/秒（测试画面30 fps，另有电视面板等内容）；HOME回Android桌面后约38–41帧/秒。
+    - 5轮前台→后台→前台全部恢复，修复前多数卡住。
+    - 电源键熄屏（手机`mScreenState=OFF`，手机所在电源组Dozing，WFD显示组保持唤醒）期间约38帧/秒，15秒后仍在；唤醒后正常。
+  - **限制**：后台时手机上没有触控板和键盘，电视只能看不能操作，除非另接蓝牙键鼠（未测）。Android 16对后台应用的音频加固只记录了“would be muted”，没有实际静音；未做长时间测试。
 - **仍待处理**：
-  - 按电源键熄屏后电视冻结：帧时钟由手机的Choreographer驱动，需改为在手机不可见时由投屏窗口驱动。
   - 触控板功耗需排除后台负载后重测。
   - 端到端延迟未测。
 
