@@ -25,6 +25,7 @@ import json
 import os
 from pathlib import Path
 import queue
+import re
 import subprocess
 import threading
 import time
@@ -39,6 +40,12 @@ MIC = 'android_microphone'
 PHONE_SINK = 'android_phone'     # always the phone itself (shared/media/media-bridge.py)
 END_SILENCE_MS = 900         # after release, so the server VAD sees the end of speech
 IDLE_STOP_S = 600            # stop an unused realtime session (cost)
+# Spoken progress while the agent works: Codex hands agent updates to the voice
+# model as context only (no response), so it would stay silent until the end.
+PROGRESS_AFTER_S = 8         # quick tasks get no progress update
+PROGRESS_GAP_S = 6           # silence before relaying a new step
+QUIET_UPDATE_S = 20          # nothing new: say it is still working (then 30 s, 45 s, 60 s)
+PROGRESS_STALE_S = 8         # an agent note older than this describes a finished step
 DATA = Path.home() / '.local/share/moto-voice-agent'
 CONFIG = Path.home() / '.config/moto-voice-agent'
 PROMPTS = Path('/usr/local/share/moto-voice-agent/prompts')
@@ -198,6 +205,12 @@ class VoiceAgent:
         self.realtime_ready = threading.Event()
         self.talking = False
         self.agent_busy = False
+        self.turn_started = 0.0
+        self.last_voice = 0.0     # last reply audio or progress request
+        self.progress_text = None
+        self.progress_at = 0.0
+        self.quiet_updates = 0
+        self.current_step = None
         self.playing_until = 0.0
         self.reply_audio_ms = 0
         self.reply_sink = None
@@ -438,6 +451,48 @@ class VoiceAgent:
             self.set_state()
         return False
 
+    # ---- spoken progress (main loop thread) ----------------------------------------
+    def start_progress(self):
+        GLib.timeout_add_seconds(1, self.progress_tick)
+        return False
+
+    def progress_tick(self):
+        if not self.agent_busy or not self.realtime:
+            return False
+        now = time.monotonic()
+        if self.talking:
+            self.last_voice = now
+        self.last_voice = max(self.last_voice, self.playing_until)
+        if now - self.turn_started < PROGRESS_AFTER_S:
+            return True
+        if self.approvals:
+            self.last_voice = now     # waiting for the user, who was already asked
+            return True
+        elapsed = int(now - self.turn_started)
+        if self.progress_text and now - self.progress_at > PROGRESS_STALE_S:
+            self.progress_text = None
+        if self.progress_text and now - self.last_voice >= PROGRESS_GAP_S:
+            text = (f'进度（已用时{elapsed}秒，任务仍在进行）：{self.progress_text}\n'
+                    '用一句很短的话告诉用户现在在做什么，不要说成结果。')
+        elif now - self.last_voice >= min(60, QUIET_UPDATE_S * 1.5 ** self.quiet_updates):
+            self.quiet_updates += 1
+            step = command_summary(self.current_step) if self.current_step else '分析中'
+            text = (f'进度（已用时{elapsed}秒，任务仍在进行，当前步骤：{step}）\n'
+                    '用一句很短的话告诉用户还在处理，不要说成结果。')
+        else:
+            return True
+        self.progress_text = None
+        self.last_voice = now
+        threading.Thread(target=self.speak_progress, args=(text,), daemon=True).start()
+        return True
+
+    def speak_progress(self, text):
+        log('progress:', text.splitlines()[0][:100])
+        try:
+            self.server.call('thread/realtime/appendSpeech', {'threadId': self.thread_id, 'text': text}, timeout=10)
+        except Exception as error:
+            log('appendSpeech', error)
+
     # ---- codex events (reader thread) -----------------------------------------------
     def on_notification(self, method, params):
         if params.get('threadId') not in (None, self.thread_id):
@@ -465,8 +520,12 @@ class VoiceAgent:
                 self.emit({'type': 'message', 'role': role, 'text': text})
         elif method == 'turn/started':
             self.agent_busy = True
+            self.turn_started = self.last_voice = time.monotonic()
+            self.progress_text = self.current_step = None
+            self.quiet_updates = 0
             self.emit({'type': 'agent-started'})
             GLib.idle_add(self.set_state)
+            GLib.idle_add(self.start_progress)
         elif method == 'turn/completed':
             self.agent_busy = False
             self.last_activity = time.monotonic()
@@ -478,6 +537,8 @@ class VoiceAgent:
     def agent_item(self, completed, item):
         kind = item.get('type')
         if kind == 'commandExecution':
+            if not completed:
+                self.current_step = item.get('command', '')
             self.emit({'type': 'command', 'id': item.get('id'), 'command': item.get('command', ''),
                        'status': 'done' if completed else 'running', 'exitCode': item.get('exitCode'),
                        'output': (item.get('aggregatedOutput') or '')[-4000:]}, keep=completed)
@@ -485,6 +546,9 @@ class VoiceAgent:
             paths = [c.get('path', '') for c in item.get('changes', [])]
             self.emit({'type': 'files', 'id': item.get('id'), 'paths': paths, 'status': item.get('status')})
         elif kind == 'agentMessage' and completed and item.get('text'):
+            if item.get('phase') != 'final_answer':
+                self.progress_text = item['text']
+                self.progress_at = time.monotonic()
             self.emit({'type': 'agent-message', 'id': item.get('id'), 'text': item['text']})
 
     def on_request(self, request_id, method, params):
@@ -495,6 +559,12 @@ class VoiceAgent:
             self.emit({'type': 'approval', 'id': approval, 'kind': 'files' if files else 'command',
                        'text': (params.get('reason') or '修改文件') if files else (params.get('command') or ''),
                        'reason': params.get('reason') or '', 'status': 'pending'})
+            # The task now waits for the user, not for the agent: say so at once.
+            self.last_voice = time.monotonic()
+            reason = params.get('reason') or ('修改文件' if files else command_summary(params.get('command') or ''))
+            threading.Thread(target=self.speak_progress, daemon=True, args=(
+                f'进度（任务暂停，等待用户批准）：{reason}\n'
+                '用一句很短的话请用户在屏幕上的卡片里点「允许」或「拒绝」。',)).start()
         else:
             # Other requests (MCP elicitations, permission profiles ...) are not supported yet.
             log('declined request', method)
@@ -563,6 +633,12 @@ class Service:
                 invocation.return_dbus_error('dev.moto.VoiceAgent.Error', str(error))
         # Codex calls block; keep the main loop (audio, D-Bus) responsive.
         threading.Thread(target=run, daemon=True).start()
+
+
+def command_summary(command):
+    """The command itself, without the shell wrapper Codex adds."""
+    match = re.fullmatch(r"/bin/(?:ba)?sh -lc '([\s\S]*)'", command.strip())
+    return (match.group(1) if match else command)[:120]
 
 
 def reply_sink(screen):
