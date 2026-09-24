@@ -235,6 +235,7 @@ KWin(moto12) 嵌套后端：Pointer::motion → 输出CAST-n上的绝对位置�
 - **焦点**：
   - 连接时Android会在电视上启动副屏主屏（`com.motorola.launcher3/...SecondaryDisplayLauncher`，`startHomeActivity: displayAdded`），并把输入焦点移到电视，导致宿主失去焦点，平台桥拒绝请求（“请先返回 Plasma Mobile”）。
   - 现在宿主在投屏中失去顶层焦点、而自身仍可见时，会在手机显示上把自己重新排到前台，30秒内最多3次，避免与其他程序反复争抢。回到手机桌面等宿主不可见的情况不处理。
+  - 修正（APK 1.32）：上滑回桌面时，手势刚开始宿主就失去顶层焦点，但此时仍然可见（Recents动画中的pausing task）。400 ms后上述逻辑把宿主拉回前台，打断了手势（日志：`taking input focus back from the cast display`之后`RecentsController.merge`）。副屏主屏只在投屏显示接入时抢焦点，因此现在只在投屏画面绑定后15 s内抢回焦点。实测投屏中连续上滑可以停在Android桌面；宿主重启后投屏重新绑定时仍会取回焦点。
 - **docked模式随插拔正确切换**：
   - 上游`KScreenOSDProvider`把“插入前的模式”从`convergenceModeEnabled`本身读回。宿主重启会让plasmashell在docked状态下重启，于是拔出后仍停在docked。
   - 现在“是否由本开关进入docked”和“进入前的模式”存在独立的`KScreenOSDAutoDock`设置里（QtCore `Settings`）。输出数为0（KScreen配置未到）时不动作。

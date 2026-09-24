@@ -72,6 +72,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         castControls = new CastControls(this, frame, this::setAndroidKeyboard);
         castDesktop = new CastDesktop(this, () -> initialized, bound -> {
             castControls.setAvailable(bound);
+            castBoundAt = bound ? android.os.SystemClock.uptimeMillis() : 0;
             // The secondary home may have taken the focus before the TV got the desktop.
             if (bound) display.postDelayed(this::reclaimFocus, 400);
         });
@@ -113,14 +114,18 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     }
 
     private boolean started, topResumed;
-    private long focusReclaimWindowStart;
+    private long focusReclaimWindowStart, castBoundAt;
     private int focusReclaims;
+    // The vendor home takes the focus only while the cast display comes up.
+    private static final long FOCUS_RECLAIM_AFTER_CAST_MS = 15000;
 
     // When a cast display connects, Android starts the vendor's secondary-display
     // home there and moves input focus to that display; the desktop host (still
     // visible on the phone) then loses focus, the platform bridge refuses requests
     // and phone input may go astray. Take the focus back on the phone (docs/58 step 4),
-    // a few times at most so two parties never fight over it.
+    // a few times at most so two parties never fight over it. Only right after the
+    // cast display is bound: later the focus moves because the user left (home
+    // gesture, recents, notifications), and pulling the app back broke going home.
     @Override public void onTopResumedActivityChanged(boolean top) {
         super.onTopResumedActivityChanged(top);
         topResumed = top;
@@ -130,6 +135,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     private void reclaimFocus() {
         if (!started || topResumed || !castControls.available()) return;
         long now = android.os.SystemClock.uptimeMillis();
+        if (now - castBoundAt > FOCUS_RECLAIM_AFTER_CAST_MS) return;
         if (now - focusReclaimWindowStart > 30000) { focusReclaimWindowStart = now; focusReclaims = 0; }
         if (++focusReclaims > 3) return;
         Log.i("MotoCast", "taking input focus back from the cast display");
