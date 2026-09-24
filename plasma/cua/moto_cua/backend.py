@@ -54,6 +54,7 @@ class LinuxAtspiBackend:
         self._nodes: dict[str, Node] = {}
         self._window: dict[str, Any] | None = None
         self._root: Node | None = None
+        self._origin: tuple | None = None   # the window's own screen extents (a11y.origin)
         self.enabled_by_us = False
         self.set_accessibility(True)
 
@@ -96,6 +97,7 @@ class LinuxAtspiBackend:
             self._window, self._root = self.active_window()
         root = Node(self._root.bus, self._root.path, None)
         nodes = self.bus.tree(root, max_nodes=self.max_elements, max_depth=self.max_depth)
+        self._origin = self.bus.origin(root)
         self.bus.details([n for n in nodes if n.interfaces])
         elements, refs = [], {}
         parent_ids: dict[int, str | None] = {}
@@ -168,7 +170,7 @@ class LinuxAtspiBackend:
         if kind == ActionKind.CLICK:
             # A real pointer click first: applications then see ordinary input events.
             # The accessibility action is only for controls without a screen position.
-            if self.bus.extents(node) is not None:
+            if self.bus.extents(node, self._origin) is not None:
                 self._pointer(node, BTN_LEFT, 1)
                 return
             index = next((i for i, name in enumerate(node.actions) if name in CLICK_ACTIONS), None)
@@ -252,7 +254,7 @@ class LinuxAtspiBackend:
         )
 
     def _global_center(self, node: Node) -> tuple[float, float]:
-        extents = self.bus.extents(node)
+        extents = self.bus.extents(node, self._origin)
         if extents is None or self._window is None:
             raise UnsupportedDesktopAction('Target has no screen position')
         cx, cy, _, _ = self._window['client']

@@ -62,6 +62,16 @@ Use these tools for anything on screen; they act with ordinary pointer/keyboard 
 5. Never start GUI apps from the shell (`firefox &`, `xdg-open`, `kstart`): the window opens on whichever screen is active, usually the phone showing this assistant. Use `desktop_launch`; if it reports no window, check `desktop_windows` once and tell the user instead of retrying other ways. Also prefer these tools over `kill` or similar for apps on screen.
 6. Apps without accessibility (some Electron/Flatpak apps, games) show few controls; take a screenshot and tell the user what you see.
 
+## WeChat (微信) on screen
+
+WeChat exposes its controls; use these names instead of guessing (English UI names):
+
+- Layout: a narrow window hides the chat list and its search box. On the TV WeChat opens desktop-sized; if the chat list (`list 'Chats'`) is missing, `desktop_window ... maximize` first.
+- Open a chat: type the contact's name into the text field named `Search` at the top of the chat list, then choose the result (or click the item in `list 'Chats'`, whose name starts with the chat's name, e.g. `File Transfer`). The navigation-bar button `Search` is WeChat's web search (搜一搜), not contact search.
+- The message box is the editable text named after the open chat (e.g. `周楷雯`). ENTER there sends. Check the chat header name first, and never type into it unless the goal is to send that text to that chat.
+- In a chat: `Voice Call` (chat header), `Send Voice`, `Send File`, `Send`, `Chat Info`. `Voice Input (Hold Ctrl+Super)` is speech-to-text, not a voice message.
+- Test on `File Transfer` (文件传输助手, messages go to the user's own devices), never on a real contact.
+
 ## Desktop windows and screenshots (shell)
 
 - Screenshot of everything: `spectacle -b -n -f -o /tmp/shot.png` (use `-m` for the active screen). Look at the image to understand what is on screen.

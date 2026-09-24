@@ -28,4 +28,9 @@ tool_timeout_sec = 320
 TOML
     chown "$user" "$config"
 fi
+# Every new RemoteDesktop portal session (each start of this MCP server) popped
+# up "Remote control session started" over the top of the windows being
+# operated; desktop automation is its only user here (docs/60).
+runuser -u "$user" -- env LC_ALL=C.UTF-8 kwriteconfig6 --file xdg-desktop-portal-kde.notifyrc \
+    --group Event/remotedesktopstarted --key Action ''
 echo "Installed moto-cua; restart Codex (moto-voice-agent) to load the MCP server."

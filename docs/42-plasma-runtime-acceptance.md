@@ -87,7 +87,7 @@ flowchart LR
   - 投屏时把电视通告为第一个输出：会影响所有同类客户端，还要重新创建手机的`wl_output`，已打开的窗口会重排。未采用。
   - 让微信经XWayland运行，并把X11主屏设为电视：会话目前未启用XWayland。未采用。
   - 采用：KWin遇到“最小值大于最大值”时，记录警告并丢弃冲突维度上的最大值（设为0，即不限），不再断开客户端。最小值代表内容的需要，错误的最大值来自客户端误判的屏幕。这不符合协议“必须报错”的要求，是本机为兼容这类客户端做的放宽。
-- **验收**：`.work/diag/minmax-probe.c`（wayland-client + xdg-shell）提交最小700×400、最大360×800，并附上缓冲区。moto16下它在2秒后仍保持连接，KWin日志记录`xdg_toplevel minimum size QSize(700, 400) exceeds maximum size QSize(360, 800) … ignoring the maximum width`。微信登录后的实测待用户登录一次后补充。
+- **验收**：`plasma/diagnostics/wayland-probes/minmax-probe.c`（wayland-client + xdg-shell）提交最小700×400、最大360×800，并附上缓冲区。moto16下它在2秒后仍保持连接，KWin日志记录`xdg_toplevel minimum size QSize(700, 400) exceeds maximum size QSize(360, 800) … ignoring the maximum width`。微信登录后的实测待用户登录一次后补充。
 
 ## 本地保存与恢复边界
 

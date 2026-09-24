@@ -177,14 +177,34 @@ class A11yBus:
             else:
                 n.value = result[0]
 
-    def extents(self, node: Node) -> tuple | None:
-        """Window-relative extents (Wayland clients know no global position)."""
+    def extents(self, node: Node, origin: tuple | None = None) -> tuple | None:
+        """Window-relative extents (Wayland clients know no global position).
+
+        With `origin` (the window's own screen extents, see `origin()`), screen
+        extents minus the origin: toolkits disagree on "window" coordinates, and
+        WeChat 4.1's Qt returns wrong ones (y and height garbled, docs/60), while
+        screen extents are consistent within one window whatever position the
+        toolkit believes the window has."""
         if 'org.a11y.atspi.Component' not in node.interfaces:
             return None
         try:
-            x, y, w, h = self.call(node.bus, node.path, 'org.a11y.atspi.Component', 'GetExtents',
-                                   GLib.Variant('(u)', (1,)))[0]
+            if origin is not None:
+                x, y, w, h = self.call(node.bus, node.path, 'org.a11y.atspi.Component', 'GetExtents',
+                                       GLib.Variant('(u)', (0,)))[0]
+                x, y = x - origin[0], y - origin[1]
+            else:
+                x, y, w, h = self.call(node.bus, node.path, 'org.a11y.atspi.Component', 'GetExtents',
+                                       GLib.Variant('(u)', (1,)))[0]
         except GLib.Error:
             return None
         return (x, y, w, h) if w > 0 and h > 0 else None
+
+    def origin(self, window: Node) -> tuple | None:
+        """Screen position the toolkit reports for a window: the reference for `extents`."""
+        try:
+            x, y, w, h = self.call(window.bus, window.path, 'org.a11y.atspi.Component', 'GetExtents',
+                                   GLib.Variant('(u)', (0,)))[0]
+        except GLib.Error:
+            return None
+        return (x, y) if w > 0 and h > 0 else None
 

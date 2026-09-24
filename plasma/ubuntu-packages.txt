@@ -71,3 +71,4 @@ kweather
 plasma-desktop
 kde-spectacle
 libnotify-bin
+python3-websocket
