@@ -20,7 +20,8 @@ public:
     Q_INVOKABLE void openConversation(const QString &id);
     Q_INVOKABLE void closeConversation();
     Q_INVOKABLE void deleteConversation(const QString &id);
-    Q_INVOKABLE void startTalking();
+    // The screen the press came from; the reply plays on that side.
+    Q_INVOKABLE void startTalking(const QString &screen);
     Q_INVOKABLE void stopTalking();
     Q_INVOKABLE void interrupt();
     Q_INVOKABLE void approve(const QString &id, const QString &decision);

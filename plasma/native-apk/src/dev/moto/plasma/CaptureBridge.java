@@ -26,11 +26,12 @@ final class CaptureBridge implements Closeable {
     private final Activity activity;
     private final File path;
     private final CameraManager cameras;
-    private final ExecutorService clients=Executors.newFixedThreadPool(3);
+    private final ExecutorService clients=Executors.newFixedThreadPool(4);
     private final Set<LocalSocket> sockets=ConcurrentHashMap.newKeySet();
-    private final Semaphore slots=new Semaphore(3);
+    private final Semaphore slots=new Semaphore(4);
     private final AtomicBoolean microphoneBusy=new AtomicBoolean();
     private final AtomicBoolean cameraBusy=new AtomicBoolean();
+    private final AtomicBoolean phoneOutputBusy=new AtomicBoolean();
     private final Object permissionLock=new Object();
     private volatile CountDownLatch permissionResult;
     private volatile boolean visible, running;
@@ -147,10 +148,13 @@ final class CaptureBridge implements Closeable {
         while((b=socket.getInputStream().read())!=-1 && b!='\n') { if(line.size()>4096)throw new IOException("Request too large");line.write(b); }
         JSONObject request=new JSONObject(line.toString("UTF-8"));
         try {
-            if(!visible)throw new IOException("请先返回 Plasma Mobile");
-            switch(request.getString("op")) {
+            String op=request.getString("op");
+            // Playback follows the Linux sink, like the Termux output; only capture needs the app in front.
+            if(!visible && !op.equals("phone-output"))throw new IOException("请先返回 Plasma Mobile");
+            switch(op) {
                 case "microphone": microphone(socket);break;
                 case "camera":camera(socket,request.getString("id"));break;
+                case "phone-output":phoneOutput(socket);break;
                 default:throw new IOException("Unsupported capture operation");
             }
         } catch(Exception e) {
@@ -183,6 +187,58 @@ final class CaptureBridge implements Closeable {
             if(recorder!=null) { try { recorder.stop(); } catch(Exception ignored) {}recorder.release(); }
             if(active)try { captureState(true,false); } catch(Exception ignored) {}
             microphoneBusy.set(false);
+        }
+    }
+    /** The phone's own output: a wired/USB/Bluetooth headset if one is connected, else the speaker. */
+    private static AudioDeviceInfo localOutput(AudioManager audio) {
+        int[] order={AudioDeviceInfo.TYPE_WIRED_HEADSET,AudioDeviceInfo.TYPE_WIRED_HEADPHONES,AudioDeviceInfo.TYPE_USB_HEADSET,
+            AudioDeviceInfo.TYPE_BLE_HEADSET,AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,AudioDeviceInfo.TYPE_BUILTIN_SPEAKER};
+        AudioDeviceInfo[] devices=audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS);
+        for(int type:order)for(AudioDeviceInfo device:devices)if(device.getType()==type)return device;
+        return null;
+    }
+    /**
+     * PCM from the Linux "phone" sink, played on the phone even while Android routes media to a
+     * cast display. Linux keeps its default sink on Android's routing; this is the explicit
+     * alternative (docs/59). Small socket buffers keep the unreported latency low.
+     */
+    private void phoneOutput(LocalSocket socket) throws Exception {
+        if(!phoneOutputBusy.compareAndSet(false,true))throw new IOException("Phone output busy");
+        AudioManager audio=activity.getSystemService(AudioManager.class);
+        AudioTrack track=null;AudioDeviceCallback callback=null;boolean header=false;
+        try {
+            int min=AudioTrack.getMinBufferSize(48000,AudioFormat.CHANNEL_OUT_STEREO,AudioFormat.ENCODING_PCM_16BIT);
+            if(min<0)throw new IOException("Unsupported output format");
+            final AudioTrack out=track=new AudioTrack.Builder()
+                .setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).build())
+                .setAudioFormat(new AudioFormat.Builder().setSampleRate(48000).setChannelMask(AudioFormat.CHANNEL_OUT_STEREO).setEncoding(AudioFormat.ENCODING_PCM_16BIT).build())
+                .setTransferMode(AudioTrack.MODE_STREAM).setBufferSizeInBytes(Math.max(min,7680)).build();
+            if(out.getState()!=AudioTrack.STATE_INITIALIZED)throw new IOException("Phone output unavailable");
+            out.setPreferredDevice(localOutput(audio));
+            callback=new AudioDeviceCallback() {
+                @Override public void onAudioDevicesAdded(AudioDeviceInfo[] added) { out.setPreferredDevice(localOutput(audio)); }
+                @Override public void onAudioDevicesRemoved(AudioDeviceInfo[] removed) { out.setPreferredDevice(localOutput(audio)); }
+            };
+            audio.registerAudioDeviceCallback(callback,null);
+            socket.setReceiveBufferSize(16384);
+            json(socket.getOutputStream(),new JSONObject().put("ok",true).put("rate",48000).put("channels",2).put("format","s16le"));header=true;
+            socket.setSoTimeout(10000);
+            out.play();
+            InputStream in=socket.getInputStream();byte[] block=new byte[3840];int pending=0;
+            while(running) {
+                int count=in.read(block,pending,block.length-pending);
+                if(count<0)break;
+                pending+=count;
+                int frames=pending-pending%4;
+                if(frames==0)continue;
+                if(out.write(block,0,frames,AudioTrack.WRITE_BLOCKING)<0)throw new IOException("Phone output write failed");
+                System.arraycopy(block,frames,block,0,pending-frames);pending-=frames;
+            }
+        } catch(Exception e) { if(!header)json(socket.getOutputStream(),new JSONObject().put("error",e.getMessage()==null?"Phone output unavailable":e.getMessage())); }
+        finally {
+            if(callback!=null)audio.unregisterAudioDeviceCallback(callback);
+            if(track!=null) { try { track.stop(); } catch(Exception ignored) {}track.release(); }
+            phoneOutputBusy.set(false);
         }
     }
     private void camera(LocalSocket socket,String id) throws Exception {

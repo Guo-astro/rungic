@@ -85,10 +85,31 @@
   - 界面长按3 s后，服务收到开始与结束，约2.7 s音频。
   - 用手机扬声器外放合成语音再由手机麦克风录入的自测不成立：Android采集启用回声消除，会抵消本机播放的声音，识别结果成了乱码。真人说话已在第1步实测中识别准确。
 
+## 回复从发起的一端播放（2026-09-24）
+
+用户实测按住说话后听不到回复。原因不在语音：服务收到并播放了回复音频（一轮约5.3 s），但投屏连接时Android把所有媒体声音（包括容器经Termux PulseAudio的音轨）放在`AUDIO_DEVICE_OUT_PROXY`上送往电视。此外，手机扬声器的媒体音量当时为1/15。
+
+用户要求：**从哪一端发起语音交互，回复就从哪一端播放。**
+
+- **共享层**：新增始终在手机本机播放的PulseAudio输出`android_phone`（“手机本机”），任何应用都可以选用。默认sink仍是跟随Android路由的`android`。
+  - 调研：Termux PulseAudio 17.0-4的`module-aaudio-sink`与`module-sles-sink`都不能指定输出设备（参数只有sink名、格式、延迟、性能模式等）；OpenSL ES也只能选流类型。因此没有改Termux模块。
+  - 做法与麦克风对称：容器内`module-pipe-sink`（PulseAudio 17，LGPL-2.1+）→ `media-bridge`在sink未挂起时读FIFO → 私有`capture.sock`的`phone-output` → APK的AudioTrack（`USAGE_MEDIA`）。`setPreferredDevice`优先选有线/USB/蓝牙耳机，没有时用扬声器；设备增减时重新选择。
+  - 延迟：pipe-sink由读取速度计时，按FIFO内未读数据上报延迟。FIFO缩到16 KiB，socket收发缓冲各16 KiB（各约85 ms）。sink空闲3 s挂起后停止读取，并丢弃FIFO残留。
+  - 播放不要求Plasma在前台（与Termux输出一致），采集仍要求。
+  - PulseAudio 17的`pactl -f json`遇到UTF-8描述（“手机本机”的monitor source）会报错。media-bridge改用`pactl list short`查麦克风source，否则主循环会一直走异常分支，麦克风也会停用。
+- **语音助手**：`StartTalking(s screen)`由按钮传入所在屏幕名。KWin把投屏输出命名为`CAST-n`，此时回复用默认sink（跟随Android路由，在电视上）；否则用`android_phone`，该sink不存在时退回默认。
+- **实测**（投屏连接中，用合成语音）：
+  - 从手机屏`WL-0`发起：回复8.9 s，APK音轨（uid 10352）在`AudioOut_15`（SPEAKER）上。
+  - 从电视屏`CAST-1`发起：回复6.25 s，Termux音轨在`AudioOut_D`（PROXY）上。
+  - 两路并存互不影响；麦克风回归：`parec`取到3.8 s有效信号。
+  - 以上以Android路由证据为准，尚待用户实听确认。
+- **音量**：投屏时手机音量键和设置里的媒体音量调的是电视那一路（PROXY）。扬声器的媒体音量要在未投屏时调节。本机当时是1/15，需要调大才听得清。Android没有给普通应用按设备设置音量的公开接口。
+
 ## 待办
 
 - **输入转写为繁体**：app-server不能设置转写语言，只影响显示；显示时做简繁转换。
 - **真人说话实测**：用“语音助手”应用按住说话，验收识别、Agent执行、审批和打断。
 - 快捷设置和悬浮控制条上的入口；识别文字的简繁转换；对话标题可改。
+- 投屏时调节手机扬声器音量的入口。
 - **第3步**：本机桌面操作工具（窗口、AT-SPI控件、截图、启动应用、平台桥）经MCP挂给Codex。
 - **费用**：实时语音按API用量计费（`gpt-realtime`音频输入$32、输出$64/百万token；mini版$10/$20）。

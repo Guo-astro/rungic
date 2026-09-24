@@ -248,6 +248,7 @@ KWin(moto12) 嵌套后端：Pointer::motion → 输出CAST-n上的绝对位置�
   - Linux经PulseAudio隧道进入Termux的pulseaudio（uid 10348），其AudioTrack由AudioFlinger放在`AUDIO_DEVICE_OUT_PROXY`（“WFD proxy device”）输出线程上，随WFD送到电视，无需改动。
   - 投屏期间媒体音量按proxy设备单独记忆（本机为5级），手机音量键调节的就是它。
   - 本机无法当场听到，以路由证据为准。
+  - 另有固定在手机本机播放的`android_phone`输出，供需要在手机上出声的场景使用（语音助手从手机发起时），见[59篇](59-voice-agent.md)“回复从发起的一端播放”。
 - **功耗**：
   - 投屏中手机屏幕保持常亮，因为手机熄屏会使宿主暂停渲染、电视画面冻结。触控板/键盘模式下窗口亮度降到0.08，回到手机模式后恢复。
   - `FLAG_KEEP_SCREEN_ON`原先还被Linux侧`keep-awake`操作（视频播放等）单独开关，12秒后被清除，会顶掉投屏常亮。现改为由`MainActivity.setKeepAwake`合并两个来源。

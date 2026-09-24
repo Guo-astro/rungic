@@ -36,6 +36,7 @@ from gi.repository import Gio, GLib, Gst
 RATE = 24000                 # PCM format of the Realtime API
 CHUNK_MS = 100
 MIC = 'android_microphone'
+PHONE_SINK = 'android_phone'     # always the phone itself (shared/media/media-bridge.py)
 END_SILENCE_MS = 900         # after release, so the server VAD sees the end of speech
 IDLE_STOP_S = 600            # stop an unused realtime session (cost)
 DATA = Path.home() / '.local/share/moto-voice-agent'
@@ -50,7 +51,7 @@ INTERFACE = '''
     <method name="OpenConversation"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
     <method name="CloseConversation"/>
     <method name="DeleteConversation"><arg type="s" direction="in"/></method>
-    <method name="StartTalking"/>
+    <method name="StartTalking"><arg type="s" direction="in"/></method>
     <method name="StopTalking"/>
     <method name="Interrupt"/>
     <method name="Approve"><arg type="s" direction="in"/><arg type="s" direction="in"/></method>
@@ -199,6 +200,7 @@ class VoiceAgent:
         self.agent_busy = False
         self.playing_until = 0.0
         self.reply_audio_ms = 0
+        self.reply_sink = None
         self.mic_chunks = 0
         self.last_activity = time.monotonic()
         self.approvals = {}       # our id -> (json-rpc id, kind)
@@ -324,7 +326,9 @@ class VoiceAgent:
             self.player = Gst.parse_launch(
                 'appsrc name=src is-live=true format=time do-timestamp=true '
                 f'caps=audio/x-raw,format=S16LE,rate={RATE},channels=1,layout=interleaved '
-                '! queue ! audioconvert ! audioresample ! pulsesink')
+                '! queue ! audioconvert ! audioresample ! pulsesink name=out')
+            if self.reply_sink:
+                self.player.get_by_name('out').set_property('device', self.reply_sink)
             self.player_src = self.player.get_by_name('src')
             bus = self.player.get_bus()
             bus.add_signal_watch()
@@ -342,8 +346,9 @@ class VoiceAgent:
             self.set_state()
         return False
 
-    def start_talking(self):
+    def start_talking(self, sink=None):
         self.last_activity = time.monotonic()
+        self.reply_sink = sink
         if not self.thread_id:
             return False
         if not self.realtime:
@@ -359,7 +364,7 @@ class VoiceAgent:
         self.mic_buffer = b''
         self.recorder.set_state(Gst.State.PLAYING)
         self.mic_chunks = 0
-        log('talk: start')
+        log('talk: start, reply on', self.reply_sink or 'default sink')
         self.set_state()
         return False
 
@@ -543,7 +548,7 @@ class Service:
                 elif method == 'DeleteConversation':
                     agent.delete_conversation(args[0])
                 elif method == 'StartTalking':
-                    GLib.idle_add(agent.start_talking)
+                    GLib.idle_add(agent.start_talking, reply_sink(args[0]))
                 elif method == 'StopTalking':
                     GLib.idle_add(agent.stop_talking)
                 elif method == 'Interrupt':
@@ -560,9 +565,26 @@ class Service:
         threading.Thread(target=run, daemon=True).start()
 
 
-def test_turn(audio_file, seconds):
+def reply_sink(screen):
+    """Answer where the user spoke: a press on a cast screen (KWin names those
+    CAST-n) follows Android's routing, which plays on that display; a press on
+    the phone plays on the phone even while casting."""
+    if screen.startswith('CAST-'):
+        return None
+    try:
+        sinks = subprocess.check_output(['pactl', 'list', 'short', 'sinks'], text=True, timeout=3)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if any(line.split('\t')[1:2] == [PHONE_SINK] for line in sinks.splitlines()):
+        return PHONE_SINK
+    return None
+
+
+def test_turn(audio_file, seconds, screen):
     """Open a new conversation and speak a recording, printing events."""
     agent = VoiceAgent(lambda e: log(json.dumps(e, ensure_ascii=False)[:300]))
+    agent.reply_sink = reply_sink(screen)
+    log('reply on', agent.reply_sink or 'default sink')
     opened = agent.open_conversation('')
     agent.realtime_ready.wait(20)
     data = Path(audio_file).read_bytes()
@@ -585,9 +607,10 @@ def main():
     parser.add_argument('--service', action='store_true', help='run the D-Bus service')
     parser.add_argument('--audio-file', help='test: speak this raw S16LE 24 kHz mono file in a new conversation')
     parser.add_argument('--seconds', type=float, default=60)
+    parser.add_argument('--screen', default='', help='test: screen the turn starts from (reply routing)')
     args = parser.parse_args()
     if args.audio_file:
-        test_turn(args.audio_file, args.seconds)
+        test_turn(args.audio_file, args.seconds, args.screen)
     elif args.service:
         Service()
         GLib.MainLoop().run()

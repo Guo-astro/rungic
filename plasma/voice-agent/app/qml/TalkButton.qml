@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Hold to talk; releasing (or dragging off and releasing) ends the turn.
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls as QQC2
 import org.kde.kirigami as Kirigami
 import dev.moto.voiceassistant
@@ -33,7 +34,7 @@ Item {
         id: area
         anchors.fill: parent
         enabled: button.enabled
-        onPressed: AgentClient.startTalking()
+        onPressed: AgentClient.startTalking(Screen.name)
         onReleased: AgentClient.stopTalking()
         onCanceled: AgentClient.stopTalking()
     }

@@ -1,7 +1,9 @@
 #!/usr/bin/python3
-"""Demand-driven Android mic / camera integration. Run as the desktop user.
+"""Demand-driven Android mic / camera / phone output integration. Run as the desktop user.
 
 PulseAudio remains the audio server; PipeWire exports Camera Video/Source nodes.
+The default sink follows Android's routing (a cast screen while casting); the
+android_phone sink always plays on the phone itself (docs/59).
 Capture sockets are private to the Android app and never listen on TCP.
 """
 import fcntl
@@ -20,6 +22,10 @@ from pathlib import Path
 RUNTIME = Path(os.environ['XDG_RUNTIME_DIR'])
 FIFO = RUNTIME / 'moto-microphone.pcm'
 SOURCE = 'android_microphone'
+PHONE_FIFO = RUNTIME / 'moto-phone-output.pcm'
+PHONE_SINK = 'android_phone'
+PHONE_HEADER = {'ok': True, 'rate': 48000, 'channels': 2, 'format': 's16le'}
+F_SETPIPE_SZ = 1031
 LOG = logging.getLogger('android-media')
 STOP = threading.Event()
 CHANGED = threading.Event()
@@ -133,6 +139,74 @@ class Microphone:
             LOG.info('microphone consumer stopped')
 
 
+class PhoneOutput:
+    """Forward the android_phone sink to the app's AudioTrack while the sink is open.
+
+    module-pipe-sink is paced by this reader and reports the FIFO fill as its
+    latency; the FIFO and socket buffers are kept small (about 85 ms each).
+    """
+
+    def __init__(self):
+        self.thread = None
+        self.cancel = threading.Event()
+        self.retry_at = 0
+
+    def stop(self):
+        self.cancel.set()
+        if self.thread:
+            self.thread.join(3)
+            if not self.thread.is_alive():
+                self.thread = None
+
+    def set_wanted(self, wanted):
+        if not wanted:
+            self.stop()
+        elif (not self.thread or not self.thread.is_alive()) and time.monotonic() >= self.retry_at:
+            self.cancel.clear()
+            self.thread = threading.Thread(target=self.play, daemon=True)
+            self.thread.start()
+
+    def play(self):
+        fd = None
+        try:
+            fd = os.open(PHONE_FIFO, os.O_RDONLY | os.O_NONBLOCK | os.O_CLOEXEC)
+            try:
+                fcntl.fcntl(fd, F_SETPIPE_SZ, 16384)
+            except OSError:
+                pass
+            with socket.socket(socket.AF_UNIX) as client:
+                client.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 16384)
+                client.settimeout(3)
+                client.connect('/mnt/android-wayland/capture.sock')
+                client.sendall(b'{"op":"phone-output"}\n')
+                if read_header(client) != PHONE_HEADER:
+                    raise OSError('Unsupported phone output format')
+                LOG.info('phone output started')
+                while not self.cancel.is_set() and not STOP.is_set():
+                    if not select.select([fd], [], [], 0.2)[0]:
+                        continue
+                    try:
+                        block = os.read(fd, 3840)
+                    except BlockingIOError:
+                        continue
+                    if block:
+                        client.sendall(block)
+        except (OSError, ValueError) as error:
+            if not self.cancel.is_set():
+                LOG.warning('phone output: %s', error)
+                self.retry_at = time.monotonic() + 5
+        finally:
+            if fd is not None:
+                # The sink is suspended now; drop what it left in the FIFO.
+                try:
+                    while os.read(fd, 65536):
+                        pass
+                except OSError:
+                    pass
+                os.close(fd)
+            LOG.info('phone output stopped')
+
+
 class Cameras:
     def __init__(self):
         self.children = {}
@@ -160,10 +234,19 @@ class Cameras:
                 LOG.info('camera %s available (%s)', key, metadata['facing'])
 
 
+def source_index():
+    # Short lists only: PA 17's JSON exporter rejects UTF-8 descriptions,
+    # such as the phone sink's monitor source.
+    for line in pactl('list', 'short', 'sources').splitlines():
+        fields = line.split('\t')
+        if len(fields) >= 2 and fields[1] == SOURCE:
+            return int(fields[0])
+    return None
+
+
 def ensure_source():
-    sources = json.loads(pactl('-f', 'json', 'list', 'sources'))
-    source = next((s for s in sources if s['name'] == SOURCE), None)
-    if source is None:
+    index = source_index()
+    if index is None:
         if FIFO.exists() and not stat.S_ISFIFO(FIFO.stat().st_mode):
             raise OSError('Microphone path is not a FIFO')
         module = pactl('load-module', 'module-pipe-source', 'source_name=' + SOURCE,
@@ -172,9 +255,24 @@ def ensure_source():
         os.chmod(FIFO, 0o600)
         pactl('set-default-source', SOURCE)
         LOG.info('microphone source ready (module %s)', module)
-        sources = json.loads(pactl('-f', 'json', 'list', 'sources'))
-        source = next(s for s in sources if s['name'] == SOURCE)
-    return source
+        index = source_index()
+    return index
+
+
+def ensure_phone_sink():
+    """Return the android_phone sink state (RUNNING, IDLE or SUSPENDED)."""
+    for line in pactl('list', 'short', 'sinks').splitlines():
+        fields = line.split('\t')
+        if len(fields) >= 5 and fields[1] == PHONE_SINK:
+            return fields[4]
+    if PHONE_FIFO.exists() and not stat.S_ISFIFO(PHONE_FIFO.stat().st_mode):
+        raise OSError('Phone output path is not a FIFO')
+    module = pactl('load-module', 'module-pipe-sink', 'sink_name=' + PHONE_SINK,
+                   'file=' + str(PHONE_FIFO), 'format=s16le', 'rate=48000', 'channels=2',
+                   'sink_properties=device.description=手机本机')
+    os.chmod(PHONE_FIFO, 0o600)
+    LOG.info('phone output sink ready (module %s)', module)
+    return 'IDLE'
 
 
 def watch_pulse():
@@ -186,7 +284,7 @@ def watch_pulse():
                     line = process.stdout.readline()
                     if not line:
                         break
-                    if ' on source' in line or ' on server ' in line:
+                    if ' on source' in line or ' on sink ' in line or ' on server ' in line:
                         CHANGED.set()
             process.terminate()
             process.wait(timeout=3)
@@ -209,7 +307,7 @@ def main():
         return
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
-    microphone, cameras = Microphone(), Cameras()
+    microphone, cameras, phone = Microphone(), Cameras(), PhoneOutput()
     threading.Thread(target=watch_pulse, daemon=True).start()
     last_info = 0
     info = {}
@@ -231,12 +329,14 @@ def main():
                 wanted = False
                 for block in outputs:
                     fields = dict(line.strip().split(': ', 1) for line in block.splitlines() if ': ' in line)
-                    if fields.get('Source') == str(source['index']) and fields.get('Corked') == 'no':
+                    if fields.get('Source') == str(source) and fields.get('Corked') == 'no':
                         wanted = True
                 permission = not (info.get('microphoneDenied') and not info.get('microphonePermission'))
                 microphone.set_wanted(bool(wanted and info.get('visible') and permission))
+                phone.set_wanted(ensure_phone_sink() != 'SUSPENDED')
             except (OSError, ValueError, subprocess.SubprocessError) as error:
                 microphone.set_wanted(False)
+                phone.set_wanted(False)
                 LOG.warning('audio server unavailable: %s', error)
                 STOP.wait(3)
             CHANGED.wait(0.5)
@@ -244,6 +344,7 @@ def main():
             STOP.wait(0.1)
     finally:
         microphone.stop()
+        phone.stop()
         cameras.update({})
 
 

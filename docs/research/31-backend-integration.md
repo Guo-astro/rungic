@@ -264,6 +264,12 @@ Firefox / Showtime / GStreamer / 系统提示音
   → Termux UID下的专用PulseAudio 17.0-4
   → module-aaudio-sink，sink=android_output
   → Android AAudio / 音频系统 / 当前输出设备
+
+需要在手机本机出声的流（语音助手从手机发起时，或用户在音量设置里选择）
+  → 容器内PulseAudio，sink=android_phone（module-pipe-sink，FIFO 16 KiB）
+  → media-bridge（按sink状态启停）
+  → 私有capture.sock，op=phone-output，48 kHz双声道S16LE
+  → APK CaptureBridge的AudioTrack，setPreferredDevice：有线/USB/蓝牙耳机优先，否则扬声器
 ```
 
 | 配置 | 所在位置与职责 |
@@ -313,6 +319,7 @@ Firefox getDisplayMedia
 | 横竖屏 | 设备页orientation → Android Activity方向 → Surface尺寸/触摸换算/INI → Phoc输出与Phosh布局 | 同步更新坐标、模式、安全区域；旋转修复（历史材料已移除） |
 | 文档共享 | GNOME/portal → 容器私有FUSE → 文档导出；公共文件另经bindfs访问 | init.sh（历史材料已移除）。容器节点10:229/0666，Android原 `/dev/fuse` 仍0600 |
 | 相机/麦克风 | Android普通授权 → 私有capture.sock → 标准PA source / PW Video/Source → GNOME/Firefox | [media-bridge.py](../../shared/media/media-bridge.py)、[camera-source.cpp](../../shared/media/camera-source.cpp)。session-apps自动启动，flock防重复；后台释放设备 |
+| 手机本机输出 | 应用选`android_phone`（“手机本机”）sink → module-pipe-sink FIFO → media-bridge → capture.sock `phone-output` → APK AudioTrack（指定本机设备） | [media-bridge.py](../../shared/media/media-bridge.py)、`CaptureBridge.phoneOutput`。默认sink仍为跟随Android路由的`android`；投屏时两路并存（实测APK音轨在SPEAKER输出线程、Termux音轨在PROXY）。见59篇 |
 | 网络文件 | Nautilus/GIO → GVfs对应协议后端 → WebDAV/SMB/NFS服务器 | WebDAV中文读写已实测；SMB/NFS仅安装后端，未验用户网络盘 |
 | 外接显示（Miracast） | Android WFD显示 ← 宿主悬浮窗SurfaceView/Presenter ← 宿主额外wl_output“Moto Cast” ← KWin(moto11)输出CAST-n的全屏toplevel；Plasma经KScreen进入docked模式 | [58篇](../58-miracast-desktop-feasibility.md)第2步；宿主`cast.rs`、KWin `wayland_display/backend/output`、kscreenosd补丁。连接由root工具`moto-cast` |
 | 投屏触控板/键盘 | 手机`CastControls`触控面板 → `NativeBridge.castPointer` → 宿主`cast_pointer`（wl_pointer只进投屏窗口）→ KWin输出CAST-n（软件光标）；Android输入法 → 已有按键/文字通道 → 宿主wl_keyboard或text-input-v3 → KWin `commitHostText` → 焦点应用 | 58篇第3步。text-input-v3路径同时让手机模式下的Android输入法能提交中文；键码表已按input-event-codes改正 |

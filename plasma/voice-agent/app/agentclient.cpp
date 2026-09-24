@@ -37,7 +37,7 @@ void AgentClient::listConversations() { call(QStringLiteral("ListConversations")
 void AgentClient::openConversation(const QString &id) { call(QStringLiteral("OpenConversation"), {id}, &AgentClient::conversationOpened); }
 void AgentClient::closeConversation() { call(QStringLiteral("CloseConversation"), {}); }
 void AgentClient::deleteConversation(const QString &id) { call(QStringLiteral("DeleteConversation"), {id}); }
-void AgentClient::startTalking() { call(QStringLiteral("StartTalking"), {}); }
+void AgentClient::startTalking(const QString &screen) { call(QStringLiteral("StartTalking"), {screen}); }
 void AgentClient::stopTalking() { call(QStringLiteral("StopTalking"), {}); }
 void AgentClient::interrupt() { call(QStringLiteral("Interrupt"), {}); }
 void AgentClient::approve(const QString &id, const QString &decision) { call(QStringLiteral("Approve"), {id, decision}); }
