@@ -70,11 +70,13 @@ TOOLS = [
     {'name': 'desktop_launch',
      'description': ('Open an application by desktop-file id or name (e.g. "org.kde.dolphin", "Firefox", "系统设置") '
                      'on the TV while casting (else the phone); an app already open is moved there and activated. '
-                     'Returns its window id and screen.'),
+                     'Returns its window id and screen. screen "agent": the assistant\'s screen (floating '
+                     'window or TV), where desktop_goal works.'),
      'inputSchema': {'type': 'object', 'properties': {
          'app': {'type': 'string'},
-         'screen': {'type': 'string', 'enum': ['auto', 'tv', 'phone'],
-                    'description': 'auto (default): the TV while casting, else the phone.'}}, 'required': ['app']},
+         'screen': {'type': 'string', 'enum': ['auto', 'agent', 'tv', 'phone'],
+                    'description': "auto (default): the assistant's screen or the TV when one is on, else the phone."}},
+         'required': ['app']},
      'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False}},
     {'name': 'desktop_observe',
      'description': 'Accessibility snapshot of the active window: controls with role, name, value and state.',
@@ -97,7 +99,8 @@ TOOLS = [
                      'answer (what the screen shows about the goal) and the steps taken. Outcome "question": the '
                      'task needs information only the user has; ask the user `question` and call again with the '
                      'same goal and the reply in `replies`. Sending, paying or deleting still needs the user\'s OK '
-                     'before you call this.'),
+                     'before you call this. Runs on the assistant\'s screen, which it turns on: the user watches it '
+                     'in a floating window (or on the TV) while the phone stays theirs.'),
      'inputSchema': {'type': 'object', 'properties': {
          'goal': {'type': 'string'},
          'app': {'type': 'string', 'description': 'Application to open or activate first (as for desktop_launch).'},
@@ -252,7 +255,8 @@ class Cua:
         kwin = self.backend.kwin
         info = kwin.windows()
         casting = any(s.startswith('CAST') for s in info.get('screens', []))
-        to_tv = screen == 'tv' or (screen == 'auto' and casting)
+        # The assistant's screen (docs/65) and the TV are the same output, CAST-n.
+        to_tv = screen in ('tv', 'agent') or (screen == 'auto' and casting)
         prefix = 'CAST' if to_tv else 'WL'
         target_screen = next((n for n in info.get('screens', []) if n.startswith(prefix)), prefix)
         existing = next((w for w in info['windows'] if (w['resource_class'] or '').casefold() in classes), None)
@@ -303,9 +307,13 @@ class Cua:
         return result
 
     def goal(self, args: dict) -> dict:
-        """A whole task through moto-clicker (typesafe-computer-use, JEV per step; docs/64)."""
+        """A whole task through moto-clicker (typesafe-computer-use, JEV per step; docs/64), on the
+        assistant's screen (docs/65): turned on first, and the app opened there."""
+        screen = subprocess.run(['moto-agent-screen', 'on'], capture_output=True, text=True, timeout=30)
+        if screen.returncode != 0:
+            raise RuntimeError(f'assistant screen: {screen.stderr.strip() or screen.stdout.strip()}')
         if args.get('app'):
-            self.launch(str(args['app']))
+            self.launch(str(args['app']), 'agent')
             time.sleep(0.8)
         command = ['moto-clicker', 'run', str(args['goal']), '--steps', str(int(args.get('steps') or 25))]
         for reply in args.get('replies') or []:

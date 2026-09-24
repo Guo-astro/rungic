@@ -10,7 +10,10 @@ import org.kde.plasma.private.mobileshell.quicksettingsplugin as QS
 QS.QuickSetting {
     id: root
 
-    readonly property bool casting: Qt.application.screens.length > 1
+    // A TV connected (moto-cast's status). Not "a second screen": the assistant's screen (docs/65)
+    // is one too, with or without a TV.
+    property bool casting: false
+    readonly property int screens: Qt.application.screens.length
     property string busy: ""          // "connect" or "disconnect" while moto-cast runs
     property bool reconnecting: false // the TV dropped the session; moto-cast-watch is reconnecting
     property string tvName: ""
@@ -42,6 +45,7 @@ QS.QuickSetting {
     }
 
     function apply(result) {
+        casting = !!result.active;
         tvName = result.active ? result.active.name.replace(/\[.*\]$/, "") : tvName;
         reconnecting = !!result.reconnecting;
         if (reconnecting) {
@@ -51,9 +55,9 @@ QS.QuickSetting {
         }
     }
 
-    // The TV came or went: learn its name, or whether it is being reconnected.
-    onCastingChanged: statusDelay.restart()
-    Component.onCompleted: if (casting) run("status")
+    // A screen came or went: learn whether a TV is connected, its name, or whether it is being reconnected.
+    onScreensChanged: statusDelay.restart()
+    Component.onCompleted: run("status")
 
     Timer {
         id: statusDelay
