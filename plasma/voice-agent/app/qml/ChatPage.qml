@@ -24,7 +24,8 @@ Kirigami.Page {
     // - all transcript pieces of one push-to-talk press form one user message;
     // - an agent turn is one collapsible "work" entry holding what the assistant
     //   said meanwhile, the agent's notes, commands and file changes;
-    // - only replies outside agent work (the answer afterwards) are bubbles.
+    // - replies outside agent work are bubbles: the acknowledgement before it and
+    //   the answer afterwards. Entries never disappear once shown.
     property int workAt: -1          // the work entry receiving agent activity
     property bool workOpen: false    // an agent turn is running
     property real lastTime: 0        // of the latest event (a turn the history left open ends there)
@@ -97,6 +98,10 @@ Kirigami.Page {
                     // The agent can start before the transcript of what started it arrives.
                     page.insertAt(page.workAt, { kind: "message", role: "user", text: e.text, press: e.press || 0 })
                 } else {
+                    // A new request: earlier turns' work folds away again.
+                    for (let i = 0; i < chat.count; i++) {
+                        if (chat.get(i).kind === "work" && chat.get(i).expanded) chat.setProperty(i, "expanded", false)
+                    }
                     chat.append(entry({ kind: "message", role: "user", text: e.text, press: e.press || 0 }))
                 }
                 if (page.title === "新对话") page.title = e.text.slice(0, 20)
@@ -109,15 +114,9 @@ Kirigami.Page {
             break
         }
         case "agent-started": {
-            // What the assistant said just before handing over ("好的，我来…") belongs to the work.
-            const steps = []
-            const last = chat.count > 0 ? chat.get(chat.count - 1) : null
-            if (last && last.kind === "message" && last.role === "assistant") {
-                steps.push(page.step({ kind: "said", text: last.text }))
-                page.removeAt(chat.count - 1)
-            }
-            chat.append(entry({ kind: "work", status: "running", started: e.time || Date.now() / 1000,
-                                text: steps.length ? steps[0].text : "", steps: steps }))
+            // The acknowledgement before it ("好的，我来…") stays a bubble: it was shown
+            // before anyone knew work would follow, and nothing on screen should vanish.
+            chat.append(entry({ kind: "work", status: "running", started: e.time || Date.now() / 1000 }))
             page.workAt = chat.count - 1
             page.workOpen = true
             break
