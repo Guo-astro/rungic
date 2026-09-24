@@ -13,6 +13,7 @@ import android.view.SurfaceView;
 import android.view.WindowManager;
 import com.winland.server.NativeBridge;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 import org.json.JSONObject;
 
 /**
@@ -24,6 +25,7 @@ import org.json.JSONObject;
 final class CastDesktop implements DisplayManager.DisplayListener, SurfaceHolder.Callback {
     private final Activity activity;
     private final BooleanSupplier ready;
+    private final Consumer<Boolean> bound;
     private final DisplayManager displays;
     private boolean enabled;
     private SurfaceView view;
@@ -31,9 +33,10 @@ final class CastDesktop implements DisplayManager.DisplayListener, SurfaceHolder
     private int displayId = -1;
     private int boundWidth, boundHeight;
 
-    CastDesktop(Activity activity, BooleanSupplier ready) {
+    CastDesktop(Activity activity, BooleanSupplier ready, Consumer<Boolean> bound) {
         this.activity = activity;
         this.ready = ready;
+        this.bound = bound;
         displays = activity.getSystemService(DisplayManager.class);
         displays.registerDisplayListener(this, new Handler(Looper.getMainLooper()));
     }
@@ -99,6 +102,7 @@ final class CastDesktop implements DisplayManager.DisplayListener, SurfaceHolder
         if (boundWidth > 0) {
             NativeBridge.releaseCastSurface();
             boundWidth = boundHeight = 0;
+            bound.accept(false);
         }
     }
 
@@ -110,6 +114,7 @@ final class CastDesktop implements DisplayManager.DisplayListener, SurfaceHolder
         NativeBridge.bindCastSurface(holder.getSurface(), width, height, refresh);
         boundWidth = width;
         boundHeight = height;
+        bound.accept(true);
     }
 
     @Override public void surfaceDestroyed(SurfaceHolder holder) { unbind(); }

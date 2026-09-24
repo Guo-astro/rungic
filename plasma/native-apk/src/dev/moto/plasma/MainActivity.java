@@ -23,6 +23,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     private CodecBridge codecs;
     private CastTest castTest;
     private CastDesktop castDesktop;
+    private CastControls castControls;
     private TextView status;
     private volatile int bufferWidth = 720, bufferHeight = 1600;
     private FrameLayout frame;
@@ -68,10 +69,12 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         frame.addView(status, new FrameLayout.LayoutParams(-1, -1));
         setContentView(frame);
         castTest = new CastTest(this, frame);
-        castDesktop = new CastDesktop(this, () -> initialized);
+        castControls = new CastControls(this, frame, this::setAndroidKeyboard);
+        castDesktop = new CastDesktop(this, () -> initialized, castControls::setAvailable);
         registerEdgeBack();
         display.setOnApplyWindowInsetsListener((v, insets) -> {
             captureDisplayInsets(insets);
+            castControls.imeVisible(insets.isVisible(WindowInsets.Type.ime()));
             return insets;
         });
         display.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or_,ob) ->
@@ -255,6 +258,25 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         if (request.optBoolean("enabled")) castTest.request(new org.json.JSONObject().put("enabled", false));
         return castDesktop.request(request);
     }
+    org.json.JSONObject castControls(org.json.JSONObject request) throws Exception {
+        if (request.has("mode")) castControls.setMode(CastControls.Mode.valueOf(request.getString("mode").toUpperCase()));
+        return castControls.status();
+    }
+
+    /** Android keyboard on the phone; its keys and text go to the focused Linux window. */
+    private void setAndroidKeyboard(boolean show) {
+        InputMethodManager im=(InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);
+        if (show) {
+            androidKeyboard=true;
+            display.requestFocus();
+            im.restartInput(display);
+            im.showSoftInput(display, InputMethodManager.SHOW_IMPLICIT);
+        } else {
+            getWindow().getInsetsController().hide(WindowInsets.Type.ime());
+            androidKeyboard=false;
+        }
+    }
+
     org.json.JSONObject displayInfo() throws org.json.JSONException {
         Display d=display.getDisplay();
         if(d==null)throw new IllegalStateException("Display unavailable");
@@ -413,7 +435,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
                 try { control("home"); }
                 catch (Exception e) { runOnUiThread(() -> Toast.makeText(this, e.getMessage(), Toast.LENGTH_LONG).show()); }
             });
-            if (i == 2) { androidKeyboard=true; display.requestFocus(); InputMethodManager im=(InputMethodManager)getSystemService(INPUT_METHOD_SERVICE); im.restartInput(display); im.showSoftInput(display, InputMethodManager.SHOW_IMPLICIT); }
+            if (i == 2) setAndroidKeyboard(true);
             if (i == 3) moveTaskToBack(true);
             if (i == 4) capture.requestPermissionsFromUser();
             if (i == 5) worker.execute(() -> { try { control("stop"); NativeBridge.releaseWaylandConnection(); initialized=false;

@@ -119,6 +119,12 @@ final class PlatformBridge implements Closeable {
         if(op.equals("display-set"))return ((MainActivity)activity).setDisplayInfo(request);
         if(op.equals("cast-test"))return ((MainActivity)activity).castTest(request);
         if(op.equals("cast-desktop"))return ((MainActivity)activity).castDesktop(request);
+        if(op.equals("cast-controls"))return ((MainActivity)activity).castControls(request);
+        if(op.equals("text-commit")) {
+            // Same path as the Android keyboard's commitText (for tests and tools).
+            com.winland.server.NativeBridge.sendTextInput(request.getString("text"));
+            return new JSONObject().put("ok",true);
+        }
         if(op.equals("clipboard-set")) {
             ClipboardManager clipboard=activity.getSystemService(ClipboardManager.class);
             String text=request.isNull("text")?null:request.getString("text");
