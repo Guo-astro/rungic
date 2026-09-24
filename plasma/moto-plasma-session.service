@@ -10,6 +10,10 @@ User=1000
 PAMName=login
 WorkingDirectory=/home/linux
 Environment=XDG_SESSION_TYPE=wayland
+# The phone is the local seat. Without a seat logind marks the session non-local
+# and polkit applies its "any" defaults: a password for every Flatpak ref and
+# PackageKit step, never retained, even for the admin (sudo) user.
+Environment=XDG_SEAT=seat0
 Environment=XDG_RUNTIME_DIR=/run/user/1000
 Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
 ExecStart=/usr/local/libexec/moto-plasma-session
