@@ -5,7 +5,6 @@ import QtQuick
 import QtQuick.Window
 
 import org.kde.plasma.private.mobileshell.state as MobileShellState
-import org.kde.taskmanager as TaskManager
 import org.kde.plasma.quicksetting.record
 import org.kde.plasma.private.mobileshell.quicksettingsplugin as QS
 
@@ -97,9 +96,12 @@ QS.QuickSetting {
 
     Instantiator {
         model: root.captureScreens
-        delegate: TaskManager.ScreencastingRequest {
+        // External screens are recorded with the pointer drawn in (the phone
+        // has none in touch mode); TaskManager.ScreencastingRequest always hides it.
+        delegate: ScreenStreamRequest {
             required property string modelData
             outputName: modelData
+            embedCursor: modelData !== root.captureScreens[0]
             onNodeIdChanged: {
                 if (nodeId > 0) {
                     const nodes = root.nodes;

@@ -95,4 +95,4 @@
     - 服务加`ExecStartPost`等待挂载点就绪。
     - 会话启动时若共享存储已挂载，写`user-dirs.conf` `enabled=False`，并用`xdg-user-dirs-update --set`固定各目录，失败不阻止会话启动。
   - 容器重启后验证：`xdg-user-dir VIDEOS`为`~/Videos`，录屏已保存到`~/Videos`。
-- **未处理**：`ScreencastingRequest`用`pointer_hidden`申请流，电视录像中没有鼠标光标。
+- **外屏录像带光标**：plasma-workspace的`ScreencastingRequest`固定以`pointer_hidden`申请流。其底层`Screencasting`类未导出（不在已安装头文件与符号中），因此录屏插件按其实现自带`ScreenStreamRequest`（`plasma/recording/screenstream.*`，直接使用KWin的`zkde_screencast_unstable_v1`），外屏以`pointer_embedded`申请，手机仍为`pointer_hidden`。实测电视录像中逐帧检测到约21×31像素的光标，并随触控板移动。
