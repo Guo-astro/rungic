@@ -1,4 +1,4 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="dev.moto.plasma" android:versionCode="37" android:versionName="1.36">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="dev.moto.plasma" android:versionCode="38" android:versionName="1.37">
   <uses-sdk android:minSdkVersion="30" android:targetSdkVersion="35" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
@@ -22,5 +22,7 @@
       <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="Local Wayland display server for the user's Linux desktop session" />
     </service>
     <service android:name=".CaptureService" android:exported="false" android:foregroundServiceType="camera|microphone" />
+    <!-- OCR on the Adreno GPU through OpenCL (LiteRT, docs/64); a vendor library apps must declare. -->
+    <uses-native-library android:name="libOpenCL.so" android:required="false" />
   </application>
 </manifest>

@@ -31,7 +31,8 @@ final class PlatformBridge implements Closeable {
     private void clearAwake() { ((MainActivity)activity).setKeepAwake(MainActivity.AWAKE_LINUX,false); }
     private final AndroidNetworkBridge network;
     private final CaptureBridge capture;
-    PlatformBridge(Activity activity,CaptureBridge capture) { this.activity=activity;this.capture=capture;path=new File(activity.getFilesDir(),"tmp/platform.sock");network=new AndroidNetworkBridge(activity); }
+    private final OcrBridge ocr;
+    PlatformBridge(Activity activity,CaptureBridge capture) { this.activity=activity;this.capture=capture;path=new File(activity.getFilesDir(),"tmp/platform.sock");network=new AndroidNetworkBridge(activity);ocr=new OcrBridge(activity); }
     void start() throws IOException {
         if(running)return;
         path.delete();
@@ -68,6 +69,12 @@ final class PlatformBridge implements Closeable {
                         // Connecting to a TV takes seconds to a minute: answer on its own thread.
                         LocalSocket owned=client;client=null;
                         Thread cast=new Thread(() -> answerCast(owned,request),"moto-cast");cast.setDaemon(true);cast.start();
+                        continue;
+                    }
+                    if(request.optString("op").equals("ocr")) {
+                        // The pixels follow the request line; recognition runs on the OCR thread (docs/64).
+                        LocalSocket owned=client;client=null;
+                        ocr.answer(owned,request);
                         continue;
                     }
                     if(request.optString("op").equals("network-wifi")) {

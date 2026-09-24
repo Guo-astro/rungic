@@ -1,0 +1,45 @@
+{
+  "purpose": "On-device OCR in the Plasma Mobile APK (docs/64): PP-OCRv6 Small on the LiteRT GPU delegate.",
+  "fetched_by": "tools/fetch_ocr_assets.py into .work/cache/ocr",
+  "files": {
+    "litert-2.2.0.aar": {
+      "url": "https://dl.google.com/android/maven2/com/google/ai/edge/litert/litert/2.2.0/litert-2.2.0.aar",
+      "sha256": "624518d72f8a249711a19e9901f480e74f823ca7818260a739cb2c023024807c",
+      "license": "Apache-2.0",
+      "use": "jni/arm64-v8a/libLiteRt.so and libLiteRtClGlAccelerator.so into the APK"
+    },
+    "det.tflite": {
+      "url": "https://huggingface.co/litert-community/PP-OCRv6-Small-LiteRT/resolve/ce3822e060428a902434ca0ee7322fbbeaf2180d/ppocrv6_small_det_640_fp32.tflite",
+      "sha256": "ec9430b6e592ffb28e83b6bab539262a30d267d2475c136b193926ad83835768",
+      "license": "Apache-2.0"
+    },
+    "rec_320.tflite": {
+      "url": "https://huggingface.co/litert-community/PP-OCRv6-Small-LiteRT/resolve/ce3822e060428a902434ca0ee7322fbbeaf2180d/ppocrv6_small_rec_320_fp32.tflite",
+      "sha256": "569bae77214a57476106ae66996f4ba4ef3ac66f81d150966c44e31a8fb0ae36",
+      "license": "Apache-2.0"
+    },
+    "rec_640.tflite": {
+      "url": "https://huggingface.co/litert-community/PP-OCRv6-Small-LiteRT/resolve/ce3822e060428a902434ca0ee7322fbbeaf2180d/ppocrv6_small_rec_640_fp32.tflite",
+      "sha256": "904c9a589763123d8a4c01d205c78669cfe3723b2a23b2221bdeb26fccc66a5d",
+      "license": "Apache-2.0"
+    },
+    "rec_960.tflite": {
+      "url": "https://huggingface.co/litert-community/PP-OCRv6-Small-LiteRT/resolve/ce3822e060428a902434ca0ee7322fbbeaf2180d/ppocrv6_small_rec_960_fp32.tflite",
+      "sha256": "cc72f0f41729e0e5d66194ff657d25cdd10646a2066a780e01b13357135e553e",
+      "license": "Apache-2.0"
+    },
+    "characters.json": {
+      "url": "https://huggingface.co/litert-community/PP-OCRv6-Small-LiteRT/resolve/ce3822e060428a902434ca0ee7322fbbeaf2180d/characters.json",
+      "sha256": "9c89db8aa95ad30c83ee305d53d366c6bba3f85ff2eab0375ef345fd50b0674a",
+      "license": "Apache-2.0",
+      "use": "18,710 CTC classes (blank first, space last), written as classes.txt"
+    },
+    "LICENSE-PP-OCRv6-Small-LiteRT": {
+      "url": "https://huggingface.co/litert-community/PP-OCRv6-Small-LiteRT/resolve/ce3822e060428a902434ca0ee7322fbbeaf2180d/LICENSE",
+      "sha256": "accc36c817ac5ede473d05732e14afc11cb6e55ef5919bc826b653f631165043",
+      "license": "Apache-2.0"
+    }
+  },
+  "model_origin": "PaddlePaddle/PP-OCRv6_small_det_safetensors eae2ee92, PaddlePaddle/PP-OCRv6_small_rec_safetensors fe049fb1, converted by litert-community with LiteRT Torch (model card: validated on SM8850 with GPU fp32).",
+  "measured_on_this_phone": "SM6435 Adreno 710, LiteRT 2.2.0 GPU, 2026-09-25: per run det 640x640 129 ms fp32 / 57 ms fp16; rec 320/640/960 21/38/56 ms fp32, 11.5/21/30 ms fp16; 1080x2400 screenshot at det scale 0.5 (2 tiles, 19-20 lines) 1.0 s fp32 / 0.6 s fp16 with identical text."
+}
