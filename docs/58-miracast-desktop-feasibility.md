@@ -413,6 +413,21 @@ moto-cast-watch（root） ┘ ← 电视端断开时自动重连
 | 语音“把投屏断开。” | Agent执行`moto-cast disconnect`，从说完到口头确认约6秒 |
 | 语音“投到电视上。” | Agent执行`moto-cast connect`并用`status`确认，约26秒后口头确认已连上 |
 
+### 点应用图标时，窗口回到点击的那块屏幕
+
+用户要求：应用已被挪到电视上时，在手机上再点它的图标，应把窗口挪回手机。
+
+- **原因**：Plasma Mobile的主屏（Folio、Halcyon）和媒体控件长按，都经`MobileShell.AppLaunch.launchOrActivateApp`打开应用。应用已在运行时，它调用`WindowUtil::activateWindowByStorageId`，后者只发出`PlasmaWindow::requestActivate`。KWin在窗口所在的电视上激活它，手机上看不到任何变化。
+- **修改**（vendor/plasma-mobile，所有从Plasma Mobile shell点开应用的入口共用）：
+  - `launchOrActivateApp(storageId, screenName)`增加点击所在屏幕的名称。Folio的`AppDelegate`和媒体控件传入`Screen.name`；Halcyon不传时保持原行为。
+  - `WindowUtil`经registry绑定各`wl_output`（v4带名称）。窗口中心不在该屏幕的逻辑几何内时，先用`PlasmaWindow::sendToOutput`（`org_kde_plasma_window.send_to_output`，KWin由`Window::sendToOutput`处理），再激活。
+  - 移回手机后，`convergentwindows`脚本按输出重新套用手机规则（无边框、最大化）。
+- **部署**：在`/root/moto-build/plasma-mobile/build`用ninja构建`libmobileshellplugin.so`、`libwindowplugin.so`和`org.kde.plasma.mobile.homescreen.folio.so`，再由`plasma/install-mobile-plugins.sh`以dpkg-divert覆盖（strip后安装，原文件保留为`.distrib`）。kscreenosd插件也列在该脚本中。之后重启plasmashell。
+- **实测**：语音助手窗口在CAST-1上时，在手机主屏点它的图标，窗口移到WL-0并被激活，呈手机样式；电视上的其他窗口不受影响。
+- **未覆盖**：
+  - 在电视的开始菜单（kickoff）里点一个正在手机上运行的应用：kickoff不走这条路径。单实例应用会自己在原处激活窗口，多实例应用会另开一个窗口。
+  - 手机上的任务切换器（KWin效果）。
+
 ### 限制
 
 - 用户在电视遥控器上退出投屏时，电视同样先关闭RTSP，与电视端故障无法区分，因此会被自动重连一次；两分钟内再次退出就不再重连。要断开投屏，请用快捷开关、语音助手或Android投屏控制。
