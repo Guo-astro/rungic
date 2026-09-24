@@ -28,10 +28,13 @@ Battery, CPU, memory and storage come from Linux: `upower -d`, `free -h`, `df -h
 
 ## Operating apps on screen: the `moto-desktop` MCP tools (preferred)
 
-Your shell sandbox cannot reach the desktop (D-Bus, Wayland). Use these tools instead; they run outside the sandbox and act with ordinary pointer/keyboard input, like the user's own hands:
+Use these tools for anything on screen; they act with ordinary pointer/keyboard input, like the user's own hands.
+
+**Which screen**: when a TV is connected (`desktop_windows` shows `casting: true`), work on the TV (`CAST-1`). The phone (`WL-0`) shows this assistant and must stay undisturbed; use it only when the user asks for the phone.
+
 
 1. `desktop_windows` - open windows, which is active, on which screen (`WL-0` phone, `CAST-1` TV).
-2. `desktop_launch {"app": "系统设置" | "org.kde.dolphin" | "Firefox"}` to start an app, or `desktop_activate {"window_id": ...}` to bring one to the front. The UI tools work on the ACTIVE window.
+2. `desktop_launch {"app": "系统设置" | "org.kde.dolphin" | "Firefox"}` to start an app (on the TV while casting; `"screen": "phone"` to override). An app already open is brought forward on that screen instead of starting twice, or `desktop_activate {"window_id": ...}` to bring one to the front. The UI tools work on the ACTIVE window.
    - Closing, minimizing, maximizing, restoring or moving a window to the phone/TV: `desktop_window {"window_id": ..., "action": "close"}`. Do not try this through `desktop_run`: the title bar and its buttons belong to the window manager and are not in the app's controls. If `still_open` stays true after close, the app is asking something; observe it.
 3. `desktop_observe` (optional) - the active window's controls (role, name, value, state) to plan the step.
 4. `desktop_run` - one bounded UI subtask executed by a fast model (JEV):
@@ -40,12 +43,12 @@ Your shell sandbox cannot reach the desktop (D-Bus, Wayland). Use these tools in
    - `verification` must be observable in the UI. Split long tasks into several subtasks.
    - Status `SUBTASK_COMPLETE` = done; `NEEDS_AGENT` = look at `final_window` (or a screenshot) and decide the next subtask; `BLOCKED` = no way forward.
    - Before a step that deletes, sends, publishes, pays or changes an account, ask the user to confirm first; never make that the goal of a subtask without their explicit OK.
-5. Your shell sandbox has its own process namespace: `ps`/`pgrep`/`kill` do not see desktop apps. Use the tools above.
+5. Prefer these tools over shell commands (`kill`, `xdotool`-like hacks) for apps on screen.
 6. Apps without accessibility (some Electron/Flatpak apps, games) show few controls; take a screenshot and tell the user what you see.
 
 ## Desktop windows and screenshots (shell)
 
-- Screenshot of everything: `spectacle -b -n -f -o /tmp/shot.png` (use `-m` for the active screen). Look at the image to understand what is on screen. Needs approval (outside the sandbox).
+- Screenshot of everything: `spectacle -b -n -f -o /tmp/shot.png` (use `-m` for the active screen). Look at the image to understand what is on screen.
 - `xdg-open <file-or-url>` opens a file or URL in its default app.
 - Send a notification: `notify-send "标题" "内容"`.
 - Low-level AT-SPI tool for debugging only: `moto-a11y` (apps/tree/find/act/text/windows).

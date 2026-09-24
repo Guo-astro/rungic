@@ -65,9 +65,13 @@ TOOLS = [
          'required': ['window_id', 'action']},
      'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False}},
     {'name': 'desktop_launch',
-     'description': ('Start an application by desktop-file id or name (e.g. "org.kde.dolphin", "Firefox", "系统设置"); '
-                     'its window becomes active. Returns the matched application.'),
-     'inputSchema': {'type': 'object', 'properties': {'app': {'type': 'string'}}, 'required': ['app']},
+     'description': ('Open an application by desktop-file id or name (e.g. "org.kde.dolphin", "Firefox", "系统设置") '
+                     'on the TV while casting (else the phone); an app already open is moved there and activated. '
+                     'Returns its window id and screen.'),
+     'inputSchema': {'type': 'object', 'properties': {
+         'app': {'type': 'string'},
+         'screen': {'type': 'string', 'enum': ['auto', 'tv', 'phone'],
+                    'description': 'auto (default): the TV while casting, else the phone.'}}, 'required': ['app']},
      'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False}},
     {'name': 'desktop_observe',
      'description': 'Accessibility snapshot of the active window: controls with role, name, value and state.',
@@ -95,7 +99,8 @@ def find_application(query: str) -> dict | None:
             continue
         app_id = (info.get_id() or '').removesuffix('.desktop')
         names = {app_id.casefold(), (info.get_name() or '').casefold(), (info.get_display_name() or '').casefold()}
-        classes = {app_id.split('.')[-1].casefold(), os.path.basename(info.get_executable() or '').casefold()}
+        classes = {app_id.casefold(), app_id.split('.')[-1].casefold(),
+                   os.path.basename(info.get_executable() or '').casefold()}
         if isinstance(info, Gio.DesktopAppInfo) and info.get_startup_wm_class():
             classes.add(info.get_startup_wm_class().casefold())
         entry = {'id': app_id, 'name': info.get_display_name(), 'classes': sorted(c for c in classes if c)}
@@ -145,7 +150,9 @@ class Cua:
     def windows(self) -> dict:
         info = self.backend.kwin.windows()
         active = (info.get('active') or {}).get('id')
-        return {'windows': [{'id': w['id'], 'caption': w['caption'], 'app': w['resource_class'], 'screen': w['output'],
+        screens = info.get('screens', [])
+        return {'casting': any(s.startswith('CAST') for s in screens), 'screens': screens,
+                'windows': [{'id': w['id'], 'caption': w['caption'], 'app': w['resource_class'], 'screen': w['output'],
                              'active': w['id'] == active, 'minimized': w['minimized']} for w in info['windows']]}
 
     def window(self, window_id: str, action: str) -> dict:
@@ -164,20 +171,34 @@ class Cua:
         time.sleep(0.3)
         return {'activated': ok}
 
-    def launch(self, app: str) -> dict:
+    def launch(self, app: str, screen: str = 'auto') -> dict:
+        """Open `app` on the TV while casting (else the phone), or bring its open window there."""
         entry = find_application(app)
         if entry is None:
             raise ValueError(f'No installed application matches {app!r}')
-        subprocess.Popen(['kstart', '--application', entry['id']], stdout=subprocess.DEVNULL,
-                         stderr=subprocess.DEVNULL, start_new_session=True)
-        # Wait for its window to become active (up to ~8 s).
         classes = entry.pop('classes')
-        for _ in range(16):
-            time.sleep(0.5)
-            active = self.backend.kwin.windows().get('active') or {}
-            if (active.get('resource_class') or '').casefold() in classes:
-                return {'launched': entry, 'active_window': active.get('caption')}
-        return {'launched': entry, 'active_window': None, 'note': 'window not active yet'}
+        kwin = self.backend.kwin
+        info = kwin.windows()
+        casting = any(s.startswith('CAST') for s in info.get('screens', []))
+        to_tv = screen == 'tv' or (screen == 'auto' and casting)
+        prefix = 'CAST' if to_tv else 'WL'
+        target_screen = next((n for n in info.get('screens', []) if n.startswith(prefix)), prefix)
+        existing = next((w for w in info['windows'] if (w['resource_class'] or '').casefold() in classes), None)
+        if existing:
+            if not existing['output'].startswith(prefix):
+                kwin.window_action(existing['id'], 'to_tv' if to_tv else 'to_phone')
+            kwin.activate(existing['id'])
+            time.sleep(0.3)
+            return {'launched': entry, 'already_open': True,
+                    'window': {'id': existing['id'], 'caption': existing['caption'], 'screen': target_screen}}
+        placed = kwin.place_next(classes, prefix, lambda: subprocess.Popen(
+            ['kstart', '--application', entry['id']], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True))
+        if placed is None:
+            return {'launched': entry, 'window': None,
+                    'note': 'No window yet (slow start, or its window class differs); check desktop_windows.'}
+        time.sleep(0.3)
+        return {'launched': entry, 'window': {'id': placed['id'], 'screen': placed['screen']}}
 
     def observe(self) -> dict:
         snapshot = self.backend.observe()
@@ -218,7 +239,7 @@ class Cua:
         if name == 'desktop_window':
             return self.window(str(arguments['window_id']), str(arguments['action']))
         if name == 'desktop_launch':
-            return self.launch(str(arguments['app']))
+            return self.launch(str(arguments['app']), str(arguments.get('screen') or 'auto'))
         if name == 'desktop_observe':
             return self.observe()
         if name == 'desktop_run':
@@ -283,7 +304,7 @@ def main() -> None:
     elif command == 'activate':
         data = cua.activate(sys.argv[2])
     elif command == 'launch':
-        data = cua.launch(sys.argv[2])
+        data = cua.launch(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else 'auto')
     elif command == 'window':
         data = cua.window(sys.argv[2], sys.argv[3])
     elif command == 'run':

@@ -27,7 +27,8 @@ function info(w) {
     client: [c.x, c.y, c.width, c.height], frame: [f.x, f.y, f.width, f.height], id: String(w.internalId)};
 }
 const wins = workspace.windowList();
-const out = {active: info(workspace.activeWindow), windows: []};
+const out = {active: info(workspace.activeWindow), windows: [], screens: []};
+for (let i = 0; i < workspace.screens.length; i++) out.screens.push(String(workspace.screens[i].name));
 for (let i = 0; i < wins.length; i++) if (wins[i].normalWindow) out.windows.push(info(wins[i]));
 callDBus("SERVICE", "/dev/moto/Cua", "dev.moto.Cua", "Report", JSON.stringify(out));
 '''
@@ -70,6 +71,26 @@ for (let i = 0; i < wins.length; i++) {
 callDBus("SERVICE", "/dev/moto/Cua", "dev.moto.Cua", "Report", JSON.stringify(result));
 '''
 
+# Armed before an app starts: its first normal window goes to the chosen screen
+# (the TV while casting) and becomes active, so the phone is not interrupted.
+PLACE_JS = '''
+const classes = CLASSES;
+let target = null;
+for (let i = 0; i < workspace.screens.length; i++) {
+  if (String(workspace.screens[i].name).indexOf("PREFIX") === 0) target = workspace.screens[i];
+}
+function added(w) {
+  if (!w.normalWindow || classes.indexOf(String(w.resourceClass).toLowerCase()) < 0) return;
+  workspace.windowAdded.disconnect(added);
+  if (target && w.output !== target) workspace.sendClientToScreen(w, target);
+  workspace.activeWindow = w;
+  callDBus("SERVICE", "/dev/moto/Cua", "dev.moto.Cua", "Report",
+           JSON.stringify({placed: true, id: String(w.internalId), screen: String(target ? target.name : w.output.name)}));
+}
+workspace.windowAdded.connect(added);
+callDBus("SERVICE", "/dev/moto/Cua", "dev.moto.Cua", "Report", JSON.stringify({armed: true}));
+'''
+
 WINDOW_ACTIONS = ('close', 'minimize', 'maximize', 'restore', 'to_phone', 'to_tv')
 
 
@@ -91,7 +112,9 @@ class KWin:
     def _kwin(self, method: str, path: str, interface: str, args=None):
         return self.session.call_sync('org.kde.KWin', path, interface, method, args, None, 0, 3000).unpack()
 
-    def _script(self, source: str, timeout: float = 3.0) -> dict:
+    def _script(self, source: str, timeout: float = 3.0, *, then=None, then_timeout: float = 0.0) -> dict:
+        """Run a one-shot script and return its report. With `then`, call it after the
+        first report and return the second one (None if it does not come in time)."""
         name = f'motocua{os.getpid()}x{time.monotonic_ns()}'
         script = self.dir / f'{name}.js'
         script.write_text(source.replace('SERVICE', self.session.get_unique_name()))
@@ -100,18 +123,24 @@ class KWin:
             number = self._kwin('loadScript', '/Scripting', 'org.kde.kwin.Scripting',
                                 GLib.Variant('(ss)', (str(script), name)))[0]
             self._kwin('run', f'/Scripting/Script{number}', 'org.kde.kwin.Script')
-            deadline = time.monotonic() + timeout
-            while not self.reports and time.monotonic() < deadline:
-                self.context.iteration(True)
-            if not self.reports:
+            if not self._wait(1, timeout):
                 raise RuntimeError('KWin script did not report')
-            return json.loads(self.reports[0])
+            if then is None:
+                return json.loads(self.reports[0])
+            then()
+            return json.loads(self.reports[1]) if self._wait(2, then_timeout) else None
         finally:
             try:
                 self._kwin('unloadScript', '/Scripting', 'org.kde.kwin.Scripting', GLib.Variant('(s)', (name,)))
             except GLib.Error:
                 pass
             script.unlink(missing_ok=True)
+
+    def _wait(self, count: int, timeout: float) -> bool:
+        deadline = time.monotonic() + timeout
+        while len(self.reports) < count and time.monotonic() < deadline:
+            self.context.iteration(False) or time.sleep(0.01)
+        return len(self.reports) >= count
 
     def windows(self) -> dict:
         """{'active': window or None, 'windows': [normal windows]}; geometry is global logical."""
@@ -120,6 +149,12 @@ class KWin:
     def cursor(self) -> tuple[float, float]:
         position = self._script(CURSOR_JS)
         return float(position['x']), float(position['y'])
+
+    def place_next(self, classes: list[str], screen_prefix: str, start, timeout: float = 12.0) -> dict | None:
+        """Start an app with `start()`; its first window opens on the screen whose name
+        starts with `screen_prefix` and becomes active. None if no window appeared."""
+        source = PLACE_JS.replace('CLASSES', json.dumps([c.lower() for c in classes])).replace('PREFIX', screen_prefix)
+        return self._script(source, then=start, then_timeout=timeout)
 
     def window_action(self, window_id: str, action: str) -> dict:
         """Window management through KWin itself. `close` is the title bar's close

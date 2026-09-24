@@ -133,6 +133,22 @@
 - **修复**：按顺序播放样本，不再打到达时间戳（`do-timestamp=false`，pulsesink `sync=false`，`buffer-time` 300 ms），由PulseAudio按采样率连续播放。复测同一类回复，没有任何不连续或重新同步记录。
 - **手机本机输出**：APK 1.34把AudioTrack缓冲从约40 ms加到约150 ms。语音与媒体播放不需要低延迟，而Linux侧由Python线程转发，手机繁忙时会被延迟。每次播放结束时，在`MotoAudio`日志中记录欠载次数：一段约35 s的回复只有1次，是开始播放时缓冲为空的那一次。
 
+## Agent模型、权限与停止按钮（2026-09-24）
+
+- **模型**：
+  - Agent固定为`gpt-6-luna`，推理强度medium，由`thread/start`与`thread/resume`的`model`和`config.model_reasoning_effort`指定，已有对话恢复时同样切换。此前用的是账号默认的`gpt-6-sol`。
+  - 账号可用模型（`model/list`）：gpt-6-sol（默认）、gpt-6-astra、gpt-6-luna（“快速、便宜，适合简单任务”），以及5.6系列。
+  - 实时语音仍为Codex默认的`gpt-realtime-1.5`。输入转写`gpt-4o-mini-transcribe`由Codex固定，只用于显示和交给Agent的上下文；交给Agent的任务文字由实时模型自己写入`background_agent`的参数。
+- **权限**：用户要求去掉所有授权，改为`approvalPolicy: never`、`sandbox: danger-full-access`，即Codex的YOLO模式。
+  - Agent以桌面用户身份不受限制地执行命令，也能直接访问D-Bus和Wayland。
+  - 破坏性操作由提示词约束：删除、覆盖、卸载、发送、发布、付款、改账户或系统设置，都需要用户明确要求并先确认。实时模型的提示词也去掉了“授权卡片”的说法。
+- **停止按钮**：
+  - 界面在Agent工作或正在播报时，于说话按钮右侧显示“停止”。它调用D-Bus `StopTask`：服务先停止播放，再对当前turn（`turn/started`里的id）调用`turn/interrupt`，并发`task-stopped`事件（界面显示“已停止”）。
+  - 按下时正在播报的那条回复，余下的音频会继续到达，因此一直丢弃到该回复结束（下一条助手`transcript/done`）；按住说话时也会解除。
+  - 实测：截屏任务开始3 s后按停止，Codex记录`turn_aborted interrupted`，界面出现“已停止”，之后没有再播出残句。
+  - 用语音说“停”仍会作为补充指示交给正在进行的任务（steer），不是强制停止。
+- **测试参数**：`--stop-after N`在N秒后模拟按下停止。
+
 ## 待办
 
 - **输入转写为繁体**：app-server不能设置转写语言，只影响显示；显示时做简繁转换。

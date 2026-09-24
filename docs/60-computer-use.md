@@ -91,6 +91,21 @@ arc-cua的接口：`observe() -> DesktopSnapshot`、`is_fresh(snapshot, action)`
 - **修复**：窗口管理交给窗口管理器。新增`desktop_window`工具（KWin脚本：`closeWindow`、`minimized`、`setMaximize`、`sendClientToScreen`）。技能里写明：窗口的关闭、最小化、最大化、移屏用这个工具，不要走`desktop_run`；沙箱中的`ps`/`pgrep`看不到桌面应用。
 - **实测**：`moto-cua window <id> close`一次关闭，窗口列表中不再有该窗口。
 
+## 投屏时默认在电视上操作（2026-09-24）
+
+用户要求：大屏开启时，绝大多数操作应在大屏上进行，不打断手机上的工作（手机上还显示着语音助手）。
+
+- **`desktop_windows`**：返回`casting`和`screens`。
+- **`desktop_launch`**：`screen`参数为`auto`（默认，投屏时为电视）、`tv`或`phone`。
+  - 应用已经打开时，不再重复启动，而是把它移到目标屏并激活。
+  - 新启动时，先加载一个一次性KWin脚本监听`windowAdded`，再执行`kstart`。该应用的第一个普通窗口一出现，就`sendClientToScreen`到目标屏并设为活动窗口，然后回报窗口id。
+  - 窗口类名的匹配包括桌面文件完整id（Dolphin的类名就是`org.kde.dolphin`）、id末段、可执行名和StartupWMClass。
+- **提示词和技能**：投屏时在电视上工作；手机上已打开的应用，先`desktop_window` `to_tv`再操作；只有用户点名手机时才用手机屏。
+- **实测**：
+  - Dolphin新开，直接出现在CAST-1并处于活动状态，1.7 s。
+  - Dolphin先移回手机再调用`launch`，被移回电视并激活，1.0 s。
+  - Firefox新开，出现在CAST-1，3.4 s。
+
 ## 限制与待办
 - 只操作活动窗口；弹出菜单等若属于另一个窗口，需要Agent先激活或再观察。
 - 没有无障碍树的应用（部分Electron、游戏）只能看截图，arc-cua的OCR后端是macOS Vision实现，Linux暂无对应。

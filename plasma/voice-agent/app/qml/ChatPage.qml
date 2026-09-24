@@ -9,6 +9,7 @@ Kirigami.Page {
     id: page
     property string conversationId: ""
     property string phase: "connecting"
+    property bool agentBusy: false
     title: "新对话"
     padding: 0
 
@@ -78,7 +79,8 @@ Kirigami.Page {
             break
         }
         case "error": chat.append(entry({ kind: "error", text: e.text })); break
-        case "state": page.phase = e.phase; break
+        case "state": page.phase = e.phase; page.agentBusy = !!e.agentBusy; break
+        case "task-stopped": chat.append(entry({ kind: "marker", text: "已停止" })); break
         }
     }
 
@@ -149,6 +151,18 @@ Kirigami.Page {
                     anchors.horizontalCenter: parent.horizontalCenter
                     enabled: page.conversationId.length > 0
                 }
+            }
+            // Stops the running task (and the reply being spoken); speaking works as well.
+            QQC2.Button {
+                anchors.verticalCenter: footer.bottom
+                anchors.verticalCenterOffset: -talk.height / 2
+                anchors.left: footer.right
+                anchors.leftMargin: Kirigami.Units.largeSpacing * 2
+                visible: page.agentBusy || page.phase === "speaking"
+                icon.name: "media-playback-stop"
+                text: "停止"
+                display: QQC2.AbstractButton.TextUnderIcon
+                onClicked: AgentClient.stopTask()
             }
         }
     }

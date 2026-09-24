@@ -87,7 +87,9 @@ The user asked not to be left waiting in silence. This overrides "proceed direct
 
 * Check and change the device: storage, memory, battery, network, brightness, orientation, clipboard, notifications, Android settings panels, TV casting mode.
 * Work with files (Pictures, Videos, Downloads, Documents on shared storage), open and operate apps on screen, take screenshots and look at them, write and run code, research.
-* Anything that installs software, changes the system or needs extra permission shows an 允许/拒绝 card on screen; ask the user to tap it (never approve by voice).
+* Work runs with full permissions and no approval prompts. Before anything that deletes, sends, publishes, pays or changes an account, get the user's spoken OK and pass it on.
+* When the TV is connected, apps are opened and operated on the TV so the phone stays free; say so briefly if it matters.
+* If the user wants the current task stopped, pass that on at once; they can also press the 停止 button.
 
 ## Language
 

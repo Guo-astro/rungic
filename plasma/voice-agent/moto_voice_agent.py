@@ -40,6 +40,9 @@ MIC = 'android_microphone'
 PHONE_SINK = 'android_phone'     # always the phone itself (shared/media/media-bridge.py)
 END_SILENCE_MS = 900         # after release, so the server VAD sees the end of speech
 IDLE_STOP_S = 600            # stop an unused realtime session (cost)
+# The agent (Codex): the fast model; tasks here are short device operations.
+AGENT_MODEL = 'gpt-6-luna'
+AGENT_EFFORT = 'medium'
 # Spoken progress while the agent works: Codex hands agent updates to the voice
 # model as context only (no response), so it would stay silent until the end.
 PROGRESS_AFTER_S = 8         # quick tasks get no progress update
@@ -61,6 +64,7 @@ INTERFACE = '''
     <method name="StartTalking"><arg type="s" direction="in"/></method>
     <method name="StopTalking"/>
     <method name="Interrupt"/>
+    <method name="StopTask"/>
     <method name="Approve"><arg type="s" direction="in"/><arg type="s" direction="in"/></method>
     <method name="State"><arg type="s" direction="out"/></method>
     <signal name="Event"><arg type="s"/></signal>
@@ -205,6 +209,8 @@ class VoiceAgent:
         self.realtime_ready = threading.Event()
         self.talking = False
         self.agent_busy = False
+        self.muted = False
+        self.turn_id = None
         self.turn_started = 0.0
         self.last_voice = 0.0     # last reply audio or progress request
         self.progress_text = None
@@ -260,7 +266,10 @@ class VoiceAgent:
 
     # ---- conversations ----------------------------------------------------------
     def thread_settings(self):
-        return {'cwd': str(Path.home()), 'sandbox': 'workspace-write', 'approvalPolicy': 'on-request',
+        # Full access without approval prompts (the user's choice, docs/59): the
+        # sandbox could not reach the desktop and every approval interrupted work.
+        return {'cwd': str(Path.home()), 'sandbox': 'danger-full-access', 'approvalPolicy': 'never',
+                'model': AGENT_MODEL, 'config': {'model_reasoning_effort': AGENT_EFFORT},
                 'developerInstructions': prompt('agent.md')}
 
     def open_conversation(self, thread_id):
@@ -366,6 +375,7 @@ class VoiceAgent:
 
     def start_talking(self, sink=None):
         self.last_activity = time.monotonic()
+        self.muted = False
         self.reply_sink = sink
         if not self.thread_id:
             return False
@@ -434,6 +444,8 @@ class VoiceAgent:
     def play(self, audio):
         if self.talking:
             log('reply audio dropped while talking')
+            return False
+        if self.muted:
             return False
         data = base64.b64decode(audio['data'])
         rate = audio.get('sampleRate', RATE)
@@ -517,6 +529,8 @@ class VoiceAgent:
         elif method == 'thread/realtime/transcript/delta':
             self.emit({'type': 'delta', 'role': params.get('role'), 'text': params.get('delta', '')}, keep=False)
         elif method == 'thread/realtime/transcript/done':
+            if params.get('role') != 'user':
+                self.muted = False      # the reply cut by the stop button has ended
             text = params.get('text', '').strip()
             if text:
                 role = 'user' if params.get('role') == 'user' else 'assistant'
@@ -524,6 +538,7 @@ class VoiceAgent:
                     self.store.touch(self.thread_id, text)
                 self.emit({'type': 'message', 'role': role, 'text': text})
         elif method == 'turn/started':
+            self.turn_id = (params.get('turn') or {}).get('id')
             self.agent_busy = True
             self.turn_started = self.last_voice = time.monotonic()
             self.progress_text = self.current_step = None
@@ -532,6 +547,7 @@ class VoiceAgent:
             GLib.idle_add(self.set_state)
             GLib.idle_add(self.start_progress)
         elif method == 'turn/completed':
+            self.turn_id = None
             self.agent_busy = False
             self.last_activity = time.monotonic()
             self.emit({'type': 'agent-finished'})
@@ -590,6 +606,22 @@ class VoiceAgent:
             log('declined request', method)
             self.server.respond(request_id, {'decision': 'decline'})
 
+    def stop_task(self):
+        """Stop button: interrupt the running agent turn and the reply being spoken."""
+        # The rest of a reply already being spoken keeps arriving: drop it until it ends.
+        self.muted = time.monotonic() < self.playing_until + 0.5
+        GLib.idle_add(self.stop_audio)
+        if not (self.agent_busy and self.thread_id and self.turn_id):
+            return
+        log('stop task', self.turn_id)
+        try:
+            self.server.call('turn/interrupt', {'threadId': self.thread_id, 'turnId': self.turn_id}, timeout=10)
+        except Exception as error:
+            log('turn/interrupt', error)
+            self.emit({'type': 'error', 'text': f'停止失败：{error}'})
+            return
+        self.emit({'type': 'task-stopped'})
+
     def approve(self, approval, decision):
         request_id = self.approvals.pop(approval, None)
         if request_id is None:
@@ -643,6 +675,8 @@ class Service:
                     GLib.idle_add(agent.stop_talking)
                 elif method == 'Interrupt':
                     GLib.idle_add(agent.stop_audio)
+                elif method == 'StopTask':
+                    agent.stop_task()
                 elif method == 'Approve':
                     agent.approve(args[0], args[1])
                 elif method == 'State':
@@ -676,7 +710,7 @@ def reply_sink(screen):
     return None
 
 
-def test_turn(audio_file, seconds, screen):
+def test_turn(audio_file, seconds, screen, stop_after=None):
     """Open a new conversation and speak a recording, printing events."""
     agent = VoiceAgent(lambda e: log(json.dumps(e, ensure_ascii=False)[:300]))
     agent.reply_sink = reply_sink(screen)
@@ -693,6 +727,9 @@ def test_turn(audio_file, seconds, screen):
     agent.append_audio(bytes(RATE * 2 * END_SILENCE_MS // 1000))
     loop = GLib.MainLoop()
     GLib.timeout_add(int(seconds * 1000), loop.quit)
+    if stop_after:
+        GLib.timeout_add(int(stop_after * 1000), lambda: (log('test: stop button'),
+                                                           threading.Thread(target=agent.stop_task).start(), False)[-1])
     loop.run()
     agent.close_conversation()
     print('conversation', opened['conversation'])
@@ -704,9 +741,10 @@ def main():
     parser.add_argument('--audio-file', help='test: speak this raw S16LE 24 kHz mono file in a new conversation')
     parser.add_argument('--seconds', type=float, default=60)
     parser.add_argument('--screen', default='', help='test: screen the turn starts from (reply routing)')
+    parser.add_argument('--stop-after', type=float, help='test: press the stop button after this many seconds')
     args = parser.parse_args()
     if args.audio_file:
-        test_turn(args.audio_file, args.seconds, args.screen)
+        test_turn(args.audio_file, args.seconds, args.screen, args.stop_after)
     elif args.service:
         Service()
         GLib.MainLoop().run()

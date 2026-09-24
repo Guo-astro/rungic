@@ -24,6 +24,7 @@ public:
     Q_INVOKABLE void startTalking(const QString &screen);
     Q_INVOKABLE void stopTalking();
     Q_INVOKABLE void interrupt();
+    Q_INVOKABLE void stopTask();
     Q_INVOKABLE void approve(const QString &id, const QString &decision);
 
 Q_SIGNALS:
