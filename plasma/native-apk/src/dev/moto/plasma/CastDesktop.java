@@ -35,9 +35,13 @@ final class CastDesktop implements DisplayManager.DisplayListener, SurfaceHolder
     private int displayId = -1;
     private int boundWidth, boundHeight;
 
-    CastDesktop(Activity activity, BooleanSupplier ready, Consumer<Boolean> bound) {
+    private final java.util.function.Supplier<int[]> fixedSize;
+
+    /** `fixedSize` gives the assistant's screen size while it is on (docs/65): the TV then presents that output, scaled. */
+    CastDesktop(Activity activity, BooleanSupplier ready, java.util.function.Supplier<int[]> fixedSize, Consumer<Boolean> bound) {
         this.activity = activity;
         this.ready = ready;
+        this.fixedSize = fixedSize;
         this.bound = bound;
         enabled = activity.getPreferences(Context.MODE_PRIVATE).getBoolean("cast_desktop", true);
         displays = activity.getSystemService(DisplayManager.class);
@@ -87,7 +91,9 @@ final class CastDesktop implements DisplayManager.DisplayListener, SurfaceHolder
         windowManager = windowContext.getSystemService(WindowManager.class);
         Display.Mode mode = display.getMode();
         view = new SurfaceView(windowContext);
-        view.getHolder().setFixedSize(mode.getPhysicalWidth(), mode.getPhysicalHeight());
+        int[] size = fixedSize.get();
+        if (size != null) view.getHolder().setFixedSize(size[0], size[1]);
+        else view.getHolder().setFixedSize(mode.getPhysicalWidth(), mode.getPhysicalHeight());
         view.getHolder().addCallback(this);
         // Above the vendor desktop, never focused (input stays with the phone), fully
         // opaque (not FLAG_NOT_TOUCHABLE, which Android caps at 0.8 opacity).

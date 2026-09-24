@@ -33,6 +33,8 @@ public final class NativeBridge {
     /** Cast display (Miracast TV) window, in pixels; refresh in mHz (docs/58). */
     public static native void bindCastSurface(Surface surface, int width, int height, int refreshMhz);
     public static native void releaseCastSurface();
+    /** The assistant's screen (docs/65): the second output exists while enabled, with or without a TV. */
+    public static native void setAgentScreen(boolean enabled, int width, int height, int refreshMhz);
     /** Phone as the TV's touchpad: 0 enable, 1 motion, 2 button, 3 scroll, 4 scroll stop (docs/58). */
     public static native void castPointer(int op, float x, float y);
     public static native String getLastNativeError();

@@ -23,6 +23,9 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     private CodecBridge codecs;
     private CastTest castTest;
     private CastDesktop castDesktop;
+    /** The assistant's screen: a 1920x1080 desktop output, on the TV or in a Linux floating window. */
+    static final int[] AGENT_SCREEN_SIZE = {1920, 1080};
+    private boolean agentScreen;
     private CastControls castControls;
     private TextView status;
     private volatile int bufferWidth = 720, bufferHeight = 1600;
@@ -70,7 +73,8 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         setContentView(frame);
         castTest = new CastTest(this, frame);
         castControls = new CastControls(this, frame, this::setAndroidKeyboard);
-        castDesktop = new CastDesktop(this, () -> initialized, bound -> {
+        agentScreen = getPreferences(MODE_PRIVATE).getBoolean("agent_screen", false);
+        castDesktop = new CastDesktop(this, () -> initialized, () -> agentScreen ? AGENT_SCREEN_SIZE : null, bound -> {
             castControls.setAvailable(bound);
             castBoundAt = bound ? android.os.SystemClock.uptimeMillis() : 0;
             // The secondary home may have taken the focus before the TV got the desktop.
@@ -272,6 +276,9 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
                     NativeBridge.setRefreshRate(display.getDisplay().getRefreshRate());
                 } else NativeBridge.rebindSurface(holder.getSurface());
                 NativeBridge.resumeRendering();
+                // The assistant's screen first, so a TV connected before the desktop (re)started
+                // presents it rather than making an output of its own.
+                if (agentScreen) NativeBridge.setAgentScreen(true, AGENT_SCREEN_SIZE[0], AGENT_SCREEN_SIZE[1], 60000);
                 // A TV that was connected before the desktop (re)started gets it now.
                 runOnUiThread(castDesktop::refresh);
                 android.system.Os.chmod(new File(getFilesDir(), "tmp").getAbsolutePath(), 0755);
@@ -307,6 +314,20 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     org.json.JSONObject castDesktop(org.json.JSONObject request) throws Exception {
         if (request.optBoolean("enabled")) castTest.request(new org.json.JSONObject().put("enabled", false));
         return castDesktop.request(request);
+    }
+    /**
+     * The assistant's screen (docs/65): {"enabled": bool} turns it on or off; the reply says whether it
+     * is on, its size and whether a TV presents it ("tv"), else the Linux floating window shows it.
+     */
+    org.json.JSONObject agentScreen(org.json.JSONObject request) throws Exception {
+        if (request.has("enabled")) {
+            agentScreen = request.getBoolean("enabled");
+            getPreferences(MODE_PRIVATE).edit().putBoolean("agent_screen", agentScreen).apply();
+            if (initialized) NativeBridge.setAgentScreen(agentScreen, AGENT_SCREEN_SIZE[0], AGENT_SCREEN_SIZE[1], 60000);
+        }
+        return new org.json.JSONObject().put("enabled", agentScreen)
+            .put("width", AGENT_SCREEN_SIZE[0]).put("height", AGENT_SCREEN_SIZE[1])
+            .put("tv", castControls.available());
     }
     org.json.JSONObject castControls(org.json.JSONObject request) throws Exception {
         if (request.has("mode")) castControls.setMode(CastControls.Mode.valueOf(request.getString("mode").toUpperCase()));

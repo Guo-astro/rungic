@@ -156,6 +156,9 @@ final class PlatformBridge implements Closeable {
             if(text!=null && text.length()>65536)return new JSONObject().put("available",false);
             return new JSONObject().put("available",true).put("text",text==null?JSONObject.NULL:text.toString());
         }
+        // The assistant's screen is the Linux desktop's own output (docs/65): the assistant turns it
+        // on for a task whether or not Plasma Mobile is in front.
+        if(op.equals("agent-screen"))return ((MainActivity)activity).agentScreen(request);
         if(!activity.hasWindowFocus())return new JSONObject().put("error","请先返回 Plasma Mobile");
         if(op.equals("display-set"))return ((MainActivity)activity).setDisplayInfo(request);
         if(op.equals("cast-test"))return ((MainActivity)activity).castTest(request);
@@ -196,6 +199,8 @@ final class PlatformBridge implements Closeable {
             activity.startActivity(new Intent(action));return new JSONObject().put("ok",true);
         }
         if(op.equals("orientation")) {
+            // Without "mode": the current setting, so a temporary change can be undone (docs/65).
+            if(!request.has("mode"))return new JSONObject().put("mode",activity.getPreferences(Activity.MODE_PRIVATE).getString("orientation","portrait"));
             String mode=request.getString("mode");
             applyOrientation(activity,mode);
             activity.getPreferences(Activity.MODE_PRIVATE).edit().putString("orientation",mode).apply();
