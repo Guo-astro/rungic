@@ -3,7 +3,9 @@
 
 PulseAudio remains the audio server; PipeWire exports Camera Video/Source nodes.
 The default sink follows Android's routing (a cast screen while casting); the
-android_phone sink always plays on the phone itself (docs/59).
+android_phone sink always plays on the phone itself (docs/59). "Linux 扬声器"
+and "Linux 麦克风" are virtual devices for software that listens and speaks in
+place of a person, e.g. an assistant taking part in a call (docs/62).
 Capture sockets are private to the Android app and never listen on TCP.
 """
 import fcntl
@@ -24,6 +26,13 @@ FIFO = RUNTIME / 'moto-microphone.pcm'
 SOURCE = 'android_microphone'
 PHONE_FIFO = RUNTIME / 'moto-phone-output.pcm'
 PHONE_SINK = 'android_phone'
+# Virtual devices (docs/62). A program that should hear an application plays
+# nothing itself: the application outputs to linux_speaker and the listener
+# records linux_speaker.monitor. Audio played into linux_microphone_input comes
+# out of linux_microphone, which any application can choose as its microphone.
+LINUX_SPEAKER = 'linux_speaker'
+LINUX_MIC = 'linux_microphone'
+LINUX_MIC_INPUT = 'linux_microphone_input'
 PHONE_HEADER = {'ok': True, 'rate': 48000, 'channels': 2, 'format': 's16le'}
 F_SETPIPE_SZ = 1031
 LOG = logging.getLogger('android-media')
@@ -275,6 +284,36 @@ def ensure_phone_sink():
     return 'IDLE'
 
 
+def ensure_linux_devices():
+    """Create the virtual devices once; they must never become the default devices.
+
+    Only after the Android output (the tunnel, which appears asynchronously) is
+    there: the default is settled then, and a default taken by a new virtual
+    device is handed back to the Android output and microphone."""
+    sinks = [line.split('\t')[1] for line in pactl('list', 'short', 'sinks').splitlines() if '\t' in line]
+    sources = [line.split('\t')[1] for line in pactl('list', 'short', 'sources').splitlines() if '\t' in line]
+    if 'android' not in sinks or (LINUX_SPEAKER in sinks and LINUX_MIC_INPUT in sinks and LINUX_MIC in sources):
+        return
+    # A description with a space needs the whole property list quoted for the
+    # module argument parser ('...="Linux 扬声器"'); without it loading fails.
+    if LINUX_SPEAKER not in sinks:
+        pactl('load-module', 'module-null-sink', 'sink_name=' + LINUX_SPEAKER, 'rate=48000', 'channels=2',
+              'sink_properties=\'device.description="Linux 扬声器"\'')
+    if LINUX_MIC_INPUT not in sinks:
+        pactl('load-module', 'module-null-sink', 'sink_name=' + LINUX_MIC_INPUT, 'rate=48000', 'channels=1',
+              'channel_map=mono', 'sink_properties=\'device.description="Linux 麦克风输入"\'')
+    if LINUX_MIC not in sources:
+        pactl('load-module', 'module-remap-source', 'master=' + LINUX_MIC_INPUT + '.monitor',
+              'source_name=' + LINUX_MIC, 'rate=48000', 'channels=1', 'channel_map=mono',
+              'source_properties=\'device.description="Linux 麦克风"\'')
+    ours = (LINUX_SPEAKER, LINUX_MIC_INPUT, LINUX_MIC, LINUX_SPEAKER + '.monitor', LINUX_MIC_INPUT + '.monitor')
+    if pactl('get-default-sink') in ours:
+        pactl('set-default-sink', 'android')
+    if pactl('get-default-source') in ours and SOURCE in sources:
+        pactl('set-default-source', SOURCE)
+    LOG.info('Linux speaker and microphone ready')
+
+
 def watch_pulse():
     while not STOP.is_set():
         try:
@@ -311,6 +350,7 @@ def main():
     threading.Thread(target=watch_pulse, daemon=True).start()
     last_info = 0
     info = {}
+    linux_devices_error = None
     try:
         while not STOP.is_set():
             now = time.monotonic()
@@ -323,6 +363,14 @@ def main():
                 cameras.update(info)
             try:
                 source = ensure_source()
+                try:
+                    ensure_linux_devices()
+                except (OSError, subprocess.SubprocessError) as error:
+                    # The virtual devices are optional: never stop the microphone
+                    # and phone output over them.
+                    if linux_devices_error != str(error):
+                        LOG.warning('Linux speaker/microphone not available: %s', error)
+                    linux_devices_error = str(error)
                 # PA 17's JSON exporter rejects UTF-8 application names. Only
                 # numeric Source and yes/no Corked fields are needed here.
                 outputs = pactl('list', 'source-outputs').split('Source Output #')[1:]
