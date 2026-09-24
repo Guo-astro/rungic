@@ -198,6 +198,7 @@ class VoiceAgent:
         self.talking = False
         self.agent_busy = False
         self.playing_until = 0.0
+        self.reply_audio_ms = 0
         self.mic_chunks = 0
         self.last_activity = time.monotonic()
         self.approvals = {}       # our id -> (json-rpc id, kind)
@@ -325,6 +326,9 @@ class VoiceAgent:
                 f'caps=audio/x-raw,format=S16LE,rate={RATE},channels=1,layout=interleaved '
                 '! queue ! audioconvert ! audioresample ! pulsesink')
             self.player_src = self.player.get_by_name('src')
+            bus = self.player.get_bus()
+            bus.add_signal_watch()
+            bus.connect('message::error', lambda _bus, message: log('player error', message.parse_error()[0].message))
             self.player.set_state(Gst.State.PLAYING)
 
     def stop_audio(self):
@@ -406,6 +410,7 @@ class VoiceAgent:
 
     def play(self, audio):
         if self.talking:
+            log('reply audio dropped while talking')
             return False
         data = base64.b64decode(audio['data'])
         rate = audio.get('sampleRate', RATE)
@@ -413,6 +418,7 @@ class VoiceAgent:
         was_speaking = time.monotonic() < self.playing_until
         self.playing_until = max(self.playing_until, time.monotonic()) + len(data) / 2 / rate
         self.player_src.emit('push-buffer', Gst.Buffer.new_wrapped(data))
+        self.reply_audio_ms += len(data) * 1000 // 2 // rate
         if not was_speaking:
             self.set_state()
             GLib.timeout_add(int((self.playing_until - time.monotonic()) * 1000) + 200, self.speaking_check)
@@ -422,6 +428,8 @@ class VoiceAgent:
         if time.monotonic() < self.playing_until:
             GLib.timeout_add(int((self.playing_until - time.monotonic()) * 1000) + 200, self.speaking_check)
         else:
+            log(f'reply audio: {self.reply_audio_ms} ms played')
+            self.reply_audio_ms = 0
             self.set_state()
         return False
 

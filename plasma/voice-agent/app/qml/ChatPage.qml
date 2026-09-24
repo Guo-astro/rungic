@@ -45,7 +45,12 @@ Kirigami.Page {
             for (let i = chat.count - 1; i >= 0 && i >= chat.count - 4; i--) {
                 if (chat.get(i).kind === kind) { chat.remove(i); break }
             }
-            chat.append(entry({ kind: "message", role: e.role, text: e.text }))
+            const last = chat.count > 0 ? chat.get(chat.count - 1) : null
+            // The agent can start before the transcript of what started it arrives.
+            if (e.role === "user" && last && last.kind === "marker" && last.text === "开始处理")
+                chat.insert(chat.count - 1, entry({ kind: "message", role: e.role, text: e.text }))
+            else
+                chat.append(entry({ kind: "message", role: e.role, text: e.text }))
             if (e.role === "user" && page.title === "新对话") page.title = e.text.slice(0, 20)
             break
         }
