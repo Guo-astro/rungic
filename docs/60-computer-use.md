@@ -118,7 +118,7 @@ arc-cua的接口：`observe() -> DesktopSnapshot`、`is_fresh(snapshot, action)`
 - **修复**：
   - moto-cua启动时，从systemd用户管理器读入图形会话环境（`busctl --user -j get-property … Manager Environment`），与桌面启动应用时相同。等窗口的时间放宽到25 s。
   - 技能中规定：不要从shell启动图形应用或`xdg-open`；`desktop_launch`报告失败时查一次`desktop_windows`，然后告诉用户，不要换别的方式重试。
-  - 在手机屏上输入文字时，聚焦后把`org.kde.kwin.VirtualKeyboard.active`设为false，再走宿主键盘通道输入。用户下次触摸输入框时键盘会照常弹出。
+  - 在手机屏上输入文字时，聚焦后把`org.kde.kwin.VirtualKeyboard.active`设为false，再由KWin提交文字。用户下次触摸输入框时键盘会照常弹出。
 - **应用名匹配**：会话语言是`en_US`（`plasma-localerc`），因此从桌面环境启动的应用是英文界面，与Plasma启动器一致。`desktop_launch`匹配.desktop中所有语言的Name/GenericName，所以用中文名也能找到应用。
 - **实测**：
   - 以Codex同样的精简环境（`env -i`）调用`launch Firefox`：3.5 s，出现在CAST-1并处于活动状态。
