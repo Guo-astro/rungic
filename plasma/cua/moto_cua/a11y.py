@@ -15,6 +15,7 @@ from gi.repository import Gio, GLib
 
 ACC = 'org.a11y.atspi.Accessible'
 PROPS = 'org.freedesktop.DBus.Properties'
+ROOT_PATH = '/org/a11y/atspi/accessible/root'   # an application's own object
 REGISTRY = ('org.a11y.atspi.Registry', '/org/a11y/atspi/accessible/root')
 NULL_PATH = '/org/a11y/atspi/null'
 

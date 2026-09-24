@@ -41,6 +41,33 @@
   - 用`pactl move`切换会被`module-stream-restore`按应用名记住，名称是通用的“Chromium”，会波及其他Chromium和Electron应用。本次已切回原设备。
   - 正式功能应按`application.process.binary`匹配流，并使用不保存的移动（由客户端库发起、不写入stream-restore），挂断后恢复原设备。
 
+## 应用音频临时路由：`moto-audio-route`
+
+`shared/media/audio-route.py`，安装为`/usr/local/bin/moto-audio-route`（与`moto-media-bridge`一样手动安装）。
+
+- 用法：`moto-audio-route --binary wechat --microphone [--speaker]`。
+- 行为：运行期间，把该程序（按`application.process.binary`匹配）的录音流移到 Linux 麦克风，加`--speaker`时播放流移到 Linux 扬声器。靠`pactl subscribe`，程序之后新建的流也会跟上。收到SIGTERM/SIGINT，或调用方关闭标准输入管道时，把每条流移回原设备。
+- 输出：启动后打印`ready`，每次移动打印`routed …`或`restored …`。
+- stream-restore会按应用名记住移动。结束时移回原设备，应用在之后的默认设备与原来相同。
+
+## 语音代发（2026-09-25）
+
+微信4.1发语音：点`Send Voice`立即开始录音，出现`Cancel`、`Play Recording`、`Send voice message`，最长60秒。初次探查时，录音用手机真麦克风录满了60秒，已取消，没有发出。
+
+moto-cua新增MCP工具`desktop_voice_message`（`plasma/cua/moto_cua/server.py`，CLI：`moto-cua voice '<json>'`）。步骤：
+
+1. 用OpenAI TTS（`gpt-4o-mini-tts`，`speech.py`，使用语音助手的密钥，走代理）生成24 kHz PCM，前后各留0.3 s静音。
+2. 读取活动窗口，由其pid取得进程名，启动`moto-audio-route --microphone`。
+3. 点开始控件；`hold`模式下是按住开始控件，适用于按住说话的应用。
+4. 等路由报告该应用的录音流已移到 Linux 麦克风，才向“Linux 麦克风输入”播放语音；4秒内没有移过来，就不播放，点取消并报错，保证真麦克风录到的内容不会被发出。
+5. 点发送控件（或松开），关闭路由，恢复原设备。
+
+控件名由调用方给出（微信：`Send Voice`、`Send voice message`、`Cancel`），不绑定某个应用。
+
+实测：在“文件传输助手”发送“这是语音助手代发的测试语音……”，得到一条8秒的语音消息，总耗时14 s。结束后微信没有残留的录音流，默认输入仍为`android_microphone`。语音内容需要用户在手机上收听确认。
+
+## 待做
+
 ## 待做
 
 - 通话代理：第二个实时语音会话接这两个设备，你的指令由现有语音助手转给它；界面上有接管、挂断按钮（方案见对话记录，待用户确认后另立章节）。

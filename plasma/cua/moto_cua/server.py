@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import select
 import subprocess
 import sys
 import threading
@@ -23,6 +24,7 @@ from pathlib import Path
 from arc_cua import DesktopExecutor, RuntimeConfig, result_to_dict, subtask_from_dict
 from arc_cua.policies import TypeSafeJevPolicy
 
+from . import names, speech
 from .backend import LinuxAtspiBackend
 
 logger = logging.getLogger('moto-cua')
@@ -85,6 +87,35 @@ TOOLS = [
      # UI operation on the user's behalf, inside this device. Codex would otherwise ask for approval on
      # every call, which the voice assistant cannot answer; the agent prompt makes it confirm deletions,
      # sending and payments with the user first.
+     'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False}},
+    {'name': 'desktop_find_name',
+     'description': ('Find a person, chat or item in the ACTIVE window (and its open popups, e.g. search results) '
+                     'by how the name SOUNDS: speech recognition often writes a Chinese name with wrong characters '
+                     'of the same sound (周凯文 for 周楷雯). Returns `search_text` (the pinyin; type it into the '
+                     'app\'s search field to list same-sounding contacts) and the visible names ranked by sound: '
+                     '1.0 same sound, 0.9 same apart from accent-type confusions (zh/z, n/l, an/ang ...). Each element '
+                     'has the `section` heading above it: use people and chats (e.g. "Contacts", the chat list), '
+                     'not search suggestions ("Internet search results"). If more than one different person '
+                     'scores 0.9 or more, ask the user which one.'),
+     'inputSchema': {'type': 'object', 'properties': {'name': {'type': 'string'}}, 'required': ['name']},
+     'annotations': {'readOnlyHint': True}},
+    {'name': 'desktop_voice_message',
+     'description': ('Record and send a voice message in the ACTIVE window (a chat already open), spoken by the '
+                     'assistant: the app\'s microphone is switched to the Linux microphone for the recording only, '
+                     'the text is spoken into it, then the send control is pressed. `start` / `finish` are control '
+                     'names from desktop_observe (WeChat: start "Send Voice", finish "Send voice message"). With '
+                     '`hold`, `start` is held down while speaking and released to send (hold-to-talk apps). The '
+                     'user\'s real microphone is never recorded: if the app does not start recording through the '
+                     'Linux microphone, nothing is spoken and the recording is cancelled.'),
+     'inputSchema': {'type': 'object', 'properties': {
+         'text': {'type': 'string', 'description': 'What the voice message says.'},
+         'start': {'type': 'string', 'description': 'Control that starts recording.'},
+         'finish': {'type': 'string', 'description': 'Control that sends the recording (omit with hold).'},
+         'cancel': {'type': 'string', 'description': 'Control that discards a recording (WeChat: "Cancel").'},
+         'hold': {'type': 'boolean'},
+         'voice': {'type': 'string', 'description': 'TTS voice, default marin.'}},
+         'required': ['text', 'start']},
+     # Sends a message on the user's behalf; the agent prompt makes it get the user's OK first.
      'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False}},
 ]
 
@@ -251,6 +282,100 @@ class Cua:
                 record.pop(key, None)
         return result
 
+    def find_name(self, name: str) -> dict:
+        snapshot = self.backend.observe()
+        found: dict[str, list] = {}
+        section: dict[str, str] = {}      # element id -> heading above it in the same list
+        heading: dict[str | None, str] = {}
+        for element in snapshot.elements:
+            first = (element.name or '').split('\n')[0].strip()
+            # Result lists group items under one-line headings without a sound match
+            # ("Contacts", "Group Chats", "Internet search results").
+            if first and '\n' not in (element.name or '') and names.score(name, first) < 0.5:
+                heading[element.parent_id] = first
+            section[element.id] = heading.get(element.parent_id, '')
+            if first:
+                found.setdefault(first, []).append(element)
+        ranked = names.rank(name, list(found))
+        return {'search_text': names.search_text(name), 'window': snapshot.window,
+                'matches': [{'name': n, 'score': score,
+                             'elements': [{'id': e.id, 'role': e.role, 'section': section[e.id], 'name': e.name[:80]}
+                                          for e in found[n][:3]]}
+                            for n, score in ranked]}
+
+    def voice_message(self, args: dict) -> dict:
+        """Speak `text` into the active app's recording (docs/62)."""
+        text = str(args['text']).strip()
+        start, finish = str(args['start']), args.get('finish')
+        cancel, hold = str(args.get('cancel') or 'Cancel'), bool(args.get('hold'))
+        if not text or (not hold and not finish):
+            raise ValueError('voice message needs text and a finish control (or hold)')
+        audio = speech.synthesize(text, voice=str(args.get('voice') or 'marin'))
+        backend = self.backend
+        snapshot = backend.observe()
+        pid = backend._window['pid']
+        binary = os.path.basename(os.readlink(f'/proc/{pid}/exe'))
+
+        def control(snap, name):
+            match = next((e for e in snap.elements if e.name == name), None) \
+                or next((e for e in snap.elements if e.name.startswith(name)), None)
+            if match is None:
+                raise ValueError(f'No control named {name!r} in {snap.window!r}')
+            return backend._global_center(backend._nodes[match.id])
+
+        start_at = control(snapshot, start)
+        router = subprocess.Popen(['moto-audio-route', '--binary', binary, '--microphone'], stdin=subprocess.PIPE,
+                                  stdout=subprocess.PIPE, text=True)
+        routed = False
+        try:
+            if router.stdout.readline().strip() != 'ready':
+                raise RuntimeError('audio routing did not start')
+            if hold:
+                backend.input.press(*start_at)
+            else:
+                backend.input.click(*start_at)
+            # The recording stream appears when recording starts; speak only once it
+            # records from the Linux microphone.
+            deadline = time.monotonic() + 4
+            while time.monotonic() < deadline and not routed:
+                ready = select.select([router.stdout], [], [], 0.2)[0]
+                if ready:
+                    routed = router.stdout.readline().startswith('routed source-output')
+            if not routed:
+                if hold:
+                    backend.input.release()
+                raise RuntimeError(f'{binary} did not start recording through the Linux microphone; nothing was spoken')
+            time.sleep(0.2)
+            subprocess.run(['pacat', '--device=linux_microphone_input', '--raw', '--format=s16le',
+                            f'--rate={speech.RATE}', '--channels=1', '--latency-msec=30'], input=audio,
+                           check=True, timeout=120)
+            time.sleep(0.4)
+            if hold:
+                backend.input.release()
+            else:
+                backend._root = None
+                backend.input.click(*control(backend.observe(), str(finish)))
+        except Exception:
+            if routed and not hold:
+                try:   # never leave a recording that could be sent later
+                    backend._root = None
+                    backend.input.click(*control(backend.observe(), cancel))
+                except Exception:  # noqa: BLE001
+                    pass
+            raise
+        finally:
+            router.stdin.close()
+            try:
+                router.wait(5)
+            except subprocess.TimeoutExpired:
+                router.kill()
+        time.sleep(1)
+        backend._root = None
+        after = backend.observe()
+        return {'sent': True, 'app': binary, 'seconds': round(len(audio) / 2 / speech.RATE, 1),
+                'window': after.window,
+                'recording_controls_left': [e.name for e in after.elements if e.name in (finish, cancel)]}
+
     def call(self, name: str, arguments: dict) -> dict:
         self.backend.set_accessibility(True)
         self._touch()
@@ -266,6 +391,10 @@ class Cua:
             return self.observe()
         if name == 'desktop_run':
             return self.run(arguments)
+        if name == 'desktop_voice_message':
+            return self.voice_message(arguments)
+        if name == 'desktop_find_name':
+            return self.find_name(str(arguments['name']))
         raise ValueError(f'Unknown tool {name}')
 
 
@@ -348,6 +477,10 @@ def main() -> None:
         data = cua.window(sys.argv[2], sys.argv[3])
     elif command == 'run':
         data = cua.run(json.loads(sys.argv[2]))
+    elif command == 'voice':
+        data = cua.voice_message(json.loads(sys.argv[2]))
+    elif command == 'find-name':
+        data = cua.find_name(sys.argv[2])
     else:
         raise SystemExit(__doc__)
     print(json.dumps(data, ensure_ascii=False, indent=1))

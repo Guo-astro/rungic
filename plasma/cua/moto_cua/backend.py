@@ -98,6 +98,7 @@ class LinuxAtspiBackend:
         root = Node(self._root.bus, self._root.path, None)
         nodes = self.bus.tree(root, max_nodes=self.max_elements, max_depth=self.max_depth)
         self._origin = self.bus.origin(root)
+        nodes += self._popups(root, self.max_elements - len(nodes))
         self.bus.details([n for n in nodes if n.interfaces])
         elements, refs = [], {}
         parent_ids: dict[int, str | None] = {}
@@ -196,6 +197,27 @@ class LinuxAtspiBackend:
         raise UnsupportedDesktopAction(f'LinuxAtspiBackend cannot execute {kind.value}')
 
     # ---- helpers --------------------------------------------------------------------------
+    def _popups(self, root: Node, budget: int) -> list[Node]:
+        """Showing popups of the same application: search suggestions, menus, combo
+        lists. On Wayland they are xdg_popups, not windows KWin reports as active,
+        and toolkits list them as separate accessible windows (WeChat's search
+        results: an unnamed filler). Other frames and dialogs are separate windows
+        and stay out. Their screen extents share the root window's origin."""
+        found: list[Node] = []
+        try:
+            windows = self.bus.windows((root.bus, a11y.ROOT_PATH))
+        except Exception:  # noqa: BLE001 - the application went away
+            return found
+        for window in windows:
+            if budget <= 0:
+                break
+            if window.path == root.path or not window.state(a11y.SHOWING) or window.role in ('frame', 'dialog'):
+                continue
+            tree = self.bus.tree(Node(window.bus, window.path, None), max_nodes=budget, max_depth=self.max_depth)
+            found += tree
+            budget -= len(tree)
+        return found
+
     def _still_active(self) -> bool:
         """Cheap check: the observed window still has the ACTIVE state."""
         if self._root is None:

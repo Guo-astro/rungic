@@ -67,10 +67,20 @@ Use these tools for anything on screen; they act with ordinary pointer/keyboard 
 WeChat exposes its controls; use these names instead of guessing (English UI names):
 
 - Layout: a narrow window hides the chat list and its search box. On the TV WeChat opens desktop-sized; if the chat list (`list 'Chats'`) is missing, `desktop_window ... maximize` first.
-- Open a chat: type the contact's name into the text field named `Search` at the top of the chat list, then choose the result (or click the item in `list 'Chats'`, whose name starts with the chat's name, e.g. `File Transfer`). The navigation-bar button `Search` is WeChat's web search (搜一搜), not contact search.
+- Open a chat: type into the text field named `Search` at the top of the chat list, then choose the person under `Contacts` in the results popup (or click the item in `list 'Chats'`, whose name starts with the chat's name, e.g. `File Transfer`). The navigation-bar button `Search` is WeChat's web search (搜一搜), not contact search.
+- Names the user SAID are unreliable: speech recognition picks characters of the same sound (周凯文 for 周楷雯). Never search by the recognized characters. Call `desktop_find_name {"name": "<as heard>"}` for `search_text` (the pinyin, e.g. `zhoukaiwen`; WeChat searches pinyin), type that into `Search`, then call `desktop_find_name` again and take the match with `section` `Contacts` (score 1.0 = same sound, 0.9 = accent-type difference). Ignore `Internet search results`. If two different people score 0.9 or more, or none does, ask the user (say the names you found).
 - The message box is the editable text named after the open chat (e.g. `周楷雯`). ENTER there sends. Check the chat header name first, and never type into it unless the goal is to send that text to that chat.
 - In a chat: `Voice Call` (chat header), `Send Voice`, `Send File`, `Send`, `Chat Info`. `Voice Input (Hold Ctrl+Super)` is speech-to-text, not a voice message.
 - Test on `File Transfer` (文件传输助手, messages go to the user's own devices), never on a real contact.
+
+## Voice messages on the user's behalf (语音代发)
+
+When the user asks you to send a voice message (发语音, 用语音告诉…):
+
+1. `desktop_launch` the chat app and open the chat by the SOUND of the name (see the WeChat section: `desktop_find_name`, pinyin search, pick under `Contacts`). Check the chat header shows that contact before sending. When you tell the user whom you sent it to, use the contact's real name (e.g. "发给了周楷雯").
+2. The content is what the user asked to say. Begin it with a short note that the assistant sends it for the user, e.g. `我是凯文的 AI 助理，替他发一条语音：……`. Do not add anything the user did not ask for.
+3. `desktop_voice_message {"text": ..., "start": "Send Voice", "finish": "Send voice message", "cancel": "Cancel"}` (WeChat). The tool switches only this app's microphone to the Linux microphone for the recording and back afterwards; the user's real microphone is never sent. For apps where you hold a button to talk, pass `"hold": true` and only `start`.
+4. Report that it was sent (the tool returns the length) and to whom.
 
 ## Desktop windows and screenshots (shell)
 

@@ -155,3 +155,17 @@ arc-cua的接口：`observe() -> DesktopSnapshot`、`is_fresh(snapshot, action)`
 另外在技能说明里补充了微信界面要点：`Search`文本框在会话列表顶部；导航栏的`Search`是搜一搜；输入框以对话名命名，在里面按回车就会发送；测试一律用`File Transfer`。这些是应用层的界面知识。
 
 修复后，同一子任务`SUBTASK_COMPLETE`，2步，用时7.2 s。
+
+## 按读音找人；把弹出层纳入观察（2026-09-25）
+
+- **问题**：用户说的人名经语音识别后常常写错字（“周凯文”实为“周楷雯”），按字搜索找不到人或找错人。
+- **`desktop_find_name`（`names.py`，python3-pypinyin 0.55）**：
+  - 按无声调拼音比较：同音得1.0；z/zh、c/ch、s/sh、n/l、f/h、an/ang、en/eng、in/ing这类混淆算接近，得0.9；其余按拼音相似度打分，最高0.8。
+  - 返回`search_text`（拼音，如`zhoukaiwen`），以及当前窗口与其弹出层中按读音排序的名字。每个名字附带所在的分区标题。
+- **微信支持拼音搜索**：输入`zhoukaiwen`，“Contacts”下即为周楷雯。“Internet search results”下的周凯文、周开文、周开稳也同为1.0，但属于搜索建议，由分区标题区分。
+- **弹出层**：
+  - 微信的搜索结果是同一应用的另一个无障碍窗口（无名filler），在Wayland上是xdg_popup，不是KWin的活动窗口，原先的观察看不到。
+  - `backend.observe`现在把同一应用正在显示、且不是frame或dialog的窗口一并纳入，它们与主窗口共用屏幕坐标原点。
+  - 另开的普通窗口（例如单独打开的对话窗口）仍然排除。
+- **技能说明**：人名来自语音时，先`desktop_find_name`取得拼音，用拼音搜索，再从“Contacts”中按读音挑选；有两个不同的人都达到0.9时，先问用户。
+- **实测**：在微信搜索`zhoukaiwen`后，`moto-cua find-name 周凯文`用时1.2 s，“周楷雯”在`Contacts`下得1.0。

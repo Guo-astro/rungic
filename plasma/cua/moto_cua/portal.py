@@ -165,6 +165,15 @@ class RemoteInput:
             if i + 1 < count:
                 time.sleep(0.08 + random.random() * 0.04)
 
+    def press(self, x: float, y: float, *, button: int = BTN_LEFT) -> None:
+        """Move there and hold the button down (hold-to-talk controls); see release()."""
+        self.glide(x, y)
+        time.sleep(0.04 + random.random() * 0.04)
+        self._notify('NotifyPointerButton', 'iu', button, 1)
+
+    def release(self, *, button: int = BTN_LEFT) -> None:
+        self._notify('NotifyPointerButton', 'iu', button, 0)
+
     def type_text(self, text: str) -> None:
         """Latin text as individual key events with a typing rhythm."""
         for ch in text:
