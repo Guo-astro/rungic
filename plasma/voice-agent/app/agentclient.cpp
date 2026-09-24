@@ -42,4 +42,5 @@ void AgentClient::stopTalking() { call(QStringLiteral("StopTalking"), {}); }
 void AgentClient::interrupt() { call(QStringLiteral("Interrupt"), {}); }
 void AgentClient::stopTask() { call(QStringLiteral("StopTask"), {}); }
 void AgentClient::approve(const QString &id, const QString &decision) { call(QStringLiteral("Approve"), {id, decision}); }
+void AgentClient::callCommand(const QString &command) { call(QStringLiteral("CallCommand"), {command}); }
 void AgentClient::onEvent(const QString &json) { Q_EMIT event(json); }

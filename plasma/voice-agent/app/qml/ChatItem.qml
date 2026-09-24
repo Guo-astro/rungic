@@ -21,6 +21,7 @@ Item {
     required property real finished
     required property bool expanded
     required property var steps
+    property bool callMonitor: false   // a proxied call is being listened in on (docs/63)
     width: ListView.view.width
     implicitHeight: loader.implicitHeight + Kirigami.Units.smallSpacing * 2
 
@@ -34,6 +35,7 @@ Item {
         sourceComponent: {
             switch (entry.kind) {
             case "work": return workCard
+            case "call": return callCard
             case "approval": return approvalCard
             case "marker": return marker
             case "error": return errorCard
@@ -157,6 +159,73 @@ Item {
                 Repeater {
                     model: entry.expanded ? entry.steps : null
                     delegate: stepDelegate
+                }
+            }
+        }
+    }
+
+    // A call the assistant takes part in (docs/63): who says what, questions for
+    // the user, and the controls. role = contact, text = goal, output = summary.
+    Component {
+        id: callCard
+        Rectangle {
+            id: callBox
+            readonly property bool live: entry.status === "running"
+            implicitWidth: entry.width * 0.9
+            implicitHeight: callColumn.implicitHeight + Kirigami.Units.largeSpacing * 2
+            radius: Kirigami.Units.cornerRadius * 2
+            color: Kirigami.ColorUtils.tintWithAlpha(Kirigami.Theme.backgroundColor, Kirigami.Theme.positiveTextColor, live ? 0.12 : 0.05)
+            border.color: live ? Kirigami.Theme.positiveTextColor : Kirigami.ColorUtils.tintWithAlpha(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, 0.15)
+            ColumnLayout {
+                id: callColumn
+                anchors { left: parent.left; right: parent.right; top: parent.top; margins: Kirigami.Units.largeSpacing }
+                spacing: Kirigami.Units.smallSpacing
+                RowLayout {
+                    Kirigami.Icon { source: "call-start"; implicitWidth: Kirigami.Units.iconSizes.small; implicitHeight: implicitWidth }
+                    QQC2.Label {
+                        Layout.fillWidth: true
+                        font.bold: true
+                        text: (callBox.live ? "助理通话中" : entry.status === "handover" ? "已交给你接听" : "通话结束")
+                              + (entry.role ? " · " + entry.role : "")
+                    }
+                }
+                QQC2.Label {
+                    Layout.fillWidth: true
+                    visible: entry.text.length > 0
+                    text: "目的：" + entry.text
+                    wrapMode: Text.Wrap
+                    opacity: 0.7
+                    font.pointSize: Kirigami.Theme.smallFont.pointSize
+                }
+                Repeater {
+                    model: entry.steps
+                    delegate: QQC2.Label {
+                        required property string kind
+                        required property string text
+                        Layout.fillWidth: true
+                        wrapMode: Text.Wrap
+                        font.bold: kind === "ask"
+                        color: kind === "ask" ? Kirigami.Theme.neutralTextColor : Kirigami.Theme.textColor
+                        opacity: kind === "note" ? 0.6 : 1
+                        text: ({ remote: "对方：", agent: "助理：", owner: "你：", ask: "问你：", note: "记录：" })[kind] + text
+                    }
+                }
+                QQC2.Label {
+                    Layout.fillWidth: true
+                    visible: !callBox.live && entry.output.length > 0
+                    text: "结果：" + entry.output
+                    wrapMode: Text.Wrap
+                    font.bold: true
+                }
+                RowLayout {
+                    visible: callBox.live
+                    QQC2.Button {
+                        text: entry.callMonitor ? "停止旁听" : "旁听"
+                        icon.name: "audio-headphones"
+                        onClicked: AgentClient.callCommand(entry.callMonitor ? "monitor-off" : "monitor-on")
+                    }
+                    QQC2.Button { text: "我来接"; icon.name: "call-start"; onClicked: AgentClient.callCommand("take-over") }
+                    QQC2.Button { text: "挂断"; icon.name: "call-stop"; onClicked: AgentClient.callCommand("hang-up") }
                 }
             }
         }

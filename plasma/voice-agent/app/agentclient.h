@@ -26,6 +26,8 @@ public:
     Q_INVOKABLE void interrupt();
     Q_INVOKABLE void stopTask();
     Q_INVOKABLE void approve(const QString &id, const QString &decision);
+    // Proxied call (docs/63): monitor-on, monitor-off, take-over, hang-up.
+    Q_INVOKABLE void callCommand(const QString &command);
 
 Q_SIGNALS:
     void conversationsListed(const QString &json);

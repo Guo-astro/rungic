@@ -8,6 +8,7 @@ cmake -S "$src/app" -B "$src/app/build" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTA
 cmake --build "$src/app/build" -j4
 cmake --install "$src/app/build"
 install -m755 "$src/moto_voice_agent.py" /usr/local/bin/moto-voice-agent
+install -Dm644 "$src/call_proxy.py" /usr/local/lib/moto-voice-agent/call_proxy.py
 install -d /usr/local/share/moto-voice-agent/prompts /usr/local/share/moto-voice-agent/skills/moto-phone-desktop
 install -m644 "$src"/prompts/*.md /usr/local/share/moto-voice-agent/prompts/
 install -m644 "$src/skills/moto-phone-desktop/SKILL.md" /usr/local/share/moto-voice-agent/skills/moto-phone-desktop/

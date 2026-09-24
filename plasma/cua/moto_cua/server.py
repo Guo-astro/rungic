@@ -24,7 +24,7 @@ from pathlib import Path
 from arc_cua import DesktopExecutor, RuntimeConfig, result_to_dict, subtask_from_dict
 from arc_cua.policies import TypeSafeJevPolicy
 
-from . import names, speech
+from . import a11y, names, speech
 from .backend import LinuxAtspiBackend
 
 logger = logging.getLogger('moto-cua')
@@ -282,6 +282,37 @@ class Cua:
                 record.pop(key, None)
         return result
 
+    def press_control(self, binary: str, names: list[str]) -> dict:
+        """Click the first control named one of `names` in any window of the app
+        (e.g. a call window's hang-up button), whichever window is active."""
+        backend = self.backend
+        bus = backend.bus
+        windows = [w for w in backend.kwin.windows()['windows']
+                   if os.path.basename(os.readlink(f"/proc/{w['pid']}/exe")) == binary]
+        for app in bus.applications():
+            pid = bus.pid(app[0])
+            if not pid or pid not in {w['pid'] for w in windows}:
+                continue
+            for window in bus.windows(app):
+                if not window.state(a11y.SHOWING):
+                    continue
+                origin = bus.origin(window)
+                target = next((w for w in windows if w['pid'] == pid and w['caption'] == window.name), None)
+                if origin is None or target is None:
+                    continue
+                for node in bus.tree(window, max_nodes=400):
+                    if not node.name or not any(node.name == n or node.name.startswith(n) for n in names):
+                        continue
+                    extents = bus.extents(node, origin)
+                    if extents is None:
+                        continue
+                    cx, cy = target['client'][0], target['client'][1]
+                    x, y, w, h = extents
+                    backend.kwin.activate(target['id'])
+                    backend.input.click(cx + x + w / 2, cy + y + h / 2)
+                    return {'pressed': node.name, 'window': target['caption']}
+        return {'pressed': None, 'looked_for': names, 'windows': [w['caption'] for w in windows]}
+
     def find_name(self, name: str) -> dict:
         snapshot = self.backend.observe()
         found: dict[str, list] = {}
@@ -481,6 +512,8 @@ def main() -> None:
         data = cua.voice_message(json.loads(sys.argv[2]))
     elif command == 'find-name':
         data = cua.find_name(sys.argv[2])
+    elif command == 'press-control':
+        data = cua.press_control(sys.argv[2], sys.argv[3:])
     else:
         raise SystemExit(__doc__)
     print(json.dumps(data, ensure_ascii=False, indent=1))

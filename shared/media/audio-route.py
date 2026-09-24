@@ -7,7 +7,8 @@ While this runs, the application's capture streams are moved to
 linux_microphone and (with --speaker) its playback streams to linux_speaker,
 including streams it opens later (e.g. when a recording or a call starts).
 On exit (SIGTERM, SIGINT or stdin closed) every moved stream goes back to the
-device it came from. Prints "ready" once watching and one line per move.
+device it came from. Prints "ready" once watching, one line per move, and
+"gone <stream> <index>" when a moved stream closes (e.g. the call ended).
 
 Matching is by application.process.binary: calls in WeChat come from its
 WebRTC module and are named "Chromium", a name other applications share.
@@ -80,6 +81,11 @@ class Router:
                         self.moved[(kind, index)] = by_index.get(device, device)
                         print(f'routed {kind[:-1]} {index} {self.moved[(kind, index)]} -> {target}', flush=True)
 
+    def gone(self, kind, index):
+        with self.lock:
+            if self.moved.pop((kind, index), None) is not None:
+                print(f'gone {kind[:-1]} {index}', flush=True)
+
     def restore(self):
         with self.lock:
             commands = {kind: command for kind, (command, _, _) in self.targets.items()}
@@ -118,6 +124,10 @@ def main():
                     break
                 if "'new' on source-output" in line or "'new' on sink-input" in line:
                     router.sweep()
+                elif "'remove' on " in line and '#' in line:
+                    kind = 'source-outputs' if 'source-output' in line else 'sink-inputs' if 'sink-input' in line else None
+                    if kind:
+                        router.gone(kind, line.rsplit('#', 1)[1].strip())
     finally:
         router.restore()
         watch.terminate()

@@ -82,6 +82,17 @@ When the user asks you to send a voice message (发语音, 用语音告诉…):
 3. `desktop_voice_message {"text": ..., "start": "Send Voice", "finish": "Send voice message", "cancel": "Cancel"}` (WeChat). The tool switches only this app's microphone to the Linux microphone for the recording and back afterwards; the user's real microphone is never sent. For apps where you hold a button to talk, pass `"hold": true` and only `start`.
 4. Report that it was sent (the tool returns the length) and to whom.
 
+## Calls on the user's behalf (通话代理)
+
+When the user asks you to call someone for a purpose ("帮我给张三打个微信电话，问他…"), or, during a call they are in, says "你来接" / "你来跟他说":
+
+1. Placing a call: open the chat by the SOUND of the name (WeChat section above), check the chat header, then click `Voice Call` in the chat header (`desktop_run`, goal "Click the Voice Call button").
+2. Right after the call starts (or at once when taking over a call that is already going):
+   `moto-voice-agent --start-call '{"contact": "<the contact's real name>", "goal": "<what to find out or tell, in the user's words, and what must be confirmed with them first>", "incoming": <true if the other side called>}'`
+   The call assistant then talks: it introduces itself as the user's AI assistant, sends questions it may not decide to the user, relays their answers, hangs up at the end and reports a summary in this chat. The app's microphone and speaker are switched to the Linux devices only for the call.
+3. Tell the user in one sentence that the assistant is on the call; while it is, what they say goes to the call assistant (the other side does not hear it), and the chat has 旁听 / 我来接 / 挂断 buttons. `moto-voice-agent --call-command take-over|hang-up|monitor-on|monitor-off` does the same.
+4. Never call anyone the user did not ask you to call.
+
 ## Desktop windows and screenshots (shell)
 
 - Screenshot of everything: `spectacle -b -n -f -o /tmp/shot.png` (use `-m` for the active screen). Look at the image to understand what is on screen.

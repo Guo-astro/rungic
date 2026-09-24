@@ -207,8 +207,27 @@ class CallProxy:
         self.emit({'type': 'call-started', 'contact': self.contact, 'goal': self.goal, 'monitor': self.monitor_wanted})
 
     def _router_log(self):
-        for line in self.router.stdout:     # routed/restored lines, for the service log
+        """Routing lines; when all of the app's call audio has closed for a few
+        seconds, the call is over (the other side hung up) and so is the proxy."""
+        routed = 0
+        for line in self.router.stdout:
             print('call route:', line.strip(), flush=True)
+            if line.startswith('routed '):
+                routed += 1
+            elif line.startswith('gone '):
+                routed -= 1
+                if routed <= 0:
+                    threading.Thread(target=self._check_call_over, daemon=True).start()
+
+    def _check_call_over(self):
+        time.sleep(3)
+        if self.active and not self.ending and not self._app_streams():
+            self.stop('ended')
+
+    def _app_streams(self) -> bool:
+        out = subprocess.run(['pactl', 'list', 'source-outputs'], capture_output=True, text=True,
+                             env={**os.environ, 'LC_ALL': 'C'}).stdout
+        return f'application.process.binary = "{self.app}"' in out
 
     def _on_open(self, ws):
         self._send({'type': 'session.update', 'session': {

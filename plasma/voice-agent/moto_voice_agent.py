@@ -36,6 +36,10 @@ import gi
 gi.require_version('Gst', '1.0')
 from gi.repository import Gio, GLib, Gst
 
+# The call proxy (docs/63) lives next to this script's shared files.
+import sys
+sys.path.insert(0, '/usr/local/lib/moto-voice-agent')
+
 RATE = 24000                 # PCM format of the Realtime API
 CHUNK_MS = 100
 MIC = 'android_microphone'
@@ -79,6 +83,8 @@ INTERFACE = '''
     <method name="StopTask"/>
     <method name="Approve"><arg type="s" direction="in"/><arg type="s" direction="in"/></method>
     <method name="State"><arg type="s" direction="out"/></method>
+    <method name="StartCall"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
+    <method name="CallCommand"><arg type="s" direction="in"/></method>
     <signal name="Event"><arg type="s"/></signal>
   </interface>
 </node>
@@ -303,6 +309,8 @@ class VoiceAgent:
         self.recorder = None
         self.mic_buffer = b''
         self.gate = PauseGate()
+        self.call = None             # the proxied call, when the assistant talks in a call (docs/63)
+        self.owner_audio = None      # what the user says to the call agent while talking
         # Id of the current push-to-talk press: the UI shows all transcript pieces
         # of one press as one message, however the server split them.
         self.press = 0
@@ -341,7 +349,8 @@ class VoiceAgent:
             phase = 'connecting'
         else:
             phase = 'ready'
-        return {'conversation': self.thread_id, 'phase': phase, 'agentBusy': self.agent_busy}
+        return {'conversation': self.thread_id, 'phase': phase, 'agentBusy': self.agent_busy,
+                'call': bool(self.call and self.call.active)}
 
     # ---- conversations ----------------------------------------------------------
     def thread_settings(self):
@@ -471,6 +480,9 @@ class VoiceAgent:
             self.recorder.get_by_name('sink').connect('new-sample', self.on_microphone)
         self.mic_buffer = b''
         self.gate = PauseGate()
+        # During a proxied call the user talks to the call agent: keep the audio
+        # here instead of sending it to the assistant's own realtime session.
+        self.owner_audio = b'' if self.call and self.call.active else None
         self.press = int(time.time() * 1000)
         self.recorder.set_state(Gst.State.PLAYING)
         self.mic_chunks = 0
@@ -485,6 +497,13 @@ class VoiceAgent:
         self.last_activity = time.monotonic()
         if self.recorder is not None:
             self.recorder.set_state(Gst.State.NULL)   # the microphone is open only while pressed
+        if self.owner_audio is not None:
+            audio, self.owner_audio = self.owner_audio + self.mic_buffer, None
+            self.mic_buffer = b''
+            log(f'talk: {len(audio) // 48} ms for the call agent')
+            threading.Thread(target=self.instruct_call, args=(audio,), daemon=True).start()
+            self.set_state()
+            return False
         log(f'talk: stop after {self.mic_chunks * CHUNK_MS} ms of audio, {self.gate.dropped_ms} ms of pauses left out')
         rest = self.gate.feed(self.mic_buffer) + self.gate.finish()
         self.mic_buffer = b''
@@ -501,6 +520,10 @@ class VoiceAgent:
         buf = sample.get_buffer()
         ok, info = buf.map(Gst.MapFlags.READ)
         if ok:
+            if self.owner_audio is not None:
+                self.owner_audio += bytes(info.data)
+                buf.unmap(info)
+                return Gst.FlowReturn.OK
             self.mic_buffer += bytes(info.data)
             buf.unmap(info)
             chunk = RATE * 2 * CHUNK_MS // 1000
@@ -698,6 +721,64 @@ class VoiceAgent:
             log('declined request', method)
             self.server.respond(request_id, {'decision': 'decline'})
 
+    # ---- proxied calls (docs/63) ------------------------------------------------------
+    def start_call(self, params):
+        """The assistant takes part in the call that the app has placed or received."""
+        import call_proxy
+        if self.call and self.call.active:
+            self.call.stop('replaced')
+        app = params.get('app') or 'wechat'
+
+        def emit(event, keep=True):
+            if event.get('type') == 'call-ended':
+                GLib.idle_add(self.set_state)
+            self.emit(event, keep)
+
+        def hang_up():
+            # Hang-up control names of the call window (WeChat 4.1 names first).
+            subprocess.run(['moto-cua', 'press-control', app, 'Hang Up', 'Hang up', 'End Call', '挂断', '结束通话'],
+                           capture_output=True, timeout=60)
+
+        self.call = call_proxy.CallProxy(emit, self.tell_owner, app=app, contact=params.get('contact', ''),
+                                         goal=params.get('goal', ''), owner=params.get('owner') or '凯文',
+                                         monitor=bool(params.get('monitor')), incoming=bool(params.get('incoming')),
+                                         hang_up=hang_up)
+        self.call.start()
+        GLib.idle_add(self.set_state)
+        return {'started': True, 'contact': params.get('contact', ''), 'app': app}
+
+    def call_command(self, command):
+        call = self.call
+        if not (call and call.active):
+            return
+        if command in ('monitor-on', 'monitor-off'):
+            call.set_monitor(command == 'monitor-on')
+        elif command == 'take-over':
+            call.take_over()
+        elif command == 'hang-up':
+            call.hang_up()
+        GLib.idle_add(self.set_state)
+
+    def instruct_call(self, audio):
+        import call_proxy
+        try:
+            text = call_proxy.transcribe(audio)
+        except Exception as error:  # noqa: BLE001
+            self.emit({'type': 'error', 'text': f'没听清你对通话助理说的话：{error}'})
+            return
+        if text and self.call and self.call.active:
+            self.call.instruct(call_proxy.simplified(text))
+
+    def tell_owner(self, text):
+        """Speak to the user on their side (a question from the call agent)."""
+        import call_proxy
+        try:
+            audio = call_proxy.synthesize(text)
+        except Exception as error:  # noqa: BLE001
+            log('tell_owner', error)
+            return
+        GLib.idle_add(self.play, {'data': base64.b64encode(audio).decode(), 'sampleRate': call_proxy.RATE})
+
     def stop_task(self):
         """Stop button: interrupt the running agent turn and the reply being spoken."""
         # The rest of a reply already being spoken keeps arriving: drop it until it ends.
@@ -773,6 +854,10 @@ class Service:
                     agent.approve(args[0], args[1])
                 elif method == 'State':
                     result = json.dumps(agent.state())
+                elif method == 'StartCall':
+                    result = json.dumps(agent.start_call(json.loads(args[0])), ensure_ascii=False)
+                elif method == 'CallCommand':
+                    agent.call_command(args[0])
                 invocation.return_value(GLib.Variant('(s)', (result,)) if result is not None else None)
             except Exception as error:
                 log('call failed', method, error)
@@ -840,7 +925,22 @@ def main():
     parser.add_argument('--screen', default='', help='test: screen the turn starts from (reply routing)')
     parser.add_argument('--stop-after', type=float, help='test: press the stop button after this many seconds')
     parser.add_argument('--raw', action='store_true', help='test: send the file without shortening pauses')
+    parser.add_argument('--start-call', metavar='JSON',
+                        help='let the assistant take part in the call just placed or received: '
+                             '{"contact": ..., "goal": ..., "app": "wechat", "incoming": false, "monitor": false}')
+    parser.add_argument('--call-command', choices=['monitor-on', 'monitor-off', 'take-over', 'hang-up'])
     args = parser.parse_args()
+    if args.start_call or args.call_command:
+        bus = Gio.bus_get_sync(Gio.BusType.SESSION)
+        if args.start_call:
+            json.loads(args.start_call)   # fail early on bad JSON
+            reply = bus.call_sync(BUS_NAME, OBJECT_PATH, BUS_NAME, 'StartCall', GLib.Variant('(s)', (args.start_call,)),
+                                  None, 0, 30000).unpack()[0]
+            print(reply)
+        else:
+            bus.call_sync(BUS_NAME, OBJECT_PATH, BUS_NAME, 'CallCommand', GLib.Variant('(s)', (args.call_command,)),
+                          None, 0, 30000)
+        return
     if args.audio_file:
         test_turn(args.audio_file, args.seconds, args.screen, args.stop_after, args.raw)
     elif args.service:

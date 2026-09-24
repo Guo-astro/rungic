@@ -29,6 +29,9 @@ Kirigami.Page {
     property int workAt: -1          // the work entry receiving agent activity
     property bool workOpen: false    // an agent turn is running
     property real lastTime: 0        // of the latest event (a turn the history left open ends there)
+    property int callAt: -1          // the proxied call entry (docs/63)
+    property bool inCall: false      // talking goes to the call agent
+    property bool callMonitor: false
 
     function entry(fields) {
         return Object.assign({ kind: "", role: "", text: "", itemId: "", command: "", output: "",
@@ -166,8 +169,31 @@ Kirigami.Page {
             }
             break
         }
-        case "error": chat.append(entry({ kind: "error", text: e.text })); break
-        case "state": page.phase = e.phase; page.agentBusy = !!e.agentBusy; break
+        case "call-started":
+            chat.append(entry({ kind: "call", status: "running", started: e.time || Date.now() / 1000,
+                                role: e.contact || "", text: e.goal || "", expanded: true }))
+            page.callAt = chat.count - 1
+            page.callMonitor = !!e.monitor
+            break
+        case "call-transcript": case "call-owner": case "call-ask": case "call-note": {
+            if (page.callAt < 0) return
+            const who = e.type === "call-owner" ? "owner" : e.type === "call-ask" ? "ask"
+                      : e.type === "call-note" ? "note" : e.role
+            chat.get(page.callAt).steps.append(page.step({ kind: who, text: e.text }))
+            break
+        }
+        case "call-monitor": page.callMonitor = !!e.on; break
+        case "call-ended":
+            if (page.callAt >= 0) {
+                chat.setProperty(page.callAt, "status", e.reason === "handover" ? "handover" : "done")
+                chat.setProperty(page.callAt, "finished", e.time || Date.now() / 1000)
+                chat.setProperty(page.callAt, "output", e.summary || "")
+            }
+            page.callAt = -1
+            page.callMonitor = false
+            break
+        case "error": case "call-error": chat.append(entry({ kind: "error", text: e.text })); break
+        case "state": page.phase = e.phase; page.agentBusy = !!e.agentBusy; page.inCall = !!e.call; break
         }
     }
 
@@ -214,7 +240,7 @@ Kirigami.Page {
             spacing: Kirigami.Units.smallSpacing
             topMargin: Kirigami.Units.largeSpacing
             bottomMargin: Kirigami.Units.largeSpacing
-            delegate: ChatItem {}
+            delegate: ChatItem { callMonitor: page.callMonitor }
             QQC2.ScrollBar.vertical: QQC2.ScrollBar {}
 
             Kirigami.PlaceholderMessage {
@@ -238,7 +264,8 @@ Kirigami.Page {
                 spacing: Kirigami.Units.smallSpacing
                 QQC2.Label {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: talk.holding ? page.phaseText.listening : (page.phaseText[page.phase] || "")
+                    text: page.inCall ? (talk.holding ? "正在听，松开后转给通话助理" : "按住对通话助理说（对方听不到）")
+                        : talk.holding ? page.phaseText.listening : (page.phaseText[page.phase] || "")
                     opacity: 0.7
                 }
                 TalkButton {
