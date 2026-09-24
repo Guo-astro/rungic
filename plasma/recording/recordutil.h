@@ -14,6 +14,8 @@ class RecordUtil : public QObject {
 public:
  explicit RecordUtil(QObject *parent=nullptr);
  Q_INVOKABLE bool startRecording(int nodeId);
+ // [{node: int, label: string}], the phone first; one file per screen.
+ Q_INVOKABLE bool startRecordingScreens(const QVariantList &screens);
  Q_INVOKABLE void stopRecording();
  QString quickSettingText() const;
  QString quickSettingStatus() const;
@@ -23,7 +25,8 @@ signals:
 private:
  void changed();
  QProcess m_process;
- QString m_output,m_error;
+ QStringList m_outputs;
+ QString m_error;
  QByteArray m_pending;
  bool m_running=false,m_stopping=false;
 };

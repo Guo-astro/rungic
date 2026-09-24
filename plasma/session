@@ -21,6 +21,17 @@ export PULSE_COOKIE=/etc/plasma/audio-cookie
 unset DISPLAY WAYLAND_DISPLAY
 while [ ! -S /mnt/android-wayland/wayland-0 ]; do sleep 1; done
 mkdir -p "$HOME/.config"
+# The standard folders are links to Android shared storage (~/Videos ->
+# Shared/Videos). xdg-user-dirs-update resets any whose target is missing to
+# $HOME, e.g. while the storage is not mounted yet, sending recordings,
+# screenshots and downloads to the home directory. Keep the fixed mapping.
+if mountpoint -q "$HOME/Shared"; then
+    printf 'enabled=False\n' > "$HOME/.config/user-dirs.conf"
+    for entry in DESKTOP:Desktop DOWNLOAD:Downloads TEMPLATES:Templates PUBLICSHARE:Public \
+                 DOCUMENTS:Documents MUSIC:Music PICTURES:Pictures VIDEOS:Videos; do
+        [ ! -d "$HOME/${entry#*:}" ] || xdg-user-dirs-update --set "${entry%%:*}" "$HOME/${entry#*:}" || true
+    done
+fi
 # Android owns device locking. Never present a Linux password prompt that has
 # no configured password or hide the desktop behind an idle screen lock.
 kwriteconfig6 --file kscreenlockerrc --group Daemon --key Autolock false

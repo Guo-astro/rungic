@@ -22,8 +22,8 @@ RecordUtil::RecordUtil(QObject *parent):QObject(parent){
   auto *n=new KNotification(QStringLiteral("captured"));
   n->setComponentName(QStringLiteral("plasma_mobile_quicksetting_record"));
   n->setTitle(ok?QStringLiteral("录屏已保存"):QStringLiteral("录屏失败"));
-  n->setText(ok?m_output:(m_error.isEmpty()?QStringLiteral("录制未完成，请检查可用空间及硬件桥接。"):m_error));
-  if(ok)n->setUrls({QUrl::fromLocalFile(m_output)});
+  n->setText(ok?m_outputs.join(QLatin1Char('\n')):(m_error.isEmpty()?QStringLiteral("录制未完成，请检查可用空间及硬件桥接。"):m_error));
+  if(ok){QList<QUrl> urls;for(const auto &o:m_outputs)urls<<QUrl::fromLocalFile(o);n->setUrls(urls);}
   n->sendEvent();
  });
 }
@@ -31,15 +31,38 @@ void RecordUtil::changed(){emit quickSettingTextChanged();emit quickSettingStatu
 QString RecordUtil::quickSettingText() const{return m_stopping?QStringLiteral("正在保存…"):(m_running?QStringLiteral("正在录屏…"):QStringLiteral("录屏"));}
 QString RecordUtil::quickSettingStatus() const{return m_stopping?QStringLiteral("请等待文件写入"):m_running?QStringLiteral("点击结束录屏"):QStringLiteral("点击录制 · 长按设置画质与声音");}
 bool RecordUtil::startRecording(int nodeId){
- if(m_running || nodeId<=0)return false;
+ return startRecordingScreens({QVariantMap{{QStringLiteral("node"),nodeId},{QStringLiteral("label"),QString()}}});
+}
+bool RecordUtil::startRecordingScreens(const QVariantList &screens){
+ if(m_running || screens.isEmpty())return false;
  const auto dir=QStandardPaths::writableLocation(QStandardPaths::MoviesLocation);
  if(!QDir().mkpath(dir))return false;
- const QString name=QStringLiteral("screen-recording.mp4");
- m_output=dir+'/'+name;
- for(int n=1;QFile::exists(m_output)||QFile::exists(m_output.chopped(4)+QStringLiteral(".partial.mp4"));++n)
-  m_output=dir+QStringLiteral("/screen-recording (%1).mp4").arg(n);
+ // One screen keeps the old name; several screens share a numbered base name
+ // with the screen as suffix, e.g. "screen-recording (2) - 外屏.mp4".
+ auto names=[&](int n){
+  const QString base=n?QStringLiteral("screen-recording (%1)").arg(n):QStringLiteral("screen-recording");
+  QStringList out;
+  for(const auto &s:screens){
+   const QString label=s.toMap().value(QStringLiteral("label")).toString();
+   out<<dir+'/'+base+(screens.size()>1&&!label.isEmpty()?QStringLiteral(" - ")+label:QString())+QStringLiteral(".mp4");
+  }
+  return out;
+ };
+ auto taken=[](const QStringList &paths){
+  for(const auto &p:paths)if(QFile::exists(p)||QFile::exists(p.chopped(4)+QStringLiteral(".partial.mp4")))return true;
+  return false;
+ };
+ int n=0;
+ while(taken(names(n)))++n;
+ m_outputs=names(n);
+ QStringList args;
+ for(int i=0;i<screens.size();++i){
+  const int node=screens.at(i).toMap().value(QStringLiteral("node")).toInt();
+  if(node<=0)return false;
+  args<<QString::number(node)<<m_outputs.at(i);
+ }
  m_error.clear();m_pending.clear();
- m_process.start(QStringLiteral("/usr/local/bin/moto-screen-recorder"),{QString::number(nodeId),m_output});
+ m_process.start(QStringLiteral("/usr/local/bin/moto-screen-recorder"),args);
  if(!m_process.waitForStarted(1000))return false;
  m_running=true;m_stopping=false;changed();return true;
 }

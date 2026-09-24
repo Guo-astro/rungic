@@ -1,7 +1,11 @@
 #!/usr/bin/python3
 # SPDX-License-Identifier: MIT
-"""KWin PipeWire node -> Android H.264 + PulseAudio -> MP4. No portal bypass:
-only plasmashell creates the restricted KWin screen stream and passes its node.
+"""KWin PipeWire node(s) -> Android H.264 + PulseAudio -> MP4. No portal bypass:
+only plasmashell creates the restricted KWin screen streams and passes their nodes.
+
+With several screens (the phone and a cast TV) every screen gets its own file.
+All branches run in one pipeline on one clock, so the files start and end
+together; the audio is encoded once and written into each file.
 """
 import configparser
 import os
@@ -24,32 +28,52 @@ def settings():
     p = c['Recording'] if c.has_section('Recording') else {}
     return p.get('quality', 'high'), p.get('audio', 'system')
 
+def partial_path(output):
+    return output.with_suffix('.partial.mp4')
+
 class Recorder:
-    def __init__(self, node, output):
+    def __init__(self, streams):
+        """streams: [(pipewire node, output path)], the first is the phone."""
         Gst.init(None)
         quality, audio = settings()
         bitrate, fps = PROFILES.get(quality, PROFILES['high'])
         sources = SOURCES.get(audio, SOURCES['system'])
-        self.output = Path(output)
-        self.partial = self.output.with_suffix('.partial.mp4')
-        video = (f'pipewiresrc name=video path={node} do-timestamp=true provide-clock=false keepalive-time={1000//fps} '
-                 '! video/x-raw ! videoflip video-direction=auto ! queue max-size-buffers=4 leaky=downstream ! videoconvert '
-                 f'! videorate ! video/x-raw,format=I420,framerate={fps}/1 '
-                 f'! motoh264enc bitrate={bitrate} ! h264parse ! queue ! mux.video_0 ')
+        self.outputs = [Path(output) for _, output in streams]
+        self.fps = fps
+        # The Adreno/Qualcomm H.264 encoder takes 1080x2400 only at 30 fps and
+        # alone; a second session or 60 fps needs every stream within the
+        # 1080p class (measured 2026-09-24). Such streams are scaled to fit.
+        self.fit_1080p = len(streams) > 1 or fps > 30
+        video = ''
+        for i, (node, _) in enumerate(streams):
+            video += (f'pipewiresrc name=video{i} path={node} do-timestamp=true provide-clock=false keepalive-time={1000//fps} '
+                      f'! video/x-raw ! videoflip name=flip{i} video-direction=auto ! queue max-size-buffers=4 leaky=downstream '
+                      f'! videoconvertscale n-threads=2 ! capsfilter name=fit{i} '
+                      f'! videorate ! video/x-raw,format=I420,framerate={fps}/1 '
+                      f'! motoh264enc bitrate={bitrate} ! h264parse ! queue ! mux{i}.video_0 ')
         audio_pipe = ''
         if sources:
             # Both sources use the pipeline clock; silence source keeps idle intervals timed.
             audio_pipe = ('audiomixer name=mix ignore-inactive-pads=true '
                           '! clocksync ! audioconvert ! audio/x-raw,format=F32LE,rate=48000,channels=2 '
-                          '! avenc_aac bitrate=192000 ! aacparse ! queue ! mux.audio_0 '
+                          '! avenc_aac bitrate=192000 ! aacparse ! tee name=aac '
                           'audiotestsrc name=silence is-live=true wave=silence ! audio/x-raw,rate=48000,channels=2 ! mix. ')
+            for i in range(len(streams)):
+                audio_pipe += f'aac. ! queue ! mux{i}.audio_0 '
+
             for index, source in enumerate(sources):
                 gain = 0.5 if len(sources) == 2 else 1.0
                 audio_pipe += (f'pulsesrc name=audio{index} device={source} provide-clock=false buffer-time=200000 '
                                '! audio/x-raw,rate=48000 ! queue ! audioconvert ! audioresample '
                                f'! audio/x-raw,rate=48000,channels=2 ! volume volume={gain} ! mix. ')
-        self.pipeline = Gst.parse_launch(video + audio_pipe + 'mp4mux name=mux fragment-duration=1000 ! filesink name=file')
-        self.pipeline.get_by_name('file').set_property('location', str(self.partial))
+        muxers = ''.join(f'mp4mux name=mux{i} fragment-duration=1000 ! filesink name=file{i} '
+                         for i in range(len(streams)))
+        self.pipeline = Gst.parse_launch(video + audio_pipe + muxers)
+        for i in range(len(streams)):
+            pad = self.pipeline.get_by_name(f'flip{i}').get_static_pad('src')
+            pad.add_probe(Gst.PadProbeType.EVENT_DOWNSTREAM, self.fit_size, i)
+        for i, output in enumerate(self.outputs):
+            self.pipeline.get_by_name(f'file{i}').set_property('location', str(partial_path(output)))
         self.pipeline.use_clock(Gst.SystemClock.obtain())
         self.loop = GLib.MainLoop()
         self.ok = False
@@ -63,14 +87,21 @@ class Recorder:
         self.started = False
         # Reserve names only after constructing the pipeline successfully.
         # A pre-existing partial file must also leave no empty final file behind.
-        self.final_fd = os.open(self.output, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        self.final_fds = []
+        reserved = []
         try:
-            os.close(os.open(self.partial, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600))
+            for output in self.outputs:
+                self.final_fds.append(os.open(output, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600))
+                reserved.append(output)
+                os.close(os.open(partial_path(output), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600))
+                reserved.append(partial_path(output))
         except Exception:
-            os.close(self.final_fd)
-            self.output.unlink()
+            for fd in self.final_fds:
+                os.close(fd)
+            for path in reserved:
+                path.unlink(missing_ok=True)
             raise
-        print(f'CONFIG quality={quality} bitrate={bitrate} fps={fps} audio={audio}', flush=True)
+        print(f'CONFIG quality={quality} bitrate={bitrate} fps={fps} audio={audio} screens={len(streams)}', flush=True)
 
     def start_timeout(self):
         if not self.started:
@@ -78,9 +109,48 @@ class Recorder:
             self.loop.quit()
         return False
 
+    def fit_size(self, pad, info, index):
+        """Choose the encoded size once the screen's (rotated) size is known."""
+        event = info.get_event()
+        if event.type != Gst.EventType.CAPS:
+            return Gst.PadProbeReturn.OK
+        structure = event.parse_caps().get_structure(0)
+        ok_w, width = structure.get_int('width')
+        ok_h, height = structure.get_int('height')
+        if not (ok_w and ok_h):
+            return Gst.PadProbeReturn.OK
+        target_w, target_h = width, height
+        if self.fit_1080p:
+            long_edge, short_edge = max(width, height), min(width, height)
+            scale = min(1.0, 1920 / long_edge, 1088 / short_edge)
+            target_w = max(16, int(width * scale) // 2 * 2)
+            target_h = max(16, int(height * scale) // 2 * 2)
+        caps = Gst.Caps.from_string(f'video/x-raw,width={target_w},height={target_h}')
+        fit = self.pipeline.get_by_name(f'fit{index}')
+        if not fit.get_property('caps') or not fit.get_property('caps').is_equal(caps):
+            fit.set_property('caps', caps)
+            print(f'SIZE screen {index} {width}x{height} -> {target_w}x{target_h}@{self.fps}', flush=True)
+        return Gst.PadProbeReturn.OK
+
+    def external_branch(self, element):
+        """Index of the external screen's video branch an element belongs to, or None."""
+        while element is not None:
+            name = element.get_name()
+            if name.startswith('video') and name[5:].isdigit() and int(name[5:]) > 0:
+                return int(name[5:])
+            element = element.get_parent()
+        return None
+
     def message(self, bus, message):
         if message.type == Gst.MessageType.ERROR:
             error, detail = message.parse_error()
+            branch = self.external_branch(message.src)
+            if branch is not None and not self.stopping:
+                # The TV went away mid-recording: finish its file, keep recording the phone.
+                print(f'WARN screen {branch} ended: {error.message}', flush=True)
+                source = self.pipeline.get_by_name(f'video{branch}')
+                threading.Thread(target=lambda: source.send_event(Gst.Event.new_eos()), daemon=True).start()
+                return
             print(f'ERROR {error.message} ({detail})', flush=True)
             self.loop.quit()
         elif message.type == Gst.MessageType.EOS:
@@ -112,8 +182,9 @@ class Recorder:
         # audio concurrently so the muxer can drain either queue. Keep clocked
         # silence until these sources have accepted EOS: ending it first lets
         # audiomixer pad indefinitely after a suspended PulseAudio monitor.
+        names = [f'video{i}' for i in range(len(self.outputs))] + ['audio0', 'audio1']
         threads = [threading.Thread(target=end, args=(name,), daemon=True)
-                   for name in ['video', 'audio0', 'audio1']
+                   for name in names
                    if self.pipeline.get_by_name(name)]
         for thread in threads:
             thread.start()
@@ -132,22 +203,27 @@ class Recorder:
             self.loop.run()
         finally:
             self.pipeline.set_state(Gst.State.NULL)
-            os.close(self.final_fd)
-        if self.ok and self.partial.stat().st_size > 0:
-            os.replace(self.partial, self.output)
-            print('SAVED', flush=True)
+            for fd in self.final_fds:
+                os.close(fd)
+        if self.ok and all(partial_path(o).stat().st_size > 0 for o in self.outputs):
+            for output in self.outputs:
+                os.replace(partial_path(output), output)
+                print(f'SAVED {output}', flush=True)
             return 0
         # Keep nonempty partial files for recovery; never claim an incomplete file is saved.
-        self.output.unlink(missing_ok=True)
-        if self.partial.exists() and not self.partial.stat().st_size:
-            self.partial.unlink()
+        for output in self.outputs:
+            output.unlink(missing_ok=True)
+            partial = partial_path(output)
+            if partial.exists() and not partial.stat().st_size:
+                partial.unlink()
         return 1
 
 if __name__ == '__main__':
-    if len(sys.argv) != 3 or not sys.argv[1].isdigit():
-        raise SystemExit('usage: moto-screen-recorder NODE OUTPUT.mp4')
+    args = sys.argv[1:]
+    if len(args) < 2 or len(args) % 2 or not all(a.isdigit() for a in args[0::2]):
+        raise SystemExit('usage: moto-screen-recorder NODE OUTPUT.mp4 [NODE OUTPUT.mp4 ...]')
     try:
-        raise SystemExit(Recorder(int(sys.argv[1]), sys.argv[2]).run())
+        raise SystemExit(Recorder([(int(n), o) for n, o in zip(args[0::2], args[1::2])]).run())
     except Exception as e:
         print(f'ERROR {e}', flush=True)
         raise SystemExit(1)

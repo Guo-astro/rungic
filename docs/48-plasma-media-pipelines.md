@@ -63,3 +63,36 @@
 - 第3次录屏已恢复约250.233秒、校正上下方向并恢复同期音轨，写入Android `Plasma/Videos/screen-recording-3-recovered.mp4`。恢复文件完整解码无错误；未以客观事件测量音画同步，原始partial保留。第7次录屏停录仍超时，其fragmented MP4可直接重封装，得到约59秒、双轨完整解码无错误的 `screen-recording-7-recovered.mp4`，原始partial也保留。
 - “先audio0、后silence/video”的顺序只通过独立音频测试，未解决静止画面下完整mux阻塞。最新候选改为并发结束video及实际音频源，等其返回后最后结束clocked silence，需完整录屏验证。不能把该候选标为已修复。
 - `plasma/qt-video-duration.patch`编译了共享FFmpeg插件候选，仅在 `/opt/moto-qt-duration` 私有路径运行Plasma Camera，原系统插件未替换。video_0003约12秒实录仍有负duration警告；因此单给输入AVFrame设置duration的候选未验收，不打入Qt正式包。正式Qt仍为已通过音频PCM验证的moto1。
+
+## 多屏同时录屏（2026-09-24）
+
+需求：点录屏后，有外屏（Miracast电视）时手机与外屏同时录制。
+
+- **快捷设置**（`plasma/recording/main.qml`）：为每块屏幕各建一个`TaskManager.ScreencastingRequest`，手机（快捷设置所在屏）排第一。全部拿到PipeWire节点后调用`RecordUtil.startRecordingScreens`；3秒内外屏未就绪时只录已有的。
+- **录制脚本**（`moto-screen-recorder NODE OUT [NODE OUT ...]`）：
+  - 所有屏幕在同一GStreamer管线、同一时钟下，每屏单独编码成一个MP4。
+  - 音频只编码一次，经`tee`写入每个文件。
+  - 文件名：单屏不变（`screen-recording (n).mp4`）；多屏为`screen-recording (n) - 手机.mp4`与`… - 外屏.mp4`。
+  - 录制中外屏断开时，该屏分支单独收尾，手机继续录，停止后两个文件都保存。
+- **硬件H.264**：
+  - `motoh264enc`经宿主`CodecBridge`固定使用`c2.qti.avc.encoder`，并要求`isHardwareAccelerated()`为真、非纯软件实现，否则报错，不回退到软件编码。
+  - 录制时logcat确认分配了`QC2Comp … c2.qti.avc.encoder`。
+- **编码能力适配**：
+  - **实测限制**：
+    - 1080×2400@60单路被拒（`Frame rate unsupported`），@30单路可以。
+    - 1080×2400与1080p两路同时编码，第二路即使30fps也会`CodecException`。
+    - 864×1920@60与1920×1080@60两路同时编码可以。
+  - **单屏60fps录屏原先就已失效**：手机改为原生1080×2400渲染后，“流畅”档的单屏录屏已在协商阶段失败（`not-negotiated`），并非本次多屏改动引入。
+  - **适配规则**：多屏或60fps时，每路在拿到实际尺寸后（`videoflip`输出CAPS事件）缩到长边≤1920、短边≤1088，保持比例，由`videoconvertscale`一次完成转换与缩放。单屏30fps保持原生分辨率。
+- **实测**：
+  - 双屏：手机864×1920@60、电视1920×1080@60，均可完整解码，内容正确。
+  - 中途断开外屏：两个文件都保存。
+  - 单屏60fps：864×1920，恢复可用。
+- **保存位置问题（共享层）**：
+  - 今天01:12 `xdg-user-dirs-update`把`~/.config/user-dirs.dirs`中的标准目录全部改成了`$HOME`，录屏、截图、下载与电视桌面文件夹因此都落到主目录。
+  - 原因是`moto-plasma-shared`的bindfs在前台运行，systemd在挂载完成前就判定服务已启动，会话抢先启动，`~/Videos`等指向`Shared/…`的链接暂时失效，于是被重置。
+  - 修复：
+    - 服务加`ExecStartPost`等待挂载点就绪。
+    - 会话启动时若共享存储已挂载，写`user-dirs.conf` `enabled=False`，并用`xdg-user-dirs-update --set`固定各目录，失败不阻止会话启动。
+  - 容器重启后验证：`xdg-user-dir VIDEOS`为`~/Videos`，录屏已保存到`~/Videos`。
+- **未处理**：`ScreencastingRequest`用`pointer_hidden`申请流，电视录像中没有鼠标光标。
