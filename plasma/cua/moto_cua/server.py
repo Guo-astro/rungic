@@ -313,6 +313,30 @@ class Cua:
                     return {'pressed': node.name, 'window': target['caption']}
         return {'pressed': None, 'looked_for': names, 'windows': [w['caption'] for w in windows]}
 
+    def focus_showing(self, binary: str, text: str) -> dict:
+        """Activate the app's window that shows `text` as a label or heading (e.g.
+        the chat header of a contact): chats may be open in several windows."""
+        backend = self.backend
+        bus = backend.bus
+        windows = [w for w in backend.kwin.windows()['windows']
+                   if os.path.basename(os.readlink(f"/proc/{w['pid']}/exe")) == binary]
+        for app in bus.applications():
+            pid = bus.pid(app[0])
+            if not pid or pid not in {w['pid'] for w in windows}:
+                continue
+            for window in bus.windows(app):
+                if not window.state(a11y.SHOWING):
+                    continue
+                target = next((w for w in windows if w['pid'] == pid and w['caption'] == window.name), None)
+                if target is None:
+                    continue
+                if any(n.name == text and n.role in ('label', 'heading', 'text', 'filler')
+                       for n in bus.tree(window, max_nodes=400)):
+                    backend.kwin.activate(target['id'])
+                    backend._root = None
+                    return {'activated': target['id'], 'window': target['caption']}
+        return {'activated': None, 'looked_for': text}
+
     def find_name(self, name: str) -> dict:
         snapshot = self.backend.observe()
         found: dict[str, list] = {}
@@ -514,6 +538,8 @@ def main() -> None:
         data = cua.find_name(sys.argv[2])
     elif command == 'press-control':
         data = cua.press_control(sys.argv[2], sys.argv[3:])
+    elif command == 'focus-showing':
+        data = cua.focus_showing(sys.argv[2], sys.argv[3])
     else:
         raise SystemExit(__doc__)
     print(json.dumps(data, ensure_ascii=False, indent=1))

@@ -95,7 +95,24 @@
   - 关闭流后`callPhase`为空，也没有残留的路由进程。
   - 打开一个对话后重复上述流程：语音助手的状态依次为`ready`（助理通话中）→`connecting`（你在通话中，已暂停）→`ready`（结束后自动恢复）。
 
-## 待验证## 待验证
+## 第二次实测：电视黑屏、没打出去却以为打了（2026-09-25）
+
+- **电视黑屏**：
+  - 日志：`PowerGroup: Powering off display group due to timeout (groupId=2, millisSinceLastUserActivity=300000)`。
+  - 电视是独立的显示组，有自己的息屏计时。对电视的操作都经宿主进入 Linux，Android 看不到任何操作，所以5分钟后就关了电视。与通话无关，只是时间恰好碰上。
+  - 修复（APK 1.36）：投屏悬浮窗加`FLAG_KEEP_SCREEN_ON`。Android 14起每个显示屏各自持有亮屏锁。
+  - 复查：`dumpsys power`中有`SCREEN_BRIGHT_WAKE_LOCK 'WindowManager/displayId:19'`（持有者dev.moto.plasma）。超过5分钟不黑屏还需再观察确认。
+- **误报已拨号**：
+  - `dial`用`press-control`，按名字点第一个匹配的“Voice Call”：不看是哪个窗口、哪个对话，点完也不检查结果，却返回`"dialed": "Voice Call"`。Agent据此告诉用户“通话正在进行中”。
+  - 改为三步：
+    - `moto-cua focus-showing wechat <联系人>`：把显示该联系人对话的窗口切到前台；找不到就拒绝拨号，不让执行器在别人的对话里操作。
+    - 由JEV执行子任务“在这个对话里给<联系人>发起语音通话（不是视频）”。
+    - 以系统信号确认：8 s内微信打开了通话音频（路由看到新的流），才返回`"dialed": true`；否则如实返回失败，并附上JEV的动作记录。
+  - 卡片显示“正在拨号… / 已拨出，等待接听 / 没能拨出 / 助理通话中”。
+  - 测试：用不存在的联系人拨号，6 s内拒绝，没有点击任何东西，也没有残留路由。
+- **根本方向（用户要求）**：整个操作电脑的过程，都应由JEV逐步决定做什么、点哪里；参考[typesafe-computer-use](https://github.com/awlevin/typesafe-computer-use)（MIT，24eb292）。评估见下一节。
+
+## 待验证## 待验证## 待验证
 
 - 与真人进行微信通话：接通前的铃声是否会被当成说话（提示词要求对方先开口后助手才说话）；微信通话窗口挂断按钮的名称；来电接管；端到端延迟。
 - 已知的语音问题：mini模型偶尔有生硬措辞或多一句过渡语。如果真实通话中明显，可以试完整版`gpt-realtime-2.1`（`MOTO_CALL_MODEL`）。

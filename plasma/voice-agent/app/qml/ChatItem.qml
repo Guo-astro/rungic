@@ -186,7 +186,12 @@ Item {
                     QQC2.Label {
                         Layout.fillWidth: true
                         font.bold: true
-                        text: (callBox.userTalks ? "你在通话中" : callBox.live ? "助理通话中" : "通话结束")
+                        text: (callBox.userTalks ? "你在通话中"
+                               : !callBox.live ? "通话结束"
+                               : entry.command === "dialing" ? "正在拨号…"
+                               : entry.command === "ringing" ? "已拨出，等待接听"
+                               : entry.command === "dial-failed" ? "没能拨出"
+                               : "助理通话中")
                               + (entry.role ? " · " + entry.role : "")
                               + (callBox.userTalks ? " · 语音助手已暂停" : "")
                     }

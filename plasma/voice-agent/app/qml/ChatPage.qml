@@ -184,6 +184,9 @@ Kirigami.Page {
             break
         }
         case "call-monitor": page.callMonitor = !!e.on; break
+        case "call-state":   // dialing -> ringing -> connected (or dial-failed)
+            if (page.callAt >= 0) chat.setProperty(page.callAt, "command", e.state)
+            break
         case "call-phase":
             if (page.callAt >= 0 && e.phase === "user") chat.setProperty(page.callAt, "status", "user")
             page.callMonitor = false

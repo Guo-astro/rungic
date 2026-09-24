@@ -758,15 +758,49 @@ class VoiceAgent:
         # Dial only once the call agent can listen: the other side is heard from
         # their first word instead of after the setup (10-20 s when set up later).
         ready = self.call.ready.wait(20)
-        dialed = None
+        result = {'started': True, 'ready': ready, 'contact': params.get('contact', ''), 'app': app}
         if params.get('dial') and ready:
-            result = subprocess.run(['moto-cua', 'press-control', app, params['dial']], capture_output=True,
-                                    text=True, timeout=60)
-            try:
-                dialed = json.loads(result.stdout).get('pressed')
-            except ValueError:
-                dialed = None
-        return {'started': True, 'ready': ready, 'dialed': dialed, 'contact': params.get('contact', ''), 'app': app}
+            result.update(self.dial(app, params.get('contact', ''), params['dial']))
+            if not result['dialed']:
+                self.call.stop('dial failed')
+        return result
+
+    def dial(self, app, contact, control):
+        """Place the call: JEV decides what to press in the contact's chat; the call
+        counts as placed only when the app opens its call audio (a system signal,
+        not the click)."""
+        self.emit({'type': 'call-state', 'state': 'dialing'}, keep=False)
+        focus = subprocess.run(['moto-cua', 'focus-showing', app, contact], capture_output=True, text=True,
+                               timeout=60)
+        try:
+            chat = json.loads(focus.stdout).get('activated')
+        except ValueError:
+            chat = None
+        if not chat:
+            # Never let the executor act on whatever chat happens to be open: it
+            # could call someone else.
+            self.emit({'type': 'call-state', 'state': 'dial-failed'}, keep=False)
+            return {'dialed': False, 'reason': f'no open chat with {contact!r}; open it first'}
+        before = self.call.streams_seen
+        task = {'goal': f'Start a voice call (not video) with {contact} from the chat that is open with them. '
+                        f'The chat header shows the call control ("{control}").',
+                'verification': [f'A voice call to {contact} has been started: a calling or ringing call screen '
+                                 'is shown'],
+                'max_actions': 4}
+        run = subprocess.run(['moto-cua', 'run', json.dumps(task, ensure_ascii=False)], capture_output=True,
+                             text=True, timeout=180)
+        try:
+            jev = json.loads(run.stdout)
+        except ValueError:
+            jev = {'status': 'ERROR', 'detail': (run.stderr or run.stdout)[-300:]}
+        deadline = time.monotonic() + 8
+        while time.monotonic() < deadline and self.call.streams_seen == before:
+            time.sleep(0.2)
+        placed = self.call.streams_seen > before
+        self.emit({'type': 'call-state', 'state': 'ringing' if placed else 'dial-failed'}, keep=False)
+        return {'dialed': placed, 'confirmed_by': 'call audio opened' if placed else None,
+                'jev_status': jev.get('status'),
+                'jev_actions': [f"{h.get('action')} {h.get('target_name') or ''}".strip() for h in jev.get('history', [])]}
 
     def call_command(self, command):
         call = self.call

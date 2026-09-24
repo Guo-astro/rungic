@@ -172,6 +172,8 @@ class CallProxy:
         self.active = False                    # the call agent talks (phase 'agent')
         self.phase = 'idle'                    # idle -> agent -> (user ->) ended
         self.ready = threading.Event()         # the realtime session is set up: safe to dial
+        self.streams_seen = 0                  # app audio streams routed so far (a call opens them)
+        self.connected = False                 # the other side has spoken
         self.responding = False
         self.pending: list[str] = []           # messages for the voice model, waiting for its current response
         self.loopbacks: list[str] = []
@@ -230,6 +232,7 @@ class CallProxy:
             print('call route:', line.strip(), flush=True)
             if line.startswith('routed '):
                 routed += 1
+                self.streams_seen += 1
             elif line.startswith('gone '):
                 routed -= 1
                 if routed <= 0:
@@ -543,6 +546,9 @@ class CallProxy:
         elif kind == 'conversation.item.input_audio_transcription.completed':
             text = simplified((event.get('transcript') or '').strip())
             if text:
+                if not self.connected:
+                    self.connected = True
+                    self.emit({'type': 'call-state', 'state': 'connected'}, keep=False)
                 self.transcript.append({'who': 'other', 'text': text})
                 self.emit({'type': 'call-transcript', 'role': 'remote', 'text': text})
                 self._decide()

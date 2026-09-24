@@ -95,7 +95,12 @@ final class CastDesktop implements DisplayManager.DisplayListener, SurfaceHolder
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                 | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-                | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+                // The cast display is its own display group with its own screen-off
+                // timeout; input reaches Linux through the host, so Android saw no
+                // activity there and switched the TV off after 5 minutes. Each
+                // display holds its own keep-screen-on wake lock (Android 14+).
+                | WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
             PixelFormat.OPAQUE);
         lp.setFitInsetsTypes(0);
         lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
