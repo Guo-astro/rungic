@@ -69,3 +69,5 @@ krecorder
 kclock
 kweather
 plasma-desktop
+kde-spectacle
+libnotify-bin

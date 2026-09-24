@@ -61,10 +61,34 @@
 
 从说完到开始播报约11 s。给线程加`developerInstructions`、给语音会话加`realtimeStartInstructions`要求使用简体中文后，Agent与播报均为简体。
 
+## 第2步：对话列表与按住说话（2026-09-24）
+
+- **后台服务**：`moto-voice-agent --service`，systemd用户单元`moto-voice-agent.service`，D-Bus按需启动，服务名`dev.moto.VoiceAgent`。
+  - 接口：`ListConversations`、`OpenConversation(id)`（空id为新对话）、`CloseConversation`、`DeleteConversation`（同时归档Codex线程）、`StartTalking`/`StopTalking`、`Interrupt`、`Approve(id, allow|allow-session|deny)`、`State`；信号`Event`（JSON）。
+  - 每个对话就是一个Codex线程：工作目录为家目录，沙箱`workspace-write`，审批策略`on-request`。
+  - 界面历史按对话存为`~/.local/share/moto-voice-agent/conversations/<id>.jsonl`，内容包括双方话语、Agent消息、命令及输出、文件改动、审批。说出第一句话后才进入列表，并以这句话作标题。
+  - 打开对话即开启实时会话，空闲10分钟后关闭。
+- **按住说话**：
+  - 按下时停止正在播放的回答（打断），并开始采集；只在按住期间打开麦克风，自然避免外放回声。松开后补0.9 s静音，让服务端VAD判定一句话结束。
+  - 采集数据拼成100 ms一块，由单一线程按顺序上传。起初每块各开一个线程上传，服务器收到的音频乱序，无法识别。
+- **系统提示词**（`plasma/voice-agent/prompts/`）：
+  - `realtime.md`作为语音模型指令，经`thread/realtime/start`的`prompt`传入。它会整体替换Codex默认指令，因此保留Codex默认内容（Apache-2.0，注明出处），后面追加本机环境、位置、能力和语言要求。
+  - 源码核实：`realtimeStartInstructions`注入的是Agent上下文，不是语音模型指令。改用正确的`prompt`之前，语音模型仍回答“无法查看你的手机”；改后直接把请求交给Agent。
+  - `agent.md`作为Agent的`developerInstructions`：手机硬件、Android宿主、LXC中的Ubuntu、Plasma Mobile、共享存储、投屏、代理、权限和回答方式。
+- **技能**：`skills/moto-phone-desktop/SKILL.md`，安装到`/usr/local/share/moto-voice-agent/skills`，并链接到`~/.codex/skills/`。内容包括平台桥全部操作、电量/内存/存储、窗口与截图（新装`kde-spectacle`）、启动应用、通知（新装`libnotify-bin`）、AT-SPI操作（`moto-a11y`）和录屏。
+  - 实测Agent在处理“手机还剩多少存储”时自己先读取了该技能，再执行`df`。
+- **界面**：Kirigami应用`moto-voice-assistant`，桌面入口“语音助手”（`dev.moto.VoiceAssistant.desktop`）。
+  - 列表页：新建、打开、删除对话。
+  - 聊天页：你的话、助手的话（均含实时转写）、Agent消息（Markdown）、命令卡片（运行中/成功/失败，可展开输出）、文件改动卡片、审批卡片（允许/本次对话都允许/拒绝）、状态行，底部按住说话按钮。
+- **实测**：
+  - 直接注入音频：从说完到Agent执行`df`再到播报，事件全部到达界面。
+  - 界面长按3 s后，服务收到开始与结束，约2.7 s音频。
+  - 用手机扬声器外放合成语音再由手机麦克风录入的自测不成立：Android采集启用回声消除，会抵消本机播放的声音，识别结果成了乱码。真人说话已在第1步实测中识别准确。
+
 ## 待办
 
 - **输入转写为繁体**：app-server不能设置转写语言，只影响显示；显示时做简繁转换。
 - **真人说话实测**：原型已支持麦克风模式（不带参数运行）。外放时的回声、服务端VAD的打断行为需实测，必要时改用GStreamer `webrtcdsp`回声消除或按住说话模式。
-- **第2步**：快捷设置/悬浮控制条入口、显示转写与进度的浮层、审批弹窗、常驻用户服务。
+- 快捷设置和悬浮控制条上的入口；识别文字的简繁转换；对话标题可改。
 - **第3步**：本机桌面操作工具（窗口、AT-SPI控件、截图、启动应用、平台桥）经MCP挂给Codex。
 - **费用**：实时语音按API用量计费（`gpt-realtime`音频输入$32、输出$64/百万token；mini版$10/$20）。

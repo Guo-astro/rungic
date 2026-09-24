@@ -1,0 +1,10 @@
+[Unit]
+Description=Voice assistant (GPT Realtime + Codex agent)
+PartOf=graphical-session.target
+
+[Service]
+Type=dbus
+BusName=dev.moto.VoiceAgent
+ExecStart=/usr/local/bin/moto-voice-agent --service
+Restart=on-failure
+RestartSec=3
