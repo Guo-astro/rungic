@@ -24,7 +24,23 @@
 - 往`linux_speaker`播放语音，从其monitor录回，峰值与送入“Linux 麦克风输入”那一路相同。
 - 用默认缓冲录音时，结束录音进程会丢掉尾部数据。测量应使用`--latency-msec=20`。
 
+## 微信通话实测（2026-09-25）
+
+- 微信4.1的通话音频来自内置的Chromium WebRTC模块，在PulseAudio中表现为：
+  - 播放流`application.name="Chromium"`（float32，单声道，44.1 kHz）；
+  - 录音流`"Chromium input"`（s16le，单声道，16 kHz）；
+  - 两者的`application.process.binary="wechat"`。
+- 用户打通一通语音电话后：
+  - 用`pactl move-sink-input`和`move-source-output`把这两路切到 Linux 扬声器和 Linux 麦克风；
+  - 向“Linux 麦克风输入”播放一句合成语音“……如果你听到了，请随便说一句话”，同时录`linux_speaker.monitor`；
+  - 约8秒后切回`android`和`android_microphone`。
+- 结果：
+  - 录音中在测试语音播完后出现约0.6 s对方的声音，转写为“我听到了。”，即双向都通。
+  - 录音含第三方声音，验证后已删除。
+- 注意：
+  - 用`pactl move`切换会被`module-stream-restore`按应用名记住，名称是通用的“Chromium”，会波及其他Chromium和Electron应用。本次已切回原设备。
+  - 正式功能应按`application.process.binary`匹配流，并使用不保存的移动（由客户端库发起、不写入stream-restore），挂断后恢复原设备。
+
 ## 待做
 
-- 微信通话实测：通话中把微信的输入、输出切到这两个设备（可在微信的音频设置里选，也可在Plasma音量小程序里按应用切换），确认对方能听到送入的语音、Linux一侧能录到对方的声音。
 - 通话代理：第二个实时语音会话接这两个设备，你的指令由现有语音助手转给它；界面上有接管、挂断按钮（方案见对话记录，待用户确认后另立章节）。
