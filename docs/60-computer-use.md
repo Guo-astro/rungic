@@ -106,6 +106,22 @@ arc-cua的接口：`observe() -> DesktopSnapshot`、`is_fresh(snapshot, action)`
   - Dolphin先移回手机再调用`launch`，被移回电视并激活，1.0 s。
   - Firefox新开，出现在CAST-1，3.4 s。
 
+## Firefox仍开在手机上、虚拟键盘顶起窗口（2026-09-24）
+
+- **现象**：让助手打开Firefox，窗口出现在手机上；Agent输入文字时，手机弹出虚拟键盘，把窗口顶了上去。
+- **原因**：
+  - Codex启动MCP服务时只传十几个环境变量，缺少`MOZ_ENABLE_WAYLAND`、`GDK_BACKEND`、`QT_QPA_PLATFORM`、`XDG_SESSION_TYPE`、`XDG_CURRENT_DESKTOP`等会话变量。`desktop_launch`从这里经`kstart`启动Firefox，Firefox找不到显示、不出窗口；Dolphin是Qt应用，靠`WAYLAND_DISPLAY`仍能启动，所以此前在完整会话里测试时没有发现。
+  - `desktop_launch`报告没有窗口后，Agent改在shell里直接执行`firefox`。新窗口落在当前活动输出上，即显示语音助手的手机。
+  - 输入框在手机屏时，按移动端设计（`KWIN_IM_SHOW_ALWAYS`，仅对内置输出生效）会弹出虚拟键盘，KWin为给键盘让位把窗口上推。输入框在电视上时不会弹出，复现时`visible`为false。
+- **修复**：
+  - moto-cua启动时，从systemd用户管理器读入图形会话环境（`busctl --user -j get-property … Manager Environment`），与桌面启动应用时相同。等窗口的时间放宽到25 s。
+  - 技能中规定：不要从shell启动图形应用或`xdg-open`；`desktop_launch`报告失败时查一次`desktop_windows`，然后告诉用户，不要换别的方式重试。
+  - 在手机屏上输入文字时，聚焦后把`org.kde.kwin.VirtualKeyboard.active`设为false，再走宿主键盘通道输入。用户下次触摸输入框时键盘会照常弹出。
+- **实测**：
+  - 以Codex同样的精简环境（`env -i`）调用`launch Firefox`：3.5 s，出现在CAST-1并处于活动状态。
+  - 语音“帮我打开火狐浏览器”：Agent调用`desktop_launch`，Firefox出现在电视上。
+  - 手机上的Firefox地址栏输入期间逐秒采样，`visible`始终为false。点击与收起之间约0.1 s，可能短暂闪现。
+
 ## 限制与待办
 - 只操作活动窗口；弹出菜单等若属于另一个窗口，需要Agent先激活或再观察。
 - 没有无障碍树的应用（部分Electron、游戏）只能看截图，arc-cua的OCR后端是macOS Vision实现，Linux暂无对应。

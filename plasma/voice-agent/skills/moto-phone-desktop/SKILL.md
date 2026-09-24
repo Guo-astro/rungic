@@ -43,13 +43,13 @@ Use these tools for anything on screen; they act with ordinary pointer/keyboard 
    - `verification` must be observable in the UI. Split long tasks into several subtasks.
    - Status `SUBTASK_COMPLETE` = done; `NEEDS_AGENT` = look at `final_window` (or a screenshot) and decide the next subtask; `BLOCKED` = no way forward.
    - Before a step that deletes, sends, publishes, pays or changes an account, ask the user to confirm first; never make that the goal of a subtask without their explicit OK.
-5. Prefer these tools over shell commands (`kill`, `xdotool`-like hacks) for apps on screen.
+5. Never start GUI apps from the shell (`firefox &`, `xdg-open`, `kstart`): the window opens on whichever screen is active, usually the phone showing this assistant. Use `desktop_launch`; if it reports no window, check `desktop_windows` once and tell the user instead of retrying other ways. Also prefer these tools over `kill` or similar for apps on screen.
 6. Apps without accessibility (some Electron/Flatpak apps, games) show few controls; take a screenshot and tell the user what you see.
 
 ## Desktop windows and screenshots (shell)
 
 - Screenshot of everything: `spectacle -b -n -f -o /tmp/shot.png` (use `-m` for the active screen). Look at the image to understand what is on screen.
-- `xdg-open <file-or-url>` opens a file or URL in its default app.
+- To open a URL or file, launch the app with `desktop_launch` and use `desktop_run` (e.g. type into the address bar); `xdg-open` from the shell would open it on the phone.
 - Send a notification: `notify-send "标题" "内容"`.
 - Low-level AT-SPI tool for debugging only: `moto-a11y` (apps/tree/find/act/text/windows).
 

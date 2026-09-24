@@ -284,6 +284,7 @@ class LinuxAtspiBackend:
                 self._set_text(node, text)
                 return
         time.sleep(0.12)
+        self._no_virtual_keyboard()
         self.input.chord(['CTRL', 'A'])
         time.sleep(0.05)
         try:
@@ -295,6 +296,19 @@ class LinuxAtspiBackend:
                 self.input.type_text(text)
             else:
                 self._set_text(node, text)
+
+    def _no_virtual_keyboard(self) -> None:
+        """A text field on the phone's own screen summons the on-screen keyboard
+        (KWIN_IM_SHOW_ALWAYS), which pushes the window up. The agent types through
+        the host instead, so put the keyboard away; the user's next touch on a text
+        field brings it back."""
+        if self._window is None or not str(self._window.get('output', '')).startswith('WL'):
+            return
+        try:
+            self.bus.session.call_sync('org.kde.KWin', '/VirtualKeyboard', a11y.PROPS, 'Set', a11y.GLib.Variant(
+                '(ssv)', ('org.kde.kwin.VirtualKeyboard', 'active', a11y.GLib.Variant('b', False))), None, 0, 2000)
+        except a11y.GLib.Error:
+            pass
 
     def _set_text(self, node: Node, text: str) -> None:
         if 'org.a11y.atspi.EditableText' not in node.interfaces or not self.bus.call(

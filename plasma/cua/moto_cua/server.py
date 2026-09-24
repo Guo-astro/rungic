@@ -193,10 +193,11 @@ class Cua:
                     'window': {'id': existing['id'], 'caption': existing['caption'], 'screen': target_screen}}
         placed = kwin.place_next(classes, prefix, lambda: subprocess.Popen(
             ['kstart', '--application', entry['id']], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            start_new_session=True))
+            start_new_session=True), timeout=25)
         if placed is None:
             return {'launched': entry, 'window': None,
-                    'note': 'No window yet (slow start, or its window class differs); check desktop_windows.'}
+                    'note': ('No window within 25 s. Check desktop_windows once; do not start the app from the '
+                             'shell (its window would open on the phone). Tell the user if it did not start.')}
         time.sleep(0.3)
         return {'launched': entry, 'window': {'id': placed['id'], 'screen': placed['screen']}}
 
@@ -289,7 +290,24 @@ def serve() -> None:
             send({'jsonrpc': '2.0', 'id': rid, 'error': {'code': -32603, 'message': str(error)}})
 
 
+def import_session_environment() -> None:
+    """Codex starts MCP servers with a handful of variables. Take the graphical
+    session's environment from the systemd user manager, as the desktop does when
+    it launches apps: without MOZ_ENABLE_WAYLAND/GDK_BACKEND, Firefox started from
+    here found no display and never showed a window."""
+    try:
+        out = subprocess.run(['busctl', '--user', '-j', 'get-property', 'org.freedesktop.systemd1',
+                              '/org/freedesktop/systemd1', 'org.freedesktop.systemd1.Manager', 'Environment'],
+                             capture_output=True, text=True, timeout=5).stdout
+        for item in json.loads(out)['data']:
+            key, _, value = item.partition('=')
+            os.environ.setdefault(key, value)
+    except (OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
+        logger.warning('session environment unavailable: %s', error)
+
+
 def main() -> None:
+    import_session_environment()
     logging.basicConfig(level=os.environ.get('MOTO_CUA_LOG', 'WARNING'), stream=sys.stderr,
                         format='%(asctime)s %(name)s %(message)s')
     command = sys.argv[1] if len(sys.argv) > 1 else 'mcp'
