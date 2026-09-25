@@ -31,7 +31,7 @@ public final class NativeBridge {
     /** eventfd that becomes readable when the compositor wants vsync again. */
     public static native int vsyncWakeFd();
     /** Cast display (Miracast TV) window, in pixels; refresh in mHz (docs/58). */
-    public static native void bindCastSurface(Surface surface, int width, int height, int refreshMhz);
+    public static native void bindCastSurface(Surface surface, int width, int height, int refreshMhz, int rotation);
     public static native void releaseCastSurface();
     /** The assistant's screen (docs/65): the second output exists while enabled, with or without a TV. */
     public static native void setAgentScreen(boolean enabled, int width, int height, int refreshMhz);

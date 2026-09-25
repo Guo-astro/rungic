@@ -118,7 +118,7 @@ final class CastDesktop implements DisplayManager.DisplayListener, SurfaceHolder
 
     private void unbind() {
         if (boundWidth > 0) {
-            NativeBridge.releaseCastSurface();
+            ((MainActivity) activity).releasePresenter("tv");
             boundWidth = boundHeight = 0;
             bound.accept(false);
         }
@@ -129,7 +129,7 @@ final class CastDesktop implements DisplayManager.DisplayListener, SurfaceHolder
     @Override public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
         Display display = displays.getDisplay(displayId);
         int refresh = display == null ? 60000 : Math.round(display.getRefreshRate() * 1000);
-        NativeBridge.bindCastSurface(holder.getSurface(), width, height, refresh);
+        ((MainActivity) activity).bindPresenter("tv", holder.getSurface(), width, height, refresh, 0);
         boundWidth = width;
         boundHeight = height;
         bound.accept(true);

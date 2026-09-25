@@ -26,6 +26,8 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     /** The assistant's screen: a 1920x1080 desktop output, on the TV or in a Linux floating window. */
     static final int[] AGENT_SCREEN_SIZE = {1920, 1080};
     private boolean agentScreen;
+    private AgentFullscreen agentFullscreen;
+    private String presenterOwner;
     private CastControls castControls;
     private TextView status;
     private volatile int bufferWidth = 720, bufferHeight = 1600;
@@ -74,8 +76,29 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         castTest = new CastTest(this, frame);
         castControls = new CastControls(this, frame, this::setAndroidKeyboard);
         agentScreen = getPreferences(MODE_PRIVATE).getBoolean("agent_screen", false);
+        agentFullscreen = new AgentFullscreen(this, frame, AGENT_SCREEN_SIZE[0], AGENT_SCREEN_SIZE[1], new AgentFullscreen.Host() {
+            @Override public void bindPresenter(String owner, android.view.Surface surface, int width, int height, int rotation) {
+                MainActivity.this.bindPresenter(owner, surface, width, height, 60000, rotation);
+            }
+            @Override public void releasePresenter(String owner) { MainActivity.this.releasePresenter(owner); }
+            @Override public void leaveFullscreen() { agentFullscreen.hide(); }
+            @Override public void castToTv() {
+                agentFullscreen.hide();
+                // As the Plasma cast tile does (moto-cast, docs/58): the last TV; seconds to a minute.
+                new Thread(() -> {
+                    try { new ProcessBuilder("su", "-c", "/data/adb/moto-wfd/moto-cast connect").redirectErrorStream(true).start().waitFor(); }
+                    catch (Exception e) { Log.w("MotoCast", "connect failed: " + e); }
+                }, "moto-cast").start();
+            }
+            @Override public void closeAgentScreen() {
+                try { agentScreen(new org.json.JSONObject().put("enabled", false)); }
+                catch (Exception e) { Log.w("MotoWayland", "agent screen off failed: " + e); }
+            }
+        });
         castDesktop = new CastDesktop(this, () -> initialized, () -> agentScreen ? AGENT_SCREEN_SIZE : null, bound -> {
             castControls.setAvailable(bound);
+            // The TV takes the assistant's screen from fullscreen (it bound the presenter first).
+            if (bound) agentFullscreen.hide();
             castBoundAt = bound ? android.os.SystemClock.uptimeMillis() : 0;
             // The secondary home may have taken the focus before the TV got the desktop.
             if (bound) display.postDelayed(this::reclaimFocus, 400);
@@ -316,18 +339,41 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         return castDesktop.request(request);
     }
     /**
-     * The assistant's screen (docs/65): {"enabled": bool} turns it on or off; the reply says whether it
-     * is on, its size and whether a TV presents it ("tv"), else the Linux floating window shows it.
+     * The assistant's screen (docs/65): {"enabled": bool} turns it on or off, {"fullscreen": bool} shows
+     * it over the whole phone; the reply says whether it is on, its size, and whether a TV ("tv") or
+     * the phone ("fullscreen") presents it, else the Linux floating window shows it.
      */
     org.json.JSONObject agentScreen(org.json.JSONObject request) throws Exception {
         if (request.has("enabled")) {
             agentScreen = request.getBoolean("enabled");
+            if (!agentScreen) agentFullscreen.hide();
             getPreferences(MODE_PRIVATE).edit().putBoolean("agent_screen", agentScreen).apply();
             if (initialized) NativeBridge.setAgentScreen(agentScreen, AGENT_SCREEN_SIZE[0], AGENT_SCREEN_SIZE[1], 60000);
         }
+        if (request.has("fullscreen")) {
+            if (!request.getBoolean("fullscreen")) agentFullscreen.hide();
+            else if (!agentScreen) throw new IllegalStateException("the assistant's screen is off");
+            else if (castControls.available()) throw new IllegalStateException("a TV shows the assistant's screen");
+            else agentFullscreen.show();
+        }
         return new org.json.JSONObject().put("enabled", agentScreen)
             .put("width", AGENT_SCREEN_SIZE[0]).put("height", AGENT_SCREEN_SIZE[1])
-            .put("tv", castControls.available());
+            .put("tv", castControls.available()).put("fullscreen", agentFullscreen.shown());
+    }
+
+    /**
+     * The host's second presenter goes to one window at a time: the TV ("tv", CastDesktop) or the
+     * assistant's screen fullscreen on the phone ("fullscreen", AgentFullscreen). A window releases
+     * it only while it is the one bound, so the other is never cut off.
+     */
+    void bindPresenter(String owner, android.view.Surface surface, int width, int height, int refreshMhz, int rotation) {
+        NativeBridge.bindCastSurface(surface, width, height, refreshMhz, rotation);
+        presenterOwner = owner;
+    }
+    void releasePresenter(String owner) {
+        if (!owner.equals(presenterOwner)) return;
+        NativeBridge.releaseCastSurface();
+        presenterOwner = null;
     }
     org.json.JSONObject castControls(org.json.JSONObject request) throws Exception {
         if (request.has("mode")) castControls.setMode(CastControls.Mode.valueOf(request.getString("mode").toUpperCase()));
