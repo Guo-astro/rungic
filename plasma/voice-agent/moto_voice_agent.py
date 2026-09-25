@@ -224,8 +224,30 @@ class Store:
         self.save_index()
         (DATA / 'conversations' / f'{thread_id}.jsonl').unlink(missing_ok=True)
 
-    def listing(self):
-        items = [dict(id=k, **v) for k, v in self.index.items()]
+    def preview(self, thread_id):
+        """The conversation's last word for the list (docs/59): the latest message, or
+        how its latest call ended. Read from the file's tail only."""
+        path = DATA / 'conversations' / f'{thread_id}.jsonl'
+        try:
+            with open(path, 'rb') as f:
+                f.seek(0, os.SEEK_END)
+                f.seek(max(0, f.tell() - 65536))
+                lines = f.read().decode('utf-8', 'replace').splitlines()
+        except OSError:
+            return ''
+        for line in reversed(lines):
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            if event.get('type') == 'message' and event.get('text'):
+                return event['text'].strip().split('\n')[0][:80]
+            if event.get('type') == 'call-ended':
+                return '通话结束'
+        return ''
+
+    def listing(self, assistant=None):
+        items = [dict(id=k, **v, preview=self.preview(k), assistant=k == assistant) for k, v in self.index.items()]
         return sorted(items, key=lambda e: e.get('updated', 0), reverse=True)
 
 
@@ -1258,7 +1280,7 @@ class Service:
             try:
                 result = None
                 if method == 'ListConversations':
-                    result = json.dumps(agent.store.listing(), ensure_ascii=False)
+                    result = json.dumps(agent.store.listing(agent.assistant_id()), ensure_ascii=False)
                 elif method == 'OpenConversation':
                     result = json.dumps(agent.open_conversation(args[0]), ensure_ascii=False)
                 elif method == 'CloseConversation':

@@ -22,6 +22,7 @@ QtObject {
     property bool workOpen: false    // an agent turn is running
     property real lastTime: 0        // of the latest event (a turn the history left open ends there)
     property int callAt: -1          // the proxied call entry (docs/63)
+    property int staleCallAt: -1     // a call the history left open: ended, unless the service says it is live
     property bool inCall: false      // talking goes to the call agent
     property string callPhase: ""    // "agent": the assistant talks; "user": the user talks, assistant paused
     property bool callMonitor: false
@@ -218,6 +219,13 @@ QtObject {
             root.phase = e.phase; root.agentBusy = !!e.agentBusy; root.inCall = !!e.call
             root.handsFree = !!e.handsFree
             root.callPhase = e.callPhase || ""
+            if (root.staleCallAt >= 0 && root.staleCallAt < entries.count) {
+                if (root.callPhase) {
+                    entries.setProperty(root.staleCallAt, "status", root.callPhase === "user" ? "user" : "running")
+                    root.callAt = root.staleCallAt
+                }
+                root.staleCallAt = -1
+            }
             break
         }
     }
@@ -229,12 +237,24 @@ QtObject {
         root.workAt = -1
         root.workOpen = false
         root.callAt = -1
+        root.staleCallAt = -1
         for (const e of opened.history) root.apply(e, false)
         // A turn that was running when the history was saved is not running now.
         if (root.workOpen && root.workAt >= 0) {
             entries.setProperty(root.workAt, "status", "done")
             entries.setProperty(root.workAt, "finished", root.lastTime)
             root.workOpen = false
+        }
+        // A call the history left open (its end was not recorded) has ended, unless the
+        // next state says otherwise.
+        if (root.callAt >= 0) {
+            const call = entries.get(root.callAt)
+            if (call.status === "running" || call.status === "user") {
+                entries.setProperty(root.callAt, "status", "done")
+                entries.setProperty(root.callAt, "finished", root.lastTime)
+                root.staleCallAt = root.callAt
+            }
+            root.callAt = -1
         }
     }
 }

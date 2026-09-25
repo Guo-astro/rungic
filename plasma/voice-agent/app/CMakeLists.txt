@@ -7,8 +7,11 @@ find_package(LayerShellQt REQUIRED)
 find_package(KF6WindowSystem REQUIRED)
 qt_standard_project_setup(REQUIRES 6.5)
 qt_add_executable(moto-voice-assistant main.cpp agentclient.cpp agentclient.h overlay.cpp overlay.h)
+# The app's colours and helpers, shared by its pages and the overlay.
+set_source_files_properties(qml/Style.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 qt_add_qml_module(moto-voice-assistant URI dev.moto.voiceassistant VERSION 1.0
-    QML_FILES qml/Main.qml qml/ConversationsPage.qml qml/ChatPage.qml qml/ChatItem.qml qml/TalkButton.qml
+    QML_FILES qml/Main.qml qml/ConversationsPage.qml qml/ChatPage.qml qml/ChatItem.qml qml/TalkDock.qml
+              qml/GlassButton.qml qml/Spinner.qml qml/Style.qml
               qml/ChatModel.qml qml/AssistantOverlay.qml qml/OverlayItem.qml qml/Bloom.qml qml/LightPill.qml qml/GlowLabel.qml)
 # The overlay's light (docs/67).
 qt_add_shaders(moto-voice-assistant "overlay-shaders" PREFIX "/"

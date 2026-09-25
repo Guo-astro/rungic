@@ -454,6 +454,7 @@ Window {
 
             GlassButton {
                 anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+                enabled: controls.opacity > 0
                 iconName: "view-conversation-balloon-symbolic"
                 label: "在应用中查看"
                 onClicked: {
@@ -485,36 +486,11 @@ Window {
             // Stop the work or the answer; otherwise close.
             GlassButton {
                 anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+                enabled: controls.opacity > 0
                 readonly property bool stops: chat.agentBusy || chat.phase === "speaking"
                 iconName: stops ? "media-playback-stop-symbolic" : "window-close-symbolic"
                 label: stops ? "停止" : "关闭"
                 onClicked: stops ? AgentClient.stopTask() : win.dismiss()
-            }
-        }
-    }
-
-    component GlassButton: QQC2.AbstractButton {
-        id: round
-        property string iconName
-        property string label
-        width: 48
-        height: 48
-        enabled: opacity > 0 && parent.opacity > 0
-        Accessible.name: label
-        background: Rectangle {
-            radius: width / 2
-            color: Qt.rgba(1, 1, 1, round.pressed ? 0.2 : 0.08)
-            border.width: 1
-            border.color: Qt.rgba(1, 1, 1, 0.12)
-        }
-        contentItem: Item {
-            Kirigami.Icon {
-                anchors.centerIn: parent
-                width: 20
-                height: 20
-                source: round.iconName
-                color: Qt.rgba(1, 1, 1, 0.92)
-                isMask: true
             }
         }
     }
