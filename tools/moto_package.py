@@ -266,7 +266,10 @@ if [ -d "$DESTDIR/etc" ]; then (cd "$DESTDIR" && find etc -type f | sort | sed '
 elves=$(find "$DESTDIR" -type f ! -path "$DESTDIR/DEBIAN/*" -exec sh -c 'head -c4 "$1" | grep -q ELF && echo "$1"' _ {{}} \\;)
 rm -rf shlibs; mkdir -p shlibs/debian; printf 'Source: x\\n\\nPackage: {name}\\nArchitecture: any\\n' > shlibs/debian/control
 if [ -n "$elves" ]; then
-  (cd shlibs && dpkg-shlibdeps -O -l"$DESTDIR/usr/lib/{name}" $elves 2>/dev/null | sed -n 's/^shlibs:Depends=//p') > shlibs.txt || true
+  # Libraries the package ships itself (private FFmpeg, plugins) resolve inside DESTDIR.
+  libdirs=$(find "$DESTDIR" -name '*.so*' ! -path "$DESTDIR/DEBIAN/*" -printf '-l%h\n' | sort -u)
+  (cd shlibs && dpkg-shlibdeps -O --ignore-missing-info $libdirs $elves 2>shlibs.err | sed -n 's/^shlibs:Depends=//p') > shlibs.txt || true
+  [ ! -s shlibs/shlibs.err ] || sed 's/^/shlibdeps: /' shlibs/shlibs.err | head -5
 else
   : > shlibs.txt
 fi
