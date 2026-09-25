@@ -6,7 +6,7 @@ PartOf=graphical-session.target
 [Service]
 Type=dbus
 BusName=dev.moto.VoiceAgent
-ExecStart=/usr/local/bin/moto-voice-agent --service
+ExecStart=/usr/bin/moto-voice-agent --service
 Restart=on-failure
 RestartSec=3
 # It and its children (codex app-server, call proxy, moto-cua) hold API keys

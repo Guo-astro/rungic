@@ -471,14 +471,16 @@ def deploy(version=None, restart='auto', acceptance='smoke', record_label=None):
     # 3 sync and install
     ensure_apt_source()
     step('sync', **sync_repo())
-    android = sync_android(info, record)
-    step('android', changed=android)
     ok, tail = apt_install(info, record)
     step('install', ok=ok)
     if not ok:
         log['result'] = 'install-failed'
         step('abort', reason=tail[-1500:])
         return log
+    # The Android side names paths inside the container: it follows a successful install,
+    # so a failed one leaves both sides at the previous release.
+    android = sync_android(info, record)
+    step('android', changed=android)
     after = installed_versions()
     (record / 'after.json').write_text(json.dumps({'release': version, 'packages': after}, indent=1) + '\n')
     # Protection is the release's pin and exact dependencies now; drop the holds they replace.

@@ -5,7 +5,7 @@ Wants=pulseaudio.service pipewire.service
 PartOf=graphical-session.target
 
 [Service]
-ExecStart=/usr/local/bin/moto-media-bridge
+ExecStart=/usr/bin/moto-media-bridge
 Restart=on-failure
 RestartSec=5
 

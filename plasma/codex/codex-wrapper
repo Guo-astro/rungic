@@ -3,4 +3,4 @@
 # app-server, the realtime WebSocket -- must reach OpenAI through the user's
 # proxy, whoever starts it; reqwest and Codex's WebSocket dialer both read these.
 . /etc/profile.d/proxy.sh
-exec /usr/local/lib/codex/current/bin/codex "$@"
+exec /usr/lib/codex/current/bin/codex "$@"

@@ -17,7 +17,7 @@ import sys
 import time
 
 SOCKET = '/mnt/android-wayland/platform.sock'
-WINDOW = '/usr/local/libexec/moto-agent-screen-window'
+WINDOW = '/usr/libexec/moto-agent-screen-window'
 
 
 def bridge(request, timeout=5):

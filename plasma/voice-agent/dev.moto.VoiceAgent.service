@@ -1,4 +1,4 @@
 [D-BUS Service]
 Name=dev.moto.VoiceAgent
-Exec=/usr/local/bin/moto-voice-agent --service
+Exec=/usr/bin/moto-voice-agent --service
 SystemdService=moto-voice-agent.service

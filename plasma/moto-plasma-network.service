@@ -4,7 +4,7 @@ After=dbus.service
 Requires=dbus.service
 
 [Service]
-ExecStart=/usr/local/libexec/moto-android-network
+ExecStart=/usr/libexec/moto-android-network
 Restart=on-failure
 RestartSec=5
 

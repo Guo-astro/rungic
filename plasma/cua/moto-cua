@@ -7,4 +7,4 @@
 : "${DBUS_SESSION_BUS_ADDRESS:=unix:path=$XDG_RUNTIME_DIR/bus}"
 : "${WAYLAND_DISPLAY:=wayland-0}"
 export XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS WAYLAND_DISPLAY
-PYTHONPATH=/usr/local/lib/moto-cua${PYTHONPATH:+:$PYTHONPATH} exec python3 -m moto_cua "$@"
+PYTHONPATH=/usr/lib/moto-cua${PYTHONPATH:+:$PYTHONPATH} exec python3 -m moto_cua "$@"

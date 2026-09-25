@@ -1,0 +1,6 @@
+Version=6
+# The desktop user's Codex (docs/59, docs/64): the phone-desktop skill and the
+# moto-desktop MCP server (formerly written by the voice agent and cua install
+# scripts for the first user only).
+Id=moto-codex-v1
+Script=moto-codex-setup.sh,sh

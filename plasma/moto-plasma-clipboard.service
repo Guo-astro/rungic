@@ -4,8 +4,9 @@ After=plasma-kwin_wayland.service
 PartOf=graphical-session.target
 
 [Service]
-Environment=PATH=/usr/local/bin:/usr/bin:/bin
-ExecStart=/usr/local/bin/moto-clipboard
+# wl-copy/wl-paste 2.3.0 (ext-data-control) come from the rebuilt wl-clipboard package (docs/61).
+Environment=PATH=/usr/bin:/bin
+ExecStart=/usr/bin/moto-clipboard
 Restart=on-failure
 RestartSec=5
 

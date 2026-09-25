@@ -1,4 +1,4 @@
 [D-BUS Service]
 Name=dev.moto.VoiceAssistant
-Exec=/usr/local/bin/moto-voice-assistant --overlay
+Exec=/usr/bin/moto-voice-assistant --overlay
 SystemdService=moto-voice-overlay.service

@@ -247,6 +247,19 @@ export DESTDIR={base}/root SRC={base}/src SOURCE_DATE_EPOCH={epoch} JOBS={jobs} 
 rm -rf "$DESTDIR"; mkdir -p "$DESTDIR/DEBIAN"
 sh -eu "$SRC/{pkg['dir'].relative_to(WORKSPACE)}/build.sh"
 cp debian-scripts/* "$DESTDIR/DEBIAN/"
+# Debug information to {base}/dbgsym by build-id (for NAME-dbgsym), then strip (docs/61).
+rm -rf {base}/dbgsym
+find "$DESTDIR" -type f ! -path "$DESTDIR/DEBIAN/*" | while read -r f; do
+  head -c4 "$f" | grep -q ELF || continue
+  case "$(readelf -h "$f" 2>/dev/null | sed -n 's/^ *Type: *\\([A-Z]*\\).*/\\1/p')" in EXEC|DYN) ;; *) continue ;; esac
+  id=$(readelf -n "$f" 2>/dev/null | sed -n 's/.*Build ID: \\([0-9a-f]*\\).*/\\1/p' | head -n1)
+  if [ -n "$id" ] && readelf -S "$f" 2>/dev/null | grep -q '\\.debug_info'; then
+    d={base}/dbgsym/usr/lib/debug/.build-id/$(echo "$id" | cut -c1-2)
+    mkdir -p "$d"
+    objcopy --only-keep-debug --compress-debug-sections "$f" "$d/$(echo "$id" | cut -c3-).debug"
+  fi
+  strip --strip-unneeded "$f"
+done
 if [ -d "$DESTDIR/etc" ]; then (cd "$DESTDIR" && find etc -type f | sort | sed 's|^|/|') > "$DESTDIR/DEBIAN/conffiles"; fi
 [ -s "$DESTDIR/DEBIAN/conffiles" ] || rm -f "$DESTDIR/DEBIAN/conffiles"
 # Library dependencies of the ELF files, as dpkg-shlibdeps computes them.
@@ -287,10 +300,24 @@ systemd-run --unit={unit} --wait --pipe --collect --quiet -p TimeoutStartSec=144
     run(f'cd {base} && dpkg-deb --root-owner-group -Zxz --build root {deb_name} >/dev/null', 'container',
         timeout=1800)
     ctl.unlink()
-    local = WORKSPACE / f'.work/cache/{deb_name}'
-    moto_release.pull(f'{PLASMA_ROOTFS}{base}/{deb_name}', local)
+    debs = [deb_name]
+    # Debug symbols, when there are any: NAME-dbgsym at the same version, in the release repository
+    # for moto-crash-symbols; never a dependency of the release.
+    dbg_name = f'{name}-dbgsym_{version}_{pkg["architecture"]}.deb'
+    dbg_control = (f'Package: {name}-dbgsym\nVersion: {version}\nArchitecture: {pkg["architecture"]}\n'
+                   f'Maintainer: {MAINTAINER}\nSection: debug\nPriority: optional\n'
+                   f'Depends: {name} (= {version})\nDescription: debug symbols for {name}\n')
+    made = run(f'''cd {base}
+[ -d dbgsym/usr/lib/debug ] || exit 3
+mkdir -p dbgsym/DEBIAN && printf '%s' {shlex.quote(dbg_control)} > dbgsym/DEBIAN/control
+dpkg-deb --root-owner-group -Zxz --build dbgsym {dbg_name} >/dev/null''', 'container', timeout=1800, check=False)
+    if made.returncode == 0:
+        debs.append(dbg_name)
+    for deb in debs:
+        local = WORKSPACE / f'.work/cache/{deb}'
+        moto_release.pull(f'{PLASMA_ROOTFS}{base}/{deb}', local)
+        shutil.move(local, moto_release.POOL / deb)
     target = moto_release.POOL / deb_name
-    shutil.move(local, target)
     record(pkg, version, target, tree)
     return target
 

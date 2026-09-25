@@ -2,6 +2,6 @@
 Type=Application
 Name=Moto Screenshot
 Comment=Screen capture for desktop automation (docs/64)
-Exec=/usr/local/libexec/moto-screenshot
+Exec=/usr/libexec/moto-screenshot
 NoDisplay=true
 X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2

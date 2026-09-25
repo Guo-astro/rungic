@@ -27,3 +27,9 @@ system tpm-udev.path
 system tpm-udev.service
 system wpa_supplicant.service
 user plasma-powerdevil.service
+# X11-only helpers; the session has no X server.
+user plasma-xembedsniproxy.service
+user plasma-gmenudbusmenuproxy.service
+# Masked by hand for the first user before 2026-09-26; the reason was not recorded.
+# Kept for every user so a new account behaves like the existing one (docs/61).
+user plasma-ksmserver.service

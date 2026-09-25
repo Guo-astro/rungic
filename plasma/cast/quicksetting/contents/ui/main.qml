@@ -34,7 +34,7 @@ QS.QuickSetting {
     }
 
     function run(command) {
-        executable.connectSource("/usr/local/bin/moto-cast " + command);
+        executable.connectSource("/usr/bin/moto-cast " + command);
     }
 
     function toggle() {

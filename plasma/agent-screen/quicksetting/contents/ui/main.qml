@@ -27,7 +27,7 @@ QS.QuickSetting {
     }
 
     function run(command) {
-        executable.connectSource("/usr/local/bin/moto-agent-screen " + command);
+        executable.connectSource("/usr/bin/moto-agent-screen " + command);
     }
 
     function toggle() {

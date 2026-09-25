@@ -6,5 +6,5 @@
 : "${DBUS_SESSION_BUS_ADDRESS:=unix:path=$XDG_RUNTIME_DIR/bus}"
 : "${WAYLAND_DISPLAY:=wayland-0}"
 export XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS WAYLAND_DISPLAY
-lib=/usr/local/lib/moto-clicker
-PYTHONPATH=$lib:/usr/local/lib/moto-cua${PYTHONPATH:+:$PYTHONPATH} exec "$lib/venv/bin/python" -m moto_clicker "$@"
+lib=/usr/lib/moto-clicker
+PYTHONPATH=$lib:/usr/lib/moto-cua${PYTHONPATH:+:$PYTHONPATH} exec "$lib/venv/bin/python" -m moto_clicker "$@"

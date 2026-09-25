@@ -7,7 +7,7 @@ PartOf=graphical-session.target
 [Service]
 Type=dbus
 BusName=dev.moto.VoiceAssistant
-ExecStart=/usr/local/bin/moto-voice-assistant --overlay
+ExecStart=/usr/bin/moto-voice-assistant --overlay
 Restart=on-failure
 RestartSec=3
 

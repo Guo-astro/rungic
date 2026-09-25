@@ -111,7 +111,7 @@ names = [dbus.service.BusName(name, bus, do_not_queue=True) for name in
          ('org.kde.Solid.PowerManagement', INTERFACE, 'org.freedesktop.PowerManagement.Inhibit', 'org.freedesktop.ScreenSaver')]
 service = Brightness(bus)
 import importlib.util
-spec = importlib.util.spec_from_file_location('moto_power_policy', '/usr/local/libexec/moto-power-policy.py')
+spec = importlib.util.spec_from_file_location('moto_power_policy', '/usr/libexec/moto-power-policy.py')
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 policy = module.Policy(bus, host)

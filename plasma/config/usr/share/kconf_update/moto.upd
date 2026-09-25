@@ -15,3 +15,9 @@ Script=moto-quicksettings.sh,sh
 # /usr/bin/firefox wrapper.
 Id=moto-firefox-launcher-v1
 Script=moto-firefox-launcher.sh,sh
+
+# Settings naming the programs' old /usr/local paths (kwinrc input method, the
+# per-user portal override). plasma/session runs kconf_update before KWin
+# starts, so KWin already reads the new input method path.
+Id=moto-usr-paths-v1
+Script=moto-usr-paths.sh,sh

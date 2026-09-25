@@ -155,7 +155,8 @@ def ocr_screen():
     remote = moto_device.push(shot, 'moto-acceptance-ocr.png')
     run(f'cp {remote} {moto_device.PLASMA_ROOTFS}/var/tmp/moto-acceptance-ocr.png && '
         f'chmod 644 {moto_device.PLASMA_ROOTFS}/var/tmp/moto-acceptance-ocr.png && rm -f {remote}', 'root')
-    text = user(f"/usr/local/lib/moto-clicker/venv/bin/python -c {shlex.quote(OCR)} "
+    text = user('py=/usr/lib/moto-clicker/venv/bin/python; [ -x $py ] || py=/usr/local/lib/moto-clicker/venv/bin/python; '
+                f"$py -c {shlex.quote(OCR)} "
                 '/var/tmp/moto-acceptance-ocr.png 2>/dev/null; rm -f /var/tmp/moto-acceptance-ocr.png', timeout=120)
     return json.loads(text.stdout.strip().splitlines()[-1]), shot
 

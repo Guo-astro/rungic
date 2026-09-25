@@ -1,0 +1,12 @@
+{
+  "name": "moto-plasma-input",
+  "architecture": "arm64",
+  "build": "device",
+  "paths": ["plasma/rime"],
+  "depends": "plasma-keyboard (>= 6.6.6-0ubuntu0.1+moto1), librime-data-luna-pinyin | rime-data-luna-pinyin, qml6-module-qtquick-virtualkeyboard",
+  "build_depends": ["qt6-virtualkeyboard-dev", "librime-dev", "cmake", "ninja-build", "plasma-keyboard"],
+  "description": "Plasma Mobile on Android: Rime Chinese input\nThe Rime (luna pinyin) input method for Plasma Keyboard: a Qt Virtual Keyboard\nplugin, the Chinese layout using it, and the keyboard launcher KWin starts.",
+  "obsolete": ["/usr/local/libexec/moto-plasma-rime", "/usr/local/share/applications/moto-plasma-rime.desktop",
+               "/usr/local/lib/moto-rime", "/usr/local/libexec/moto-rime-check", "/usr/local/share/moto-rime",
+               "/usr/local/libexec/moto-plasma-keyboard"]
+}

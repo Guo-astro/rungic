@@ -1,0 +1,7 @@
+{
+  "comment": "The Codex CLI release moto-codex packages (docs/59). Official package, unpacked as-is; SHA256 checked when the package is built.",
+  "version": "0.156.1",
+  "url": "https://github.com/openai/codex/releases/download/rust-v0.156.1/codex-package-aarch64-unknown-linux-musl.tar.gz",
+  "sha256": "fdd47ed6aade0360796fd3f6f95a45096f327c15e19e8c7339f9dc5633041786",
+  "license": "Apache-2.0"
+}

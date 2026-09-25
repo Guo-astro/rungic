@@ -30,7 +30,7 @@ import moto_trace  # noqa: E402
 import moto_trace_report  # noqa: E402
 from moto_device import PLASMA, run  # noqa: E402
 
-BINARY = '/usr/local/bin/moto-compbench'
+BINARY = '/usr/bin/moto-compbench'
 
 
 def bench(variant, args, seconds, warmup, box):

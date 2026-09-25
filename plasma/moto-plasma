@@ -40,7 +40,7 @@ case "$action" in
     exec 9>"$BASE/control.lock"
     flock 9 9>&9
     if ! running; then start_container; fi
-    attach /usr/local/libexec/moto-plasma-account-setup 9>&-
+    attach /usr/libexec/moto-plasma-account-setup 9>&-
     ;;
   lock)
     # Acknowledge before Android suspends the foreground APK on screen-off.
@@ -92,13 +92,13 @@ case "$action" in
     ;;
   status) exec "$ENTER" /usr/bin/lxc-info -n plasma ;;
   hide-keyboard|home)
-    exec "$ENTER" /usr/bin/lxc-attach -n plasma -- /usr/local/bin/moto-plasma-user-exec /usr/local/libexec/moto-plasma-desktop-action "$action"
+    exec "$ENTER" /usr/bin/lxc-attach -n plasma -- /usr/bin/moto-plasma-user-exec /usr/libexec/moto-plasma-desktop-action "$action"
     ;;
   shell) exec "$ENTER" /usr/bin/lxc-attach -n plasma -- /bin/sh -l ;;
   exec|user-exec)
     [ "$#" -gt 0 ] || { echo 'Command required' >&2; exit 2; }
     if [ "$action" = user-exec ]; then
-      exec "$ENTER" /usr/bin/lxc-attach -n plasma -- /usr/local/bin/moto-plasma-user-exec "$@"
+      exec "$ENTER" /usr/bin/lxc-attach -n plasma -- /usr/bin/moto-plasma-user-exec "$@"
     fi
     exec "$ENTER" /usr/bin/lxc-attach -n plasma -- "$@"
     ;;

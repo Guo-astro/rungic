@@ -4,7 +4,7 @@ After=plasma-plasmashell.service
 PartOf=graphical-session.target
 
 [Service]
-ExecStart=/usr/local/libexec/moto-plasma-display
+ExecStart=/usr/libexec/moto-plasma-display
 Restart=on-failure
 RestartSec=5
 

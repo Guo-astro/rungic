@@ -8,7 +8,7 @@ import os
 root = Path(__file__).resolve().parent.parent
 stage = Path(os.environ.get('MOTO_MESA_STAGE', root / '.work/stage/mesa'))
 output = Path(os.environ.get('MOTO_MESA_PACKAGES', root / '.work/packages/mesa'))
-version = '26.3.0~devel20260824+moto1'
+version = os.environ.get('MOTO_MESA_VERSION', '26.3.0~devel20260824+moto1')
 packages = ('mesa-libgallium', 'libegl-mesa0', 'libglx-mesa0', 'libgbm1',
             'libgbm-dev', 'libgl1-mesa-dri', 'mesa-vulkan-drivers')
 external = ('libc6 (>= 2.43), libdrm2 (>= 2.4.125), libexpat1, libelf1t64, '

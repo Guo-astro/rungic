@@ -88,7 +88,9 @@ def install_symbols(reports):
                 wanted[name.split(':')[0]] = version
     if not wanted:
         return {'installed': [], 'unavailable': []}
-    local = {n: v for n, v in wanted.items() if '+moto' in v}
+    # This project's packages (rebuilt +moto ones and its own moto-*) carry their -dbgsym in the
+    # release repository; Ubuntu's come from ddebs.
+    local = {n: v for n, v in wanted.items() if '+moto' in v or n.startswith('moto-')}
     ubuntu = {n: v for n, v in wanted.items() if n not in local}
     installed, unavailable, extra = [], [], []
     for group, ddebs in ((local, False), (ubuntu, True)):

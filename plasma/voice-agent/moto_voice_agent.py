@@ -40,7 +40,7 @@ from gi.repository import Gio, GLib, Gst
 
 # The call proxy (docs/63) lives next to this script's shared files.
 import sys
-sys.path.insert(0, '/usr/local/lib/moto-voice-agent')
+sys.path.insert(0, '/usr/lib/moto-voice-agent')
 
 RATE = 24000                 # PCM format of the Realtime API
 CHUNK_MS = 100
@@ -74,7 +74,7 @@ QUIET_UPDATE_S = 20          # nothing new: say it is still working (then 30 s, 
 PROGRESS_STALE_S = 8         # an agent note older than this describes a finished step
 DATA = Path.home() / '.local/share/moto-voice-agent'
 CONFIG = Path.home() / '.config/moto-voice-agent'
-PROMPTS = Path('/usr/local/share/moto-voice-agent/prompts')
+PROMPTS = Path('/usr/share/moto-voice-agent/prompts')
 BUS_NAME = 'dev.moto.VoiceAgent'
 OBJECT_PATH = '/dev/moto/VoiceAgent'
 INTERFACE = '''
@@ -1196,7 +1196,7 @@ def call_screen_connected(window_id: str | None) -> bool:
     and a call that was up went unnoticed."""
     try:
         args = ['window', window_id] if window_id else ['active-window']
-        done = subprocess.run(['/usr/local/libexec/moto-screenshot', *args], capture_output=True, timeout=10)
+        done = subprocess.run(['/usr/libexec/moto-screenshot', *args], capture_output=True, timeout=10)
         if done.returncode != 0:
             return False
         end = done.stdout.index(b'\n')
@@ -1238,7 +1238,7 @@ def call_snapshot(tag: str) -> None:
         directory.mkdir(parents=True, exist_ok=True)
         from PIL import Image
         for output in info.get('screens', []):
-            done = subprocess.run(['/usr/local/libexec/moto-screenshot', 'screen', output], capture_output=True, timeout=15)
+            done = subprocess.run(['/usr/libexec/moto-screenshot', 'screen', output], capture_output=True, timeout=15)
             if done.returncode != 0:
                 continue
             end = done.stdout.index(b'\n')

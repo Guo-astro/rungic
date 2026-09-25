@@ -16,7 +16,7 @@ Environment=XDG_SESSION_TYPE=wayland
 Environment=XDG_SEAT=seat0
 Environment=XDG_RUNTIME_DIR=/run/user/1000
 Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
-ExecStart=/usr/local/libexec/moto-plasma-session
+ExecStart=/usr/libexec/moto-plasma-session
 ExecStop=-/usr/bin/systemctl --user stop graphical-session.target
 ExecStopPost=-/usr/bin/systemctl --user stop graphical-session.target
 Restart=on-failure
