@@ -226,3 +226,37 @@ uv run --script tools/kwin_pipeline_run.py OUT --zerocopy on --kwin-env MOTO_KWI
 - **剩余**：
   - 仍有约 10% 的漏帧；`plasma-settings` 在 Qt 侧只从 31% 降到 26%，这个指标还包括应用自己的帧调度。
   - 下一步可考虑按 vsync 预测提前发帧回调，以及量化滑动开始时 Android 从 30 Hz 切到 120 Hz 的延迟（空闲时 SurfaceFlinger 的当前模式是 30 Hz，系统默认优先级还有一条最高 90 Hz 的投票）。
+
+## 按 vsync 预测调节奏：两次尝试，实测没有收益，已撤回（2026-09-26，APK 1.44 → 1.45，KWin moto18 → moto17）
+
+用户要求在上一节的基础上继续做“按 vsync 预测提前发帧回调”。
+
+- **先定位剩下的漏帧**（`dumpsys SurfaceFlinger --latency` 的三列：期望显示、实际显示、帧就绪）：
+  - KWin 的帧在提交后 0.4 ms（p90 2.6 ms）内就绪，GPU 不是瓶颈。
+  - SurfaceFlinger 从收到事务到显示最少 15.5 ms、中位数 20 ms，约 2–2.5 个周期，这是 Android 在 120 Hz 下的正常流水线深度。
+  - 宿主的帧回调在处理提交时立刻发出，并不慢，所以“帧回调串行”已不是问题。
+- **尝试 1：KWin 允许 3 帧在途**（moto18）：wayland 后端在 Android 主输出上 `setMaxPendingFrameCount(3)`，RenderLoop 的提前量上限从 2 个 vblank 改为“在途帧数 × vblank”（至少 2）。
+  - 迟到帧数没有可区分的变化：moto18 为 8、4、4、19、31、8、9、21、21、37、11、6、11，moto17 为 17、13、8、8（这些数都受下面说的重开干扰）。
+- **KWin 的逐帧记录**（`KWIN_LOG_PERFORMANCE_DATA=1`，经 `/etc/plasma/gpu-env` 临时打开）暴露了时间基准问题：
+  - 宿主默认报给 KWin 的是“提交即显示”的软件时间，相邻两帧间隔 10–15 ms，不是 vblank 的整数倍；KWin 自己从未错过目标，但 vblank 相位是乱的。
+  - 改报 SurfaceFlinger 的真实显示时间（`debug.moto.present_feedback=hw`）会形成正反馈：真实时间里含排队时间，KWin 的安全余量从 22 ms 涨到 35 ms，迟到比例升到 40–61%。
+- **尝试 2：Android 帧时间线**（APK 1.44）：
+  - Java 改用 `Choreographer.postVsyncCallback`（API 33）取得各时间线的 vsyncId、截止时间和预计显示时间；
+  - 每帧按顺序分配一条截止时间还没过的时间线，用 `ASurfaceTransaction_setFrameTimeline`（API 31，dlsym）设到事务上；
+  - 等到截止时间，再以截止时间作为显示时间回报给 KWin。
+  - 结果：KWin 收到的时间全部落在 vblank 上，但迟到帧反而更多。
+- **可靠的对照方法**（`.work/pacing-ab.py`）：App 只打开一次，先等 25 秒；在同一实例里交替切换运行时开关，每轮做同样的三次滑动；同时记录 KGSL 频率（都是 600 MHz）。
+  - 此前每轮都用 `--conversation` 重开语音助手，服务每次都要在后台恢复 8 MB 的 Codex 线程（59 篇），CPU 负载和滚动测试叠在一起，结果在 1–25 之间乱跳，甚至得出过相反的结论。
+  - 对照结果（每轮约 126 个显示间隔中的迟到数）：
+
+    | 配置 | 6 轮 | 中位数 / 平均 |
+    |---|---|---|
+    | KWin moto18，软件回报 | 9、11、18、8、6、8 | 8.5 / 10.0 |
+    | KWin moto18，帧时间线 | 26、21、25、21、19、17 | 21 / 21.5 |
+    | KWin moto17，APK 1.45（即 1.43 的行为） | 5、4、14、7、20、13 | 10 / 10.5 |
+
+- **结论**：
+  - 帧时间线明显更差，3 帧在途没有可测收益，而且会增加一帧延迟。两者都已撤回：APK 1.45 的代码与 1.43 相同，KWin 装回 moto17。
+  - 当前状态：滚动时约 8%（中位数 10/126）的显示间隔迟到一个 vsync。
+  - 上一节 1.42 → 1.43 的 29% → 10–14%，当时也用了重开 App 的方法，绝对值受干扰，但方向和这里一致。
+- **仍待查明**：剩下的漏帧可能来自客户端（Qt 应用在 KWin 帧回调之后才开始画），也可能来自 KWin 按“提交即显示”推算的 vblank 相位。下一步应当用对照方法，同时记录 Qt 渲染循环和 KWin 的逐帧数据来区分。
