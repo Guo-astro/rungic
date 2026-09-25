@@ -22,4 +22,7 @@ Unattended-Upgrade::Package-Blacklist {
 	"libglx-mesa";
 	"libgbm";
 	"xdg-desktop-portal-kde";
+	"plasma-settings";
+	"plasma-keyboard";
+	"wl-clipboard";
 };

@@ -1,9 +1,9 @@
 {
-  "comment": "What a release of the Plasma container consists of (docs/61). tools/moto_release.py builds moto-plasma-release with an exact dependency on every package listed here; the .debs themselves are build output in .work/apt/pool. 'rebuilt' are Ubuntu packages rebuilt from vendor/ (+motoN); 'project' are this repository's own packages; 'coupled' are Ubuntu packages pinned to the version installed when the release is built, because files of theirs are diverted or their private ABI is used by code that is not rebuilt with them yet. 'android' are files outside the container that a release installs (backed up by deploy for rollback); the APK is versioned separately.",
+  "comment": "What a release of the Plasma container consists of (docs/61). tools/moto_release.py builds moto-plasma-release with an exact dependency on every package listed here; the .debs themselves are build output in .work/apt/pool. 'rebuilt' are Ubuntu packages rebuilt from vendor/ (+motoN); 'project' are this repository's own packages (plasma/packaging, built by tools/moto_package.py; their versions come from .work/apt/project-builds.json and must be current for the commit); 'coupled' are Ubuntu packages pinned to the version installed when the release is built, because files of theirs are diverted or their private ABI is used by code that is not rebuilt with them yet. 'android' are files outside the container that a release installs (backed up by deploy for rollback); the APK is versioned separately.",
   "rebuilt": {
     "kwin": {
       "source": "vendor/kwin",
-      "version": "4:6.6.6-0ubuntu0.1+moto17",
+      "version": "4:6.6.6-0ubuntu0.1+moto19",
       "packages": [
         "kwin-common",
         "kwin-data",
@@ -13,8 +13,8 @@
       ]
     },
     "mesa": {
-      "source": "vendor/mesa (plasma/package-mesa.py)",
-      "version": "26.3.0~devel20260824+moto1",
+      "source": "vendor/mesa (plasma/package-mesa.py, built on the phone)",
+      "version": "26.3.0~devel20260824+moto2",
       "packages": [
         "libegl-mesa0",
         "libgbm-dev",
@@ -54,11 +54,89 @@
       "packages": [
         "plasma-camera"
       ]
+    },
+    "plasma-mobile": {
+      "source": "vendor/plasma-mobile",
+      "version": "6.6.5-0ubuntu0.1+moto1",
+      "packages": [
+        "plasma-mobile",
+        "plasma-mobile-tweaks"
+      ]
+    },
+    "plasma-settings": {
+      "source": "vendor/plasma-settings",
+      "version": "25.12.0-1+moto1",
+      "packages": [
+        "plasma-settings"
+      ]
+    },
+    "plasma-keyboard": {
+      "source": "vendor/plasma-keyboard",
+      "version": "6.6.6-0ubuntu0.1+moto1",
+      "packages": [
+        "plasma-keyboard"
+      ]
+    },
+    "xdg-desktop-portal-kde": {
+      "source": "vendor/xdg-desktop-portal-kde",
+      "version": "6.6.6-0ubuntu0.1+moto1",
+      "packages": [
+        "xdg-desktop-portal-kde"
+      ]
+    },
+    "wl-clipboard": {
+      "source": "vendor/wl-clipboard",
+      "version": "2.3.0-0+moto1",
+      "packages": [
+        "wl-clipboard"
+      ]
     }
   },
-  "project": {},
+  "project": {
+    "moto-plasma-config": {
+      "source": "plasma/packaging/moto-plasma-config"
+    },
+    "moto-plasma-session": {
+      "source": "plasma/packaging/moto-plasma-session"
+    },
+    "moto-plasma-bridges": {
+      "source": "plasma/packaging/moto-plasma-bridges"
+    },
+    "moto-plasma-input": {
+      "source": "plasma/packaging/moto-plasma-input"
+    },
+    "moto-plasma-recording": {
+      "source": "plasma/packaging/moto-plasma-recording"
+    },
+    "moto-plasma-diagnostics": {
+      "source": "plasma/packaging/moto-plasma-diagnostics"
+    },
+    "moto-voice-agent": {
+      "source": "plasma/packaging/moto-voice-agent"
+    },
+    "moto-cua": {
+      "source": "plasma/packaging/moto-cua"
+    },
+    "moto-agent-screen": {
+      "source": "plasma/packaging/moto-agent-screen"
+    },
+    "moto-cast": {
+      "source": "plasma/packaging/moto-cast"
+    },
+    "moto-codex": {
+      "source": "plasma/packaging/moto-codex"
+    },
+    "moto-codec": {
+      "source": "plasma/packaging/moto-codec"
+    },
+    "moto-firefox": {
+      "source": "plasma/packaging/moto-firefox"
+    },
+    "moto-snapshot": {
+      "source": "plasma/packaging/moto-snapshot"
+    }
+  },
   "coupled": [
-    "plasma-mobile",
     "plasma-workspace",
     "libplasma7",
     "libplasmaquick7"
@@ -74,11 +152,14 @@
     "plasma-mobile",
     "plasma-workspace",
     "libplasma7",
+    "libplasmaquick7",
+    "plasma-keyboard",
+    "xdg-desktop-portal-kde",
+    "libqt6multimedia6",
     "moto-plasma-session",
     "moto-plasma-bridges",
     "moto-plasma-input",
-    "libqt6multimedia6",
-    "libplasmaquick7"
+    "moto-plasma-config"
   ],
   "android": [
     {

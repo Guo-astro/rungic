@@ -244,12 +244,24 @@ def build(version=None, allow_dirty=False, note=''):
     deps = {}
     have = pool_debs()
     missing = []
-    for section in ('rebuilt', 'project'):
-        for component in s[section].values():
-            for name in component['packages']:
-                if upstream_name(name, component['version']).split('_', 1)[1] not in have.get(name, {}):
-                    missing.append(f"{name}={component['version']}")
-                deps[name] = component['version']
+    for component in s['rebuilt'].values():
+        for name in component['packages']:
+            if upstream_name(name, component['version']).split('_', 1)[1] not in have.get(name, {}):
+                missing.append(f"{name}={component['version']}")
+            deps[name] = component['version']
+    # The project's own packages: the version built from the current commit (tools/moto_package.py).
+    if s.get('project'):
+        import moto_package
+        definitions = moto_package.definitions()
+        built = moto_package.builds()
+        for name in s['project']:
+            pkg = definitions.get(name)
+            if pkg is None:
+                raise SystemExit(f'{name} has no plasma/packaging definition')
+            if not moto_package.current(pkg):
+                missing.append(f'{name} (not built for the current sources: moto_package.py build {name})')
+                continue
+            deps[name] = built[name]['version']
     if missing:
         raise SystemExit(f'not in the pool: {missing} (build them, or import-installed)')
     coupled = {}
