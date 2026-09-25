@@ -70,6 +70,8 @@ enabledLocales=zh_CN,en_US
 
 使用 `plasma/build-desktop-fixes.sh` 构建独立 `/usr/local/libexec/moto-plasma-keyboard`，Rime包装入口执行此二进制。适配Rime仍只用Qt公开输入法接口；前端改动在Plasma Keyboard自己的源码中，按其GPL许可保留补丁。安装顺序需先准备这个前端，再运行 `rime/install.sh`，否则包装入口缺少可执行文件。
 
+> 2026-09-26起由`moto-plasma-input`包安装（`/usr/lib/moto-rime`、`/usr/libexec/moto-plasma-rime`），Rime包装入口直接执行重建的`plasma-keyboard +moto1`，不再有私有的`/usr/local`副本（61篇）。
+
 修复后再验切换语言、横竖屏、输入 `nihao`、首候选“你好”和提交，没有新的LanguagePopup失效对象日志或输入法崩溃。证据：`rime-final-nihao.png`、`rime-menu-fixed.png`。英语切换仍保留；默认中文方案仅为朙月简体拼音，未来可单独评估雾凇拼音，不在本轮未经验证替换词库。
 
 整机重启后再次验收：点Plasma入口自动启动，默认简体中文；真实触屏`nihao`首候选“你好”，键盘PID266持续运行，无新的输入法CrashExit或LanguagePopup错误。截图`rime-after-reboot-nihao.png`。

@@ -18,6 +18,7 @@ GDB短暂附加KWin，触摸触发`XdgToplevelWindow::maximize`，调用链来�
 
 1. `plasma/convergent-keyboard.patch`只在窗口边框实际需要取消时保留原直接尺寸设置；已经无边框的窗口由KWin继续管理最大化、屏幕工作区和键盘避让。将反复累加的匿名回调改成绑定当前活动窗口的`Connections`，并处理空窗口。
 2. `plasma/install-convergent-fix.sh`使用dpkg-divert保存发行版原件到`main.qml.distrib`。升级Plasma Mobile后重新核对并应用补丁。现场热加载用了新路径，因为同一QQmlEngine重载同一路径仍可能命中旧组件缓存；不能把`loadDeclarativeScript`成功等同于新代码已生效。
+  > 2026-09-26起convergentwindows随`plasma-mobile +moto2`打包，本地divert由该包的preinst移除（61篇）。
 3. `plasma/keyboard-focus.patch`将上下文可见性同步放到Qt事件队列末尾，合并同一批Wayland中的失活/激活。旧组合文本仍立即reset；真正失焦仍隐藏键盘；用户主动收起不经过延时合并。已构建部署并重启键盘，实机结果如下。
 
 ## 验收记录

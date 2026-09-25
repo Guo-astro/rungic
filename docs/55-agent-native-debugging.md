@@ -117,10 +117,18 @@ Claude Code原生支持MCP工具，Agent可以直接获得带参数模式的工�
 - 发现Plasma Mobile导航栏三个按钮无无障碍名称（辅助技术与Agent都无法区分）。上游master已给`NavigationPanelAction`增加`accessibleText`并绑定`Accessible.name`；已原样回移到vendor 6.6.5。mobileshell的qmldir使用`prefer :/…`，QML编进插件资源，因此在手机上以CMake单独构建`mobileshellplugin`与`org.kde.plasma.mobile.taskpanel`（`tools/build_on_device.py plasma-mobile targets`），经dpkg-divert替换发行版文件，原件保留为`.distrib`。重启会话后三个按钮名称为Task switcher、Home、Close app，均有Press动作。
 - 构建环境：Ubuntu以打包补丁放宽Plasma内部依赖版本，KPipeWire为6.6.4而上游6.6.5要求同版本；未改vendor源码，改用`plasma/build-shims/KPipeWire`版本垫片（仅接受6.6.x）。容器新增只含源码索引的`/etc/apt/sources.list.d/moto-build-src.sources`，以`apt-get build-dep plasma-mobile`安装构建依赖。
 
+## P4：交付、完整性与崩溃链（2026-09-26）
+
+实施细节与验收见[61篇](61-delivery-diagnostics-plan.md)“实施记录”。与本篇相关的变化：
+
+- 诊断组件不再由`tools/deploy_plasma_diagnostics.py`安装，改为`moto-plasma-diagnostics`包（`/usr/bin`、`/usr/libexec`、`/usr/lib/systemd`），随发布部署。
+- 新MCP工具：`integrity`（rootfs漂移：包文件、本项目divert、无主文件、systemd mask、本机配置清单、崩溃链前提）、`crash_groups`（按签名归并，含`new_in_release`）、`crash_symbolize`（按build-id装`-dbgsym`并重做回溯）。
+- 崩溃报告增加签名、build-id、所属包与发布；同时写入systemd-coredump格式，`coredumpctl list/info/debug`可直接使用。上面“按需符号化”一项由`moto-crash-symbols`完成：Ubuntu库用ddebs，本项目包用发布仓库中的`-dbgsym`（构建改为`-g1`并拆出调试信息）。
+- AT-SPI补充：会话刚重启时，抽屉搜索结果不进入AT-SPI树（屏幕上已显示）；快捷设置折叠时，未显示的磁贴仍报告为showing；plasma-keyboard的按键以label暴露，但面板坐标与屏幕有偏移。验收脚本分别用OCR读回、完全展开面板后再点、只检查键盘出现来处理。
+
 ## 仍未完成或未验证
 
 - 容器内连接Android `traced_producer`、Mesa `-Dperfetto=true`的GPU阶段数据源：未实施。目前GPU时间来自KGSL tracepoint，已满足56篇量化；逐渲染阶段的GPU计数需要时再做。
-- 按需符号化：Ubuntu debuginfod直连很慢、经代理超时，崩溃报告中的库帧多为`??`；自建KWin/Mesa的符号仍在手机构建目录，尚未接入。
 - AT-SPI覆盖：plasmashell、Kalk已验证；启动器图标无动作、Kirigami搜索框无EditableText接口，工具已分别以坐标点击和“聚焦+Android输入”兜底。其他应用逐个遇到再记录。
 - Qt日志类别的运行时切换未验证。
 - `.mcp.json`为项目级MCP配置，Claude Code首次加载时需要用户批准；K8已实际用MCP客户端调用验证，本机（另一台开发机）尚未在其环境中运行。

@@ -21,6 +21,8 @@ Android 挖孔中心线适配让顶部面板实际厚度变成38个逻辑像素�
 
 `plasma/install-panel-fix.sh`应用补丁；使用dpkg-divert把发行版文件保存在`Panel.qml.distrib`，升级时原包更新该副本。升级Plasma Mobile后应重新核对并运行此脚本；不应永远沿用旧版完整QML文件。补丁上下文沿用原GPL-2.0-or-later许可；LayerShellQt是公开接口复用，无复制其实现。
 
+> 2026-09-26起Panel.qml随`plasma-mobile +moto2`打包，本地divert由该包的preinst移除（61篇）。
+
 `plasma/display.py`在四项面板参数写完后发一次KConfig通知并flush。此前实测个别短命kwriteconfig --notify进程退出后，文件值已更新而运行中面板仍读旧值；异步通知退出竞争是推断，非完整Qt内部追踪结论。改为同一长驻连接批量通知后完成下列验收。
 
 ## 验收

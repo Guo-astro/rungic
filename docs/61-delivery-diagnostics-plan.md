@@ -1,6 +1,6 @@
 # 系统交付、验收与诊断改进方案
 
-2026-09-26。本文是改进方案，**尚未实施，也没有操作手机**。基线是`origin/agent-native-debugging`（`817e4a7d`），下文55–59篇均指该分支中的文档。方案遵循AGENTS.md：优先使用Linux与发行版的标准机制，在共享层解决问题；修改后用多个独立应用交叉验收；研究结论与已验证功能分开写。
+2026-09-26。本文最初是改进方案；同日按“实施记录”一节实施，前面各节保留为方案原文，与实施不同之处以实施记录为准。基线是`origin/agent-native-debugging`（`817e4a7d`），下文55–59篇均指该分支中的文档。方案遵循AGENTS.md：优先使用Linux与发行版的标准机制，在共享层解决问题；修改后用多个独立应用交叉验收；研究结论与已验证功能分开写。
 
 ## 目标
 
@@ -203,3 +203,62 @@ btrfs的收益是多快照、廉价克隆的测试容器、send/receive增量备
 - **未核验项**：systemd-coredump与apport能否共存、ddebs的arm64可用性、unattended-upgrades状态、容器内`/proc/sys`在各启动路径下是否都只读。
 - **自动验收的边界**：画质、声学效果、投屏无法自动判定，保留人工清单。
 - **存储占用**：调试符号、旧版本和core都占空间，需要设置保留上限并纳入完整性检查。
+
+## 实施记录（2026-09-26）
+
+以下是在`agent-native-debugging`上实施的结果。“已验证”指在手机上实际运行过；其余写明未验证或未完成。
+
+### 核对方案的现状判断
+
+实施前用只读命令核对了设备（`moto-integrity`首轮结果与手工检查），与“现状与问题”一节不一致之处：
+
+| 方案所写 | 实际 |
+|---|---|
+| hold了12个包 | 只hold了8个（Mesa 7个与plasma-camera）；kwin `+moto17`、kscreen、libcamera、qtmultimedia都没有保护 |
+| unattended-upgrades状态未核验 | 已启用，允许`resolute`与`-security`，黑名单为空，9-24/25自动升级过xdg-desktop-portal、NetworkManager、sqlite。Ubuntu若发布kwin安全更新（`0ubuntu0.2`高于`0ubuntu0.1+moto17`），会被静默替换 |
+| 至少8处divert | 13处本地divert（`install-mobile-plugins.sh`新增5处） |
+| `/usr/local`约40个文件 | 5024个（moto-clicker venv与私有FFmpeg为主）；另有自有文件放在dpkg管理的`/usr`（quicksettings、用户单元、D-Bus服务、desktop文件） |
+| ddebs的arm64未核验 | 可用：`resolute`与`resolute-updates`都有arm64；ddebs没有`-security`套件 |
+| systemd-coredump与apport能否共存未核验 | apport.service带`ConditionVirtualization=!container`，容器内不启动；systemd-coredump只与`core-dump-handler`冲突，可共存 |
+| 容器内`/proc/sys`只读 | `/proc/sys`只读；`moto-plasma-init`只把`/proc/sys/user`重新挂为可写（Flatpak需要），`kernel.core_pattern`不受影响 |
+| `dpkg --verify`可直接作完整性检查 | 直接运行有35540行噪声（最小化镜像的`path-exclude`）；按dpkg过滤规则去掉后只有2项 |
+| `main`落后44个提交 | 实施时落后117个 |
+
+### 已实施
+
+**P0（已验证）**：`plasma/config/etc/apt/apt.conf.d/51moto-unattended-upgrades`把重建、被divert和Qt私有ABI相关的包列入unattended-upgrades黑名单，其余包保留自动安全更新（dry run只升级curl）。语音agent单元`LimitCORE=0`，其子进程codex app-server实测core上限为0。
+
+**完整性检查（已验证）**：`plasma/diagnostics/moto-integrity`与MCP工具`integrity`，按方案第4节检查，另加本机配置清单（`moto-local-config.json`：只有路径、属主、权限）、systemd mask、崩溃链前提（DrKonqi须配`KCRASH_DUMP_ONLY`、coredump sysctl已屏蔽、持凭据单元`LimitCORE=0`）。首轮发现的13个缺失的zh_CN翻译（语言包含规则晚于这些包安装）和一个被改动的`wl-paste.fish`已通过重装修复。
+
+**崩溃诊断链（已验证）**：
+- `moto-coredump-collect`记录发布版本、可执行文件所属包、各模块build-id（`eu-unstrip`）和签名（崩溃线程越过信号、abort、Qt fatal、KCrash、syscall-cancel转发帧后的前5帧；有符号时用函数名，否则模块+偏移；内联帧归入调用者模块）。
+- 每条报告同时以systemd-coredump格式写入journal：`coredumpctl list/info/debug`直接读取`/var/lib/moto-cores/*/core.zst`（kalk与sleep的可控SIGSEGV实测）。
+- core每个签名最多保留2个：kaccess的abort循环（两天188次）曾挤掉其他崩溃的全部core。
+- `moto-crash-symbols`按精确版本安装报告需要的`-dbgsym`（ddebs经单独的源文件，日常`apt update`不取其索引；libc6回退到`-dbg`），重做回溯与签名。kaccess报告从`libc+0x8e0fc/libQt6Core+0xe3f5c`变为`init_platform < createPlatformIntegration`。
+- 安装systemd-coredump时先屏蔽其`50-coredump.conf`；实测`core_pattern`未变。MCP：`crash_groups`（次数、首末时间、所属发布、`new_in_release`）、`crash_symbolize`。
+
+**发布、部署与回滚（已验证）**：`tools/moto_release.py`（仓库、元包、`deploy`/`rollback`/`status`）与`tools/moto_acceptance.py`。
+- 仓库：`.work/apt/repo`，apt-ftparchive索引，origin `moto`、label `moto-plasma`；设备`/var/lib/moto-apt`，`file:`源`Trusted: yes`（仅root可写），pin 1001。选用`trusted=yes`而非本地签名：AGENTS.md只授权同步APK签名密钥。
+- 元包`moto-plasma-release=<YYYYMMDD.N>`：对`plasma/release/packages.json`中的全部包精确依赖，含`/usr/share/moto/release.json`（git提交）。
+- 部署：预检、记录dpkg状态与完整性、同步仓库、在transient unit中安装（**每个包都带精确版本**：apt不会为满足依赖自动降级，回滚需要这一点）、安装成功后再同步发布中的Android侧文件（失败时两侧都停在上一版本）、解除被发布取代的hold、按需重启会话、完整性与冒烟验收、记录到`.work/deploy/`。
+- 实测：20260926.1（现有18个重建包原样入库）部署；20260926.2（kwin moto18）部署并重启会话；`rollback`回到.1（实际降级kwin并重启会话）；20260926.3部署结果`ok`。
+
+**冒烟验收（已验证，8项约70秒）**：会话（KWin与plasmashell的PID稳定且plasmashell运行≥15秒）、关键用户单元、部署期间的新崩溃签名（已知签名单列）、KScreen与Android尺寸一致、Android文字输入抽屉搜索（OCR读回：会话刚重启时结果视图不进入AT-SPI树，搜索框也不暴露文本）、摄像头帧（数量、PTS递增、非恒定填充、停止后节点空闲；最长帧间隔作为指标）、播放进入默认sink并恢复挂起、录音电平与挂起。
+
+**完整验收（已实现）**：应用启动、KScreen缩放应用与撤销、硬件编解码往返（motoh264enc编码、私有FFmpeg `h264_moto`解码：90/90帧、1280x720、3.0秒）、快捷设置录屏、Rime（引擎提交中文首选；文本框获得焦点后键盘出现）、合成器时序（`kwin_pipeline_run.py`，paint或呈现间隔p95较上一发布劣化超过15%即失败）。
+
+**打包（P3/P4）**：`tools/moto_package.py`从`plasma/packaging/<名称>/`构建14个自有包（主机构建的可复现，设备构建的用dpkg-shlibdeps并按build-id拆出`-dbgsym`），`tools/vendor_debian.py`把Ubuntu打包导入vendor（先单独提交导入，再提交`+moto`变更）。
+- 新增包：moto-plasma-config、-session、-bridges、-input、-recording、-diagnostics，moto-voice-agent、moto-cua（可迁移的venv）、moto-agent-screen、moto-cast、moto-codex（官方包，固定SHA256）、moto-codec（私有FFmpeg在`/usr/lib/moto-codec`）、moto-firefox（包级divert `/usr/bin/firefox`）、moto-snapshot（Ubuntu无snapshot包）。
+- 重建包：plasma-mobile `+moto2`（含录屏快捷设置，preinst接管原有的本地divert）、plasma-settings、plasma-keyboard、xdg-desktop-portal-kde `+moto1`、wl-clipboard `2.3.0-0+moto1`、KWin `+moto19`（`-g1`与dbgsym）、Mesa `+moto2`（libgallium回到包内，preinst接管divert）。
+- `/usr/local`→`/usr`：单元、D-Bus、desktop文件（KWin按可执行路径授权）、QML、脚本、Android侧`moto-plasma`与LXC init路径同步修改；用户设置中的旧路径由kconf_update迁移（kwinrc输入法、Codex MCP命令与技能链接、每用户portal覆盖与单元链接），`plasma/session`在KWin启动前运行kconf_update。
+- 配置：`kscreenlockerrc`改为`/etc/xdg`默认值（`[$i]`），会话不再每次写入；portal通知默认值；`migrate-display.py`改为kconf_update脚本（兼容原标记）；快捷设置磁贴插入改为kconf_update（没有列表的用户保持Plasma Mobile默认）。
+- 取得的源码：三个probe源码、`dev.moto.Platform.desktop`、journald与PipeWire配置、deb-src列表此前只存在于手机，已收入仓库。
+- `-g1`成本（plasma-mobile完整构建，LTO）：墙钟14分钟、CPU 52分钟，dbgsym 3.7 MB。
+
+### 实施中发现的问题
+
+- **kaccess abort循环**：kaccess强制xcb平台，会话没有X显示，每次会话启动崩溃数次（签名`f6f8756afbd8`，列为已知签名，未修复）。
+- **会话重启就绪误报**（已修复）：`moto-plasma restart-session`在旧KWin/plasmashell退出前就判定就绪，且`set -e`下两次会话之间的空`pidof`使脚本退出；现在要求新PID。
+- **私有FFmpeg命令行不可用**（moto-codec已修复）：rpath只含`/usr/local/lib/moto-codec`，工具加载了系统libavformat。
+- **录屏收尾超时**（未修复）：停止后`Timed out finalizing recording`，只留下`.partial.mp4`；`~/Videos`已有多组此类残留。本次在手机编译负载下测得，空闲时的表现待复测。
+- **用户单元只为首个用户启用**：display、brightness、media、clipboard在`~/.config`中启用；包改为全局启用，kconf_update清理旧链接。

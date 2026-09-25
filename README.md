@@ -33,7 +33,7 @@ Motorola moto g100s（XT2537-4 / Adreno710）上的Android与Linux桌面适配�
 
 Vendor适配应放在哪一层、哪些可以抽离到共享后端，见[54篇架构评审](docs/54-vendor-adaptation-boundaries.md)。
 
-系统交付、验收与诊断的改进方案见[61篇](docs/61-delivery-diagnostics-plan.md)（方案，未实施）。
+系统交付、验收与诊断见[61篇](docs/61-delivery-diagnostics-plan.md)：容器rootfs上本项目的文件都来自包（`plasma/packaging`、vendor重建包），经本地APT仓库与发布元包部署（`tools/moto_release.py deploy|rollback|status`），部署后自动验收（`tools/moto_acceptance.py`），`moto-integrity`检查漂移。
 
 ## 文档索引
 
@@ -91,4 +91,14 @@ Vendor适配应放在哪一层、哪些可以抽离到共享后端，见[54篇�
 | [56-kwin-vulkan-quantification.md](docs/56-kwin-vulkan-quantification.md) | KWin + 原生 Vulkan 收益量化 |
 | [57-zero-copy-explicit-sync.md](docs/57-zero-copy-explicit-sync.md) | 零拷贝呈现与显式同步 |
 | [58-miracast-desktop-feasibility.md](docs/58-miracast-desktop-feasibility.md) | Miracast投屏桌面与手机触控板可行性 |
-| [61-delivery-diagnostics-plan.md](docs/61-delivery-diagnostics-plan.md) | 系统交付、验收与诊断改进方案 |
+| [59-voice-agent.md](docs/59-voice-agent.md) | 语音Agent：GPT Realtime驱动Codex |
+| [60-computer-use.md](docs/60-computer-use.md) | 电脑操作：arc-cua + JEV的Linux后端（moto-cua） |
+| [61-delivery-diagnostics-plan.md](docs/61-delivery-diagnostics-plan.md) | 系统交付、验收与诊断：打包、发布、回滚、验收、崩溃链、rootfs快照 |
+| [62-linux-virtual-audio.md](docs/62-linux-virtual-audio.md) | Linux扬声器与Linux麦克风（系统级虚拟音频设备） |
+| [63-call-proxy.md](docs/63-call-proxy.md) | 通话代理：语音助手替用户打电话、接电话 |
+| [64-goal-computer-use.md](docs/64-goal-computer-use.md) | 目标级电脑操作：typesafe-computer-use + 手机GPU OCR |
+| [65-agent-screen.md](docs/65-agent-screen.md) | 助理屏：按需开启、浮窗与投屏互转的第二输出 |
+| [66-pointer-gestures.md](docs/66-pointer-gestures.md) | 指针手势与移动算法：直接触摸、触控板、电视 |
+| [67-home-assistant.md](docs/67-home-assistant.md) | 长按Home呼出语音助手 |
+| [68-luna-computer-use.md](docs/68-luna-computer-use.md) | GPT-6 Luna Computer Use（看画面决定点哪里） |
+| [69-filesystem-capabilities.md](docs/69-filesystem-capabilities.md) | 文件系统与容器能力审计 |

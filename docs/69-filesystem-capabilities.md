@@ -35,6 +35,8 @@
 
 `plasma/diagnostics/moto-fs-audit`由`plasma/diagnostics/install.sh`安装到`/usr/local/bin`，以桌面用户身份运行。
 
+> 2026-09-26起由`moto-plasma-diagnostics`包安装到`/usr/bin/moto-fs-audit`（61篇）。
+
 - 默认检查：家目录、`~/.cache`、`~/.local/share`、各XDG用户目录、`/tmp`、`/var/tmp`、`/dev/shm`、`$XDG_RUNTIME_DIR`。也可以指定目录。
 - 检查内容：在每个目录的临时子目录里实际执行24项操作，每项都注明会影响哪类应用。
 - 选项：`--env`同时报告容器的各项限制；`--json`输出机器可读结果。

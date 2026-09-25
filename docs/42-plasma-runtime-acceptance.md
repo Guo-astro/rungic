@@ -31,6 +31,8 @@
 
 三个KDE私有应用由 `plasma/build-desktop-fixes.sh` 构建。需配套KDE/Qt开发包，Kirigami Addons包名为 `kirigami-addons-dev`。该脚本安装二进制和portal允许列表元数据；服务drop-in、中文portal core的`.mo`与用户会话配置需按本机已存配置部署，不能只运行此构建脚本就声称完成新机安装。
 
+> 2026-09-26起这三个应用重建为Ubuntu包（plasma-settings、plasma-keyboard、xdg-desktop-portal-kde `+moto1`），不再从`/usr/local`遮盖；portal的`QT_NO_XDG_DESKTOP_PORTAL=1`改为`moto-plasma-config`提供的系统级drop-in（61篇）。
+
 KWin构建要注意：`dpkg-buildpackage -nc` 可能因为 `debian/debhelper-build-stamp` **完全跳过源码编译**。本轮曾出现+moto2包版本已变而库仍为旧内容，随后强制 `cmake --build`、重新打包安装，并用库内 `SetWaylandInhibition` 符号及运行行为核对。最终成功日志为 `kwin-idle-rebuild.log` / `kwin-idle-install.log`；较早的 `kwin-moto2-build.log` 不能当最终编译证据。新增 `plasma/build-kwin.sh` 从干净Ubuntu源码完整构建；两个补丁已验证可以应用到6.6.6上游源码。
 
 ## 电源行为
