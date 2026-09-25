@@ -219,8 +219,10 @@ Description: Plasma Mobile on Android: release {version}
  See docs/61-delivery-diagnostics-plan.md.
 ''')
         target = POOL / f'{META}_{version}_all.deb'
-        subprocess.run(['dpkg-deb', '--root-owner-group', '-Zxz', '--build', str(root), str(target)],
-                       check=True, capture_output=True)
+        built = subprocess.run(['dpkg-deb', '--root-owner-group', '-Zxz', '--build', str(root), str(target)],
+                               capture_output=True, text=True)
+        if built.returncode:
+            raise SystemExit(f'dpkg-deb: {built.stderr.strip()}')
         return target
     finally:
         shutil.rmtree(root)
@@ -261,7 +263,9 @@ def build(version=None, allow_dirty=False, note=''):
     if s.get('coupled'):
         text = out('dpkg-query -W -f \'${Package}\\t${Version}\\n\' ' + ' '.join(map(shlex.quote, s['coupled'])),
                    'container')
-        coupled = dict(line.split('\t') for line in text.splitlines() if '\t' in line)
+        coupled = {n: v for n, v in (line.split('\t') for line in text.splitlines() if '\t' in line) if v}
+        if set(s['coupled']) - set(coupled):
+            raise SystemExit(f"coupled packages not installed: {sorted(set(s['coupled']) - set(coupled))}")
         deps.update(coupled)
     version = version or next_version()
     if (POOL / f'{META}_{version}_all.deb').exists():

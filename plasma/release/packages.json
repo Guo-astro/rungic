@@ -60,7 +60,8 @@
   "coupled": [
     "plasma-mobile",
     "plasma-workspace",
-    "libplasma6"
+    "libplasma7",
+    "libplasmaquick7"
   ],
   "session_restart": [
     "kwin-*",
@@ -72,11 +73,12 @@
     "libglx-mesa0",
     "plasma-mobile",
     "plasma-workspace",
-    "libplasma6",
+    "libplasma7",
     "moto-plasma-session",
     "moto-plasma-bridges",
     "moto-plasma-input",
-    "libqt6multimedia6"
+    "libqt6multimedia6",
+    "libplasmaquick7"
   ],
   "android": [
     {
