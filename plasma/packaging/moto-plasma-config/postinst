@@ -1,0 +1,7 @@
+#!/bin/sh
+# The critical power action used to be set by editing Ubuntu's UPower.conf; the drop-in in
+# UPower.conf.d carries it now, so the packaged file goes back to its defaults.
+if [ "$1" = configure ] && [ -f /etc/UPower/UPower.conf ]; then
+    sed -i -e 's/^AllowRiskyCriticalPowerAction=true$/AllowRiskyCriticalPowerAction=false/' \
+           -e 's/^CriticalPowerAction=Ignore$/CriticalPowerAction=HybridSleep/' /etc/UPower/UPower.conf
+fi
