@@ -18,7 +18,18 @@ public:
     // JSON strings are parsed on the QML side.
     Q_INVOKABLE void listConversations();
     Q_INVOKABLE void openConversation(const QString &id);
-    Q_INVOKABLE void closeConversation();
+    // Closes it only if it is still the open one ("" closes whatever is open).
+    Q_INVOKABLE void closeConversation(const QString &id);
+    // The one conversation of the Home button (docs/67); its history comes as assistantOpened.
+    Q_INVOKABLE void openAssistant();
+    // Home held: talk in the assistant's conversation until releaseTalking().
+    Q_INVOKABLE void assistantTalk(const QString &screen);
+    // A hold ended: the turn ends, or listening goes on hands-free if nothing was said yet.
+    Q_INVOKABLE void releaseTalking();
+    // Stop listening and drop what was said (the overlay dismissed while listening).
+    Q_INVOKABLE void cancelTalking();
+    // Hands-free from the start: the turn ends when speech does.
+    Q_INVOKABLE void startListening(const QString &screen);
     Q_INVOKABLE void deleteConversation(const QString &id);
     // The screen the press came from; the reply plays on that side.
     Q_INVOKABLE void startTalking(const QString &screen);
@@ -32,6 +43,7 @@ public:
 Q_SIGNALS:
     void conversationsListed(const QString &json);
     void conversationOpened(const QString &json);
+    void assistantOpened(const QString &json);
     void event(const QString &json);
     void failed(const QString &message);
 

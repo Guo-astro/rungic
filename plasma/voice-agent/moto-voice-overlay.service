@@ -1,0 +1,15 @@
+[Unit]
+Description=Voice assistant overlay (holding the Home button, docs/67)
+After=plasma-plasmashell.service moto-voice-agent.service
+Wants=moto-voice-agent.service
+PartOf=graphical-session.target
+
+[Service]
+Type=dbus
+BusName=dev.moto.VoiceAssistant
+ExecStart=/usr/local/bin/moto-voice-assistant --overlay
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=plasma-workspace.target

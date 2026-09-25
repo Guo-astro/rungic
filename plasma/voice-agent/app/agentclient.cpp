@@ -35,7 +35,12 @@ void AgentClient::call(const QString &method, const QVariantList &args, void (Ag
 
 void AgentClient::listConversations() { call(QStringLiteral("ListConversations"), {}, &AgentClient::conversationsListed); }
 void AgentClient::openConversation(const QString &id) { call(QStringLiteral("OpenConversation"), {id}, &AgentClient::conversationOpened); }
-void AgentClient::closeConversation() { call(QStringLiteral("CloseConversation"), {}); }
+void AgentClient::closeConversation(const QString &id) { call(QStringLiteral("CloseConversation"), {id}); }
+void AgentClient::openAssistant() { call(QStringLiteral("OpenAssistant"), {}, &AgentClient::assistantOpened); }
+void AgentClient::assistantTalk(const QString &screen) { call(QStringLiteral("AssistantTalk"), {screen}); }
+void AgentClient::releaseTalking() { call(QStringLiteral("ReleaseTalking"), {}); }
+void AgentClient::cancelTalking() { call(QStringLiteral("CancelTalking"), {}); }
+void AgentClient::startListening(const QString &screen) { call(QStringLiteral("StartListening"), {screen}); }
 void AgentClient::deleteConversation(const QString &id) { call(QStringLiteral("DeleteConversation"), {id}); }
 void AgentClient::startTalking(const QString &screen) { call(QStringLiteral("StartTalking"), {screen}); }
 void AgentClient::stopTalking() { call(QStringLiteral("StopTalking"), {}); }

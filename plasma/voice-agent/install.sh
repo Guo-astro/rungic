@@ -14,9 +14,13 @@ install -m644 "$src"/prompts/*.md /usr/local/share/moto-voice-agent/prompts/
 install -m644 "$src/skills/moto-phone-desktop/SKILL.md" /usr/local/share/moto-voice-agent/skills/moto-phone-desktop/
 install -m644 "$src/moto-voice-agent.service" /usr/lib/systemd/user/moto-voice-agent.service
 install -m644 "$src/dev.moto.VoiceAgent.service" /usr/share/dbus-1/services/dev.moto.VoiceAgent.service
+# The overlay of the Home button (docs/67); both resident in the session.
+install -m644 "$src/moto-voice-overlay.service" /usr/lib/systemd/user/moto-voice-overlay.service
+install -m644 "$src/dev.moto.VoiceAssistant.service" /usr/share/dbus-1/services/dev.moto.VoiceAssistant.service
+systemctl --global enable moto-voice-agent.service moto-voice-overlay.service
 install -m644 "$src/dev.moto.VoiceAssistant.desktop" /usr/local/share/applications/dev.moto.VoiceAssistant.desktop
 # Per user: the Codex skill (skills are read from ~/.codex/skills).
 user_home=$(getent passwd 1000 | cut -d: -f6)
 install -d -o 1000 -g 1000 "$user_home/.codex/skills"
 ln -sfn /usr/local/share/moto-voice-agent/skills/moto-phone-desktop "$user_home/.codex/skills/moto-phone-desktop"
-echo "Installed. Restart the service: systemctl --user restart moto-voice-agent"
+echo "Installed. Restart: systemctl --user daemon-reload && systemctl --user restart moto-voice-agent moto-voice-overlay"

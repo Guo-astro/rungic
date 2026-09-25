@@ -1,5 +1,6 @@
 [Unit]
 Description=Voice assistant (GPT Realtime + Codex agent)
+After=moto-plasma-media.service
 PartOf=graphical-session.target
 
 [Service]
@@ -8,3 +9,7 @@ BusName=dev.moto.VoiceAgent
 ExecStart=/usr/local/bin/moto-voice-agent --service
 Restart=on-failure
 RestartSec=3
+
+[Install]
+# Resident: holding Home should only have to open the realtime link (docs/67).
+WantedBy=plasma-workspace.target

@@ -52,6 +52,11 @@ END_SILENCE_MS = 900         # after release, so the server VAD sees the end of 
 PAUSE_KEEP_MS = 200          # the start of a pause is sent as is
 PAUSE_PREROLL_MS = 140       # and the end of a longer one, before speech resumes
 IDLE_STOP_S = 600            # stop an unused realtime session (cost)
+# Hands-free (docs/67): a hold released before anything was said keeps listening,
+# and the turn ends by itself after speech and then this much quiet.
+HANDS_FREE_END_MS = 900
+HANDS_FREE_NO_SPEECH_S = 8   # nothing said by then: stop listening, send nothing
+HANDS_FREE_MAX_S = 60
 # The voice (Realtime API): Codex's default is gpt-realtime-1.5. The emotion of
 # the voice is chosen by the model per response from prompts/realtime.md; the
 # API has no emotion parameter, it follows instructions.
@@ -75,7 +80,12 @@ INTERFACE = '''
   <interface name="dev.moto.VoiceAgent">
     <method name="ListConversations"><arg type="s" direction="out"/></method>
     <method name="OpenConversation"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
-    <method name="CloseConversation"/>
+    <method name="CloseConversation"><arg type="s" direction="in"/></method>
+    <method name="OpenAssistant"><arg type="s" direction="out"/></method>
+    <method name="AssistantTalk"><arg type="s" direction="in"/></method>
+    <method name="ReleaseTalking"/>
+    <method name="CancelTalking"/>
+    <method name="StartListening"><arg type="s" direction="in"/></method>
     <method name="DeleteConversation"><arg type="s" direction="in"/></method>
     <method name="StartTalking"><arg type="s" direction="in"/></method>
     <method name="StopTalking"/>
@@ -280,6 +290,50 @@ class PauseGate:
         return rest
 
 
+class Endpointer:
+    """Whether speech has been heard, and whether it has ended (hands-free).
+
+    A 20 ms frame is speech when it is at least 12 dB above the noise floor (a low
+    percentile of the levels so far) and above -50 dBFS: absolute, unlike PauseGate,
+    so that a press that began in silence tells noise from speech.
+    """
+    FRAME = RATE * 2 * 20 // 1000
+
+    def __init__(self):
+        self.levels = []
+        self.speech_ms = 0
+        self.quiet_ms = 0
+        self.rest = b''
+
+    @property
+    def heard(self):
+        return self.speech_ms >= 200
+
+    @property
+    def ended(self):
+        return self.heard and self.quiet_ms >= HANDS_FREE_END_MS
+
+    def feed(self, data):
+        """Returns the loudest frame level of `data` (dBFS) for the UI."""
+        data = self.rest + data
+        cut = len(data) - len(data) % self.FRAME
+        self.rest = data[cut:]
+        loudest = -120.0
+        for i in range(0, cut, self.FRAME):
+            db = PauseGate.level(data[i:i + self.FRAME])
+            loudest = max(loudest, db)
+            self.levels.append(db)
+            if len(self.levels) > 500:
+                del self.levels[0]
+            floor = sorted(self.levels)[len(self.levels) // 5]
+            if db > max(floor + 12, -50.0):
+                self.speech_ms += 20
+                self.quiet_ms = 0
+            else:
+                self.quiet_ms += 20
+        return loudest
+
+
 class VoiceAgent:
     def __init__(self, emit):
         Gst.init(None)
@@ -314,6 +368,9 @@ class VoiceAgent:
         # Id of the current push-to-talk press: the UI shows all transcript pieces
         # of one press as one message, however the server split them.
         self.press = 0
+        self.endpointer = Endpointer()
+        self.hands_free = False      # listening until speech ends, not until release
+        self.talk_started = 0.0
         # Transcript segments being spoken or transcribed: item id -> (role, press, start time).
         self.segments = {}
         # thread/realtime/start was sent and neither started nor closed has come back:
@@ -356,6 +413,7 @@ class VoiceAgent:
             phase = 'ready'
         call_phase = self.call.phase if self.call and self.call.phase in ('agent', 'user') else None
         return {'conversation': self.thread_id, 'phase': phase, 'agentBusy': self.agent_busy,
+                'handsFree': self.talking and self.hands_free, 'assistant': self.thread_id == self.assistant_id(),
                 'call': call_phase == 'agent', 'callPhase': call_phase}
 
     # ---- conversations ----------------------------------------------------------
@@ -366,8 +424,16 @@ class VoiceAgent:
                 'model': AGENT_MODEL, 'config': {'model_reasoning_effort': AGENT_EFFORT},
                 'developerInstructions': prompt('agent.md')}
 
-    def open_conversation(self, thread_id):
+    def open_conversation(self, thread_id, connect=True):
         with self.lock:
+            if thread_id and thread_id == self.thread_id:
+                # Already open (the app showing the assistant's conversation): reopening
+                # would cut the realtime session in the middle of a reply.
+                if connect and not self.realtime:
+                    threading.Thread(target=self.start_realtime, daemon=True).start()
+                return {'conversation': thread_id,
+                        'title': self.store.index.get(thread_id, {}).get('title', '新对话'),
+                        'history': self.store.history(thread_id)}
             self.close_conversation()
             if thread_id:
                 result = self.server.call('thread/resume', {'threadId': thread_id, **self.thread_settings()})
@@ -379,7 +445,8 @@ class VoiceAgent:
             self.last_activity = time.monotonic()
             log('open', self.thread_id, 'resumed' if thread_id else 'new')
             history = self.store.history(self.thread_id)
-            threading.Thread(target=self.start_realtime, daemon=True).start()
+            if connect:
+                threading.Thread(target=self.start_realtime, daemon=True).start()
             GLib.idle_add(self.set_state)
             return {'conversation': self.thread_id,
                     'title': self.store.index.get(self.thread_id, {}).get('title', '新对话'),
@@ -419,22 +486,76 @@ class VoiceAgent:
         self.segments.clear()
         GLib.idle_add(self.stop_audio)
 
-    def close_conversation(self):
+    def close_conversation(self, thread_id=None):
+        """Close the open conversation (only if it is `thread_id`, when given)."""
         with self.lock:
+            if thread_id and thread_id != self.thread_id:
+                return
             if self.thread_id:
                 self.stop_realtime()
                 log('close', self.thread_id)
             self.thread_id = None
             GLib.idle_add(self.set_state)
 
+    # ---- the assistant's conversation (Home held, docs/67) -------------------------
+    def assistant_id(self):
+        try:
+            return json.loads((DATA / 'assistant.json').read_text()).get('thread')
+        except (OSError, ValueError):
+            return None
+
+    def open_assistant(self, connect=False):
+        """The one conversation the Home button talks in, open (and warm) without
+        the realtime link unless `connect`. Returns what open_conversation returns."""
+        with self.lock:
+            wanted = self.assistant_id()
+            if wanted and self.thread_id == wanted:
+                if connect and not self.realtime:
+                    threading.Thread(target=self.start_realtime, daemon=True).start()
+                return {'conversation': wanted, 'title': self.store.index.get(wanted, {}).get('title', '语音助手'),
+                        'history': self.store.history(wanted)}
+            opened = None
+            if wanted:
+                try:
+                    opened = self.open_conversation(wanted, connect)
+                except Exception as error:  # noqa: BLE001  (the thread is gone: start a new one)
+                    # Codex saves a thread once it has a turn: one never talked in is gone
+                    # after a restart. Its entry would stay in the list as an empty "语音助手".
+                    log('assistant conversation', wanted, 'not resumed:', error)
+                    if not self.store.history(wanted):
+                        self.store.delete(wanted)
+            if opened is None:
+                opened = self.open_conversation('', connect)
+                (DATA / 'assistant.json').write_text(json.dumps({'thread': opened['conversation']}))
+            self.store.touch(opened['conversation'], '语音助手')
+            opened['title'] = self.store.index[opened['conversation']]['title']
+            return opened
+
+    def warm(self):
+        """At service start and whenever no other conversation is open: the assistant's
+        conversation resumed and the microphone pipeline built, so that holding Home
+        only has to open the realtime link (and audio waits for it, not the user)."""
+        GLib.idle_add(self.ensure_recorder)
+        try:
+            if not self.thread_id:
+                self.open_assistant(connect=False)
+                log('warm: assistant conversation', self.thread_id)
+        except Exception as error:  # noqa: BLE001
+            log('warm', error)
+
     def delete_conversation(self, thread_id):
         if thread_id == self.thread_id:
             self.close_conversation()
+        was_assistant = thread_id == self.assistant_id()
         try:
             self.server.call('thread/archive', {'threadId': thread_id}, timeout=10)
         except Exception as error:
             log('archive failed', error)
         self.store.delete(thread_id)
+        if was_assistant:
+            # The Home button's conversation starts over (the overlay asks for it again).
+            (DATA / 'assistant.json').unlink(missing_ok=True)
+            self.emit_raw({'type': 'assistant-reset'})
 
     def idle_check(self):
         if self.realtime and not self.talking and not self.agent_busy \
@@ -487,14 +608,12 @@ class VoiceAgent:
             threading.Thread(target=self.start_realtime, daemon=True).start()
         self.stop_audio()           # barge in: stop speaking at once
         self.talking = True
-        if self.recorder is None:
-            self.recorder = Gst.parse_launch(
-                f'pulsesrc device={MIC} ! audioconvert ! audioresample '
-                f'! audio/x-raw,format=S16LE,rate={RATE},channels=1 '
-                f'! appsink name=sink emit-signals=true sync=false blocksize={RATE * 2 * CHUNK_MS // 1000}')
-            self.recorder.get_by_name('sink').connect('new-sample', self.on_microphone)
+        self.ensure_recorder()
         self.mic_buffer = b''
         self.gate = PauseGate()
+        self.endpointer = Endpointer()
+        self.hands_free = False
+        self.talk_started = time.monotonic()
         # During a proxied call the user talks to the call agent: keep the audio
         # here instead of sending it to the assistant's own realtime session.
         self.owner_audio = b'' if self.call and self.call.active else None
@@ -505,13 +624,60 @@ class VoiceAgent:
         self.set_state()
         return False
 
+    def ensure_recorder(self):
+        if self.recorder is None:
+            self.recorder = Gst.parse_launch(
+                f'pulsesrc device={MIC} ! audioconvert ! audioresample '
+                f'! audio/x-raw,format=S16LE,rate={RATE},channels=1 '
+                f'! appsink name=sink emit-signals=true sync=false blocksize={RATE * 2 * CHUNK_MS // 1000}')
+            self.recorder.get_by_name('sink').connect('new-sample', self.on_microphone)
+            self.recorder.set_state(Gst.State.READY)
+        return False
+
+    def release_talking(self):
+        """The hold ended: what was said is complete, unless nothing has been said yet
+        (a quick press): then listen on hands-free until speech ends (like Siri)."""
+        if not self.talking:
+            return False
+        if self.owner_audio is None and not self.endpointer.heard:
+            self.hands_free = True
+            log('talk: released before speech, listening hands-free')
+            self.set_state()
+            return False
+        return self.stop_talking()
+
+    def start_listening(self, sink=None):
+        """Hands-free from the start (a tap on the orb)."""
+        self.start_talking(sink)
+        if self.talking:
+            self.hands_free = True
+            self.set_state()
+        return False
+
+    def cancel_talking(self):
+        """Hands-free heard nothing, or the overlay was dismissed while listening: close
+        the microphone and send nothing more (what was sent stays below a turn: no stop)."""
+        if not self.talking:
+            return False
+        self.talking = False
+        self.hands_free = False
+        if self.recorder is not None:
+            self.recorder.set_state(Gst.State.READY)
+        self.mic_buffer = b''
+        log('talk: nothing said, cancelled')
+        self.emit({'type': 'listen-cancelled'}, keep=False)
+        self.set_state()
+        return False
+
     def stop_talking(self):
         if not self.talking:
             return False
         self.talking = False
+        self.hands_free = False
         self.last_activity = time.monotonic()
         if self.recorder is not None:
-            self.recorder.set_state(Gst.State.NULL)   # the microphone is open only while pressed
+            # The microphone is open only while talking; READY keeps the pipeline built.
+            self.recorder.set_state(Gst.State.READY)
         if self.owner_audio is not None:
             audio, self.owner_audio = self.owner_audio + self.mic_buffer, None
             self.mic_buffer = b''
@@ -539,8 +705,17 @@ class VoiceAgent:
                 self.owner_audio += bytes(info.data)
                 buf.unmap(info)
                 return Gst.FlowReturn.OK
-            self.mic_buffer += bytes(info.data)
+            data = bytes(info.data)
             buf.unmap(info)
+            self.mic_buffer += data
+            level = self.endpointer.feed(data)
+            self.emit({'type': 'level', 'db': round(level, 1)}, keep=False)
+            if self.hands_free:
+                elapsed = time.monotonic() - self.talk_started
+                if self.endpointer.ended or elapsed > HANDS_FREE_MAX_S:
+                    GLib.idle_add(self.stop_talking)
+                elif not self.endpointer.heard and elapsed > HANDS_FREE_NO_SPEECH_S:
+                    GLib.idle_add(self.cancel_talking)
             chunk = RATE * 2 * CHUNK_MS // 1000
             while len(self.mic_buffer) >= chunk:
                 send = self.gate.feed(self.mic_buffer[:chunk])
@@ -898,6 +1073,7 @@ class Service:
         self.interface = info.interfaces[0]
         Gio.bus_own_name(Gio.BusType.SESSION, BUS_NAME, Gio.BusNameOwnerFlags.NONE,
                          self.register, None, lambda conn, name: (log('lost bus name'), os._exit(1)))
+        threading.Thread(target=self.agent.warm, daemon=True).start()
 
     def register(self, connection, name):
         self.connection = connection
@@ -925,7 +1101,22 @@ class Service:
                 elif method == 'OpenConversation':
                     result = json.dumps(agent.open_conversation(args[0]), ensure_ascii=False)
                 elif method == 'CloseConversation':
-                    agent.close_conversation()
+                    # The assistant's conversation stays open (resident, docs/67): the app
+                    # leaving its page must not cut the overlay's session.
+                    if not args[0] or args[0] != agent.assistant_id():
+                        agent.close_conversation(args[0] or None)
+                        agent.warm()      # back to the assistant's conversation, warm
+                elif method == 'OpenAssistant':
+                    result = json.dumps(agent.open_assistant(), ensure_ascii=False)
+                elif method == 'AssistantTalk':
+                    agent.open_assistant()
+                    GLib.idle_add(agent.start_talking, reply_sink(args[0]))
+                elif method == 'ReleaseTalking':
+                    GLib.idle_add(agent.release_talking)
+                elif method == 'CancelTalking':
+                    GLib.idle_add(agent.cancel_talking)
+                elif method == 'StartListening':
+                    GLib.idle_add(agent.start_listening, reply_sink(args[0]))
                 elif method == 'DeleteConversation':
                     agent.delete_conversation(args[0])
                 elif method == 'StartTalking':
