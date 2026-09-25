@@ -73,6 +73,22 @@ for name in packages:
             f'{sonames[name]} {name} (>= {version})\n')
     if name != 'libgbm-dev':
         (directory / 'DEBIAN/triggers').write_text('activate-noawait ldconfig\n')
+    if name == 'mesa-libgallium':
+        # docs/61: libgallium was installed over +moto1's with a local diversion
+        # (build_on_device.py divert); this package carries that build.
+        preinst = directory / 'DEBIAN/preinst'
+        preinst.write_text('''#!/bin/sh
+set -e
+if [ "$1" = install ] || [ "$1" = upgrade ]; then
+    for f in /usr/lib/aarch64-linux-gnu/libgallium-*.so; do
+        if dpkg-divert --list "$f" | grep -q '^local diversion'; then
+            rm -f "$f"
+            dpkg-divert --local --rename --remove "$f" >/dev/null
+        fi
+    done
+fi
+''')
+        preinst.chmod(0o755)
 
 ignored = []
 for path in sorted(stage.rglob('*')):

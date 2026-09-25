@@ -57,7 +57,7 @@
     },
     "plasma-mobile": {
       "source": "vendor/plasma-mobile",
-      "version": "6.6.5-0ubuntu0.1+moto1",
+      "version": "6.6.5-0ubuntu0.1+moto2",
       "packages": [
         "plasma-mobile",
         "plasma-mobile-tweaks"
