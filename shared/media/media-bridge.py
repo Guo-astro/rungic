@@ -251,7 +251,7 @@ class Cameras:
                 self.retry_at[key] = time.monotonic() + 2
         for key, metadata in desired.items():
             if key not in self.children and time.monotonic() >= self.retry_at.get(key, 0):
-                args = ['/usr/local/bin/moto-camera-source', key]
+                args = ['/usr/bin/moto-camera-source', key]
                 args.extend(str(metadata[k]) for k in ('width', 'height', 'rotation', 'facing'))
                 self.children[key] = subprocess.Popen(args)
                 LOG.info('camera %s available (%s)', key, metadata['facing'])

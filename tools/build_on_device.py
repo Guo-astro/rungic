@@ -15,6 +15,7 @@ what changed.
                a meson tree (Mesa) is configured with plasma/<component>-meson-options
   status       state of the build unit and the log tail
   install      dpkg -i the .debs of the last build (version from debian/changelog)
+  collect      the last build's .debs and .ddebs into the release repository pool (moto_release.py)
   divert       install built files over distribution ones with dpkg-divert
                (--file BUILT=INSTALLED, repeatable); the original stays as .distrib
 
@@ -124,6 +125,35 @@ dpkg -i $debs   # apt holds on these packages stay in place; dpkg ignores them
 ''', 'container', timeout=600)
 
 
+def build_deps(component):
+    """apt-get build-dep for the staged Debian source (full builds)."""
+    return out(f'''set -e
+[ -r /etc/profile.d/proxy.sh ] && . /etc/profile.d/proxy.sh
+cd {BASE}/{component}/src
+dpkg-checkbuilddeps 2>/dev/null || DEBIAN_FRONTEND=noninteractive apt-get build-dep -y -q . | tail -2
+''', 'container', timeout=3600)
+
+
+def collect(component):
+    """The last build's .debs (and .ddeb debug symbols, renamed .deb for the index) into the release
+    repository pool (docs/61)."""
+    import moto_release
+    from pathlib import Path
+    version = out(f"dpkg-parsechangelog -l {BASE}/{component}/src/debian/changelog -S Version | sed 's/^[0-9]*://'",
+                  'container').strip()
+    names = out(f"cd {BASE}/{component} && ls *_{version}_*.deb *_{version}_*.ddeb 2>/dev/null", 'container').split()
+    incoming = WORKSPACE / '.work/apt/incoming'
+    incoming.mkdir(parents=True, exist_ok=True)
+    for name in names:
+        target = incoming / (name[:-5] + '.deb' if name.endswith('.ddeb') else name)
+        moto_release.pull(f'{PLASMA_ROOTFS}{BASE}/{component}/{name}', target)
+    added = moto_release.import_debs(sorted(incoming.glob('*.deb')))
+    for path in incoming.glob('*.deb'):
+        path.unlink()
+    moto_release.index()
+    return f'{version}: {len(names)} files, added {added}'
+
+
 def divert(component, files):
     lines = ['set -e']
     for spec in files:
@@ -137,7 +167,8 @@ echo "{installed} <- {built}"''')
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('component')
-    parser.add_argument('action', choices=['full', 'incremental', 'targets', 'status', 'install', 'divert', 'wait'])
+    parser.add_argument('action', choices=['full', 'incremental', 'targets', 'status', 'install', 'divert', 'wait',
+                                           'collect'])
     parser.add_argument('--target', action='append', default=[], help='CMake target (targets mode)')
     parser.add_argument('--file', action='append', default=[], help='BUILT=INSTALLED (divert mode)')
     parser.add_argument('--cmake-arg', action='append', default=[], help='extra configure argument (targets mode)')
@@ -150,11 +181,15 @@ def main():
         if args.action == 'targets' and not args.target:
             parser.error('targets mode needs --target')
         sync(args.component)
+        if args.action == 'full':
+            print(build_deps(args.component))
         start(args.component, args.action, args.jobs, args.target, not args.no_lto, args.cmake_arg)
     elif args.action == 'divert':
         print(divert(args.component, args.file))
     elif args.action == 'status':
         print(status(args.component))
+    elif args.action == 'collect':
+        print(collect(args.component))
     elif args.action == 'wait':
         while 'SubState=running' in (text := status(args.component)) or 'ActiveState=activating' in text:
             time.sleep(30)
