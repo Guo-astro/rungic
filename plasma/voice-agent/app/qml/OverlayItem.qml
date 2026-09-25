@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// An entry of the conversation in the overlay (docs/67), always on the dark backdrop.
+// An entry of the conversation in the overlay (docs/67), on its dark or light backdrop.
 // The panel shows the latest turn: what the user said as a caption above the answer in
 // large type. Pulled up, it shows the whole conversation: the user's words in a glass
 // bubble, the assistant's as plain text. An agent turn is one line saying what it does.
@@ -25,7 +25,7 @@ Item {
     implicitHeight: shown ? loader.implicitHeight + Kirigami.Units.largeSpacing : 0
 
     readonly property bool mine: role === "user" && (kind === "message" || kind === "live-user")
-    readonly property color ink: "#F4F1EA"
+    readonly property color ink: Style.ink
 
     Loader {
         id: loader
@@ -43,7 +43,7 @@ Item {
         Text {
             text: entry.text
             wrapMode: Text.Wrap
-            color: Qt.rgba(1, 1, 1, 0.62)
+            color: Style.dim
             font.pixelSize: 14
         }
     }
@@ -55,7 +55,7 @@ Item {
             implicitWidth: Math.min(measure.implicitWidth, entry.width * 0.8 - padX * 2) + padX * 2
             implicitHeight: label.implicitHeight + 20
             radius: 20
-            color: Qt.rgba(1, 1, 1, 0.10)
+            color: Style.glass
             opacity: entry.kind.startsWith("live") ? 0.72 : 1
             Text {
                 id: measure
@@ -110,7 +110,7 @@ Item {
                 width: Math.min(parent.width, row.implicitWidth + 28)
                 height: parent.height
                 radius: height / 2
-                color: Qt.rgba(1, 1, 1, 0.07)
+                color: Style.glass
                 Row {
                     id: row
                     x: 14
@@ -129,14 +129,14 @@ Item {
                         height: 16
                         anchors.verticalCenter: parent.verticalCenter
                         source: entry.status === "stopped" ? "media-playback-stop-symbolic" : "checkmark-symbolic"
-                        color: Qt.rgba(1, 1, 1, 0.72)
+                        color: Style.dim
                         isMask: true
                     }
                     Text {
                         width: Math.min(implicitWidth, capsule.width - 28 - 24)
                         anchors.verticalCenter: parent.verticalCenter
                         elide: Text.ElideRight
-                        color: Qt.rgba(1, 1, 1, 0.72)
+                        color: Style.dim
                         font.pixelSize: 13
                         text: entry.status === "stopped" ? "已停止"
                             : capsule.running ? "正在处理 · " + capsule.seconds + " 秒" + (capsule.step ? " · " + capsule.step : "")
@@ -151,7 +151,7 @@ Item {
         id: call
         Text {
             horizontalAlignment: Text.AlignHCenter
-            color: Qt.rgba(1, 1, 1, 0.66)
+            color: Style.dim
             font.pixelSize: 13
             text: "通话 · " + entry.role + (entry.text ? " · " + entry.text : "")
             elide: Text.ElideRight
@@ -164,7 +164,7 @@ Item {
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.Wrap
             font.pixelSize: 13
-            color: entry.kind === "error" ? "#FF8A80" : Qt.rgba(1, 1, 1, 0.62)
+            color: entry.kind === "error" ? Style.error : Style.dim
             text: entry.text
         }
     }

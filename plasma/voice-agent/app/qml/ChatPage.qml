@@ -136,7 +136,7 @@ Kirigami.Page {
             contentItem: Rectangle {
                 implicitWidth: 3
                 radius: 1.5
-                color: Qt.rgba(1, 1, 1, 0.25)
+                color: Style.track
                 opacity: bar.active ? 1 : 0
                 Behavior on opacity { NumberAnimation { duration: 300 } }
             }
@@ -207,11 +207,11 @@ Kirigami.Page {
                     width: parent.width
                     height: 46
                     radius: 16
-                    color: Qt.rgba(1, 1, 1, 0.05)
+                    color: Style.surface
                     Text {
                         anchors { left: parent.left; leftMargin: 16; verticalCenter: parent.verticalCenter }
                         text: "“" + parent.modelData + "”"
-                        color: Qt.rgba(1, 1, 1, 0.86)
+                        color: Style.inkSoft
                         font.pixelSize: 15
                     }
                 }
@@ -225,8 +225,8 @@ Kirigami.Page {
         height: bloom.height
         opacity: bloom.rise
         gradient: Gradient {
-            GradientStop { position: 0.0; color: Qt.rgba(0.03, 0.035, 0.05, 0) }
-            GradientStop { position: 0.55; color: Qt.rgba(0.03, 0.035, 0.05, 0.9) }
+            GradientStop { position: 0.0; color: Style.fade(0) }
+            GradientStop { position: 0.55; color: Style.fade(0.9) }
         }
     }
     Bloom {

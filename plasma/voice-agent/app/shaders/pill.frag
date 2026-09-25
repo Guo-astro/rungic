@@ -13,6 +13,7 @@ layout(std140, binding = 0) uniform buf {
     float time;
     float glow;     // 0..1
     float bright;   // 0..1
+    float light;    // 1 on a light ground: the glow around tints instead of adding light
 };
 
 vec3 palette(float t)
@@ -47,9 +48,11 @@ void main()
     float room = (area.y - capsule.y) * 0.5;
     float halo = exp(-max(d, 0.0) / (capsule.y * 0.3)) * (1.0 - smoothstep(room * 0.35, room * 0.95, d))
                * glow * (1.0 - inside) * 0.75;
-    vec3 around = palette(turn + time * 0.12) * halo;
+    vec3 glowColor = mix(palette(turn + time * 0.12), pow(palette(turn + time * 0.12), vec3(1.6)), light);
+    vec3 around = glowColor * halo;
 
     vec3 col = inner * inside + around;
-    float a = clamp(inside + max(around.r, max(around.g, around.b)), 0.0, 1.0);
+    float glowAlpha = mix(max(around.r, max(around.g, around.b)), halo, light);
+    float a = clamp(inside + glowAlpha, 0.0, 1.0);
     fragColor = vec4(col, a) * qt_Opacity;
 }

@@ -92,7 +92,7 @@ Item {
             text: entry.text
             textFormat: Text.PlainText
             wrapMode: Text.Wrap
-            color: "#F2EEE6"
+            color: Style.ink
             opacity: entry.kind.startsWith("live") ? 0.8 : 1
             font.pixelSize: entry.answer ? 19 : 17
             font.weight: entry.answer ? Font.Medium : Font.Normal
@@ -115,7 +115,7 @@ Item {
         Text {
             text: entry.text
             wrapMode: Text.Wrap
-            color: "#FF8A80"
+            color: Style.error
             font.pixelSize: 14
         }
     }
@@ -238,9 +238,9 @@ Item {
                     visible: !stepItem.isCommand
                     text: stepItem.text
                     textFormat: stepItem.kind === "note" || stepItem.kind === "answer" ? Text.MarkdownText : Text.PlainText
-                    linkColor: Style.gold
+                    linkColor: Style.accent
                     wrapMode: Text.Wrap
-                    color: Qt.rgba(1, 1, 1, 0.82)
+                    color: Style.inkSoft
                     font.pixelSize: 14
                     font.italic: stepItem.kind === "said"
                     lineHeight: 1.1
@@ -262,7 +262,7 @@ Item {
                         wrapMode: Text.WrapAnywhere
                         maximumLineCount: stepItem.open ? 400 : 8
                         elide: Text.ElideRight
-                        color: Qt.rgba(1, 1, 1, 0.78)
+                        color: Style.codeInk
                         font.family: "monospace"
                         font.pixelSize: 12
                         lineHeight: 1.12
@@ -294,7 +294,7 @@ Item {
                     implicitWidth: 8
                     implicitHeight: 8
                     radius: 4
-                    color: callBox.running ? Style.gold : Style.faint
+                    color: callBox.running ? Style.accent : Style.faint
                     SequentialAnimation on opacity {
                         running: callBox.running
                         loops: Animation.Infinite
@@ -365,7 +365,7 @@ Item {
                                 Layout.fillWidth: true
                                 text: said.text
                                 wrapMode: Text.Wrap
-                                color: said.kind === "remote" ? Style.ink : said.kind === "note" ? Style.dim : Qt.rgba(1, 1, 1, 0.84)
+                                color: said.kind === "remote" ? Style.ink : said.kind === "note" ? Style.dim : Style.inkSoft
                                 font.pixelSize: 15
                                 lineHeight: 1.12
                             }
@@ -377,13 +377,13 @@ Item {
                         Rectangle {
                             implicitHeight: askColumn.implicitHeight + 24
                             radius: 14
-                            color: Qt.rgba(0.94, 0.76, 0.49, 0.10)
-                            border.color: Qt.rgba(0.94, 0.76, 0.49, 0.28)
+                            color: Style.accentFill
+                            border.color: Style.accentBorder
                             ColumnLayout {
                                 id: askColumn
                                 anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; margins: 14 }
                                 spacing: 4
-                                Text { text: "问你"; color: Style.gold; font.pixelSize: 12; font.letterSpacing: 0.5 }
+                                Text { text: "问你"; color: Style.accent; font.pixelSize: 12; font.letterSpacing: 0.5 }
                                 Text {
                                     Layout.fillWidth: true
                                     text: said.text
@@ -438,7 +438,7 @@ Item {
             live: entry.status === "pending"
             padding: 16
             spacing: 10
-            Text { text: "需要你的批准"; color: Style.gold; font.pixelSize: 14; font.weight: Font.DemiBold }
+            Text { text: "需要你的批准"; color: Style.accent; font.pixelSize: 14; font.weight: Font.DemiBold }
             Text {
                 Layout.fillWidth: true
                 text: entry.command.length > 0 ? entry.command : entry.text
@@ -483,7 +483,7 @@ Item {
         radius: 20
         color: Style.surface
         border.width: 1
-        border.color: live ? Qt.rgba(0.94, 0.76, 0.49, 0.35) : Style.line
+        border.color: live ? Style.accentBorder : Style.line
         ColumnLayout {
             id: cardColumn
             anchors { left: parent.left; right: parent.right; top: parent.top; margins: cardBox.padding }
@@ -503,9 +503,9 @@ Item {
         background: Rectangle {
             radius: height / 2
             color: pb.danger ? (pb.pressed ? Qt.darker(Style.danger, 1.2) : Style.danger)
-                 : Qt.rgba(1, 1, 1, pb.pressed || pb.checked ? 0.18 : 0.08)
+                 : pb.pressed || pb.checked ? Style.glassPressed : Style.glass
             border.width: 1
-            border.color: Qt.rgba(1, 1, 1, 0.10)
+            border.color: Style.glassBorder
         }
         contentItem: Item {
             Row {
@@ -518,7 +518,7 @@ Item {
                     width: 18
                     height: 18
                     source: pb.iconName
-                    color: "white"
+                    color: pb.danger ? "white" : Style.ink
                     isMask: true
                 }
                 Text {

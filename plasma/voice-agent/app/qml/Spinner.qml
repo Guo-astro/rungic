@@ -12,13 +12,13 @@ Item {
         radius: width / 2
         color: "transparent"
         border.width: 2
-        border.color: Qt.rgba(1, 1, 1, 0.18)
+        border.color: Style.track
     }
     Shape {
         anchors.fill: parent
         preferredRendererType: Shape.CurveRenderer
         ShapePath {
-            strokeColor: Style.gold
+            strokeColor: Style.accent
             strokeWidth: 2
             fillColor: "transparent"
             capStyle: ShapePath.RoundCap

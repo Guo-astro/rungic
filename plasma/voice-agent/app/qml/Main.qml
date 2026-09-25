@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // The voice assistant's app (docs/59): the conversations, and one open beside them on a
-// wide screen (the TV) or on top of them on the phone. Always dark, like the Home
+// wide screen (the TV) or on top of them on the phone. Dark or light as the system is, like the Home
 // button's overlay (docs/67).
 import QtQuick
 import org.kde.kirigami as Kirigami

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // The assistant's overlay (docs/67): holding Home darkens and blurs the whole screen and
 // light rises from under the finger, listening at once; it shows the one assistant
-// conversation. Always dark, whatever the theme.
+// conversation. Dark or light as the system is (Style).
 //
 // What it shows:
 // - listen: the light up from Home, following the voice; "正在听" and a hint.
@@ -226,7 +226,7 @@ Window {
 
     Item {
         anchors.fill: parent
-        Kirigami.Theme.colorSet: Kirigami.Theme.Complementary
+        Kirigami.Theme.colorSet: Style.dark ? Kirigami.Theme.Complementary : Kirigami.Theme.Window
         Kirigami.Theme.inherit: false
 
         // Darkens what is behind (KWin blurs it too): the light and the words stand out.
@@ -235,16 +235,16 @@ Window {
             height: win.above
             opacity: win.appear
             gradient: Gradient {
-                GradientStop { position: 0.0; color: Qt.rgba(0.016, 0.02, 0.035, 0.58) }
-                GradientStop { position: 0.55; color: Qt.rgba(0.016, 0.02, 0.035, 0.74) }
-                GradientStop { position: 1.0; color: Qt.rgba(0.016, 0.02, 0.035, 0.86) }
+                GradientStop { position: 0.0; color: Style.veil(Style.scrimTop) }
+                GradientStop { position: 0.55; color: Style.veil(Style.scrimMiddle) }
+                GradientStop { position: 1.0; color: Style.veil(Style.scrimBottom) }
             }
             // Over the navigation panel as well, lighter: its buttons stay visible (and theirs to touch).
             Rectangle {
                 anchors.top: parent.bottom
                 width: parent.width
                 height: win.navHeight
-                color: Qt.rgba(0.016, 0.02, 0.035, 0.72)
+                color: Style.veil(0.72)
             }
             MouseArea {
                 anchors.fill: parent
@@ -300,14 +300,14 @@ Window {
                 width: parent.width
                 text: win.newTurn ? win.userText : "请说"
                 wrapMode: Text.Wrap
-                color: win.newTurn ? "#F7F4EE" : Qt.rgba(0.97, 0.96, 0.93, 0.5)
+                color: win.newTurn ? Style.ink : Style.dim
                 font.pixelSize: Math.round(Math.min(win.width, 430) * 0.075)
                 font.weight: Font.Medium
                 lineHeight: 1.2
             }
             Text {
                 text: win.holding ? "松开 Home 发送" : chat.handsFree ? "说完自动发送 · 轻点结束" : ""
-                color: Qt.rgba(1, 1, 1, 0.66)
+                color: Style.dim
                 font.pixelSize: 14
             }
         }
@@ -321,7 +321,7 @@ Window {
             wrapMode: Text.Wrap
             maximumLineCount: 4
             elide: Text.ElideRight
-            color: Qt.rgba(0.97, 0.96, 0.93, 0.92)
+            color: Style.ink
             font.pixelSize: 22
             font.weight: Font.Medium
             lineHeight: 1.15
@@ -339,9 +339,9 @@ Window {
             y: topY
             height: controls.y + controls.height + 20 - topY
             radius: 34
-            color: Qt.rgba(0.11, 0.12, 0.16, 0.62)
+            color: Style.panel
             border.width: 1
-            border.color: Qt.rgba(1, 1, 1, 0.09)
+            border.color: Style.line
             opacity: win.view === "answer" ? win.appear : 0
             Behavior on opacity { NumberAnimation { duration: 240 } }
             visible: opacity > 0
@@ -366,14 +366,14 @@ Window {
                 width: 36
                 height: 4
                 radius: 2
-                color: Qt.rgba(1, 1, 1, 0.22)
+                color: Style.track
             }
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 y: 26
                 visible: win.expanded
                 text: "语音助手"
-                color: Qt.rgba(1, 1, 1, 0.86)
+                color: Style.inkSoft
                 font.pixelSize: 15
                 font.weight: Font.DemiBold
             }
@@ -407,7 +407,7 @@ Window {
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter
                 text: "有什么可以帮你？"
-                color: "#F4F1EA"
+                color: Style.ink
                 font.pixelSize: 19
                 font.weight: Font.Medium
             }
@@ -441,7 +441,7 @@ Window {
                 width: Math.min(implicitWidth, win.contentWidth - 48)
                 visible: win.view === "work" && text !== ""
                 elide: Text.ElideRight
-                color: Qt.rgba(1, 1, 1, 0.66)
+                color: Style.dim
                 font.pixelSize: 14
                 text: status.working ? win.workStep : ""
             }

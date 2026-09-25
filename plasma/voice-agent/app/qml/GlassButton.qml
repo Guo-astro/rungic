@@ -13,9 +13,9 @@ QQC2.AbstractButton {
     Accessible.name: label
     background: Rectangle {
         radius: width / 2
-        color: Qt.rgba(1, 1, 1, round.pressed ? 0.2 : 0.08)
+        color: round.pressed ? Style.glassPressed : Style.glass
         border.width: 1
-        border.color: Qt.rgba(1, 1, 1, 0.12)
+        border.color: Style.glassBorder
     }
     contentItem: Item {
         Kirigami.Icon {
@@ -23,7 +23,7 @@ QQC2.AbstractButton {
             width: 20
             height: 20
             source: round.iconName
-            color: Qt.rgba(1, 1, 1, 0.92)
+            color: Style.ink
             isMask: true
         }
     }

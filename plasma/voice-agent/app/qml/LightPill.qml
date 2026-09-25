@@ -35,6 +35,7 @@ Item {
         readonly property real time: root.time
         readonly property real glow: root.mode === "idle" ? 0.45 : 0.75 + 0.25 * root.beat
         readonly property real bright: root.mode === "idle" ? 0.5 : 1
+        readonly property real light: Style.dark ? 0 : 1
         fragmentShader: "qrc:/shaders/pill.frag.qsb"
     }
 }

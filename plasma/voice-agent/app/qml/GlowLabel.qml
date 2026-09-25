@@ -13,7 +13,7 @@ Item {
 
     Text {
         id: label
-        color: Qt.rgba(1, 1, 1, 0.66)
+        color: Style.dim
         font.letterSpacing: 1.3
     }
     ShaderEffect {
@@ -25,6 +25,7 @@ Item {
         height: label.height + margin * 2
         readonly property size area: Qt.size(width, height)
         readonly property real time: root.time
+        readonly property real light: Style.dark ? 0 : 1
         readonly property var source: ShaderEffectSource {
             sourceItem: label
             hideSource: root.glowing

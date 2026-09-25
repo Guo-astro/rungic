@@ -157,7 +157,7 @@ Kirigami.Page {
                 onClicked: page.openChat(page.pinned.cid, "语音助手")
                 background: Rectangle {
                     radius: 24
-                    color: pinnedCard.pressed ? Qt.rgba(1, 1, 1, 0.09) : Style.surface
+                    color: pinnedCard.pressed ? Style.glass : Style.surface
                     border.width: 1
                     border.color: Style.line
                 }
@@ -199,7 +199,7 @@ Kirigami.Page {
                         wrapMode: Text.Wrap
                         maximumLineCount: 2
                         elide: Text.ElideRight
-                        color: Qt.rgba(1, 1, 1, 0.84)
+                        color: Style.inkSoft
                         font.pixelSize: 15
                         lineHeight: 1.1
                     }
@@ -282,7 +282,7 @@ Kirigami.Page {
                             height: parent.height
                             Accessible.name: rowBox.title
                             onClicked: swipe.offset < 0 ? swipe.offset = 0 : page.openChat(rowBox.cid, rowBox.title)
-                            background: Rectangle { color: rowButton.pressed ? Qt.rgba(1, 1, 1, 0.05) : Style.ground }
+                            background: Rectangle { color: rowButton.pressed ? Qt.tint(Style.ground, Style.pressed) : Style.ground }
                             contentItem: Column {
                                 leftPadding: 24
                                 rightPadding: 24
@@ -364,8 +364,8 @@ Kirigami.Page {
         height: bloom.height
         opacity: bloom.rise
         gradient: Gradient {
-            GradientStop { position: 0.0; color: Qt.rgba(0.03, 0.035, 0.05, 0) }
-            GradientStop { position: 0.55; color: Qt.rgba(0.03, 0.035, 0.05, 0.9) }
+            GradientStop { position: 0.0; color: Style.fade(0) }
+            GradientStop { position: 0.55; color: Style.fade(0.9) }
         }
     }
     Bloom {

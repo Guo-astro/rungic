@@ -9,6 +9,7 @@ layout(std140, binding = 0) uniform buf {
     float qt_Opacity;
     vec2 area;      // px, the text plus its margin
     float time;
+    float light;    // 1 on a light ground: deep gold, ink and blue, no halo
 };
 layout(binding = 1) uniform sampler2D source;
 
@@ -27,12 +28,15 @@ void main()
     g = g / 36.0;
 
     float s = fract(qt_TexCoord0.x * area.x / 160.0 - time * 0.3) * 4.0;
-    vec3 gold = vec3(1.0, 0.86, 0.62), blue = vec3(0.62, 0.72, 1.0);
-    vec3 grad = mix(gold, vec3(1.0), clamp(s, 0.0, 1.0));
+    // Light: #8A5A12, #1B1A1F and #2B54C9 read at 4.5:1 or better on the light overlay.
+    vec3 gold = mix(vec3(1.0, 0.86, 0.62), vec3(0.54, 0.35, 0.07), light);
+    vec3 blue = mix(vec3(0.62, 0.72, 1.0), vec3(0.17, 0.33, 0.79), light);
+    vec3 mid = mix(vec3(1.0), vec3(0.106, 0.102, 0.122), light);
+    vec3 grad = mix(gold, mid, clamp(s, 0.0, 1.0));
     grad = mix(grad, blue, clamp(s - 1.0, 0.0, 1.0));
-    grad = mix(grad, vec3(1.0), clamp(s - 2.0, 0.0, 1.0));
+    grad = mix(grad, mid, clamp(s - 2.0, 0.0, 1.0));
     grad = mix(grad, gold, clamp(s - 3.0, 0.0, 1.0));
 
-    float halo = g * 0.55 * (1.0 - a);
+    float halo = g * 0.55 * (1.0 - a) * (1.0 - light);
     fragColor = vec4(grad * a + gold * halo, a + halo) * qt_Opacity;
 }

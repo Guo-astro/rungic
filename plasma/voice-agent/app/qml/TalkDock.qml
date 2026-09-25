@@ -26,8 +26,8 @@ Item {
         opacity: dock.mode === "listen" ? 0 : 1
         Behavior on opacity { NumberAnimation { duration: 200 } }
         gradient: Gradient {
-            GradientStop { position: 0.0; color: Qt.rgba(0.03, 0.035, 0.05, 0) }
-            GradientStop { position: 0.35; color: Qt.rgba(0.03, 0.035, 0.05, 0.85) }
+            GradientStop { position: 0.0; color: Style.fade(0) }
+            GradientStop { position: 0.35; color: Style.fade(0.85) }
         }
     }
 
@@ -50,7 +50,7 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 visible: text !== ""
                 text: dock.hint
-                color: Qt.rgba(1, 1, 1, 0.72)
+                color: Style.dim
                 font.pixelSize: 13
             }
         }

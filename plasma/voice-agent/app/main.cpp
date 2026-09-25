@@ -15,6 +15,7 @@
 #include <QStandardPaths>
 
 #include "overlay.h"
+#include "systemtheme.h"
 
 // One app: a second start hands its conversation to the first (dev.moto.VoiceAssistantApp).
 class AppInstance : public QObject
@@ -88,15 +89,21 @@ int main(int argc, char *argv[])
         bus.call(open);
         return 0;
     }
-    // The app's own colours (docs/59). Declared through KDE_COLOR_SCHEME_PATH before any window
-    // exists: the platform theme hands it to KWin (the KDE palette protocol) and Kirigami reads
-    // it, so the shell's status bar and navigation panel take the same colours.
-    const QString scheme = QStandardPaths::locate(QStandardPaths::GenericDataLocation,
-                                                  QStringLiteral("moto-voice-assistant/MotoVoiceAssistant.colors"));
-    if (!scheme.isEmpty()) {
-        app.setProperty("KDE_COLOR_SCHEME_PATH", scheme);
-        QGuiApplication::setPalette(KColorScheme::createApplicationPalette(KSharedConfig::openConfig(scheme)));
-    }
+    // The app's own colours, dark or light as the system is (docs/59). Declared through
+    // KDE_COLOR_SCHEME_PATH: the platform theme hands it to KWin (the KDE palette protocol)
+    // and Kirigami reads it, so the shell's status bar and navigation panel take the same
+    // colours. Applied again when the system switches.
+    const auto applyScheme = [&app] {
+        const QString name = SystemTheme::instance()->dark() ? QStringLiteral("MotoVoiceAssistant.colors")
+                                                             : QStringLiteral("MotoVoiceAssistantLight.colors");
+        const QString scheme = QStandardPaths::locate(QStandardPaths::GenericDataLocation, QStringLiteral("moto-voice-assistant/") + name);
+        if (!scheme.isEmpty()) {
+            app.setProperty("KDE_COLOR_SCHEME_PATH", scheme);
+            QGuiApplication::setPalette(KColorScheme::createApplicationPalette(KSharedConfig::openConfig(scheme)));
+        }
+    };
+    applyScheme();
+    QObject::connect(SystemTheme::instance(), &SystemTheme::darkChanged, &app, applyScheme);
     engine.setInitialProperties({{QStringLiteral("initialConversation"), conversation}});
     engine.loadFromModule("dev.moto.voiceassistant", "Main");
     bus.registerObject(QStringLiteral("/App"), new AppInstance(&engine), QDBusConnection::ExportScriptableSlots);

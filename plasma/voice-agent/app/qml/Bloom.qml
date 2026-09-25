@@ -9,5 +9,6 @@ ShaderEffect {
     property real rim: 1          // edge light
     property real spread: width   // bloom width, px
     readonly property size area: Qt.size(width, height)
+    readonly property real light: Style.dark ? 0 : 1
     fragmentShader: "qrc:/shaders/bloom.frag.qsb"
 }

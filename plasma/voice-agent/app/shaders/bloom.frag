@@ -14,6 +14,7 @@ layout(std140, binding = 0) uniform buf {
     float rise;     // 0 gone .. 1 fully up (summon / gathered into the pill)
     float rim;      // edge light, 0..1
     float spread;   // bloom width, px
+    float light;    // 1 on a light ground: tinted, deeper colours with ordinary alpha
 };
 
 const vec3 BLUE = vec3(0.36, 0.53, 0.96);
@@ -71,8 +72,15 @@ void main()
     col += BLUE * (exp(-p.x / 1.1) + 0.45 * exp(-p.x / 7.0)) * up * rim;
     col += PINK * (exp(-(area.x - p.x) / 1.1) + 0.45 * exp(-(area.x - p.x) / 7.0)) * up * rim;
 
-    // Soft shoulder instead of clipping: bright stays light, never a flat white patch.
-    col = vec3(1.0) - exp(-col * 1.25);
-    float a = clamp(max(col.r, max(col.g, col.b)), 0.0, 1.0);
-    fragColor = vec4(col, a) * qt_Opacity;
+    // Dark ground: a soft shoulder instead of clipping; bright stays light, never a flat
+    // white patch, and it adds to what is behind.
+    vec3 lit = vec3(1.0) - exp(-col * 1.25);
+    vec4 onDark = vec4(lit, clamp(max(lit.r, max(lit.g, lit.b)), 0.0, 1.0));
+    // Light ground: added light would vanish into white. The same colours, deepened and
+    // laid over the ground with their strength as alpha.
+    float m = max(col.r, max(col.g, col.b));
+    vec3 hue = pow(col / max(m, 1e-4), vec3(1.8)) * 0.92;
+    float strength = (1.0 - exp(-m * 1.6)) * 0.85;
+    vec4 onLight = vec4(hue * strength, strength);
+    fragColor = mix(onDark, onLight, light) * qt_Opacity;
 }
