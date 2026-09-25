@@ -123,6 +123,13 @@ Kirigami.Page {
         anchors { left: parent.left; right: parent.right; top: parent.top; bottom: dock.top }
         contentHeight: column.implicitHeight
         clip: true
+        // Past either end the list stretches a little and springs back (no empty space).
+        boundsMovement: Flickable.StopAtBounds
+        transform: Scale {
+            origin.x: flick.width / 2
+            origin.y: flick.verticalOvershoot > 0 ? flick.height : 0
+            yScale: 1 + 0.08 * Math.min(Math.abs(flick.verticalOvershoot) / Math.max(1, flick.height), 1)
+        }
 
         Column {
             id: column

@@ -127,10 +127,11 @@ Kirigami.Page {
         onContentHeightChanged: if (follow && !moving) Qt.callLater(stickToEnd)
         onMovementStarted: follow = false
         onMovementEnded: follow = atYEnd
-        QQC2.ScrollBar.vertical: QQC2.ScrollBar {
+        // Touch: an indicator only. The attached ScrollBar is a control: it wrote its clamped
+        // position back when a drag past the end ended (or a finger at the edge touched it), so
+        // the view snapped to the end in one frame instead of springing back.
+        QQC2.ScrollIndicator.vertical: QQC2.ScrollIndicator {
             id: bar
-            background: null
-            // Thin, at the edge, only while scrolling.
             padding: 2
             contentItem: Rectangle {
                 implicitWidth: 3
@@ -139,6 +140,14 @@ Kirigami.Page {
                 opacity: bar.active ? 1 : 0
                 Behavior on opacity { NumberAnimation { duration: 300 } }
             }
+        }
+        // Past either end the content stretches a little and springs back, instead of
+        // leaving empty space under the finger.
+        boundsMovement: Flickable.StopAtBounds
+        transform: Scale {
+            origin.x: view.width / 2
+            origin.y: view.verticalOvershoot > 0 ? view.height : 0
+            yScale: 1 + 0.08 * Math.min(Math.abs(view.verticalOvershoot) / Math.max(1, view.height), 1)
         }
     }
 
