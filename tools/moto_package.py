@@ -212,12 +212,15 @@ def build_host(pkg, tree):
 
 
 def stage_sources(pkg):
-    """The package's paths (symlinks resolved, so shared files come along) as a tar for the phone."""
+    """The tracked files of the package's paths (symlinks resolved, so shared files come along) as a
+    tar for the phone. Only tracked files: local build trees never reach a package build."""
     archive = WORKSPACE / f".work/cache/{pkg['name']}-src.tar"
+    paths = sorted(set(pkg['paths']) | {str(pkg['dir'].relative_to(WORKSPACE))})
+    files = subprocess.run(['git', 'ls-files', '-z', '--', *paths], cwd=WORKSPACE, capture_output=True,
+                           check=True).stdout.decode().split('\0')
     with tarfile.open(archive, 'w', dereference=True) as tar:
-        for path in sorted(set(pkg['paths']) | {str(pkg['dir'].relative_to(WORKSPACE))}):
-            tar.add(WORKSPACE / path, arcname=path, filter=lambda t: None if '/build/' in f'/{t.name}/' and
-                    t.name.split('/')[-1] == 'build' else t)
+        for name in filter(None, files):
+            tar.add(WORKSPACE / name, arcname=name, recursive=False)
     return archive
 
 
