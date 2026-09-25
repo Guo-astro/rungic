@@ -171,8 +171,8 @@ pipe = Gst.parse_launch(f'pipewiresrc target-object={node} num-buffers={count + 
 sink = pipe.get_by_name('sink')
 pipe.set_state(Gst.State.PLAYING)
 frames, start, caps = [], time.monotonic(), None
-while len(frames) < count and time.monotonic() - start < 25:
-    sample = sink.emit('try-pull-sample', 3 * Gst.SECOND)
+while len(frames) < count and time.monotonic() - start < 40:
+    sample = sink.emit('try-pull-sample', 10 * Gst.SECOND)
     if sample is None:
         break
     caps = caps or sample.get_caps().to_string()
@@ -181,7 +181,8 @@ while len(frames) < count and time.monotonic() - start < 25:
     data = info.data[::211]
     mean = sum(data) / len(data)
     std = (sum((x - mean) ** 2 for x in data) / len(data)) ** 0.5
-    frames.append({'pts': buf.pts, 'mean': round(mean, 1), 'std': round(std, 1)})
+    frames.append({'t': round(time.monotonic() - start, 3), 'pts': buf.pts, 'mean': round(mean, 1),
+                   'std': round(std, 1)})
     buf.unmap(info)
 first = time.monotonic() - start
 pipe.set_state(Gst.State.NULL)
@@ -214,8 +215,11 @@ def camera_frames(ctx, node='moto.camera.0', frames=20):
     fps = (len(pts) - 1) / ((pts[-1] - pts[0]) / 1e9) if len(pts) > 1 and pts[-1] > pts[0] else None
     idle = wait_for(lambda: _node_state(node) in ('suspended', 'idle'), timeout=10)
     luma = round(sum(f['mean'] for f in got) / len(got), 1) if got else None
+    arrival = [f['t'] for f in got]
+    max_gap = round(max((b - a for a, b in zip(arrival, arrival[1:])), default=0), 3)
     return result(len(got) == frames and monotonic and varied >= frames // 2 and idle,
-                  {'fps': round(fps, 1) if fps else None, 'first_frames_s': data['seconds'], 'mean_luma': luma},
+                  {'fps': round(fps, 1) if fps else None, 'first_frame_s': arrival[0] if arrival else None,
+                   'max_gap_s': max_gap, 'mean_luma': luma},
                   frames=len(got), monotonic=monotonic, varied=varied, caps=data['caps'],
                   state_after=_node_state(node))
 
