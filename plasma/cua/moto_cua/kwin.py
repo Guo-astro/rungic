@@ -37,6 +37,35 @@ for (let i = 0; i < wins.length; i++) if (wins[i].normalWindow) out.windows.push
 callDBus("SERVICE", "/dev/moto/Cua", "dev.moto.Cua", "Report", JSON.stringify(out));
 '''
 
+# The window an agent works in and what belongs to it (docs/68): the popups, menus and dialogs
+# whose transientFor chain leads to it are separate windows in Wayland, often reaching outside it.
+TARGET_JS = '''
+function info(w) {
+  if (!w) return null;
+  const f = w.frameGeometry;
+  return {id: String(w.internalId), pid: w.pid, caption: w.caption, resource_class: String(w.resourceClass),
+    normal: w.normalWindow, dialog: w.dialog, minimized: w.minimized, output: w.output ? w.output.name : "",
+    frame: [f.x, f.y, f.width, f.height]};
+}
+function belongs(w, target) {
+  for (let p = w.transientFor, n = 0; p && n < 10; p = p.transientFor, n++) if (p === target) return true;
+  return false;
+}
+const wins = workspace.stackingOrder;
+let target = null;
+for (let i = 0; i < wins.length; i++) if (String(wins[i].internalId) === "TARGET") target = wins[i];
+const out = {target: info(target), active: info(workspace.activeWindow), related: [], outputs: []};
+for (let i = 0; i < workspace.screens.length; i++) {
+  const s = workspace.screens[i], g = s.geometry;
+  out.outputs.push({name: String(s.name), geometry: [g.x, g.y, g.width, g.height], scale: s.devicePixelRatio});
+}
+if (target) for (let i = 0; i < wins.length; i++) {
+  const w = wins[i];
+  if (w !== target && !w.minimized && belongs(w, target)) out.related.push(info(w));
+}
+callDBus("SERVICE", "/dev/moto/Cua", "dev.moto.Cua", "Report", JSON.stringify(out));
+'''
+
 CURSOR_JS = '''
 const c = workspace.cursorPos;
 callDBus("SERVICE", "/dev/moto/Cua", "dev.moto.Cua", "Report", JSON.stringify({x: c.x, y: c.y}));
@@ -150,6 +179,13 @@ class KWin:
         """{'active': window or None, 'windows': [normal windows], 'screens': [names],
         'outputs': [{name, geometry, scale}]}; geometry is global logical."""
         return self._script(WINDOW_JS)
+
+    def target(self, window_id: str) -> dict:
+        """{'target': the window (None if gone), 'active', 'related': its popups and dialogs,
+        'outputs'}; geometry is global logical."""
+        if window_id and not window_id.replace('-', '').strip('{}').isalnum():
+            raise ValueError(f'bad window id {window_id!r}')
+        return self._script(TARGET_JS.replace('TARGET', window_id or '-'))
 
     def cursor(self) -> tuple[float, float]:
         position = self._script(CURSOR_JS)

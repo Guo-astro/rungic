@@ -182,9 +182,13 @@ ACTION_SCHEMA = {
 }
 PLAN_ONE_TOOLS = [
     {'name': 'desktop_screenshot',
-     'description': ("Look at the assistant's screen (1920x1080): returns the image. Coordinates for desktop_act "
-                     'are its pixels. Turns the assistant\'s screen on if needed.'),
-     'inputSchema': {'type': 'object', 'properties': {}}, 'annotations': {'readOnlyHint': True}},
+     'description': ("Look at the assistant's screen: returns the image of the active window there (rendered by "
+                     'the window manager, with its open menus and dialogs), or with scope "screen" the whole screen '
+                     '(1920x1080). Coordinates for desktop_act are pixels of the latest image. Turns the assistant\'s '
+                     'screen on if needed.'),
+     'inputSchema': {'type': 'object', 'properties': {
+         'scope': {'type': 'string', 'enum': ['window', 'screen'], 'description': 'window (default) or screen'}}},
+     'annotations': {'readOnlyHint': True}},
     {'name': 'desktop_act',
      'description': ("Act on the assistant's screen yourself, from what you saw in desktop_screenshot: a short "
                      'batch of actions carried out in order, then the new screenshot comes back. For a whole '
@@ -393,8 +397,8 @@ class Cua:
         return result
 
     # ---- plan one: GPT-6 Luna computer use (luna.py) ------------------------------------------
-    def agent_screen(self) -> ComputerUse:
-        """The assistant's screen (turned on if needed) and a computer-use session on it."""
+    def agent_output(self) -> str:
+        """The assistant's screen's output (turned on if needed)."""
         outputs = [o['name'] for o in self.backend.kwin.windows().get('outputs', []) if o['name'].startswith('CAST')]
         if not outputs:
             screen = subprocess.run(['moto-agent-screen', 'on'], capture_output=True, text=True, timeout=30)
@@ -404,31 +408,42 @@ class Cua:
             outputs = [o['name'] for o in self.backend.kwin.windows().get('outputs', []) if o['name'].startswith('CAST')]
             if not outputs:
                 raise RuntimeError("the assistant's screen did not come up")
-        if getattr(self, '_computer', None) is None or self._computer.screen.output_name != outputs[0]:
-            self._computer = ComputerUse(self.backend, outputs[0])
+        return outputs[0]
+
+    def agent_screen(self) -> ComputerUse:
+        """The session desktop_screenshot and desktop_act share: its latest image says where
+        desktop_act's pixels are. It follows the active window on the assistant's screen."""
+        output = self.agent_output()
+        if getattr(self, '_computer', None) is None or self._computer.screen.output_name != output:
+            self._computer = ComputerUse(self.backend, output)
         return self._computer
 
     def goal_luna(self, args: dict) -> dict:
         subprocess.run(['moto-agent-screen', 'on'], capture_output=True, timeout=30)
-        computer = self.agent_screen()
+        output = self.agent_output()
+        window_id = None
         if args.get('app'):
-            self.launch(str(args['app']), 'agent')
+            # The window the task is about, from the window manager: the model sees that window.
+            window_id = ((self.launch(str(args['app']), 'agent') or {}).get('window') or {}).get('id')
             time.sleep(0.8)
+        computer = ComputerUse(self.backend, output, window_id)
         task = str(args['goal'])
         for reply in args.get('replies') or []:
             task += f"\n(Earlier you asked: {reply['question']} The user answered: {reply['answer']})"
         return computer.run(task, max_steps=int(args.get('steps') or 30), timeout_s=GOAL_TIMEOUT_S - 10)
 
-    def screenshot(self) -> dict:
+    def screenshot(self, scope: str = 'window') -> dict:
         computer = self.agent_screen()
-        url, image = computer.screen.capture()
-        return {'screen': computer.screen.output_name, 'width': image.width, 'height': image.height,
-                '__image__': url.split(',', 1)[1]}
+        computer.screen.whole = scope == 'screen'
+        computer.screen.window_id = None           # the active window, whichever it is now
+        url, image, _ = computer.screen.capture()
+        return {'screen': computer.screen.output_name, 'shows': computer.screen.scope, 'width': image.width,
+                'height': image.height, '__image__': url.split(',', 1)[1]}
 
     def act(self, actions: list[dict]) -> dict:
         computer = self.agent_screen()
-        if computer.screen.scale == 1.0 and computer.screen.geometry[2] == 1.0:
-            computer.screen.capture()          # the geometry for the coordinates
+        if not computer.screen.scope:
+            raise ValueError('take desktop_screenshot first: the actions are in its pixels')
         done = []
         for action in actions:
             try:
@@ -437,7 +452,7 @@ class Cua:
                 done.append(f"{action.get('type')}: not done ({error})")
                 break
         time.sleep(0.5)
-        return {'done': done, **self.screenshot()}
+        return {'done': done, **self.screenshot('screen' if computer.screen.whole else 'window')}
 
     def voice_message_luna(self, args: dict) -> dict:
         """Speak `text` into a recording the model starts and sends on screen (docs/62, docs/68)."""
@@ -445,11 +460,12 @@ class Cua:
         if not text:
             raise ValueError('voice message needs text')
         audio = speech.synthesize(text, voice=str(args.get('voice') or 'marin'))
-        computer = self.agent_screen()
+        output = self.agent_output()
         active = self.backend.kwin.windows().get('active') or {}
         if not active.get('pid') or not str(active.get('output', '')).startswith('CAST'):
             raise RuntimeError("open the chat on the assistant's screen first (desktop_goal), then call this")
         binary = os.path.basename(os.readlink(f"/proc/{active['pid']}/exe"))
+        computer = ComputerUse(self.backend, output, active['id'])   # the chat's window
         router = subprocess.Popen(['moto-audio-route', '--binary', binary, '--microphone'], stdin=subprocess.PIPE,
                                   stdout=subprocess.PIPE, text=True)
         routed = threading.Event()
@@ -680,7 +696,7 @@ class Cua:
             if name == 'desktop_goal':
                 return self.goal_luna(arguments)
             if name == 'desktop_screenshot':
-                return self.screenshot()
+                return self.screenshot(str(arguments.get('scope') or 'window'))
             if name == 'desktop_act':
                 return self.act(list(arguments['actions']))
             if name == 'desktop_voice_message':
@@ -805,8 +821,8 @@ def main() -> None:
     elif command == 'goal':
         args = json.loads(sys.argv[2])
         data = cua.goal_luna(args) if plan() == 'luna' else cua.goal(args)
-    elif command == 'screenshot':   # OUT gets the JPEG the model sees
-        data = cua.screenshot()
+    elif command == 'screenshot':   # OUT gets the JPEG the model sees; SCOPE window (default) or screen
+        data = cua.screenshot(sys.argv[3] if len(sys.argv) > 3 else 'window')
         Path(sys.argv[2]).write_bytes(__import__('base64').b64decode(data.pop('__image__')))
     elif command == 'act':
         data = cua.act(json.loads(sys.argv[2]))

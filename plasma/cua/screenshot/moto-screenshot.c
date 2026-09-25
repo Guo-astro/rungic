@@ -1,7 +1,10 @@
 /* Screen capture through KWin's ScreenShot2 D-Bus interface (docs/64).
  *
  *   moto-screenshot screen <output-name>     one output, e.g. WL-0 or the TV
- *   moto-screenshot active-window            KWin's active window
+ *   moto-screenshot active-window            KWin's active window (without its title bar)
+ *   moto-screenshot window <internal-id>     one window by KWin's id, with its title bar, rendered
+ *                                            alone (whatever covers it; its popups are not in it)
+ *   moto-screenshot area <x> <y> <w> <h>     a rectangle of the desktop, global logical coordinates
  *
  * Writes one JSON line (width, height, stride, format, scale, screen) and then
  * the raw pixels to stdout. KWin allows ScreenShot2 only to executables whose
@@ -16,6 +19,7 @@
 #include <gio/gunixfdlist.h>
 #include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -58,8 +62,15 @@ int main(int argc, char **argv)
     } else if (argc == 2 && strcmp(argv[1], "active-window") == 0) {
         method = "CaptureActiveWindow";
         g_variant_builder_add(&options, "{sv}", "include-decoration", g_variant_new_boolean(FALSE));
+    } else if (argc == 3 && strcmp(argv[1], "window") == 0) {
+        method = "CaptureWindow";
+        /* The frame (title bar included, no shadow): the image matches KWin's frameGeometry. */
+        g_variant_builder_add(&options, "{sv}", "include-decoration", g_variant_new_boolean(TRUE));
+        g_variant_builder_add(&options, "{sv}", "include-shadow", g_variant_new_boolean(FALSE));
+    } else if (argc == 6 && strcmp(argv[1], "area") == 0) {
+        method = "CaptureArea";
     } else {
-        fprintf(stderr, "usage: moto-screenshot screen <output-name> | active-window\n");
+        fprintf(stderr, "usage: moto-screenshot screen <output-name> | active-window | window <id> | area <x> <y> <w> <h>\n");
         return 2;
     }
 
@@ -86,8 +97,11 @@ int main(int argc, char **argv)
     Reader reader = {fds[0], g_byte_array_new()};
     GThread *thread = g_thread_new("read", read_all, &reader);
 
-    if (strcmp(method, "CaptureScreen") == 0)
+    if (strcmp(method, "CaptureScreen") == 0 || strcmp(method, "CaptureWindow") == 0)
         parameters = g_variant_new("(sa{sv}h)", argv[2], &options, 0);
+    else if (strcmp(method, "CaptureArea") == 0)
+        parameters = g_variant_new("(iiuua{sv}h)", atoi(argv[2]), atoi(argv[3]), (guint32)atoi(argv[4]),
+                                   (guint32)atoi(argv[5]), &options, 0);
     else
         parameters = g_variant_new("(a{sv}h)", &options, 0);
     GVariant *reply = g_dbus_connection_call_with_unix_fd_list_sync(

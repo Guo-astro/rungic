@@ -1,7 +1,9 @@
 """Computer use with GPT-6 Luna (docs/68): the model sees the screen and decides where to act.
 
 Plan one of moto-cua (the default). No accessibility tree and no OCR: every step is a screenshot of
-the assistant's screen sent to the Responses API with the `computer` tool, and the model answers
+the window the task is about, as KWin renders it (with its open popups and dialogs; the whole
+assistant's screen when there is no window or the model asks for it: `Screen`), sent to the
+Responses API with the `computer` tool, and the model answers
 with a batch of mouse and keyboard actions in that screenshot's pixels. They are carried out with
 the same input as everywhere in moto-cua (the RemoteDesktop portal; text through KWin's input-method
 commit, so any script types) and the next screenshot goes back, until the model stops.
@@ -53,6 +55,9 @@ INSTRUCTIONS = """You operate a Linux desktop (KDE Plasma) for the user through 
 you see is the assistant's own screen, 1920x1080; the user watches it. Coordinates are pixels of the \
 screenshot you were given.
 
+- The screenshots show the window you work in (with its open menus and dialogs), not the whole \
+screen; call view_whole_screen when you need the taskbar, the desktop or another window. The image \
+size changes when the view does; always use the pixels of the latest screenshot.
 - Work like a careful person: look, act, look again. Keep each batch of actions short; after anything \
 that changes the screen (opening, clicking a list item, sending), look before going on.
 - `type` writes the text into the focused field in any language (Chinese included); click the field \
@@ -92,20 +97,56 @@ def keysym_for(name: str) -> int:
 
 
 class Screen:
-    """One output: screenshots in native pixels, and those pixels as global logical points."""
+    """What the model sees and where its pixels are: the window it works in, rendered by KWin
+    alone (CaptureWindow; whatever covers it), with its open popups and dialogs when there are
+    some (CaptureArea over them all: they are separate windows in Wayland), or the whole output.
+    The window follows the task: when it closes or another app's window becomes active on this
+    output (a system dialog, a second app), that one is the window."""
 
-    def __init__(self, backend, output_name: str) -> None:
+    def __init__(self, backend, output_name: str, window_id: str | None = None) -> None:
         self.backend = backend
         self.output_name = output_name
-        self.geometry = (0.0, 0.0, 1.0, 1.0)
-        self.scale = 1.0
+        self.window_id = window_id      # None: the active window on this output
+        self.whole = False              # the model asked for the whole screen
+        self.origin = (0.0, 0.0)        # the image's top-left, global logical
+        self.scale = 1.0                # image pixels per logical point
+        self.clip = (0.0, 0.0, 1.0, 1.0)  # the output: where a click may land
+        self.scope = ''                 # what the image shows, told to the model when it changes
 
-    def capture(self) -> tuple[str, Image.Image]:
-        outputs = {o['name']: o for o in self.backend.kwin.windows().get('outputs', [])}
+    def _region(self) -> tuple[list[str], tuple[float, float, float, float], str]:
+        kwin = self.backend.kwin
+        info = kwin.target(self.window_id or '')
+        outputs = {o['name']: o for o in info['outputs']}
         if self.output_name not in outputs:
-            raise RuntimeError(f'no output {self.output_name} (is the assistant\'s screen on?)')
-        self.geometry = tuple(outputs[self.output_name]['geometry'])
-        done = subprocess.run([SCREENSHOT, 'screen', self.output_name], capture_output=True, timeout=15)
+            raise RuntimeError(f"no output {self.output_name} (is the assistant's screen on?)")
+        screen = tuple(outputs[self.output_name]['geometry'])
+        self.clip = screen
+        self.output_scale = float(outputs[self.output_name].get('scale') or 1.0)
+        target, active = info['target'], info['active']
+        usable = lambda w: bool(w) and not w['minimized'] and w['output'] == self.output_name \
+            and (w['normal'] or w['dialog'])
+        if usable(active) and (not usable(target) or active['pid'] != target['pid']):
+            self.window_id = active['id']            # the task moved to another window
+            info = kwin.target(self.window_id)
+            target = info['target']
+        if self.whole or not usable(target):
+            return ['screen', self.output_name], screen, 'the whole screen'
+        name = target['caption'] or target['resource_class']
+        if not info['related']:
+            return ['window', target['id']], tuple(target['frame']), f'only the "{name}" window'
+        frames = [target['frame']] + [w['frame'] for w in info['related']]
+        x1 = max(min(f[0] for f in frames), screen[0])
+        y1 = max(min(f[1] for f in frames), screen[1])
+        x2 = min(max(f[0] + f[2] for f in frames), screen[0] + screen[2])
+        y2 = min(max(f[1] + f[3] for f in frames), screen[1] + screen[3])
+        x1, y1, x2, y2 = int(x1), int(y1), int(x2 + 0.999), int(y2 + 0.999)
+        return (['area', str(x1), str(y1), str(x2 - x1), str(y2 - y1)], (x1, y1, x2 - x1, y2 - y1),
+                f'the "{name}" window with its open menus and dialogs')
+
+    def capture(self) -> tuple[str, Image.Image, bool]:
+        """The image as a data URL, the image, and whether what it shows changed."""
+        args, region, scope = self._region()
+        done = subprocess.run([SCREENSHOT, *args], capture_output=True, timeout=15)
         if done.returncode != 0:
             raise RuntimeError(f'moto-screenshot: {done.stderr.decode(errors="replace").strip()}')
         end = done.stdout.index(b'\n')
@@ -115,25 +156,47 @@ class Screen:
             raise RuntimeError(f"unsupported capture format {header.get('format')}")
         image = Image.frombuffer('RGBA', (header['width'], header['height']), done.stdout[end + 1:], 'raw', mode,
                                  header['stride'], 1).convert('RGB')
-        self.scale = image.width / self.geometry[2]
-        # JPEG q85 without chroma subsampling (docs/68): 190 KB against 1.3 MB of PNG, 26 ms to encode
-        # on the phone, requests about half as long; reading and click accuracy were no worse.
+        # CaptureArea renders at the largest scale of all outputs (the phone's 3): back to this
+        # output's own pixels, or the model would pay for 3x as many for nothing.
+        wanted = (round(region[2] * self.output_scale), round(region[3] * self.output_scale))
+        if image.width > wanted[0] * 1.05:
+            image = image.resize(wanted, Image.LANCZOS)
+        self.origin = (float(region[0]), float(region[1]))
+        self.scale = image.width / region[2]
+        changed = scope != self.scope
+        self.scope = scope
+        # JPEG q85 without chroma subsampling (docs/68): 190 KB against 1.3 MB of PNG for the whole
+        # screen, 26 ms to encode on the phone, requests about half as long; accuracy no worse.
         buffer = io.BytesIO()
         image.save(buffer, 'JPEG', quality=85, subsampling=0)
-        return 'data:image/jpeg;base64,' + base64.b64encode(buffer.getvalue()).decode(), image
+        return 'data:image/jpeg;base64,' + base64.b64encode(buffer.getvalue()).decode(), image, changed
 
     def point(self, x: float, y: float) -> tuple[float, float]:
-        ox, oy, w, h = self.geometry
-        gx, gy = ox + x / self.scale, oy + y / self.scale
-        if not (ox <= gx < ox + w and oy <= gy < oy + h):
-            raise ValueError(f'({x}, {y}) is outside the screenshot')
+        gx, gy = self.origin[0] + x / self.scale, self.origin[1] + y / self.scale
+        cx, cy, cw, ch = self.clip
+        if not (cx <= gx < cx + cw and cy <= gy < cy + ch):
+            raise ValueError(f'({x}, {y}) is outside the screen')
         return gx, gy
+
+    def note(self) -> str:
+        return (f'(This screenshot shows {self.scope}; coordinates are pixels of it. '
+                'Call view_whole_screen to see everything.)' if not self.whole else
+                '(This screenshot shows the whole screen; coordinates are pixels of it.)')
+
+
+VIEW_WHOLE_SCREEN = {
+    'type': 'function', 'name': 'view_whole_screen',
+    'description': ('The screenshots show only the window you work in (with its open menus and dialogs). Call this '
+                    'to see the whole screen instead: the taskbar, the desktop or other windows.'),
+    'parameters': {'type': 'object', 'properties': {}, 'additionalProperties': False},
+}
+TOOLS = [{'type': 'computer'}, VIEW_WHOLE_SCREEN]
 
 
 class ComputerUse:
-    def __init__(self, backend, output_name: str) -> None:
+    def __init__(self, backend, output_name: str, window_id: str | None = None) -> None:
         self.backend = backend
-        self.screen = Screen(backend, output_name)
+        self.screen = Screen(backend, output_name, window_id)
 
     # ---- the model ----------------------------------------------------------------------
     def _respond(self, body: dict) -> dict:
@@ -227,55 +290,81 @@ class ComputerUse:
         carried out before it is set (a voice message's send waits for the speech to end)."""
         started = time.monotonic()
         steps: list[dict] = []
-        image_url, _ = self.screen.capture()
-        body = {'model': MODEL, 'tools': [{'type': 'computer'}], 'instructions': INSTRUCTIONS,
+        self.screen.whole = False
+        image_url, _, _ = self.screen.capture()
+        body = {'model': MODEL, 'tools': TOOLS, 'instructions': INSTRUCTIONS,
                 'reasoning': {'effort': EFFORT}, 'truncation': 'auto',
                 'input': [{'role': 'user', 'content': [
-                    {'type': 'input_text', 'text': task},
+                    {'type': 'input_text', 'text': f'{task}\n\n{self.screen.note()}'},
                     {'type': 'input_image', 'image_url': image_url, 'detail': 'original'}]}]}
         model_s = 0.0
+
+        def elapsed() -> float:
+            return round(time.monotonic() - started, 1)
+
         while True:
             t0 = time.monotonic()
             response = self._respond(body)
             model_s += time.monotonic() - t0
-            calls = [item for item in response.get('output', []) if item.get('type') == 'computer_call']
-            text = ' '.join(c.get('text', '') for item in response.get('output', []) if item.get('type') == 'message'
+            output = response.get('output', [])
+            calls = [item for item in output if item.get('type') == 'computer_call']
+            functions = [item for item in output if item.get('type') == 'function_call']
+            text = ' '.join(c.get('text', '') for item in output if item.get('type') == 'message'
                             for c in item.get('content', []) if c.get('type') == 'output_text').strip()
-            if not calls:
+            if not calls and not functions:
                 return self._result(text, steps, started, model_s)
-            call = calls[0]
-            if call.get('pending_safety_checks'):
+            follow: list[dict] = []
+            for function in functions:
+                if function.get('name') == 'view_whole_screen':
+                    self.screen.whole = True
+                    steps.append({'actions': ['view whole screen']})
+                follow.append({'type': 'function_call_output', 'call_id': function['call_id'],
+                               'output': 'The next screenshots show the whole screen; take one to look.'})
+            call = calls[0] if calls else None
+            if call and call.get('pending_safety_checks'):
                 # The API wants the user to confirm this action; we cannot ask mid-run.
                 return {'outcome': 'question', 'question': '; '.join(c.get('message', '') for c in call['pending_safety_checks']),
-                        'safety_checks': call['pending_safety_checks'], 'steps': steps,
-                        'elapsed_s': round(time.monotonic() - started, 1)}
-            done_actions = []
-            actions = call.get('actions') or ([call['action']] if call.get('action') else [])
-            for action in actions:
-                if gate is not None and action.get('type') != 'screenshot':
-                    gate.wait(timeout_s)
-                if ABORT_FILE.exists():
-                    ABORT_FILE.unlink(missing_ok=True)
-                    return {'outcome': 'stopped', 'steps': steps, 'elapsed_s': round(time.monotonic() - started, 1)}
-                try:
-                    done_actions.append(self.execute(action))
-                except (ValueError, KeyError) as error:
-                    done_actions.append(f'{action.get("type")}: skipped ({error})')
-                if stop and stop():
-                    steps.append({'actions': done_actions})
-                    return {'outcome': 'signalled', 'steps': steps, 'elapsed_s': round(time.monotonic() - started, 1)}
-            steps.append({'actions': done_actions, 'note': text} if text else {'actions': done_actions})
+                        'safety_checks': call['pending_safety_checks'], 'steps': steps, 'elapsed_s': elapsed()}
+            if call:
+                done_actions = []
+                actions = call.get('actions') or ([call['action']] if call.get('action') else [])
+                for action in actions:
+                    if gate is not None and action.get('type') != 'screenshot':
+                        gate.wait(timeout_s)
+                    if ABORT_FILE.exists():
+                        ABORT_FILE.unlink(missing_ok=True)
+                        return {'outcome': 'stopped', 'steps': steps, 'elapsed_s': elapsed()}
+                    try:
+                        done_actions.append(self.execute(action))
+                    except (ValueError, KeyError) as error:
+                        done_actions.append(f'{action.get("type")}: skipped ({error})')
+                    if stop and stop():
+                        steps.append({'actions': done_actions})
+                        return {'outcome': 'signalled', 'steps': steps, 'elapsed_s': elapsed()}
+                steps.append({'actions': done_actions, 'note': text} if text else {'actions': done_actions})
             if len(steps) >= max_steps or time.monotonic() - started > timeout_s:
                 return {'outcome': 'unfinished', 'note': f'stopped after {len(steps)} steps', 'steps': steps,
-                        'elapsed_s': round(time.monotonic() - started, 1)}
+                        'elapsed_s': elapsed()}
+            if not call:
+                # Only view_whole_screen was called: after the first request the API takes images only
+                # as computer_call_output, so the model asks for the screenshot next.
+                body = {'model': MODEL, 'tools': TOOLS, 'instructions': INSTRUCTIONS, 'reasoning': {'effort': EFFORT},
+                        'truncation': 'auto', 'previous_response_id': response['id'], 'input': follow}
+                continue
             time.sleep(SETTLE_S)
             if stop and stop():
-                return {'outcome': 'signalled', 'steps': steps, 'elapsed_s': round(time.monotonic() - started, 1)}
-            image_url, _ = self.screen.capture()
-            body = {'model': MODEL, 'tools': [{'type': 'computer'}], 'instructions': INSTRUCTIONS,
+                return {'outcome': 'signalled', 'steps': steps, 'elapsed_s': elapsed()}
+            image_url, image, changed = self.screen.capture()
+            steps[-1]['saw'] = f'{self.screen.scope} {image.width}x{image.height}' if steps else ''
+            screenshot = {'type': 'computer_screenshot', 'image_url': image_url, 'detail': 'original'}
+            items = list(follow)
+            if call:
+                items.insert(0, {'type': 'computer_call_output', 'call_id': call['call_id'], 'output': screenshot})
+                if changed:
+                    items.append({'role': 'user', 'content': [{'type': 'input_text', 'text': self.screen.note()}]})
+            body = {'model': MODEL, 'tools': TOOLS, 'instructions': INSTRUCTIONS,
                     'reasoning': {'effort': EFFORT}, 'truncation': 'auto', 'previous_response_id': response['id'],
-                    'input': [{'type': 'computer_call_output', 'call_id': call['call_id'], 'output': {
-                        'type': 'computer_screenshot', 'image_url': image_url, 'detail': 'original'}}]}
+                    'input': items}
 
     @staticmethod
     def _result(text: str, steps: list, started: float, model_s: float) -> dict:
