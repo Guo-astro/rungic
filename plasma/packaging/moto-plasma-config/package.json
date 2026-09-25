@@ -5,7 +5,7 @@
   "paths": ["plasma/config", "plasma/dpkg-locales.conf", "plasma/mozilla.sources", "plasma/mozilla.pref",
             "plasma/wireplumber-android.conf", "plasma/network-manager.conf", "plasma/gpu-env", "plasma/pulse.pa",
             "plasma/policy-rc.d"],
-  "depends": "kconf, python3",
+  "depends": "libkf6config-bin, python3",
   "description": "Plasma Mobile on Android: system configuration\nAPT sources, pins and the unattended-upgrades blacklist of the release repository;\ncontainer unit masks; journald, PipeWire, WirePlumber, D-Bus and GPU environment\nsettings; system defaults in /etc/xdg; one-time per-user migrations (kconf_update).\nSee docs/61-delivery-diagnostics-plan.md.",
   "obsolete": []
 }
