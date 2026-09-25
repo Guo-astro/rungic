@@ -414,6 +414,44 @@ def codec_roundtrip(ctx, frames=90):
                   encoded_frames=encoded, decoded_frames=decoded, duration=duration, stream=stream)
 
 
+@check
+def rime_input(ctx):
+    """Chinese input, in two automatic parts: the Rime engine and data commit Chinese first candidates
+    (moto-rime-check: nihao, zhongguo, ceshi, 300 compositions), and focusing a Qt text field
+    (moto-input-probe) brings up the keyboard (its keys appear on AT-SPI). Android key events reach the
+    client directly, not through Rime, so typing on the virtual keyboard itself stays a manual item."""
+    check = run('for p in /usr/libexec/moto-rime-check /usr/local/libexec/moto-rime-check; do [ -x $p ] && '
+                'exec $p; done; exit 9', 'user', timeout=120, check=False)
+    engine = check.returncode == 0
+    enabled = moto_agent.a11y('state')['enabled']
+    if not enabled:
+        moto_agent.ui_enable(True)
+        time.sleep(2)
+    probe = next((p for p in ('/usr/bin/moto-input-probe', '/usr/local/bin/moto-input-probe')
+                  if run(f'test -x {p}', 'container', check=False).returncode == 0), None)
+    keyboard = False
+    try:
+        if probe:
+            user(f'(setsid {probe} >/dev/null 2>&1 &) ; true')
+            field = wait_for(lambda: next((f for f in moto_agent.ui_find('moto-input-probe', role='text')), None)
+                             if any(a['name'] == 'moto-input-probe' for a in moto_agent.a11y('apps')) else None,
+                             timeout=20)
+            if field:
+                moto_agent.ui_tap('moto-input-probe', field['path'])
+                keyboard = bool(wait_for(lambda: [n for n in moto_agent.ui_find('plasma-keyboard', role='label')
+                                                  if n['name'] in ('q', 'a', 'z')], timeout=8))
+        return result(engine and keyboard, engine=check.stdout.strip() or f'exit {check.returncode}',
+                      keyboard_shown=keyboard, probe=probe)
+    finally:
+        run('pkill -x moto-input-probe', 'container', check=False)
+        try:
+            _home()
+        except Exception:
+            pass
+        if not enabled:
+            moto_agent.ui_enable(False)
+
+
 def _quick_settings():
     """The quick settings fully expanded: the first pull shows one row only, and AT-SPI reports the
     tiles of the collapsed part as showing although they are off screen."""

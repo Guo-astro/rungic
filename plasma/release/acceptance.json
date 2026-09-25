@@ -74,6 +74,12 @@
       "title": "The default source records a non-zero level and suspends afterwards"
     },
     {
+      "id": "input.rime",
+      "level": "full",
+      "check": "rime_input",
+      "title": "Rime engine commits Chinese first candidates; a focused Qt text field brings up the keyboard"
+    },
+    {
       "id": "app.launch",
       "level": "full",
       "check": "app_launch",
@@ -129,6 +135,7 @@
     "Visual defects and image quality (display, camera, recording)",
     "Acoustic quality of speaker and microphone",
     "Audio/video synchronisation of recordings, judged by eye and ear",
+    "Typing pinyin on the virtual keyboard and committing Chinese (Android key events bypass Rime)",
     "Rime candidate UI and typing feel",
     "Casting to a TV (needs a real receiver, docs/58)"
   ]
