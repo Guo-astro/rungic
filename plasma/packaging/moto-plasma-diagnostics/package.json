@@ -49,5 +49,6 @@
     "/etc/systemd/user.conf.d/60-moto-core.conf",
     "/etc/systemd/system/sys-kernel-tracing.mount.d",
     "/etc/tmpfiles.d/moto-coredump.conf"
-  ]
+  ],
+  "user_systemd": true
 }

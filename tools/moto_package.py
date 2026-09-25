@@ -93,8 +93,16 @@ def maintainer_scripts(pkg, root):
                  '    if [ -L "$f" ] || [ -f "$f" ]; then rm -f "$f"; elif [ -d "$f" ]; then rm -rf "$f"; fi',
                  '  done',
                  'fi', '']
-    if units.get('system') or units.get('user'):
+    if units.get('system') or units.get('user') or pkg.get('user_systemd'):
         post += ['if [ -d /run/systemd/system ]; then systemctl daemon-reload || true; fi']
+    if units.get('user') or pkg.get('user_systemd'):
+        # Running user managers keep the unit files and drop-ins they loaded; a session restart
+        # would otherwise start the old (possibly deleted) command lines.
+        post += ['for dir in /run/user/*; do',
+                 '  uid=${dir##*/}; [ -S "$dir/systemd/private" ] || continue',
+                 '  name=$(getent passwd "$uid" | cut -d: -f1); [ -n "$name" ] || continue',
+                 '  runuser -u "$name" -- env XDG_RUNTIME_DIR="$dir" systemctl --user daemon-reload || true',
+                 'done']
     for unit in units.get('system', []):
         post += [f'if [ "$1" = configure ] && [ -z "$2" ]; then systemctl enable {unit} || true; fi']
     for unit in units.get('user', []):

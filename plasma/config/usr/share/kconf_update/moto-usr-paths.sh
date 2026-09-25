@@ -13,6 +13,7 @@ dropin=${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/plasma-xdg-desktop-portal-
 if [ -f "$dropin" ] && grep -q '^ExecStart=/usr/local/libexec/xdg-desktop-portal-kde' "$dropin"; then
     rm -f "$dropin"
     rmdir "$(dirname "$dropin")" 2>/dev/null || true
+    reload=1
 fi
 # Codex: the desktop MCP server and the phone-desktop skill moved with the packages.
 codex=$HOME/.codex
@@ -30,5 +31,8 @@ for unit in moto-plasma-display moto-plasma-brightness moto-plasma-media moto-pl
     link=$wants/$unit.service
     if [ -L "$link" ] && [ "$(readlink "$link")" = "/etc/systemd/user/$unit.service" ]; then
         rm -f "$link"
+        reload=1
     fi
 done
+# The user manager loaded the removed files: reload it before the session starts its units.
+[ -z "${reload:-}" ] || systemctl --user daemon-reload || true
