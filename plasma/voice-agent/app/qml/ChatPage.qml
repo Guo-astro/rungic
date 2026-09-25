@@ -11,6 +11,8 @@ import dev.moto.voiceassistant
 Kirigami.Page {
     id: page
     property string conversationId: ""
+    property string initialTitle: ""        // from the list, shown until the conversation arrives
+    property bool loaded: false
     padding: 0
     globalToolBarStyle: Kirigami.ApplicationHeaderStyle.None
     background: Rectangle { color: "transparent" }   // the window draws the ground
@@ -34,7 +36,8 @@ Kirigami.Page {
             page.conversationId = opened.conversation
             chat.load(opened)
             view.follow = true
-            Qt.callLater(view.stickToEnd)
+            view.positionViewAtEnd()
+            page.loaded = true
         }
         function onEvent(json) {
             const e = JSON.parse(json)
@@ -91,7 +94,7 @@ Kirigami.Page {
                 left: back.visible ? back.right : parent.left; leftMargin: back.visible ? 12 : 40
                 right: parent.right; rightMargin: 24; verticalCenter: parent.verticalCenter
             }
-            text: chat.title
+            text: page.loaded ? chat.title : page.initialTitle
             elide: Text.ElideRight
             color: Style.ink
             font.pixelSize: page.width > 700 ? 18 : 17
@@ -110,6 +113,9 @@ Kirigami.Page {
         width: column
         height: Math.min(contentHeight + 8, room)
         clip: true
+        // Comes in once loaded, already at its end.
+        opacity: page.loaded ? 1 : 0
+        Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
         model: chat.entries
         delegate: ChatItem { callMonitor: chat.callMonitor }
         // New content keeps the view at the end only while the reader is there. Scrolled up,
@@ -133,6 +139,26 @@ Kirigami.Page {
         }
     }
 
+    // Still loading: said after a moment (a quick load shows nothing in between).
+    Timer { id: slowLoad; interval: 150; running: !page.loaded }
+    Column {
+        anchors.centerIn: parent
+        spacing: 12
+        opacity: !page.loaded && !slowLoad.running ? 1 : 0
+        visible: opacity > 0
+        Behavior on opacity { NumberAnimation { duration: 180 } }
+        Spinner {
+            anchors.horizontalCenter: parent.horizontalCenter
+            scale: 1.5
+        }
+        Text {
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: "正在打开…"
+            color: Style.dim
+            font.pixelSize: 14
+        }
+    }
+
     // Scrolled away from the end: a way back.
     GlassButton {
         anchors { horizontalCenter: parent.horizontalCenter; bottom: dock.top; bottomMargin: 4 }
@@ -150,7 +176,7 @@ Kirigami.Page {
         anchors { left: view.left; right: view.right; verticalCenter: parent.verticalCenter; verticalCenterOffset: -40 }
         leftPadding: 8
         spacing: 22
-        visible: chat.entries.count === 0
+        visible: page.loaded && chat.entries.count === 0
         Text {
             text: "有什么可以帮你？"
             color: Style.ink

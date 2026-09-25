@@ -20,11 +20,14 @@ Kirigami.ApplicationWindow {
     pageStack.defaultColumnWidth: Kirigami.Units.gridUnit * 20
     pageStack.separatorVisible: false
 
-    function openConversation(id) {
+    // `title`, when known (the list), shows at once while the conversation loads.
+    function openChat(id, title) {
         const top = pageStack.currentItem
         if (top && top.conversationId === id && pageStack.depth > 1) return
         while (pageStack.depth > 1) pageStack.pop()
-        pageStack.push(Qt.resolvedUrl("ChatPage.qml"), { conversationId: id })
+        pageStack.push(Qt.resolvedUrl("ChatPage.qml"), { conversationId: id, initialTitle: title || "" })
     }
+    // Called over D-Bus (a second start, the overlay's "open in app").
+    function openConversation(id) { openChat(id, "") }
     Component.onCompleted: if (initialConversation) openConversation(initialConversation)
 }

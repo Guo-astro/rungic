@@ -366,6 +366,11 @@ class VoiceAgent:
         self.thread_id = None
         self.realtime = False
         self.realtime_ready = threading.Event()
+        # The open conversation's Codex thread is resumed in the background (resume reads the
+        # whole rollout: seconds for one full of screenshots); what needs Codex waits on this.
+        self.resumed = threading.Event()
+        self.resumed.set()
+        self.open_generation = 0
         self.talking = False
         self.agent_busy = False
         self.muted = False
@@ -449,6 +454,9 @@ class VoiceAgent:
                 'developerInstructions': prompt('agent.md')}
 
     def open_conversation(self, thread_id, connect=True):
+        """Open a conversation. What the app shows comes from our own store and returns at
+        once; the Codex thread is resumed in the background (docs/59): only talking needs it,
+        and resuming reads the whole rollout (2.7 s for one of 8 MB, screenshots included)."""
         with self.lock:
             if thread_id and thread_id == self.thread_id:
                 # Already open (the app showing the assistant's conversation): reopening
@@ -459,15 +467,21 @@ class VoiceAgent:
                         'title': self.store.index.get(thread_id, {}).get('title', '新对话'),
                         'history': self.store.history(thread_id)}
             self.close_conversation()
+            self.open_generation += 1
             if thread_id:
-                result = self.server.call('thread/resume', {'threadId': thread_id, **self.thread_settings()})
+                self.thread_id = thread_id
+                self.resumed = threading.Event()
+                threading.Thread(target=self.resume_thread, args=(thread_id, self.open_generation, self.resumed),
+                                 daemon=True).start()
+                self.store.touch(self.thread_id)
             else:
+                # A new thread: its id comes from Codex, and starting one is quick.
                 result = self.server.call('thread/start', self.thread_settings())
-            self.thread_id = result['thread']['id']
-            if thread_id:
-                self.store.touch(self.thread_id)   # a new one is listed once the user speaks
+                self.thread_id = result['thread']['id']
+                self.resumed = threading.Event()
+                self.resumed.set()
             self.last_activity = time.monotonic()
-            log('open', self.thread_id, 'resumed' if thread_id else 'new')
+            log('open', self.thread_id, 'resuming' if thread_id else 'new')
             history = self.store.history(self.thread_id)
             if connect:
                 threading.Thread(target=self.start_realtime, daemon=True).start()
@@ -476,7 +490,40 @@ class VoiceAgent:
                     'title': self.store.index.get(self.thread_id, {}).get('title', '新对话'),
                     'history': history}
 
+    def resume_thread(self, thread_id, generation, resumed):
+        started = time.monotonic()
+        try:
+            self.server.call('thread/resume', {'threadId': thread_id, **self.thread_settings()})
+        except Exception as error:  # noqa: BLE001
+            log('resume', thread_id, 'failed:', error)
+            with self.lock:
+                if generation != self.open_generation:
+                    return
+                if thread_id == self.assistant_id():
+                    # Codex saves a thread once it has a turn: one never talked in is gone after a
+                    # restart. Start the assistant a new one; the overlay reopens it.
+                    if not self.store.history(thread_id):
+                        self.store.delete(thread_id)
+                    result = self.server.call('thread/start', self.thread_settings())
+                    self.thread_id = result['thread']['id']
+                    (DATA / 'assistant.json').write_text(json.dumps({'thread': self.thread_id}))
+                    self.store.touch(self.thread_id, '语音助手')
+                    resumed.set()
+                    self.emit({'type': 'assistant-reset'}, keep=False)
+                else:
+                    self.emit({'type': 'error', 'text': f'无法恢复这个对话：{error}'})
+            return
+        if generation != self.open_generation:
+            log('resumed', thread_id, 'after another was opened: left alone')
+            return
+        log('resumed', thread_id, f'in {time.monotonic() - started:.1f} s')
+        resumed.set()
+
     def start_realtime(self):
+        # The thread must be resumed in Codex first (open_conversation resumes it behind).
+        thread_id, resumed = self.thread_id, self.resumed
+        if not resumed.wait(60) or self.thread_id != thread_id:
+            return
         with self.lock:
             if self.realtime or self.realtime_starting or not self.thread_id:
                 return
@@ -538,17 +585,9 @@ class VoiceAgent:
                     threading.Thread(target=self.start_realtime, daemon=True).start()
                 return {'conversation': wanted, 'title': self.store.index.get(wanted, {}).get('title', '语音助手'),
                         'history': self.store.history(wanted)}
-            opened = None
             if wanted:
-                try:
-                    opened = self.open_conversation(wanted, connect)
-                except Exception as error:  # noqa: BLE001  (the thread is gone: start a new one)
-                    # Codex saves a thread once it has a turn: one never talked in is gone
-                    # after a restart. Its entry would stay in the list as an empty "语音助手".
-                    log('assistant conversation', wanted, 'not resumed:', error)
-                    if not self.store.history(wanted):
-                        self.store.delete(wanted)
-            if opened is None:
+                opened = self.open_conversation(wanted, connect)   # resumes behind; resume_thread replaces a lost one
+            else:
                 opened = self.open_conversation('', connect)
                 (DATA / 'assistant.json').write_text(json.dumps({'thread': opened['conversation']}))
             self.store.touch(opened['conversation'], '语音助手')

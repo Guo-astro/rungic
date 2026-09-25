@@ -16,8 +16,8 @@ Kirigami.Page {
     globalToolBarStyle: Kirigami.ApplicationHeaderStyle.None
     background: Rectangle { color: "transparent" }   // the window draws the ground
 
-    function openChat(id) {
-        applicationWindow().openConversation(id)
+    function openChat(id, title) {
+        applicationWindow().openChat(id, title)
     }
 
     function when(seconds) {
@@ -95,7 +95,7 @@ Kirigami.Page {
             if (!conversation) return
             if (keep) AgentClient.releaseTalking()
             else AgentClient.cancelTalking()
-            if (keep) page.openChat(conversation)
+            if (keep) page.openChat(conversation, "新对话")
             else AgentClient.closeConversation(conversation)
         }
     }
@@ -147,7 +147,7 @@ Kirigami.Page {
                 width: parent.width - 32
                 implicitHeight: pinnedColumn.implicitHeight + 32
                 Accessible.name: "语音助手对话"
-                onClicked: page.openChat(page.pinned.cid)
+                onClicked: page.openChat(page.pinned.cid, "语音助手")
                 background: Rectangle {
                     radius: 24
                     color: pinnedCard.pressed ? Qt.rgba(1, 1, 1, 0.09) : Style.surface
@@ -274,7 +274,7 @@ Kirigami.Page {
                             width: parent.width
                             height: parent.height
                             Accessible.name: rowBox.title
-                            onClicked: swipe.offset < 0 ? swipe.offset = 0 : page.openChat(rowBox.cid)
+                            onClicked: swipe.offset < 0 ? swipe.offset = 0 : page.openChat(rowBox.cid, rowBox.title)
                             background: Rectangle { color: rowButton.pressed ? Qt.rgba(1, 1, 1, 0.05) : Style.ground }
                             contentItem: Column {
                                 leftPadding: 24
