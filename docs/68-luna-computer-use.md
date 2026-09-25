@@ -97,6 +97,6 @@
 - 通过语音助手（Codex app-server）完整跑一次方案一（本轮用 CLI 和 `codex exec` 验证）。
 - `desktop_act` 由 Codex 主模型逐步操作的实际效果与耗时。
 - 方案二切换后的回归（`moto-cua plan atspi`，工具列表和 JEV 版 `desktop_goal`）。
-- 通话代理的拨号（`--start-call` 的 `dial`）仍然使用 JEV，也就是方案二的执行器（63 篇）。
+- 通话代理的拨号和挂断已改用方案一（63 篇），但还没有实际打一通电话验证。
 - 按住说话类的录音控件（`hold`）在方案一下不支持：`computer` 工具没有“按住直到外部信号”的动作。
 - 推理强度目前为 `low`（`MOTO_CUA_EFFORT`），更低档位对速度和准确性的影响未测。

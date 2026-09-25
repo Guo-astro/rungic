@@ -945,9 +945,10 @@ class VoiceAgent:
             self.emit(event, keep)
 
         def hang_up():
-            # Hang-up control names of the call window (WeChat 4.1 names first).
-            subprocess.run(['moto-cua', 'press-control', app, 'Hang Up', 'Hang up', 'End Call', '挂断', '结束通话'],
-                           capture_output=True, timeout=60)
+            # The model finds the hang-up control on screen (computer use plan one, docs/68).
+            result = luna_goal('End the call that is in progress: press the hang-up (end call) control of the call '
+                               'window. Press nothing else. Reply DONE once the call has ended.', timeout=90)
+            log('call: hang up', result.get('outcome'), result.get('answer') or result.get('note') or '')
 
         self.call = call_proxy.CallProxy(emit, self.tell_owner, app=app, contact=params.get('contact', ''),
                                          goal=params.get('goal', ''), owner=params.get('owner') or '凯文',
@@ -966,41 +967,27 @@ class VoiceAgent:
         return result
 
     def dial(self, app, contact, control):
-        """Place the call: JEV decides what to press in the contact's chat; the call
-        counts as placed only when the app opens its call audio (a system signal,
-        not the click)."""
+        """Place the call: the model looks at the chat on screen (computer use plan one, docs/68),
+        checks the header shows `contact` and starts a voice call; the call counts as placed only
+        when the app opens its call audio (a system signal, not the click), and the model is
+        stopped at that moment so it presses nothing in the call window."""
         self.emit({'type': 'call-state', 'state': 'dialing'}, keep=False)
-        focus = subprocess.run(['moto-cua', 'focus-showing', app, contact], capture_output=True, text=True,
-                               timeout=60)
-        try:
-            chat = json.loads(focus.stdout).get('activated')
-        except ValueError:
-            chat = None
-        if not chat:
-            # Never let the executor act on whatever chat happens to be open: it
-            # could call someone else.
-            self.emit({'type': 'call-state', 'state': 'dial-failed'}, keep=False)
-            return {'dialed': False, 'reason': f'no open chat with {contact!r}; open it first'}
         before = self.call.streams_seen
-        task = {'goal': f'Start a voice call (not video) with {contact} from the chat that is open with them. '
-                        f'The chat header shows the call control ("{control}").',
-                'verification': [f'A voice call to {contact} has been started: a calling or ringing call screen '
-                                 'is shown'],
-                'max_actions': 4}
-        run = subprocess.run(['moto-cua', 'run', json.dumps(task, ensure_ascii=False)], capture_output=True,
-                             text=True, timeout=180)
-        try:
-            jev = json.loads(run.stdout)
-        except ValueError:
-            jev = {'status': 'ERROR', 'detail': (run.stderr or run.stdout)[-300:]}
+        hint = f' (it may be labelled "{control}")' if control and control.isascii() and len(control) < 40 else ''
+        goal = (f'The active window shows a chat. First check the name in the chat header: it must be {contact}. '
+                f'If it is not, press nothing and reply FAILED. If it is, start a voice call (not a video call) with '
+                f'{contact} from this chat{hint}: the phone button in the chat header may open a small menu first; '
+                'then choose the voice call in it. As soon as a calling or ringing screen appears, stop at once and '
+                'reply DONE. Never press anything in the call window.')
+        result = luna_goal(goal, timeout=120, stop_when=lambda: self.call.streams_seen > before)
         deadline = time.monotonic() + 8
-        while time.monotonic() < deadline and self.call.streams_seen == before:
+        while time.monotonic() < deadline and self.call.streams_seen == before and result.get('outcome') != 'failed':
             time.sleep(0.2)
         placed = self.call.streams_seen > before
         self.emit({'type': 'call-state', 'state': 'ringing' if placed else 'dial-failed'}, keep=False)
         return {'dialed': placed, 'confirmed_by': 'call audio opened' if placed else None,
-                'jev_status': jev.get('status'),
-                'jev_actions': [f"{h.get('action')} {h.get('target_name') or ''}".strip() for h in jev.get('history', [])]}
+                'outcome': result.get('outcome'), 'screen': result.get('answer') or result.get('note'),
+                'actions': [a for step in result.get('steps', []) for a in step.get('actions', [])]}
 
     def call_command(self, command):
         call = self.call
@@ -1063,6 +1050,40 @@ class VoiceAgent:
         answer = {'allow': 'accept', 'allow-session': 'acceptForSession'}.get(decision, 'decline')
         self.server.respond(request_id, {'decision': answer})
         self.emit({'type': 'approval-result', 'id': approval, 'decision': answer})
+
+
+def luna_goal(goal: str, timeout: float = 120, stop_when=None) -> dict:
+    """A task for moto-cua's computer use on the assistant's screen (docs/68), following the
+    active window. `stop_when()` turning true stops the model before its next action, through
+    the abort file its loop watches (the user's "stop" uses the same file)."""
+    abort = Path(os.environ.get('XDG_RUNTIME_DIR', f'/run/user/{os.getuid()}')) / 'moto-clicker' / 'abort'
+    abort.unlink(missing_ok=True)
+    process = subprocess.Popen(['moto-cua', 'goal', json.dumps({'goal': goal, 'steps': 8}, ensure_ascii=False)],
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    deadline = time.monotonic() + timeout
+    signalled = False
+    while process.poll() is None and time.monotonic() < deadline:
+        if stop_when and not signalled and stop_when():
+            abort.parent.mkdir(parents=True, exist_ok=True)
+            abort.touch()
+            signalled = True
+        time.sleep(0.2)
+    if process.poll() is None:
+        abort.parent.mkdir(parents=True, exist_ok=True)
+        abort.touch()
+        try:
+            process.wait(15)
+        except subprocess.TimeoutExpired:
+            process.kill()
+    out, err = process.communicate()
+    abort.unlink(missing_ok=True)
+    try:
+        result = json.loads(out)
+    except ValueError:
+        result = {'outcome': 'error', 'note': (err or out)[-300:]}
+    if signalled:
+        result['outcome'] = 'signalled'
+    return result
 
 
 class Service:
