@@ -87,6 +87,17 @@ def crash_detail(crash_id: str) -> str:
 
 
 @server.tool(annotations=READ)
+def integrity(details: bool = True) -> str:
+    """Rootfs drift check (about a minute): package files changed/missing (dpkg --verify honouring
+    path-exclude), project dpkg diversions (= development state), +moto packages without release/hold
+    protection or replaceable by the archive, release metapackage mismatches, files in /usr and /etc that no
+    package owns, systemd masks without a package, ownership anomalies, and machine-local configuration
+    (credentials: presence and permissions only). summary.state is clean, development or drift."""
+    report = moto_agent.integrity()
+    return dump(report if details else report['summary'])
+
+
+@server.tool(annotations=READ)
 def kwin_info() -> str:
     """KWin supportInformation: version, platform, compositing/OpenGL renderer, options, loaded effects."""
     return moto_agent.kwin_info()

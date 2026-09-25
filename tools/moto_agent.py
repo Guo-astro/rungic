@@ -275,6 +275,19 @@ def crash_get(crash_id, lines=160):
                      'or /var/crash/<name>.crash')
 
 
+# ---------------------------------------------------------------- integrity
+
+def integrity():
+    """Drift of the container rootfs against dpkg, the release and the local-config manifest
+    (plasma/diagnostics/moto-integrity, docs/61). Read-only; takes about a minute (dpkg --verify)."""
+    text = run('for p in /usr/bin/moto-integrity /usr/local/bin/moto-integrity; do '
+               '[ -x $p ] && exec $p --json; done; echo null', 'container', timeout=300, check=False).stdout
+    report = json.loads(text)
+    if report is None:
+        raise DeviceError('moto-integrity is not installed in the container')
+    return report
+
+
 # ---------------------------------------------------------------- desktop and host
 
 def kwin_info():
@@ -420,6 +433,7 @@ def main():
     p = sub.add_parser('crashes'); p.add_argument('--since', type=float, default=86400)
     p = sub.add_parser('crash'); p.add_argument('id')
     sub.add_parser('kwin-info')
+    sub.add_parser('integrity')
     p = sub.add_parser('host'); p.add_argument('op')
     p = sub.add_parser('screenshot'); p.add_argument('path', nargs='?')
     p = sub.add_parser('snapshot'); p.add_argument('label', nargs='?', default='manual')
@@ -433,7 +447,7 @@ def main():
             print(format_entries(r['entries']))
             print(f"-- {r['total']} entries, {r['truncated']} truncated, noise suppressed: {r['suppressed_noise']}", file=sys.stderr)
         return
-    value = {'status': status, 'kwin-info': kwin_info,
+    value = {'status': status, 'kwin-info': kwin_info, 'integrity': integrity,
              'session-log': lambda: session_log(a.lines), 'crashes': lambda: crashes(a.since),
              'crash': lambda: crash_get(a.id), 'host': lambda: host_request(a.op),
              'screenshot': lambda: screenshot(a.path), 'snapshot': lambda: snapshot(a.label, a.since)}[a.cmd]()

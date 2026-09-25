@@ -1,0 +1,397 @@
+#!/usr/bin/python3
+# SPDX-License-Identifier: MIT
+"""Integrity and drift check of the Plasma container rootfs (docs/61).
+
+Read-only. Compares the installed system with what dpkg, the release
+metapackage and the local-configuration manifest say it should be:
+
+  packages   files of installed packages changed or missing (dpkg --verify,
+             honouring dpkg path-exclude/path-include); edited conffiles
+  diversions local dpkg diversions by this project (a development state)
+  rebuilt    +moto packages: protected by the release or a hold, and whether
+             an archive version would replace them
+  release    installed versions against moto-plasma-release's dependencies
+  unowned    files in /usr and /etc that no package owns and that are not
+             known generated state or declared local configuration
+  ownership  owner/mode of the top-level directories; files in /usr, /etc
+             owned by a non-root user
+  local      declared machine-local configuration: presence and permissions
+
+  moto-integrity            text report
+  moto-integrity --json     machine-readable result
+
+Exit status: 0 clean, 1 drift found, 2 development state (project diversions)
+and no other drift.
+"""
+import argparse
+import fnmatch
+import glob
+import json
+import os
+import pwd
+import re
+import stat
+import subprocess
+import sys
+
+LOCAL_MANIFEST = '/usr/share/moto/local-config.json'
+RELEASE = '/usr/share/moto/release.json'
+DESKTOP_UID = 1000
+
+# Files no package owns because a trigger, a maintainer script or the running
+# system generates them. fnmatch patterns ('*' crosses '/').
+GENERATED = [
+    '*/__pycache__/*', '*.pyc',
+    '/usr/lib/locale/locale-archive', '/usr/lib/locale/C.utf8/*',
+    '/usr/share/icons/*/icon-theme.cache', '/usr/share/mime/*', '/usr/share/applications/mimeinfo.cache',
+    '/usr/share/glib-2.0/schemas/gschemas.compiled', '/usr/share/info/dir', '/usr/share/info/dir.old',
+    '/usr/lib/*/gdk-pixbuf-2.0/*/loaders.cache', '/usr/lib/*/gio/modules/giomodule.cache',
+    '/usr/lib/*/gtk-*/*/immodules.cache', '/usr/lib/*/gtk-*/*/*/immodules.cache',
+    '/usr/lib/udev/hwdb.bin', '/usr/share/fonts/*/.uuid', '/usr/share/fonts/.uuid',
+    '/usr/lib/python3/dist-packages/*.egg-info/*', '/usr/share/python3/runtime.d/*',
+    '/usr/lib/*/qt6/plugins/*/*.cache', '/usr/lib/systemd/system-generators/*.cache',
+    '/usr/share/sgml/*', '/usr/share/xml/*catalog*', '/usr/lib/*/perl/*/auto/*.packlist',
+    '/usr/lib/jvm/*/lib/security/cacerts',
+    '/etc/machine-id', '/etc/hostname', '/etc/hosts', '/etc/resolv.conf', '/etc/mtab', '/etc/localtime',
+    '/etc/timezone', '/etc/adjtime', '/etc/ld.so.cache', '/etc/.pwd.lock', '/etc/group', '/etc/group-',
+    '/etc/gshadow', '/etc/gshadow-', '/etc/passwd', '/etc/passwd-', '/etc/shadow', '/etc/shadow-',
+    '/etc/subuid', '/etc/subuid-', '/etc/subgid', '/etc/subgid-', '/etc/shells', '/etc/default/locale',
+    '/etc/locale.gen', '/etc/locale.conf', '/etc/vconsole.conf', '/etc/environment',
+    '/etc/alternatives/*', '/etc/ssl/certs/*', '/etc/ca-certificates.conf', '/etc/ssh/ssh_host_*',
+    '/etc/systemd/system/*.wants/*', '/etc/systemd/system/*.requires/*', '/etc/systemd/user/*.wants/*',
+    '/etc/systemd/system/*.target.wants', '/etc/systemd/user/*.target.wants',
+    '/etc/rc?.d/*', '/etc/init.d/.depend.*', '/etc/fonts/conf.d/*', '/etc/X11/Xsession.d/*',
+    '/etc/apparmor.d/cache/*', '/etc/apt/trusted.gpg.d/*', '/etc/apt/apt.conf.d/01autoremove-kernels',
+    '/etc/apt/apt.conf.d/20auto-upgrades', '/etc/apt/apt.conf.d/50unattended-upgrades.ucf-dist',
+    '/etc/update-motd.d/*', '/etc/dconf/db/*', '/etc/xml/*', '/etc/sgml/*', '/etc/python3*/sitecustomize.py',
+    '/etc/cloud/*', '/etc/netplan/*', '/etc/NetworkManager/system-connections/*',
+    '/etc/NetworkManager/conf.d/*', '/etc/polkit-1/localauthority/*', '/etc/sudoers.d/*',
+    '/etc/sane.d/*', '/etc/brltty/*', '/etc/X11/xkb/*', '/etc/console-setup/*', '/etc/default/keyboard',
+    '/etc/ucf/*', '/etc/*/*.dpkg-dist', '/etc/*/*.dpkg-old', '/etc/*/*.ucf-dist', '/etc/*/*.ucf-old',
+    '/etc/pam.d/common-*', '/etc/ld.so.conf.d/*', '/etc/kernel/*', '/etc/initramfs-tools/*',
+    '/etc/fwupd/*', '/etc/PackageKit/*', '/etc/xdg/autostart/*.desktop.dpkg-*',
+    '/etc/docker/*', '/etc/containerd/*', '/etc/.updated', '/etc/motd',
+    # Written by maintainer scripts (base-files, ucf, update-*) or the Ubuntu cloud image build.
+    '/etc/profile', '/etc/fstab', '/etc/fstab.cloud-image', '/etc/nsswitch.conf', '/etc/inputrc',
+    '/etc/modules', '/etc/networks', '/etc/hosts.allow', '/etc/hosts.deny', '/etc/odbcinst.ini',
+    '/etc/.resolv.conf.systemd-resolved.bak', '/etc/apparmor.d/local/*', '/etc/apparmor.d/tunables/*.d/*',
+    '/etc/apt/sources.list', '/etc/apt/sources.list.d/ubuntu.sources', '/etc/apt/apt.conf.d/50unattended-upgrades',
+    '/etc/chrony/*', '/etc/default/console-setup', '/etc/default/grub.d/*', '/etc/dictionaries-common/*',
+    '/etc/dpkg/dpkg.cfg.d/excludes', '/etc/dpkg/origins/default', '/etc/perl/XML/SAX/ParserDetails.ini',
+    '/etc/profile.d/debuginfod.*', '/etc/python3/debian_config', '/etc/security/opasswd',
+    '/etc/ssh/sshd_config', '/etc/ssh/sshd_config.d/*cloudimg*', '/etc/sysctl.d/*cloudimg*',
+    '/etc/systemd/*.conf.d/*cloudimg*', '/usr/sbin/grub-probe', '/usr/share/fonts/X11/*/fonts.*',
+    '/usr/share/fonts/X11/*/encodings.dir', '/usr/bin/wechat',
+]
+
+# Local diversions that the distribution itself makes (usr-merge, minimized images).
+SYSTEM_DIVERSION = re.compile(r'\.usr-is-merged$|^/usr/bin/man$|^/usr/bin/man\.REAL$')
+
+
+def run(*argv, check=False):
+    return subprocess.run(argv, capture_output=True, text=True, errors='replace', check=check).stdout
+
+
+def dpkg_filters():
+    """path-exclude/path-include rules in order; the last matching rule wins."""
+    rules = []
+    for name in sorted(glob.glob('/etc/dpkg/dpkg.cfg.d/*')) + ['/etc/dpkg/dpkg.cfg']:
+        try:
+            with open(name) as f:
+                for line in f:
+                    m = re.match(r'\s*(path-exclude|path-include)[= ]\s*(\S+)', line)
+                    if m:
+                        rules.append((m.group(1) == 'path-exclude', m.group(2)))
+        except OSError:
+            pass
+    return rules
+
+
+def excluded(path, rules):
+    result = False
+    for exclude, pattern in rules:
+        if fnmatch.fnmatchcase(path, pattern):
+            result = exclude
+    return result
+
+
+def usr_merged(path):
+    for top in ('/bin/', '/sbin/', '/lib/', '/lib64/', '/lib32/', '/libx32/'):
+        if path.startswith(top):
+            return '/usr' + path
+    return path
+
+
+def check_packages(rules):
+    changed, missing, conffiles = [], [], []
+    for line in run('dpkg', '--verify').splitlines():
+        m = re.match(r'(\S+)\s+(c\s+)?(/.*)$', line)
+        if not m:
+            continue
+        flags, conf, path = m.group(1), bool(m.group(2)), m.group(3)
+        if flags == 'missing':
+            if not excluded(path, rules) and not excluded(usr_merged(path), rules):
+                missing.append(path)
+        elif conf:
+            conffiles.append(path)
+        else:
+            changed.append(path)
+    owners = {}
+    if changed or missing:
+        for line in run('dpkg', '-S', *(changed + missing)[:200]).splitlines():
+            pkg, _, path = line.partition(': ')
+            if not pkg.startswith('diversion'):
+                owners[path] = pkg
+    return {
+        'changed': [{'path': p, 'package': owners.get(p)} for p in changed],
+        'missing': [{'path': p, 'package': owners.get(p)} for p in missing],
+        'conffiles_edited': conffiles,
+    }
+
+
+def check_diversions():
+    project, system = [], []
+    for line in run('dpkg-divert', '--list').splitlines():
+        m = re.match(r'(local )?diversion (?:of|from) (\S+) to (\S+)(?: by (\S+))?', line)
+        if not m:
+            continue
+        entry = {'path': m.group(2), 'divert_to': m.group(3), 'by': m.group(4) or 'local'}
+        if m.group(4) or SYSTEM_DIVERSION.search(m.group(2)) or SYSTEM_DIVERSION.search(m.group(3)):
+            system.append(entry)
+        else:
+            project.append(entry)
+    return {'project': project, 'system_count': len(system)}
+
+
+def installed_packages():
+    packages = {}
+    for line in run('dpkg-query', '-W', '-f', '${db:Status-Abbrev}\t${Package}\t${Version}\n').splitlines():
+        status, name, version = line.split('\t')
+        if status.startswith('ii') or status.startswith('hi'):
+            packages[name] = version
+    return packages
+
+
+def release_info():
+    try:
+        with open(RELEASE) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def release_dependencies():
+    """Exact dependencies of the installed release metapackage."""
+    text = run('dpkg-query', '-W', '-f', '${Depends}', 'moto-plasma-release')
+    deps = {}
+    for item in text.split(','):
+        m = re.match(r'\s*(\S+)\s*\(=\s*([^)]+)\)', item)
+        if m:
+            deps[m.group(1)] = m.group(2).strip()
+    return deps
+
+
+def check_rebuilt(packages, deps):
+    held = set(run('apt-mark', 'showhold').split())
+    rebuilt = [name for name, version in packages.items() if '+moto' in version]
+    policy = run('apt-cache', 'policy', *rebuilt) if rebuilt else ''
+    candidates = {}
+    for block in re.split(r'\n(?=\S)', policy):
+        m = re.match(r'(\S+):\n\s+Installed: (\S+)\n\s+Candidate: (\S+)', block)
+        if m:
+            candidates[m.group(1)] = m.group(3)
+    result = []
+    for name in sorted(rebuilt):
+        candidate = candidates.get(name)
+        result.append({
+            'package': name, 'version': packages[name],
+            'protected_by': 'release' if name in deps else 'hold' if name in held else None,
+            'archive_would_replace': bool(candidate and candidate not in ('(none)', packages[name])
+                                          and '+moto' not in candidate),
+            'candidate': candidate,
+        })
+    return result
+
+
+def check_release(packages, deps):
+    info = release_info()
+    if not deps and not info:
+        return {'installed': False}
+    mismatch = [{'package': p, 'want': v, 'have': packages.get(p)} for p, v in sorted(deps.items())
+                if packages.get(p) != v]
+    return {'installed': 'moto-plasma-release' in packages, 'version': packages.get('moto-plasma-release'),
+            'info': info, 'mismatch': mismatch}
+
+
+def owned_paths():
+    owned = set()
+    for name in glob.glob('/var/lib/dpkg/info/*.list'):
+        with open(name, errors='replace') as f:
+            for line in f:
+                path = line.rstrip('\n')
+                owned.add(path)
+                owned.add(usr_merged(path))
+    for line in run('dpkg-divert', '--list').splitlines():
+        m = re.match(r'(?:local )?diversion (?:of|from) (\S+) to (\S+)', line)
+        if m:
+            owned.update((m.group(1), m.group(2)))
+    return owned
+
+
+def declared_local(manifest):
+    home = pwd.getpwuid(DESKTOP_UID).pw_dir
+    paths = set()
+    for item in manifest.get('files', []):
+        for p in [item['path']] + item.get('alternatives', []):
+            paths.add(p.replace('~', home, 1))
+    return paths
+
+
+def check_unowned(owned, local):
+    found = {'/usr': [], '/etc': []}
+    masks = []
+    for top in found:
+        for dirpath, dirnames, filenames in os.walk(top):
+            if dirpath == '/usr' and 'local' in dirnames:
+                dirnames.remove('local')   # /usr/local is reported by its own count
+            for name in filenames + [d for d in dirnames if os.path.islink(os.path.join(dirpath, d))]:
+                path = os.path.join(dirpath, name)
+                if path in owned or path in local:
+                    continue
+                if os.path.islink(path) and os.readlink(path).startswith('/etc/alternatives/'):
+                    continue   # update-alternatives
+                if os.path.islink(path) and dirpath in ('/etc/systemd/system', '/etc/systemd/user'):
+                    if os.readlink(path) == '/dev/null':
+                        masks.append(path)
+                    continue   # enable aliases are generated; masks are listed apart
+                if any(fnmatch.fnmatchcase(path, g) for g in GENERATED):
+                    continue
+                found[top].append(path)
+    usr_local = sum(len(f) for _, _, f in os.walk('/usr/local'))
+    return {'usr': sorted(found['/usr']), 'etc': sorted(found['/etc']), 'systemd_masks': sorted(masks),
+            'usr_local_files': usr_local}
+
+
+def check_ownership(local):
+    problems = []
+    for path in ('/', '/usr', '/usr/bin', '/usr/lib', '/usr/share', '/etc', '/var', '/var/lib', '/opt'):
+        try:
+            st = os.lstat(path)
+        except OSError:
+            continue
+        if st.st_uid != 0 or st.st_gid != 0 or st.st_mode & (stat.S_IWGRP | stat.S_IWOTH):
+            problems.append({'path': path, 'uid': st.st_uid, 'gid': st.st_gid, 'mode': oct(st.st_mode & 0o7777)})
+    user_owned = run('sh', '-c', "find /usr /etc -xdev ! -uid 0 ! -path '/usr/local/*' 2>/dev/null | head -50")
+    return {'top_level': problems, 'non_root_files': [p for p in user_owned.split() if p not in local]}
+
+
+def check_local(manifest):
+    home = pwd.getpwuid(DESKTOP_UID).pw_dir
+    result = []
+    for item in manifest.get('files', []):
+        candidates = [item['path']] + item.get('alternatives', [])
+        path = next((p.replace('~', home, 1) for p in candidates if os.path.exists(p.replace('~', home, 1))),
+                    None)
+        entry = {'path': item['path'], 'present': path is not None, 'required': item.get('required', False)}
+        if path:
+            st = os.stat(path)
+            owner = str(st.st_uid) if item.get('owner', '').isdigit() else pwd.getpwuid(st.st_uid).pw_name
+            problems = []
+            if item.get('owner') and owner != item['owner']:
+                problems.append(f"owner {owner}, want {item['owner']}")
+            if item.get('mode') and oct(st.st_mode & 0o7777) != oct(int(item['mode'], 8)):
+                problems.append(f"mode {oct(st.st_mode & 0o7777)}, want {item['mode']}")
+            if path != item['path'].replace('~', home, 1):
+                entry['found_at'] = path
+            entry['problems'] = problems
+        result.append(entry)
+    return result
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument('--json', action='store_true')
+    parser.add_argument('--manifest', default=LOCAL_MANIFEST)
+    args = parser.parse_args()
+    if os.geteuid() != 0:
+        sys.exit('moto-integrity: run as root in the container')
+    try:
+        with open(args.manifest) as f:
+            manifest = json.load(f)
+    except (OSError, ValueError):
+        manifest = {}
+    rules = dpkg_filters()
+    packages = installed_packages()
+    deps = release_dependencies()
+    local = check_local(manifest)
+    declared = declared_local(manifest)
+    report = {
+        'packages': check_packages(rules),
+        'diversions': check_diversions(),
+        'rebuilt': check_rebuilt(packages, deps),
+        'release': check_release(packages, deps),
+        'unowned': check_unowned(owned_paths(), declared),
+        'ownership': check_ownership(declared),
+        'local': local,
+    }
+    drift = {
+        'changed_files': len(report['packages']['changed']),
+        'missing_files': len(report['packages']['missing']),
+        'unprotected_rebuilt': sum(1 for r in report['rebuilt'] if not r['protected_by']),
+        'replaceable_rebuilt': sum(1 for r in report['rebuilt']
+                                   if r['archive_would_replace'] and r['protected_by'] != 'hold'),
+        'release_mismatch': len(report['release'].get('mismatch', [])),
+        'unowned_usr': len(report['unowned']['usr']),
+        'unowned_etc': len(report['unowned']['etc']),
+        'unowned_systemd_masks': len(report['unowned']['systemd_masks']),
+        'ownership': len(report['ownership']['top_level']) + len(report['ownership']['non_root_files']),
+        'local_missing_required': sum(1 for e in local if e['required'] and not e['present']),
+        'local_permissions': sum(1 for e in local if e.get('problems')),
+    }
+    development = bool(report['diversions']['project'])
+    state = 'drift' if any(drift.values()) else 'development' if development else 'clean'
+    report['summary'] = {'state': state, 'development': development,
+                         'project_diversions': len(report['diversions']['project']), **drift}
+    if args.json:
+        json.dump(report, sys.stdout, ensure_ascii=False, indent=1)
+        print()
+    else:
+        s = report['summary']
+        print(f"state: {s['state']}")
+        for key, value in s.items():
+            if key not in ('state',) and value:
+                print(f'  {key}: {value}')
+        for p in report['packages']['changed']:
+            print(f"changed  {p['path']} ({p['package']})")
+        for p in report['packages']['missing']:
+            print(f"missing  {p['path']} ({p['package']})")
+        for p in report['packages']['conffiles_edited']:
+            print(f'conffile {p}')
+        for d in report['diversions']['project']:
+            print(f"divert   {d['path']}")
+        for r in report['rebuilt']:
+            flag = '' if r['protected_by'] else '  UNPROTECTED'
+            flag += f"  archive would replace with {r['candidate']}" if r['archive_would_replace'] else ''
+            print(f"rebuilt  {r['package']} {r['version']} [{r['protected_by'] or '-'}]{flag}")
+        for m in report['release'].get('mismatch', []):
+            print(f"release  {m['package']}: want {m['want']}, have {m['have']}")
+        for top in ('usr', 'etc'):
+            for p in report['unowned'][top]:
+                print(f'unowned  {p}')
+        for p in report['unowned']['systemd_masks']:
+            print(f'mask     {p} (no package)')
+        print(f"/usr/local files: {report['unowned']['usr_local_files']}")
+        for p in report['ownership']['top_level']:
+            print(f"owner    {p['path']} uid={p['uid']} gid={p['gid']} mode={p['mode']}")
+        for p in report['ownership']['non_root_files']:
+            print(f'owner    {p} (not root)')
+        for e in local:
+            if not e['present']:
+                print(f"local    {e['path']} absent{' (required)' if e['required'] else ''}")
+            for problem in e.get('problems', []):
+                print(f"local    {e['path']}: {problem}")
+    sys.exit(1 if state == 'drift' else 2 if state == 'development' else 0)
+
+
+if __name__ == '__main__':
+    main()

@@ -11,6 +11,8 @@ install -Dm644 "$src/moto-coredump.service" /etc/systemd/system/moto-coredump.se
 install -Dm755 "$src/moto-coredump-collect" /usr/local/libexec/moto-coredump-collect
 install -Dm755 "$src/moto-a11y" /usr/local/bin/moto-a11y
 install -Dm755 "$src/moto-fs-audit" /usr/local/bin/moto-fs-audit
+install -Dm755 "$src/moto-integrity" /usr/local/bin/moto-integrity
+install -Dm644 "$src/moto-local-config.json" /usr/share/moto/local-config.json
 install -Dm644 "$src/moto-plasma-session.service" /etc/systemd/system/moto-plasma-session.service
 install -Dm644 "$src/sys-kernel-tracing.conf" /etc/systemd/system/sys-kernel-tracing.mount.d/60-moto.conf
 systemd-tmpfiles --create /etc/tmpfiles.d/moto-coredump.conf

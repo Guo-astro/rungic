@@ -1,0 +1,22 @@
+{
+  "comment": "Machine-local configuration and credentials (docs/61): never packaged or committed. Paths, owners and modes only, no contents. moto-integrity checks presence and permissions; '~' is the desktop user's home.",
+  "files": [
+    {"path": "/etc/profile.d/proxy.sh", "owner": "root", "mode": "0644", "required": false,
+     "source": "set up by hand", "purpose": "HTTP(S) proxy for downloads (AGENTS.md)"},
+    {"path": "/etc/plasma/audio-cookie", "owner": "1000", "mode": "0600", "required": true,
+     "source": "plasma/android-audio at each start", "purpose": "PulseAudio cookie of the Android audio bridge"},
+    {"path": "/etc/plasma/android-shm-context", "owner": "root", "required": true,
+     "source": "plasma/moto-plasma at each start", "purpose": "SELinux label for shared memory with the APK"},
+    {"path": "/etc/moto-plasma/account.json", "owner": "root", "required": false,
+     "source": "plasma/account/setup.py (first-run account)", "purpose": "desktop account state"},
+    {"path": "~/.config/moto-voice-agent/openai-api-key", "owner": "1000", "mode": "0600", "required": false,
+     "source": "entered by the user", "purpose": "OpenAI key: voice agent, call proxy, Luna, speech"},
+    {"path": "~/.config/moto-voice-agent/typesafe-api-key", "owner": "1000", "mode": "0600", "required": false,
+     "alternatives": ["~/.config/moto-cua/typesafe-api-key"],
+     "source": "entered by the user", "purpose": "JEV/TypeSafe key: moto-clicker, call proxy"},
+    {"path": "~/.local/state/moto-cua/remote-desktop-token", "owner": "1000", "mode": "0600", "required": false,
+     "source": "RemoteDesktop portal (moto-cua)", "purpose": "restore token of the desktop automation portal session"},
+    {"path": "~/.codex/auth.json", "owner": "1000", "mode": "0600", "required": false,
+     "source": "codex login (device code)", "purpose": "Codex login used by the voice agent"}
+  ]
+}
