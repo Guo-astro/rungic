@@ -9,6 +9,10 @@ install -Dm644 "$src/moto-coredump.tmpfiles" /etc/tmpfiles.d/moto-coredump.conf
 install -Dm644 "$src/moto-coredump.path" /etc/systemd/system/moto-coredump.path
 install -Dm644 "$src/moto-coredump.service" /etc/systemd/system/moto-coredump.service
 install -Dm755 "$src/moto-coredump-collect" /usr/local/libexec/moto-coredump-collect
+install -Dm755 "$src/moto-crash-symbols" /usr/local/bin/moto-crash-symbols
+install -Dm644 "$src/../config/etc/apt/moto-ddebs.sources" /etc/apt/moto-ddebs.sources
+# systemd-coredump (for coredumpctl) must never set Android's global core_pattern.
+ln -sfn /dev/null /etc/sysctl.d/50-coredump.conf
 install -Dm755 "$src/moto-a11y" /usr/local/bin/moto-a11y
 install -Dm755 "$src/moto-fs-audit" /usr/local/bin/moto-fs-audit
 install -Dm755 "$src/moto-integrity" /usr/local/bin/moto-integrity

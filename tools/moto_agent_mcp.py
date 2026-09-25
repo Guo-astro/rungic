@@ -80,6 +80,22 @@ def crashes(since_seconds: float = 86400) -> str:
 
 
 @server.tool(annotations=READ)
+def crash_groups(since_seconds: float = 30 * 86400, release: str | None = None) -> str:
+    """Container crashes grouped by signature (executable + first meaningful frames, function names when
+    symbolized, module+offset otherwise): count, first/last time, releases seen in, latest report and
+    reports still holding a core. release: also list signatures seen only in that release (regressions)."""
+    return dump(moto_agent.crash_groups(since_seconds, release))
+
+
+@server.tool(annotations=ACT)
+def crash_symbolize(report_ids: list[str] | None = None, recent: int = 0) -> str:
+    """Install the -dbgsym packages (Ubuntu ddebs, or this project's repository for +moto packages) that the
+    given crash reports need, regenerate their backtraces and recompute signatures. Installs packages in the
+    container; minutes the first time. Only reports that still keep core.zst can be redone."""
+    return dump(moto_agent.crash_symbolize(tuple(report_ids or ()), recent))
+
+
+@server.tool(annotations=READ)
 def crash_detail(crash_id: str) -> str:
     """Backtrace of a crash listed by `crashes`: an Android tombstone ("tombstone_31"), a container core report
     ("20260923-214119-kalk-32151", gdb backtrace of all threads) or an apport report ("/var/crash/x.crash")."""

@@ -1,0 +1,182 @@
+#!/usr/bin/python3
+# SPDX-License-Identifier: MIT
+"""Symbolize saved crash reports (docs/61): install debug symbols, redo the backtrace.
+
+  moto-crash-symbols REPORT...        report ids under /var/lib/moto-cores
+  moto-crash-symbols --recent N       the N newest reports that still have core.zst
+  moto-crash-symbols --no-install     only redo backtrace and signature with what is installed
+  moto-crash-symbols --debuginfod     also let gdb fetch from debuginfod.ubuntu.com (slow)
+
+For each module mapped in the core (info.json: file and build-id) whose symbols
+are missing under /usr/lib/debug/.build-id, the owning package's `-dbgsym` at
+exactly the installed version is installed: this project's packages (+moto)
+from the configured sources (the local release repository), Ubuntu's from the
+ddebs archive, which is configured only for this tool
+(/etc/apt/moto-ddebs.sources) so daily apt updates do not fetch its indexes.
+The backtrace is then regenerated, the signature recomputed (the previous one
+is kept as signature_unsymbolized) and the report marked symbolized.
+Run as root in the container.
+"""
+import argparse
+import compression.zstd as zstd
+import importlib.machinery
+import importlib.util
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+STORE = Path('/var/lib/moto-cores')
+DDEBS = '/etc/apt/moto-ddebs.sources'
+DDEBS_LISTS = Path('/var/lib/moto-ddebs/lists')
+COLLECTOR = next(p for p in ('/usr/libexec/moto-coredump-collect', '/usr/local/libexec/moto-coredump-collect',
+                             str(Path(__file__).with_name('moto-coredump-collect'))) if os.path.exists(p))
+loader = importlib.machinery.SourceFileLoader('collect', COLLECTOR)
+collect = importlib.util.module_from_spec(importlib.util.spec_from_loader('collect', loader))
+loader.exec_module(collect)
+
+APT_DDEBS = ['-o', f'Dir::Etc::SourceList={DDEBS}', '-o', 'Dir::Etc::SourceParts=-',
+             '-o', f'Dir::State::Lists={DDEBS_LISTS}']
+
+
+def have_symbols(build_id):
+    return bool(build_id) and Path(f'/usr/lib/debug/.build-id/{build_id[:2]}/{build_id[2:]}.debug').exists()
+
+
+def owner(path):
+    text = subprocess.run(['dpkg-query', '-S', path], capture_output=True, text=True).stdout
+    for line in text.splitlines():
+        if not line.startswith('diversion'):
+            name = line.split(': ', 1)[0].split(', ')[0]
+            version = subprocess.run(['dpkg-query', '-W', '-f', '${Version}', name],
+                                     capture_output=True, text=True).stdout
+            return name, version
+    return None, None
+
+
+def apt(*args, ddebs=False):
+    env = dict(os.environ, DEBIAN_FRONTEND='noninteractive')
+    return subprocess.run(['apt-get', '-q', *(APT_DDEBS if ddebs else []), *args],
+                          capture_output=True, text=True, env=env, errors='replace')
+
+
+def refresh_ddebs():
+    DDEBS_LISTS.mkdir(parents=True, exist_ok=True)
+    (DDEBS_LISTS / 'partial').mkdir(exist_ok=True)
+    stamp = DDEBS_LISTS / '.updated'
+    if stamp.exists() and time.time() - stamp.stat().st_mtime < 86400:
+        return
+    result = apt('update', ddebs=True)
+    if result.returncode:
+        raise SystemExit('ddebs update failed:\n' + result.stderr[-2000:])
+    stamp.touch()
+
+
+def install_symbols(reports):
+    wanted = {}   # package -> (dbgsym name, version)
+    for info in reports:
+        for module in info.get('modules', []):
+            path = module.get('file')
+            if not path or not path.startswith('/') or have_symbols(module.get('build_id')):
+                continue
+            name, version = owner(path)
+            if name:
+                wanted[name.split(':')[0]] = version
+    if not wanted:
+        return {'installed': [], 'unavailable': []}
+    local = {n: v for n, v in wanted.items() if '+moto' in v}
+    ubuntu = {n: v for n, v in wanted.items() if n not in local}
+    installed, unavailable, extra = [], [], []
+    for group, ddebs in ((local, False), (ubuntu, True)):
+        if not group:
+            continue
+        if ddebs:
+            refresh_ddebs()
+        specs = [f'{n}-dbgsym={v}' for n, v in group.items()]
+        if apt('install', '--simulate', '--no-install-recommends', *specs, ddebs=ddebs).returncode:
+            # Install what exists: one by one, then the older -dbg naming (libc6-dbg lives in
+            # the regular archive, not in ddebs).
+            specs = []
+            for n, v in group.items():
+                for spec, from_ddebs in ((f'{n}-dbgsym={v}', ddebs), (f'{n}-dbg={v}', False)):
+                    if apt('install', '--simulate', '--no-install-recommends', spec,
+                           ddebs=from_ddebs).returncode == 0:
+                        if from_ddebs == ddebs:
+                            specs.append(spec)
+                        else:
+                            extra.append(spec)
+                        break
+                else:
+                    unavailable.append(f'{n}-dbgsym={v}')
+        if specs:
+            result = apt('install', '-y', '--no-install-recommends', *specs, ddebs=ddebs)
+            if result.returncode:
+                unavailable += specs
+            else:
+                installed += specs
+    if extra:
+        result = apt('install', '-y', '--no-install-recommends', *extra)
+        (unavailable if result.returncode else installed).extend(extra)
+    return {'installed': installed, 'unavailable': unavailable}
+
+
+def resymbolize(report, debuginfod=False):
+    info_path = report / 'info.json'
+    info = json.loads(info_path.read_text())
+    core_zst = report / 'core.zst'
+    if not core_zst.exists():
+        return {'report': report.name, 'error': 'core.zst was pruned; only newer reports keep cores'}
+    with tempfile.TemporaryDirectory(dir='/var/tmp') as tmp:
+        core = Path(tmp) / 'core'
+        with zstd.open(core_zst, 'rb') as source, open(core, 'wb') as target:
+            shutil.copyfileobj(source, target, 1 << 20)
+        if debuginfod:
+            os.environ.setdefault('DEBUGINFOD_URLS', 'https://debuginfod.ubuntu.com')
+            collect_gdb = collect.gdb
+            collect.gdb = lambda *a, **k: collect_gdb('-iex', 'set debuginfod enabled on', *a, **k)
+        header = collect.gdb('-c', str(core), timeout=60)
+        trace, crashing = collect.backtrace(core, info.get('exe') or '')
+        mods = collect.modules(core, info.get('exe') or '')
+    text = '\n'.join(l for l in (header + '\n' + trace).splitlines() if not l.startswith('[New LWP'))
+    (report / 'backtrace.txt').write_text(text + '\n')
+    sig, frames = collect.signature(info['comm'], collect.parse_frames(crashing), mods)
+    if info.get('signature') and info['signature'] != sig and not info.get('signature_unsymbolized'):
+        info['signature_unsymbolized'] = info['signature']
+    info.update(signature=sig, signature_frames=frames, symbolized=True,
+                modules=[{'file': m['file'] or m['name'], 'build_id': m['build_id']} for m in mods])
+    info['top_frames'] = [l for l in crashing.splitlines() if l.startswith('#')][:4]
+    info['missing_symbols'] = sorted({m['file'] for m in mods
+                                      if m['file'] and m['build_id'] and not have_symbols(m['build_id'])})
+    info_path.write_text(json.dumps(info, indent=1))
+    return {'report': report.name, 'signature': sig, 'frames': frames,
+            'missing_symbols': len(info['missing_symbols'])}
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument('reports', nargs='*')
+    parser.add_argument('--recent', type=int)
+    parser.add_argument('--no-install', action='store_true')
+    parser.add_argument('--debuginfod', action='store_true')
+    args = parser.parse_args()
+    if os.geteuid() != 0:
+        sys.exit('moto-crash-symbols: run as root in the container')
+    reports = [STORE / r for r in args.reports]
+    if args.recent:
+        reports += sorted((p.parent for p in STORE.glob('*/core.zst')), reverse=True)[:args.recent]
+    reports = [r for r in dict.fromkeys(reports) if (r / 'info.json').exists()]
+    if not reports:
+        sys.exit('no reports')
+    result = {'symbols': None if args.no_install else
+              install_symbols([json.loads((r / 'info.json').read_text()) for r in reports])}
+    result['reports'] = [resymbolize(r, args.debuginfod) for r in reports]
+    json.dump(result, sys.stdout, ensure_ascii=False, indent=1)
+    print()
+
+
+if __name__ == '__main__':
+    main()

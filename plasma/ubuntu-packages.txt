@@ -79,3 +79,9 @@ python3-venv
 python3-onnxruntime
 gcc
 libglib2.0-dev
+# Crash diagnosis (docs/55, docs/61): gdb backtraces, eu-unstrip build-ids,
+# coredumpctl over the collected reports, the ddebs archive key.
+gdb
+elfutils
+systemd-coredump
+ubuntu-dbgsym-keyring

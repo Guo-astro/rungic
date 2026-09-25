@@ -16,6 +16,9 @@ metapackage and the local-configuration manifest say it should be:
   ownership  owner/mode of the top-level directories; files in /usr, /etc
              owned by a non-root user
   local      declared machine-local configuration: presence and permissions
+  crash      the crash chain's preconditions: no DrKonqi without
+             KCRASH_DUMP_ONLY (it would take over KDE crashes and leave no
+             core), systemd-coredump's core_pattern sysctl masked
 
   moto-integrity            text report
   moto-integrity --json     machine-readable result
@@ -308,6 +311,26 @@ def check_local(manifest):
     return result
 
 
+def check_crash():
+    problems = []
+    drkonqi = run('dpkg-query', '-W', '-f', '${db:Status-Abbrev}', 'drkonqi').startswith('ii')
+    if drkonqi:
+        env = run('sh', '-c', 'cat /etc/environment /etc/environment.d/*.conf /usr/lib/environment.d/*.conf '
+                  '2>/dev/null')
+        if not re.search(r'^\s*KCRASH_DUMP_ONLY=1', env, re.M):
+            problems.append('drkonqi is installed without KCRASH_DUMP_ONLY=1: KDE crashes leave no core')
+    # Services that hold credentials must not dump core (docs/61).
+    for unit in ('moto-voice-agent.service',):
+        text = run('sh', '-c', f'cat /usr/lib/systemd/user/{unit} /etc/systemd/user/{unit} '
+                   f'/etc/systemd/user/{unit}.d/*.conf 2>/dev/null')
+        if text and not re.search(r'^\s*LimitCORE=0\s*$', text, re.M):
+            problems.append(f'{unit} holds API keys but has no LimitCORE=0')
+    mask = '/etc/sysctl.d/50-coredump.conf'
+    if os.path.exists('/usr/lib/sysctl.d/50-coredump.conf') and os.path.realpath(mask) != '/dev/null':
+        problems.append(f'{mask} is not masked: systemd-sysctl could redirect Android\'s core_pattern')
+    return problems
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--json', action='store_true')
@@ -333,6 +356,7 @@ def main():
         'unowned': check_unowned(owned_paths(), declared),
         'ownership': check_ownership(declared),
         'local': local,
+        'crash': check_crash(),
     }
     drift = {
         'changed_files': len(report['packages']['changed']),
@@ -347,6 +371,7 @@ def main():
         'ownership': len(report['ownership']['top_level']) + len(report['ownership']['non_root_files']),
         'local_missing_required': sum(1 for e in local if e['required'] and not e['present']),
         'local_permissions': sum(1 for e in local if e.get('problems')),
+        'crash_chain': len(report['crash']),
     }
     development = bool(report['diversions']['project'])
     state = 'drift' if any(drift.values()) else 'development' if development else 'clean'
@@ -385,6 +410,8 @@ def main():
             print(f"owner    {p['path']} uid={p['uid']} gid={p['gid']} mode={p['mode']}")
         for p in report['ownership']['non_root_files']:
             print(f'owner    {p} (not root)')
+        for p in report['crash']:
+            print(f'crash    {p}')
         for e in local:
             if not e['present']:
                 print(f"local    {e['path']} absent{' (required)' if e['required'] else ''}")

@@ -263,6 +263,72 @@ PY
     return result
 
 
+def crash_groups(since_seconds=30 * 86400, release=None):
+    """Container crash reports grouped by signature (plasma/diagnostics/moto-coredump-collect).
+
+    With release, also lists the signatures seen only in that release: new there, or not seen
+    in the reports still kept from earlier ones."""
+    now = float(out('date +%s'))
+    text = run(f'''python3 - <<'PY'
+import json, pathlib
+since = {now - since_seconds}
+rows = []
+for info in pathlib.Path('/var/lib/moto-cores').glob('*/info.json'):
+    try:
+        d = json.loads(info.read_text())
+    except ValueError:
+        continue
+    if d.get('time', 0) >= since:
+        rows.append({{'id': info.parent.name, 'time': d['time'], 'comm': d.get('comm'), 'exe': d.get('exe'),
+                     'signal': d.get('signal'), 'signature': d.get('signature'),
+                     'frames': d.get('signature_frames') or d.get('top_frames'),
+                     'symbolized': d.get('symbolized', False), 'core': (info.parent / 'core.zst').exists(),
+                     'release': (d.get('release') or {{}}).get('version'),
+                     'package': d.get('package')}})
+print(json.dumps(rows))
+PY
+''', 'container', check=False).stdout
+    rows = json.loads(text) if text.strip() else []
+    groups = {}
+    key_of = lambda row: row['signature'] or f"unsigned:{row['comm']}:{row['signal']}"
+    for row in sorted(rows, key=lambda r: r['time']):
+        key = key_of(row)
+        g = groups.setdefault(key, {'signature': row['signature'], 'comm': row['comm'], 'exe': row['exe'],
+                                    'signal': row['signal'], 'count': 0, 'first': row['time'],
+                                    'releases': [], 'reports': []})
+        g['count'] += 1
+        g['last'] = row['time']
+        g['frames'] = row['frames']            # the latest report: symbolized when any was
+        g['symbolized'] = row['symbolized'] or g.get('symbolized', False)
+        if row['release'] not in g['releases']:
+            g['releases'].append(row['release'])
+        g['reports'].append(row['id'])
+    fmt = lambda t: datetime.datetime.fromtimestamp(t).isoformat(timespec='seconds')
+    result = []
+    for key, g in sorted(groups.items(), key=lambda kg: (-kg[1]['count'], -kg[1]['last'])):
+        g['first'], g['last'] = fmt(g['first']), fmt(g['last'])
+        g['latest_report'] = g['reports'][-1]
+        g['with_core'] = sorted(r['id'] for r in rows if key_of(r) == key and r['core'])[-3:]
+        del g['reports']
+        result.append(g)
+    answer = {'since_seconds': since_seconds, 'reports': len(rows), 'groups': result}
+    if release:
+        answer['new_in_release'] = [g['signature'] for g in result if g['releases'] == [release]]
+    return answer
+
+
+def crash_symbolize(report_ids=(), recent=0):
+    """Install debug symbols for crash reports and redo their backtraces (moto-crash-symbols).
+    Installs -dbgsym packages in the container; can take minutes the first time."""
+    ids = [r for r in report_ids if re.fullmatch(r'\d{8}-\d{6}-[^/\s]+-\d+', r)]
+    if len(ids) != len(report_ids):
+        raise ValueError('report ids look like YYYYmmdd-HHMMSS-comm-pid')
+    args = ' '.join(ids) + (f' --recent {int(recent)}' if recent else '')
+    text = run('for p in /usr/bin/moto-crash-symbols /usr/local/bin/moto-crash-symbols; do '
+               f'[ -x $p ] && exec $p {args}; done; echo null', 'container', timeout=1800, check=False)
+    return json.loads(text.stdout) if text.stdout.strip() not in ('', 'null') else text.stderr
+
+
 def crash_get(crash_id, lines=160):
     """Android tombstone head, container core backtrace, or apport report (without its binary fields)."""
     if re.fullmatch(r'tombstone_\d+', crash_id):
@@ -432,6 +498,9 @@ def main():
     p = sub.add_parser('session-log'); p.add_argument('--lines', type=int, default=200)
     p = sub.add_parser('crashes'); p.add_argument('--since', type=float, default=86400)
     p = sub.add_parser('crash'); p.add_argument('id')
+    p = sub.add_parser('crash-groups'); p.add_argument('--since', type=float, default=30 * 86400)
+    p.add_argument('--release')
+    p = sub.add_parser('crash-symbolize'); p.add_argument('ids', nargs='*'); p.add_argument('--recent', type=int, default=0)
     sub.add_parser('kwin-info')
     sub.add_parser('integrity')
     p = sub.add_parser('host'); p.add_argument('op')
@@ -449,7 +518,9 @@ def main():
         return
     value = {'status': status, 'kwin-info': kwin_info, 'integrity': integrity,
              'session-log': lambda: session_log(a.lines), 'crashes': lambda: crashes(a.since),
-             'crash': lambda: crash_get(a.id), 'host': lambda: host_request(a.op),
+             'crash': lambda: crash_get(a.id),
+             'crash-groups': lambda: crash_groups(a.since, a.release),
+             'crash-symbolize': lambda: crash_symbolize(a.ids, a.recent), 'host': lambda: host_request(a.op),
              'screenshot': lambda: screenshot(a.path), 'snapshot': lambda: snapshot(a.label, a.since)}[a.cmd]()
     print(value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, indent=1))
 
