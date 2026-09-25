@@ -68,16 +68,22 @@ case "$action" in
       echo 'Android storage was remounted; restarting the Plasma container' >&2
       "$ENTER" /usr/bin/lxc-stop -n plasma -t 15 9>&- || true
     fi
+    old_pids=
     if [ "$action" = restart-session ] && running; then
+      # The old compositor and shell take a moment to exit: readiness must see new ones.
+      old_pids=$(attach /bin/sh -c 'echo $(pidof kwin_wayland) $(pidof plasmashell)' 9>&-) || old_pids=
       attach /bin/sh -c 'systemctl restart moto-plasma-session.service' 9>&-
     fi
     if ! running; then
       start_container
     fi
     ready=0
-    for i in $(seq 1 30); do
-      if attach /bin/sh -c 'test -f /run/user/1000/moto-session.env && pidof plasmashell >/dev/null && pidof kwin_wayland >/dev/null' 9>&-; then
-        ready=1; break
+    for i in $(seq 1 60); do
+      pids=$(attach /bin/sh -c 'test -f /run/user/1000/moto-session.env && k=$(pidof kwin_wayland) && p=$(pidof plasmashell) && echo $k $p' 9>&-) || pids=
+      if [ -n "$pids" ]; then
+        new=1
+        for pid in $pids; do case " $old_pids " in *" $pid "*) new=0 ;; esac; done
+        if [ "$new" = 1 ]; then ready=1; break; fi
       fi
       sleep 1
     done

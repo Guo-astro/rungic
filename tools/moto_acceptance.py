@@ -58,10 +58,23 @@ def wait_for(condition, timeout=10, interval=0.5):
 # ---------------------------------------------------------------- session
 
 @check
-def session_ready(ctx):
-    text = run('test -f /run/user/1000/moto-session.env && echo env; pidof kwin_wayland >/dev/null && echo kwin; '
-               'pidof plasmashell >/dev/null && echo shell', 'container', check=False).stdout.split()
-    return result({'env', 'kwin', 'shell'} <= set(text), present=text)
+def session_ready(ctx, settle_s=15, timeout=90):
+    """KWin and plasmashell up with stable PIDs, and plasmashell running long enough to have
+    loaded its launcher model: later checks must not race a session that is still starting."""
+    probe = ('test -f /run/user/1000/moto-session.env && echo env; k=$(pidof kwin_wayland) && echo kwin $k; '
+             'p=$(pidof -s plasmashell) && echo shell $p $(ps -o etimes= -p $p)')
+    samples, deadline = [], time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        text = run(probe, 'container', check=False).stdout
+        state = {line.split()[0]: line.split()[1:] for line in text.splitlines() if line.strip()}
+        key = (tuple(state.get('kwin', [])), (state.get('shell') or [None])[0])
+        age = int(state['shell'][1]) if len(state.get('shell', [])) > 1 else 0
+        samples = (samples + [key])[-3:]
+        if {'env', 'kwin', 'shell'} <= set(state) and len(samples) == 3 and len(set(samples)) == 1 \
+                and age >= settle_s:
+            return result(True, {'shell_age_s': age}, kwin=list(key[0]), plasmashell=key[1])
+        time.sleep(2)
+    return result(False, present=sorted(state), samples=[list(map(str, s)) for s in samples])
 
 
 @check
@@ -127,37 +140,53 @@ def _drawer_search():
     return fields[0]
 
 
+OCR = """
+import json, sys
+from rapidocr import RapidOCR
+out = RapidOCR()(sys.argv[1])
+print(json.dumps([[t, float(sc), [int(v) for v in b[0]]] for t, sc, b in zip(out.txts, out.scores, out.boxes)],
+                 ensure_ascii=False))
+"""
+
+
+def ocr_screen():
+    """Text on the phone's screen: [text, score, [x, y]] from RapidOCR in moto-clicker's venv."""
+    shot = moto_agent.screenshot()
+    remote = moto_device.push(shot, 'moto-acceptance-ocr.png')
+    run(f'cp {remote} {moto_device.PLASMA_ROOTFS}/var/tmp/moto-acceptance-ocr.png && '
+        f'chmod 644 {moto_device.PLASMA_ROOTFS}/var/tmp/moto-acceptance-ocr.png && rm -f {remote}', 'root')
+    text = user(f"/usr/local/lib/moto-clicker/venv/bin/python -c {shlex.quote(OCR)} "
+                '/var/tmp/moto-acceptance-ocr.png 2>/dev/null; rm -f /var/tmp/moto-acceptance-ocr.png', timeout=120)
+    return json.loads(text.stdout.strip().splitlines()[-1]), shot
+
+
 @check
 def input_text(ctx, text='Calcul', expect='Calculator', absent='Clock'):
-    """Android text input into the drawer search. Kirigami's search field exposes no AT-SPI text,
-    so the effect is read instead: the drawer filters to the matching launcher entry."""
+    """Android text input into the drawer search, read back from the screen by OCR: right after a
+    session restart the results never reach the AT-SPI tree, and the search field exposes no text."""
     enabled = moto_agent.a11y('state')['enabled']
     if not enabled:
         moto_agent.ui_enable(True)
         time.sleep(2)
-    import ui_launch_check as ui
     try:
         field = _drawer_search()
-
-        from collections import Counter
-
-        def labels():
-            return Counter(n['name'] for n in moto_agent.ui_find('plasmashell', role='label'))
-        # The full grid stays "showing" under the results over AT-SPI (and its paths shift), so
-        # count names: the results view adds one label per match.
-        # Right after a session restart the drawer's AT-SPI tree is still filling: wait until it settles.
-        before, previous = labels(), None
-        for _ in range(20):
-            if before == previous:
+        taps = 0
+        for taps in range(1, 4):
+            moto_agent.ui_tap('plasmashell', field['path'])
+            focused = wait_for(lambda: any('focused' in f.get('states', []) for f in
+                                           moto_agent.ui_find('plasmashell', role='text', name='Search')),
+                               timeout=3, interval=0.3)
+            if focused:
                 break
-            time.sleep(0.5)
-            previous, before = before, labels()
-        moto_agent.ui_press('plasmashell', field['path'], 'SetFocus')
-        time.sleep(0.4)
+        if not focused:
+            return result(False, {'taps': taps}, error='the drawer search field never took focus')
         run(f'input text {shlex.quote(text)}', 'shell')
-        new = wait_for(lambda: (lambda n: n if expect in n else None)(set(labels() - before)), timeout=6) \
-            or set(labels() - before)
-        return result(expect in new and absent not in new, sent=text, results=sorted(new)[:12])
+        time.sleep(1.5)
+        words, _ = ocr_screen()
+        top = field['extents'][1] * 3 + 400          # logical → pixels, generous: field and results
+        seen = [w for w, score, (x, y) in words if y < top + 600]
+        typed = any(w.startswith(text) and not w.startswith(expect) for w in seen)
+        return result(typed and expect in seen and absent not in seen, {'taps': taps}, sent=text, seen=seen[:20])
     finally:
         try:
             _home()
@@ -337,6 +366,14 @@ def run_scenarios(selected, release=None, out_dir=None, since=None):
             except Exception as error:
                 row = result(False, error=f'{type(error).__name__}: {error}',
                              trace=traceback.format_exc()[-1500:])
+        if row['passed'] is False and scenario.get('screenshot_on_failure', True):
+            try:
+                shot = Path(moto_agent.screenshot())
+                target = out_dir / f"{scenario['id']}.png"
+                shot.replace(target)
+                row['details']['screenshot'] = str(target)
+            except Exception:
+                pass
         row = {'id': scenario['id'], 'title': scenario['title'], 'level': scenario['level'], **row,
                'seconds': round(time.monotonic() - began, 1)}
         rows.append(row)
