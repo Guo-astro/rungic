@@ -154,3 +154,12 @@ uv run --script tools/compbench_run.py .work/refs/NEW/l1 --variant gles:fence --
   - Firefox 156：WebRender 在 Linux 上只有 OpenGL（EGL）和软件两条路径，`libxul.so` 和默认配置里都没有 Vulkan 的合成选项。可行的只有经 Zink 把 GL 翻译成 Vulkan，而这条路在 KWin 上实测更慢，不采用。
   - GTK4（4.22）支持 `GSK_RENDERER=vulkan`，但本轮没有测，仍为 `gl`。
 - **回退**：把 `gpu-env` 改回 `opengl` 并重启会话。
+
+### 全局切换后撤回（同日）
+
+切到 Vulkan 后，用户发现语音助手闪屏。
+
+- **复现**：`QSG_RHI_BACKEND=vulkan` 下录屏 12 秒，操作是翻列表、点进对话、滚动、返回，逐帧检测“某帧与前后两帧都差很多、而前后两帧相近”的情况，共 25 次。
+  - 闪的那一帧是整屏灰色（平均亮度约 170，正常画面约 18），左下角有一块黑色方块，下一帧就恢复。看起来像是把一块尚未画完或未初始化的缓冲显示了出来，可能与 Turnip 的 Wayland WSI 在 KGSL 上的同步有关，本轮没有继续查。
+- **撤回**：用户要求换回 OpenGL ES，`gpu-env` 已恢复 `QSG_RHI_BACKEND=opengl`。重启会话后，plasmashell、浮层和 App 都不再加载 Vulkan；同样的操作录 414 帧，没有检测到闪屏。
+- 之前的性能对照只看了帧间隔和 CPU，没有检查画面内容，所以没发现这个问题。今后评估渲染后端，要同时做这项逐帧画面检测（`.work/flicker.py` 的方法）。
