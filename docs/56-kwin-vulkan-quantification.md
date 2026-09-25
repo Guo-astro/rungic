@@ -143,3 +143,14 @@ uv run --script tools/compbench_run.py .work/refs/NEW/l1 --variant gles:fence --
   - plasmashell 改用 Vulkan，CPU 少约 22%，但迟到数的中位数偏差（区间重叠），继续使用 OpenGL。
   - 全局切换需要更多应用的对照，本轮不做。
 - **测量过程中的事故**：前一次重启会话时，旧 plasmashell 在退出途中崩溃（SEGV），之后没有被重新拉起，约 20 分钟里没有状态栏和导航栏。第一轮语音助手对照就是在这种状态下测的，已作废并重测（上表是重测结果）。另外，plasmashell 重启后要等前台窗口下一次被激活，才能重新拿到应用配色（59 篇），这个问题待改进。
+
+### 全局切换（2026-09-26，用户决定）
+
+看过上面的数据后，用户决定所有 Qt Quick 应用都改用 Vulkan。`plasma/gpu-env` 由 `QSG_RHI_BACKEND=opengl` 改为 `vulkan`，经会话脚本导入整个会话。
+
+- **验证**（重启会话后查 `/proc/PID/maps`）：plasmashell、语音助手 App、`plasma-settings` 都加载了 `libvulkan_freedreno`；语音浮层要等首次显示才创建渲染器，唤出后也是 Vulkan，光效渲染正常。重启后 plasmashell、语音浮层和语音服务都在运行。
+- **不在范围内**：
+  - KWin 仍用 OpenGL ES（`KWIN_COMPOSE=O2ES`）：它没有 Vulkan 渲染器，经 Zink 实测更差（51 篇）。
+  - Firefox 156：WebRender 在 Linux 上只有 OpenGL（EGL）和软件两条路径，`libxul.so` 和默认配置里都没有 Vulkan 的合成选项。可行的只有经 Zink 把 GL 翻译成 Vulkan，而这条路在 KWin 上实测更慢，不采用。
+  - GTK4（4.22）支持 `GSK_RENDERER=vulkan`，但本轮没有测，仍为 `gl`。
+- **回退**：把 `gpu-env` 改回 `opengl` 并重启会话。
