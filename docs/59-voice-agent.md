@@ -298,6 +298,39 @@
   - 大屏分栏；
   - 左滑删除的手势手感。
 
+## 面板跟随应用配色；滚动不再跳回底部（2026-09-25）
+
+用户反馈：App 里的状态栏和导航栏不沉浸；对话往上滚后会突然跳回底部，问是不是组件选错了。
+
+### 状态栏和导航栏
+
+- **原因**：前台有最大化的应用时，Plasma Mobile 把两条面板画成不透明，颜色取系统主题（现在是浅色 Breeze 的 Header 和 Window 配色），与应用本身无关。深色的 App 于是上下各夹着一条浅色的系统栏。这是共享层的问题，每个自带配色的应用都会遇到。
+- **调研**：
+  - 上游 plasma-mobile 的合并请求中，面板颜色相关的有 #136（顶栏改用 Header 配色）、#820、#827、#838、#863（启动反馈时的颜色），都没有让面板跟随应用配色；以“status bar color”“panel color”“colorscheme”检索，本轮未找到这类工作。
+  - Android 的做法是由应用设置系统栏颜色，或者绘制到系统栏下面（edge-to-edge）。Plasma Mobile 的最大化窗口不会延伸到面板下面。
+  - 现成的标准通路：KDE 应用通过 `org_kde_kwin_server_decoration_palette` 协议上报自己的配色方案，KWin 保存在 `Window::colorScheme`，原本用来给窗口标题栏上色。plasma-integration（Plasma/6.6 分支 `kwaylandintegration.cpp`）在窗口创建和应用调色板变化时，把 `qApp` 的 `KDE_COLOR_SCHEME_PATH` 属性发给 KWin；KColorSchemeManager 切换配色时设置的也是这个属性。
+- **做法**（应用 → 标准接口 → 共享层）：
+  - 应用：`MotoVoiceAssistant.colors` 由 Breeze Dark 派生（LGPL-2.0-or-later），Window、Header、View、Complementary 的背景都是 App 的底色 #0A0B10，文字 #F4F1EA，强调色为金色。`main.cpp` 在创建窗口之前设置 `KDE_COLOR_SCHEME_PATH` 和对应的调色板；App 背景改为纯色，与导航栏无缝衔接。
+  - KWin：convergentwindows 包里新增 `WindowColors.qml`。普通窗口被激活、窗口配色变化或换屏时，用 `DBusCall` 把 `(输出名, colorScheme)` 发给 plasmashell。之所以放进这个已经启用的脚本，是因为 Plasma Mobile 的 kwinrc 插件列表由 envmanager 写入且不可改，新增脚本需要改 envmanager。
+  - plasmashell：`ShellDBusObject` 新增 `setActiveWindowColorScheme(屏幕, 配色)` 和 `windowBackground(屏幕, 配色组)`。配色是绝对路径或 `color-schemes/` 下的名字，用 KConfig 直接读 `BackgroundNormal`（plasma-mobile 没有链接 KColorScheme）。`kdeglobals` 表示应用没有自己的配色，返回空字符串，面板保持原样。
+  - 面板：状态栏（`StatusBarWrapper.qml`，Header 组）和导航栏（`NavigationPanelComponent.qml`，Window 组）在不透明时使用应用的背景色；背景偏深时前景改用 Complementary 配色组，也就是浅色图标和文字。
+- **部署**：
+  - `build_on_device.py plasma-mobile targets` 构建 `mobileshellstateplugin`、`org.kde.plasma.mobile.taskpanel` 和 `org.kde.plasma.mobile.panel`，由 `plasma/install-mobile-plugins.sh` 安装（新增后两项），`plasma/install-convergent-fix.sh` 一并安装 `WindowColors.qml`；然后重启 plasmashell。
+  - 注意：KWin 的声明式脚本共用一个 QML 引擎，卸载再加载 convergentwindows 时仍使用缓存的旧 `main.qml`，新的 `WindowColors` 要等 KWin 下次启动才会生效。本次为了当场验证，另外把 `WindowColors.qml` 作为临时脚本加载了一份（只在本次会话有效）。
+- **验证**（手机 WL-0）：
+  - 语音助手 App：`dbus-monitor` 看到 `setActiveWindowColorScheme("WL-0", ".../MotoVoiceAssistant.colors")`，状态栏和导航栏变为 #0A0B10，图标和文字为浅色，与 App 连成一体（截屏）。
+  - 系统设置 `plasma-settings`：上报 `kdeglobals`，面板保持浅色主题（截屏），说明没有声明配色的应用不受影响。
+  - 尚未验证：其他声明了自定义配色的 KDE 应用；电视屏上的面板；KWin 重启后由 `main.qml` 加载 `WindowColors` 的路径。
+
+### 滚动跳回底部
+
+- **原因**：组件没有选错，问题在自动滚动的写法。`contentHeight` 每次变化都调用 `positionViewAtEnd()`；而往上滚时，ListView 会创建新的条目并重新估算总高度，每次估算变化都把视图拉回底部。浮层上拉后的对话列表也有同样的问题。
+- **做法**：
+  - 采用常见的“跟随到底”规则：只有视图本来就在底部时，新内容才让它滚到最新；用户开始拖动就停止跟随，停下时如果在底部，再恢复跟随。
+  - 在 App 里按下说话、打开对话时，回到最新。
+  - 离开底部后，说话栏上方出现“回到最新”按钮。
+- **验证**：在一段很长的对话里向上拖动两次，等待 4 秒后，视图停在拖到的位置，“回到最新”按钮已出现（截屏）。
+
 ## 待办
 
 - **输入转写为繁体**：app-server不能设置转写语言，只影响显示；显示时做简繁转换。

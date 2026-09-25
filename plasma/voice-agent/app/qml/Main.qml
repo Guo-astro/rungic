@@ -12,18 +12,8 @@ Kirigami.ApplicationWindow {
     title: "语音助手"
     width: Kirigami.Units.gridUnit * 26
     height: Kirigami.Units.gridUnit * 40
+    // Flat: the navigation panel below takes this same colour (MotoVoiceAssistant.colors).
     color: Style.ground
-    Kirigami.Theme.colorSet: Kirigami.Theme.Complementary
-    Kirigami.Theme.inherit: false
-
-    // A faint glow from the bottom, where the light lives.
-    background: Rectangle {
-        gradient: Gradient {
-            GradientStop { position: 0.0; color: Style.ground }
-            GradientStop { position: 0.7; color: Style.ground }
-            GradientStop { position: 1.0; color: Style.groundLow }
-        }
-    }
 
     pageStack.initialPage: ConversationsPage {}
     pageStack.globalToolBar.style: Kirigami.ApplicationHeaderStyle.None

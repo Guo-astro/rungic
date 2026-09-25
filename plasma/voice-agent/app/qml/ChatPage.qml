@@ -33,14 +33,15 @@ Kirigami.Page {
             if (page.conversationId && opened.conversation !== page.conversationId) return
             page.conversationId = opened.conversation
             chat.load(opened)
-            Qt.callLater(view.positionViewAtEnd)
+            view.follow = true
+            Qt.callLater(view.stickToEnd)
         }
         function onEvent(json) {
             const e = JSON.parse(json)
             if (e.conversation && e.conversation !== page.conversationId) return
             if (e.type === "level") { page.micLevel = e.db; return }
             chat.apply(e, true)
-            if (e.type !== "state") Qt.callLater(view.positionViewAtEnd)
+            if (e.type !== "state") Qt.callLater(view.stickToEnd)
         }
         function onFailed(message) { chat.apply({ type: "error", text: message }, true) }
     }
@@ -111,7 +112,14 @@ Kirigami.Page {
         clip: true
         model: chat.entries
         delegate: ChatItem { callMonitor: chat.callMonitor }
-        onContentHeightChanged: Qt.callLater(positionViewAtEnd)
+        // New content keeps the view at the end only while the reader is there. Scrolled up,
+        // the view stays put: while it scrolls, ListView creates delegates and re-estimates its
+        // content height, and following every change threw the reader back to the end.
+        property bool follow: true
+        function stickToEnd() { if (follow) positionViewAtEnd() }
+        onContentHeightChanged: if (follow && !moving) Qt.callLater(stickToEnd)
+        onMovementStarted: follow = false
+        onMovementEnded: follow = atYEnd
         QQC2.ScrollBar.vertical: QQC2.ScrollBar {
             id: bar
             background: null
@@ -122,6 +130,18 @@ Kirigami.Page {
                 opacity: bar.active ? 1 : 0
                 Behavior on opacity { NumberAnimation { duration: 300 } }
             }
+        }
+    }
+
+    // Scrolled away from the end: a way back.
+    GlassButton {
+        anchors { horizontalCenter: parent.horizontalCenter; bottom: dock.top; bottomMargin: 4 }
+        visible: !view.follow && !view.atYEnd && view.contentHeight > view.height
+        iconName: "arrow-down-symbolic"
+        label: "回到最新"
+        onClicked: {
+            view.follow = true
+            view.positionViewAtEnd()
         }
     }
 
@@ -203,6 +223,9 @@ Kirigami.Page {
             : page.holding ? "松开发送 · 手指滑开取消"
             : chat.handsFree ? "说完自动发送 · 轻点结束" : ""
         onTalkPressed: {
+            // Talking brings the conversation back to its end.
+            view.follow = true
+            view.positionViewAtEnd()
             if (chat.handsFree) { AgentClient.stopTalking(); return }
             page.holding = true
             AgentClient.startTalking(page.screenName)

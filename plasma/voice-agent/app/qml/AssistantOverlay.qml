@@ -112,6 +112,7 @@ Window {
             floor = chat.entries.count
             awaiting = false
             expanded = false
+            list.follow = true
         } else {
             awaiting = true
             awaitTimer.restart()
@@ -181,7 +182,7 @@ Window {
             chat.apply(e, true)
             if (e.type === "state") return
             idleTimer.restart()
-            Qt.callLater(list.positionViewAtEnd)
+            if (list.follow) Qt.callLater(list.positionViewAtEnd)
             // Work finished while the overlay was away: bring the result up.
             if (e.type === "agent-finished" && !win.shown && win.screenName) win.summon(win.screenName)
         }
@@ -395,7 +396,11 @@ Window {
                 from: win.expanded ? 0 : Math.max(0, win.lastUser)
                 compact: !win.expanded
             }
-            onContentHeightChanged: Qt.callLater(positionViewAtEnd)
+            // Follows new content only while at the end (scrolling up re-estimates the height).
+            property bool follow: true
+            onContentHeightChanged: if (follow && !moving) Qt.callLater(positionViewAtEnd)
+            onMovementStarted: follow = false
+            onMovementEnded: follow = atYEnd
             Text {
                 id: hint
                 visible: chat.entries.count === 0

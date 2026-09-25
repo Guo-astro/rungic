@@ -2,6 +2,9 @@
 // Voice assistant: chat list with push-to-talk for the Codex voice agent (docs/59).
 //   --overlay            the resident overlay the Home button brings up (docs/67)
 //   --conversation ID    open that conversation (in the running app, if there is one)
+#include <KColorScheme>
+#include <KSharedConfig>
+
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QGuiApplication>
@@ -9,6 +12,7 @@
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
 #include <QQuickWindow>
+#include <QStandardPaths>
 
 #include "overlay.h"
 
@@ -83,6 +87,15 @@ int main(int argc, char *argv[])
         open.setArguments({conversation});
         bus.call(open);
         return 0;
+    }
+    // The app's own colours (docs/59). Declared through KDE_COLOR_SCHEME_PATH before any window
+    // exists: the platform theme hands it to KWin (the KDE palette protocol) and Kirigami reads
+    // it, so the shell's status bar and navigation panel take the same colours.
+    const QString scheme = QStandardPaths::locate(QStandardPaths::GenericDataLocation,
+                                                  QStringLiteral("moto-voice-assistant/MotoVoiceAssistant.colors"));
+    if (!scheme.isEmpty()) {
+        app.setProperty("KDE_COLOR_SCHEME_PATH", scheme);
+        QGuiApplication::setPalette(KColorScheme::createApplicationPalette(KSharedConfig::openConfig(scheme)));
     }
     engine.setInitialProperties({{QStringLiteral("initialConversation"), conversation}});
     engine.loadFromModule("dev.moto.voiceassistant", "Main");
