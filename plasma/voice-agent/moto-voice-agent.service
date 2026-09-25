@@ -9,6 +9,9 @@ BusName=dev.moto.VoiceAgent
 ExecStart=/usr/local/bin/moto-voice-agent --service
 Restart=on-failure
 RestartSec=3
+# It and its children (codex app-server, call proxy, moto-cua) hold API keys
+# and a login: no core dumps (docs/61).
+LimitCORE=0
 
 [Install]
 # Resident: holding Home should only have to open the realtime link (docs/67).
