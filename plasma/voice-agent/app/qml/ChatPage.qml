@@ -105,12 +105,13 @@ Kirigami.Page {
     // ---- the conversation ------------------------------------------------------------
     ListView {
         id: view
+        // The width of the page: the scroll bar sits at the screen's edge; ChatItem keeps the
+        // entries to a centred reading column.
         readonly property real column: Math.min(page.width - 40, Style.readingWidth)
         // Short conversations sit just above the talk control, as speech does: the view is
         // only as tall as what it holds, up to the space there is.
         readonly property real room: dock.y + 8 - header.height
-        anchors { bottom: dock.top; bottomMargin: -8; horizontalCenter: parent.horizontalCenter }
-        width: column
+        anchors { bottom: dock.top; bottomMargin: -8; left: parent.left; right: parent.right }
         height: Math.min(contentHeight + 8, room)
         clip: true
         // Comes in once loaded, already at its end.
@@ -129,6 +130,8 @@ Kirigami.Page {
         QQC2.ScrollBar.vertical: QQC2.ScrollBar {
             id: bar
             background: null
+            // Thin, at the edge, only while scrolling.
+            padding: 2
             contentItem: Rectangle {
                 implicitWidth: 3
                 radius: 1.5
@@ -173,7 +176,8 @@ Kirigami.Page {
 
     // Nothing said yet.
     Column {
-        anchors { left: view.left; right: view.right; verticalCenter: parent.verticalCenter; verticalCenterOffset: -40 }
+        anchors { horizontalCenter: parent.horizontalCenter; verticalCenter: parent.verticalCenter; verticalCenterOffset: -40 }
+        width: view.column
         leftPadding: 8
         spacing: 22
         visible: page.loaded && chat.entries.count === 0

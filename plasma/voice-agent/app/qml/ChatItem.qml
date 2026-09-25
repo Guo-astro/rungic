@@ -25,7 +25,11 @@ Item {
     required property bool expanded
     required property var steps
     property bool callMonitor: false   // a proxied call is being listened in on (docs/63)
+    // The view spans the page (its scroll bar at the screen's edge); entries keep to a
+    // centred reading column.
     width: ListView.view.width
+    readonly property real column: Math.min(width - 40, Style.readingWidth)
+    readonly property real inset: (width - column) / 2
     implicitHeight: loader.implicitHeight + 16
 
     readonly property bool mine: kind === "message" && role === "user" || kind === "live-user"
@@ -35,9 +39,9 @@ Item {
 
     Loader {
         id: loader
-        x: entry.mine ? entry.width - width : 0
+        x: entry.mine ? entry.inset + entry.column - width : entry.inset
         y: 8
-        width: entry.mine ? Math.min(implicitWidth, entry.width * 0.8) : entry.width
+        width: entry.mine ? Math.min(implicitWidth, entry.column * 0.8) : entry.column
         sourceComponent: {
             switch (entry.kind) {
             case "work": return workCard
@@ -55,7 +59,7 @@ Item {
         Rectangle {
             readonly property real padX: 16
             // Natural (unwrapped) width decides the bubble width; the text wraps inside.
-            implicitWidth: Math.min(measure.implicitWidth, entry.width * 0.8 - padX * 2) + padX * 2
+            implicitWidth: Math.min(measure.implicitWidth, entry.column * 0.8 - padX * 2) + padX * 2
             implicitHeight: label.implicitHeight + 20
             radius: 20
             bottomRightRadius: 6
