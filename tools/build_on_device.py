@@ -30,6 +30,10 @@ import moto_device
 from moto_device import PLASMA_ROOTFS, WORKSPACE, out, push, run
 
 BASE = '/root/moto-build'
+# Line tables only (-g1): enough for symbolized backtraces (docs/61) at a fraction of -g2's
+# compile memory; debhelper strips the packages and puts the symbols into -dbgsym packages
+# for the release repository.
+DEBUG_FLAGS = 'DEB_CFLAGS_MAINT_APPEND=-g1 DEB_CXXFLAGS_MAINT_APPEND=-g1'
 
 
 def stage(component):
@@ -85,14 +89,17 @@ def start(component, mode, jobs, targets=(), lto=True, cmake_args=()):
                  f"-DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=OFF {' '.join(cmake_args)}) && "
                  f"cmake --build {build} -j {jobs} --target {' '.join(targets)}")
     elif mode == 'full':
-        steps = (f"export DEB_BUILD_OPTIONS='nocheck nostrip parallel={jobs}' DEB_CXXFLAGS_MAINT_APPEND=-g0{maint}; "
+        steps = (f"export DEB_BUILD_OPTIONS='nocheck parallel={jobs}' {DEBUG_FLAGS}{maint}; "
                  f"cd {work}/src && dpkg-buildpackage -b -uc -us")
     else:
-        steps = (f"export DEB_BUILD_OPTIONS='nocheck nostrip parallel={jobs}' DEB_CXXFLAGS_MAINT_APPEND=-g0{maint}; "
+        steps = (f"export DEB_BUILD_OPTIONS='nocheck parallel={jobs}' {DEBUG_FLAGS}{maint}; "
                  f"cd {work}/src && test -d {obj} && make -C {obj} -j{jobs} && debian/rules binary")
     run(f'''set -e
+# RemainAfterExit keeps the last build's result and MemoryPeak readable until the next one.
+systemctl stop moto-build-{component} 2>/dev/null || true
 systemctl reset-failed moto-build-{component} 2>/dev/null || true
-systemd-run --unit=moto-build-{component} --nice=10 --property=IOSchedulingClass=idle \\
+systemd-run --unit=moto-build-{component} --nice=10 --property=IOSchedulingClass=idle --property=MemoryAccounting=yes \\
+  --property=RemainAfterExit=yes \\
   --setenv=HOME=/root --property=StandardOutput=truncate:{work}/build.log --property=StandardError=inherit \\
   /bin/sh -c "{steps}"
 ''', 'container')
@@ -100,7 +107,8 @@ systemd-run --unit=moto-build-{component} --nice=10 --property=IOSchedulingClass
 
 
 def status(component):
-    return out(f'''systemctl show -p ActiveState -p Result -p ExecMainStartTimestamp -p ExecMainExitTimestamp moto-build-{component}
+    return out(f'''systemctl show -p ActiveState -p SubState -p Result -p ExecMainStartTimestamp -p ExecMainExitTimestamp \
+  -p ExecMainStatus -p MemoryPeak -p CPUUsageNSec moto-build-{component}
 grep -E '^\\[ *[0-9]+%\\]|^\\[[0-9]+/[0-9]+\\]|error|Error|warning: unused|dpkg-deb: building' {BASE}/{component}/build.log 2>/dev/null | tail -n 8 | cut -c1-200
 ls -1t {BASE}/{component}/*.deb 2>/dev/null | head -12''', 'container')
 
@@ -148,7 +156,7 @@ def main():
     elif args.action == 'status':
         print(status(args.component))
     elif args.action == 'wait':
-        while 'ActiveState=active' in (text := status(args.component)) or 'ActiveState=activating' in text:
+        while 'SubState=running' in (text := status(args.component)) or 'ActiveState=activating' in text:
             time.sleep(30)
         print(text)
     else:
