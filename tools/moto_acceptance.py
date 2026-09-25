@@ -314,6 +314,134 @@ def audio_record(ctx):
                   default_source=default, samples=samples)
 
 
+# ---------------------------------------------------------------- full level
+
+@check
+def app_launch(ctx, app='Calculator', process='kalk', rounds=2):
+    """Launch and close through the launcher by accessible names (tools/ui_launch_check.py)."""
+    import ui_launch_check as ui
+    enabled = moto_agent.a11y('state')['enabled']
+    if not enabled:
+        moto_agent.ui_enable(True)
+        time.sleep(2)
+    try:
+        if ui.running(process):
+            ui.close(process)
+        steps = []
+        for _ in range(rounds):
+            began = time.monotonic()
+            step = ui.launch(app, process, False)
+            step['launch_s'] = round(time.monotonic() - began, 1)
+            step |= ui.close(process)
+            steps.append(step)
+        ok = all(s['started'] and s['registered'] and s['exited'] for s in steps)
+        return result(ok, {'launch_s': max(s['launch_s'] for s in steps)}, rounds=steps)
+    finally:
+        try:
+            _home()
+        except Exception:
+            pass
+        if not enabled:
+            moto_agent.ui_enable(False)
+
+
+def _phone_output():
+    doctor = json.loads(user('kscreen-doctor -j 2>/dev/null').stdout or '{}')
+    android = re.search(r'(\d+)x(\d+)', out('wm size | tail -1', 'shell'))
+    size = sorted((int(android[1]), int(android[2]))) if android else None
+    for o in doctor.get('outputs', []):
+        mode = next((m for m in o.get('modes', []) if m['id'] == o.get('currentModeId')), None)
+        if o.get('enabled') and mode and sorted((mode['size']['width'], mode['size']['height'])) == size:
+            return o
+    return None
+
+
+@check
+def display_scale_roundtrip(ctx, other=2.75):
+    """KScreen applies a scale to the phone output and reverts it: the display settings path
+    (KScreen -> KWin output management -> the Android host) works both ways."""
+    output = _phone_output()
+    if not output:
+        return result(False, error='phone output not found in kscreen-doctor')
+    name, original = output['name'], output['scale']
+    target = other if abs(original - other) > 0.01 else original - 0.25
+    user(f'kscreen-doctor output.{name}.scale.{target}')
+    applied = wait_for(lambda: (lambda o: o and abs(o['scale'] - target) < 0.01)(_phone_output()), timeout=8)
+    user(f'kscreen-doctor output.{name}.scale.{original}')
+    restored = wait_for(lambda: (lambda o: o and abs(o['scale'] - original) < 0.01)(_phone_output()), timeout=8)
+    return result(bool(applied) and bool(restored), output=name, original=original, tried=target,
+                  applied=bool(applied), restored=bool(restored))
+
+
+CODEC = r"""
+set -e
+d=$(mktemp -d /var/tmp/moto-codec.XXXXXX); trap 'rm -rf "$d"' EXIT
+bin=/usr/lib/moto-codec/ffmpeg/bin; [ -x $bin/ffprobe ] || bin=/usr/local/lib/moto-codec/ffmpeg/bin
+# The /usr/local build's rpath lacked ffmpeg/lib, so its tools picked up the system libav* (fixed in moto-codec).
+export LD_LIBRARY_PATH=$bin/../lib:$bin/../..
+now() { python3 -c 'import time; print(time.monotonic())'; }
+t0=$(now)
+gst-launch-1.0 -q videotestsrc num-buffers=FRAMES pattern=ball ! video/x-raw,width=1280,height=720,framerate=30/1 \
+  ! motoh264enc ! h264parse ! mp4mux ! filesink location=$d/t.mp4
+t1=$(now)
+$bin/ffprobe -v error -count_frames -select_streams v:0 -show_entries stream=codec_name,nb_read_frames,width,height \
+  -show_entries format=duration -of json $d/t.mp4
+t2=$(now)
+decoded=$($bin/ffmpeg -v error -c:v h264_moto -i $d/t.mp4 -f framemd5 - 2>/dev/null | grep -vc '^#')
+t3=$(now)
+echo "@@ encode_s=$(python3 -c "print(round($t1 - $t0, 2))") decode_s=$(python3 -c "print(round($t3 - $t2, 2))") decoded=$decoded"
+"""
+
+
+@check
+def codec_roundtrip(ctx, frames=90):
+    """Android hardware H.264 encode through the GStreamer element (motoh264enc), then decode through the
+    private FFmpeg's h264_moto: frame counts, duration and resolution checked."""
+    text = user(CODEC.replace('FRAMES', str(int(frames))), timeout=180)
+    body, _, tail = text.stdout.partition('@@ ')
+    try:
+        probe = json.loads(body)
+    except ValueError:
+        return result(False, error=(text.stderr or text.stdout)[-1500:])
+    stream = (probe.get('streams') or [{}])[0]
+    values = dict(kv.split('=', 1) for kv in tail.split())
+    encoded = int(stream.get('nb_read_frames') or 0)
+    decoded = int(values.get('decoded') or 0)
+    duration = float(probe.get('format', {}).get('duration') or 0)
+    ok = (encoded == frames and decoded == frames and stream.get('codec_name') == 'h264'
+          and (stream.get('width'), stream.get('height')) == (1280, 720) and abs(duration - frames / 30) < 0.2)
+    return result(ok, {'encode_s': float(values.get('encode_s') or 0), 'decode_s': float(values.get('decode_s') or 0)},
+                  encoded_frames=encoded, decoded_frames=decoded, duration=duration, stream=stream)
+
+
+@check
+def compositor_perf(ctx, max_regression=0.15, rounds=2):
+    """tools/kwin_pipeline_run.py while scrolling the drawer: KWin paint and SurfaceFlinger present intervals,
+    CPU and GPU. Fails when paint p95 or the present interval p95 is worse than the previous release's by
+    more than max_regression."""
+    import subprocess
+    out_dir = ctx['out_dir'] / 'compositor'
+    run_ = subprocess.run(['uv', 'run', '--script', str(moto_device.WORKSPACE / 'tools/kwin_pipeline_run.py'),
+                           str(out_dir), '--rounds', str(rounds), '--seconds', '8', '--swipes', '6',
+                           '--max-thermal', '2'], capture_output=True, text=True, timeout=1800)
+    summary_path = out_dir / 'summary.json'
+    if not summary_path.exists():
+        return result(False, error=(run_.stderr or run_.stdout)[-1500:])
+    summary = json.loads(summary_path.read_text())
+    metrics = {'kwin_paint_ms_p95': summary.get('kwin_paint_ms_p95'), 'sf_interval_ms_p95': summary.get('sf_interval_ms_p95'),
+               'kwin_cpu_pct': (summary.get('cpu_core_pct') or {}).get('kwin'),
+               'plasmashell_cpu_pct': (summary.get('cpu_core_pct') or {}).get('plasmashell'),
+               'gpu_busy_pct': summary.get('gpu_busy_pct')}
+    regressions = []
+    base = ctx.get('previous_metrics', {}).get('perf.compositor', {})
+    for key in ('kwin_paint_ms_p95', 'sf_interval_ms_p95'):
+        if isinstance(base.get(key), (int, float)) and isinstance(metrics[key], (int, float)) and base[key] > 0:
+            if metrics[key] > base[key] * (1 + max_regression):
+                regressions.append(f'{key} {base[key]} -> {metrics[key]}')
+    return result(not regressions and metrics['kwin_paint_ms_p95'] is not None, metrics,
+                  regressions=regressions, compared_with=base or None, summary=str(summary_path))
+
+
 # ---------------------------------------------------------------- runner
 
 def load():
@@ -351,10 +479,12 @@ def compare(current, previous):
 def run_scenarios(selected, release=None, out_dir=None, since=None):
     spec = load()
     started = time.time()
-    ctx = {'spec': spec, 'since': since or started, 'release': release}
     stamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
     out_dir = Path(out_dir) if out_dir else RESULTS / (release or 'unreleased') / stamp
     out_dir.mkdir(parents=True, exist_ok=True)
+    _, base = previous_report(release, {s['id'] for s in selected})
+    ctx = {'spec': spec, 'since': since or started, 'release': release, 'out_dir': out_dir,
+           'previous_metrics': {s['id']: s.get('metrics', {}) for s in (base or {}).get('scenarios', [])}}
     rows = []
     for scenario in selected:
         fn = CHECKS.get(scenario['check'])

@@ -10,7 +10,7 @@ cd "$SRC/vendor/ffmpeg"
 ./configure --prefix=/usr/lib/moto-codec/ffmpeg --enable-shared --disable-static \
  --disable-doc --disable-autodetect --disable-network --disable-devices \
  --enable-gpl --enable-libx264 --enable-libx265 --enable-libvpx --enable-libopus --enable-libdav1d \
- --extra-cflags=-g1 --extra-ldflags="-L$lib -Wl,-rpath,/usr/lib/moto-codec" \
+ --extra-cflags=-g1 --extra-ldflags="-L$lib -Wl,-rpath,/usr/lib/moto-codec:/usr/lib/moto-codec/ffmpeg/lib" \
  --extra-libs='-lmotocodec -pthread' >/dev/null
 make -j"${JOBS:-4}" >/dev/null
 make install DESTDIR="$DESTDIR" >/dev/null
