@@ -139,15 +139,24 @@ def input_text(ctx, text='Calcul', expect='Calculator', absent='Clock'):
     try:
         field = _drawer_search()
 
+        from collections import Counter
+
         def labels():
-            return {(n['path'], n['name']) for n in moto_agent.ui_find('plasmashell', role='label')}
-        # The full grid stays "showing" under the results over AT-SPI, so look at what appears.
-        before = labels()
+            return Counter(n['name'] for n in moto_agent.ui_find('plasmashell', role='label'))
+        # The full grid stays "showing" under the results over AT-SPI (and its paths shift), so
+        # count names: the results view adds one label per match.
+        # Right after a session restart the drawer's AT-SPI tree is still filling: wait until it settles.
+        before, previous = labels(), None
+        for _ in range(20):
+            if before == previous:
+                break
+            time.sleep(0.5)
+            previous, before = before, labels()
         moto_agent.ui_press('plasmashell', field['path'], 'SetFocus')
         time.sleep(0.4)
         run(f'input text {shlex.quote(text)}', 'shell')
-        new = wait_for(lambda: (lambda n: n if expect in n else None)({name for _, name in labels() - before}),
-                       timeout=6) or {name for _, name in labels() - before}
+        new = wait_for(lambda: (lambda n: n if expect in n else None)(set(labels() - before)), timeout=6) \
+            or set(labels() - before)
         return result(expect in new and absent not in new, sent=text, results=sorted(new)[:12])
     finally:
         try:
