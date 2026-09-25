@@ -12,7 +12,7 @@ install -Dm755 "$P/account/setup.py" "$DESTDIR/usr/libexec/moto-plasma-account-s
 install -Dm644 "$P/account/moto-account.desktop" "$DESTDIR/usr/share/applications/moto-account.desktop"
 install -Dm755 "$P/user-exec" "$DESTDIR/usr/bin/moto-plasma-user-exec"
 mkdir -p "$DESTDIR/usr/bin"
-g++ -O2 -std=c++20 -fPIC -o "$DESTDIR/usr/bin/moto-plasma-screen-metrics" "$P/screen-metrics.cpp" \
+g++ -O2 -g1 -std=c++20 -fPIC -o "$DESTDIR/usr/bin/moto-plasma-screen-metrics" "$P/screen-metrics.cpp" \
     $(pkg-config --cflags --libs Qt6Gui)
 for unit in moto-plasma-session moto-plasma-shared; do
     install -Dm644 "$P/$unit.service" "$DESTDIR/usr/lib/systemd/system/$unit.service"

@@ -18,9 +18,9 @@ gl="$(pkg-config --cflags --libs gbm egl glesv2)"
 cc -O2 -g1 -o "$B/moto-gpu-probe" "$SRC/shared/graphics/gpu-probe.c" $gl
 cc -O2 -g1 -I"$SRC/shared/graphics" $(pkg-config --cflags libdrm) -o "$B/moto-gpu-ahb-probe" "$SRC/plasma/gpu-ahb-probe.c" $gl
 qt="$(pkg-config --cflags --libs Qt6Gui Qt6Qml)"
-g++ -O2 -std=c++20 -fPIC -o "$B/moto-input-probe" "$D/probes/input-probe.cpp" $qt
-g++ -O2 -std=c++20 -fPIC -o "$B/screen-probe" "$D/probes/screen-probe.cpp" $(pkg-config --cflags --libs Qt6Gui)
-g++ -O2 -std=c++20 -fPIC -o "$B/apps-probe" "$D/probes/apps-probe.cpp" $(pkg-config --cflags --libs Qt6Core) \
+g++ -O2 -g1 -std=c++20 -fPIC -o "$B/moto-input-probe" "$D/probes/input-probe.cpp" $qt
+g++ -O2 -g1 -std=c++20 -fPIC -o "$B/screen-probe" "$D/probes/screen-probe.cpp" $(pkg-config --cflags --libs Qt6Gui)
+g++ -O2 -g1 -std=c++20 -fPIC -o "$B/apps-probe" "$D/probes/apps-probe.cpp" $(pkg-config --cflags --libs Qt6Core) \
     -I/usr/include/KF6/KService -I/usr/include/KF6/KCoreAddons -lKF6Service -lKF6CoreAddons
 sh "$SRC/plasma/bench/compbench/build.sh" "$SRC/plasma/bench/compbench/build" >/dev/null
 install -m755 "$SRC/plasma/bench/compbench/build/compbench" "$B/moto-compbench"
