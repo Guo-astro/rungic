@@ -28,7 +28,9 @@ import com.winland.server.NativeBridge;
  *
  * Above the picture lies a transparent layer turned the same way, so touches and the toolbar work
  * in the landscape view the user holds. It is a panel window of its own: the host's zero-copy layer
- * sits above everything else drawn in the activity's window, which covered a toolbar there. tap = click, long press = right click, drag = drag, two
+ * sits above everything else drawn in the activity's window, which covered a toolbar there.
+ * Two ways to touch it, switched on the toolbar and remembered: direct (below) or the laptop
+ * touchpad of TouchpadGestures, where the finger moves the pointer instead of standing for it. tap = click, long press = right click, drag = drag, two
  * fingers = scroll; a swipe up starting in its bottom strip (the phone's left edge) shows the
  * toolbar (leave, TV, close) for three seconds, while a tap there still clicks.
  */
@@ -52,6 +54,7 @@ final class AgentFullscreen implements SurfaceHolder.Callback {
     private FrameLayout panel;
     private Landscape landscape;
     private boolean bound;
+    private boolean touchpad;
 
     AgentFullscreen(Activity activity, FrameLayout parent, int agentWidth, int agentHeight, Host host) {
         this.activity = activity;
@@ -59,6 +62,7 @@ final class AgentFullscreen implements SurfaceHolder.Callback {
         this.host = host;
         this.agentWidth = agentWidth;
         this.agentHeight = agentHeight;
+        touchpad = activity.getPreferences(Context.MODE_PRIVATE).getBoolean("agent_fullscreen_touchpad", false);
     }
 
     boolean shown() { return root != null; }
@@ -123,6 +127,9 @@ final class AgentFullscreen implements SurfaceHolder.Callback {
     /** The landscape view: the phone's size turned, over the picture, taking the touches. */
     private final class Landscape extends FrameLayout {
         private final LinearLayout toolbar;
+        private final IconView modeButton;
+        private final TouchpadGestures pad = new TouchpadGestures(activity, main);
+        private boolean swipeTaken;  // an upward swipe from the bottom strip went to the toolbar
         private final Runnable hideToolbar = this::fadeToolbar;
         private final int touchSlop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
         private final float swipeZone = dp(56);
@@ -146,6 +153,11 @@ final class AgentFullscreen implements SurfaceHolder.Callback {
             capsule.setCornerRadius(dp(23));
             toolbar.setBackground(capsule);
             toolbar.addView(button(Icon.LEAVE, host::leaveFullscreen));
+            modeButton = new IconView(context, Icon.TOUCHPAD);
+            modeButton.setOnClickListener(v -> { showToolbar(); setTouchpad(!touchpad); });
+            modeButton.setLayoutParams(new LinearLayout.LayoutParams((int) dp(42), (int) dp(34)));
+            modeButton.setSelected(touchpad);
+            toolbar.addView(modeButton);
             toolbar.addView(button(Icon.TV, host::castToTv));
             toolbar.addView(button(Icon.CLOSE, host::closeAgentScreen));
             toolbar.setVisibility(View.GONE);
@@ -174,6 +186,14 @@ final class AgentFullscreen implements SurfaceHolder.Callback {
             view.setOnClickListener(v -> { showToolbar(); action.run(); });
             view.setLayoutParams(new LinearLayout.LayoutParams((int) dp(42), (int) dp(34)));
             return view;
+        }
+
+        /** Touchpad (the finger moves the pointer) or direct (the finger is the pointer). */
+        private void setTouchpad(boolean on) {
+            pad.reset();
+            touchpad = on;
+            modeButton.setSelected(on);
+            activity.getPreferences(Context.MODE_PRIVATE).edit().putBoolean("agent_fullscreen_touchpad", on).apply();
         }
 
         private void fadeToolbar() {
@@ -214,6 +234,7 @@ final class AgentFullscreen implements SurfaceHolder.Callback {
         }
 
         @Override public boolean onTouchEvent(MotionEvent e) {
+            if (touchpad) return touchpadEvent(e);
             switch (e.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
                     downX = lastX = e.getX();
@@ -270,6 +291,23 @@ final class AgentFullscreen implements SurfaceHolder.Callback {
             }
         }
 
+        /** Touchpad mode: the gestures, except an upward swipe from the bottom strip (the toolbar). */
+        private boolean touchpadEvent(MotionEvent e) {
+            if (e.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                swipe = e.getY() > getHeight() - swipeZone;
+                swipeTaken = false;
+                downY = e.getY();
+            }
+            if (swipeTaken) return true;
+            if (swipe && e.getActionMasked() == MotionEvent.ACTION_MOVE && e.getPointerCount() == 1 && downY - e.getY() > dp(20)) {
+                swipeTaken = true;
+                pad.reset();
+                showToolbar();
+                return true;
+            }
+            return pad.onTouchEvent(e);
+        }
+
         private float centroidX(MotionEvent e) {
             float sum = 0;
             for (int i = 0; i < e.getPointerCount(); i++) sum += e.getX(i);
@@ -283,7 +321,7 @@ final class AgentFullscreen implements SurfaceHolder.Callback {
         }
     }
 
-    private enum Icon { LEAVE, TV, CLOSE }
+    private enum Icon { LEAVE, TOUCHPAD, TV, CLOSE }
 
     /** A white line icon on a round press highlight. */
     private final class IconView extends View {
@@ -310,7 +348,8 @@ final class AgentFullscreen implements SurfaceHolder.Callback {
 
         @Override protected void onDraw(Canvas c) {
             float cx = getWidth() / 2f, cy = getHeight() / 2f, s = dp(9);
-            if (isPressed()) c.drawCircle(cx, cy, Math.min(cx, cy), pressedPaint);
+            // Pressed, or a mode that is on (the touchpad toggle): a round highlight.
+            if (isPressed() || isSelected()) c.drawCircle(cx, cy, Math.min(cx, cy), pressedPaint);
             switch (icon) {
                 case LEAVE: {  // four corners pointing inwards
                     float a = s * 0.45f;
@@ -323,6 +362,11 @@ final class AgentFullscreen implements SurfaceHolder.Callback {
                     }
                     break;
                 }
+                case TOUCHPAD:  // a touchpad with its two buttons
+                    c.drawRoundRect(new RectF(cx - s, cy - s * 0.75f, cx + s, cy + s * 0.75f), dp(2.5f), dp(2.5f), paint);
+                    c.drawLine(cx - s, cy + s * 0.3f, cx + s, cy + s * 0.3f, paint);
+                    c.drawLine(cx, cy + s * 0.3f, cx, cy + s * 0.75f, paint);
+                    break;
                 case TV:
                     c.drawRoundRect(new RectF(cx - s, cy - s * 0.7f, cx + s, cy + s * 0.5f), dp(2), dp(2), paint);
                     c.drawLine(cx - s * 0.45f, cy + s * 0.85f, cx + s * 0.45f, cy + s * 0.85f, paint);
