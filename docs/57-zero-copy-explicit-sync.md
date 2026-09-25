@@ -197,3 +197,32 @@ uv run --script tools/kwin_pipeline_run.py OUT --zerocopy on --kwin-env MOTO_KWI
 ```
 
 数据：`benchmarks/zero-copy-20260924/`。原生宿主可在K8构建：`MOTO_PROXY= bash plasma/build-native-core.sh`（自动使用SDK中最新NDK，xkbcommon取自已安装APK）。
+
+## 宿主帧节拍：活跃时事件驱动（2026-09-25，APK 1.43）
+
+本篇当时留下的“显示节拍受宿主帧回调与呈现反馈影响”，在用户反馈 QML 应用滚动掉帧时（59 篇）处理。
+
+- **测量方法**：`dumpsys SurfaceFlinger --latency moto-zero-copy#N` 读取宿主零拷贝图层最近 128 帧的实际显示时间（`.work/sf-latency.py`）。操作是在语音助手的长对话里做一次快速滑动加一次慢速拖动。另外用 Qt 渲染循环日志（`qt.scenegraph.time.renderloop`）看应用侧的帧间隔。
+- **现象**：屏幕确实运行在 120 Hz（周期 8.33 ms），但滚动时约 29% 的相邻显示间隔是 17 ms（36/124），而且零散分布，不是固定的 60 Hz。Qt 侧，语音助手和 `plasma-settings` 都有约 30% 的帧间隔超过 11 ms，时间耗在 swap 上。
+- **原因**：
+  - 宿主合成循环在活跃状态下每一圈都停在 `frame_clock::wait_next`，等下一个 Choreographer tick，醒来才处理 KWin 的提交、触摸命令和 SurfaceFlinger 的回报。
+  - KWin 画完一帧的时刻在 vsync 周期内是抖动的。落在 tick 刚过之后的一帧，要等将近一个周期才被取走；下一帧如果按时到了，两帧会在同一个 tick 里被处理，其中一帧被跳过，显示上就少了一个 vsync。
+  - 呈现反馈也要到下一个 tick 才转给 KWin，拖慢了 KWin RenderLoop 的节奏（它按“显示时刻减帧回调时刻”估算安全余量，wayland 后端允许两帧在途）。
+- **做法**（`native/plasma/src/android/frame_clock.rs`、`compositor.rs`）：
+  - 活跃状态改用 `wait_active`：`frameTick` 每个 tick 同时写一个 eventfd，循环一起 poll 这个 tick fd、原有的 kick fd（JNI 命令和 SurfaceFlinger 回调已经会 kick）以及 Wayland 服务端的 fd，任何一个到了都立即处理。
+  - KWin 的提交一到就转成 SurfaceControl 事务，由 SurfaceFlinger 按 vsync 锁存（Chromium 的 SurfaceControl 路径也是一帧准备好就提交）。
+  - 休眠（parked）逻辑不变。
+- **结果**（同一手势，APK 1.42 → 1.43）：
+
+  | 指标 | 之前 | 之后 |
+  |---|---|---|
+  | 语音助手，SurfaceFlinger 显示间隔 ≥10 ms 的比例 | 29%（36/124） | 13.5%（17/126）、10.3%（13/126） |
+  | `plasma-settings`，同上 | 未测 | 7.1%（9/126）、2.4%（3/126） |
+  | 语音助手，Qt 帧间隔 ≥11 ms | 30% | 13% |
+  | 语音助手，swap p90 | 12 ms | 8 ms |
+  | `plasma-settings`，Qt 帧间隔 ≥11 ms | 31% | 26% |
+  | 宿主 APK CPU（空闲 / 滚动，单核） | — | 1.3% / 12.2% |
+
+- **剩余**：
+  - 仍有约 10% 的漏帧；`plasma-settings` 在 Qt 侧只从 31% 降到 26%，这个指标还包括应用自己的帧调度。
+  - 下一步可考虑按 vsync 预测提前发帧回调，以及量化滑动开始时 Android 从 30 Hz 切到 120 Hz 的延迟（空闲时 SurfaceFlinger 的当前模式是 30 Hz，系统默认优先级还有一条最高 90 Hz 的投票）。
