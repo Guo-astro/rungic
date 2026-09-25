@@ -5,7 +5,8 @@
 #   ninja components/mobileshell/libmobileshellplugin.so components/windowplugin/libwindowplugin.so \
 #         bin/plasma/applets/org.kde.plasma.mobile.homescreen.folio.so \
 #         bin/org/kde/plasma/quicksetting/kscreenosd/libkscreenosdplugin.so \
-#         bin/plasma/applets/org.kde.plasma.mobile.taskpanel.so
+#         bin/plasma/applets/org.kde.plasma.mobile.taskpanel.so bin/plasma/applets/org.kde.plasma.mobile.panel.so \
+#         components/mobileshellstate/libmobileshellstateplugin.so
 # Plugins that were not built are skipped. Restart plasmashell afterwards.
 set -eu
 build=${1:-/root/moto-build/plasma-mobile/build}
@@ -25,4 +26,6 @@ components/windowplugin/libwindowplugin.so $qt/qml/org/kde/plasma/private/mobile
 bin/plasma/applets/org.kde.plasma.mobile.homescreen.folio.so $qt/plugins/plasma/applets/org.kde.plasma.mobile.homescreen.folio.so
 bin/org/kde/plasma/quicksetting/kscreenosd/libkscreenosdplugin.so $qt/qml/org/kde/plasma/quicksetting/kscreenosd/libkscreenosdplugin.so
 bin/plasma/applets/org.kde.plasma.mobile.taskpanel.so $qt/plugins/plasma/applets/org.kde.plasma.mobile.taskpanel.so
+bin/plasma/applets/org.kde.plasma.mobile.panel.so $qt/plugins/plasma/applets/org.kde.plasma.mobile.panel.so
+components/mobileshellstate/libmobileshellstateplugin.so $qt/qml/org/kde/plasma/private/mobileshell/state/libmobileshellstateplugin.so
 LIST
