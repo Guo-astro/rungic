@@ -57,7 +57,7 @@ KWin CAST-1 ─────┤
   - 现在的做法：浮窗的全屏按钮向平台桥发 `{"op":"agent-screen","fullscreen":true}`。APK 在 Plasma 画面之上加一个全屏 SurfaceView，并以 `bindPresenter("fullscreen", …, rotation 90)` 绑定宿主的第二输出显示端。原生显示端用 `ASurfaceTransaction_setGeometry`，由 SurfaceFlinger 完成顺时针 90° 旋转、按比例缩放和居中留黑边，帧仍是零拷贝。浮窗在全屏期间隐藏并停止录制，处理方式和电视接管时相同。
   - 显示端归属：电视（`"tv"`，CastDesktop）和全屏（`"fullscreen"`）共用一个显示端，一方只在自己是当前绑定者时才释放，所以不会误断另一方。电视接上时优先，全屏自动退出；电视在显示时拒绝进入全屏。
   - 触摸：由宿主处理，不经 Linux。透明触摸层和工具栏放在一个单独的子窗口里（`TYPE_APPLICATION_PANEL`），因为宿主的零拷贝图层会盖住同一个 Activity 窗口里画的所有东西，最初的工具栏只露出一条边。这个层同样旋转 90°，使用横屏坐标。
-    - 单击是点击，长按是右键，单指拖动是拖拽，双指是滚动（方向与电视触控板一致）。
+    - 手势与移动算法见 66 篇（APK 1.40 统一重构：直接触摸与触控板共用 `PointerOutput`、`PointerTransfer`、`GestureRules`）。
     - 指针通过新增的 `castPointer` op 5（绝对位置，单位为助理屏像素）直接落到 KWin 的 CAST 窗口上。
     - 点击时抬起延后 40 ms：按下和抬起在同一时刻发出时，面板的应用启动器不响应。
     - 进入全屏 300 ms 后先把指针移到画面中央：KWin 要等看到新的指针能力后才绑定指针，第一次点击的按下原本会丢。

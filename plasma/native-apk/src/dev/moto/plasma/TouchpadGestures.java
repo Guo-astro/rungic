@@ -1,121 +1,153 @@
 package dev.moto.plasma;
 
-import android.content.Context;
 import android.os.Handler;
-import android.os.SystemClock;
 import android.view.MotionEvent;
-import android.view.ViewConfiguration;
-import com.winland.server.NativeBridge;
 
 /**
- * Laptop touchpad gestures on the host's second output (docs/58, docs/65): one finger moves the
- * pointer (accelerated), a tap clicks, tap then touch again drags, two fingers scroll, a two-finger
- * tap right-clicks, a three-finger tap middle-clicks. Shared by the phone as the TV's touchpad
- * (CastControls) and the touchpad mode of the assistant's screen fullscreen (AgentFullscreen).
+ * A laptop touchpad over the host's second output (docs/66), after libinput's tap state machine:
+ *
+ *   one finger moves        the pointer (PointerTransfer: 1:1 as seen, accelerating when fast)
+ *   tap                     left click; two-finger tap right click; three-finger tap middle click
+ *   tap, tap                double click
+ *   tap, then touch & move  drag (the button stays down until the finger lifts); a touch held
+ *   (or hold past the tap   past the tap timeout after a tap also starts a drag
+ *    timeout)
+ *   two fingers move        scroll, content following the fingers; kinetic after the lift
+ *
+ * Shared by the phone as the TV's touchpad (CastControls) and the touchpad mode of the assistant's
+ * screen fullscreen (AgentFullscreen).
  */
 final class TouchpadGestures {
-    private static final int BTN_LEFT = 0x110, BTN_RIGHT = 0x111, BTN_MIDDLE = 0x112;
-    // Tap-and-drag: a tap presses at once and releases after this unless touched again.
-    private static final long TAP_RELEASE_MS = 180, TAP_MAX_MS = 250;
+    private enum State { IDLE, TOUCH, TAPPED, DRAG_OR_DOUBLETAP, DRAGGING }
+
+    private final PointerOutput out;
+    private final PointerTransfer transfer;
     private final Handler handler;
-    private final float slop;
-    private final Runnable tapRelease = () -> { tapHeld = false; NativeBridge.castPointer(2, BTN_LEFT, 0); };
-    private final float[] point = new float[2];
-    private boolean tapHeld, dragging, moved, scrolling;
+    private final float[] point = new float[2], delta = new float[2];
+    private final Runnable tapReleased = this::tapReleased;
+    private final Runnable holdToDrag = this::holdToDrag;
+    private State state = State.IDLE;
     private int maxFingers;
-    private long downTime, lastMoveTime;
+    private boolean moved, scrolling;
+    private long downTime;
     private float startX, startY, lastX, lastY;
 
-    TouchpadGestures(Context context, Handler handler) {
+    TouchpadGestures(PointerOutput out, PointerTransfer transfer, Handler handler) {
+        this.out = out;
+        this.transfer = transfer;
         this.handler = handler;
-        slop = ViewConfiguration.get(context).getScaledTouchSlop();
     }
 
-    /** Let go of anything held (a gesture was cut short or the mode changed). */
+    /** Let go of anything held: a gesture was cut short, or the mode changed. */
     void reset() {
-        handler.removeCallbacks(tapRelease);
-        if (tapHeld || dragging) NativeBridge.castPointer(2, BTN_LEFT, 0);
-        if (scrolling) NativeBridge.castPointer(4, 0, 0);
-        tapHeld = dragging = scrolling = false;
+        handler.removeCallbacks(tapReleased);
+        handler.removeCallbacks(holdToDrag);
+        if (state == State.TAPPED || state == State.DRAG_OR_DOUBLETAP || state == State.DRAGGING)
+            out.button(PointerOutput.BTN_LEFT, false);
+        if (scrolling) out.scrollStop();
+        state = State.IDLE;
+        scrolling = false;
     }
 
-    private void centroid(MotionEvent e, float[] out) {
-        float x = 0, y = 0;
-        int n = e.getPointerCount();
-        int skip = e.getActionMasked() == MotionEvent.ACTION_POINTER_UP ? e.getActionIndex() : -1;
-        int count = 0;
-        for (int i = 0; i < n; i++) {
-            if (i == skip) continue;
-            x += e.getX(i);
-            y += e.getY(i);
-            count++;
+    private void tapReleased() {
+        // No second touch in time: the tap was a single click.
+        if (state == State.TAPPED) {
+            out.button(PointerOutput.BTN_LEFT, false);
+            state = State.IDLE;
         }
-        out[0] = count > 0 ? x / count : 0;
-        out[1] = count > 0 ? y / count : 0;
+    }
+
+    private void holdToDrag() {
+        // The second touch stayed down past the tap timeout: it is a drag, not a double click.
+        if (state == State.DRAG_OR_DOUBLETAP && !scrolling) state = State.DRAGGING;
+    }
+
+    private boolean pastTapMove(float x, float y) {
+        return Math.hypot(x - startX, y - startY) * transfer.mmPerInputPx() > GestureRules.TAP_MOVE_MM;
     }
 
     boolean onTouchEvent(MotionEvent e) {
-        long now = SystemClock.uptimeMillis();
         switch (e.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 maxFingers = 1;
                 moved = scrolling = false;
-                downTime = lastMoveTime = now;
+                downTime = e.getEventTime();
                 startX = lastX = e.getX();
                 startY = lastY = e.getY();
-                if (tapHeld) {
-                    // Touched again right after a tap: keep the button down and drag.
-                    handler.removeCallbacks(tapRelease);
-                    tapHeld = false;
-                    dragging = true;
+                transfer.start(e.getX(), e.getY(), e.getEventTime());
+                if (state == State.TAPPED) {
+                    // Touched again soon after a tap: the button stays down; a quick lift makes it a
+                    // double click, moving (or holding past the tap timeout) makes it a drag.
+                    handler.removeCallbacks(tapReleased);
+                    state = State.DRAG_OR_DOUBLETAP;
+                    handler.postDelayed(holdToDrag, GestureRules.TAP_TIMEOUT_MS);
+                } else {
+                    state = State.TOUCH;
                 }
                 return true;
             case MotionEvent.ACTION_POINTER_DOWN:
             case MotionEvent.ACTION_POINTER_UP:
                 maxFingers = Math.max(maxFingers, e.getPointerCount());
-                // Re-anchor on finger changes so the centroid does not jump.
-                centroid(e, point);
+                // Re-anchor on finger changes so the centroid does not jump, and the pointer does
+                // not jump when the first finger lifts and another becomes the first.
+                GestureRules.centroid(e, point);
                 lastX = point[0];
                 lastY = point[1];
+                if (e.getActionMasked() == MotionEvent.ACTION_POINTER_UP) {
+                    int keep = e.getActionIndex() == 0 ? 1 : 0;
+                    transfer.start(e.getX(keep), e.getY(keep), e.getEventTime());
+                }
                 return true;
             case MotionEvent.ACTION_MOVE: {
-                centroid(e, point);
-                float dx = point[0] - lastX, dy = point[1] - lastY;
+                GestureRules.centroid(e, point);
+                if (!moved && pastTapMove(point[0], point[1])) {
+                    moved = true;
+                    if (state == State.DRAG_OR_DOUBLETAP) state = State.DRAGGING;
+                }
+                if (e.getPointerCount() >= 2) {
+                    if (moved) {
+                        // Natural scrolling at unity: the content follows the fingers as seen.
+                        float k = transfer.mmPerInputPx() * transfer.outputPxPerMm();
+                        out.scroll(-(point[0] - lastX) * k, -(point[1] - lastY) * k);
+                        scrolling = true;
+                    }
+                } else if (!scrolling) {
+                    // From the first sample, as libinput does: the slow end of the curve (1/3 below
+                    // 7 mm/s) keeps a tap's jitter to a fraction of a pixel.
+                    transfer.motion(e, 0, delta);
+                    out.moveBy(delta[0], delta[1]);
+                }
                 lastX = point[0];
                 lastY = point[1];
-                if (!moved && Math.hypot(point[0] - startX, point[1] - startY) > slop) moved = true;
-                if (!moved) return true;
-                long dt = Math.max(1, now - lastMoveTime);
-                lastMoveTime = now;
-                if (e.getPointerCount() >= 2) {
-                    // Natural scrolling: content follows the fingers.
-                    scrolling = true;
-                    NativeBridge.castPointer(3, -dx * 1.5f, -dy * 1.5f);
-                } else if (e.getPointerCount() == 1 && !scrolling) {
-                    float speed = (float) Math.hypot(dx, dy) / dt; // px per ms
-                    float gain = 1.3f + Math.min(speed * 0.9f, 2.7f);
-                    NativeBridge.castPointer(1, dx * gain, dy * gain);
-                }
                 return true;
             }
             case MotionEvent.ACTION_UP: {
-                boolean tap = !moved && now - downTime < TAP_MAX_MS;
-                if (scrolling) NativeBridge.castPointer(4, 0, 0);
-                if (dragging) {
-                    NativeBridge.castPointer(2, BTN_LEFT, 0);
-                    dragging = false;
-                    // Second tap without movement: that was a double click.
-                    if (tap && maxFingers == 1) click(BTN_LEFT);
-                } else if (tap && maxFingers == 1) {
-                    NativeBridge.castPointer(2, BTN_LEFT, 1);
-                    tapHeld = true;
-                    handler.postDelayed(tapRelease, TAP_RELEASE_MS);
-                } else if (tap && maxFingers == 2) {
-                    click(BTN_RIGHT);
-                } else if (tap && maxFingers >= 3) {
-                    click(BTN_MIDDLE);
-                }
+                handler.removeCallbacks(holdToDrag);
+                boolean tap = !moved && e.getEventTime() - downTime < GestureRules.TAP_TIMEOUT_MS;
+                if (scrolling) out.scrollStop();
                 scrolling = false;
+                switch (state) {
+                    case DRAG_OR_DOUBLETAP:  // tap, tap: the first click ends, the second is a click
+                        out.button(PointerOutput.BTN_LEFT, false);
+                        state = State.IDLE;
+                        if (tap && maxFingers == 1) out.click(PointerOutput.BTN_LEFT);
+                        break;
+                    case DRAGGING:
+                        out.button(PointerOutput.BTN_LEFT, false);
+                        state = State.IDLE;
+                        break;
+                    default:
+                        state = State.IDLE;
+                        if (!tap) break;
+                        if (maxFingers == 1) {
+                            // Press now; release unless a touch follows within the drag timeout.
+                            out.button(PointerOutput.BTN_LEFT, true);
+                            state = State.TAPPED;
+                            handler.postDelayed(tapReleased, GestureRules.DRAG_TIMEOUT_MS);
+                        } else {
+                            out.click(GestureRules.tapButton(maxFingers));
+                        }
+                }
                 return true;
             }
             case MotionEvent.ACTION_CANCEL:
@@ -124,10 +156,5 @@ final class TouchpadGestures {
             default:
                 return true;
         }
-    }
-
-    private void click(int button) {
-        NativeBridge.castPointer(2, button, 1);
-        NativeBridge.castPointer(2, button, 0);
     }
 }

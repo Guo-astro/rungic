@@ -215,7 +215,10 @@ final class CastControls {
         TouchpadView(Context context) {
             super(context);
             paint.setTextAlign(Paint.Align.CENTER);
-            gestures = new TouchpadGestures(context, handler);
+            // The TV at the same visual angle as the finger: 1:1 as seen when slow (docs/66).
+            float phonePxPerMm = context.getResources().getDisplayMetrics().xdpi / 25.4f;
+            gestures = new TouchpadGestures(new PointerOutput(handler),
+                new PointerTransfer(phonePxPerMm, PointerTransfer.TOUCHPAD_TV_PX_PER_MM), handler);
         }
 
         void reset() { gestures.reset(); }

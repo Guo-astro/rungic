@@ -15,10 +15,8 @@ import android.view.MotionEvent;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
-import android.view.ViewConfiguration;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import com.winland.server.NativeBridge;
 
 /**
  * The assistant's screen fullscreen on the phone (docs/65). The host presents the output's frames
@@ -29,10 +27,10 @@ import com.winland.server.NativeBridge;
  * Above the picture lies a transparent layer turned the same way, so touches and the toolbar work
  * in the landscape view the user holds. It is a panel window of its own: the host's zero-copy layer
  * sits above everything else drawn in the activity's window, which covered a toolbar there.
- * Two ways to touch it, switched on the toolbar and remembered: direct (below) or the laptop
- * touchpad of TouchpadGestures, where the finger moves the pointer instead of standing for it. tap = click, long press = right click, drag = drag, two
- * fingers = scroll; a swipe up starting in its bottom strip (the phone's left edge) shows the
- * toolbar (leave, TV, close) for three seconds, while a tap there still clicks.
+ * Two ways to touch it, switched on the toolbar and remembered: DirectGestures (the finger is the
+ * pointer) or TouchpadGestures (the finger moves the pointer, 1:1 under it when slow; docs/66). A
+ * swipe up starting in its bottom strip (the phone's left edge) shows the toolbar (leave, touchpad,
+ * TV, close) for three seconds, while a tap there still clicks.
  */
 final class AgentFullscreen implements SurfaceHolder.Callback {
     interface Host {
@@ -43,12 +41,12 @@ final class AgentFullscreen implements SurfaceHolder.Callback {
         void closeAgentScreen();
     }
 
-    private static final int BTN_LEFT = 0x110, BTN_RIGHT = 0x111;
     private final Activity activity;
     private final FrameLayout parent;
     private final Host host;
     private final int agentWidth, agentHeight;
     private final Handler main = new Handler(Looper.getMainLooper());
+    private final PointerOutput pointer = new PointerOutput(main);
     private FrameLayout root;
     private SurfaceView surface;
     private FrameLayout panel;
@@ -107,16 +105,16 @@ final class AgentFullscreen implements SurfaceHolder.Callback {
     @Override public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
         host.bindPresenter("fullscreen", holder.getSurface(), width, height, 90);
         bound = true;
-        NativeBridge.castPointer(0, 1, 0);  // the host pointer lives on the assistant's screen
+        pointer.attach(true);  // the host pointer lives on the assistant's screen
         // KWin binds its pointer only after seeing the new capability, and the first motion
         // enters: a first tap's press came before that and was lost. Enter now, in the centre.
-        main.postDelayed(() -> { if (bound) NativeBridge.castPointer(5, agentWidth / 2f, agentHeight / 2f); }, 300);
+        main.postDelayed(() -> { if (bound) pointer.moveTo(agentWidth / 2f, agentHeight / 2f); }, 300);
     }
 
     @Override public void surfaceDestroyed(SurfaceHolder holder) {
         if (!bound) return;
         bound = false;
-        NativeBridge.castPointer(0, 0, 0);
+        pointer.attach(false);
         host.releasePresenter("fullscreen");
     }
 
@@ -128,17 +126,15 @@ final class AgentFullscreen implements SurfaceHolder.Callback {
     private final class Landscape extends FrameLayout {
         private final LinearLayout toolbar;
         private final IconView modeButton;
-        private final TouchpadGestures pad = new TouchpadGestures(activity, main);
-        private boolean swipeTaken;  // an upward swipe from the bottom strip went to the toolbar
         private final Runnable hideToolbar = this::fadeToolbar;
-        private final int touchSlop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
-        private final float swipeZone = dp(56);
-        private float downX, downY, lastX, lastY;
-        private boolean moved, dragging, scrolling, swipe, longPressed;
-        private final Runnable longPress = () -> {
-            longPressed = true;
-            click(downX, downY, BTN_RIGHT);
-        };
+        private final float swipeZone = dp(56), swipeDistance = dp(20);
+        private final PointerOutput out = pointer;
+        private DirectGestures direct;
+        private TouchpadGestures pad;
+        // A touch from the bottom strip is held back until it shows its way: up, the toolbar;
+        // anything else, the gestures (from where it started); a tap there still clicks.
+        private boolean fromStrip, stripDecided, toToolbar;
+        private float downX, downY;
 
         Landscape(Context context) {
             super(context);
@@ -179,6 +175,23 @@ final class AgentFullscreen implements SurfaceHolder.Callback {
             setPivotY(0);
             setRotation(90);
             setTranslationX(width);  // after turning about the top-left corner, back onto the screen
+            gestures(height, width);
+        }
+
+        /** The gestures for a `width` x `height` landscape view: the picture is fitted and centred. */
+        private void gestures(int width, int height) {
+            float scale = Math.min(width / (float) agentWidth, height / (float) agentHeight);
+            float left = (width - agentWidth * scale) / 2, top = (height - agentHeight * scale) / 2;
+            float phonePxPerMm = activity.getResources().getDisplayMetrics().xdpi / 25.4f;
+            DirectGestures.Mapper mapper = (x, y, mapped) -> {
+                mapped[0] = Math.max(0, Math.min(agentWidth - 1, (x - left) / scale));
+                mapped[1] = Math.max(0, Math.min(agentHeight - 1, (y - top) / scale));
+            };
+            if (direct != null) direct.reset();
+            if (pad != null) pad.reset();
+            direct = new DirectGestures(out, mapper, main, phonePxPerMm, 1 / scale);
+            // Touchpad on the picture itself: unity is 1:1 under the finger.
+            pad = new TouchpadGestures(out, new PointerTransfer(phonePxPerMm, phonePxPerMm / scale), main);
         }
 
         private View button(Icon icon, Runnable action) {
@@ -190,7 +203,8 @@ final class AgentFullscreen implements SurfaceHolder.Callback {
 
         /** Touchpad (the finger moves the pointer) or direct (the finger is the pointer). */
         private void setTouchpad(boolean on) {
-            pad.reset();
+            if (pad != null) pad.reset();
+            if (direct != null) direct.reset();
             touchpad = on;
             modeButton.setSelected(on);
             activity.getPreferences(Context.MODE_PRIVATE).edit().putBoolean("agent_fullscreen_touchpad", on).apply();
@@ -211,113 +225,29 @@ final class AgentFullscreen implements SurfaceHolder.Callback {
             main.postDelayed(hideToolbar, 3000);
         }
 
-        /** Landscape position -> the assistant's screen, in its pixels (the picture is fitted, centred). */
-        private float[] toAgent(float x, float y) {
-            float scale = Math.min(getWidth() / (float) agentWidth, getHeight() / (float) agentHeight);
-            float left = (getWidth() - agentWidth * scale) / 2, top = (getHeight() - agentHeight * scale) / 2;
-            return new float[] {
-                Math.max(0, Math.min(agentWidth - 1, (x - left) / scale)),
-                Math.max(0, Math.min(agentHeight - 1, (y - top) / scale))};
-        }
-
-        private void pointTo(float x, float y) {
-            float[] p = toAgent(x, y);
-            NativeBridge.castPointer(5, p[0], p[1]);
-        }
-
-        /** A press and, a moment later, its release: a release in the same instant as the press was
-         *  ignored by some controls (the panel's application launcher). */
-        private void click(float x, float y, int button) {
-            pointTo(x, y);
-            NativeBridge.castPointer(2, button, 1);
-            main.postDelayed(() -> NativeBridge.castPointer(2, button, 0), 40);
-        }
-
         @Override public boolean onTouchEvent(MotionEvent e) {
-            if (touchpad) return touchpadEvent(e);
-            switch (e.getActionMasked()) {
-                case MotionEvent.ACTION_DOWN:
-                    downX = lastX = e.getX();
-                    downY = lastY = e.getY();
-                    moved = dragging = scrolling = longPressed = false;
-                    // From the bottom strip an upward swipe shows the toolbar; a tap or a long
-                    // press there still reaches the screen (its taskbar lies there).
-                    swipe = downY > getHeight() - swipeZone;
-                    main.postDelayed(longPress, ViewConfiguration.getLongPressTimeout());
-                    return true;
-                case MotionEvent.ACTION_POINTER_DOWN:
-                    main.removeCallbacks(longPress);
-                    if (dragging) { NativeBridge.castPointer(2, BTN_LEFT, 0); dragging = false; }
-                    scrolling = true;
-                    pointTo(centroidX(e), centroidY(e));
-                    lastX = centroidX(e);
-                    lastY = centroidY(e);
-                    return true;
-                case MotionEvent.ACTION_MOVE: {
-                    float x = scrolling ? centroidX(e) : e.getX(), y = scrolling ? centroidY(e) : e.getY();
-                    if (!moved && Math.hypot(x - downX, y - downY) > touchSlop) {
-                        moved = true;
-                        main.removeCallbacks(longPress);
-                        if (!scrolling && !swipe && !longPressed) {
-                            pointTo(downX, downY);
-                            NativeBridge.castPointer(2, BTN_LEFT, 1);
-                            dragging = true;
-                        }
-                    }
-                    if (swipe) {
-                        if (downY - y > dp(20)) showToolbar();
-                    } else if (scrolling) {
-                        float scale = Math.min(getWidth() / (float) agentWidth, getHeight() / (float) agentHeight);
-                        // Natural scrolling, as the TV touchpad does (CastControls).
-                        NativeBridge.castPointer(3, -(x - lastX) / scale * 1.5f, -(y - lastY) / scale * 1.5f);
-                    } else if (dragging) {
-                        pointTo(x, y);
-                    }
-                    lastX = x;
-                    lastY = y;
+            if (direct == null) return true;  // not laid out yet
+            int action = e.getActionMasked();
+            if (action == MotionEvent.ACTION_DOWN) {
+                downX = e.getX();
+                downY = e.getY();
+                fromStrip = downY > getHeight() - swipeZone;
+                stripDecided = !fromStrip;
+                toToolbar = false;
+            }
+            if (toToolbar) return true;
+            if (!stripDecided && action == MotionEvent.ACTION_MOVE) {
+                float up = downY - e.getY(), side = Math.abs(e.getX() - downX);
+                if (e.getPointerCount() == 1 && up > swipeDistance && up > side) {
+                    toToolbar = true;
+                    showToolbar();
+                    if (touchpad) pad.reset(); else direct.reset();
                     return true;
                 }
-                case MotionEvent.ACTION_UP:
-                case MotionEvent.ACTION_CANCEL:
-                    main.removeCallbacks(longPress);
-                    if (dragging) NativeBridge.castPointer(2, BTN_LEFT, 0);
-                    if (scrolling) NativeBridge.castPointer(4, 0, 0);
-                    if (!moved && !longPressed && !scrolling && e.getActionMasked() == MotionEvent.ACTION_UP)
-                        click(e.getX(), e.getY(), BTN_LEFT);
-                    dragging = scrolling = false;
-                    return true;
-                default:
-                    return true;
+                if (e.getPointerCount() == 1 && Math.hypot(up, side) <= swipeDistance) return true;
+                stripDecided = true;  // not the toolbar: the gestures take it from here
             }
-        }
-
-        /** Touchpad mode: the gestures, except an upward swipe from the bottom strip (the toolbar). */
-        private boolean touchpadEvent(MotionEvent e) {
-            if (e.getActionMasked() == MotionEvent.ACTION_DOWN) {
-                swipe = e.getY() > getHeight() - swipeZone;
-                swipeTaken = false;
-                downY = e.getY();
-            }
-            if (swipeTaken) return true;
-            if (swipe && e.getActionMasked() == MotionEvent.ACTION_MOVE && e.getPointerCount() == 1 && downY - e.getY() > dp(20)) {
-                swipeTaken = true;
-                pad.reset();
-                showToolbar();
-                return true;
-            }
-            return pad.onTouchEvent(e);
-        }
-
-        private float centroidX(MotionEvent e) {
-            float sum = 0;
-            for (int i = 0; i < e.getPointerCount(); i++) sum += e.getX(i);
-            return sum / e.getPointerCount();
-        }
-
-        private float centroidY(MotionEvent e) {
-            float sum = 0;
-            for (int i = 0; i < e.getPointerCount(); i++) sum += e.getY(i);
-            return sum / e.getPointerCount();
+            return touchpad ? pad.onTouchEvent(e) : direct.onTouchEvent(e);
         }
     }
 
