@@ -23,10 +23,10 @@ final class DirectGestures {
     private final PointerOutput out;
     private final Mapper mapper;
     private final Handler handler;
-    private final float mmPerInputPx;
     private final float outputPerInputPx;
     private final long longPressMs = ViewConfiguration.getLongPressTimeout();
     private final float[] point = new float[2], mapped = new float[2];
+    private final GestureRules.Travel travel;
     private final Runnable longPress = this::longPress;
     private int maxFingers;
     private boolean moved, dragging, scrolling, longPressed;
@@ -38,7 +38,7 @@ final class DirectGestures {
         this.out = out;
         this.mapper = mapper;
         this.handler = handler;
-        this.mmPerInputPx = 1f / inputPxPerMm;
+        this.travel = new GestureRules.Travel(inputPxPerMm);
         this.outputPerInputPx = outputPerInputPx;
     }
 
@@ -62,6 +62,7 @@ final class DirectGestures {
     }
 
     boolean onTouchEvent(MotionEvent e) {
+        boolean travelled = travel.moved(e);
         switch (e.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 maxFingers = 1;
@@ -86,7 +87,7 @@ final class DirectGestures {
                 return true;
             case MotionEvent.ACTION_MOVE: {
                 GestureRules.centroid(e, point);
-                if (!moved && Math.hypot(point[0] - startX, point[1] - startY) * mmPerInputPx > GestureRules.TAP_MOVE_MM) {
+                if (!moved && travelled) {
                     moved = true;
                     handler.removeCallbacks(longPress);
                     if (e.getPointerCount() == 1 && maxFingers == 1 && !longPressed) {

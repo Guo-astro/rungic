@@ -24,18 +24,20 @@ final class TouchpadGestures {
     private final PointerTransfer transfer;
     private final Handler handler;
     private final float[] point = new float[2], delta = new float[2];
+    private final GestureRules.Travel travel;
     private final Runnable tapReleased = this::tapReleased;
     private final Runnable holdToDrag = this::holdToDrag;
     private State state = State.IDLE;
     private int maxFingers;
     private boolean moved, scrolling;
     private long downTime;
-    private float startX, startY, lastX, lastY;
+    private float lastX, lastY;
 
     TouchpadGestures(PointerOutput out, PointerTransfer transfer, Handler handler) {
         this.out = out;
         this.transfer = transfer;
         this.handler = handler;
+        this.travel = new GestureRules.Travel(1f / transfer.mmPerInputPx());
     }
 
     /** Let go of anything held: a gesture was cut short, or the mode changed. */
@@ -62,18 +64,15 @@ final class TouchpadGestures {
         if (state == State.DRAG_OR_DOUBLETAP && !scrolling) state = State.DRAGGING;
     }
 
-    private boolean pastTapMove(float x, float y) {
-        return Math.hypot(x - startX, y - startY) * transfer.mmPerInputPx() > GestureRules.TAP_MOVE_MM;
-    }
-
     boolean onTouchEvent(MotionEvent e) {
+        boolean travelled = travel.moved(e);
         switch (e.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 maxFingers = 1;
                 moved = scrolling = false;
                 downTime = e.getEventTime();
-                startX = lastX = e.getX();
-                startY = lastY = e.getY();
+                lastX = e.getX();
+                lastY = e.getY();
                 transfer.start(e.getX(), e.getY(), e.getEventTime());
                 if (state == State.TAPPED) {
                     // Touched again soon after a tap: the button stays down; a quick lift makes it a
@@ -100,7 +99,7 @@ final class TouchpadGestures {
                 return true;
             case MotionEvent.ACTION_MOVE: {
                 GestureRules.centroid(e, point);
-                if (!moved && pastTapMove(point[0], point[1])) {
+                if (!moved && travelled) {
                     moved = true;
                     if (state == State.DRAG_OR_DOUBLETAP) state = State.DRAGGING;
                 }

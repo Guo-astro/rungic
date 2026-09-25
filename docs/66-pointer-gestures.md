@@ -45,7 +45,7 @@
 |---|---|
 | `PointerOutput` | 指针进入第二输出的唯一出口（castPointer：绝对移动、相对移动、按键、滚动、停止滚动）；点击时抬起延后 40 ms |
 | `PointerTransfer` | 移动算法：输入按手机 dpi 换算成毫米，用采样自带的时间戳（含历史采样）计算 60 ms 窗口内的速度，按 libinput 曲线（平台区归一为 1）加 Simpson 平均；输出 = 毫米 × 目标屏“每毫米像素”。全屏时这个值是画面在手机上的像素/毫米（物理 1:1），电视为 `TOUCHPAD_TV_PX_PER_MM` = 10.5 |
-| `GestureRules` | 共用阈值（180 ms、160 ms、1.3 mm）、按手指数选键、指尖中心点计算 |
+| `GestureRules` | 共用阈值（180 ms、160 ms、1.3 mm）、按手指数选键、指尖中心点计算；`Travel` 按手指各自判断是否移动（APK 1.41） |
 | `TouchpadGestures` | 触控板：libinput 的轻点状态机（IDLE / TOUCH / TAPPED / DRAG_OR_DOUBLETAP / DRAGGING） |
 | `DirectGestures` | 直接触摸：触屏上模拟鼠标的通行约定 |
 
@@ -83,8 +83,70 @@ CAST-1 当时的缩放是 1.75，全屏画面缩放为 1，所以 1 个手机像
 - 在 Dolphin 文件区长按，弹出完整的右键菜单。Plasma Mobile 的面板和桌面本身没有右键菜单，那里没有反应是正常的。
 - 指针落点与换算结果一致（按 1.75 缩放核对）。
 
+## 投屏模式的问题分析（2026-09-25，电视 TCL 85Q6H 已连接）
+
+用户反馈：投屏时双指右键不生效，光标抖动、不跟手，双指滚动发飘；手机上正常。
+
+- **双指轻点失效（已从代码确认）**：`TouchpadGestures`、`DirectGestures` 用多指中点对比第一根手指的按下点来判断是否移动。第二根手指落下时，中点跳到两指之间，超过 1.3 mm，轻点就被取消，并发出一段滚动。
+- **滚动发飘（已从代码确认）**：宿主发的是手指来源的 axis 和 axis_stop；KWin 嵌套 Wayland 后端（`vendor/kwin/src/backends/wayland/wayland_backend.cpp:133`，上游 `TODO: Send discreteDelta and source as well`）转发时有三个问题：
+  - 来源成了 Unknown，所以应用收不到 `axis_source`。
+  - 没有转发 axis_stop（`wayland/pointer.cpp` 只在 delta 为 0 时才发 stop）。
+  - 位置会按输出缩放除（`MOTO_KWIN_FLAT_OUTPUT`），滚动量没有除，在 1.75 缩放下放大 1.75 倍。
+  - 修复前应用收到的是没有来源、也没有停止事件的 axis，只能按滚轮理解（按格数滚动，常加平滑动画）。修复后的协议日志见下方“修复”一节。
+- **光标抖动（未定位）**：
+  - 已排除：命令会立刻 `frame_clock::kick` 唤醒合成循环；采样期间投屏的 `frames` 与 `new` 同步增长（约 60/s），跳帧计数不变。
+  - 剩余嫌疑：
+    - KWin 的 CAST-1 时钟与 Android 无线显示的合成/编码时钟不同步，出现周期性重复帧或丢帧。
+    - 120 Hz 输入与 60 Hz 出帧的节拍。
+    - 编码、Wi‑Fi、电视画质处理的延迟。
+
+## Flutter 手势框架对照（调研，未采用代码）
+
+来源：Flutter 3.47.5 stable（`6a19cca`，2026-09-17），`packages/flutter/lib/src/gestures/`，BSD-3-Clause。只借鉴算法，不复制代码；稀疏检出在 `.work/research/flutter`。
+
+| 问题 | Flutter 做法 | 源码位置 | 对本项目 |
+|---|---|---|---|
+| 轻点是否移动 | 只看**主手指到它自己按下点**的距离（`PrimaryPointerGestureRecognizer._getGlobalDistance`）；阈值取平台值（Android 8 dp ≈ 1.27 mm），缺省 18 逻辑像素 | `recognizer.dart`、`events.dart computeHitSlop`、`gesture_settings.dart` | 我们用中点对比第一指按下点，这是双指轻点失效的原因。改为按手指各自判断 |
+| 手指增减 | 多指中点（focal point）和间距每次都重算。手指增减时 `_reconfigure` 把起点重设为当前中点，已开始的手势先 `onEnd`，再以新指数继续，新手指落下不会跳也不算移动 | `scale.dart` `_update`、`_reconfigure` | 我们只重设了 last，没有重设用于阈值判断的起点 |
+| 拖动阈值 | 逐事件累加**各手指自身的 delta**（`_globalDistanceMoved`），不用位置差，换手指不会产生位移 | `monodrag.dart` | 与“按手指各自判断”一致 |
+| 多指拖动/滚动 | `MultitouchDragStrategy`：`latestPointer`（Android，缺省）、`averageBoundaryPointers`（iOS）、`sumAllPointers` | `recognizer.dart:64`、`monodrag.dart` | 触控板双指滚动用中点位移，相当于 iOS 的平均，保持不变 |
+| 速度 | 最近 100 ms、至多 20 个采样做**二次最小二乘拟合**，取一次项；样本间隔超过 40 ms 视为停止 | `velocity_tracker.dart`、`lsq_solver.dart` | 取它的采样选择，但拟合改为直线，原因见下方“修复”一节的对比测试 |
+| 输入与帧的节拍 | 可选的重采样（`resamplingEnabled`，缺省关闭）：按“帧时间 − 38 ms”在前后两个采样之间线性插值，专门处理输入频率不是显示频率整数倍的情况（例如 120 Hz 输入、90 Hz 显示）；每根手指一个重采样器 | `resampler.dart`、`binding.dart` | 与电视光标抖动的嫌疑之一对应。要生效，得在知道 CAST-1 出帧时刻的一端（宿主）按帧插值，castPointer 需要带时间戳 |
+| 手势竞争 | 手势竞技场：候选手势各自接受或放弃，最后剩下的获胜；抬手时 sweep 给第一个候选 | `arena.dart` | 我们用单一状态机实现同样的效果，不需要引入竞技场 |
+| 双指/三指轻点 | **框架里没有**。`MultiTapGestureRecognizer` 是多根手指各自独立的轻点，不是“两指一起轻点” | `multitap.dart` | 这部分仍以 libinput 的规则为准 |
+
+结论：
+- Flutter 的长处在触摸屏手势框架：竞技场、按手指的阈值、手指增减时重设起点、LSQ 速度、可选重采样。
+- 触控板语义（多指轻点、轻点拖动、加速曲线）它没有，仍以 libinput 为准。
+- 采用：轻点/移动阈值按手指各自判断（手指数变化时自然不产生位移，等效于重设起点）；速度估计采用它的采样选择。
+- 重采样要等测出抖动来源后再决定。
+
+## 修复（APK 1.41 + KWin moto17，2026-09-25）
+
+- **`GestureRules.Travel`**：记录每根手指按下的位置，任一手指离自己的按下点超过 1.3 mm 才算移动。`TouchpadGestures` 和 `DirectGestures` 共用，取代原先按中点判断的写法。
+- **`PointerTransfer` 速度估计**：用 60 ms 内、至多 20 个采样、遇到超过 40 ms 的停顿就截断，做直线最小二乘拟合。在 JVM 上用合成采样对比（240 Hz 采样，手机 15.4 px/mm）：
+
+  | 估计方法 | 50 mm/s 加 0.3 px 噪声的均方根误差 | 10→150 mm/s 突变后每 12 ms 的读数 |
+  |---|---|---|
+  | 原 60 ms 两点差分 | 0.47 mm/s | 19 47 75 103 131 150 |
+  | Flutter 式 100 ms 二次拟合 | 0.71 mm/s | 21 89 165 210 212 180 150 |
+  | 60 ms 直线拟合（采用） | 0.26 mm/s | 13 37 73 112 141 150 |
+  | 100 ms 直线拟合 | 0.18 mm/s | 12 28 54 85 115 139 150 |
+
+  Flutter 的二次拟合在速度突变处过冲到 212 mm/s，进入加速区，会带来一次增益尖峰。它只在抬手时估算一次惯性速度，没有这个问题；我们每个采样都要调整增益，所以不适合。60 ms 直线拟合的噪声约为原来的一半，响应速度相同，也没有过冲。
+- **KWin 嵌套后端**（`wayland_backend.cpp`，moto17）：
+  - 转发 `axis_source`，停止时按 libinput 的方式发送 0 值，客户端收到 `axis_stop`。
+  - 在扁平输出下，滚动量和位置一样按输出缩放除。
+  - 手指来源标为反向（自然滚动，内容跟着手指走）。
+- **实机验证**（电视 TCL 85Q6H 已连接，CAST-1 缩放 1.75，手机处于触控板模式）：
+  - 方法：root 向触摸屏 `/dev/input/event8` 写入多点触控协议 B 的原始事件，电视上的 Dolphin 开启 `WAYLAND_DEBUG=client`。
+  - 双指下滑 19.5 mm：Dolphin 每步收到 `axis_source(1)`、`axis_relative_direction(0, 1)`、`axis(…, 0, -5.83)`，结束时收到两个方向的 `axis_stop`。每步手机 15 px ≈ 0.97 mm，换算为 10.2 电视像素，除以 1.75 等于 5.83 逻辑像素。全程 204 电视像素，即 10.5 px/mm。
+  - 双指轻点（第二指晚约 33 ms 落下，两指相距 16 mm，总时长约 100 ms）：Dolphin 收到 `button 273` 按下，48 ms 后松开，打开右键菜单（`get_popup`）。单击菜单外，菜单关闭。
+  - 注意：一次注入的总时长超过 180 ms 就不算轻点。第一次测试因脚本 sleep 过长而无效。
+
 ## 未验证
-- 手机当电视触控板：已经换成同一套组件，但电视不可用，未实测。
-- 滚动内容是否严格 1:1 跟手：取决于 KWin 如何换算 axis 的单位，尚未测量。
-- adb 只能模拟单指，双指和三指手势没有实测。
+- 手机当电视触控板：双指滚动和双指轻点已在协议层验证（上一节）；单指移动的手感、光标是否跟手，还要用户在电视上实际使用确认。
+- 滚动单位已在协议层核对（上一节）。各应用把 finger 滚动换算成内容位移的方式（Qt Quick、GTK、Firefox）尚未逐个在电视上目测。
+- 直接触摸模式（助理屏全屏）的双指轻点使用同一个 `Travel`，本轮没有实机测试；三指轻点也未测。
+- 电视上的光标抖动未定位，也没有修复。本轮只降低了速度估计的噪声，需要实机对比。
 - 电视的实际尺寸和观看距离拿不到，10.5 px/mm 是按 35° 视野的默认值，以后可以加一个指针速度微调。

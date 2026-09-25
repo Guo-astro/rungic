@@ -324,7 +324,7 @@ Firefox getDisplayMedia
 | 网络文件 | Nautilus/GIO → GVfs对应协议后端 → WebDAV/SMB/NFS服务器 | WebDAV中文读写已实测；SMB/NFS仅安装后端，未验用户网络盘 |
 | 共享存储（XDG用户目录） | `~/Shared` bindfs → Android MediaProvider FUSE（`/storage/emulated/0/Plasma`） | [61篇](../61-filesystem-capabilities.md)：已去掉`--direct-io`，恢复共享映射和SQLite WAL；符号链接、大小写、执行等是Android FUSE本身的限制；`moto-fs-audit`用于检查 |
 | 外接显示（Miracast） | Android WFD显示 ← 宿主悬浮窗SurfaceView/Presenter ← 宿主额外wl_output“Moto Cast” ← KWin(moto11)输出CAST-n的全屏toplevel；Plasma经KScreen进入docked模式 | [58篇](../58-miracast-desktop-feasibility.md)第2步；宿主`cast.rs`、KWin `wayland_display/backend/output`、kscreenosd补丁。连接由root工具`moto-cast`；Linux入口（快捷开关“投屏”、`/usr/local/bin/moto-cast`、语音助手）经平台桥`cast`调用它，电视端断开由`moto-cast-watch`自动重连（第5步） |
-| 投屏触控板/键盘 | 手机`CastControls`触控面板 → `NativeBridge.castPointer` → 宿主`cast_pointer`（wl_pointer只进投屏窗口）→ KWin输出CAST-n（软件光标）；Android输入法 → 已有按键/文字通道 → 宿主wl_keyboard或text-input-v3 → KWin `commitHostText` → 焦点应用 | 58篇第3步。text-input-v3路径同时让手机模式下的Android输入法能提交中文；键码表已按input-event-codes改正 |
+| 投屏触控板/键盘 | 手机`CastControls`触控面板 → `NativeBridge.castPointer` → 宿主`cast_pointer`（wl_pointer只进投屏窗口）→ KWin输出CAST-n（软件光标）；Android输入法 → 已有按键/文字通道 → 宿主wl_keyboard或text-input-v3 → KWin `commitHostText` → 焦点应用 | 58篇第3步。text-input-v3路径同时让手机模式下的Android输入法能提交中文；键码表已按input-event-codes改正。双指滚动经KWin嵌套后端转给应用时保留手指来源与axis_stop，并按输出缩放换算（KWin moto17，66篇） |
 | 凭据 | GNOME应用/libsecret → session D-Bus Secret Service → GNOME Keyring；Seahorse管理 | 使用上游服务；首次持久钥匙串由用户设密码，容器没有可用于PAM自动解锁的真实登录口令 |
 
 显示元数据有两个文件：`/mnt/android-wayland/android-display.ini` 保存安全区域，坐标单位是Wayland帧缓冲像素；`android-refresh.ini` 保存Android报告Hz、支持范围、请求Hz与APK成功提交fps。两者都通过AtomicFile发布，避免读到半写入文件。
