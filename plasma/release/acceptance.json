@@ -1,0 +1,135 @@
+{
+  "comment": "Post-release acceptance scenarios (docs/61), run by tools/moto_acceptance.py after every deploy (smoke) and for release candidates (full). Each scenario names a check function and its parameters; results go to .work/acceptance/<release>/<time>/ and metrics are compared with the previous release's report. Every scenario restores what it changes. 'manual' lists what automatic results do not replace.",
+  "known_crash_signatures": {
+    "f6f8756afbd8": "kaccess forces the xcb platform and aborts without an X display (found 2026-09-26, open)"
+  },
+  "scenarios": [
+    {
+      "id": "session.ready",
+      "level": "smoke",
+      "check": "session_ready",
+      "title": "KWin and plasmashell running, session environment written"
+    },
+    {
+      "id": "session.units",
+      "level": "smoke",
+      "check": "user_units",
+      "params": {
+        "critical": [
+          "moto-plasma-*",
+          "plasma-plasmashell.service",
+          "plasma-kwin_wayland.service",
+          "moto-voice-agent.service",
+          "moto-voice-overlay.service",
+          "pulseaudio.service",
+          "pipewire.service",
+          "wireplumber.service"
+        ]
+      },
+      "title": "No failed desktop or bridge user units"
+    },
+    {
+      "id": "crash.new",
+      "level": "smoke",
+      "check": "new_crashes",
+      "title": "No crash signatures during the deploy and the run, except known ones"
+    },
+    {
+      "id": "display.geometry",
+      "level": "smoke",
+      "check": "display_geometry",
+      "title": "The phone's KScreen output matches the Android display size"
+    },
+    {
+      "id": "input.text",
+      "level": "smoke",
+      "check": "input_text",
+      "params": {
+        "text": "Calcul",
+        "expect": "Calculator",
+        "absent": "Clock"
+      },
+      "title": "Android text input reaches the focused drawer search, which filters to the matching app"
+    },
+    {
+      "id": "camera.frames",
+      "level": "smoke",
+      "check": "camera_frames",
+      "params": {
+        "node": "moto.camera.0",
+        "frames": 20
+      },
+      "title": "PipeWire camera delivers varied frames with increasing timestamps and goes idle after"
+    },
+    {
+      "id": "audio.playback",
+      "level": "smoke",
+      "check": "audio_playback",
+      "title": "A (quiet) stream enters the default sink, which suspends again afterwards"
+    },
+    {
+      "id": "audio.record",
+      "level": "smoke",
+      "check": "audio_record",
+      "title": "The default source records a non-zero level and suspends afterwards"
+    },
+    {
+      "id": "app.launch",
+      "level": "full",
+      "check": "app_launch",
+      "params": {
+        "app": "Calculator",
+        "process": "kalk",
+        "rounds": 2
+      },
+      "title": "Launch and close an app through the launcher by accessible names"
+    },
+    {
+      "id": "display.mode",
+      "level": "full",
+      "check": "display_scale_roundtrip",
+      "title": "KScreen applies and reverts a scale change on the phone output"
+    },
+    {
+      "id": "camera.back",
+      "level": "full",
+      "check": "camera_frames",
+      "params": {
+        "node": "moto.camera.1",
+        "frames": 20
+      },
+      "title": "Second camera node delivers frames"
+    },
+    {
+      "id": "codec.hw",
+      "level": "full",
+      "check": "codec_roundtrip",
+      "title": "Hardware encode (GStreamer) of a test pattern, decode through FFmpeg, duration and frames checked"
+    },
+    {
+      "id": "recording.quicksetting",
+      "level": "full",
+      "check": "screen_recording",
+      "params": {
+        "seconds": 4
+      },
+      "title": "The recording quick setting writes a playable file with video and audio tracks"
+    },
+    {
+      "id": "perf.compositor",
+      "level": "full",
+      "check": "compositor_perf",
+      "params": {
+        "max_regression": 0.15
+      },
+      "title": "Frame timing of a scripted scroll, compared with the previous release"
+    }
+  ],
+  "manual": [
+    "Visual defects and image quality (display, camera, recording)",
+    "Acoustic quality of speaker and microphone",
+    "Audio/video synchronisation of recordings, judged by eye and ear",
+    "Rime candidate UI and typing feel",
+    "Casting to a TV (needs a real receiver, docs/58)"
+  ]
+}

@@ -1,0 +1,103 @@
+{
+  "comment": "What a release of the Plasma container consists of (docs/61). tools/moto_release.py builds moto-plasma-release with an exact dependency on every package listed here; the .debs themselves are build output in .work/apt/pool. 'rebuilt' are Ubuntu packages rebuilt from vendor/ (+motoN); 'project' are this repository's own packages; 'coupled' are Ubuntu packages pinned to the version installed when the release is built, because files of theirs are diverted or their private ABI is used by code that is not rebuilt with them yet. 'android' are files outside the container that a release installs (backed up by deploy for rollback); the APK is versioned separately.",
+  "rebuilt": {
+    "kwin": {
+      "source": "vendor/kwin",
+      "version": "4:6.6.6-0ubuntu0.1+moto17",
+      "packages": [
+        "kwin-common",
+        "kwin-data",
+        "kwin-dev",
+        "kwin-wayland",
+        "libkwin6"
+      ]
+    },
+    "mesa": {
+      "source": "vendor/mesa (plasma/package-mesa.py)",
+      "version": "26.3.0~devel20260824+moto1",
+      "packages": [
+        "libegl-mesa0",
+        "libgbm-dev",
+        "libgbm1",
+        "libgl1-mesa-dri",
+        "libglx-mesa0",
+        "mesa-libgallium",
+        "mesa-vulkan-drivers"
+      ]
+    },
+    "kscreen": {
+      "source": "vendor/kscreen (plasma/package-display.py)",
+      "version": "4:6.6.5-0ubuntu0.1+moto2",
+      "packages": [
+        "kscreen"
+      ]
+    },
+    "libcamera": {
+      "source": "vendor/libcamera (plasma/package-media.py)",
+      "version": "0.7.0-1ubuntu2+moto1",
+      "packages": [
+        "libcamera0.7",
+        "libcamera-dev"
+      ]
+    },
+    "qtmultimedia": {
+      "source": "vendor/qtmultimedia (plasma/package-media.py)",
+      "version": "6.10.2-2+moto1",
+      "packages": [
+        "libqt6multimedia6",
+        "qt6-multimedia-dev"
+      ]
+    },
+    "plasma-camera": {
+      "source": "vendor/plasma-camera (plasma/package-media.py)",
+      "version": "2.1.1-2build1+moto1",
+      "packages": [
+        "plasma-camera"
+      ]
+    }
+  },
+  "project": {},
+  "coupled": [
+    "plasma-mobile",
+    "plasma-workspace",
+    "libplasma6"
+  ],
+  "session_restart": [
+    "kwin-*",
+    "libkwin6",
+    "mesa-*",
+    "libegl-mesa0",
+    "libgbm1",
+    "libgl1-mesa-dri",
+    "libglx-mesa0",
+    "plasma-mobile",
+    "plasma-workspace",
+    "libplasma6",
+    "moto-plasma-session",
+    "moto-plasma-bridges",
+    "moto-plasma-input",
+    "libqt6multimedia6"
+  ],
+  "android": [
+    {
+      "source": "plasma/moto-plasma",
+      "path": "/data/adb/moto-plasma/moto-plasma",
+      "mode": "755"
+    },
+    {
+      "source": "plasma/android-audio",
+      "path": "/data/adb/moto-plasma/android-audio",
+      "mode": "755"
+    },
+    {
+      "source": "plasma/android-audio.pa",
+      "path": "/data/adb/moto-plasma/android-audio.pa",
+      "mode": "644"
+    },
+    {
+      "source": "plasma/plasma.config",
+      "path": "/data/adb/moto-lxc/runtime/var/lib/lxc/plasma/config",
+      "mode": "644"
+    }
+  ]
+}
