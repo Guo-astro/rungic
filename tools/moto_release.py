@@ -200,8 +200,9 @@ def next_version():
 
 def build_meta(version, deps, info):
     root = Path(tempfile.mkdtemp(dir=WORKSPACE / '.work/cache'))
+    root.chmod(0o755)   # dpkg-deb refuses mkdtemp's 0700
     try:
-        (root / 'DEBIAN').mkdir()
+        (root / 'DEBIAN').mkdir(mode=0o755)
         doc = root / 'usr/share/moto'
         doc.mkdir(parents=True)
         (doc / 'release.json').write_text(json.dumps(info, indent=1, ensure_ascii=False) + '\n')
