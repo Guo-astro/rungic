@@ -1,0 +1,6 @@
+# Source indexes for apt-get build-dep of vendored components (tools/build_on_device.py).
+Types: deb-src
+URIs: http://archive.ubuntu.com/ubuntu/
+Suites: resolute resolute-updates
+Components: main universe
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg

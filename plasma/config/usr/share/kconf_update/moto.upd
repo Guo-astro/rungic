@@ -1,0 +1,17 @@
+Version=6
+# One-time per-user migrations of this project (docs/61). kded runs them at
+# session start and records them in ~/.config/kconf_updaterc.
+
+# The legacy nested output's inconsistent scale (plasma/migrate-display.py).
+Id=moto-native-display-v1
+Script=moto-migrate-display.py,python3
+
+# Quick setting tiles of cast and the assistant's screen, next to their
+# neighbours (formerly done by the cast and agent-screen install scripts).
+Id=moto-quicksettings-v1
+Script=moto-quicksettings.sh,sh
+
+# The per-user Firefox launcher override is replaced by moto-firefox's
+# /usr/bin/firefox wrapper.
+Id=moto-firefox-launcher-v1
+Script=moto-firefox-launcher.sh,sh

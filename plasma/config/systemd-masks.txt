@@ -1,0 +1,29 @@
+# Units masked in the container (symlinks to /dev/null, shipped by moto-plasma-config).
+# Android owns these functions or the container cannot provide them (docs/40, docs/42).
+system ModemManager.service
+system NetworkManager-wait-online.service
+system NetworkManager.service
+system bluetooth.service
+system chrony.service
+system cloud-config.service
+system cloud-final.service
+system cloud-init-local.service
+system cloud-init-network.service
+system cloud-init.target
+system console-getty.service
+system getty@tty1.service
+system netplan-configure.service
+system power-profiles-daemon.service
+system snapd.seeded.service
+system snapd.service
+system snapd.socket
+system ssh.service
+system ssh.socket
+system systemd-networkd-wait-online.service
+system systemd-networkd.service
+system systemd-networkd.socket
+system systemd-resolved.service
+system tpm-udev.path
+system tpm-udev.service
+system wpa_supplicant.service
+user plasma-powerdevil.service

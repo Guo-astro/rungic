@@ -55,17 +55,10 @@ META = 'moto-plasma-release'
 # The build directories on the phone that hold .debs of installed versions (import-installed).
 DEVICE_DEB_DIRS = ['/root/moto-build/*', '/root/moto-mesa-debs', '/root/moto-display-packages',
                    '/root/moto-media-packages', '/root/moto-packages/*', '/root']
-SOURCES = '''Types: deb
-URIs: file:/var/lib/moto-apt
-Suites: ./
-Trusted: yes
-'''
-PREFERENCES = '''# This project's releases (docs/61): its versions win over the Ubuntu archive,
-# and an older release can be reinstalled (priority above 1000 allows downgrades).
-Package: *
-Pin: release o=moto,l=moto-plasma
-Pin-Priority: 1001
-'''
+# The source and pin that moto-plasma-config ships; deploy installs the same bytes before the
+# package exists, so dpkg later takes them over as unchanged conffiles.
+SOURCES = (WORKSPACE / 'plasma/config/etc/apt/sources.list.d/moto.sources').read_text()
+PREFERENCES = (WORKSPACE / 'plasma/config/etc/apt/preferences.d/moto').read_text()
 APT_OURS = ('-o Dir::Etc::SourceList=/etc/apt/sources.list.d/moto.sources -o Dir::Etc::SourceParts=- '
             '-o APT::Get::List-Cleanup=0')
 

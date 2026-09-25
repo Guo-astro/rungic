@@ -1,0 +1,5 @@
+# This project's releases (docs/61): its versions win over the Ubuntu archive,
+# and an older release can be reinstalled (priority above 1000 allows downgrades).
+Package: *
+Pin: release o=moto,l=moto-plasma
+Pin-Priority: 1001

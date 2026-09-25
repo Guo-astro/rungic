@@ -1,0 +1,8 @@
+# Moto (docs/61): Android owns device locking. The Linux screen locker would
+# ask for a password the desktop account need not have, or hide the desktop
+# behind an idle lock, so these are fixed defaults ([$i]: not user-editable).
+# plasma/session used to write them into every user's kscreenlockerrc at
+# each session start.
+[Daemon][$i]
+Autolock=false
+LockOnResume=false

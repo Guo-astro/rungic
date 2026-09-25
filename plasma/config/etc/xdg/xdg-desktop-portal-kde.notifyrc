@@ -1,0 +1,5 @@
+# Moto (docs/60): every start of the desktop automation's RemoteDesktop portal
+# session showed "Remote control session started" over the operated windows.
+# A system default instead of each user's notifyrc; users can turn it back on.
+[Event/remotedesktopstarted]
+Action=
