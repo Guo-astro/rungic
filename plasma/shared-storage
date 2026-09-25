@@ -10,7 +10,7 @@ chown root:root /home/linux/Shared
 chmod 0755 /home/linux/Shared
 # No --direct-io: with it FUSE refuses shared writable mmap (ENODEV), which
 # SQLite WAL, LMDB and MMKV need; WeChat's databases in ~/Documents failed
-# with I/O errors and were "repaired" on every start (docs/61). Without it
+# with I/O errors and were "repaired" on every start (docs/69). Without it
 # the kernel page cache is used; FUSE still drops a file's cached pages when
 # it is opened again and attr_timeout=0 keeps sizes and times current, so
 # changes made on the Android side are seen on the next open.

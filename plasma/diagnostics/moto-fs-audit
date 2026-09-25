@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # SPDX-License-Identifier: MIT
-"""Filesystem and container capability audit (docs/61).
+"""Filesystem and container capability audit (docs/69).
 
 Runs the file operations that desktop applications rely on in each directory
 they store data in, and reports what does not work and which kind of
