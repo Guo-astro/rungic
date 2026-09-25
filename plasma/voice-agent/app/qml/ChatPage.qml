@@ -59,6 +59,15 @@ Kirigami.Page {
         if (fields.kind !== "command" || !fields.status || fields.status === "running")
             chat.setProperty(page.workAt, "text", fields.kind === "command" ? fields.command : fields.text)
     }
+    // The streaming bubble of transcript segment `id`, or -1.
+    function liveAt(id) {
+        if (!id) return -1
+        for (let i = chat.count - 1; i >= 0; i--) {
+            const e = chat.get(i)
+            if (e.itemId === id && (e.kind === "live-user" || e.kind === "live-assistant")) return i
+        }
+        return -1
+    }
     function removeAt(i) {
         chat.remove(i)
         if (page.workAt > i) page.workAt--
@@ -72,48 +81,60 @@ Kirigami.Page {
     function apply(e, live) {
         if (e.time && e.type !== "state") page.lastTime = e.time
         switch (e.type) {
+        // Transcripts stream per segment (e.id): the user's transcription often ends
+        // after the reply has begun, so a delta finds its own bubble by id, and the
+        // finished text replaces that bubble where it stands (docs/59).
         case "delta": {
             if (!live || !e.text) return
-            if (e.role === "user") {
-                const at = lastOf("live-user")
-                if (at >= 0 && chat.get(at).press === (e.press || 0)) chat.setProperty(at, "text", chat.get(at).text + e.text)
-                else chat.append(entry({ kind: "live-user", role: "user", text: e.text, press: e.press || 0 }))
-            } else if (page.workOpen && page.workAt >= 0) {
+            const at = liveAt(e.id)
+            if (at >= 0) chat.setProperty(at, "text", chat.get(at).text + e.text)
+            else if (e.role === "user")
+                chat.append(entry({ kind: "live-user", role: "user", text: e.text, itemId: e.id || "", press: e.press || 0 }))
+            else if (page.workOpen && page.workAt >= 0) {
                 // Spoken progress streams into the work entry's status line.
                 const w = chat.get(page.workAt)
                 chat.setProperty(page.workAt, "text", w.status === "live" ? w.text + e.text : e.text)
                 chat.setProperty(page.workAt, "status", "live")
-            } else {
-                const last = chat.count > 0 ? chat.get(chat.count - 1) : null
-                if (last && last.kind === "live-assistant") chat.setProperty(chat.count - 1, "text", last.text + e.text)
-                else chat.append(entry({ kind: "live-assistant", role: "assistant", text: e.text }))
-            }
+            } else chat.append(entry({ kind: "live-assistant", role: "assistant", text: e.text, itemId: e.id || "" }))
             break
         }
         case "message": {
-            const liveAt = lastOf(e.role === "user" ? "live-user" : "live-assistant")
-            if (liveAt >= 0 && liveAt >= chat.count - 4) page.removeAt(liveAt)
+            const liveIndex = liveAt(e.id)
             if (e.role === "user") {
                 const at = lastOf("message", "user")
                 if (e.press && at >= 0 && chat.get(at).press === e.press) {
+                    // Another segment of the same press joins its message.
                     chat.setProperty(at, "text", page.join(chat.get(at).text, e.text))
-                } else if (page.workAt >= 0 && page.workAt === chat.count - 1 && live
-                           && chat.get(page.workAt).steps.count <= 1 && e.time - chat.get(page.workAt).started < 8) {
-                    // The agent can start before the transcript of what started it arrives.
-                    page.insertAt(page.workAt, { kind: "message", role: "user", text: e.text, press: e.press || 0 })
+                    if (liveIndex >= 0) page.removeAt(liveIndex)
                 } else {
                     // A new request: earlier turns' work folds away again.
                     for (let i = 0; i < chat.count; i++) {
                         if (chat.get(i).kind === "work" && chat.get(i).expanded) chat.setProperty(i, "expanded", false)
                     }
-                    chat.append(entry({ kind: "message", role: "user", text: e.text, press: e.press || 0 }))
+                    if (liveIndex >= 0) {
+                        chat.setProperty(liveIndex, "kind", "message")
+                        chat.setProperty(liveIndex, "text", e.text)
+                    } else if (page.workAt >= 0 && page.workAt === chat.count - 1 && live
+                               && chat.get(page.workAt).steps.count <= 1 && e.time - chat.get(page.workAt).started < 8) {
+                        // The agent can start before the transcript of what started it arrives.
+                        page.insertAt(page.workAt, { kind: "message", role: "user", text: e.text, itemId: e.id || "", press: e.press || 0 })
+                    } else {
+                        chat.append(entry({ kind: "message", role: "user", text: e.text, itemId: e.id || "", press: e.press || 0 }))
+                    }
                 }
                 if (page.title === "新对话") page.title = e.text.slice(0, 20)
+            } else if (liveIndex >= 0) {
+                // Streamed as a bubble (before any agent work began): it stays one.
+                chat.setProperty(liveIndex, "kind", "message")
+                chat.setProperty(liveIndex, "text", e.text)
+            } else if (page.workOpen && page.workAt >= 0 && e.started && e.started < chat.get(page.workAt).started) {
+                // Begun before the work (a history replay has no stream): above the work, as it was shown.
+                page.insertAt(page.workAt, { kind: "message", role: "assistant", text: e.text, itemId: e.id || "" })
             } else if (page.workOpen && page.workAt >= 0) {
                 if (chat.get(page.workAt).status === "live") chat.setProperty(page.workAt, "status", "running")
                 page.addStep({ kind: "said", text: e.text })
             } else {
-                chat.append(entry({ kind: "message", role: "assistant", text: e.text }))
+                chat.append(entry({ kind: "message", role: "assistant", text: e.text, itemId: e.id || "" }))
             }
             break
         }

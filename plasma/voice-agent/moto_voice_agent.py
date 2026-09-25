@@ -314,6 +314,11 @@ class VoiceAgent:
         # Id of the current push-to-talk press: the UI shows all transcript pieces
         # of one press as one message, however the server split them.
         self.press = 0
+        # Transcript segments being spoken or transcribed: item id -> (role, press, start time).
+        self.segments = {}
+        # thread/realtime/start was sent and neither started nor closed has come back:
+        # a press in the meantime waits for that session instead of starting another.
+        self.realtime_starting = False
         # Audio must reach the server in order: one sender thread, fixed chunks.
         self.uploads = queue.Queue()
         threading.Thread(target=self.upload_loop, daemon=True).start()
@@ -382,8 +387,11 @@ class VoiceAgent:
 
     def start_realtime(self):
         with self.lock:
-            if self.realtime or not self.thread_id:
+            if self.realtime or self.realtime_starting or not self.thread_id:
                 return
+            # A second start while the first is under way replaced the session and
+            # dropped the audio sent to the first (a press right after opening).
+            self.realtime_starting = True
             self.realtime_ready.clear()
             try:
                 self.server.call('thread/realtime/start', {
@@ -393,9 +401,11 @@ class VoiceAgent:
                     # which prompts/realtime.md includes).
                     'prompt': prompt('realtime.md')})
             except Exception as error:
+                self.realtime_starting = False
                 self.emit({'type': 'error', 'text': f'语音连接失败：{error}'})
                 return
-        self.realtime_ready.wait(20)
+        if not self.realtime_ready.wait(20):
+            self.realtime_starting = False   # never started: the next press tries again
 
     def stop_realtime(self):
         if self.realtime and self.thread_id:
@@ -404,7 +414,9 @@ class VoiceAgent:
             except Exception:
                 pass
         self.realtime = False
+        self.realtime_starting = False
         self.realtime_ready.clear()
+        self.segments.clear()
         GLib.idle_add(self.stop_audio)
 
     def close_conversation(self):
@@ -630,29 +642,42 @@ class VoiceAgent:
             GLib.idle_add(self.play, params['audio'])
         elif method == 'thread/realtime/started':
             self.realtime = True
+            self.realtime_starting = False
             self.realtime_ready.set()
             GLib.idle_add(self.set_state)
         elif method == 'thread/realtime/closed':
             self.realtime = False
+            self.realtime_starting = False
             self.realtime_ready.clear()
             GLib.idle_add(self.set_state)
         elif method == 'thread/realtime/error':
             self.emit({'type': 'error', 'text': params.get('message', '')})
-        elif method == 'thread/realtime/transcript/delta':
-            event = {'type': 'delta', 'role': params.get('role'), 'text': params.get('delta', '')}
-            if params.get('role') == 'user':
-                event['press'] = self.press
+        # Transcripts by segment (item id), not the role-only transcript/delta and
+        # transcript/done: the user's transcription often finishes after the reply
+        # has begun streaming, and the chat has to tell the two streams apart.
+        elif method == 'thread/realtime/item/started' and (params.get('item') or {}).get('type') == 'transcriptSegment':
+            item = params['item']
+            role = 'user' if item.get('role') == 'user' else 'assistant'
+            self.segments[item['id']] = (role, self.press if role == 'user' else 0, time.time())
+        elif method == 'thread/realtime/item/transcript/delta':
+            role, press, _ = self.segments.get(params.get('itemId'), ('assistant', 0, 0))
+            event = {'type': 'delta', 'role': role, 'id': params.get('itemId'), 'text': params.get('delta', '')}
+            if role == 'user':
+                event['press'] = press
             self.emit(event, keep=False)
-        elif method == 'thread/realtime/transcript/done':
-            if params.get('role') != 'user':
+        elif method == 'thread/realtime/item/completed' and (params.get('item') or {}).get('type') == 'transcriptSegment':
+            item = params['item']
+            role, press, started = self.segments.pop(item['id'], ('user' if item.get('role') == 'user' else 'assistant', self.press, 0))
+            if role != 'user':
                 self.muted = False      # the reply cut by the stop button has ended
-            text = params.get('text', '').strip()
+            text = (item.get('text') or '').strip()
             if text:
-                role = 'user' if params.get('role') == 'user' else 'assistant'
-                event = {'type': 'message', 'role': role, 'text': text}
+                # When the segment began: an acknowledgement begun before agent work
+                # stays a bubble above it, also when the history is replayed.
+                event = {'type': 'message', 'role': role, 'id': item['id'], 'text': text, 'started': started}
                 if role == 'user':
                     self.store.touch(self.thread_id, text)
-                    event['press'] = self.press
+                    event['press'] = press
                 self.emit(event)
         elif method == 'turn/started':
             self.turn_id = (params.get('turn') or {}).get('id')
