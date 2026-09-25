@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Shapes
 
 Item {
+    id: spinner
     implicitWidth: 16
     implicitHeight: 16
     Rectangle {
@@ -30,6 +31,8 @@ Item {
     RotationAnimator on rotation {
         from: 0; to: 360; duration: 900
         loops: Animation.Infinite
-        running: parent.visible
+        // Its own visibility: `parent` here was the item it sits in, visible with a finished
+        // card's hidden spinner, which kept the window redrawing at 120 Hz (docs/59).
+        running: spinner.visible
     }
 }
