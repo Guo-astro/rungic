@@ -24,10 +24,6 @@ public:
     QRect area() const;
     // Rectangles (x, y, width, height) that take touches; the rest passes through.
     Q_INVOKABLE void setInputRects(const QVariantList &rects);
-    // Make `window` a fullscreen surface above everything, the shell's panels too (fullscreen mode).
-    // KWin 6.6 does not restack a layer surface whose layer changes, so this is a window of its own.
-    // Call before the window is first shown.
-    Q_INVOKABLE void setupOverlay(QQuickWindow *window);
 
 Q_SIGNALS:
     void areaChanged();

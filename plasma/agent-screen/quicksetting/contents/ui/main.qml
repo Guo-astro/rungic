@@ -12,6 +12,7 @@ QS.QuickSetting {
 
     property bool on: false
     property bool onTv: false
+    property bool fullscreen: false
     property bool busy: false
     property string error: ""
 
@@ -22,7 +23,7 @@ QS.QuickSetting {
         if (busy) return on ? "正在关闭…" : "正在打开…";
         if (error) return error;
         if (!on) return "关闭";
-        return onTv ? "在电视上" : "浮窗";
+        return onTv ? "在电视上" : fullscreen ? "全屏" : "浮窗";
     }
 
     function run(command) {
@@ -66,6 +67,7 @@ QS.QuickSetting {
             }
             root.on = !!result.enabled;
             root.onTv = result.shown_on === "tv";
+            root.fullscreen = result.shown_on === "phone fullscreen";
         }
     }
 }

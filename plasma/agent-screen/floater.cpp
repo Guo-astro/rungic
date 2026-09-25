@@ -74,18 +74,3 @@ void Floater::setInputRects(const QVariantList &rects)
     // An empty mask means "everywhere" to Qt: keep one pixel instead when nothing is shown.
     m_window->setMask(region.isEmpty() ? QRegion(0, 0, 1, 1) : region);
 }
-
-void Floater::setupOverlay(QQuickWindow *window)
-{
-    auto layer = LayerShellQt::Window::get(window);
-    layer->setScope(QStringLiteral("moto-agent-screen-fullscreen"));
-    layer->setLayer(LayerShellQt::Window::LayerOverlay);
-    layer->setAnchors(LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
-                                                    | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight));
-    layer->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
-    layer->setExclusiveZone(-1);
-    layer->setWantsToBeOnActiveScreen(false);
-    layer->setScreen(phoneScreen());
-    window->setScreen(phoneScreen());
-    window->resize(area().size());
-}

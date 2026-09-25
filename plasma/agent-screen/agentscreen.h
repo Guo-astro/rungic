@@ -40,6 +40,9 @@ public:
     Q_INVOKABLE void scroll(double dx, double dy);
     // Hand the screen to the TV last cast to (the host keeps the output; only its frames move).
     Q_INVOKABLE void castToTv();
+    // Fullscreen on the phone: the Android host presents the output itself (zero-copy), and this
+    // window hides and stops recording until it leaves fullscreen.
+    Q_INVOKABLE void fullscreen();
     // Turn the assistant's screen off and quit.
     Q_INVOKABLE void close();
 
@@ -65,6 +68,7 @@ private:
     uint m_nodeId = 0;
     bool m_enabled = true;
     bool m_onTv = false;
+    bool m_fullscreen = false;
     bool m_authenticated = false;
     bool m_pointerPlaced = false;
 };

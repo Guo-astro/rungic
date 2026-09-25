@@ -53,7 +53,8 @@ def output():
 
 def status():
     state = bridge({'op': 'agent-screen'})
-    return {'enabled': state['enabled'], 'shown_on': 'tv' if state.get('tv') else 'floating window',
+    shown_on = 'tv' if state.get('tv') else 'phone fullscreen' if state.get('fullscreen') else 'floating window'
+    return {'enabled': state['enabled'], 'shown_on': shown_on,
             'size': f"{state['width']}x{state['height']}", 'output': output() if state['enabled'] else None,
             'window_running': window_running()}
 

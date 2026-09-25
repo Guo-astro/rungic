@@ -159,6 +159,7 @@ void AgentScreen::poll()
     }
     m_enabled = state.value(QStringLiteral("enabled")).toBool();
     m_onTv = state.value(QStringLiteral("tv")).toBool();
+    m_fullscreen = state.value(QStringLiteral("fullscreen")).toBool();
     if (!m_enabled) {  // turned off elsewhere (quick setting, moto-agent-screen off)
         QCoreApplication::quit();
         return;
@@ -174,9 +175,9 @@ void AgentScreen::update()
         setStatus(QStringLiteral("waiting for the screen"));
         return;
     }
-    if (m_onTv) {  // the TV shows it: no recording, the floating window hides
+    if (m_onTv || m_fullscreen) {  // the TV or the phone's fullscreen shows it: no recording, the window hides
         stopStream();
-        setStatus(QStringLiteral("tv"));
+        setStatus(m_onTv ? QStringLiteral("tv") : QStringLiteral("fullscreen"));
         return;
     }
     if (m_stream && m_streamed == output)
@@ -266,6 +267,17 @@ void AgentScreen::castToTv()
     });
     connect(worker, &QThread::finished, worker, &QObject::deleteLater);
     worker->start();
+}
+
+void AgentScreen::fullscreen()
+{
+    const QJsonObject state = bridge({{QStringLiteral("op"), QStringLiteral("agent-screen")}, {QStringLiteral("fullscreen"), true}});
+    if (state.contains(QStringLiteral("error"))) {
+        qWarning() << "agent screen: fullscreen:" << state.value(QStringLiteral("error")).toString();
+        return;
+    }
+    m_fullscreen = state.value(QStringLiteral("fullscreen")).toBool();
+    update();
 }
 
 void AgentScreen::close()

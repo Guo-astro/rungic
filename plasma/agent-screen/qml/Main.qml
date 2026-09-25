@@ -9,14 +9,11 @@
 // pinch it between half and the full width of the phone. A tap, a drag or a pinch shows a toolbar of
 // icons below the picture, a small gap away (above it near the bottom of the screen), which hides a
 // few seconds later.
-// Fullscreen: a window of its own above everything, showing the picture turned a quarter clockwise,
-// so it fills the phone held sideways (top to the left). The phone itself stays portrait: turning
-// its output re-laid out every phone app and made it overlap the assistant's screen in KWin's space.
-// Touches reach the assistant's screen (tap = click, long press = right click, drag = drag, two
-// fingers = scroll). Swiping up from the bottom of the sideways view shows the toolbar there for a
-// few seconds.
+// Fullscreen: the Android host presents the assistant's screen over the whole phone itself (the APK's
+// AgentFullscreen: zero-copy, turned a quarter for the phone held sideways, its own touch handling
+// and toolbar); this window hides meanwhile, as it does while a TV shows the screen.
 // Tab: a handle on the edge; tap to bring the window back, drag to slide it along the edge.
-// While a TV presents the screen everything hides; when the TV goes, it comes back.
+// While a TV or the phone's fullscreen presents the screen everything hides; then it comes back.
 import QtQuick
 import QtQuick.Effects
 import QtQuick.Window
@@ -27,11 +24,11 @@ Window {
     id: root
     // Shown once main.cpp has made it a layer surface.
     property bool ready: false
-    visible: ready && agent.status !== "tv"
+    visible: ready && agent.status !== "tv" && agent.status !== "fullscreen"
     title: "moto-agent-screen"
     color: "transparent"
 
-    property string mode: "window"      // window | tab | fullscreen
+    property string mode: "window"      // window | tab
     property string edge: "right"
     property real px: 12
     property real py: 110
@@ -40,7 +37,6 @@ Window {
     property bool toolbarShown: false
     property bool dragging: false
     property bool pinching: false
-    property var fullscreenWindow: null
     readonly property rect area: floater.area
     readonly property real minWidth: area.width * 0.5
     readonly property real panelHeight: Math.round(panelWidth * 9 / 16)
@@ -81,17 +77,9 @@ Window {
         px = edge === "left" ? 8 : area.width - panelWidth - 8
         settle()
     }
-    function setFullscreen(on) {
+    function setFullscreen() {
         toolbarShown = false
-        if (on && !fullscreenWindow) {
-            mode = "fullscreen"
-            fullscreenWindow = fullscreenComponent.createObject(null)
-        } else if (!on && fullscreenWindow) {
-            fullscreenWindow.destroy()
-            fullscreenWindow = null
-            mode = "window"
-            settle()
-        }
+        agent.fullscreen()
     }
     Component.onCompleted: {
         panelWidth = area.width * 0.72
@@ -124,13 +112,12 @@ Window {
     // ---- a capsule of icon buttons -----------------------------------------------------------------
     component Toolbar: Item {
         id: bar
-        property bool large: false
         property bool shown: false
         property real slide: -8          // where it comes from while appearing
         property var actions: []
         signal used()
         width: row.implicitWidth + 16
-        height: large ? 46 : 40
+        height: 40
         opacity: shown ? 1 : 0
         scale: shown ? 1 : 0.9
         visible: opacity > 0.01
@@ -138,7 +125,7 @@ Window {
         Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
         Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
 
-        // Touches on the capsule stay here (fullscreen: never a click on the picture below).
+        // Touches on the capsule stay here, between the buttons too.
         TapHandler { gesturePolicy: TapHandler.WithinBounds }
         // Dark translucent material. A real blur of what is behind needs KWin's blur effect, which
         // Plasma Mobile does not load (docs/65).
@@ -165,7 +152,7 @@ Window {
                     }
                     Kirigami.Icon {
                         anchors.centerIn: parent
-                        width: bar.large ? 22 : 19; height: width
+                        width: 19; height: width
                         source: modelData.icon
                         color: "white"
                         isMask: true
@@ -211,8 +198,7 @@ Window {
             PipeWire.PipeWireSourceItem {
                 id: stream
                 anchors.fill: parent
-                // Nothing to draw while fullscreen shows the picture instead.
-                nodeId: root.mode === "fullscreen" ? 0 : agent.nodeId
+                nodeId: agent.nodeId
                 visible: nodeId > 0
             }
             Kirigami.Icon {
@@ -289,7 +275,7 @@ Window {
         slide: root.barAbove ? 8 : -8
         x: Math.max(6, Math.min(root.width - width - 6, panel.x + (panel.width - width) / 2))
         y: root.barAbove ? panel.y - root.gap - height : panel.y + panel.height + root.gap
-        actions: [{ icon: "view-fullscreen", act: () => root.setFullscreen(true) },
+        actions: [{ icon: "view-fullscreen", act: () => root.setFullscreen() },
                   { icon: "video-television", act: () => agent.castToTv() },
                   { icon: root.onLeftHalf ? "go-previous" : "go-next", act: () => root.tuck(root.onLeftHalf ? "left" : "right") },
                   { icon: "window-close", act: () => agent.close() }]
@@ -332,115 +318,6 @@ Window {
             onActiveChanged: if (active) offset = centroid.scenePressPosition.y - root.tabY
             onCentroidChanged: if (active)
                 root.tabY = Math.max(0, Math.min(root.area.height - root.tabHeight, centroid.scenePosition.y - offset))
-        }
-    }
-
-    // ---- fullscreen: a window of its own above everything ------------------------------------------
-    Component {
-        id: fullscreenComponent
-        Window {
-            id: full
-            visible: false
-            color: "black"
-            title: "moto-agent-screen fullscreen"
-            property bool barShown: false
-            readonly property int swipeZone: 56   // from the bottom of the sideways view
-            function showBar() {
-                barShown = true
-                barTimer.restart()
-            }
-            Timer {
-                id: barTimer
-                interval: 3000
-                onTriggered: full.barShown = false
-            }
-            Component.onCompleted: {
-                floater.setupOverlay(full)
-                visible = Qt.binding(() => agent.status !== "tv")
-            }
-
-            // The sideways view: the window turned a quarter clockwise; everything in it (picture,
-            // touches, toolbar) works in its own upright coordinates.
-            Item {
-                id: sideways
-                anchors.centerIn: parent
-                width: full.height
-                height: full.width
-                rotation: 90
-
-                PipeWire.PipeWireSourceItem {
-                    id: fullStream
-                    anchors.fill: parent
-                    nodeId: agent.nodeId
-                }
-
-                Item {
-                    id: touchArea
-                    anchors.fill: parent
-                    function move(p) {
-                        const r = fullStream.paintedRect.width > 0 ? fullStream.paintedRect : Qt.rect(0, 0, width, height)
-                        agent.pointerMove((p.x - r.x) / r.width, (p.y - r.y) / r.height)
-                    }
-                    function click(p, button) {
-                        move(p)
-                        agent.pointerButton(button, true)
-                        agent.pointerButton(button, false)
-                    }
-                    TapHandler {
-                        onTapped: (point) => touchArea.click(point.position, root.btnLeft)
-                        onLongPressed: touchArea.click(point.position, root.btnRight)
-                    }
-                    DragHandler {
-                        target: null
-                        maximumPointCount: 1
-                        property bool swipe: false   // up from the bottom zone: the toolbar, not a drag
-                        onActiveChanged: {
-                            if (active) {
-                                swipe = centroid.pressPosition.y > touchArea.height - full.swipeZone
-                                if (swipe)
-                                    return
-                                touchArea.move(centroid.pressPosition)
-                                agent.pointerButton(root.btnLeft, true)
-                            } else if (!swipe) {
-                                agent.pointerButton(root.btnLeft, false)
-                            }
-                        }
-                        onCentroidChanged: {
-                            if (!active)
-                                return
-                            if (swipe) {
-                                if (centroid.position.y - centroid.pressPosition.y < -20)
-                                    full.showBar()
-                            } else {
-                                touchArea.move(centroid.position)
-                            }
-                        }
-                    }
-                    DragHandler {
-                        target: null
-                        minimumPointCount: 2
-                        property point last
-                        onActiveChanged: if (active) { last = centroid.position; touchArea.move(centroid.position) }
-                        onCentroidChanged: if (active) {
-                            // Natural scrolling: the content follows the fingers.
-                            agent.scroll(-(centroid.position.x - last.x) * 2, -(centroid.position.y - last.y) * 2)
-                            last = centroid.position
-                        }
-                    }
-                }
-
-                Toolbar {
-                    large: true
-                    shown: full.barShown
-                    slide: 8
-                    x: (sideways.width - width) / 2
-                    y: sideways.height - height - 20
-                    actions: [{ icon: "view-restore", act: () => root.setFullscreen(false) },
-                              { icon: "video-television", act: () => { root.setFullscreen(false); agent.castToTv() } },
-                              { icon: "window-close", act: () => { root.setFullscreen(false); agent.close() } }]
-                    onUsed: full.showBar()
-                }
-            }
         }
     }
 }
