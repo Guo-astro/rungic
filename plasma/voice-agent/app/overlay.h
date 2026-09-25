@@ -30,7 +30,7 @@ public:
     // Maps the window on the named screen (the one Home was held on).
     Q_INVOKABLE void present(const QString &screen);
     Q_INVOKABLE void conceal();
-    // The card's shape, in window coordinates: the frosted material goes behind it only.
+    // The frosted area, in window coordinates: KWin blurs and saturates behind it only.
     Q_INVOKABLE void setCard(const QRectF &rect, qreal radius);
     // Touches below `height` (the navigation panel) go to the shell, not the overlay.
     Q_INVOKABLE void setTouchableHeight(int height);

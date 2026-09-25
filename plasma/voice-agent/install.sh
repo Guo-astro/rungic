@@ -1,6 +1,6 @@
 #!/bin/sh
 # Build and install the voice assistant inside the Plasma container (docs/59).
-# Needs Qt6 (base, declarative, quickcontrols2) development files and CMake;
+# Needs Qt6 (base, declarative, quickcontrols2, shadertools) development files and CMake;
 # Codex is installed separately under /usr/local/lib/codex (see docs/59).
 set -eu
 src=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)

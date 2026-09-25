@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// An entry of the conversation in the overlay (docs/67): the chat's bubbles, lighter;
-// an agent turn is one line saying what it is doing (the details are in the app).
+// An entry of the conversation in the overlay (docs/67), always on the dark backdrop.
+// The panel shows the latest turn: what the user said as a caption above the answer in
+// large type. Pulled up, it shows the whole conversation: the user's words in a glass
+// bubble, the assistant's as plain text. An agent turn is one line saying what it does.
 import QtQuick
 import QtQuick.Controls as QQC2
 import org.kde.kirigami as Kirigami
 
 Item {
     id: entry
+    required property int index
     required property string kind
     required property string role
     required property string text
@@ -14,30 +17,45 @@ Item {
     required property real started
     required property real finished
     required property var steps
-    property bool dark: true
+    property int from: 0              // entries before it are not shown
+    property bool compact: true       // the latest turn only (not pulled up)
+    readonly property bool shown: index >= from
+    visible: shown
     width: ListView.view.width
-    implicitHeight: loader.implicitHeight + Kirigami.Units.smallSpacing
+    implicitHeight: shown ? loader.implicitHeight + Kirigami.Units.largeSpacing : 0
 
     readonly property bool mine: role === "user" && (kind === "message" || kind === "live-user")
+    readonly property color ink: "#F4F1EA"
 
     Loader {
         id: loader
-        x: entry.mine ? entry.width - width : 0
-        width: Math.min(implicitWidth, entry.width * (entry.kind === "work" ? 1 : 0.82))
+        active: entry.shown
+        x: entry.mine && !entry.compact ? entry.width - width : 0
+        width: entry.mine && !entry.compact ? Math.min(implicitWidth, entry.width * 0.8) : entry.width
         sourceComponent: entry.kind === "work" ? work
                        : entry.kind === "error" || entry.kind === "marker" || entry.kind === "approval" ? note
-                       : entry.kind === "call" ? call : bubble
+                       : entry.kind === "call" ? call
+                       : entry.mine ? (entry.compact ? caption : bubble) : answer
+    }
+
+    Component {
+        id: caption
+        Text {
+            text: entry.text
+            wrapMode: Text.Wrap
+            color: Qt.rgba(1, 1, 1, 0.62)
+            font.pixelSize: 14
+        }
     }
 
     Component {
         id: bubble
         Rectangle {
-            readonly property real pad: Kirigami.Units.largeSpacing
-            implicitWidth: Math.min(measure.implicitWidth, entry.width * 0.82 - pad * 2) + pad * 2
-            implicitHeight: label.implicitHeight + pad * 1.3
-            radius: Math.min(height / 2, Kirigami.Units.gridUnit)
-            color: entry.mine ? Kirigami.Theme.highlightColor
-                 : entry.dark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(1, 1, 1, 0.62)
+            readonly property real padX: 16
+            implicitWidth: Math.min(measure.implicitWidth, entry.width * 0.8 - padX * 2) + padX * 2
+            implicitHeight: label.implicitHeight + 20
+            radius: 20
+            color: Qt.rgba(1, 1, 1, 0.10)
             opacity: entry.kind.startsWith("live") ? 0.72 : 1
             Text {
                 id: measure
@@ -45,27 +63,41 @@ Item {
                 text: entry.text
                 font: label.font
             }
-            QQC2.Label {
+            Text {
                 id: label
-                x: parent.pad
+                x: parent.padX
                 anchors.verticalCenter: parent.verticalCenter
-                width: parent.width - parent.pad * 2
+                width: parent.width - parent.padX * 2
                 text: entry.text
                 wrapMode: Text.Wrap
-                color: entry.mine ? "white" : Kirigami.Theme.textColor
-                font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.08
+                color: entry.ink
+                font.pixelSize: 16
+                lineHeight: 1.1
             }
         }
     }
 
     Component {
+        id: answer
+        Text {
+            text: entry.text
+            wrapMode: Text.Wrap
+            color: entry.ink
+            opacity: entry.kind.startsWith("live") ? 0.8 : 1
+            font.pixelSize: entry.compact ? 21 : 17
+            font.weight: entry.compact ? Font.Medium : Font.Normal
+            lineHeight: 1.15
+        }
+    }
+
+    Component {
         id: work
-        Rectangle {
+        Item {
             id: capsule
             property real now: Date.now() / 1000
             Timer {
                 interval: 1000; repeat: true
-                running: entry.status === "running" || entry.status === "live"
+                running: capsule.running
                 onTriggered: capsule.now = Date.now() / 1000
             }
             readonly property bool running: entry.status === "running" || entry.status === "live"
@@ -73,37 +105,43 @@ Item {
             readonly property string step: entry.text.replace(/^\/bin\/(?:ba)?sh -lc '([\s\S]*)'$/, "$1").split("\n")[0]
             readonly property int seconds: Math.max(0, Math.round((running ? now : entry.finished) - entry.started))
             implicitWidth: entry.width
-            implicitHeight: row.implicitHeight + Kirigami.Units.smallSpacing * 2
-            radius: height / 2
-            color: entry.dark ? Qt.rgba(1, 1, 1, 0.06) : Qt.rgba(0, 0, 0, 0.04)
-            Row {
-                id: row
-                anchors.verticalCenter: parent.verticalCenter
-                x: Kirigami.Units.largeSpacing
-                width: parent.width - Kirigami.Units.largeSpacing * 2
-                spacing: Kirigami.Units.smallSpacing
-                QQC2.BusyIndicator {
-                    visible: capsule.running
-                    width: Kirigami.Units.iconSizes.small
-                    height: width
-                    running: visible
-                }
-                Kirigami.Icon {
-                    visible: !capsule.running
-                    width: Kirigami.Units.iconSizes.small
-                    height: width
-                    source: entry.status === "stopped" ? "media-playback-stop-symbolic" : "checkmark-symbolic"
-                    opacity: 0.6
-                }
-                QQC2.Label {
-                    width: row.width - Kirigami.Units.iconSizes.small - row.spacing
+            implicitHeight: 32
+            Rectangle {
+                width: Math.min(parent.width, row.implicitWidth + 28)
+                height: parent.height
+                radius: height / 2
+                color: Qt.rgba(1, 1, 1, 0.07)
+                Row {
+                    id: row
+                    x: 14
+                    width: parent.width - 28
                     anchors.verticalCenter: parent.verticalCenter
-                    elide: Text.ElideRight
-                    opacity: 0.7
-                    font.pointSize: Kirigami.Theme.smallFont.pointSize
-                    text: entry.status === "stopped" ? "已停止"
-                        : capsule.running ? "正在处理 · " + capsule.seconds + " 秒" + (capsule.step ? " · " + capsule.step : "")
-                        : "已处理 · " + entry.steps.count + " 步 · 用时 " + capsule.seconds + " 秒"
+                    spacing: 8
+                    QQC2.BusyIndicator {
+                        visible: capsule.running
+                        width: 16
+                        height: 16
+                        running: visible
+                    }
+                    Kirigami.Icon {
+                        visible: !capsule.running
+                        width: 16
+                        height: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        source: entry.status === "stopped" ? "media-playback-stop-symbolic" : "checkmark-symbolic"
+                        color: Qt.rgba(1, 1, 1, 0.72)
+                        isMask: true
+                    }
+                    Text {
+                        width: Math.min(implicitWidth, capsule.width - 28 - 24)
+                        anchors.verticalCenter: parent.verticalCenter
+                        elide: Text.ElideRight
+                        color: Qt.rgba(1, 1, 1, 0.72)
+                        font.pixelSize: 13
+                        text: entry.status === "stopped" ? "已停止"
+                            : capsule.running ? "正在处理 · " + capsule.seconds + " 秒" + (capsule.step ? " · " + capsule.step : "")
+                            : "已处理 · " + entry.steps.count + " 步 · 用时 " + capsule.seconds + " 秒"
+                    }
                 }
             }
         }
@@ -111,36 +149,23 @@ Item {
 
     Component {
         id: call
-        Item {
-            implicitWidth: entry.width
-            implicitHeight: callLabel.implicitHeight
-            QQC2.Label {
-                id: callLabel
-                width: parent.width
-                horizontalAlignment: Text.AlignHCenter
-                opacity: 0.7
-                font.pointSize: Kirigami.Theme.smallFont.pointSize
-                text: "通话 · " + entry.role + (entry.text ? " · " + entry.text : "")
-                elide: Text.ElideRight
-            }
+        Text {
+            horizontalAlignment: Text.AlignHCenter
+            color: Qt.rgba(1, 1, 1, 0.66)
+            font.pixelSize: 13
+            text: "通话 · " + entry.role + (entry.text ? " · " + entry.text : "")
+            elide: Text.ElideRight
         }
     }
 
     Component {
         id: note
-        Item {
-            implicitWidth: entry.width
-            implicitHeight: noteLabel.implicitHeight
-            QQC2.Label {
-                id: noteLabel
-                width: parent.width
-                horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.Wrap
-                font.pointSize: Kirigami.Theme.smallFont.pointSize
-                color: entry.kind === "error" ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.textColor
-                opacity: entry.kind === "error" ? 1 : 0.6
-                text: entry.text
-            }
+        Text {
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.Wrap
+            font.pixelSize: 13
+            color: entry.kind === "error" ? "#FF8A80" : Qt.rgba(1, 1, 1, 0.62)
+            text: entry.text
         }
     }
 }
