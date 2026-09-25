@@ -378,6 +378,24 @@
 - **对照**：同样测系统设置（`plasma-settings`），31% 的帧间隔超过 11 ms，节奏与本 App 相同。所以剩下的顿挫属于共享的合成通路，就是 57 篇留下的“显示节拍受宿主帧回调与呈现反馈影响”（SurfaceFlinger 帧间隔 p95 16.7 ms），不是本 App 的问题。
 - **Android 侧现状**：空闲时屏幕实际是 30 Hz（SurfaceFlinger 当前模式），宿主在触摸后才申请 120 Hz；系统默认优先级还有一条最高 90 Hz 的投票。滑动开头的几帧因此可能落在较低的刷新率上。这一点尚未量化。
 
+## 深浅两套主题与设计系统（2026-09-26）
+
+用户要求：长按 Home 的浮层和语音助手 App 都要有深色、浅色两套主题，并且注意可读性；用 Claude Design 做浅色设计，并抽象出设计系统。
+
+- **跟随系统**：`SystemTheme`（C++ 单例）读取 `kdeglobals` 的窗口背景色判断深浅，用 KConfigWatcher 监听变化，Qt 的 colorScheme 变化时也会重新读取。App 自己设置了调色板，所以不能靠调色板判断。App 同时切换配色方案文件（深色 `MotoVoiceAssistant.colors`、浅色 `MotoVoiceAssistantLight.colors`），面板跟着变（`KDE_COLOR_SCHEME_PATH`，见上文“面板跟随应用配色”）。实测已打开的 App 会当场跟随 `plasma-apply-colorscheme` 切换。
+- **配色**：`Style.qml` 里写了两套值，所有写死的颜色都换成了 token（53 处）。
+  - 按 WCAG 计算了每一对文字和底色：浅色最低 4.65:1（`faint` 在 `glass` 上），深色最低 5.57:1。
+  - 浮层遮罩加深到浅色 0.78 / 0.84 / 0.90、深色 0.74 / 0.80 / 0.88，背后是纯白或纯黑时 `dim` 仍有 5.2:1。原来的 0.58 在背后是白色时只有 3.24:1。浮层里的次要文字一律用 `dim`。
+  - Markdown 链接用的是调色板里的链接色：浅色配色把 ForegroundLink 改为 #1F5AAA（6.2:1），原来的 #2980B9 只有 3.9:1。
+- **光**：三个着色器加了 `light` 参数。浅色底上相加的光会消失在白里，所以改成把同样的颜色加深，再按强度覆盖上去（核心用金色）。光丸外圈的光晕以强度作为 alpha；发光文字用深金、墨色和深蓝，不加光晕。
+- **设计系统**：Claude Design 的“语音助手设计系统”，从上述代码整理而来：
+  - 33 个颜色，浅色、深色两套主题，每个都注明用法和对比度；
+  - 15 个字体样式（行高按 QML lineHeight × Noto Sans CJK 自然行距 1.448 换算），以及间距、圆角、尺寸、浮层遮罩不透明度；
+  - 13 个组件的说明和静态预览，按 QML 源码还原：LightPill、GlowLabel、TalkDock、Bloom、Spinner、Message、WorkCard、CallCard、PillButton、GlassButton、ConversationRow、PinnedCard、OverlayPanel；
+  - 15 个 Breeze symbolic 图标（LGPL-3.0-or-later，颜色固定为 #232629，只作查看用）。
+  - 设计系统以 `Style.qml` 为准，改 token 时两边一起改。
+- **浅色设计稿**：两块画布各加“深色 / 浅色”两页，并安装了设计系统。浮层的浅色页有聆听、处理中、回答、展开对话；App 的浅色页有对话列表、对话、聆听、处理中、代打电话。画稿中的色值全部取自设计系统的浅色主题。
+- **实机验证**：浅色下，列表、对话、浮层截屏都可读，面板颜色与 App 一致；临时切到深色，已打开的 App 当场跟着变，验证后恢复为 Breeze Light。
 ## 待办
 
 - **输入转写为繁体**：app-server不能设置转写语言，只影响显示；显示时做简繁转换。
