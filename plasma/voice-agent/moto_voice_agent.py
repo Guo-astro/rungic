@@ -21,6 +21,7 @@ ChatGPT sign-in.
 import argparse
 import array
 import base64
+import io
 import itertools
 import json
 import math
@@ -31,6 +32,7 @@ import re
 import subprocess
 import threading
 import time
+import urllib.request
 
 import gi
 gi.require_version('Gst', '1.0')
@@ -948,12 +950,15 @@ class VoiceAgent:
             # The model finds the hang-up control on screen (computer use plan one, docs/68).
             result = luna_goal('End the call that is in progress: press the hang-up (end call) control of the call '
                                'window. Press nothing else. Reply DONE once the call has ended.', timeout=90)
-            log('call: hang up', result.get('outcome'), result.get('answer') or result.get('note') or '')
+            log('call: hang up', result.get('outcome'), result.get('answer') or result.get('note') or '',
+                json.dumps(result.get('steps', []), ensure_ascii=False)[:1500])
 
         self.call = call_proxy.CallProxy(emit, self.tell_owner, app=app, contact=params.get('contact', ''),
                                          goal=params.get('goal', ''), owner=params.get('owner') or '凯文',
                                          monitor=bool(params.get('monitor')), incoming=bool(params.get('incoming')),
                                          hang_up=hang_up)
+        self.call.on_answered = lambda: call_snapshot('answered')
+        self.call.confirm_connected = call_screen_connected
         self.call.start()
         GLib.idle_add(self.set_state)
         # Dial only once the call agent can listen: the other side is heard from
@@ -984,6 +989,9 @@ class VoiceAgent:
         while time.monotonic() < deadline and self.call.streams_seen == before and result.get('outcome') != 'failed':
             time.sleep(0.2)
         placed = self.call.streams_seen > before
+        if placed:
+            threading.Thread(target=lambda: (time.sleep(2), call_snapshot('ringing')), daemon=True).start()
+            threading.Thread(target=self.call.watch_ringing, daemon=True).start()
         self.emit({'type': 'call-state', 'state': 'ringing' if placed else 'dial-failed'}, keep=False)
         return {'dialed': placed, 'confirmed_by': 'call audio opened' if placed else None,
                 'outcome': result.get('outcome'), 'screen': result.get('answer') or result.get('note'),
@@ -1050,6 +1058,67 @@ class VoiceAgent:
         answer = {'allow': 'accept', 'allow-session': 'acceptForSession'}.get(decision, 'decline')
         self.server.respond(request_id, {'decision': answer})
         self.emit({'type': 'approval-result', 'id': approval, 'decision': answer})
+
+
+def call_screen_connected() -> bool:
+    """Whether the call screen (the active window, as a call app puts its call window in
+    front) shows the call connected: a running call timer, not "calling" or "waiting".
+    Only the top of the window, where call apps show the timer; about 2 s (docs/63)."""
+    try:
+        done = subprocess.run(['/usr/local/libexec/moto-screenshot', 'active-window'], capture_output=True, timeout=10)
+        if done.returncode != 0:
+            return False
+        end = done.stdout.index(b'\n')
+        header = json.loads(done.stdout[:end])
+        from PIL import Image
+        modes = {4: 'BGRX', 5: 'BGRA', 6: 'BGRA', 16: 'RGBX', 17: 'RGBA', 18: 'RGBA'}
+        image = Image.frombuffer('RGBA', (header['width'], header['height']), done.stdout[end + 1:], 'raw',
+                                 modes.get(header.get('format'), 'BGRA'), header['stride'], 1).convert('RGB')
+        top = image.crop((0, 0, image.width, max(60, image.height // 8)))
+        buffer = io.BytesIO()
+        top.save(buffer, 'JPEG', quality=85, subsampling=0)
+        body = {'model': 'gpt-6-luna', 'reasoning': {'effort': 'none'}, 'max_output_tokens': 16, 'input': [
+            {'role': 'user', 'content': [
+                {'type': 'input_text', 'text': 'This is the top of a call window. Is a running call-duration timer '
+                                               '(like 00:05) shown? Answer only yes or no.'},
+                {'type': 'input_image', 'detail': 'original',
+                 'image_url': 'data:image/jpeg;base64,' + base64.b64encode(buffer.getvalue()).decode()}]}]}
+        key = (CONFIG / 'openai-api-key').read_text().strip()
+        request = urllib.request.Request('https://api.openai.com/v1/responses', data=json.dumps(body).encode(),
+                                         headers={'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json'})
+        with urllib.request.urlopen(request, timeout=20) as response:
+            reply = json.loads(response.read())
+        text = ''.join(c.get('text', '') for o in reply.get('output', []) if o.get('type') == 'message'
+                       for c in o.get('content', []))
+        return text.strip().lower().startswith('yes')
+    except Exception as error:  # noqa: BLE001  (not connected, as far as we know)
+        log('call screen check', error)
+        return False
+
+
+def call_snapshot(tag: str) -> None:
+    """Where the call's windows are, for diagnosis (docs/63): the window list in the log, and
+    both screens as they look now in ~/.cache/moto-voice-agent (the latest call only)."""
+    try:
+        info = json.loads(subprocess.run(['moto-cua', 'windows'], capture_output=True, text=True, timeout=20).stdout)
+        log(f'call: {tag}: windows', json.dumps([{k: w.get(k) for k in ('caption', 'app', 'screen', 'active', 'minimized')}
+                                                 for w in info.get('windows', [])], ensure_ascii=False))
+        directory = Path.home() / '.cache/moto-voice-agent'
+        directory.mkdir(parents=True, exist_ok=True)
+        from PIL import Image
+        for output in info.get('screens', []):
+            done = subprocess.run(['/usr/local/libexec/moto-screenshot', 'screen', output], capture_output=True, timeout=15)
+            if done.returncode != 0:
+                continue
+            end = done.stdout.index(b'\n')
+            header = json.loads(done.stdout[:end])
+            modes = {4: 'BGRX', 5: 'BGRA', 6: 'BGRA', 16: 'RGBX', 17: 'RGBA', 18: 'RGBA'}
+            image = Image.frombuffer('RGBA', (header['width'], header['height']), done.stdout[end + 1:], 'raw',
+                                     modes.get(header.get('format'), 'BGRA'), header['stride'], 1).convert('RGB')
+            image.thumbnail((960, 960))
+            image.save(directory / f'call-{tag}-{output}.jpg', quality=80)
+    except Exception as error:  # noqa: BLE001  (diagnostics only)
+        log('call snapshot', tag, error)
 
 
 def luna_goal(goal: str, timeout: float = 120, stop_when=None) -> dict:

@@ -72,7 +72,7 @@ def instructions(owner: str, contact: str, goal: str, incoming: bool = False) ->
     return f'''你是{owner}的 AI 助理，正在替{owner}和{contact or '对方'}通电话（微信语音通话）。你只负责说话：用自然、简短、礼貌的普通话，像真人通话一样一次只说一两句。
 
 ## 身份
-- 对方先开口（例如“喂”）之后，你才开口；第一句原样说：“你好，我是{owner}的 AI 助理，{who}。”然后说明来意。
+- 接通后，对方先说了话（例如“喂”）就回应；系统提示你先开口时，立刻开口，不要等。第一句原样说：“你好，我是{owner}的 AI 助理，{who}。”然后说明来意。开场白只说一次：之后对方“嗯”“喂”一声，就直接接着说。
 - 如果对方问起，如实说明你是 AI 助理；不要冒充{owner}本人。
 
 ## 这通电话的目的
@@ -142,10 +142,29 @@ class Player:
         self.src = self.pipeline.get_by_name('src')
         self.pipeline.set_state(Gst.State.PLAYING)
         self.until = 0.0
+        self.held: list[bytes] | None = None   # audio kept back until release() (the opening)
 
     def push(self, data: bytes) -> None:
+        if self.held is not None:
+            self.held.append(data)
+            return False
         self.until = max(self.until, time.monotonic()) + len(data) / 2 / RATE
         self.src.emit('push-buffer', Gst.Buffer.new_wrapped(data))
+        return False
+
+    def hold(self) -> bool:
+        self.held = []
+        return False
+
+    def release(self) -> bool:
+        held, self.held = self.held or [], None
+        for data in held:
+            self.push(data)
+        return False
+
+    def drop(self) -> bool:
+        self.held = None
+        return False
 
     def flush(self) -> None:
         """Drop what is queued (the other side started talking)."""
@@ -174,6 +193,15 @@ class CallProxy:
         self.ready = threading.Event()         # the realtime session is set up: safe to dial
         self.streams_seen = 0                  # app audio streams routed so far (a call opens them)
         self.connected = False                 # the other side has spoken
+        self.answered = False                  # the app opened its microphone: the call is up
+        self.remote_spoke = False              # the other side started speaking at least once
+        self.on_answered = None                # callback (diagnostics)
+        # () -> bool: whether the app's call screen shows the call connected (a running call
+        # timer). The microphone opening is only the trigger: ringback tones and music must
+        # never be taken for the other side.
+        self.confirm_connected = None
+        self.opened = False                    # the opening was spoken: the session answers by itself
+        self.answer_at = 0                     # transcript index where the call came up (before: ringing)
         self.responding = False
         self.pending: list[str] = []           # messages for the voice model, waiting for its current response
         self.loopbacks: list[str] = []
@@ -233,10 +261,74 @@ class CallProxy:
             if line.startswith('routed '):
                 routed += 1
                 self.streams_seen += 1
+                # Ringing plays a tone only; WeChat opens its microphone when the call is answered.
+                if line.startswith('routed source-output') and not self.answered:
+                    self.answered = True
+                    threading.Thread(target=self._answered, daemon=True).start()
             elif line.startswith('gone '):
                 routed -= 1
                 if routed <= 0:
                     threading.Thread(target=self._check_call_over, daemon=True).start()
+
+    CONFIRM_S = 8          # the call screen should show the call up within this after the trigger
+
+    def _answered(self):
+        """The call may be up (the app opened its microphone, or the ringing check saw it).
+        The opening is generated at once but held back, and plays the moment the call
+        screen shows the call connected; if it does not, it is dropped and nothing was
+        said (ringback music never gets an answer). A call we picked up (incoming, taken
+        over) needs no check."""
+        if self.on_answered:
+            threading.Thread(target=self.on_answered, daemon=True).start()
+        if not (self.active and not self.ending) or self.opened:
+            return
+        if self.incoming or self.confirm_connected is None:
+            time.sleep(0.3)
+            self.answer_at = len(self.transcript)
+            self._open()
+            return
+        self.answer_at = len(self.transcript)
+        GLib.idle_add(self.player.hold)
+        self._say('[系统] 电话已经接通。现在说第一句，然后说明来意。')
+        deadline = time.monotonic() + self.CONFIRM_S
+        while self.active and not self.ending and time.monotonic() < deadline:
+            if self.confirm_connected():
+                print('call: connected (call screen)', flush=True)
+                GLib.idle_add(self.player.release)
+                self._open(spoken=True)
+                return
+            time.sleep(0.3)
+        print('call: not connected after the trigger: the opening is dropped', flush=True)
+        self._send({'type': 'response.cancel'})
+        GLib.idle_add(self.player.drop)
+        self.answered = False                   # a later trigger or the ringing check tries again
+
+    def watch_ringing(self):
+        """While it rings: look at the call screen now and then, in case the microphone
+        trigger does not come (the check itself decides, not the audio)."""
+        while self.active and not self.ending and not self.opened:
+            time.sleep(3)
+            if not self.answered and self.confirm_connected and self.confirm_connected():
+                self.answered = True
+                self._answered()
+
+    def _open(self, spoken: bool = False):
+        """The opening plays to the end, then the session answers the other side by itself.
+        A "嗯" in the middle of the opening cut it, and the model, seeing its introduction
+        cut short, introduced itself again."""
+        if not spoken:
+            self._say('[系统] 电话已经接通。现在说第一句，然后说明来意。')
+        time.sleep(1.0)                          # the opening's audio starts arriving
+        while self.active and (self.responding or self.player.busy()):
+            time.sleep(0.1)
+        self.opened = True
+        self._send({'type': 'session.update', 'session': {'type': 'realtime', 'audio': {'input': {
+            'turn_detection': {'type': 'server_vad', 'silence_duration_ms': 600,
+                               'create_response': True, 'interrupt_response': True}}}}})
+        # Something said during the opening gets its answer now.
+        heard = [t['text'] for t in self.transcript[self.answer_at:] if t['who'] == 'other' and t.get('during_opening')]
+        if heard and not any(len(t) <= 2 for t in heard[-1:]):
+            self._say('[系统] 你说开场白时对方说了：' + '；'.join(heard) + '。现在回应。')
 
     def _check_call_over(self):
         time.sleep(3)
@@ -266,8 +358,10 @@ class CallProxy:
             'audio': {
                 'input': {'format': {'type': 'audio/pcm', 'rate': RATE},
                           'transcription': {'model': 'gpt-4o-mini-transcribe', 'language': 'zh'},
+                          # No automatic answers until the opening: the ringback tone and the click
+                          # of answering were heard as speech ("我没听清").
                           'turn_detection': {'type': 'server_vad', 'silence_duration_ms': 600,
-                                             'create_response': True, 'interrupt_response': True}},
+                                             'create_response': False, 'interrupt_response': True}},
                 'output': {'format': {'type': 'audio/pcm', 'rate': RATE}, 'voice': VOICE}}}})
         # The other side, as the app plays it.
         self.capture = Gst.parse_launch(
@@ -530,7 +624,9 @@ class CallProxy:
         elif kind == 'response.output_text.delta' and hasattr(self, '_summary_parts'):
             self._summary_parts.append(event.get('delta', ''))
         elif kind == 'input_audio_buffer.speech_started':
-            GLib.idle_add(self.player.flush)          # the other side interrupts
+            self.remote_spoke = True
+            if self.opened:                           # before, it may be a "喂" or the ringback:
+                GLib.idle_add(self.player.flush)      # the other side interrupts
         elif kind == 'response.created' and response.get('output_modalities') != ['text']:
             self.responding = True
         elif kind == 'response.done':
@@ -549,7 +645,7 @@ class CallProxy:
                 if not self.connected:
                     self.connected = True
                     self.emit({'type': 'call-state', 'state': 'connected'}, keep=False)
-                self.transcript.append({'who': 'other', 'text': text})
+                self.transcript.append({'who': 'other', 'text': text, 'during_opening': not self.opened})
                 self.emit({'type': 'call-transcript', 'role': 'remote', 'text': text})
                 self._decide()
         elif kind == 'response.output_audio_transcript.done':
