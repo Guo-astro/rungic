@@ -1,5 +1,7 @@
 # 电脑操作：arc-cua + JEV 的 Linux 后端（moto-cua）
 
+> 2026-09-25 起，本篇描述的是方案二（不是默认方案）。默认的电脑操作方案一见 [68 篇](68-luna-computer-use.md)（GPT-6 Luna 看画面操作）；切换方法：`moto-cua plan atspi`。
+
 2026-09-24。目标：语音助手的 Agent 能在本机 Plasma 桌面上操作图形应用。执行由 arc-cua 运行时和 TypeSafe 的 JEV 快速决策模型完成，Agent（Codex）只负责规划子任务。
 
 ## 选型与来源

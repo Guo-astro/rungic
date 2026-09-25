@@ -1,4 +1,11 @@
-"""moto-cua: desktop computer use for Codex, as an MCP server or a CLI (docs/60).
+"""moto-cua: desktop computer use for Codex, as an MCP server or a CLI (docs/60, docs/68).
+
+Two plans (`moto-cua plan [luna|atspi]`, ~/.config/moto-cua/plan):
+  luna (default)  GPT-6 Luna computer use: the model sees screenshots and decides where to act
+                  (luna.py); Codex can also look and act itself (desktop_screenshot, desktop_act).
+  atspi           plan two: accessibility tree + OCR + JEV (desktop_observe, desktop_run,
+                  desktop_find_name, and desktop_goal through moto-clicker).
+Window management (KWin) and the input (RemoteDesktop portal, KWin text commit) are shared.
 
 The voice agent's Codex runs commands in a sandbox that cannot reach D-Bus or
 Wayland. Codex starts MCP servers outside that sandbox, so desktop operations
@@ -8,7 +15,8 @@ Wayland. Codex starts MCP servers outside that sandbox, so desktop operations
   moto-cua windows|observe     print JSON
   moto-cua launch APP | activate WINDOW_ID | window WINDOW_ID ACTION
   moto-cua run '<subtask json>'
-  moto-cua goal '{"goal": ..., "app": ...}'   whole task, JEV per step (moto-clicker)
+  moto-cua goal '{"goal": ..., "app": ...}'   whole task (Luna, or JEV per step under plan atspi)
+  moto-cua screenshot OUT.png | act '<actions json>' | plan [luna|atspi]
 """
 from __future__ import annotations
 
@@ -27,11 +35,23 @@ from arc_cua.policies import TypeSafeJevPolicy
 
 from . import a11y, names, speech
 from .backend import LinuxAtspiBackend
+from .luna import ComputerUse
 
 logger = logging.getLogger('moto-cua')
 KEY_FILES = (Path.home() / '.config/moto-cua/typesafe-api-key',
              Path.home() / '.config/moto-voice-agent/typesafe-api-key')
 MAX_ELEMENTS_SHOWN = 150
+PLAN_FILE = Path.home() / '.config/moto-cua/plan'
+PLANS = ('luna', 'atspi')
+
+
+def plan() -> str:
+    """luna unless plan two was chosen."""
+    try:
+        chosen = PLAN_FILE.read_text().strip()
+    except OSError:
+        chosen = ''
+    return chosen if chosen in PLANS else 'luna'
 
 SUBTASK_SCHEMA = {
     'type': 'object',
@@ -93,7 +113,7 @@ TOOLS = [
      'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False}},
     {'name': 'desktop_goal',
      'description': ('Do a whole task on the desktop: every step (what to click, type, scroll, when it is done) is '
-                     'chosen by JEV from the screen (OCR + accessibility), text is written only when needed. Give '
+                     'chosen by GOAL_DECIDER. Give '
                      'the goal as the user would say it, with every literal value (names, message text) in it. '
                      'With `app`, that application is opened or brought forward first. Returns outcome, achieved, '
                      'answer (what the screen shows about the goal) and the steps taken. Outcome "question": the '
@@ -140,6 +160,72 @@ TOOLS = [
      # Sends a message on the user's behalf; the agent prompt makes it get the user's OK first.
      'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False}},
 ]
+
+
+ACTION_SCHEMA = {
+    'type': 'object',
+    'description': ('One action, as the computer-use tool of the Responses API defines it; x/y are pixels of the '
+                    'latest desktop_screenshot.'),
+    'properties': {
+        'type': {'type': 'string', 'enum': ['click', 'double_click', 'drag', 'move', 'scroll', 'keypress', 'type',
+                                            'wait']},
+        'x': {'type': 'number'}, 'y': {'type': 'number'},
+        'button': {'type': 'string', 'enum': ['left', 'right', 'wheel', 'back', 'forward']},
+        'keys': {'type': 'array', 'items': {'type': 'string'},
+                 'description': 'keypress: the chord (e.g. ["CTRL", "L"], ["ENTER"]); mouse actions: modifiers held.'},
+        'path': {'type': 'array', 'items': {'type': 'object', 'properties': {'x': {'type': 'number'},
+                                                                            'y': {'type': 'number'}}},
+                 'description': 'drag: the points, first to last.'},
+        'scroll_x': {'type': 'number'}, 'scroll_y': {'type': 'number', 'description': 'pixels, positive = down'},
+        'text': {'type': 'string', 'description': 'type: text for the focused field, any language.'}},
+    'required': ['type'],
+}
+PLAN_ONE_TOOLS = [
+    {'name': 'desktop_screenshot',
+     'description': ("Look at the assistant's screen (1920x1080): returns the image. Coordinates for desktop_act "
+                     'are its pixels. Turns the assistant\'s screen on if needed.'),
+     'inputSchema': {'type': 'object', 'properties': {}}, 'annotations': {'readOnlyHint': True}},
+    {'name': 'desktop_act',
+     'description': ("Act on the assistant's screen yourself, from what you saw in desktop_screenshot: a short "
+                     'batch of actions carried out in order, then the new screenshot comes back. For a whole '
+                     'multi-step task prefer desktop_goal (faster).'),
+     'inputSchema': {'type': 'object', 'properties': {'actions': {'type': 'array', 'items': ACTION_SCHEMA}},
+                     'required': ['actions']},
+     'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False}},
+]
+PLAN_TWO_ONLY = ('desktop_observe', 'desktop_run', 'desktop_find_name')
+DECIDERS = {'luna': 'GPT-6 Luna looking at screenshots of the screen (computer use; no accessibility tree or OCR); '
+                    'text is typed in any language',
+            'atspi': 'JEV from the screen (OCR + accessibility), text is written only when needed'}
+
+
+def tools_for(chosen: str) -> list[dict]:
+    tools = []
+    for tool in TOOLS:
+        if chosen == 'luna' and tool['name'] in PLAN_TWO_ONLY:
+            continue
+        tool = dict(tool)
+        if tool['name'] == 'desktop_goal':
+            tool['description'] = tool['description'].replace('GOAL_DECIDER', DECIDERS[chosen])
+        if tool['name'] == 'desktop_voice_message' and chosen == 'luna':
+            tool = VOICE_MESSAGE_LUNA
+        tools.append(tool)
+    return tools + (PLAN_ONE_TOOLS if chosen == 'luna' else [])
+
+
+VOICE_MESSAGE_LUNA = {
+    'name': 'desktop_voice_message',
+    'description': ('Record and send a voice message in the chat open in the ACTIVE window on the assistant\'s '
+                    'screen, spoken by the assistant: the app\'s microphone is switched to the Linux microphone '
+                    'for the recording only; GPT-6 Luna finds and presses the record and send controls on screen. '
+                    'Recording counts as started only when the app records from the Linux microphone; otherwise '
+                    'nothing is spoken and nothing is sent. The user\'s real microphone is never recorded.'),
+    'inputSchema': {'type': 'object', 'properties': {
+        'text': {'type': 'string', 'description': 'What the voice message says.'},
+        'voice': {'type': 'string', 'description': 'TTS voice, default marin.'}},
+        'required': ['text']},
+    'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False},
+}
 
 
 def localized_names(info) -> set[str]:
@@ -305,6 +391,118 @@ class Cua:
             for key in ('before_revision', 'after_revision', 'target_bounds'):
                 record.pop(key, None)
         return result
+
+    # ---- plan one: GPT-6 Luna computer use (luna.py) ------------------------------------------
+    def agent_screen(self) -> ComputerUse:
+        """The assistant's screen (turned on if needed) and a computer-use session on it."""
+        outputs = [o['name'] for o in self.backend.kwin.windows().get('outputs', []) if o['name'].startswith('CAST')]
+        if not outputs:
+            screen = subprocess.run(['moto-agent-screen', 'on'], capture_output=True, text=True, timeout=30)
+            if screen.returncode != 0:
+                raise RuntimeError(f'assistant screen: {screen.stderr.strip() or screen.stdout.strip()}')
+            time.sleep(1)
+            outputs = [o['name'] for o in self.backend.kwin.windows().get('outputs', []) if o['name'].startswith('CAST')]
+            if not outputs:
+                raise RuntimeError("the assistant's screen did not come up")
+        if getattr(self, '_computer', None) is None or self._computer.screen.output_name != outputs[0]:
+            self._computer = ComputerUse(self.backend, outputs[0])
+        return self._computer
+
+    def goal_luna(self, args: dict) -> dict:
+        subprocess.run(['moto-agent-screen', 'on'], capture_output=True, timeout=30)
+        computer = self.agent_screen()
+        if args.get('app'):
+            self.launch(str(args['app']), 'agent')
+            time.sleep(0.8)
+        task = str(args['goal'])
+        for reply in args.get('replies') or []:
+            task += f"\n(Earlier you asked: {reply['question']} The user answered: {reply['answer']})"
+        return computer.run(task, max_steps=int(args.get('steps') or 30), timeout_s=GOAL_TIMEOUT_S - 10)
+
+    def screenshot(self) -> dict:
+        computer = self.agent_screen()
+        url, image = computer.screen.capture()
+        return {'screen': computer.screen.output_name, 'width': image.width, 'height': image.height,
+                '__image__': url.split(',', 1)[1]}
+
+    def act(self, actions: list[dict]) -> dict:
+        computer = self.agent_screen()
+        if computer.screen.scale == 1.0 and computer.screen.geometry[2] == 1.0:
+            computer.screen.capture()          # the geometry for the coordinates
+        done = []
+        for action in actions:
+            try:
+                done.append(computer.execute(action))
+            except (ValueError, KeyError) as error:
+                done.append(f"{action.get('type')}: not done ({error})")
+                break
+        time.sleep(0.5)
+        return {'done': done, **self.screenshot()}
+
+    def voice_message_luna(self, args: dict) -> dict:
+        """Speak `text` into a recording the model starts and sends on screen (docs/62, docs/68)."""
+        text = str(args['text']).strip()
+        if not text:
+            raise ValueError('voice message needs text')
+        audio = speech.synthesize(text, voice=str(args.get('voice') or 'marin'))
+        computer = self.agent_screen()
+        active = self.backend.kwin.windows().get('active') or {}
+        if not active.get('pid') or not str(active.get('output', '')).startswith('CAST'):
+            raise RuntimeError("open the chat on the assistant's screen first (desktop_goal), then call this")
+        binary = os.path.basename(os.readlink(f"/proc/{active['pid']}/exe"))
+        router = subprocess.Popen(['moto-audio-route', '--binary', binary, '--microphone'], stdin=subprocess.PIPE,
+                                  stdout=subprocess.PIPE, text=True)
+        routed = threading.Event()
+
+        def watch():
+            for line in router.stdout:
+                if line.startswith('routed source-output'):
+                    routed.set()
+        try:
+            if router.stdout.readline().strip() != 'ready':
+                raise RuntimeError('audio routing did not start')
+            threading.Thread(target=watch, daemon=True).start()
+            start = computer.run(
+                'In the chat that is open, start recording a voice message: press the control that records an audio '
+                'message to send (WeChat calls it "Send Voice"; usually a microphone next to the message box). Not '
+                'voice input or dictation, which turns speech into text (WeChat "Voice Input"), and not a voice or '
+                'video call. If unsure which icon is which, hover or look closely first. Do not send anything. As '
+                'soon as the recording has started, stop and reply DONE.',
+                max_steps=6, timeout_s=60, stop=routed.is_set)
+            if not routed.wait(3):
+                return {'sent': False, 'app': binary, 'start': start,
+                        'note': f'{binary} did not start recording through the Linux microphone; nothing was spoken'}
+            # Finding the send control takes the model a few seconds: it looks while the speech plays,
+            # and presses only after it ended (else the message ends in seconds of silence).
+            spoken = threading.Event()
+            found: dict = {}
+            finder = threading.Thread(target=lambda: found.update(computer.run(
+                'A voice message is being recorded in this chat. Press the control that sends this recording '
+                '(not cancel). Then reply DONE and say whether it appears in the chat.',
+                max_steps=4, timeout_s=90, gate=spoken)), daemon=True)
+            time.sleep(0.2)
+            finder.start()
+            try:
+                subprocess.run(['pacat', '--device=linux_microphone_input', '--raw', '--format=s16le',
+                                f'--rate={speech.RATE}', '--channels=1', '--latency-msec=30'], input=audio,
+                               check=True, timeout=120)
+                time.sleep(0.4)
+            finally:
+                spoken.set()
+            finder.join(100)
+            send = found or {'outcome': 'failed', 'answer': 'no result from the send step'}
+            if send.get('outcome') != 'done':
+                computer.run('A voice message recording may still be open. Cancel it without sending, then reply DONE.',
+                             max_steps=4, timeout_s=60)
+                return {'sent': False, 'app': binary, 'send': send}
+            return {'sent': True, 'app': binary, 'seconds': round(len(audio) / 2 / speech.RATE, 1),
+                    'screen': send.get('answer'), 'steps': start.get('steps', []) + send.get('steps', [])}
+        finally:
+            router.stdin.close()
+            try:
+                router.wait(5)
+            except subprocess.TimeoutExpired:
+                router.kill()
 
     def goal(self, args: dict) -> dict:
         """A whole task through moto-clicker (typesafe-computer-use, JEV per step; docs/64), on the
@@ -477,8 +675,22 @@ class Cua:
                 'recording_controls_left': [e.name for e in after.elements if e.name in (finish, cancel)]}
 
     def call(self, name: str, arguments: dict) -> dict:
-        self.backend.set_accessibility(True)
-        self._touch()
+        chosen = plan()
+        if chosen == 'luna':
+            if name == 'desktop_goal':
+                return self.goal_luna(arguments)
+            if name == 'desktop_screenshot':
+                return self.screenshot()
+            if name == 'desktop_act':
+                return self.act(list(arguments['actions']))
+            if name == 'desktop_voice_message':
+                return self.voice_message_luna(arguments)
+            if name in PLAN_TWO_ONLY:
+                raise ValueError(f'{name} belongs to plan two (moto-cua plan atspi)')
+        # Plan two and the shared window tools; accessibility only where plan two needs it.
+        if chosen == 'atspi' or name not in ('desktop_windows', 'desktop_activate', 'desktop_window', 'desktop_launch'):
+            self.backend.set_accessibility(True)
+            self._touch()
         if name == 'desktop_windows':
             return self.windows()
         if name == 'desktop_activate':
@@ -522,12 +734,16 @@ def serve() -> None:
                 result = {'protocolVersion': version, 'capabilities': {'tools': {}},
                           'serverInfo': {'name': 'moto-cua', 'version': '0.1.0'}}
             elif method == 'tools/list':
-                result = {'tools': TOOLS}
+                result = {'tools': tools_for(plan())}
             elif method == 'tools/call':
                 params = request.get('params', {})
                 try:
                     data = cua.call(params.get('name', ''), params.get('arguments') or {})
-                    result = {'content': [{'type': 'text', 'text': json.dumps(data, ensure_ascii=False)}]}
+                    image = data.pop('__image__', None) if isinstance(data, dict) else None
+                    content = [{'type': 'text', 'text': json.dumps(data, ensure_ascii=False)}]
+                    if image:
+                        content.append({'type': 'image', 'data': image, 'mimeType': 'image/jpeg'})
+                    result = {'content': content}
                 except Exception as error:  # reported to the model, not a protocol error
                     logger.exception('tool %s failed', params.get('name'))
                     result = {'content': [{'type': 'text', 'text': f'{type(error).__name__}: {error}'}],
@@ -580,13 +796,28 @@ def main() -> None:
     elif command == 'run':
         data = cua.run(json.loads(sys.argv[2]))
     elif command == 'voice':
-        data = cua.voice_message(json.loads(sys.argv[2]))
+        args = json.loads(sys.argv[2])
+        data = cua.voice_message_luna(args) if plan() == 'luna' else cua.voice_message(args)
     elif command == 'find-name':
         data = cua.find_name(sys.argv[2])
     elif command == 'press-control':
         data = cua.press_control(sys.argv[2], sys.argv[3:])
     elif command == 'goal':
-        data = cua.goal(json.loads(sys.argv[2]))
+        args = json.loads(sys.argv[2])
+        data = cua.goal_luna(args) if plan() == 'luna' else cua.goal(args)
+    elif command == 'screenshot':   # OUT gets the JPEG the model sees
+        data = cua.screenshot()
+        Path(sys.argv[2]).write_bytes(__import__('base64').b64decode(data.pop('__image__')))
+    elif command == 'act':
+        data = cua.act(json.loads(sys.argv[2]))
+        data.pop('__image__', None)
+    elif command == 'plan':
+        if len(sys.argv) > 2:
+            if sys.argv[2] not in PLANS:
+                raise SystemExit(f'plan: one of {", ".join(PLANS)}')
+            PLAN_FILE.parent.mkdir(parents=True, exist_ok=True)
+            PLAN_FILE.write_text(sys.argv[2] + '\n')
+        data = {'plan': plan(), 'note': 'restart Codex (moto-voice-agent) for its tool list to change'}
     elif command == 'focus-showing':
         data = cua.focus_showing(sys.argv[2], sys.argv[3])
     else:

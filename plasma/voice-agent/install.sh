@@ -11,7 +11,7 @@ install -m755 "$src/moto_voice_agent.py" /usr/local/bin/moto-voice-agent
 install -Dm644 "$src/call_proxy.py" /usr/local/lib/moto-voice-agent/call_proxy.py
 install -d /usr/local/share/moto-voice-agent/prompts /usr/local/share/moto-voice-agent/skills/moto-phone-desktop
 install -m644 "$src"/prompts/*.md /usr/local/share/moto-voice-agent/prompts/
-install -m644 "$src/skills/moto-phone-desktop/SKILL.md" /usr/local/share/moto-voice-agent/skills/moto-phone-desktop/
+install -m644 "$src"/skills/moto-phone-desktop/*.md /usr/local/share/moto-voice-agent/skills/moto-phone-desktop/
 install -m644 "$src/moto-voice-agent.service" /usr/lib/systemd/user/moto-voice-agent.service
 install -m644 "$src/dev.moto.VoiceAgent.service" /usr/share/dbus-1/services/dev.moto.VoiceAgent.service
 # The overlay of the Home button (docs/67); both resident in the session.
