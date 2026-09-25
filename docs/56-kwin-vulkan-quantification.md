@@ -119,3 +119,27 @@ uv run --script tools/compbench_run.py .work/refs/NEW/l1 --variant gles:fence --
 原型需先在容器内构建并安装为`/usr/local/bin/moto-compbench`（`plasma/bench/compbench/build.sh`）。
 
 后续：第1、5项（宿主零拷贝与fence同步）已实施，KWin每帧阻塞约降70%，见[57篇](57-zero-copy-explicit-sync.md)。
+
+## 复测：Qt 应用改用 Vulkan（2026-09-26）
+
+当年只把 plasmashell 切到 Vulkan 时，SurfaceFlinger 帧间隔 p95 从 16.7 ms 劣化到 33.4 ms，原因是 KWin 的 `glFinish` 排在 plasmashell 的大块 GPU 提交之后。57 篇把 KWin 改为 fence 等待、宿主改为零拷贝以后，这个前提已经变了，所以重测。
+
+- **方法**：
+  - 语音助手：两种后端交替启动（OpenGL、Vulkan、Vulkan、OpenGL），每次启动先等 25 秒，让 Codex 在后台恢复完线程（57 篇），然后连测 3 轮。每轮是同样的三次滑动，记录宿主零拷贝层的 `SurfaceFlinger --latency`（每轮约 126 个显示间隔中间隔超过 10 ms 的数量）和 App 进程 CPU。`QSG_INFO` 确认 Vulkan 实例用的是 Turnip Adreno 710。
+  - plasmashell：用临时 drop-in 设置 `QSG_RHI_BACKEND`，按同样的顺序重启 plasmashell，在应用抽屉里滑动；通过 `/proc/PID/maps` 里是否有 `libvulkan_freedreno` 确认后端。
+- **结果**（6 轮）：
+
+  | 对象 | 迟到数（中位数） | p95 | 进程 CPU（单核，中位数） |
+  |---|---|---|---|
+  | 语音助手 OpenGL | 26、8、8、7、4、4（7.5） | — | 61.6% |
+  | 语音助手 Vulkan | 5、14、0、9、9、8（8.5） | — | 37.6% |
+  | plasmashell OpenGL，抽屉 | 8、6、19、20、28、5（13.5） | 16.7 ms | 21.5% |
+  | plasmashell Vulkan，抽屉 | 21、16、27、4、21、22（21） | 16.7 ms | 16.7% |
+
+  - 语音助手的 RSS：Vulkan 118.8 MB，OpenGL 127.3 MB；Vulkan 下自定义着色器（光效）渲染正常。
+- **结论**：
+  - 当年 plasmashell 的 p95 劣化已经不再出现。
+  - 语音助手改用 Vulkan，出帧节奏不变，CPU 约少 40%。
+  - plasmashell 改用 Vulkan，CPU 少约 22%，但迟到数的中位数偏差（区间重叠），继续使用 OpenGL。
+  - 全局切换需要更多应用的对照，本轮不做。
+- **测量过程中的事故**：前一次重启会话时，旧 plasmashell 在退出途中崩溃（SEGV），之后没有被重新拉起，约 20 分钟里没有状态栏和导航栏。第一轮语音助手对照就是在这种状态下测的，已作废并重测（上表是重测结果）。另外，plasmashell 重启后要等前台窗口下一次被激活，才能重新拿到应用配色（59 篇），这个问题待改进。
