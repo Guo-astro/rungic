@@ -950,6 +950,7 @@ class VoiceAgent:
                 # The user talks on the phone now: pause the assistant (its realtime
                 # session would otherwise keep listening and could speak into the call).
                 threading.Thread(target=self.stop_realtime, daemon=True).start()
+                threading.Thread(target=self.watch_user_audio, daemon=True).start()
             elif kind == 'call-ended' and self.thread_id:
                 threading.Thread(target=self.start_realtime, daemon=True).start()   # resume
                 threading.Thread(target=self.speak_call_result, args=(event.get('reason'), event.get('summary') or ''),
@@ -1013,6 +1014,32 @@ class VoiceAgent:
         return {'dialed': placed, 'confirmed_by': 'call audio opened' if placed else None,
                 'outcome': result.get('outcome'), 'screen': result.get('answer') or result.get('note'),
                 'actions': [a for step in result.get('steps', []) for a in step.get('actions', [])]}
+
+    def watch_user_audio(self):
+        """After a take-over, every 2 s: where WeChat's streams are, their latency and the
+        load, for the stutter the user heard after taking over (docs/63)."""
+        app = self.call.app if self.call else 'wechat'
+        while self.call and self.call.phase == 'user':
+            try:
+                env = {**os.environ, 'LC_ALL': 'C'}
+                inputs = subprocess.run(['pactl', 'list', 'sink-inputs'], capture_output=True, text=True, env=env,
+                                        timeout=5).stdout.split('Sink Input #')[1:]
+                streams = []
+                for block in inputs:
+                    if f'application.process.binary = "{app}"' in block:
+                        sink = re.search(r'Sink: (\d+)', block)
+                        latency = re.search(r'Sink Latency: (\d+)', block)
+                        buffer = re.search(r'Buffer Latency: (\d+)', block)
+                        streams.append(f"#{block.split(chr(10), 1)[0]} sink {sink.group(1) if sink else '?'} "
+                                       f"buffer {int(buffer.group(1)) // 1000 if buffer else '?'} ms "
+                                       f"sink {int(latency.group(1)) // 1000 if latency else '?'} ms")
+                # (Android's side, the phone track's underruns, is in `dumpsys media.audio_flinger`
+                # on the host: the container cannot read it.)
+                load = open('/proc/loadavg').read().split()[:3]
+                log('call audio:', '; '.join(streams) or 'no streams', '| load', ' '.join(load))
+            except Exception as error:  # noqa: BLE001  (diagnostics only)
+                log('call audio', error)
+            time.sleep(2)
 
     def speak_call_result(self, reason, summary):
         """The assistant was quiet during the call; now one or two sentences on how it went."""
