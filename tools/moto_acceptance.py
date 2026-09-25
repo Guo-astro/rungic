@@ -414,6 +414,78 @@ def codec_roundtrip(ctx, frames=90):
                   encoded_frames=encoded, decoded_frames=decoded, duration=duration, stream=stream)
 
 
+def _quick_settings():
+    """The quick settings fully expanded: the first pull shows one row only, and AT-SPI reports the
+    tiles of the collapsed part as showing although they are off screen."""
+    run('input swipe 300 2 300 1200 400', 'shell')
+    time.sleep(1.2)
+    run('input swipe 540 500 540 1800 400', 'shell')
+    time.sleep(1.5)
+
+
+def _tap_label(pattern):
+    labels = [n for n in moto_agent.ui_find('plasmashell', role='label', name=pattern)
+              if n.get('extents', [0, 0, 0, 0])[2] > 0]
+    if not labels:
+        raise RuntimeError(f'no visible label {pattern!r}')
+    return moto_agent.ui_tap('plasmashell', labels[0]['path'])
+
+
+PROBE_RECORDING = r"""
+f=$(ls -t "$HOME"/Videos/screen-recording*.mp4 2>/dev/null | grep -v '\.partial\.mp4$' | head -1)
+[ -n "$f" ] && [ -s "$f" ] || exit 3
+bin=/usr/lib/moto-codec/ffmpeg/bin; [ -x $bin/ffprobe ] || bin=/usr/local/lib/moto-codec/ffmpeg/bin
+export LD_LIBRARY_PATH=$bin/../lib:$bin/../..
+echo "$f"; stat -c %Y "$f"
+$bin/ffprobe -v error -show_entries stream=codec_type,codec_name,avg_frame_rate -show_entries format=duration -of json "$f"
+"""
+
+
+@check
+def screen_recording(ctx, seconds=4):
+    """The recording quick setting, pressed as a user would (AT-SPI finds it, a touch toggles it): a playable
+    MP4 with a video and an audio track and about the recorded duration. The file is deleted afterwards."""
+    enabled = moto_agent.a11y('state')['enabled']
+    if not enabled:
+        moto_agent.ui_enable(True)
+        time.sleep(2)
+    started = time.time()
+    path = None
+    try:
+        _home()
+        _quick_settings()
+        _tap_label('^录屏$')
+        time.sleep(seconds + 1)
+        _quick_settings()
+        _tap_label('^正在录屏')           # the tile while recording: "正在录屏… / 点击结束录屏"
+        text = wait_for(lambda: (lambda r: r if r.returncode == 0 and float(r.stdout.split('\n')[1]) >= started - 2
+                                 else None)(user(PROBE_RECORDING)), timeout=30, interval=2)
+        if not text:
+            journal = run('journalctl --since=-3min -o cat | grep "^Screen recording:" | tail -8', 'container',
+                          check=False).stdout
+            partial = user('f=$(ls -t "$HOME"/Videos/screen-recording*.partial.mp4 2>/dev/null | head -1); '
+                           '[ -n "$f" ] && echo "$(stat -c %Y "$f") $f"').stdout.strip()
+            if partial and float(partial.split(' ', 1)[0]) >= started - 2:
+                path = partial.split(' ', 1)[1]   # this run's unfinished file only; older ones may be recoverable
+            return result(False, error='no finished screen recording in ~/Videos', recorder_log=journal[-1200:])
+        lines = text.stdout.split('\n', 2)
+        path = lines[0]
+        probe = json.loads(lines[2])
+        kinds = {st['codec_type']: st for st in probe.get('streams', [])}
+        duration = float(probe.get('format', {}).get('duration') or 0)
+        ok = 'video' in kinds and 'audio' in kinds and seconds - 1 <= duration <= seconds + 4
+        return result(ok, {'duration_s': round(duration, 2)}, streams=probe.get('streams'), file=path)
+    finally:
+        if path:
+            user(f'rm -f {shlex.quote(path)}')
+        try:
+            _home()
+        except Exception:
+            pass
+        if not enabled:
+            moto_agent.ui_enable(False)
+
+
 @check
 def compositor_perf(ctx, max_regression=0.15, rounds=2):
     """tools/kwin_pipeline_run.py while scrolling the drawer: KWin paint and SurfaceFlinger present intervals,
