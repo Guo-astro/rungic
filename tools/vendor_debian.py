@@ -3,7 +3,7 @@
 """Bring Ubuntu's Debian packaging into a vendored component (docs/61, vendor/README.md).
 
   vendor_debian.py import COMPONENT DSC     debian/ and quilt state (.pc) from an Ubuntu source
-                                            package; its distribution patches applied to vendor/
+                  [--new-upstream V]        package; its distribution patches applied to vendor/
   vendor_debian.py changelog COMPONENT TEXT a +motoN changelog entry for this project's build
 
 `import` is the "upstream import" step of the vendor rules: commit its result on its own,
@@ -34,7 +34,7 @@ def component_entry(manifest, path):
     raise SystemExit(f'{path} is not in vendor/manifest.json')
 
 
-def import_debian(component, dsc):
+def import_debian(component, dsc, new_upstream=None):
     dsc = Path(dsc).resolve()
     vendor = WORKSPACE / 'vendor' / component
     if (vendor / 'debian').exists():
@@ -58,7 +58,7 @@ def import_debian(component, dsc):
                                  capture_output=True, check=True).stdout
         subprocess.run(['tar', '-x', '-C', str(base), '--strip-components=2'], input=archive, check=True)
         diff = subprocess.run(['diff', '-rq', str(pristine), str(base)], capture_output=True, text=True).stdout
-        if diff.strip():
+        if diff.strip() and not new_upstream:
             raise SystemExit(f'the orig tarball differs from the vendored baseline {baseline[:12]}:\n{diff[:2000]}')
         # Distribution patches onto the vendored (already customised) tree.
         series = (tree / 'debian/patches/series')
@@ -90,6 +90,7 @@ def import_debian(component, dsc):
                      if 'debian.tar' in n]
     entry['ubuntu_source'] = {
         'version': version,
+        **({'packaging_only_for_upstream': new_upstream} if new_upstream else {}),
         'files': [{'name': f.name, 'sha256': hashlib.sha256(f.read_bytes()).hexdigest()} for f in files],
         'patches_applied_on_import': applied, 'patches_already_in_tree': already,
         'imported': datetime.date.today().isoformat(),
@@ -116,9 +117,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest='cmd', required=True)
     p = sub.add_parser('import'); p.add_argument('component'); p.add_argument('dsc')
+    p.add_argument('--new-upstream', metavar='VERSION', help='the vendored upstream is newer than the source '
+                   "package's: take its packaging only (no content check)")
     p = sub.add_parser('changelog'); p.add_argument('component'); p.add_argument('text')
     a = parser.parse_args()
-    result = import_debian(a.component, a.dsc) if a.cmd == 'import' else changelog(a.component, a.text)
+    result = (import_debian(a.component, a.dsc, a.new_upstream) if a.cmd == 'import'
+              else changelog(a.component, a.text))
     print(json.dumps(result, indent=1))
 
 
