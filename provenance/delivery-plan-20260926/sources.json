@@ -1,0 +1,45 @@
+{
+  "date": "2026-09-26",
+  "purpose": "Sources cited by docs/61-delivery-diagnostics-plan.md; read-only research, nothing imported",
+  "baseline": {
+    "branch": "agent-native-debugging",
+    "commit": "817e4a7de75a1aa9aa8323c5292804a67a2a54d1"
+  },
+  "sources": [
+    {
+      "name": "KDE kcrash",
+      "url": "https://invent.kde.org/frameworks/kcrash",
+      "ref": "v6.24.0",
+      "commit": "0c184f97e8d1d01651f23d5747498a5ef07e8538",
+      "license": "LGPL-2.0-or-later"
+    },
+    {
+      "name": "KDE kded kded.cpp",
+      "url": "https://invent.kde.org/frameworks/kded/-/raw/v6.24.0/src/kded.cpp",
+      "ref": "v6.24.0"
+    },
+    {
+      "name": "Android common kernel (btrfs feasibility)",
+      "url": "https://android.googlesource.com/kernel/common",
+      "ref": "android15-6.6-2025-05_r16",
+      "files": [
+        "arch/arm64/configs/gki_defconfig",
+        "BUILD.bazel",
+        "fs/btrfs/Kconfig",
+        "fs/btrfs/bio.c",
+        "block/Kconfig",
+        "block/blk-cgroup.h",
+        "block/blk-cgroup.c",
+        "include/linux/bio.h"
+      ],
+      "license": "GPL-2.0"
+    },
+    {
+      "name": "systemd coredumpctl",
+      "url": "https://raw.githubusercontent.com/systemd/systemd/v259/src/coredump/coredumpctl.c",
+      "ref": "v259",
+      "license": "LGPL-2.1-or-later"
+    }
+  ],
+  "local_copies": ".work/research/"
+}

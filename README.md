@@ -33,6 +33,8 @@ Motorola moto g100s（XT2537-4 / Adreno710）上的Android与Linux桌面适配�
 
 Vendor适配应放在哪一层、哪些可以抽离到共享后端，见[54篇架构评审](docs/54-vendor-adaptation-boundaries.md)。
 
+系统交付、验收与诊断的改进方案见[61篇](docs/61-delivery-diagnostics-plan.md)（方案，未实施）。
+
 ## 文档索引
 
 01–21包含设备/ROM/容器历史；早期Phosh专属安装文档已移除。28–35保留共享接口研究，38以后记录Plasma适配。历史“当时已验证”的状态不代表当前所有功能已经验收。
@@ -89,3 +91,4 @@ Vendor适配应放在哪一层、哪些可以抽离到共享后端，见[54篇�
 | [56-kwin-vulkan-quantification.md](docs/56-kwin-vulkan-quantification.md) | KWin + 原生 Vulkan 收益量化 |
 | [57-zero-copy-explicit-sync.md](docs/57-zero-copy-explicit-sync.md) | 零拷贝呈现与显式同步 |
 | [58-miracast-desktop-feasibility.md](docs/58-miracast-desktop-feasibility.md) | Miracast投屏桌面与手机触控板可行性 |
+| [61-delivery-diagnostics-plan.md](docs/61-delivery-diagnostics-plan.md) | 系统交付、验收与诊断改进方案 |
