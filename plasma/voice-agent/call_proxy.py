@@ -202,6 +202,9 @@ class CallProxy:
         self.confirm_connected = None
         self.opened = False                    # the opening was spoken: the session answers by itself
         self.answer_at = 0                     # transcript index where the call came up (before: ringing)
+        self.window_id = None                  # the app's call window (KWin id), once known
+        self.hanging = False                   # a hang-up is under way
+        self.monitor_until = 0.0               # a paused listen-in resumes then
         self.responding = False
         self.pending: list[str] = []           # messages for the voice model, waiting for its current response
         self.loopbacks: list[str] = []
@@ -299,7 +302,8 @@ class CallProxy:
                 return
             time.sleep(0.3)
         print('call: not connected after the trigger: the opening is dropped', flush=True)
-        self._send({'type': 'response.cancel'})
+        if self.responding:
+            self._send({'type': 'response.cancel'})
         GLib.idle_add(self.player.drop)
         self.answered = False                   # a later trigger or the ringing check tries again
 
@@ -396,22 +400,33 @@ class CallProxy:
     def _end(self, reason: str) -> None:
         if self.phase == 'ended':
             return
+        self._close_router()
         self.phase = 'ended'
         self.emit({'type': 'call-ended', 'reason': reason, 'summary': self.summary})
 
-    def _teardown_agent(self, reason: str) -> None:
-        """Stop listening and speaking and give the app its devices back."""
-        self.set_monitor(False)
+    def _close_router(self) -> None:
+        """Give the app its devices back (the router restores them on stdin EOF)."""
+        router, self.router = self.router, None
+        if router is not None:
+            try:
+                router.stdin.close()
+            except OSError:
+                pass
+            try:
+                router.wait(5)
+            except subprocess.TimeoutExpired:
+                router.kill()
+
+    def _teardown_agent(self, reason: str, keep_router: bool = False) -> None:
+        """Stop listening and speaking; unless `keep_router`, give the app its devices back."""
+        self._loopbacks(False)
+        self.emit({'type': 'call-monitor', 'on': False}, keep=False)
         if self.capture is not None:
             self.capture.set_state(Gst.State.NULL)
         if self.player is not None:
             self.player.close()
-        if self.router is not None:
-            self.router.stdin.close()
-            try:
-                self.router.wait(5)
-            except subprocess.TimeoutExpired:
-                self.router.kill()
+        if not keep_router:
+            self._close_router()
         if reason in ('ended', 'hung up', 'handover') and self.transcript:
             self.summary = self.summary or self._summarize()
         if self.ws is not None:
@@ -474,6 +489,11 @@ class CallProxy:
 
     def set_monitor(self, on: bool) -> None:
         """Listen in on the phone: the other side and the agent, mixed into the phone output."""
+        self.monitor_wanted = on
+        self._loopbacks(on)
+        self.emit({'type': 'call-monitor', 'on': bool(self.loopbacks)}, keep=False)
+
+    def _loopbacks(self, on: bool) -> None:
         if on and not self.loopbacks:
             for source in (REMOTE, AGENT_OUT + '.monitor'):
                 result = subprocess.run(['pactl', 'load-module', 'module-loopback', f'source={source}',
@@ -485,24 +505,82 @@ class CallProxy:
             for module in self.loopbacks:
                 subprocess.run(['pactl', 'unload-module', module], capture_output=True)
             self.loopbacks = []
-        self.emit({'type': 'call-monitor', 'on': bool(self.loopbacks)}, keep=False)
+
+    def pause_monitor(self, seconds: float) -> None:
+        """The assistant speaks to the user (a question): the call they listen in on pauses
+        meanwhile, so the two are never heard over each other."""
+        if not self.loopbacks:
+            return
+        self._loopbacks(False)
+        until = time.monotonic() + seconds
+        self.monitor_until = until
+
+        def resume():
+            time.sleep(seconds)
+            if self.monitor_until == until and self.monitor_wanted and self.active:
+                self._loopbacks(True)
+        threading.Thread(target=resume, daemon=True).start()
 
     def take_over(self) -> None:
-        """The user talks themselves: the app gets the real microphone and speaker
-        back and the call goes on (phase 'user') until either side hangs up."""
+        """The user talks themselves: the app gets the phone's own microphone and speaker
+        (not Android's default output, which may be a TV) and the call goes on (phase
+        'user') until either side hangs up."""
         with self.lock:
             if not self.active:
                 return
             self.active = False
-        self._teardown_agent('handover')
+        self._teardown_agent('handover', keep_router=True)
+        if self.router is not None:
+            try:
+                self.router.stdin.write('phone\n')
+                self.router.stdin.flush()
+            except OSError:
+                pass
         self.phase = 'user'
         self.emit({'type': 'call-phase', 'phase': 'user', 'summary': self.summary})
         threading.Thread(target=self._watch_user_call, daemon=True).start()
 
     def hang_up(self) -> None:
-        if self.hang_up_ui is not None:
-            threading.Thread(target=self.hang_up_ui, daemon=True).start()
-        self.stop('hung up')
+        """End the call itself: the agent falls silent at once, hang-up is pressed in the
+        app (retried), and only when the app's call audio has closed are the devices given
+        back. Stopping first had left the call running with nobody on it when the press
+        failed, and the card said it had ended (docs/63)."""
+        with self.lock:
+            if self.hanging or self.phase in ('idle', 'ended'):
+                return
+            self.hanging = True
+        self.ending = self.ending or 'end'
+        self.emit({'type': 'call-state', 'state': 'hanging-up'}, keep=False)
+        GLib.idle_add(self.player.flush)
+        if self.responding:
+            self._send({'type': 'response.cancel'})
+        threading.Thread(target=self._hang_up_in_app, daemon=True).start()
+
+    def _hang_up_in_app(self) -> None:
+        ended = False
+        for attempt in range(3):
+            if self.hang_up_ui is not None:
+                self.hang_up_ui()
+            deadline = time.monotonic() + 6
+            while time.monotonic() < deadline:
+                if not self._app_streams():
+                    ended = True
+                    break
+                time.sleep(0.5)
+            if ended:
+                break
+            print(f'call: hang-up attempt {attempt + 1} left the call open', flush=True)
+        if ended:
+            if self.phase == 'agent':
+                self.stop('hung up')
+            else:
+                self._end('hung up')
+            return
+        self.hanging = False
+        self.emit({'type': 'call-state', 'state': 'hangup-failed'}, keep=False)
+        self.emit({'type': 'call-error', 'text': '没能挂断微信通话，请在微信里挂断。通话已转到手机上。'})
+        if self.phase == 'agent':
+            self.take_over()
 
     # ---- JEV decides the next step ----------------------------------------------------------
     def _decide(self) -> None:
@@ -597,9 +675,7 @@ class CallProxy:
         if self.ending == 'handover':
             self.take_over()
         else:
-            if self.hang_up_ui is not None:
-                self.hang_up_ui()
-            self.stop('ended')
+            self.hang_up()
 
     # ---- realtime events -------------------------------------------------------------------
     def _send(self, message: dict) -> None:
@@ -655,7 +731,10 @@ class CallProxy:
                 self.emit({'type': 'call-transcript', 'role': 'agent', 'text': text})
                 self._decide()
         elif kind == 'error':
-            self.emit({'type': 'call-error', 'text': (event.get('error') or {}).get('message', raw[:200])})
+            message = (event.get('error') or {}).get('message', raw[:200])
+            if 'no active response' in message:     # a cancel that came after the response ended
+                return
+            self.emit({'type': 'call-error', 'text': message})
 
 
 def _test():

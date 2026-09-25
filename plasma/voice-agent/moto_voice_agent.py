@@ -741,7 +741,14 @@ class VoiceAgent:
         except Exception as error:
             log('appendAudio', error)
 
-    def play(self, audio):
+    def call_in_progress(self) -> bool:
+        return bool(self.call and self.call.phase in ('agent', 'user'))
+
+    def play(self, audio, owner=False):
+        """Reply audio. During a call only what the call assistant has for the user (`owner`)
+        plays: the assistant's own replies and progress spoke over the call (docs/63)."""
+        if not owner and self.call_in_progress():
+            return False
         if self.talking:
             log('reply audio dropped while talking')
             return False
@@ -777,6 +784,9 @@ class VoiceAgent:
         if not self.agent_busy or not self.realtime:
             return False
         now = time.monotonic()
+        if self.call_in_progress():
+            self.last_voice = now          # the call is what the user hears now
+            return True
         if self.talking:
             self.last_voice = now
         self.last_voice = max(self.last_voice, self.playing_until)
@@ -942,14 +952,18 @@ class VoiceAgent:
                 threading.Thread(target=self.stop_realtime, daemon=True).start()
             elif kind == 'call-ended' and self.thread_id:
                 threading.Thread(target=self.start_realtime, daemon=True).start()   # resume
+                threading.Thread(target=self.speak_call_result, args=(event.get('reason'), event.get('summary') or ''),
+                                 daemon=True).start()
             if kind in ('call-phase', 'call-ended'):
                 GLib.idle_add(self.set_state)
             self.emit(event, keep)
 
         def hang_up():
-            # The model finds the hang-up control on screen (computer use plan one, docs/68).
+            # The model finds the hang-up control in the call window (computer use plan one, docs/68).
+            window = (self.call.window_id if self.call else None) or call_window(app)
             result = luna_goal('End the call that is in progress: press the hang-up (end call) control of the call '
-                               'window. Press nothing else. Reply DONE once the call has ended.', timeout=90)
+                               'window. Press nothing else. Reply DONE once the call has ended.', timeout=60,
+                               window=window)
             log('call: hang up', result.get('outcome'), result.get('answer') or result.get('note') or '',
                 json.dumps(result.get('steps', []), ensure_ascii=False)[:1500])
 
@@ -958,7 +972,8 @@ class VoiceAgent:
                                          monitor=bool(params.get('monitor')), incoming=bool(params.get('incoming')),
                                          hang_up=hang_up)
         self.call.on_answered = lambda: call_snapshot('answered')
-        self.call.confirm_connected = call_screen_connected
+        call = self.call
+        self.call.confirm_connected = lambda: call_screen_connected(call.window_id or call_window(app))
         self.call.start()
         GLib.idle_add(self.set_state)
         # Dial only once the call agent can listen: the other side is heard from
@@ -990,12 +1005,26 @@ class VoiceAgent:
             time.sleep(0.2)
         placed = self.call.streams_seen > before
         if placed:
+            self.call.window_id = call_window(app)
+            log('call: call window', self.call.window_id)
             threading.Thread(target=lambda: (time.sleep(2), call_snapshot('ringing')), daemon=True).start()
             threading.Thread(target=self.call.watch_ringing, daemon=True).start()
         self.emit({'type': 'call-state', 'state': 'ringing' if placed else 'dial-failed'}, keep=False)
         return {'dialed': placed, 'confirmed_by': 'call audio opened' if placed else None,
                 'outcome': result.get('outcome'), 'screen': result.get('answer') or result.get('note'),
                 'actions': [a for step in result.get('steps', []) for a in step.get('actions', [])]}
+
+    def speak_call_result(self, reason, summary):
+        """The assistant was quiet during the call; now one or two sentences on how it went."""
+        if not self.realtime_ready.wait(20) or not self.thread_id:
+            return
+        time.sleep(0.5)
+        text = (f'通话结束（{reason}）。' + (f'通话助理的总结：{summary}\n' if summary else '')
+                + '用一两句话告诉用户结果，不要重复细节。')
+        try:
+            self.server.call('thread/realtime/appendSpeech', {'threadId': self.thread_id, 'text': text}, timeout=10)
+        except Exception as error:  # noqa: BLE001
+            log('call result', error)
 
     def call_command(self, command):
         call = self.call
@@ -1033,7 +1062,10 @@ class VoiceAgent:
         except Exception as error:  # noqa: BLE001
             log('tell_owner', error)
             return
-        GLib.idle_add(self.play, {'data': base64.b64encode(audio).decode(), 'sampleRate': call_proxy.RATE})
+        call = self.call
+        if call and call.phase == 'agent':
+            call.pause_monitor(len(audio) / 2 / call_proxy.RATE + 0.5)   # not over the call
+        GLib.idle_add(self.play, {'data': base64.b64encode(audio).decode(), 'sampleRate': call_proxy.RATE}, True)
 
     def stop_task(self):
         """Stop button: interrupt the running agent turn and the reply being spoken."""
@@ -1060,12 +1092,23 @@ class VoiceAgent:
         self.emit({'type': 'approval-result', 'id': approval, 'decision': answer})
 
 
-def call_screen_connected() -> bool:
-    """Whether the call screen (the active window, as a call app puts its call window in
-    front) shows the call connected: a running call timer, not "calling" or "waiting".
-    Only the top of the window, where call apps show the timer; about 2 s (docs/63)."""
+def call_window(app: str) -> str | None:
+    """The app's topmost window, which is its call window during a call (KWin)."""
     try:
-        done = subprocess.run(['/usr/local/libexec/moto-screenshot', 'active-window'], capture_output=True, timeout=10)
+        out = subprocess.run(['moto-cua', 'top-window', app], capture_output=True, text=True, timeout=20).stdout
+        return (json.loads(out).get('window') or {}).get('id')
+    except (ValueError, OSError, subprocess.SubprocessError):
+        return None
+
+
+def call_screen_connected(window_id: str | None) -> bool:
+    """Whether the call window shows the call connected: a running call timer, not
+    "calling" or "waiting". Only its top, where call apps show the timer; about 2 s
+    (docs/63). The window itself, not the active one: the chat window was active once,
+    and a call that was up went unnoticed."""
+    try:
+        args = ['window', window_id] if window_id else ['active-window']
+        done = subprocess.run(['/usr/local/libexec/moto-screenshot', *args], capture_output=True, timeout=10)
         if done.returncode != 0:
             return False
         end = done.stdout.index(b'\n')
@@ -1121,13 +1164,14 @@ def call_snapshot(tag: str) -> None:
         log('call snapshot', tag, error)
 
 
-def luna_goal(goal: str, timeout: float = 120, stop_when=None) -> dict:
+def luna_goal(goal: str, timeout: float = 120, stop_when=None, window: str | None = None) -> dict:
     """A task for moto-cua's computer use on the assistant's screen (docs/68), following the
     active window. `stop_when()` turning true stops the model before its next action, through
     the abort file its loop watches (the user's "stop" uses the same file)."""
     abort = Path(os.environ.get('XDG_RUNTIME_DIR', f'/run/user/{os.getuid()}')) / 'moto-clicker' / 'abort'
     abort.unlink(missing_ok=True)
-    process = subprocess.Popen(['moto-cua', 'goal', json.dumps({'goal': goal, 'steps': 8}, ensure_ascii=False)],
+    task = {'goal': goal, 'steps': 8, **({'window': window} if window else {})}
+    process = subprocess.Popen(['moto-cua', 'goal', json.dumps(task, ensure_ascii=False)],
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     deadline = time.monotonic() + timeout
     signalled = False

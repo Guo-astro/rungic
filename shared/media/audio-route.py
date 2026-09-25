@@ -6,8 +6,10 @@
 While this runs, the application's capture streams are moved to
 linux_microphone and (with --speaker) its playback streams to linux_speaker,
 including streams it opens later (e.g. when a recording or a call starts).
-On exit (SIGTERM, SIGINT or stdin closed) every moved stream goes back to the
-device it came from. Prints "ready" once watching, one line per move, and
+The line "phone" on stdin sends them to the phone's own speaker and
+microphone instead (android_phone, android_microphone: the user takes over a
+call; the default Android output may be a TV). On exit (SIGTERM, SIGINT or
+stdin closed) every moved stream goes back to the device it came from. Prints "ready" once watching, one line per move, and
 "gone <stream> <index>" when a moved stream closes (e.g. the call ended).
 
 Matching is by application.process.binary: calls in WeChat come from its
@@ -25,6 +27,7 @@ import sys
 import threading
 
 MIC, SPEAKER = 'linux_microphone', 'linux_speaker'
+PHONE_MIC, PHONE_SPEAKER = 'android_microphone', 'android_phone'
 ENV = {**os.environ, 'LC_ALL': 'C'}
 
 
@@ -87,6 +90,16 @@ class Router:
                         self.moved[(kind, index)] = by_index.get(device, device)
                         print(f'routed {kind[:-1]} {index} {self.moved[(kind, index)]} -> {target}', flush=True)
 
+    def retarget(self, microphone, speaker):
+        """Send the routed streams, and those opened later, to other devices."""
+        with self.lock:
+            new = {'source-outputs': microphone, 'sink-inputs': speaker}
+            for kind, (command, devices, _, default) in list(self.targets.items()):
+                self.targets[kind] = (command, devices, new[kind], default)
+                for (moved_kind, index) in self.moved:
+                    if moved_kind == kind and pactl(command, index, new[kind]).returncode == 0:
+                        print(f'routed {kind[:-1]} {index} -> {new[kind]}', flush=True)
+
     def gone(self, kind, index):
         with self.lock:
             if self.moved.pop((kind, index), None) is not None:
@@ -122,8 +135,13 @@ def main():
         router.sweep()
         while not stop.is_set():
             ready = select.select(inputs, [], [], 0.5)[0]
-            if sys.stdin in ready and not sys.stdin.readline():
-                break
+            if sys.stdin in ready:
+                command = sys.stdin.readline()
+                if not command:
+                    break
+                if command.strip() == 'phone':
+                    router.retarget(PHONE_MIC, PHONE_SPEAKER)
+                    router.sweep()
             if watch.stdout in ready:
                 line = watch.stdout.readline()
                 if not line:

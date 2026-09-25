@@ -66,6 +66,21 @@ if (target) for (let i = 0; i < wins.length; i++) {
 callDBus("SERVICE", "/dev/moto/Cua", "dev.moto.Cua", "Report", JSON.stringify(out));
 '''
 
+# An application's topmost window (a call app puts its call window on top of its others).
+TOP_JS = '''
+const wins = workspace.stackingOrder;
+let found = null;
+for (let i = wins.length - 1; i >= 0 && !found; i--) {
+  const w = wins[i];
+  if (!w.minimized && (w.normalWindow || w.dialog) && String(w.resourceClass).toLowerCase() === "CLASS") {
+    const f = w.frameGeometry;
+    found = {id: String(w.internalId), caption: w.caption, output: w.output ? w.output.name : "",
+             frame: [f.x, f.y, f.width, f.height]};
+  }
+}
+callDBus("SERVICE", "/dev/moto/Cua", "dev.moto.Cua", "Report", JSON.stringify({window: found}));
+'''
+
 CURSOR_JS = '''
 const c = workspace.cursorPos;
 callDBus("SERVICE", "/dev/moto/Cua", "dev.moto.Cua", "Report", JSON.stringify({x: c.x, y: c.y}));
@@ -186,6 +201,12 @@ class KWin:
         if window_id and not window_id.replace('-', '').strip('{}').isalnum():
             raise ValueError(f'bad window id {window_id!r}')
         return self._script(TARGET_JS.replace('TARGET', window_id or '-'))
+
+    def top_window(self, resource_class: str) -> dict | None:
+        """The application's topmost unminimized window (stacking order), or None."""
+        if not resource_class.replace('.', '').replace('-', '').replace('_', '').isalnum():
+            raise ValueError(f'bad resource class {resource_class!r}')
+        return self._script(TOP_JS.replace('CLASS', resource_class.lower())).get('window')
 
     def cursor(self) -> tuple[float, float]:
         position = self._script(CURSOR_JS)

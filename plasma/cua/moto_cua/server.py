@@ -421,7 +421,7 @@ class Cua:
     def goal_luna(self, args: dict) -> dict:
         subprocess.run(['moto-agent-screen', 'on'], capture_output=True, timeout=30)
         output = self.agent_output()
-        window_id = None
+        window_id = args.get('window')          # a window the caller knows (e.g. a call window)
         if args.get('app'):
             # The window the task is about, from the window manager: the model sees that window.
             window_id = ((self.launch(str(args['app']), 'agent') or {}).get('window') or {}).get('id')
@@ -834,6 +834,8 @@ def main() -> None:
             PLAN_FILE.parent.mkdir(parents=True, exist_ok=True)
             PLAN_FILE.write_text(sys.argv[2] + '\n')
         data = {'plan': plan(), 'note': 'restart Codex (moto-voice-agent) for its tool list to change'}
+    elif command == 'top-window':       # moto-cua top-window RESOURCE_CLASS
+        data = {'window': cua.backend.kwin.top_window(sys.argv[2])}
     elif command == 'focus-showing':
         data = cua.focus_showing(sys.argv[2], sys.argv[3])
     else:

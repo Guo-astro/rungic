@@ -89,7 +89,7 @@ The call's audio must be switched to the assistant before the call starts; `--st
 1. Open the chat with the person (`desktop_goal`), so it is the active window on the assistant's screen.
 2. `moto-voice-agent --start-call '{"contact": "<name in the chat header>", "goal": "<what to say or find out>", "dial": "Voice Call"}'`: switches WeChat's microphone and speaker to the call assistant, then dials. `"dialed": true` means the call audio opened; otherwise the call was not placed.
    A call already going: the same without `dial` (`"incoming": true` if they called).
-3. The call assistant then talks on its own and asks the user when needed. `moto-voice-agent --call-command take-over|hang-up|monitor-on|monitor-off` for the user's 我来接 / 挂断 / 旁听.
+3. With `"dialed": true`, tell the user in one sentence that the call assistant is calling, and end your turn: you stay quiet during the call (your speech does not play), the call assistant talks on its own, asks the user when needed, and its summary comes to the chat when the call ends. `moto-voice-agent --call-command take-over|hang-up|monitor-on|monitor-off` for the user's 我来接 / 挂断 / 旁听.
 
 ## Desktop windows and screenshots (shell)
 

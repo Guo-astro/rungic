@@ -191,6 +191,8 @@ Item {
                                : entry.command === "dialing" ? "正在拨号…"
                                : entry.command === "ringing" ? "已拨出，等待接听"
                                : entry.command === "dial-failed" ? "没能拨出"
+                               : entry.command === "hanging-up" ? "正在挂断…"
+                               : entry.command === "hangup-failed" ? "没能挂断，请在微信里挂断"
                                : "助理通话中")
                               + (entry.role ? " · " + entry.role : "")
                               + (callBox.userTalks ? " · 语音助手已暂停" : "")
