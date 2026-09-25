@@ -85,6 +85,8 @@ GENERATED = [
     '/etc/ssh/sshd_config', '/etc/ssh/sshd_config.d/*cloudimg*', '/etc/sysctl.d/*cloudimg*',
     '/etc/systemd/*.conf.d/*cloudimg*', '/usr/sbin/grub-probe', '/usr/share/fonts/X11/*/fonts.*',
     '/usr/share/fonts/X11/*/encodings.dir', '/usr/bin/wechat',
+    # screen's postinst (the file says so).
+    '/usr/lib/systemd/system/screen-cleanup.service', '/etc/tmpfiles.d/screen-cleanup.conf',
 ]
 
 # Local diversions that the distribution itself makes (usr-merge, minimized images).

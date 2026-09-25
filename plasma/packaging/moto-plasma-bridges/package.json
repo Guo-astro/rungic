@@ -2,18 +2,55 @@
   "name": "moto-plasma-bridges",
   "architecture": "arm64",
   "build": "device",
-  "paths": ["plasma/device-panel.py", "plasma/dev.moto.Platform.desktop", "shared/platform", "shared/media/media-bridge.py",
-            "shared/media/audio-route.py", "shared/media/camera-source.cpp", "plasma/moto-plasma-network.service",
-            "plasma/moto-plasma-media.service", "plasma/moto-plasma-clipboard.service"],
+  "paths": [
+    "plasma/device-panel.py",
+    "plasma/dev.moto.Platform.desktop",
+    "shared/platform",
+    "shared/media/media-bridge.py",
+    "shared/media/audio-route.py",
+    "shared/media/camera-source.cpp",
+    "plasma/moto-plasma-network.service",
+    "plasma/moto-plasma-media.service",
+    "plasma/moto-plasma-clipboard.service"
+  ],
   "depends": "moto-plasma-config, python3, python3-gi, python3-dbus, gir1.2-adw-1, pulseaudio-utils, pipewire",
-  "build_depends": ["libpipewire-0.3-dev", "libjson-glib-dev", "libyuv-dev", "pkgconf", "g++"],
+  "build_depends": [
+    "libpipewire-0.3-dev",
+    "libjson-glib-dev",
+    "libyuv-dev",
+    "pkgconf",
+    "g++"
+  ],
   "description": "Plasma Mobile on Android: Android bridges\nThe Android device panel, clipboard, network state for NetworkManager clients, the\nmicrophone and camera bridge (PipeWire camera sources from Android frames) and the\naudio route switch.",
-  "units": {"system": ["moto-plasma-network.service"],
-            "user": ["moto-plasma-media.service", "moto-plasma-clipboard.service"]},
-  "obsolete": ["/usr/local/bin/moto-platform", "/usr/local/share/applications/dev.moto.Platform.desktop",
-               "/usr/local/bin/moto-clipboard", "/usr/local/libexec/moto-android-network",
-               "/usr/local/bin/moto-media-bridge", "/usr/local/bin/moto-audio-route", "/usr/local/bin/moto-camera-source",
-               "/etc/systemd/system/moto-plasma-network.service",
-               "/etc/systemd/system/multi-user.target.wants/moto-plasma-network.service",
-               "/etc/systemd/user/moto-plasma-media.service", "/etc/systemd/user/moto-plasma-clipboard.service"]
+  "units": {
+    "system": [
+      "moto-plasma-network.service"
+    ],
+    "user": [
+      "moto-plasma-media.service",
+      "moto-plasma-clipboard.service"
+    ]
+  },
+  "obsolete": [
+    "/usr/local/bin/moto-platform",
+    "/usr/local/share/applications/dev.moto.Platform.desktop",
+    "/usr/local/bin/moto-clipboard",
+    "/usr/local/libexec/moto-android-network",
+    "/usr/local/bin/moto-media-bridge",
+    "/usr/local/bin/moto-audio-route",
+    "/usr/local/bin/moto-camera-source",
+    "/etc/systemd/system/moto-plasma-network.service",
+    "/etc/systemd/system/multi-user.target.wants/moto-plasma-network.service",
+    "/etc/systemd/user/moto-plasma-media.service",
+    "/etc/systemd/user/moto-plasma-clipboard.service",
+    "/usr/local/bin/wl-copy",
+    "/usr/local/bin/wl-paste",
+    "/usr/local/share/man/man1/wl-clipboard.1",
+    "/usr/local/share/man/man1/wl-copy.1",
+    "/usr/local/share/man/man1/wl-paste.1",
+    "/usr/local/share/bash-completion/completions/wl-copy",
+    "/usr/local/share/bash-completion/completions/wl-paste",
+    "/usr/local/share/zsh/site-functions/_wl-copy",
+    "/usr/local/share/zsh/site-functions/_wl-paste"
+  ]
 }

@@ -89,7 +89,8 @@ def maintainer_scripts(pkg, root):
     if obsolete:
         post += ['# Files of the manual installation this package replaces (docs/61).',
                  'if [ "$1" = configure ]; then',
-                 '  for f in ' + ' '.join(shlex.quote(p) for p in obsolete) + '; do',
+                 # Patterns with * expand; other paths are quoted.
+                 '  for f in ' + ' '.join(p if '*' in p else shlex.quote(p) for p in obsolete) + '; do',
                  '    if [ -L "$f" ] || [ -f "$f" ]; then rm -f "$f"; elif [ -d "$f" ]; then rm -rf "$f"; fi',
                  '  done',
                  'fi', '']
