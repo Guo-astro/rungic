@@ -381,15 +381,20 @@ cmp -s /etc/apt/preferences.d/moto.new /etc/apt/preferences.d/moto 2>/dev/null \
 ''', 'container')
 
 
-def apt_install(version, record):
-    """apt-get install in a transient unit, so an adb disconnect does not interrupt dpkg."""
+def apt_install(info, record):
+    """apt-get install in a transient unit, so an adb disconnect does not interrupt dpkg.
+
+    Every package of the release is named with its exact version: apt does not downgrade
+    dependencies on its own, which a rollback needs."""
+    version = info['version']
+    pins = ' '.join(shlex.quote(f'{n}={v}') for n, v in sorted(info['packages'].items()))
     unit = f'moto-deploy-{int(time.time())}'
     result = run(f'''set -e
 apt-get -q update {APT_OURS} >/dev/null
 systemd-run --unit={unit} --wait --pipe --collect --quiet -p TimeoutStartSec=3600 \\
   --setenv=DEBIAN_FRONTEND=noninteractive \\
   apt-get -q -y --allow-downgrades --allow-change-held-packages --no-install-recommends \\
-  -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install {META}={version} 2>&1
+  -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install {META}={version} {pins} 2>&1
 ''', 'container', timeout=3900, check=False)
     (record / 'apt.log').write_text(result.stdout + result.stderr)
     return result.returncode == 0, result.stdout[-3000:] + result.stderr[-2000:]
@@ -475,7 +480,7 @@ def deploy(version=None, restart='auto', acceptance='smoke', record_label=None):
     step('sync', **sync_repo())
     android = sync_android(info, record)
     step('android', changed=android)
-    ok, tail = apt_install(version, record)
+    ok, tail = apt_install(info, record)
     step('install', ok=ok)
     if not ok:
         log['result'] = 'install-failed'
