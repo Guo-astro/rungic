@@ -12,7 +12,9 @@ metapackage and the local-configuration manifest say it should be:
              an archive version would replace them
   release    installed versions against moto-plasma-release's dependencies
   unowned    files in /usr and /etc that no package owns and that are not
-             known generated state or declared local configuration
+             known generated state or declared local configuration; files in
+             /usr/local that shadow a packaged command, libexec program,
+             desktop entry or D-Bus service
   ownership  owner/mode of the top-level directories; files in /usr, /etc
              owned by a non-root user
   local      declared machine-local configuration: presence and permissions
@@ -273,8 +275,22 @@ def check_unowned(owned, local):
                     continue
                 found[top].append(path)
     usr_local = sum(len(f) for _, _, f in os.walk('/usr/local'))
+    # /usr/local comes first in PATH and XDG_DATA_DIRS: a leftover there silently replaces a
+    # packaged program or desktop entry (the old plasma-settings and portal did after 20260926.4).
+    shadowing = []
+    for local_dir, packaged_dirs in (('/usr/local/bin', ('/usr/bin', '/bin')), ('/usr/local/sbin', ('/usr/sbin', '/sbin')),
+                                     ('/usr/local/libexec', ('/usr/libexec',)),
+                                     ('/usr/local/share/applications', ('/usr/share/applications',)),
+                                     ('/usr/local/share/dbus-1/services', ('/usr/share/dbus-1/services',))):
+        try:
+            names = os.listdir(local_dir)
+        except OSError:
+            continue
+        for name in names:
+            if any(os.path.lexists(os.path.join(d, name)) for d in packaged_dirs):
+                shadowing.append(os.path.join(local_dir, name))
     return {'usr': sorted(found['/usr']), 'etc': sorted(found['/etc']), 'systemd_masks': sorted(masks),
-            'usr_local_files': usr_local}
+            'usr_local_files': usr_local, 'usr_local_shadowing': sorted(shadowing)}
 
 
 def check_ownership(local):
@@ -370,6 +386,7 @@ def main():
         'unowned_usr': len(report['unowned']['usr']),
         'unowned_etc': len(report['unowned']['etc']),
         'unowned_systemd_masks': len(report['unowned']['systemd_masks']),
+        'usr_local_shadowing': len(report['unowned']['usr_local_shadowing']),
         'ownership': len(report['ownership']['top_level']) + len(report['ownership']['non_root_files']),
         'local_missing_required': sum(1 for e in local if e['required'] and not e['present']),
         'local_permissions': sum(1 for e in local if e.get('problems')),
@@ -408,6 +425,8 @@ def main():
         for p in report['unowned']['systemd_masks']:
             print(f'mask     {p} (no package)')
         print(f"/usr/local files: {report['unowned']['usr_local_files']}")
+        for p in report['unowned']['usr_local_shadowing']:
+            print(f'shadows  {p} (a packaged file of the same name)')
         for p in report['ownership']['top_level']:
             print(f"owner    {p['path']} uid={p['uid']} gid={p['gid']} mode={p['mode']}")
         for p in report['ownership']['non_root_files']:
