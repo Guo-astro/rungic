@@ -145,6 +145,16 @@
     - 接通检查和挂断都针对通话窗口本身：拨号成功后由 `moto-cua top-window wechat`（KWin 按层叠顺序取最上层的窗口）得到窗口 id；截图用 `moto-screenshot window <id>`，挂断用 `moto-cua goal` 的 `window` 参数。
     - “Cancellation failed: no active response found”不再作为错误显示在卡片上，取消只在确有回应进行中时才发出。
   - 验证：路由切换已单独测试（测试音频流：`android` → `linux_speaker` → 收到 `phone` 后到 `android_phone` → 结束时还原到 `android`）。旁听、我来接、挂断的完整通话流程尚未实测。
+- **我来接之后，手机上听对方一节一节（2026-09-25）**：
+  - 路径：`android_phone`（`module-pipe-sink`）→ media-bridge 的 Python 线程每次读 20 ms → Unix 套接字 → APK 的 AudioTrack（缓冲约 150 ms）。原来的 `android` 直连隧道在 Android 端最终进的是 `AUDIO_DEVICE_OUT_PROXY`（无线投屏的音频），不能用于我来接。
+  - 空闲时测试都正常：PulseAudio 一侧，30 ms 的低延迟流在两个输出上都没有欠载；连续送数据 13 s，AudioTrack 欠载为 0；麦克风这一路每 20 ms 一块，最大间隔 28 ms。这条路的总延迟约 0.4 s（AudioTrack 一侧报告 275–313 ms，加上管道约 85 ms）。
+  - 证据：那通电话期间，手机播放的轨道 383（16:23:25–16:25:32）在持续有数据（播放器空闲时也送静音）的情况下，累计欠载 47064 帧，约 1 s，应集中在我来接那半分钟里。结论：负载下转发线程被挤掉了执行时间。
+  - 修复：音频线程提到音频优先级。
+    - media-bridge 的手机输出线程和麦克风转发线程设为 nice −11，与 PulseAudio 相同。用户服务的 `RLIMIT_NICE` 为 40，允许这样设；容器里没有 rtkit，也没有实时调度额度。
+    - APK（1.42）CaptureBridge 的手机输出和麦克风处理线程设为 `THREAD_PRIORITY_URGENT_AUDIO`，结束时恢复默认，因为这些是线程池里的线程。
+    - 实测优先级已生效：Linux 侧 `play` 线程 nice 为 −11，Android 侧该线程为 −19。
+  - 未验证：我来接之后的实际通话效果。若仍然断续，下一步为我来接单独建一条通话级的播放通道（用途为语音通话、低延迟模式、约 40 ms 缓冲）。
+  - 诊断：我来接之后每 2 s 记录一次微信音频流所在的设备、延迟和系统负载。Android 播放轨道的欠载，事后可从 `dumpsys media.audio_flinger` 的轨道移除记录中读取。
 - **根本方向（用户要求）**：整个操作电脑的过程，都应由JEV逐步决定做什么、点哪里；参考[typesafe-computer-use](https://github.com/awlevin/typesafe-computer-use)（MIT，24eb292）。评估见下一节。
 
 ## 待验证## 待验证## 待验证

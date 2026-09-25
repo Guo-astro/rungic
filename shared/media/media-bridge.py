@@ -98,6 +98,7 @@ class Microphone:
             self.thread.start()
 
     def capture(self):
+        audio_priority()
         fd = None
         try:
             with socket.socket(socket.AF_UNIX) as client:
@@ -148,6 +149,18 @@ class Microphone:
             LOG.info('microphone consumer stopped')
 
 
+AUDIO_NICE = -11   # PulseAudio's own level; the session allows it (RLIMIT_NICE), not realtime
+
+
+def audio_priority():
+    """Audio threads forward in small blocks: under load (a call, the desktop rendering) a
+    normal-priority thread was starved and the phone heard the call in pieces (docs/63)."""
+    try:
+        os.setpriority(os.PRIO_PROCESS, threading.get_native_id(), AUDIO_NICE)
+    except OSError as error:
+        LOG.warning('audio thread priority: %s', error)
+
+
 class PhoneOutput:
     """Forward the android_phone sink to the app's AudioTrack while the sink is open.
 
@@ -176,6 +189,7 @@ class PhoneOutput:
             self.thread.start()
 
     def play(self):
+        audio_priority()
         fd = None
         try:
             fd = os.open(PHONE_FIFO, os.O_RDONLY | os.O_NONBLOCK | os.O_CLOEXEC)

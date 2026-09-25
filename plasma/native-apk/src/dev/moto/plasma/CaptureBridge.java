@@ -163,7 +163,13 @@ final class CaptureBridge implements Closeable {
             throw e;
         }
     }
+    // The audio threads forward small blocks: at normal priority, a busy phone (a call, the
+    // compositor in this process) starved them and the phone heard a call in pieces (docs/63).
+    private static void audioPriority() {
+        try { android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO); } catch(Exception ignored) {}
+    }
     private void microphone(LocalSocket socket) throws Exception {
+        audioPriority();
         if(!microphoneBusy.compareAndSet(false,true))throw new IOException("麦克风正在使用中");
         AudioRecord recorder=null;boolean active=false,header=false;
         try {
@@ -184,6 +190,7 @@ final class CaptureBridge implements Closeable {
             }
         } catch(Exception e) { if(!header)json(socket.getOutputStream(),new JSONObject().put("error",e.getMessage()==null?"Microphone unavailable":e.getMessage())); }
         finally {
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_DEFAULT);   // a pool thread: others use it next
             if(recorder!=null) { try { recorder.stop(); } catch(Exception ignored) {}recorder.release(); }
             if(active)try { captureState(true,false); } catch(Exception ignored) {}
             microphoneBusy.set(false);
@@ -204,6 +211,7 @@ final class CaptureBridge implements Closeable {
      */
     private void phoneOutput(LocalSocket socket) throws Exception {
         if(!phoneOutputBusy.compareAndSet(false,true))throw new IOException("Phone output busy");
+        audioPriority();
         AudioManager audio=activity.getSystemService(AudioManager.class);
         AudioTrack track=null;AudioDeviceCallback callback=null;boolean header=false;
         try {
@@ -238,6 +246,7 @@ final class CaptureBridge implements Closeable {
             }
         } catch(Exception e) { if(!header)json(socket.getOutputStream(),new JSONObject().put("error",e.getMessage()==null?"Phone output unavailable":e.getMessage())); }
         finally {
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_DEFAULT);   // a pool thread: others use it next
             if(callback!=null)audio.unregisterAudioDeviceCallback(callback);
             if(track!=null) {
                 android.util.Log.i("MotoAudio","phone output ended, underruns="+track.getUnderrunCount());
