@@ -3,8 +3,6 @@ export MESA_LOADER_DRIVER_OVERRIDE=kgsl
 export FD_KGSL_ENABLE_DMABUF=1
 export VK_DRIVER_FILES=/usr/share/vulkan/icd.d/freedreno_icd.aarch64.json
 export KWIN_COMPOSE=O2ES
-export MOTO_KWIN_RENDER_DEVICE=/dev/kgsl-3d0
-export MOTO_GPU_ALLOCATOR=/mnt/android-wayland/moto-gpu-alloc
 # Qt Quick stays on OpenGL ES. Vulkan (Turnip) was tried session-wide on 2026-09-26 and
 # reverted: the voice assistant flashed whole grey frames while scrolling (docs/56).
 export QSG_RHI_BACKEND=opengl

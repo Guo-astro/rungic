@@ -95,6 +95,12 @@
       "title": "Launch and close an app through the launcher by accessible names"
     },
     {
+      "id": "cast.agent_screen",
+      "level": "full",
+      "check": "agent_screen_output",
+      "title": "The assistant's screen appears as KWin output CAST-n of the host output's size and goes away when turned off"
+    },
+    {
       "id": "display.mode",
       "level": "full",
       "check": "display_scale_roundtrip",

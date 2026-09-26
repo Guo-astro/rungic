@@ -343,6 +343,41 @@ def idle_inhibit(ctx, seconds=6):
 
 # ---------------------------------------------------------------- full level
 
+def _cast_outputs():
+    try:
+        outputs = json.loads(user('kscreen-doctor -j', timeout=20).stdout).get('outputs', [])
+    except ValueError:
+        return []
+    return [o for o in outputs if o.get('name', '').startswith('CAST') and o.get('enabled')]
+
+
+@check
+def agent_screen_output(ctx):
+    """The assistant's screen is a cast output of the Android host (docs/65): turning it on makes
+    KWin's output CAST-n of the host output's size, turning it off removes it (docs/72, the
+    Android backend's host outputs)."""
+    def state(command, timeout=60):
+        try:
+            return json.loads(user(f'moto-agent-screen {command}', timeout=timeout).stdout)
+        except ValueError:
+            return {}
+    before = state('status')
+    if before.get('enabled'):
+        # In use: only check that its output is there.
+        return result(bool(before.get('output')), note='already on; left as it was', status=before)
+    on = state('on', timeout=90)
+    name = on.get('output') or ''
+    outputs = {o['name']: o for o in _cast_outputs()}
+    mode = next((m for m in outputs.get(name, {}).get('modes', [])
+                 if m.get('id') == outputs.get(name, {}).get('currentModeId')), {})
+    size = mode.get('size', {})
+    off = state('off')
+    gone = wait_for(lambda: not _cast_outputs(), timeout=20, interval=1)
+    expected = on.get('size', '1920x1080')
+    ok = name.startswith('CAST') and f"{size.get('width')}x{size.get('height')}" == expected and gone
+    return result(ok, output=name, size=size, expected=expected, removed=gone, off=off)
+
+
 @check
 def app_launch(ctx, app='Calculator', process='kalk', rounds=2):
     """Launch and close through the launcher by accessible names (tools/ui_launch_check.py)."""
