@@ -175,3 +175,16 @@
 未通过的`recording.quicksetting`：停止录屏时`pulsesrc`（系统声音）的EOS没有返回，收尾12秒超时。切换前`20260926.20`和`20260927.5`上已出现同样的失败（`.5`上重跑一次通过），切换后连续3次失败。单独用`gst-launch-1.0 -e pulsesrc device=android.monitor`测试时EOS正常，问题在录屏管线内部，与改名无关，另行处理。
 
 还未做：重启手机后的验收。手机通过无线调试连接，重启后端口会变化，可能需要用户重新打开无线调试，所以等用户在场时进行。
+
+### C2部署与验收（2026-09-27，发布`20260927.6`）
+
+容器改用`/var/lib/rungic-{host,cores,apt}`；KWin `+rungic2`连接`rungic-gpu-alloc`，投屏输出厂商“Rungic”与“Moto”都认。`--snapshot never --acceptance none`部署成功，完整性clean；随后冷启动容器，init从`/var/lib/rungic-host`读取共享内存标签，APT源指向`/var/lib/rungic-apt`，PulseAudio cookie为新路径。KWin的三个缓冲连接都在`rungic-gpu-alloc`上。
+
+完整验收18项中17项通过，未通过的仍是`recording.quicksetting`（同上，已有问题）；`rebrand.residue`：容器与Android侧均为0项失败，另列出19项留待后续阶段。
+
+按包回滚到C之前的`20260927.5`：部署保留了当前Android侧（`android kept=True`），旧容器经兼容挂载和`moto-gpu-alloc`链接正常运行，冒烟验收通过；再部署`20260927.6`，冒烟验收首次`input.text`失败、重试通过（会话刚重启时的已知偶发项）。
+
+**剩余**
+- 重启手机后验收（需要用户在场重新打开无线调试）：开机脚本`rungic-cast-watch.sh`、`rungic-wfd-sepolicy.sh`，Magisk授权在开机清理后仍在，`debug.moto.*`临时属性消失。
+- Docker：`/data/adb/moto-docker`与SELinux类型`moto_docker*`。数据镜像`docker-data.ext4`（8G）内每个文件都带`moto_docker_file`标签，改类型需要停止Docker后挂载镜像整体重标，或保留类型名只改路径；单独评估后再做。
+- D阶段：移除兼容挂载、`moto-gpu-alloc`链接、投屏厂商“Moto”；卸载旧APK（`pm uninstall`）；删除`/data/adb/rungic-cutover`与Termux旧音频目录；purge `moto-*`的rc残留；移除`/home/linux`链接。
