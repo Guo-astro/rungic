@@ -1,3 +1,11 @@
+kwin (4:6.6.6-0ubuntu0.1+rungic2) resolute; urgency=medium
+
+  * Rungic rename phase C (docs/70): the host's buffer allocator socket is
+    /mnt/android-wayland/rungic-gpu-alloc; a cast output is one made by
+    "Rungic" or, until phase D, "Moto".
+
+ -- range-dev <noreply@localhost>  Sun, 27 Sep 2026 04:00:00 +0000
+
 kwin (4:6.6.6-0ubuntu0.1+rungic1) resolute; urgency=medium
 
   * Rungic rename (docs/70): the Android backend's display client namespace

@@ -5,8 +5,8 @@ load-module module-device-restore
 # app name WeChat's calls share with every Chromium-based program ("Chromium"),
 # so later calls opened on the virtual devices, silent. Volumes are still kept.
 load-module module-stream-restore restore_device=false
-load-module module-native-protocol-unix auth-cookie=/var/lib/moto-host/audio-cookie
-load-module module-tunnel-sink-new server=unix:/mnt/android-audio/native cookie=/var/lib/moto-host/audio-cookie sink_name=android rate=48000 channels=2 reconnect_interval_ms=2000 sink_properties=device.description=Android
+load-module module-native-protocol-unix auth-cookie=/var/lib/rungic-host/audio-cookie
+load-module module-tunnel-sink-new server=unix:/mnt/android-audio/native cookie=/var/lib/rungic-host/audio-cookie sink_name=android rate=48000 channels=2 reconnect_interval_ms=2000 sink_properties=device.description=Android
 load-module module-suspend-on-idle timeout=3
 # The tunnel appears asynchronously; it is the only output sink and becomes
 # the default automatically. A synchronous set-default-sink fails on startup.

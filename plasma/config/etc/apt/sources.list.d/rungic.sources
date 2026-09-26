@@ -1,5 +1,5 @@
 # This project's release repository (docs/61), mirrored by tools/rungic_release.py.
 Types: deb
-URIs: file:/var/lib/moto-apt
+URIs: file:/var/lib/rungic-apt
 Suites: ./
 Trusted: yes

@@ -18,7 +18,7 @@ home() { getent passwd $uid | cut -d: -f6; }
 group=$(getent group $uid | cut -d: -f1)
 # The login is a placeholder only until the first-run account setup (plasma/account) chose one.
 configured=no
-grep -q '"configured": *true' /var/lib/moto-host/account.json 2>/dev/null && configured=yes
+grep -q '"configured": *true' /var/lib/rungic-host/account.json 2>/dev/null && configured=yes
 
 move_home() {   # to
     from=$(home) to=$1

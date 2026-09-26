@@ -172,7 +172,7 @@ static void connect_host(void) {
 }
 
 static void allocate_buffers(void) {
-    const char *socket = getenv("RUNGIC_GPU_ALLOCATOR") ? getenv("RUNGIC_GPU_ALLOCATOR") : "/mnt/android-wayland/moto-gpu-alloc";
+    const char *socket = getenv("RUNGIC_GPU_ALLOCATOR") ? getenv("RUNGIC_GPU_ALLOCATOR") : "/mnt/android-wayland/rungic-gpu-alloc";
     for (int i = 0; i < opt.buffers; i++) {
         struct output_buffer *b = &out_buf[i];
         if (!rungic_gpu_allocate(socket, opt.width, opt.height, FOURCC_XB24, &b->lease, &b->fd, &b->stride))

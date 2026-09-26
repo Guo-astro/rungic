@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 """Symbolize saved crash reports (docs/61): install debug symbols, redo the backtrace.
 
-  rungic-crash-symbols REPORT...        report ids under /var/lib/moto-cores
+  rungic-crash-symbols REPORT...        report ids under /var/lib/rungic-cores
   rungic-crash-symbols --recent N       the N newest reports that still have core.zst
   rungic-crash-symbols --no-install     only redo backtrace and signature with what is installed
   rungic-crash-symbols --debuginfod     also let gdb fetch from debuginfod.ubuntu.com (slow)
@@ -30,7 +30,7 @@ import tempfile
 import time
 from pathlib import Path
 
-STORE = Path('/var/lib/moto-cores')
+STORE = Path('/var/lib/rungic-cores')
 DDEBS = '/etc/apt/rungic-ddebs.sources'
 DDEBS_LISTS = Path('/var/lib/rungic-ddebs/lists')
 COLLECTOR = next(p for p in ('/usr/libexec/rungic-coredump-collect', '/usr/local/libexec/rungic-coredump-collect',

@@ -40,7 +40,7 @@ Origin: vendor
  src/backends/android/CMakeLists.txt           |   8 +
  src/backends/android/android-display-client.h |  89 ++++++++
  src/backends/android/android_allocator.h      | 143 ++++++++++++
- src/backends/android/android_backend.cpp      | 301 ++++++++++++++++++++++++++
+ src/backends/android/android_backend.cpp      | 303 ++++++++++++++++++++++++++
  src/backends/android/android_backend.h        |  84 +++++++
  src/backends/android/android_output.cpp       | 116 ++++++++++
  src/backends/android/android_output.h         |  49 +++++
@@ -49,7 +49,7 @@ Origin: vendor
  src/backends/android/host_text_input.cpp      |  59 +++++
  src/backends/android/host_text_input.h        |  37 ++++
  src/main_wayland.cpp                          |  24 +-
- 13 files changed, 1079 insertions(+), 2 deletions(-)
+ 13 files changed, 1081 insertions(+), 2 deletions(-)
  create mode 100644 src/backends/android/CMakeLists.txt
  create mode 100644 src/backends/android/android-display-client.h
  create mode 100644 src/backends/android/android_allocator.h
@@ -331,10 +331,10 @@ index 0000000..88fe7ef
 +}
 diff --git a/src/backends/android/android_backend.cpp b/src/backends/android/android_backend.cpp
 new file mode 100644
-index 0000000..2436ff7
+index 0000000..0f0d9f2
 --- /dev/null
 +++ b/src/backends/android/android_backend.cpp
-@@ -0,0 +1,301 @@
+@@ -0,0 +1,303 @@
 +/*
 +    SPDX-FileCopyrightText: 2026 Rungic
 +
@@ -448,8 +448,10 @@ index 0000000..2436ff7
 +
 +static bool isCastHostOutput(HostOutput *hostOutput)
 +{
-+    // The host names its cast outputs so (native/plasma cast.rs).
-+    return hostOutput->manufacturer() == QLatin1String("Moto") && hostOutput->model() == QLatin1String("Cast");
++    // The host names its cast outputs so (native/plasma cast.rs); "Moto" is the name the host uses until
++    // phase D of the Rungic rename (docs/70).
++    const QString make = hostOutput->manufacturer();
++    return (make == QLatin1String("Rungic") || make == QLatin1String("Moto")) && hostOutput->model() == QLatin1String("Cast");
 +}
 +
 +void AndroidBackend::handleHostOutput(HostOutput *hostOutput)
@@ -638,7 +640,7 @@ index 0000000..2436ff7
 +} // namespace KWin
 diff --git a/src/backends/android/android_backend.h b/src/backends/android/android_backend.h
 new file mode 100644
-index 0000000..2acf241
+index 0000000..380c88c
 --- /dev/null
 +++ b/src/backends/android/android_backend.h
 @@ -0,0 +1,84 @@
@@ -672,7 +674,7 @@ index 0000000..2acf241
 +    /// The GPU node (KGSL is not a DRM device, so the host cannot name it as dmabuf main device).
 +    QString renderDevice = QStringLiteral("/dev/kgsl-3d0");
 +    /// The host's buffer lease socket (docs/57).
-+    QByteArray allocator = QByteArrayLiteral("/mnt/android-wayland/moto-gpu-alloc");
++    QByteArray allocator = QByteArrayLiteral("/mnt/android-wayland/rungic-gpu-alloc");
 +};
 +
 +/**

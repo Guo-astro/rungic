@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # SPDX-License-Identifier: MIT
-"""Move finished cores from /data/app_dump into /var/lib/moto-cores with a backtrace.
+"""Move finished cores from /data/app_dump into /var/lib/rungic-cores with a backtrace.
 
 Started by rungic-coredump.path. Each report directory holds info.json,
 backtrace.txt and core.zst. One journal line at err priority names the report,
@@ -31,7 +31,7 @@ import time
 from pathlib import Path
 
 SPOOL = Path('/data/app_dump')
-STORE = Path('/var/lib/moto-cores')
+STORE = Path('/var/lib/rungic-cores')
 KEEP_CORES = 8                 # newest reports that keep core.zst
 KEEP_CORES_PER_SIGNATURE = 2
 MAX_CORE_BYTES = 4 << 30       # total compressed cores

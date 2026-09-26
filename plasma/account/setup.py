@@ -16,7 +16,7 @@ import sys
 import time
 
 # Shared with the Android side through state/host (docs/61 §7); the old location is read once.
-STATE = Path('/var/lib/moto-host/account.json')
+STATE = Path('/var/lib/rungic-host/account.json')
 LEGACY_STATE = Path('/etc/moto-plasma/account.json')
 OWNER_UID = 1000
 

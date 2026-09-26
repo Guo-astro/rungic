@@ -36,7 +36,7 @@ int main(void) {
     CHECK(renderer && (strstr(renderer, "Adreno") || strstr(renderer, "FD710")) && !strstr(renderer,"llvmpipe"));
     int lease=socket(AF_UNIX,SOCK_STREAM|SOCK_CLOEXEC,0); CHECK(lease>=0);
     struct sockaddr_un address={.sun_family=AF_UNIX};
-    strcpy(address.sun_path,"/mnt/android-wayland/moto-gpu-alloc");
+    strcpy(address.sun_path,"/mnt/android-wayland/rungic-gpu-alloc");
     CHECK(connect(lease,(void*)&address,sizeof(address))==0);
     uint32_t request[]={0x4d475055,64,64,DRM_FORMAT_XRGB8888},reply[3]={0};
     CHECK(send(lease,request,sizeof(request),MSG_NOSIGNAL)==sizeof(request));
