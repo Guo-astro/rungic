@@ -1,30 +1,31 @@
 From: clawd20130 <clawd20130@gmail.com>
-Date: Thu, 24 Sep 2026 02:11:47 +0900
-Subject: KWin: send the output's GPU completion fence instead of glFinish
+Date: Sat, 26 Sep 2026 18:47:08 +0900
+Subject: Wayland backend: send the GPU completion fence to a host without
+ implicit synchronization
 
-When the Android host offers zwp_linux_explicit_synchronization_v1 (KGSL has
-no DRM syncobj), export an EGL native fence for each output frame and attach
-it with set_acquire_fence in the same commit; the render thread no longer
-blocks in glFinish. MOTO_KWIN_EXPLICIT_SYNC=-1 restores the old path.
-Packaged as 6.6.6-0ubuntu0.1+moto8. Measured: Paint p50 6.7 -> 2.0 ms.
+When the render device's buffers have no implicit synchronization (WaylandBackend::implicitSync(),
+the Android host's AHardwareBuffers) and the host offers zwp_linux_explicit_synchronization_v1,
+export an EGL native fence for each output frame and attach it with set_acquire_fence in the
+same commit; the render thread no longer blocks in glFinish. Without the global, or without a
+native fence, it still waits. Measured on the Android host: Paint p50 6.7 -> 2.0 ms (docs/57).
 
-Forwarded: not-needed
+Forwarded: no
 Last-Update: 2026-09-26
-X-Rungic-Status: Inappropriate [Android host specific: runs nested in the Android APK compositor]
+X-Rungic-Status: Pending [generic for nested KWin on hosts with explicit synchronization and without implicit sync]
 X-Rungic-Tests: L3:perf.compositor
-X-Rungic-Docs: docs/57
+X-Rungic-Docs: docs/57 docs/72
 Origin: vendor, commit:5127264a
 ---
- src/backends/wayland/wayland_display.cpp     | 12 +++++++++++
+ src/backends/wayland/wayland_display.cpp     | 12 ++++++++++++
  src/backends/wayland/wayland_display.h       |  3 +++
- src/backends/wayland/wayland_egl_backend.cpp | 30 +++++++++++++++++++++++-----
- src/backends/wayland/wayland_output.cpp      | 14 +++++++++++++
- src/backends/wayland/wayland_output.h        |  5 +++++
+ src/backends/wayland/wayland_egl_backend.cpp | 24 ++++++++++++++++++++----
+ src/backends/wayland/wayland_output.cpp      | 14 ++++++++++++++
+ src/backends/wayland/wayland_output.h        |  4 ++++
  src/wayland/CMakeLists.txt                   |  1 +
- 6 files changed, 60 insertions(+), 5 deletions(-)
+ 6 files changed, 54 insertions(+), 4 deletions(-)
 
 diff --git a/src/backends/wayland/wayland_display.cpp b/src/backends/wayland/wayland_display.cpp
-index 4395fb2..9b0ace8 100644
+index 6030bc5..a87e830 100644
 --- a/src/backends/wayland/wayland_display.cpp
 +++ b/src/backends/wayland/wayland_display.cpp
 @@ -38,6 +38,7 @@
@@ -35,7 +36,7 @@ index 4395fb2..9b0ace8 100644
  #include "wayland-pointer-constraints-unstable-v1-client-protocol.h"
  #include "wayland-pointer-gestures-unstable-v1-server-protocol.h"
  #include "wayland-presentation-time-client-protocol.h"
-@@ -201,6 +202,9 @@ WaylandDisplay::~WaylandDisplay()
+@@ -206,6 +207,9 @@ WaylandDisplay::~WaylandDisplay()
      if (m_toplevelIconManager) {
          xdg_toplevel_icon_manager_v1_destroy(m_toplevelIconManager);
      }
@@ -45,7 +46,7 @@ index 4395fb2..9b0ace8 100644
      if (m_keyboardShortcutsInhibitManager) {
          zwp_keyboard_shortcuts_inhibit_manager_v1_destroy(m_keyboardShortcutsInhibitManager);
      }
-@@ -360,6 +364,11 @@ wp_fractional_scale_manager_v1 *WaylandDisplay::fractionalScale() const
+@@ -380,6 +384,11 @@ wp_fractional_scale_manager_v1 *WaylandDisplay::fractionalScale() const
      return m_fractionalScaleV1;
  }
  
@@ -57,29 +58,29 @@ index 4395fb2..9b0ace8 100644
  wp_single_pixel_buffer_manager_v1 *WaylandDisplay::singlePixelManager() const
  {
      return m_singlePixelManager;
-@@ -427,6 +436,9 @@ void WaylandDisplay::registry_global(void *data, wl_registry *registry, uint32_t
+@@ -448,6 +457,9 @@ void WaylandDisplay::registry_global(void *data, wl_registry *registry, uint32_t
          display->m_subCompositor->setup(static_cast<wl_subcompositor *>(wl_registry_bind(registry, name, &wl_subcompositor_interface, 1)));
      } else if (strcmp(interface, wp_single_pixel_buffer_manager_v1_interface.name) == 0) {
          display->m_singlePixelManager = reinterpret_cast<wp_single_pixel_buffer_manager_v1 *>(wl_registry_bind(registry, name, &wp_single_pixel_buffer_manager_v1_interface, 1));
 +    } else if (strcmp(interface, zwp_linux_explicit_synchronization_v1_interface.name) == 0) {
-+        // sync_file acquire fences for the Android output (KGSL has no DRM syncobj).
++        // sync_file acquire fences for outputs without implicit synchronization (hosts without DRM syncobj).
 +        display->m_explicitSynchronization = reinterpret_cast<zwp_linux_explicit_synchronization_v1 *>(wl_registry_bind(registry, name, &zwp_linux_explicit_synchronization_v1_interface, 1));
      } else if (strcmp(interface, xdg_toplevel_icon_manager_v1_interface.name) == 0) {
          display->m_toplevelIconManager = reinterpret_cast<xdg_toplevel_icon_manager_v1 *>(wl_registry_bind(registry, name, &xdg_toplevel_icon_manager_v1_interface, 1));
      } else if (strcmp(interface, zwp_keyboard_shortcuts_inhibit_manager_v1_interface.name) == 0) {
 diff --git a/src/backends/wayland/wayland_display.h b/src/backends/wayland/wayland_display.h
-index e41da18..f1525bd 100644
+index 9bbeaa8..d4cd25a 100644
 --- a/src/backends/wayland/wayland_display.h
 +++ b/src/backends/wayland/wayland_display.h
-@@ -21,6 +21,7 @@ struct wp_fractional_scale_manager_v1;
+@@ -23,6 +23,7 @@ struct wp_fractional_scale_manager_v1;
  struct wp_single_pixel_buffer_manager_v1;
  struct xdg_toplevel_icon_manager_v1;
  struct zwp_keyboard_shortcuts_inhibit_manager_v1;
 +struct zwp_linux_explicit_synchronization_v1;
+ struct wl_output;
  
  namespace KWayland
- {
-@@ -81,6 +82,7 @@ public:
+@@ -90,6 +91,7 @@ public:
      wp_single_pixel_buffer_manager_v1 *singlePixelManager() const;
      xdg_toplevel_icon_manager_v1 *toplevelIconManager() const;
      zwp_keyboard_shortcuts_inhibit_manager_v1 *keyboardShortcutsInhibitManager() const;
@@ -87,7 +88,7 @@ index e41da18..f1525bd 100644
  
  public Q_SLOTS:
      void flush();
-@@ -98,6 +100,7 @@ private:
+@@ -113,6 +115,7 @@ private:
      std::unique_ptr<WaylandClient::Viewporter> m_viewporter;
      wp_single_pixel_buffer_manager_v1 *m_singlePixelManager = nullptr;
      xdg_toplevel_icon_manager_v1 *m_toplevelIconManager = nullptr;
@@ -96,10 +97,10 @@ index e41da18..f1525bd 100644
      std::unique_ptr<ColorManager> m_colorManager;
      std::unique_ptr<WaylandEventThread> m_eventThread;
 diff --git a/src/backends/wayland/wayland_egl_backend.cpp b/src/backends/wayland/wayland_egl_backend.cpp
-index eb6d594..6c4f32d 100644
+index 7a4f08b..7f6dba1 100644
 --- a/src/backends/wayland/wayland_egl_backend.cpp
 +++ b/src/backends/wayland/wayland_egl_backend.cpp
-@@ -22,6 +22,7 @@
+@@ -21,6 +21,7 @@
  #include "wayland_display.h"
  #include "wayland_logging.h"
  #include "wayland_output.h"
@@ -107,53 +108,43 @@ index eb6d594..6c4f32d 100644
  
  #include <KWayland/Client/subsurface.h>
  #include <KWayland/Client/surface.h>
-@@ -103,20 +104,39 @@ bool WaylandEglLayer::doEndFrame(const Region &renderedDeviceRegion, const Regio
+@@ -102,15 +103,30 @@ bool WaylandEglLayer::doEndFrame(const Region &renderedDeviceRegion, const Regio
  {
      m_query->end();
      frame->addRenderTimeQuery(std::move(m_query));
--    // Flush rendering commands to the dmabuf.
--    if (qEnvironmentVariableIsSet("MOTO_GPU_ALLOCATOR")) {
--        // Android vendor import has no explicit synchronization protocol yet.
-+    // The Android host samples or scans out the buffer as soon as it is committed.
-+    // With explicit synchronization the GPU completion fence travels with the
-+    // commit (acquire fence) and this thread does not wait; otherwise wait here.
-+    auto output = static_cast<WaylandOutput *>(m_output.get());
-+    zwp_linux_surface_synchronization_v1 *sync = nullptr;
-+    if (qEnvironmentVariableIsSet("MOTO_GPU_ALLOCATOR") && qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT")
-+        && qEnvironmentVariableIntValue("MOTO_KWIN_EXPLICIT_SYNC") != -1) {
-+        sync = output->surfaceSynchronization();
-+    }
-+    if (qEnvironmentVariableIsSet("MOTO_GPU_ALLOCATOR") && !sync) {
-         fTraceDuration("GpuWait (", m_output->name(), ")");
-         glFinish();
--    } else {
+-    // Flush rendering commands to the dmabuf; without implicit synchronization, wait for them.
+-    if (m_backend->backend()->implicitSync()) {
 -        glFlush();
+-    } else {
++    // Without implicit synchronization the host would use the buffer before the GPU finished it.
++    // With explicit synchronization the GPU completion fence travels with the commit (acquire
++    // fence) and this thread does not wait; otherwise wait here.
++    auto output = static_cast<WaylandOutput *>(m_output.get());
++    const bool implicitSync = m_backend->backend()->implicitSync();
++    zwp_linux_surface_synchronization_v1 *sync = implicitSync ? nullptr : output->surfaceSynchronization();
++    if (!implicitSync && !sync) {
+         glFinish();
      }
      EGLNativeFence releaseFence{m_backend->eglDisplayObject()};
 +    if (sync && !releaseFence.isValid()) {
-+        fTraceDuration("GpuWait (", m_output->name(), ")");
 +        glFinish(); // no native fence: fall back to waiting
 +        sync = nullptr;
 +    }
-+    if (!qEnvironmentVariableIsSet("MOTO_GPU_ALLOCATOR") || sync) {
++    if (implicitSync || sync) {
 +        glFlush();
 +    }
  
-     {
-         fTraceDuration("Import (", m_output->name(), ")");
-         setBuffer(m_backend->backend()->importBuffer(m_buffer->buffer()), damagedDeviceRegion);
-     }
+     setBuffer(m_backend->backend()->importBuffer(m_buffer->buffer()), damagedDeviceRegion);
 +    if (sync) {
 +        // Double-buffered: applies to the buffer attached above at the output's next commit.
 +        // libwayland duplicates the fd while marshalling.
-+        fTrace("AcquireFence (", m_output->name(), ")");
 +        zwp_linux_surface_synchronization_v1_set_acquire_fence(sync, releaseFence.fileDescriptor().get());
 +    }
      m_swapchain->release(m_buffer, releaseFence.takeFileDescriptor());
  
      m_damageJournal.add(damagedDeviceRegion);
 diff --git a/src/backends/wayland/wayland_output.cpp b/src/backends/wayland/wayland_output.cpp
-index 8a65266..d49001d 100644
+index 49240ac..2389045 100644
 --- a/src/backends/wayland/wayland_output.cpp
 +++ b/src/backends/wayland/wayland_output.cpp
 @@ -29,6 +29,7 @@
@@ -162,9 +153,9 @@ index 8a65266..d49001d 100644
  #include "wayland-single-pixel-buffer-v1-client-protocol.h"
 +#include "wayland-linux-explicit-synchronization-unstable-v1-client-protocol.h"
  #include "wayland-tearing-control-v1-client-protocol.h"
+ #include "wayland-xdg-shell-client-protocol.h"
  #include "wayland-xdg-toplevel-icon-v1-client-protocol.h"
- #include "workspace.h"
-@@ -184,9 +185,22 @@ WaylandOutput::~WaylandOutput()
+@@ -186,9 +187,22 @@ WaylandOutput::~WaylandOutput()
      m_viewport.reset();
      m_xdgDecoration.reset();
      m_xdgShellSurface.reset();
@@ -188,28 +179,27 @@ index 8a65266..d49001d 100644
  {
      const auto &preferred = m_colorSurfaceFeedback->preferredColor();
 diff --git a/src/backends/wayland/wayland_output.h b/src/backends/wayland/wayland_output.h
-index 7c30ce3..d818fc7 100644
+index 3cedeb8..e606cc2 100644
 --- a/src/backends/wayland/wayland_output.h
 +++ b/src/backends/wayland/wayland_output.h
-@@ -37,6 +37,8 @@ struct zwp_keyboard_shortcuts_inhibitor_v1;
+@@ -38,6 +38,7 @@ struct zwp_keyboard_shortcuts_inhibitor_v1;
  struct wl_callback;
  struct wl_callback_listener;
  
 +struct zwp_linux_surface_synchronization_v1;
-+
- namespace KWin
- {
- class OutputFrame;
-@@ -88,6 +90,8 @@ public:
  
-     bool isReady() const;
+ struct wl_output;
+ 
+@@ -95,6 +96,8 @@ public:
+     /// Whether the output gets a cursor layer; without one KWin draws the cursor into the frame.
+     virtual bool hasCursorLayer() const;
      KWayland::Client::Surface *surface() const;
 +    /// Explicit synchronization for the output surface, or null when the host lacks it.
 +    zwp_linux_surface_synchronization_v1 *surfaceSynchronization();
      WaylandCursor *cursor() const;
      WaylandBackend *backend() const;
  
-@@ -119,6 +123,7 @@ private:
+@@ -145,6 +148,7 @@ private:
      std::vector<std::unique_ptr<OutputLayer>> m_layers;
      std::unique_ptr<RenderLoop> m_renderLoop;
      std::unique_ptr<KWayland::Client::Surface> m_surface;

@@ -1,5 +1,5 @@
 From: clawd20130 <clawd20130@gmail.com>
-Date: Thu, 24 Sep 2026 23:18:16 +0900
+Date: Sat, 26 Sep 2026 18:45:02 +0900
 Subject: Desktop automation types through KWin, not the Android host
 
 KWin moto15 adds VirtualKeyboard.commitText(): the text goes to the
@@ -39,7 +39,7 @@ index 1bb525e..19f6068 100644
  
  #include "moc_virtualkeyboard_dbus.cpp"
 diff --git a/src/virtualkeyboard_dbus.h b/src/virtualkeyboard_dbus.h
-index 6fdbb5b..cad1d67 100644
+index 6fdbb5b..c4ba295 100644
 --- a/src/virtualkeyboard_dbus.h
 +++ b/src/virtualkeyboard_dbus.h
 @@ -37,6 +37,12 @@ public:
@@ -47,7 +47,7 @@ index 6fdbb5b..cad1d67 100644
      Q_SCRIPTABLE bool willShowOnActive() const;
      Q_SCRIPTABLE void forceActivate();
 +    /**
-+     * Moto (docs/60): commit @p text to the focused text field the way an input
++     * (docs/60) Commit @p text to the focused text field the way an input
 +     * method does (text-input v1/v2/v3, else key events). Lets desktop automation
 +     * type any text, Chinese included, without the on-screen keyboard.
 +     */

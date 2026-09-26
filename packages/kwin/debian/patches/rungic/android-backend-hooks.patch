@@ -1,0 +1,1083 @@
+From: clawd20130 <clawd20130@gmail.com>
+Date: Sat, 26 Sep 2026 18:46:24 +0900
+Subject: Hooks for a backend nested in a host that differs from a desktop
+ compositor
+
+What src/backends/android (the last patch) needs from upstream code, as virtual functions
+whose base versions keep upstream behaviour, so the Android host's specifics stay in one place
+and upstream changes meet them at these hooks only (docs/72):
+
+- WaylandOutput: hostScale(), ownsScale(), singleSurface() (a host that shows the output's
+  buffer pixel for pixel, lets KWin choose the scale, and presents the primary layer on the
+  output surface itself), mapFromHost() for input positions, modesFor(), applyExtraChanges(),
+  hasCursorLayer(), and an optional host wl_output to be fullscreen on.
+- WaylandBackend: createOutputObject(), configureDisplay(), renderDevicePath(),
+  setUpRenderDevice(), createShmAllocator(), implicitSync(), hostImportsClientBuffers(),
+  hostFingerScrollIsNatural(); createOutput(), addOutput(), removeOutput() for derived
+  backends' outputs.
+- WaylandDisplay: a connect timeout, a connection-lost handler, and globalAnnounced()/
+  globalRemoved() so a derived backend binds globals of its own.
+- DrmDevice::setAllocator(); ShmGraphicsBufferAllocator in a directory instead of memfds;
+  EglDisplay::create() with the render node; OutputBackend::maxLinuxDmabufVersion(), used when
+  the server creates zwp_linux_dmabuf_v1; InputRedirection::idleInhibitedChanged().
+
+Replaces the environment-variable checks (MOTO_KWIN_FLAT_OUTPUT, MOTO_KWIN_RENDER_DEVICE,
+MOTO_GPU_ALLOCATOR, MOTO_KWIN_ANDROID_SHM) that the earlier patches spread over these files.
+
+Forwarded: not-needed
+Last-Update: 2026-09-26
+X-Rungic-Status: Inappropriate [hooks for the Android host backend; upstream behaviour unchanged when not overridden]
+X-Rungic-Tests: L1:full KWin test suite equals the unpatched baseline (host, docs/72); L3:session.ready L3:display.geometry L3:perf.compositor
+X-Rungic-Docs: docs/72
+Origin: vendor
+---
+ src/backends/wayland/wayland_backend.cpp          | 77 +++++++++++++++++---
+ src/backends/wayland/wayland_backend.h            | 31 +++++++-
+ src/backends/wayland/wayland_display.cpp          | 28 +++++++-
+ src/backends/wayland/wayland_display.h            | 17 +++++
+ src/backends/wayland/wayland_egl_backend.cpp      | 29 ++++++--
+ src/backends/wayland/wayland_layer.cpp            |  9 +++
+ src/backends/wayland/wayland_output.cpp           | 86 +++++++++++++++++++----
+ src/backends/wayland/wayland_output.h             | 29 +++++++-
+ src/backends/wayland/wayland_qpainter_backend.cpp |  6 +-
+ src/core/drmdevice.cpp                            |  5 ++
+ src/core/drmdevice.h                              |  4 +-
+ src/core/outputbackend.cpp                        |  7 ++
+ src/core/outputbackend.h                          |  3 +
+ src/core/shmgraphicsbufferallocator.cpp           | 21 +++++-
+ src/core/shmgraphicsbufferallocator.h             |  7 ++
+ src/input.cpp                                     |  4 ++
+ src/input.h                                       |  2 +
+ src/opengl/egldisplay.cpp                         |  8 +--
+ src/opengl/egldisplay.h                           |  5 +-
+ src/wayland/linuxdmabufv1clientbuffer.cpp         |  8 +--
+ src/wayland/linuxdmabufv1clientbuffer.h           |  5 +-
+ src/wayland/linuxdmabufv1clientbuffer_p.h         |  2 +-
+ src/wayland_server.cpp                            |  2 +-
+ 23 files changed, 342 insertions(+), 53 deletions(-)
+
+diff --git a/src/backends/wayland/wayland_backend.cpp b/src/backends/wayland/wayland_backend.cpp
+index 557156e..1997533 100644
+--- a/src/backends/wayland/wayland_backend.cpp
++++ b/src/backends/wayland/wayland_backend.cpp
+@@ -10,6 +10,7 @@
+ #include "wayland_backend.h"
+ #include "compositor.h"
+ #include "core/drmdevice.h"
++#include "core/shmgraphicsbufferallocator.h"
+ #include "input.h"
+ #include "wayland-client/linuxdmabuf.h"
+ #include "wayland_display.h"
+@@ -105,7 +106,7 @@ WaylandInputDevice::WaylandInputDevice(KWayland::Client::Pointer *pointer, Wayla
+         WaylandOutput *output = m_seat->backend()->findOutput(m_pointer->enteredSurface());
+         Q_ASSERT(output);
+         const auto subsurface = m_seat->backend()->findSubSurface(m_pointer->enteredSurface());
+-        const QPointF absolutePos = output->position() + relativeToSurface
++        const QPointF absolutePos = output->position() + output->mapFromHost(relativeToSurface)
+             + (subsurface ? subsurface->position() : QPoint());
+         Q_EMIT pointerMotionAbsolute(absolutePos, std::chrono::milliseconds(time), this);
+     });
+@@ -197,13 +198,13 @@ WaylandInputDevice::WaylandInputDevice(KWayland::Client::Touch *touch, WaylandSe
+     connect(touch, &Touch::sequenceStarted, this, [this](TouchPoint *tp) {
+         auto o = m_seat->backend()->findOutput(tp->surface());
+         Q_ASSERT(o);
+-        const QPointF position = o->position() + tp->position();
++        const QPointF position = o->position() + o->mapFromHost(tp->position());
+         Q_EMIT touchDown(tp->id(), position, std::chrono::milliseconds(tp->time()), this);
+     });
+     connect(touch, &Touch::pointAdded, this, [this](TouchPoint *tp) {
+         auto o = m_seat->backend()->findOutput(tp->surface());
+         Q_ASSERT(o);
+-        const QPointF position = o->position() + tp->position();
++        const QPointF position = o->position() + o->mapFromHost(tp->position());
+         Q_EMIT touchDown(tp->id(), position, std::chrono::milliseconds(tp->time()), this);
+     });
+     connect(touch, &Touch::pointRemoved, this, [this](TouchPoint *tp) {
+@@ -212,7 +213,7 @@ WaylandInputDevice::WaylandInputDevice(KWayland::Client::Touch *touch, WaylandSe
+     connect(touch, &Touch::pointMoved, this, [this](TouchPoint *tp) {
+         auto o = m_seat->backend()->findOutput(tp->surface());
+         Q_ASSERT(o);
+-        const QPointF position = o->position() + tp->position();
++        const QPointF position = o->position() + o->mapFromHost(tp->position());
+         Q_EMIT touchMotion(tp->id(), position, std::chrono::milliseconds(tp->time()), this);
+     });
+ }
+@@ -433,14 +434,18 @@ WaylandBackend::~WaylandBackend()
+ bool WaylandBackend::initialize()
+ {
+     m_display = std::make_unique<WaylandDisplay>();
++    configureDisplay(m_display.get());
+     if (!m_display->initialize(m_options.socketName)) {
+         return false;
+     }
+ 
+-    if (WaylandClient::LinuxDmabufV1 *dmabuf = m_display->linuxDmabuf()) {
+-        m_drmDevice = DrmDevice::open(dmabuf->mainDevice());
++    if (m_display->linuxDmabuf()) {
++        const QString path = renderDevicePath();
++        m_drmDevice = DrmDevice::open(path);
+         if (!m_drmDevice) {
+-            qCWarning(KWIN_WAYLAND_BACKEND) << "Failed to open drm render node" << dmabuf->mainDevice();
++            qCWarning(KWIN_WAYLAND_BACKEND) << "Failed to open drm render node" << path;
++        } else {
++            setUpRenderDevice(m_drmDevice.get());
+         }
+     }
+ 
+@@ -477,9 +482,9 @@ void WaylandBackend::createOutputs()
+     Q_EMIT outputsQueried();
+ }
+ 
+-WaylandOutput *WaylandBackend::createOutput(const QString &name, const QSize &size, qreal scale, bool fullscreen)
++WaylandOutput *WaylandBackend::createOutput(const QString &name, const QSize &size, qreal scale, bool fullscreen, wl_output *fullscreenOn)
+ {
+-    WaylandOutput *waylandOutput = new WaylandOutput(name, this);
++    WaylandOutput *waylandOutput = createOutputObject(name, fullscreenOn);
+     waylandOutput->init(size, scale, fullscreen);
+ 
+     // Wait until the output window is configured by the host compositor.
+@@ -490,6 +495,60 @@ WaylandOutput *WaylandBackend::createOutput(const QString &name, const QSize &si
+     return waylandOutput;
+ }
+ 
++WaylandOutput *WaylandBackend::createOutputObject(const QString &name, wl_output *fullscreenOn)
++{
++    return new WaylandOutput(name, this, fullscreenOn);
++}
++
++void WaylandBackend::configureDisplay(WaylandDisplay *display)
++{
++}
++
++QString WaylandBackend::renderDevicePath() const
++{
++    return QString::fromUtf8(m_display->linuxDmabuf()->mainDevice());
++}
++
++void WaylandBackend::setUpRenderDevice(DrmDevice *device)
++{
++}
++
++std::unique_ptr<GraphicsBufferAllocator> WaylandBackend::createShmAllocator() const
++{
++    return std::make_unique<ShmGraphicsBufferAllocator>();
++}
++
++bool WaylandBackend::implicitSync() const
++{
++    return true;
++}
++
++bool WaylandBackend::hostImportsClientBuffers() const
++{
++    return true;
++}
++
++bool WaylandBackend::hostFingerScrollIsNatural() const
++{
++    return false;
++}
++
++void WaylandBackend::addOutput(WaylandOutput *output)
++{
++    m_outputs << output;
++    Q_EMIT outputAdded(output);
++    Q_EMIT outputsQueried();
++}
++
++void WaylandBackend::removeOutput(WaylandOutput *output)
++{
++    if (m_outputs.removeAll(output)) {
++        Q_EMIT outputRemoved(output);
++        Q_EMIT outputsQueried();
++        output->unref();
++    }
++}
++
+ void WaylandBackend::destroyOutputs()
+ {
+     while (!m_outputs.isEmpty()) {
+diff --git a/src/backends/wayland/wayland_backend.h b/src/backends/wayland/wayland_backend.h
+index dd6f1cd..fb2bbd4 100644
+--- a/src/backends/wayland/wayland_backend.h
++++ b/src/backends/wayland/wayland_backend.h
+@@ -25,6 +25,7 @@
+ #include <QSize>
+ 
+ struct wl_buffer;
++struct wl_output;
+ struct wl_display;
+ 
+ namespace KWayland
+@@ -45,6 +46,7 @@ class SubSurface;
+ 
+ namespace KWin
+ {
++class GraphicsBufferAllocator;
+ class GraphicsBuffer;
+ class DrmDevice;
+ 
+@@ -249,13 +251,40 @@ public:
+     void setEglDisplay(std::unique_ptr<EglDisplay> &&display);
+     EglDisplay *sceneEglDisplayObject() const override;
+ 
++    /// Buffers of the render device come without implicit synchronization: layers wait for the
++    /// GPU, or pass a fence when the host offers explicit synchronization.
++    virtual bool implicitSync() const;
++    /// The host can present client buffers directly (direct scanout of a client's buffer).
++    virtual bool hostImportsClientBuffers() const;
++    /// Finger scrolling on the host moves content with the fingers, as on a touch screen.
++    virtual bool hostFingerScrollIsNatural() const;
++    /// Allocator for buffers of the software (QPainter) path, which the host shows.
++    virtual std::unique_ptr<GraphicsBufferAllocator> createShmAllocator() const;
++
+ Q_SIGNALS:
+     void pointerLockChanged(bool locked);
+ 
++protected:
++    const WaylandBackendOptions &options() const
++    {
++        return m_options;
++    }
++    /// A new output object (src/backends/android derives its own).
++    virtual WaylandOutput *createOutputObject(const QString &name, wl_output *fullscreenOn);
++    /// An output window of `size` pixels, fullscreen (on `fullscreenOn`, a host wl_output, if given).
++    WaylandOutput *createOutput(const QString &name, const QSize &size, qreal scale, bool fullscreen, wl_output *fullscreenOn = nullptr);
++    void addOutput(WaylandOutput *output);
++    void removeOutput(WaylandOutput *output);
++    /// Settings of the host connection before it is made.
++    virtual void configureDisplay(WaylandDisplay *display);
++    /// The render device to open: the host's dmabuf main device upstream.
++    virtual QString renderDevicePath() const;
++    /// Called once the render device is open (e.g. to give it another allocator).
++    virtual void setUpRenderDevice(DrmDevice *device);
++
+ private:
+     void createOutputs();
+     void destroyOutputs();
+-    WaylandOutput *createOutput(const QString &name, const QSize &size, qreal scale, bool fullscreen);
+ 
+     WaylandBackendOptions m_options;
+     std::unique_ptr<WaylandDisplay> m_display;
+diff --git a/src/backends/wayland/wayland_display.cpp b/src/backends/wayland/wayland_display.cpp
+index 24e0842..6030bc5 100644
+--- a/src/backends/wayland/wayland_display.cpp
++++ b/src/backends/wayland/wayland_display.cpp
+@@ -59,8 +59,9 @@ class WaylandEventThread : public QThread
+     Q_OBJECT
+ 
+ public:
+-    WaylandEventThread(wl_display *display)
++    WaylandEventThread(wl_display *display, std::function<void()> connectionLost)
+         : m_display(display)
++        , m_connectionLost(std::move(connectionLost))
+         , m_fd(wl_display_get_fd(display))
+         , m_quitPipe{-1, -1}
+         , m_reading(true)
+@@ -83,6 +84,9 @@ public:
+     {
+         while (true) {
+             if (wl_display_dispatch_pending(m_display) < 0) {
++                if (m_connectionLost) {
++                    m_connectionLost(); // a backend whose host restarts (src/backends/android)
++                }
+                 qFatal("Wayland connection broke");
+             }
+ 
+@@ -154,6 +158,7 @@ protected:
+ 
+ private:
+     wl_display *const m_display;
++    const std::function<void()> m_connectionLost;
+     int m_fd;
+     int m_quitPipe[2];
+     QAtomicInteger<bool> m_reading;
+@@ -217,14 +222,29 @@ void WaylandDisplay::flush()
+     m_eventThread->dispatch();
+ }
+ 
++void WaylandDisplay::setConnectTimeout(std::chrono::milliseconds timeout)
++{
++    m_connectTimeout = timeout;
++}
++
++void WaylandDisplay::setConnectionLostHandler(std::function<void()> handler)
++{
++    m_connectionLost = std::move(handler);
++}
++
+ bool WaylandDisplay::initialize(const QString &socketName)
+ {
+     m_display = wl_display_connect(socketName.toUtf8());
++    // A host that restarts (src/backends/android) may not be listening yet.
++    for (auto waited = std::chrono::milliseconds(0); !m_display && waited < m_connectTimeout; waited += std::chrono::milliseconds(250)) {
++        usleep(250 * 1000);
++        m_display = wl_display_connect(socketName.toUtf8());
++    }
+     if (!m_display) {
+         return false;
+     }
+ 
+-    m_eventThread = std::make_unique<WaylandEventThread>(m_display);
++    m_eventThread = std::make_unique<WaylandEventThread>(m_display, m_connectionLost);
+     connect(m_eventThread.get(), &WaylandEventThread::available, this, &WaylandDisplay::flush, Qt::QueuedConnection);
+     m_eventThread->start();
+ 
+@@ -433,12 +453,16 @@ void WaylandDisplay::registry_global(void *data, wl_registry *registry, uint32_t
+     } else if (strcmp(interface, zwp_keyboard_shortcuts_inhibit_manager_v1_interface.name) == 0) {
+         display->m_keyboardShortcutsInhibitManager = reinterpret_cast<zwp_keyboard_shortcuts_inhibit_manager_v1 *>(wl_registry_bind(registry, name, &zwp_keyboard_shortcuts_inhibit_manager_v1_interface, 1));
+     }
++    Q_EMIT display->globalAnnounced(registry, name, QByteArray(interface), version);
+ }
+ 
+ void WaylandDisplay::registry_global_remove(void *data, wl_registry *registry, uint32_t name)
+ {
++    Q_EMIT static_cast<WaylandDisplay *>(data)->globalRemoved(name);
+ }
+ 
++
++
+ }
+ }
+ 
+diff --git a/src/backends/wayland/wayland_display.h b/src/backends/wayland/wayland_display.h
+index e41da18..9bbeaa8 100644
+--- a/src/backends/wayland/wayland_display.h
++++ b/src/backends/wayland/wayland_display.h
+@@ -8,6 +8,8 @@
+ 
+ #include <QHash>
+ #include <QObject>
++#include <functional>
++#include <chrono>
+ 
+ #include <memory>
+ 
+@@ -21,6 +23,7 @@ struct wp_fractional_scale_manager_v1;
+ struct wp_single_pixel_buffer_manager_v1;
+ struct xdg_toplevel_icon_manager_v1;
+ struct zwp_keyboard_shortcuts_inhibit_manager_v1;
++struct wl_output;
+ 
+ namespace KWayland
+ {
+@@ -52,6 +55,8 @@ class WaylandEventThread;
+ class WaylandLinuxDmabufFeedbackV1;
+ class ColorManager;
+ 
++
++
+ class WaylandDisplay : public QObject
+ {
+     Q_OBJECT
+@@ -60,6 +65,10 @@ public:
+     WaylandDisplay();
+     ~WaylandDisplay() override;
+ 
++    /// How long initialize() waits for the host's socket (default: not at all).
++    void setConnectTimeout(std::chrono::milliseconds timeout);
++    /// Called on the event thread when the host connection breaks, before KWin aborts.
++    void setConnectionLostHandler(std::function<void()> handler);
+     bool initialize(const QString &socketName);
+ 
+     wl_display *nativeDisplay() const;
+@@ -85,6 +94,12 @@ public:
+ public Q_SLOTS:
+     void flush();
+ 
++Q_SIGNALS:
++    /// Every global of the host, also those bound here, so a derived backend can bind more
++    /// (src/backends/android). Emitted from the registry; bind on `registry` right away.
++    void globalAnnounced(wl_registry *registry, uint32_t name, const QByteArray &interface, uint32_t version);
++    void globalRemoved(uint32_t name);
++
+ private:
+     static void registry_global(void *data, wl_registry *registry, uint32_t name, const char *interface, uint32_t version);
+     static void registry_global_remove(void *data, wl_registry *registry, uint32_t name);
+@@ -101,6 +116,8 @@ private:
+     zwp_keyboard_shortcuts_inhibit_manager_v1 *m_keyboardShortcutsInhibitManager = nullptr;
+     std::unique_ptr<ColorManager> m_colorManager;
+     std::unique_ptr<WaylandEventThread> m_eventThread;
++    std::chrono::milliseconds m_connectTimeout{0};
++    std::function<void()> m_connectionLost;
+     std::unique_ptr<WaylandClient::LinuxDmabufV1> m_linuxDmabuf;
+     std::unique_ptr<KWayland::Client::Compositor> m_compositor;
+     std::unique_ptr<KWayland::Client::SubCompositor> m_subCompositor;
+diff --git a/src/backends/wayland/wayland_egl_backend.cpp b/src/backends/wayland/wayland_egl_backend.cpp
+index 66ae1b2..7a4f08b 100644
+--- a/src/backends/wayland/wayland_egl_backend.cpp
++++ b/src/backends/wayland/wayland_egl_backend.cpp
+@@ -102,8 +102,12 @@ bool WaylandEglLayer::doEndFrame(const Region &renderedDeviceRegion, const Regio
+ {
+     m_query->end();
+     frame->addRenderTimeQuery(std::move(m_query));
+-    // Flush rendering commands to the dmabuf.
+-    glFlush();
++    // Flush rendering commands to the dmabuf; without implicit synchronization, wait for them.
++    if (m_backend->backend()->implicitSync()) {
++        glFlush();
++    } else {
++        glFinish();
++    }
+     EGLNativeFence releaseFence{m_backend->eglDisplayObject()};
+ 
+     setBuffer(m_backend->backend()->importBuffer(m_buffer->buffer()), damagedDeviceRegion);
+@@ -115,6 +119,9 @@ bool WaylandEglLayer::doEndFrame(const Region &renderedDeviceRegion, const Regio
+ 
+ bool WaylandEglLayer::importScanoutBuffer(GraphicsBuffer *buffer, const std::shared_ptr<OutputFrame> &frame)
+ {
++    if (!m_backend->backend()->hostImportsClientBuffers()) {
++        return false;
++    }
+     if (!test()) {
+         return false;
+     }
+@@ -198,8 +205,12 @@ bool WaylandEglCursorLayer::doEndFrame(const Region &renderedDeviceRegion, const
+     if (frame) {
+         frame->addRenderTimeQuery(std::move(m_query));
+     }
+-    // Flush rendering commands to the dmabuf.
+-    glFlush();
++    // Flush rendering commands to the dmabuf; without implicit synchronization, wait for them.
++    if (m_backend->backend()->implicitSync()) {
++        glFlush();
++    } else {
++        glFinish();
++    }
+ 
+     wl_buffer *buffer = m_backend->backend()->importBuffer(m_buffer->buffer());
+     Q_ASSERT(buffer);
+@@ -265,12 +276,15 @@ void WaylandEglBackend::createOutputLayers(BackendOutput *output)
+     auto primary = std::make_unique<WaylandEglLayer>(waylandOutput, this, OutputLayerType::Primary, 0);
+     primary->subSurface()->placeAbove(waylandOutput->surface());
+     layers.push_back(std::move(primary));
+-    for (int z = 1; z < 5; z++) {
++    for (int z = 1; z < (waylandOutput->singleSurface() ? 1 : 5); z++) {
+         auto layer = std::make_unique<WaylandEglLayer>(waylandOutput, this, OutputLayerType::GenericLayer, z);
+         layer->subSurface()->placeAbove(static_cast<WaylandEglLayer *>(layers.back().get())->surface());
+         layers.push_back(std::move(layer));
+     }
+-    layers.push_back(std::make_unique<WaylandEglCursorLayer>(waylandOutput, this));
++    // Without a cursor layer KWin renders the cursor into the frame.
++    if (waylandOutput->hasCursorLayer()) {
++        layers.push_back(std::make_unique<WaylandEglCursorLayer>(waylandOutput, this));
++    }
+     waylandOutput->setOutputLayers(std::move(layers));
+ }
+ 
+@@ -286,7 +300,8 @@ bool WaylandEglBackend::initializeEgl()
+             }
+         }
+ 
+-        m_backend->setEglDisplay(EglDisplay::create(eglGetPlatformDisplayEXT(EGL_PLATFORM_GBM_KHR, m_backend->drmDevice()->gbmDevice(), nullptr)));
++        m_backend->setEglDisplay(EglDisplay::create(eglGetPlatformDisplayEXT(EGL_PLATFORM_GBM_KHR, m_backend->drmDevice()->gbmDevice(), nullptr),
++                                                    true, m_backend->drmDevice()->path()));
+     }
+ 
+     const auto display = m_backend->sceneEglDisplayObject();
+diff --git a/src/backends/wayland/wayland_layer.cpp b/src/backends/wayland/wayland_layer.cpp
+index 1bc003e..72fa24c 100644
+--- a/src/backends/wayland/wayland_layer.cpp
++++ b/src/backends/wayland/wayland_layer.cpp
+@@ -79,12 +79,21 @@ bool WaylandLayer::test() const
+ 
+ void WaylandLayer::setBuffer(wl_buffer *buffer, const Region &deviceDamagedRegion)
+ {
++    if (type() == OutputLayerType::Primary && static_cast<WaylandOutput *>(m_output.get())->singleSurface()) {
++        auto surface = static_cast<WaylandOutput *>(m_output.get())->surface();
++        surface->attachBuffer(buffer);
++        surface->damageBuffer(QRegion(deviceDamagedRegion));
++        return;
++    }
+     m_surface->attachBuffer(buffer);
+     m_surface->damageBuffer(QRegion(deviceDamagedRegion));
+ }
+ 
+ void WaylandLayer::commit(PresentationMode presentationMode)
+ {
++    if (type() == OutputLayerType::Primary && static_cast<WaylandOutput *>(m_output.get())->singleSurface()) {
++        return; // Parent commit and frame callback are owned by WaylandOutput.
++    }
+     if (!isEnabled()) {
+         setBuffer(nullptr, Region{});
+         m_surface->commit(KWayland::Client::Surface::CommitFlag::None);
+diff --git a/src/backends/wayland/wayland_output.cpp b/src/backends/wayland/wayland_output.cpp
+index e435266..49240ac 100644
+--- a/src/backends/wayland/wayland_output.cpp
++++ b/src/backends/wayland/wayland_output.cpp
+@@ -30,6 +30,7 @@
+ #include "wayland-presentation-time-client-protocol.h"
+ #include "wayland-single-pixel-buffer-v1-client-protocol.h"
+ #include "wayland-tearing-control-v1-client-protocol.h"
++#include "wayland-xdg-shell-client-protocol.h"
+ #include "wayland-xdg-toplevel-icon-v1-client-protocol.h"
+ #include "workspace.h"
+ 
+@@ -118,13 +119,14 @@ const wp_fractional_scale_v1_listener WaylandOutput::s_fractionalScaleListener{
+     .preferred_scale = &WaylandOutput::handleFractionalScaleChanged,
+ };
+ 
+-WaylandOutput::WaylandOutput(const QString &name, WaylandBackend *backend)
++WaylandOutput::WaylandOutput(const QString &name, WaylandBackend *backend, wl_output *fullscreenOn)
+     : BackendOutput()
+     , m_renderLoop(std::make_unique<RenderLoop>(this))
+     , m_surface(backend->display()->compositor()->createSurface())
+     , m_xdgShellSurface(backend->display()->xdgShell()->createSurface(m_surface.get()))
+     , m_backend(backend)
+     , m_cursor(std::make_unique<WaylandCursor>(backend))
++    , m_fullscreenOn(fullscreenOn)
+ {
+     m_renderLoop->setMaxPendingFrameCount(2);
+     if (KWayland::Client::XdgDecorationManager *manager = m_backend->display()->xdgDecorationManager()) {
+@@ -306,13 +308,13 @@ bool WaylandOutput::present(const QList<OutputLayer *> &layersToUpdate, const st
+         m_cursor->setEnabled(cursorLayers.front()->isEnabled());
+         // TODO also move the actual cursor image update here too...
+     }
+-    if (!m_mapped) {
++    if (!m_mapped && !singleSurface()) {
+         // we only ever want a black background
+         auto buffer = wp_single_pixel_buffer_manager_v1_create_u32_rgba_buffer(m_backend->display()->singlePixelManager(), 0, 0, 0, 0xFFFFFFFF);
+         m_surface->attachBuffer(buffer);
+         m_mapped = true;
+     }
+-    m_viewport->setDestination(QSize(std::round(modeSize().width() / scale()), std::round(modeSize().height() / scale())));
++    m_viewport->setDestination(QSize(std::round(modeSize().width() / hostScale()), std::round(modeSize().height() / hostScale())));
+     m_surface->setScale(1);
+     // commit the subsurfaces before the main surface
+     for (OutputLayer *layer : layersToUpdate) {
+@@ -336,6 +338,45 @@ bool WaylandOutput::present(const QList<OutputLayer *> &layersToUpdate, const st
+     return true;
+ }
+ 
++QPointF WaylandOutput::mapFromHost(const QPointF &position) const
++{
++    return position * hostScale() / scale();
++}
++
++qreal WaylandOutput::hostScale() const
++{
++    return scale();
++}
++
++bool WaylandOutput::ownsScale() const
++{
++    return false;
++}
++
++bool WaylandOutput::singleSurface() const
++{
++    return false;
++}
++
++QList<std::shared_ptr<OutputMode>> WaylandOutput::modesFor(const QSize &size, uint32_t rate) const
++{
++    return {std::make_shared<OutputMode>(size, rate)};
++}
++
++void WaylandOutput::applyExtraChanges([[maybe_unused]] State &next, [[maybe_unused]] const OutputChangeSet &props,
++                                      [[maybe_unused]] OutputConfiguration::Source source)
++{
++    // intentionally ignored, as it would get overwritten
++    // with the fractional scale protocol anyways
++    // next.scale = props->scale.value_or(m_state.scale);
++}
++
++void WaylandOutput::setRefreshRate(uint32_t rate)
++{
++    m_refreshRate = rate;
++    m_renderLoop->setRefreshRate(rate);
++}
++
+ void WaylandOutput::frameDiscarded()
+ {
+     m_frames.pop_front();
+@@ -347,8 +388,10 @@ void WaylandOutput::framePresented(std::chrono::nanoseconds timestamp, uint32_t
+         m_refreshRate = refreshRate;
+         const auto mode = std::make_shared<OutputMode>(pixelSize(), m_refreshRate);
+         State next = m_state;
+-        next.modes = {mode};
+-        next.currentMode = mode;
++        next.modes = modesFor(pixelSize(), m_refreshRate);
++        next.currentMode = *std::ranges::find_if(next.modes, [&](const auto &candidate) {
++            return candidate->size() == pixelSize() && candidate->refreshRate() == m_refreshRate;
++        });
+         setState(next);
+         m_renderLoop->setRefreshRate(m_refreshRate);
+     }
+@@ -375,9 +418,7 @@ void WaylandOutput::applyChanges(const OutputConfiguration &config)
+     next.enabled = props->enabled.value_or(m_state.enabled);
+     next.transform = props->transform.value_or(m_state.transform);
+     next.position = props->pos.value_or(m_state.position);
+-    // intentionally ignored, as it would get overwritten
+-    // with the fractional scale protocol anyways
+-    // next.scale = props->scale.value_or(m_state.scale);
++    applyExtraChanges(next, *props, config.source);
+     next.desiredModeSize = props->desiredModeSize.value_or(m_state.desiredModeSize);
+     next.desiredModeRefreshRate = props->desiredModeRefreshRate.value_or(m_state.desiredModeRefreshRate);
+     next.desiredModeFlags = props->desiredModeFlags.value_or(m_state.desiredModeFlags);
+@@ -400,6 +441,11 @@ bool WaylandOutput::isReady() const
+     return m_ready;
+ }
+ 
++bool WaylandOutput::hasCursorLayer() const
++{
++    return true;
++}
++
+ KWayland::Client::Surface *WaylandOutput::surface() const
+ {
+     return m_surface.get();
+@@ -433,12 +479,18 @@ void WaylandOutput::init(const QSize &pixelSize, qreal scale, bool fullscreen)
+     auto mode = std::make_shared<OutputMode>(pixelSize, m_refreshRate);
+ 
+     State initialState;
+-    initialState.modes = {mode};
+-    initialState.currentMode = mode;
++    initialState.modes = modesFor(pixelSize, m_refreshRate);
++    initialState.currentMode = *std::ranges::find_if(initialState.modes, [&](const auto &candidate) {
++        return candidate->size() == pixelSize && candidate->refreshRate() == m_refreshRate;
++    });
+     initialState.scale = scale;
+     setState(initialState);
+ 
+-    m_xdgShellSurface->setFullscreen(fullscreen);
++    if (fullscreen && m_fullscreenOn) {
++        xdg_toplevel_set_fullscreen(*m_xdgShellSurface, m_fullscreenOn);
++    } else {
++        m_xdgShellSurface->setFullscreen(fullscreen);
++    }
+     m_surface->commit(KWayland::Client::Surface::CommitFlag::None);
+ }
+ 
+@@ -463,12 +515,16 @@ void WaylandOutput::applyConfigure(const QSize &size, quint32 serial)
+ {
+     m_xdgShellSurface->ackConfigure(serial);
+     if (!size.isEmpty()) {
+-        auto mode = std::make_shared<OutputMode>(size * m_pendingScale, m_refreshRate);
++        const bool ownScale = ownsScale();
++        const QSize pixels = ownScale ? size * hostScale() : size * m_pendingScale;
++        auto mode = std::make_shared<OutputMode>(pixels, m_refreshRate);
+ 
+         State next = m_state;
+-        next.modes = {mode};
+-        next.currentMode = mode;
+-        next.scale = m_pendingScale;
++        next.modes = modesFor(mode->size(), m_refreshRate);
++        next.currentMode = *std::ranges::find_if(next.modes, [&](const auto &candidate) {
++            return candidate->size() == mode->size() && candidate->refreshRate() == m_refreshRate;
++        });
++        next.scale = ownScale ? m_state.scale : m_pendingScale;
+         setState(next);
+ 
+         Q_EMIT m_backend->outputsQueried();
+diff --git a/src/backends/wayland/wayland_output.h b/src/backends/wayland/wayland_output.h
+index 7c30ce3..3cedeb8 100644
+--- a/src/backends/wayland/wayland_output.h
++++ b/src/backends/wayland/wayland_output.h
+@@ -9,6 +9,7 @@
+ #pragma once
+ 
+ #include "core/backendoutput.h"
++#include "core/outputconfiguration.h"
+ 
+ #include <KWayland/Client/xdgshell.h>
+ #include <QObject>
+@@ -37,6 +38,9 @@ struct zwp_keyboard_shortcuts_inhibitor_v1;
+ struct wl_callback;
+ struct wl_callback_listener;
+ 
++
++struct wl_output;
++
+ namespace KWin
+ {
+ class OutputFrame;
+@@ -78,7 +82,8 @@ class WaylandOutput : public BackendOutput
+ {
+     Q_OBJECT
+ public:
+-    WaylandOutput(const QString &name, WaylandBackend *backend);
++    /// fullscreenOn: a host wl_output the window is shown fullscreen on (a cast display).
++    WaylandOutput(const QString &name, WaylandBackend *backend, wl_output *fullscreenOn = nullptr);
+     ~WaylandOutput() override;
+ 
+     RenderLoop *renderLoop() const override;
+@@ -87,6 +92,8 @@ public:
+     void init(const QSize &pixelSize, qreal scale, bool fullscreen);
+ 
+     bool isReady() const;
++    /// Whether the output gets a cursor layer; without one KWin draws the cursor into the frame.
++    virtual bool hasCursorLayer() const;
+     KWayland::Client::Surface *surface() const;
+     WaylandCursor *cursor() const;
+     WaylandBackend *backend() const;
+@@ -104,6 +111,25 @@ public:
+     void setOutputLayers(std::vector<std::unique_ptr<OutputLayer>> &&layers);
+     QList<OutputLayer *> outputLayers() const;
+ 
++    /// A position on the host surface (host logical coordinates) in the output's logical ones.
++    QPointF mapFromHost(const QPointF &position) const;
++    /// The host shows the output's buffer at this scale: the output's own scale upstream (the host
++    /// window is the output's logical size), 1 when the host shows it pixel for pixel.
++    virtual qreal hostScale() const;
++    /// Whether KWin decides the output's scale; upstream the host does (fractional scale).
++    virtual bool ownsScale() const;
++    /// Whether the primary layer draws into the output surface itself, without subsurfaces.
++    virtual bool singleSurface() const;
++
++protected:
++    /// The modes offered for a host window of `size` pixels at `rate` mHz; one of them must be
++    /// that size and rate. The host decides the size, so by default it is the only mode.
++    virtual QList<std::shared_ptr<OutputMode>> modesFor(const QSize &size, uint32_t rate) const;
++    /// Settings of a configuration that the nested output does not apply itself (the host owns
++    /// scale and mode); a derived backend may (src/backends/android).
++    virtual void applyExtraChanges(State &next, const OutputChangeSet &props, OutputConfiguration::Source source);
++    void setRefreshRate(uint32_t rate);
++
+ private:
+     void handleConfigure(const QSize &size, KWayland::Client::XdgShellSurface::States states, quint32 serial);
+     void updateWindowTitle();
+@@ -126,6 +152,7 @@ private:
+     std::unique_ptr<WaylandCursor> m_cursor;
+     bool m_hasPointerLock = false;
+     bool m_ready = false;
++    wl_output *const m_fullscreenOn;
+     bool m_mapped = false;
+     struct FrameData
+     {
+diff --git a/src/backends/wayland/wayland_qpainter_backend.cpp b/src/backends/wayland/wayland_qpainter_backend.cpp
+index b433dad..8498918 100644
+--- a/src/backends/wayland/wayland_qpainter_backend.cpp
++++ b/src/backends/wayland/wayland_qpainter_backend.cpp
+@@ -148,7 +148,7 @@ void WaylandQPainterCursorLayer::releaseBuffers()
+ WaylandQPainterBackend::WaylandQPainterBackend(Wayland::WaylandBackend *b)
+     : QPainterBackend()
+     , m_backend(b)
+-    , m_allocator(std::make_unique<ShmGraphicsBufferAllocator>())
++    , m_allocator(b->createShmAllocator())
+ {
+     const auto waylandOutputs = m_backend->waylandOutputs();
+     for (auto *output : waylandOutputs) {
+@@ -170,7 +170,9 @@ void WaylandQPainterBackend::createOutput(BackendOutput *output)
+     const auto waylandOutput = static_cast<WaylandOutput *>(output);
+     std::vector<std::unique_ptr<OutputLayer>> layers;
+     layers.push_back(std::make_unique<WaylandQPainterPrimaryLayer>(waylandOutput, this));
+-    layers.push_back(std::make_unique<WaylandQPainterCursorLayer>(waylandOutput, this));
++    if (waylandOutput->hasCursorLayer()) {
++        layers.push_back(std::make_unique<WaylandQPainterCursorLayer>(waylandOutput, this));
++    }
+     waylandOutput->setOutputLayers(std::move(layers));
+ }
+ 
+diff --git a/src/core/drmdevice.cpp b/src/core/drmdevice.cpp
+index d4b3849..757202b 100644
+--- a/src/core/drmdevice.cpp
++++ b/src/core/drmdevice.cpp
+@@ -55,6 +55,11 @@ GraphicsBufferAllocator *DrmDevice::allocator() const
+     return m_allocator.get();
+ }
+ 
++void DrmDevice::setAllocator(std::unique_ptr<GraphicsBufferAllocator> &&allocator)
++{
++    m_allocator = std::move(allocator);
++}
++
+ int DrmDevice::fileDescriptor() const
+ {
+     return m_fd.get();
+diff --git a/src/core/drmdevice.h b/src/core/drmdevice.h
+index adfa4dc..65d79e9 100644
+--- a/src/core/drmdevice.h
++++ b/src/core/drmdevice.h
+@@ -31,6 +31,8 @@ public:
+     dev_t deviceId() const;
+     gbm_device *gbmDevice() const;
+     GraphicsBufferAllocator *allocator() const;
++    /// Buffers of this device from another allocator, e.g. one the host provides (src/backends/android).
++    void setAllocator(std::unique_ptr<GraphicsBufferAllocator> &&allocator);
+     int fileDescriptor() const;
+     bool supportsSyncObjTimelines() const;
+     std::optional<drmPciDeviceInfo> pciDeviceInfo() const;
+@@ -45,7 +47,7 @@ private:
+     const dev_t m_id;
+     const FileDescriptor m_fd;
+     gbm_device *const m_gbmDevice;
+-    const std::unique_ptr<GraphicsBufferAllocator> m_allocator;
++    std::unique_ptr<GraphicsBufferAllocator> m_allocator;
+     bool m_supportsSyncObjTimelines;
+ };
+ 
+diff --git a/src/core/outputbackend.cpp b/src/core/outputbackend.cpp
+index b0f3396..be3eb94 100644
+--- a/src/core/outputbackend.cpp
++++ b/src/core/outputbackend.cpp
+@@ -9,6 +9,8 @@
+ 
+ #include "outputbackend.h"
+ 
++#include <climits>
++
+ #include "inputbackend.h"
+ #include "opengl/eglbackend.h"
+ #include "opengl/egldisplay.h"
+@@ -107,6 +109,11 @@ Session *OutputBackend::session() const
+     return nullptr;
+ }
+ 
++int OutputBackend::maxLinuxDmabufVersion() const
++{
++    return INT_MAX;
++}
++
+ } // namespace KWin
+ 
+ #include "moc_outputbackend.cpp"
+diff --git a/src/core/outputbackend.h b/src/core/outputbackend.h
+index f6a353a..f405d55 100644
+--- a/src/core/outputbackend.h
++++ b/src/core/outputbackend.h
+@@ -82,6 +82,9 @@ public:
+      * Applies the output changes. Default implementation only sets values common between platforms
+      */
+     virtual OutputConfigurationError applyOutputChanges(const OutputConfiguration &config);
++    /// The newest zwp_linux_dmabuf_v1 KWin offers its clients: v4 and later send the render node as
++    /// main device, which clients cannot use when it is not a DRM device (src/backends/android).
++    virtual int maxLinuxDmabufVersion() const;
+ 
+     virtual Session *session() const;
+ 
+diff --git a/src/core/shmgraphicsbufferallocator.cpp b/src/core/shmgraphicsbufferallocator.cpp
+index 17529e2..f3f54cb 100644
+--- a/src/core/shmgraphicsbufferallocator.cpp
++++ b/src/core/shmgraphicsbufferallocator.cpp
+@@ -77,6 +77,11 @@ const ShmAttributes *ShmGraphicsBuffer::shmAttributes() const
+     return &m_attributes;
+ }
+ 
++ShmGraphicsBufferAllocator::ShmGraphicsBufferAllocator(const QByteArray &directory)
++    : m_directory(directory)
++{
++}
++
+ GraphicsBuffer *ShmGraphicsBufferAllocator::allocate(const GraphicsBufferOptions &options)
+ {
+     if (!options.software) {
+@@ -98,7 +103,17 @@ GraphicsBuffer *ShmGraphicsBufferAllocator::allocate(const GraphicsBufferOptions
+     const int bufferSize = options.size.height() * stride;
+ 
+ #if HAVE_MEMFD
+-    FileDescriptor fd = FileDescriptor(memfd_create("shm", MFD_CLOEXEC | MFD_ALLOW_SEALING));
++    FileDescriptor fd;
++    const bool inDirectory = !m_directory.isEmpty();
++    if (inDirectory) {
++        QByteArray name = m_directory + "/kwin-shm-XXXXXX";
++        fd = FileDescriptor(mkostemp(name.data(), O_CLOEXEC));
++        if (fd.isValid()) {
++            unlink(name.constData());
++        }
++    } else {
++        fd = FileDescriptor(memfd_create("shm", MFD_CLOEXEC | MFD_ALLOW_SEALING));
++    }
+     if (!fd.isValid()) {
+         return nullptr;
+     }
+@@ -107,7 +122,9 @@ GraphicsBuffer *ShmGraphicsBufferAllocator::allocate(const GraphicsBufferOptions
+         return nullptr;
+     }
+ 
+-    fcntl(fd.get(), F_ADD_SEALS, F_SEAL_SHRINK | F_SEAL_GROW | F_SEAL_SEAL);
++    if (!inDirectory) {
++        fcntl(fd.get(), F_ADD_SEALS, F_SEAL_SHRINK | F_SEAL_GROW | F_SEAL_SEAL);
++    }
+ #else
+     char templateName[] = "/tmp/kwin-shm-XXXXXX";
+     FileDescriptor fd{mkstemp(templateName)};
+diff --git a/src/core/shmgraphicsbufferallocator.h b/src/core/shmgraphicsbufferallocator.h
+index f693361..a223686 100644
+--- a/src/core/shmgraphicsbufferallocator.h
++++ b/src/core/shmgraphicsbufferallocator.h
+@@ -14,7 +14,14 @@ namespace KWin
+ class KWIN_EXPORT ShmGraphicsBufferAllocator : public GraphicsBufferAllocator
+ {
+ public:
++    /// With a directory, buffers are files there (unlinked) rather than sealed memfds: a consumer
++    /// under another SELinux label can map them (the Android host, src/backends/android).
++    explicit ShmGraphicsBufferAllocator(const QByteArray &directory = QByteArray());
++
+     GraphicsBuffer *allocate(const GraphicsBufferOptions &options) override;
++
++private:
++    QByteArray m_directory;
+ };
+ 
+ } // namespace KWin
+diff --git a/src/input.cpp b/src/input.cpp
+index a79bb3a..c30edb9 100644
+--- a/src/input.cpp
++++ b/src/input.cpp
+@@ -3472,6 +3472,9 @@ void InputRedirection::addIdleInhibitor(Window *inhibitor)
+         for (IdleDetector *idleDetector : std::as_const(m_idleDetectors)) {
+             idleDetector->setInhibited(true);
+         }
++        if (m_idleInhibitors.size() == 1) {
++            Q_EMIT idleInhibitedChanged(true);
++        }
+     }
+ }
+ 
+@@ -3481,6 +3484,7 @@ void InputRedirection::removeIdleInhibitor(Window *inhibitor)
+         for (IdleDetector *idleDetector : std::as_const(m_idleDetectors)) {
+             idleDetector->setInhibited(false);
+         }
++        Q_EMIT idleInhibitedChanged(false);
+     }
+ }
+ 
+diff --git a/src/input.h b/src/input.h
+index e6ce8a9..dee44de 100644
+--- a/src/input.h
++++ b/src/input.h
+@@ -209,6 +209,8 @@ public:
+     void addInputBackend(std::unique_ptr<InputBackend> &&inputBackend);
+ 
+ Q_SIGNALS:
++    /// Whether any window inhibits idle changed (a nested backend tells its host, src/backends/android).
++    void idleInhibitedChanged(bool inhibited);
+     void deviceAdded(InputDevice *device);
+     void deviceRemoved(InputDevice *device);
+     /**
+diff --git a/src/opengl/egldisplay.cpp b/src/opengl/egldisplay.cpp
+index ec411f7..2c3c649 100644
+--- a/src/opengl/egldisplay.cpp
++++ b/src/opengl/egldisplay.cpp
+@@ -32,7 +32,7 @@ bool EglDisplay::shouldUseOpenGLES()
+     return QOpenGLContext::openGLModuleType() == QOpenGLContext::LibGLES;
+ }
+ 
+-std::unique_ptr<EglDisplay> EglDisplay::create(::EGLDisplay display, bool owning)
++std::unique_ptr<EglDisplay> EglDisplay::create(::EGLDisplay display, bool owning, const QString &renderNode)
+ {
+     if (!display) {
+         return nullptr;
+@@ -71,7 +71,7 @@ std::unique_ptr<EglDisplay> EglDisplay::create(::EGLDisplay display, bool owning
+         }
+     }
+ 
+-    return std::make_unique<EglDisplay>(display, extensions, owning);
++    return std::make_unique<EglDisplay>(display, extensions, owning, renderNode);
+ }
+ 
+ static std::optional<dev_t> devIdForFileName(const QString &path)
+@@ -85,11 +85,11 @@ static std::optional<dev_t> devIdForFileName(const QString &path)
+     }
+ }
+ 
+-EglDisplay::EglDisplay(::EGLDisplay display, const QList<QByteArray> &extensions, bool owning)
++EglDisplay::EglDisplay(::EGLDisplay display, const QList<QByteArray> &extensions, bool owning, const QString &renderNode)
+     : m_handle(display)
+     , m_extensions(extensions)
+     , m_owning(owning)
+-    , m_renderNode(determineRenderNode())
++    , m_renderNode(renderNode.isEmpty() ? determineRenderNode() : renderNode)
+     , m_renderDevNode(devIdForFileName(m_renderNode))
+     , m_supportsBufferAge(extensions.contains(QByteArrayLiteral("EGL_EXT_buffer_age")) && qgetenv("KWIN_USE_BUFFER_AGE") != "0")
+     , m_supportsNativeFence(extensions.contains(QByteArrayLiteral("EGL_ANDROID_native_fence_sync"))
+diff --git a/src/opengl/egldisplay.h b/src/opengl/egldisplay.h
+index 67ec070..46fd9a5 100644
+--- a/src/opengl/egldisplay.h
++++ b/src/opengl/egldisplay.h
+@@ -33,7 +33,7 @@ public:
+         QList<uint64_t> externalOnlyModifiers;
+     };
+ 
+-    EglDisplay(::EGLDisplay display, const QList<QByteArray> &extensions, bool owning = true);
++    EglDisplay(::EGLDisplay display, const QList<QByteArray> &extensions, bool owning = true, const QString &renderNode = QString());
+     ~EglDisplay();
+ 
+     QList<QByteArray> extensions() const;
+@@ -57,7 +57,8 @@ public:
+     EGLImageKHR importDmaBufAsImage(const DmaBufAttributes &dmabuf, int plane, int format, const QSize &size) const;
+ 
+     static bool shouldUseOpenGLES();
+-    static std::unique_ptr<EglDisplay> create(::EGLDisplay display, bool owning = true);
++    /// renderNode: the device the display was made for, when EGL cannot tell (a non-DRM GPU node).
++    static std::unique_ptr<EglDisplay> create(::EGLDisplay display, bool owning = true, const QString &renderNode = QString());
+ 
+ private:
+     QHash<uint32_t, DrmFormatInfo> queryImportFormats() const;
+diff --git a/src/wayland/linuxdmabufv1clientbuffer.cpp b/src/wayland/linuxdmabufv1clientbuffer.cpp
+index 71ba2ba..930df7f 100644
+--- a/src/wayland/linuxdmabufv1clientbuffer.cpp
++++ b/src/wayland/linuxdmabufv1clientbuffer.cpp
+@@ -27,8 +27,8 @@ namespace KWin
+ {
+ static const int s_version = 5;
+ 
+-LinuxDmaBufV1ClientBufferIntegrationPrivate::LinuxDmaBufV1ClientBufferIntegrationPrivate(LinuxDmaBufV1ClientBufferIntegration *q, Display *display)
+-    : QtWaylandServer::zwp_linux_dmabuf_v1(*display, s_version)
++LinuxDmaBufV1ClientBufferIntegrationPrivate::LinuxDmaBufV1ClientBufferIntegrationPrivate(LinuxDmaBufV1ClientBufferIntegration *q, Display *display, int maxVersion)
++    : QtWaylandServer::zwp_linux_dmabuf_v1(*display, std::min(s_version, maxVersion))
+     , q(q)
+     , defaultFeedback(new LinuxDmaBufV1Feedback(this))
+ {
+@@ -295,9 +295,9 @@ bool LinuxDmaBufParamsV1::test(Resource *resource, uint32_t width, uint32_t heig
+     return true;
+ }
+ 
+-LinuxDmaBufV1ClientBufferIntegration::LinuxDmaBufV1ClientBufferIntegration(Display *display)
++LinuxDmaBufV1ClientBufferIntegration::LinuxDmaBufV1ClientBufferIntegration(Display *display, int maxVersion)
+     : QObject(display)
+-    , d(new LinuxDmaBufV1ClientBufferIntegrationPrivate(this, display))
++    , d(new LinuxDmaBufV1ClientBufferIntegrationPrivate(this, display, maxVersion))
+ {
+ }
+ 
+diff --git a/src/wayland/linuxdmabufv1clientbuffer.h b/src/wayland/linuxdmabufv1clientbuffer.h
+index e6c11f0..fb870a7 100644
+--- a/src/wayland/linuxdmabufv1clientbuffer.h
++++ b/src/wayland/linuxdmabufv1clientbuffer.h
+@@ -8,6 +8,8 @@
+ */
+ #pragma once
+ 
++#include <climits>
++
+ #include "core/graphicsbuffer.h"
+ 
+ #include <QHash>
+@@ -66,7 +68,8 @@ class KWIN_EXPORT LinuxDmaBufV1ClientBufferIntegration : public QObject
+     Q_OBJECT
+ 
+ public:
+-    explicit LinuxDmaBufV1ClientBufferIntegration(Display *display);
++    /// maxVersion: what the output backend allows (OutputBackend::maxLinuxDmabufVersion()).
++    explicit LinuxDmaBufV1ClientBufferIntegration(Display *display, int maxVersion = INT_MAX);
+     ~LinuxDmaBufV1ClientBufferIntegration() override;
+ 
+     RenderBackend *renderBackend() const;
+diff --git a/src/wayland/linuxdmabufv1clientbuffer_p.h b/src/wayland/linuxdmabufv1clientbuffer_p.h
+index 8d9ece0..58af36d 100644
+--- a/src/wayland/linuxdmabufv1clientbuffer_p.h
++++ b/src/wayland/linuxdmabufv1clientbuffer_p.h
+@@ -31,7 +31,7 @@ class LinuxDmaBufV1FormatTable;
+ class LinuxDmaBufV1ClientBufferIntegrationPrivate : public QtWaylandServer::zwp_linux_dmabuf_v1
+ {
+ public:
+-    LinuxDmaBufV1ClientBufferIntegrationPrivate(LinuxDmaBufV1ClientBufferIntegration *q, Display *display);
++    LinuxDmaBufV1ClientBufferIntegrationPrivate(LinuxDmaBufV1ClientBufferIntegration *q, Display *display, int maxVersion);
+ 
+     LinuxDmaBufV1ClientBufferIntegration *q;
+     std::unique_ptr<LinuxDmaBufV1Feedback> defaultFeedback;
+diff --git a/src/wayland_server.cpp b/src/wayland_server.cpp
+index 7aacb90..2c2441b 100644
+--- a/src/wayland_server.cpp
++++ b/src/wayland_server.cpp
+@@ -550,7 +550,7 @@ DrmClientBufferIntegration *WaylandServer::drm()
+ LinuxDmaBufV1ClientBufferIntegration *WaylandServer::linuxDmabuf()
+ {
+     if (!m_linuxDmabuf) {
+-        m_linuxDmabuf = new LinuxDmaBufV1ClientBufferIntegration(m_display);
++        m_linuxDmabuf = new LinuxDmaBufV1ClientBufferIntegration(m_display, kwinApp()->outputBackend()->maxLinuxDmabufVersion());
+     }
+     return m_linuxDmabuf;
+ }

@@ -1,0 +1,104 @@
+From: clawd20130 <clawd20130@gmail.com>
+Date: Sat, 26 Sep 2026 18:45:02 +0900
+Subject: Wayland backend: accept a host with zwp_linux_dmabuf_v1 v3
+
+A v3 host sends formats and modifiers as events and has no feedback objects, so no main
+device: the client wrapper keeps the legacy format list and returns no main device or surface
+feedback, and the backend then needs another way to know the render device (src/backends/android
+names it). A host without dmabuf feedback used to be refused outright.
+
+Split from the Android host graphics change in the round-2 fold (docs/72).
+
+Forwarded: no
+Last-Update: 2026-09-26
+X-Rungic-Status: Pending [generic: nested KWin on hosts with dmabuf v3]
+X-Rungic-Tests: L3:session.ready L3:perf.compositor
+X-Rungic-Docs: docs/40 docs/72
+Origin: vendor
+---
+ src/backends/wayland/wayland_display.cpp |  5 +++--
+ src/wayland-client/linuxdmabuf.cpp       | 17 +++++++++++++----
+ src/wayland-client/linuxdmabuf.h         |  1 +
+ 3 files changed, 17 insertions(+), 6 deletions(-)
+
+diff --git a/src/backends/wayland/wayland_display.cpp b/src/backends/wayland/wayland_display.cpp
+index 5eed420..24e0842 100644
+--- a/src/backends/wayland/wayland_display.cpp
++++ b/src/backends/wayland/wayland_display.cpp
+@@ -406,8 +406,9 @@ void WaylandDisplay::registry_global(void *data, wl_registry *registry, uint32_t
+         display->m_xdgDecorationManager = std::make_unique<KWayland::Client::XdgDecorationManager>();
+         display->m_xdgDecorationManager->setup(static_cast<zxdg_decoration_manager_v1 *>(wl_registry_bind(registry, name, &zxdg_decoration_manager_v1_interface, std::min(version, 1u))));
+     } else if (strcmp(interface, zwp_linux_dmabuf_v1_interface.name) == 0) {
+-        if (version < 4) {
+-            qWarning("zwp_linux_dmabuf_v1 v4 or newer is needed");
++        // v3 has no main device; the backend then has to know the render device itself.
++        if (version < 3) {
++            qWarning("zwp_linux_dmabuf_v1 v3 or newer is needed");
+             return;
+         }
+         display->m_linuxDmabuf = std::make_unique<WaylandClient::LinuxDmabufV1>(registry, name, std::min(version, 4u));
+diff --git a/src/wayland-client/linuxdmabuf.cpp b/src/wayland-client/linuxdmabuf.cpp
+index 2ff1b15..9f545f7 100644
+--- a/src/wayland-client/linuxdmabuf.cpp
++++ b/src/wayland-client/linuxdmabuf.cpp
+@@ -172,7 +172,9 @@ LinuxDmabufV1::LinuxDmabufV1(wl_registry *registry, uint32_t name, uint32_t vers
+     };
+     zwp_linux_dmabuf_v1_add_listener(m_dmabuf, &dmabufListener, this);
+ 
+-    m_defaultFeedback = std::make_unique<LinuxDmabufFeedbackV1>(zwp_linux_dmabuf_v1_get_default_feedback(m_dmabuf));
++    if (version >= 4) {
++        m_defaultFeedback = std::make_unique<LinuxDmabufFeedbackV1>(zwp_linux_dmabuf_v1_get_default_feedback(m_dmabuf));
++    }
+ }
+ 
+ LinuxDmabufV1::~LinuxDmabufV1()
+@@ -187,12 +189,12 @@ zwp_linux_dmabuf_v1 *LinuxDmabufV1::handle() const
+ 
+ QByteArray LinuxDmabufV1::mainDevice() const
+ {
+-    return m_defaultFeedback->devicePath();
++    return m_defaultFeedback ? m_defaultFeedback->devicePath() : QByteArray();
+ }
+ 
+ QHash<uint32_t, QList<uint64_t>> LinuxDmabufV1::formats() const
+ {
+-    return m_defaultFeedback->formats();
++    return m_defaultFeedback ? m_defaultFeedback->formats() : m_legacyFormats;
+ }
+ 
+ void LinuxDmabufV1::format(void *data, struct zwp_linux_dmabuf_v1 *zwp_linux_dmabuf_v1, uint32_t format)
+@@ -202,7 +204,11 @@ void LinuxDmabufV1::format(void *data, struct zwp_linux_dmabuf_v1 *zwp_linux_dma
+ 
+ void LinuxDmabufV1::modifier(void *data, struct zwp_linux_dmabuf_v1 *zwp_linux_dmabuf_v1, uint32_t format, uint32_t modifier_hi, uint32_t modifier_lo)
+ {
+-    // Not sent in v4 and onward.
++    auto self = static_cast<LinuxDmabufV1 *>(data);
++    const uint64_t value = (uint64_t(modifier_hi) << 32) | modifier_lo;
++    if (!self->m_legacyFormats[format].contains(value)) {
++        self->m_legacyFormats[format].append(value);
++    }
+ }
+ 
+ wl_buffer *LinuxDmabufV1::importBuffer(GraphicsBuffer *graphicsBuffer) const
+@@ -229,6 +235,9 @@ wl_buffer *LinuxDmabufV1::importBuffer(GraphicsBuffer *graphicsBuffer) const
+ 
+ std::unique_ptr<LinuxDmabufFeedbackV1> LinuxDmabufV1::getSurfaceFeedback(wl_surface *surface) const
+ {
++    if (!m_defaultFeedback) {
++        return nullptr;
++    }
+     return std::make_unique<LinuxDmabufFeedbackV1>(zwp_linux_dmabuf_v1_get_surface_feedback(m_dmabuf, surface));
+ }
+ }
+diff --git a/src/wayland-client/linuxdmabuf.h b/src/wayland-client/linuxdmabuf.h
+index 41858d8..77573f0 100644
+--- a/src/wayland-client/linuxdmabuf.h
++++ b/src/wayland-client/linuxdmabuf.h
+@@ -93,6 +93,7 @@ private:
+ 
+     zwp_linux_dmabuf_v1 *m_dmabuf;
+     std::unique_ptr<LinuxDmabufFeedbackV1> m_defaultFeedback;
++    QHash<uint32_t, QList<uint64_t>> m_legacyFormats;
+ };
+ 
+ }

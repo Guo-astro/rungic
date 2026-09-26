@@ -1,55 +1,66 @@
 From: clawd20130 <clawd20130@gmail.com>
-Date: Sat, 26 Sep 2026 16:49:54 +0900
-Subject: Android host backend: display settings and idle inhibition in
+Date: Sat, 26 Sep 2026 18:47:49 +0900
+Subject: Android host backend: everything specific to the Android host in
  src/backends/android
 
-kwin_wayland --android-host selects AndroidBackend, a WaylandBackend for KWin nested in
-the Android host compositor (the APK). What only that host needs lives in
-src/backends/android; upstream files carry small hooks:
+kwin_wayland --android-host selects AndroidBackend, the Wayland backend for KWin nested in
+the Android host compositor (the APK). Everything only that host needs lives here; upstream
+files carry the hooks of the previous patches (docs/72):
 
-- main_wayland.cpp: the --android-host option.
-- WaylandBackend::createOutputObject(): protected virtual, so the backend makes its own outputs.
-- WaylandOutput::modesFor(), applyExtraChanges(): protected virtual, plus setRefreshRate().
-- InputRedirection::idleInhibitedChanged(bool): emitted when the first window starts or the
-  last one stops inhibiting idle.
+- Graphics: the KGSL render device (--android-render-device, default /dev/kgsl-3d0) opened
+  without a dmabuf main device; output buffers leased from the host (AndroidGraphicsBuffer-
+  Allocator over the lease socket, --android-allocator), UBWC when the modifiers allow it; SHM
+  buffers the host maps in /dev/shm (its SELinux label); no implicit synchronization (glFinish
+  or the explicit-sync fence); clients get zwp_linux_dmabuf_v1 v3, since they cannot use a
+  KGSL main device; client buffers are not scanned out.
+- Outputs (AndroidOutput): shown pixel for pixel on a single surface, scale chosen by KWin;
+  the phone output offers the Android display's resolutions x refresh rates, is internal and
+  has Android's physical size; user changes ask Android to switch (android-display-client.h).
+- Host outputs (HostOutput, read from the raw wl_output protocol, as KWayland's Output crashed
+  on repeated modes): each cast display the host announces (a Miracast TV, the assistant's
+  screen) becomes output CAST-n, fullscreen on it, without a cursor layer, at scale 1.5 until
+  the user picks another (kept by name).
+- Host text input: text the Android keyboard commits over text-input-v3 goes to KWin's input
+  method (HostTextInput).
+- Idle inhibition: a zwp_idle_inhibitor_v1 on the phone output while any window inhibits idle;
+  the host keeps the screen on (APK 1.46).
+- Host restarts: KWin waits up to 60 s for the host's socket, and when the host goes away it
+  waits for it and exits with 133 so kwin_wayland_wrapper restarts it without counting a crash.
 
-AndroidOutput offers the Android display's resolutions x refresh rates on the phone output,
-which is internal and gets the physical size Android reports; on every output of the host
-KWin owns the scale (the host shows KWin's buffer 1:1). AndroidBackend asks Android to switch
-resolution or refresh policy when the user changes the phone output (not a cast output), and
-forwards idle inhibition as a standard zwp_idle_inhibitor_v1 on the phone output's surface,
-bound on a queue of its own; the host keeps the screen on while it exists (APK 1.46). This
-replaces the D-Bus call to dev.moto.Android.Power and its 5 s re-sends, and the display code
-that was spread over wayland_backend.cpp and wayland_output.cpp behind MOTO_KWIN_FLAT_OUTPUT.
+No environment variable is read; the session passes --android-host (plasma/kwin).
 
 Forwarded: not-needed
 Last-Update: 2026-09-26
-X-Rungic-Status: Inappropriate [Android host specific: runs nested in the Android APK compositor]
-X-Rungic-Tests: L3:idle.inhibit L3:display.mode L3:display.geometry; L1:testIdleInhibition L1:testInputMethod (hook H8, unchanged behaviour)
-X-Rungic-Docs: docs/72 docs/50
+X-Rungic-Status: Inappropriate [Android host specific: KWin nested in the Android APK compositor]
+X-Rungic-Tests: L3:session.ready L3:display.geometry L3:display.mode L3:input.text L3:idle.inhibit L3:cast.agent_screen L3:perf.compositor; L1:full suite equals baseline
+X-Rungic-Docs: docs/40 docs/57 docs/58 docs/65 docs/72
 Origin: vendor
 ---
- src/backends/CMakeLists.txt                        |   1 +
- src/backends/android/CMakeLists.txt                |   6 +
- .../{wayland => android}/android-display-client.h  |   0
- src/backends/android/android_backend.cpp           | 145 +++++++++++++++++++++
- src/backends/android/android_backend.h             |  48 +++++++
- src/backends/android/android_output.cpp            |  88 +++++++++++++
- src/backends/android/android_output.h              |  37 ++++++
- src/backends/wayland/wayland_backend.cpp           |   7 +-
- src/backends/wayland/wayland_backend.h             |   4 +
- src/backends/wayland/wayland_output.cpp            |  57 ++++----
- src/backends/wayland/wayland_output.h              |  12 +-
- src/input.cpp                                      |   4 +
- src/input.h                                        |   2 +
- src/main_wayland.cpp                               |  13 +-
- 14 files changed, 394 insertions(+), 30 deletions(-)
+ src/backends/CMakeLists.txt                   |   1 +
+ src/backends/android/CMakeLists.txt           |   8 +
+ src/backends/android/android-display-client.h |  89 ++++++++
+ src/backends/android/android_allocator.h      | 143 ++++++++++++
+ src/backends/android/android_backend.cpp      | 301 ++++++++++++++++++++++++++
+ src/backends/android/android_backend.h        |  84 +++++++
+ src/backends/android/android_output.cpp       | 116 ++++++++++
+ src/backends/android/android_output.h         |  49 +++++
+ src/backends/android/host_output.cpp          | 106 +++++++++
+ src/backends/android/host_output.h            |  64 ++++++
+ src/backends/android/host_text_input.cpp      |  59 +++++
+ src/backends/android/host_text_input.h        |  37 ++++
+ src/main_wayland.cpp                          |  24 +-
+ 13 files changed, 1079 insertions(+), 2 deletions(-)
  create mode 100644 src/backends/android/CMakeLists.txt
- rename src/backends/{wayland => android}/android-display-client.h (100%)
+ create mode 100644 src/backends/android/android-display-client.h
+ create mode 100644 src/backends/android/android_allocator.h
  create mode 100644 src/backends/android/android_backend.cpp
  create mode 100644 src/backends/android/android_backend.h
  create mode 100644 src/backends/android/android_output.cpp
  create mode 100644 src/backends/android/android_output.h
+ create mode 100644 src/backends/android/host_output.cpp
+ create mode 100644 src/backends/android/host_output.h
+ create mode 100644 src/backends/android/host_text_input.cpp
+ create mode 100644 src/backends/android/host_text_input.h
 
 diff --git a/src/backends/CMakeLists.txt b/src/backends/CMakeLists.txt
 index e94a1c6..cd60757 100644
@@ -62,26 +73,268 @@ index e94a1c6..cd60757 100644
  add_subdirectory(libinput)
 diff --git a/src/backends/android/CMakeLists.txt b/src/backends/android/CMakeLists.txt
 new file mode 100644
-index 0000000..fa88337
+index 0000000..71bde69
 --- /dev/null
 +++ b/src/backends/android/CMakeLists.txt
-@@ -0,0 +1,6 @@
+@@ -0,0 +1,8 @@
 +# Rungic: KWin nested in the Android host compositor (docs/72). Everything specific to that host
 +# lives here; the Wayland backend only offers virtual hooks.
 +target_sources(kwin PRIVATE
 +    android_backend.cpp
 +    android_output.cpp
++    host_output.cpp
++    host_text_input.cpp
 +)
-diff --git a/src/backends/wayland/android-display-client.h b/src/backends/android/android-display-client.h
-similarity index 100%
-rename from src/backends/wayland/android-display-client.h
-rename to src/backends/android/android-display-client.h
+diff --git a/src/backends/android/android-display-client.h b/src/backends/android/android-display-client.h
+new file mode 100644
+index 0000000..89a89b8
+--- /dev/null
++++ b/src/backends/android/android-display-client.h
+@@ -0,0 +1,89 @@
++// SPDX-License-Identifier: GPL-2.0-or-later
++#pragma once
++
++#include <QElapsedTimer>
++#include <QFile>
++#include <QJsonDocument>
++#include <QJsonObject>
++#include <QJsonArray>
++#include <cerrno>
++#include <cstring>
++#include <poll.h>
++#include <sys/socket.h>
++#include <sys/un.h>
++#include <unistd.h>
++
++namespace MotoDisplay
++{
++inline QJsonObject info()
++{
++    QFile file(QStringLiteral("/mnt/android-wayland/android-display.json"));
++    if (!file.open(QIODevice::ReadOnly)) {
++        return {};
++    }
++    return QJsonDocument::fromJson(file.readAll()).object();
++}
++
++// Only explicit display changes use IPC; rendering never waits on this socket.
++// One total deadline bounds both sending and receiving, including partial I/O.
++inline QJsonObject request(QJsonObject value)
++{
++    const auto failure = [](const QString &message) {
++        return QJsonObject{{QStringLiteral("error"), message}};
++    };
++    const int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
++    if (fd < 0) {
++        return failure(QString::fromLocal8Bit(strerror(errno)));
++    }
++    struct Close { int fd; ~Close() { close(fd); } } closer{fd};
++    QElapsedTimer timer;
++    timer.start();
++    const auto wait = [&](short events) {
++        pollfd p{fd, events, 0};
++        int result;
++        do {
++            const int remaining = 500 - int(timer.elapsed());
++            if (remaining <= 0) return false;
++            result = poll(&p, 1, remaining);
++        } while (result < 0 && errno == EINTR);
++        return result > 0 && (p.revents & events);
++    };
++    sockaddr_un address{};
++    address.sun_family = AF_UNIX;
++    strcpy(address.sun_path, "/mnt/android-wayland/platform.sock");
++    if (connect(fd, reinterpret_cast<sockaddr *>(&address), sizeof(address)) < 0) {
++        if (errno != EINPROGRESS || !wait(POLLOUT)) {
++            return failure(QStringLiteral("Android display connection unavailable"));
++        }
++        int error = 0;
++        socklen_t size = sizeof(error);
++        if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &error, &size) < 0 || error) {
++            return failure(QStringLiteral("Android display connection failed"));
++        }
++    }
++    value.insert(QStringLiteral("op"), QStringLiteral("display-set"));
++    const QByteArray bytes = QJsonDocument(value).toJson(QJsonDocument::Compact) + '\n';
++    qsizetype sent = 0;
++    while (sent < bytes.size()) {
++        if (!wait(POLLOUT)) return failure(QStringLiteral("Android display request timed out"));
++        const auto n = send(fd, bytes.constData() + sent, bytes.size() - sent, MSG_NOSIGNAL);
++        if (n < 0 && (errno == EAGAIN || errno == EINTR)) continue;
++        if (n <= 0) return failure(QStringLiteral("Android display request failed"));
++        sent += n;
++    }
++    QByteArray reply;
++    while (!reply.contains('\n') && reply.size() < 16384) {
++        if (!wait(POLLIN)) return failure(QStringLiteral("Android display reply timed out"));
++        char buffer[4096];
++        const auto n = recv(fd, buffer, sizeof(buffer), 0);
++        if (n < 0 && (errno == EAGAIN || errno == EINTR)) continue;
++        if (n <= 0) break;
++        reply.append(buffer, n);
++    }
++    const QJsonObject result = QJsonDocument::fromJson(reply).object();
++    if (result.isEmpty() || (!result.contains(QStringLiteral("error")) && !result.value(QStringLiteral("ok")).toBool())) {
++        return failure(QStringLiteral("Invalid Android display reply"));
++    }
++    return result;
++}
++}
+diff --git a/src/backends/android/android_allocator.h b/src/backends/android/android_allocator.h
+new file mode 100644
+index 0000000..88fe7ef
+--- /dev/null
++++ b/src/backends/android/android_allocator.h
+@@ -0,0 +1,143 @@
++// SPDX-License-Identifier: GPL-2.0-or-later
++// Android AHardwareBuffer lease protocol shared with the Android native APK backend.
++#pragma once
++
++#include "core/graphicsbuffer.h"
++#include "core/graphicsbufferallocator.h"
++#include <drm_fourcc.h>
++#include <sys/socket.h>
++#include <sys/time.h>
++#include <sys/un.h>
++#include <unistd.h>
++#include <cstring>
++
++namespace KWin
++{
++class AndroidGraphicsBuffer final : public GraphicsBuffer
++{
++public:
++    AndroidGraphicsBuffer(DmaBufAttributes &&attributes, FileDescriptor &&lease)
++        : m_attributes(std::move(attributes)), m_lease(std::move(lease)) {}
++    QSize size() const override { return {m_attributes.width, m_attributes.height}; }
++    bool hasAlphaChannel() const override { return alphaChannelFromDrmFormat(m_attributes.format); }
++    const DmaBufAttributes *dmabufAttributes() const override { return &m_attributes; }
++
++private:
++    DmaBufAttributes m_attributes;
++    FileDescriptor m_lease; // Keep the Android native handle alive until release.
++};
++
++static GraphicsBuffer *allocateAndroidBuffer(const QByteArray &path, const GraphicsBufferOptions &options)
++{
++    const int width = options.size.width(), height = options.size.height();
++    if (options.software || width <= 0 || height <= 0 || width > 4096 || height > 4096 || int64_t(width) * height > 4194304) {
++        return nullptr;
++    }
++    // An Adreno UBWC (QCOM_COMPRESSED) buffer when the modifiers allow it (the host lists it and Mesa
++    // imports it, FD_KGSL_DMABUF_UBWC=1). The host answers with the modifier it actually allocated,
++    // which may be LINEAR.
++    const bool wantUbwc = options.modifiers.contains(DRM_FORMAT_MOD_QCOM_COMPRESSED);
++    if (!wantUbwc && !options.modifiers.isEmpty() && !options.modifiers.contains(DRM_FORMAT_MOD_LINEAR) && !options.modifiers.contains(DRM_FORMAT_MOD_INVALID)) {
++        return nullptr;
++    }
++    switch (options.format) {
++    case DRM_FORMAT_ARGB8888:
++    case DRM_FORMAT_XRGB8888:
++    case DRM_FORMAT_ABGR8888:
++    case DRM_FORMAT_XBGR8888:
++        break;
++    default:
++        return nullptr;
++    }
++    sockaddr_un address{};
++    address.sun_family = AF_UNIX;
++    if (path.isEmpty() || path.size() >= sizeof(address.sun_path)) {
++        return nullptr;
++    }
++    std::memcpy(address.sun_path, path.constData(), path.size());
++    FileDescriptor lease(socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0));
++    if (!lease.isValid()) {
++        return nullptr;
++    }
++    timeval timeout{.tv_sec = 3, .tv_usec = 0};
++    setsockopt(lease.get(), SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
++    setsockopt(lease.get(), SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
++    if (connect(lease.get(), reinterpret_cast<sockaddr *>(&address), sizeof(address)) < 0) {
++        return nullptr;
++    }
++    // Both endpoints are little-endian ARM64. v1 (16-byte request, 12-byte reply) is
++    // implicitly LINEAR; v2 appends the wanted modifier and the reply the allocated one.
++    const uint32_t magic = wantUbwc ? 0x4d475056 : 0x4d475055;
++    const uint64_t wanted = DRM_FORMAT_MOD_QCOM_COMPRESSED;
++    uint32_t request[]{magic, uint32_t(width), uint32_t(height), options.format, uint32_t(wanted), uint32_t(wanted >> 32)};
++    const ssize_t requestSize = wantUbwc ? sizeof(request) : 4 * sizeof(uint32_t);
++    if (send(lease.get(), request, requestSize, MSG_NOSIGNAL) != requestSize) {
++        return nullptr;
++    }
++    uint32_t reply[5]{};
++    const ssize_t replySize = wantUbwc ? sizeof(reply) : 3 * sizeof(uint32_t);
++    iovec iov{.iov_base = reply, .iov_len = size_t(replySize)};
++    alignas(cmsghdr) char control[CMSG_SPACE(8 * sizeof(int))]{};
++    msghdr message{};
++    message.msg_iov = &iov;
++    message.msg_iovlen = 1;
++    message.msg_control = control;
++    message.msg_controllen = sizeof(control);
++    const auto length = recvmsg(lease.get(), &message, MSG_WAITALL | MSG_CMSG_CLOEXEC);
++    std::vector<FileDescriptor> received;
++    for (cmsghdr *c = CMSG_FIRSTHDR(&message); c; c = CMSG_NXTHDR(&message, c)) {
++        if (c->cmsg_level == SOL_SOCKET && c->cmsg_type == SCM_RIGHTS && c->cmsg_len >= CMSG_LEN(0)) {
++            const size_t count = (c->cmsg_len - CMSG_LEN(0)) / sizeof(int);
++            for (size_t i = 0; i < count; ++i) {
++                int fd;
++                std::memcpy(&fd, CMSG_DATA(c) + i * sizeof(int), sizeof(int));
++                received.emplace_back(fd);
++            }
++        }
++    }
++    if (length != replySize || (message.msg_flags & (MSG_CTRUNC | MSG_TRUNC)) || received.size() != 1 ||
++        reply[0] != magic || reply[2] != options.format || reply[1] < uint32_t(width) * 4 || reply[1] > 65536) {
++        return nullptr;
++    }
++    const uint64_t modifier = wantUbwc ? (uint64_t(reply[4]) << 32 | reply[3]) : DRM_FORMAT_MOD_LINEAR;
++    if (modifier != DRM_FORMAT_MOD_LINEAR && modifier != DRM_FORMAT_MOD_QCOM_COMPRESSED) {
++        return nullptr;
++    }
++    if (!options.modifiers.isEmpty() && !options.modifiers.contains(modifier)
++        && !(modifier == DRM_FORMAT_MOD_LINEAR && options.modifiers.contains(DRM_FORMAT_MOD_INVALID))) {
++        return nullptr;
++    }
++    DmaBufAttributes attributes;
++    attributes.planeCount = 1;
++    attributes.width = width;
++    attributes.height = height;
++    attributes.format = options.format;
++    attributes.modifier = modifier;
++    attributes.fd[0] = std::move(received.front());
++    attributes.pitch[0] = reply[1];
++    return new AndroidGraphicsBuffer(std::move(attributes), std::move(lease));
++}
++
++/// Allocates from the host's lease socket; software buffers stay with the device's own allocator.
++class AndroidGraphicsBufferAllocator : public GraphicsBufferAllocator
++{
++public:
++    AndroidGraphicsBufferAllocator(const QByteArray &path, std::unique_ptr<GraphicsBufferAllocator> &&fallback)
++        : m_path(path)
++        , m_fallback(std::move(fallback))
++    {
++    }
++
++    GraphicsBuffer *allocate(const GraphicsBufferOptions &options) override
++    {
++        if (options.software) {
++            return m_fallback->allocate(options);
++        }
++        return allocateAndroidBuffer(m_path, options);
++    }
++
++private:
++    const QByteArray m_path;
++    const std::unique_ptr<GraphicsBufferAllocator> m_fallback;
++};
++}
 diff --git a/src/backends/android/android_backend.cpp b/src/backends/android/android_backend.cpp
 new file mode 100644
-index 0000000..e8f09b2
+index 0000000..82d1243
 --- /dev/null
 +++ b/src/backends/android/android_backend.cpp
-@@ -0,0 +1,145 @@
+@@ -0,0 +1,301 @@
 +/*
 +    SPDX-FileCopyrightText: 2026 Rungic
 +
@@ -89,7 +342,13 @@ index 0000000..e8f09b2
 +*/
 +#include "android_backend.h"
 +#include "android-display-client.h"
++#include "android_allocator.h"
 +#include "android_output.h"
++#include "host_output.h"
++#include "host_text_input.h"
++#include "core/drmdevice.h"
++#include "core/gbmgraphicsbufferallocator.h"
++#include "core/shmgraphicsbufferallocator.h"
 +#include "backends/wayland/wayland_display.h"
 +#include "backends/wayland/wayland_logging.h"
 +#include "core/outputconfiguration.h"
@@ -97,11 +356,15 @@ index 0000000..e8f09b2
 +#include "main.h"
 +
 +#include "wayland-idle-inhibit-unstable-v1-client-protocol.h"
++#include "wayland-text-input-unstable-v3-client-protocol.h"
++
++#include <KWayland/Client/seat.h>
 +
 +#include <KWayland/Client/surface.h>
 +
 +#include <cmath>
 +#include <cstring>
++#include <unistd.h>
 +#include <wayland-client.h>
 +
 +namespace KWin
@@ -109,8 +372,9 @@ index 0000000..e8f09b2
 +namespace Android
 +{
 +
-+AndroidBackend::AndroidBackend(const Wayland::WaylandBackendOptions &options, QObject *parent)
++AndroidBackend::AndroidBackend(const Wayland::WaylandBackendOptions &options, const AndroidBackendOptions &android, QObject *parent)
 +    : WaylandBackend(options, parent)
++    , m_android(android)
 +{
 +    // Input exists once the workspace does.
 +    connect(kwinApp(), &Application::workspaceCreated, this, [this]() {
@@ -121,6 +385,13 @@ index 0000000..e8f09b2
 +
 +AndroidBackend::~AndroidBackend()
 +{
++    // Everything bound on the host goes before the connection does (~WaylandBackend).
++    m_textInput.reset();
++    if (m_textInputManager) {
++        zwp_text_input_manager_v3_destroy(m_textInputManager);
++    }
++    qDeleteAll(m_hostOutputs);
++    m_hostOutputs.clear();
 +    if (m_idleInhibitor) {
 +        zwp_idle_inhibitor_v1_destroy(m_idleInhibitor);
 +    }
@@ -138,7 +409,76 @@ index 0000000..e8f09b2
 +        return false;
 +    }
 +    bindHostGlobals();
++    if (m_textInputManager) {
++        m_textInput = std::make_unique<HostTextInput>(m_textInputManager, *display()->seat());
++    }
++    // Cast displays (Miracast TV, the assistant's screen) announced so far, now that the phone's
++    // output exists; later ones as they come.
++    m_initialized = true;
++    for (HostOutput *hostOutput : std::as_const(m_hostOutputs)) {
++        handleHostOutput(hostOutput);
++    }
 +    return true;
++}
++
++void AndroidBackend::handleGlobal(wl_registry *registry, uint32_t name, const QByteArray &interface, uint32_t version)
++{
++    if (interface == wl_output_interface.name) {
++        // v3 at most: release on destruction exists from v3; name/description (v4) are not needed.
++        const uint32_t bound = std::min(version, 3u);
++        auto hostOutput = new HostOutput(static_cast<wl_output *>(wl_registry_bind(registry, name, &wl_output_interface, bound)), bound, this);
++        m_hostOutputs.insert(name, hostOutput);
++        connect(hostOutput, &HostOutput::changed, this, [this, hostOutput]() {
++            if (m_initialized) {
++                handleHostOutput(hostOutput);
++            }
++        });
++    } else if (interface == zwp_text_input_manager_v3_interface.name) {
++        m_textInputManager = static_cast<zwp_text_input_manager_v3 *>(wl_registry_bind(registry, name, &zwp_text_input_manager_v3_interface, 1));
++    }
++}
++
++void AndroidBackend::handleGlobalRemoved(uint32_t name)
++{
++    if (HostOutput *hostOutput = m_hostOutputs.take(name)) {
++        handleHostOutputRemoved(hostOutput);
++        hostOutput->deleteLater();
++    }
++}
++
++static bool isCastHostOutput(HostOutput *hostOutput)
++{
++    // The host names its cast outputs so (native/plasma cast.rs).
++    return hostOutput->manufacturer() == QLatin1String("Moto") && hostOutput->model() == QLatin1String("Cast");
++}
++
++void AndroidBackend::handleHostOutput(HostOutput *hostOutput)
++{
++    if (!isCastHostOutput(hostOutput) || m_castOutputs.contains(hostOutput) || hostOutput->pixelSize().isEmpty()) {
++        return;
++    }
++    // The first scale of a cast output; KWin keeps the user's by the output's name.
++    const qreal scale = 1.5;
++    // Reuse the lowest free number: KWin keeps an output's settings (scale) by its name, and the
++    // same TV reconnects as a new host output every time.
++    int number = 1;
++    while (std::ranges::any_of(m_castOutputs, [number](Wayland::WaylandOutput *cast) {
++        return cast->name() == QStringLiteral("CAST-%1").arg(number);
++    })) {
++        number++;
++    }
++    Wayland::WaylandOutput *output = createOutput(QStringLiteral("CAST-%1").arg(number), hostOutput->pixelSize(), scale, true, hostOutput->output());
++    qCInfo(KWIN_WAYLAND_BACKEND) << "Cast output added" << output->name() << hostOutput->pixelSize() << "scale" << scale;
++    m_castOutputs.insert(hostOutput, output);
++    addOutput(output);
++}
++
++void AndroidBackend::handleHostOutputRemoved(HostOutput *hostOutput)
++{
++    if (Wayland::WaylandOutput *output = m_castOutputs.take(hostOutput)) {
++        qCInfo(KWIN_WAYLAND_BACKEND) << "Cast output removed" << output->name();
++        removeOutput(output);
++    }
 +}
 +
 +static void registryGlobal(void *data, wl_registry *registry, uint32_t name, const char *interface, uint32_t version)
@@ -194,9 +534,78 @@ index 0000000..e8f09b2
 +    qCDebug(KWIN_WAYLAND_BACKEND) << "idle inhibition on the Android host:" << (m_idleInhibitor != nullptr);
 +}
 +
-+Wayland::WaylandOutput *AndroidBackend::createOutputObject(const QString &name, Wayland::HostOutput *hostOutput)
++Wayland::WaylandOutput *AndroidBackend::createOutputObject(const QString &name, wl_output *fullscreenOn)
 +{
-+    return new AndroidOutput(name, this, hostOutput);
++    HostOutput *hostOutput = nullptr;
++    for (HostOutput *candidate : std::as_const(m_hostOutputs)) {
++        if (candidate->output() == fullscreenOn) {
++            hostOutput = candidate;
++        }
++    }
++    return new AndroidOutput(name, this, fullscreenOn ? hostOutput : nullptr);
++}
++
++void AndroidBackend::configureDisplay(Wayland::WaylandDisplay *display)
++{
++    // The host goes away whenever its app is updated or restarted. Waiting for its socket and
++    // asking kwin_wayland_wrapper for a restart (exit code 133) replaces an abort per host
++    // restart: no core dump, and the wrapper's crash counter (it gives up after ten) is not
++    // consumed. Clients stay on the wrapper's socket and reconnect.
++    connect(display, &Wayland::WaylandDisplay::globalAnnounced, this, &AndroidBackend::handleGlobal);
++    connect(display, &Wayland::WaylandDisplay::globalRemoved, this, &AndroidBackend::handleGlobalRemoved);
++    display->setConnectTimeout(std::chrono::seconds(60));
++    const QByteArray socket = options().socketName.toUtf8();
++    display->setConnectionLostHandler([socket]() {
++        qCWarning(KWIN_WAYLAND_BACKEND) << "Host connection lost; waiting for the Android host to restart";
++        for (int waited = 0; waited < 120000; waited += 250) {
++            if (wl_display *probe = wl_display_connect(socket.constData())) {
++                wl_display_disconnect(probe);
++                break;
++            }
++            usleep(250 * 1000);
++        }
++        ::_exit(133); // kwin_wayland_wrapper: restart without counting a crash
++    });
++}
++
++QString AndroidBackend::renderDevicePath() const
++{
++    return m_android.renderDevice;
++}
++
++void AndroidBackend::setUpRenderDevice(DrmDevice *device)
++{
++    // Output buffers come from the host (AHardwareBuffer leases), which presents them itself.
++    device->setAllocator(std::make_unique<AndroidGraphicsBufferAllocator>(
++        m_android.allocator, std::make_unique<GbmGraphicsBufferAllocator>(device->gbmDevice())));
++}
++
++int AndroidBackend::maxLinuxDmabufVersion() const
++{
++    // v4 and later name the render node as main device; clients' Mesa cannot use a KGSL node.
++    return 3;
++}
++
++bool AndroidBackend::implicitSync() const
++{
++    return false; // AHardwareBuffers: the host waits for nothing unless given a fence
++}
++
++bool AndroidBackend::hostImportsClientBuffers() const
++{
++    return false; // the host presents only buffers it leased
++}
++
++bool AndroidBackend::hostFingerScrollIsNatural() const
++{
++    return true; // the host scrolls with fingers as a touch screen does
++}
++
++std::unique_ptr<GraphicsBufferAllocator> AndroidBackend::createShmAllocator() const
++{
++    // Software buffers the host maps need the APK's SELinux label, which the container's private
++    // /dev/shm mount supplies; a memfd's would not do.
++    return std::make_unique<ShmGraphicsBufferAllocator>(QByteArrayLiteral("/dev/shm"));
 +}
 +
 +OutputConfigurationError AndroidBackend::applyOutputChanges(const OutputConfiguration &config)
@@ -205,7 +614,7 @@ index 0000000..e8f09b2
 +        for (Wayland::WaylandOutput *output : waylandOutputs()) {
 +            const auto props = config.constChangeSet(output);
 +            // A cast output (TV) has the host's size: nothing to ask Android for.
-+            if (!props || output->isCast()) continue;
++            if (!props || !static_cast<AndroidOutput *>(output)->isPhone()) continue;
 +            if (props->scale && (!std::isfinite(*props->scale) || *props->scale < 0.5 || *props->scale > 3.0)) {
 +                return OutputConfigurationError::Unknown;
 +            }
@@ -229,10 +638,10 @@ index 0000000..e8f09b2
 +} // namespace KWin
 diff --git a/src/backends/android/android_backend.h b/src/backends/android/android_backend.h
 new file mode 100644
-index 0000000..16f95c1
+index 0000000..2acf241
 --- /dev/null
 +++ b/src/backends/android/android_backend.h
-@@ -0,0 +1,48 @@
+@@ -0,0 +1,84 @@
 +/*
 +    SPDX-FileCopyrightText: 2026 Rungic
 +
@@ -243,6 +652,9 @@ index 0000000..16f95c1
 +#include "backends/wayland/wayland_backend.h"
 +
 +struct wl_event_queue;
++struct wl_registry;
++struct wl_output;
++struct zwp_text_input_manager_v3;
 +struct zwp_idle_inhibit_manager_v1;
 +struct zwp_idle_inhibitor_v1;
 +
@@ -250,6 +662,18 @@ index 0000000..16f95c1
 +{
 +namespace Android
 +{
++
++class AndroidOutput;
++class HostOutput;
++class HostTextInput;
++
++struct AndroidBackendOptions
++{
++    /// The GPU node (KGSL is not a DRM device, so the host cannot name it as dmabuf main device).
++    QString renderDevice = QStringLiteral("/dev/kgsl-3d0");
++    /// The host's buffer lease socket (docs/57).
++    QByteArray allocator = QByteArrayLiteral("/mnt/android-wayland/moto-gpu-alloc");
++};
 +
 +/**
 + * KWin nested in the Android host compositor (`kwin_wayland --android-host`, docs/72): the
@@ -261,38 +685,60 @@ index 0000000..16f95c1
 +{
 +    Q_OBJECT
 +public:
-+    explicit AndroidBackend(const Wayland::WaylandBackendOptions &options, QObject *parent = nullptr);
++    explicit AndroidBackend(const Wayland::WaylandBackendOptions &options, const AndroidBackendOptions &android = {},
++                            QObject *parent = nullptr);
 +    ~AndroidBackend() override;
 +
 +    bool initialize() override;
 +    OutputConfigurationError applyOutputChanges(const OutputConfiguration &config) override;
++    int maxLinuxDmabufVersion() const override;
++
++    bool implicitSync() const override;
++    bool hostImportsClientBuffers() const override;
++    bool hostFingerScrollIsNatural() const override;
++    std::unique_ptr<GraphicsBufferAllocator> createShmAllocator() const override;
 +
 +protected:
-+    Wayland::WaylandOutput *createOutputObject(const QString &name, Wayland::HostOutput *hostOutput) override;
++    Wayland::WaylandOutput *createOutputObject(const QString &name, wl_output *fullscreenOn) override;
++    void configureDisplay(Wayland::WaylandDisplay *display) override;
++    QString renderDevicePath() const override;
++    void setUpRenderDevice(DrmDevice *device) override;
 +
 +private:
 +    void bindHostGlobals();
++    void handleGlobal(wl_registry *registry, uint32_t name, const QByteArray &interface, uint32_t version);
++    void handleGlobalRemoved(uint32_t name);
++    void handleHostOutput(HostOutput *hostOutput);
++    void handleHostOutputRemoved(HostOutput *hostOutput);
 +    void setIdleInhibited(bool inhibited);
 +
++    const AndroidBackendOptions m_android;
 +    wl_event_queue *m_queue = nullptr;
 +    zwp_idle_inhibit_manager_v1 *m_idleInhibitManager = nullptr;
 +    zwp_idle_inhibitor_v1 *m_idleInhibitor = nullptr;
++    /// wl_output globals of the host by name: the phone's and one per cast display.
++    QHash<uint32_t, HostOutput *> m_hostOutputs;
++    QHash<HostOutput *, Wayland::WaylandOutput *> m_castOutputs;
++    bool m_initialized = false;
++    zwp_text_input_manager_v3 *m_textInputManager = nullptr;
++    std::unique_ptr<HostTextInput> m_textInput;
 +};
 +
 +} // namespace Android
 +} // namespace KWin
 diff --git a/src/backends/android/android_output.cpp b/src/backends/android/android_output.cpp
 new file mode 100644
-index 0000000..f601466
+index 0000000..fa5a35b
 --- /dev/null
 +++ b/src/backends/android/android_output.cpp
-@@ -0,0 +1,88 @@
+@@ -0,0 +1,116 @@
 +/*
 +    SPDX-FileCopyrightText: 2026 Rungic
 +
 +    SPDX-License-Identifier: GPL-2.0-or-later
 +*/
 +#include "android_output.h"
++#include "host_output.h"
 +#include "android-display-client.h"
 +#include "core/outputconfiguration.h"
 +#include "core/renderloop.h"
@@ -304,20 +750,47 @@ index 0000000..f601466
 +namespace Android
 +{
 +
-+AndroidOutput::AndroidOutput(const QString &name, Wayland::WaylandBackend *backend, Wayland::HostOutput *hostOutput)
-+    : WaylandOutput(name, backend, hostOutput)
++AndroidOutput::AndroidOutput(const QString &name, Wayland::WaylandBackend *backend, HostOutput *hostOutput)
++    : WaylandOutput(name, backend, hostOutput ? hostOutput->output() : nullptr)
 +    , m_phone(hostOutput == nullptr)
 +{
++    Information information = m_information;
 +    if (m_phone) {
 +        const QJsonObject info = MotoDisplay::info();
-+        Information information = m_information;
 +        information.physicalSize = QSize(info.value("physicalWidthMM").toInt(-1), info.value("physicalHeightMM").toInt(-1));
 +        information.internal = true;
-+        setInformation(information);
++    } else {
++        information.manufacturer = hostOutput->manufacturer();
++        information.model = hostOutput->model();
++        information.physicalSize = hostOutput->physicalSize();
++        if (hostOutput->refreshRate() > 0) {
++            setRefreshRate(hostOutput->refreshRate()); // before init(), which makes the first mode
++        }
 +    }
++    setInformation(information);
 +}
 +
 +bool AndroidOutput::isPhone() const
++{
++    return m_phone;
++}
++
++qreal AndroidOutput::hostScale() const
++{
++    return 1.0;
++}
++
++bool AndroidOutput::ownsScale() const
++{
++    return true;
++}
++
++bool AndroidOutput::singleSurface() const
++{
++    return true;
++}
++
++bool AndroidOutput::hasCursorLayer() const
 +{
 +    return m_phone;
 +}
@@ -377,10 +850,10 @@ index 0000000..f601466
 +} // namespace KWin
 diff --git a/src/backends/android/android_output.h b/src/backends/android/android_output.h
 new file mode 100644
-index 0000000..aa2b206
+index 0000000..283804a
 --- /dev/null
 +++ b/src/backends/android/android_output.h
-@@ -0,0 +1,37 @@
+@@ -0,0 +1,49 @@
 +/*
 +    SPDX-FileCopyrightText: 2026 Rungic
 +
@@ -395,18 +868,30 @@ index 0000000..aa2b206
 +namespace Android
 +{
 +
++class HostOutput;
++
 +/**
-+ * An output of KWin nested in the Android host (docs/72). The phone output (no host output
-+ * behind it) offers the Android display's resolutions and refresh rates and is internal; on
-+ * every output of the host KWin owns the scale, since the host shows KWin's buffer 1:1.
++ * An output of KWin nested in the Android host (docs/72). The phone output offers the Android
++ * display's resolutions and refresh rates and is internal; a cast output (a Miracast TV or the
++ * assistant's screen, docs/58, docs/65) is shown fullscreen on its host output and has no cursor
++ * layer, since the host draws no cursor there. On every output of the host KWin owns the scale,
++ * since the host shows KWin's buffer 1:1.
 + */
 +class AndroidOutput : public Wayland::WaylandOutput
 +{
 +    Q_OBJECT
 +public:
-+    AndroidOutput(const QString &name, Wayland::WaylandBackend *backend, Wayland::HostOutput *hostOutput);
++    /// hostOutput: the host output of a cast output; none for the phone.
++    AndroidOutput(const QString &name, Wayland::WaylandBackend *backend, HostOutput *hostOutput);
 +
 +    bool isPhone() const;
++
++    /// The host shows KWin's buffer pixel for pixel; KWin decides the scale; the primary layer
++    /// draws into the output surface, which the host presents (SurfaceControl) without copies.
++    qreal hostScale() const override;
++    bool ownsScale() const override;
++    bool singleSurface() const override;
++    bool hasCursorLayer() const override;
 +
 +protected:
 +    QList<std::shared_ptr<OutputMode>> modesFor(const QSize &size, uint32_t rate) const override;
@@ -418,223 +903,298 @@ index 0000000..aa2b206
 +
 +} // namespace Android
 +} // namespace KWin
-diff --git a/src/backends/wayland/wayland_backend.cpp b/src/backends/wayland/wayland_backend.cpp
-index ea50aa1..239d8ec 100644
---- a/src/backends/wayland/wayland_backend.cpp
-+++ b/src/backends/wayland/wayland_backend.cpp
-@@ -580,7 +580,7 @@ void WaylandBackend::createOutputs()
- 
- WaylandOutput *WaylandBackend::createOutput(const QString &name, const QSize &size, qreal scale, bool fullscreen, HostOutput *hostOutput)
- {
--    WaylandOutput *waylandOutput = new WaylandOutput(name, this, hostOutput);
-+    WaylandOutput *waylandOutput = createOutputObject(name, hostOutput);
-     waylandOutput->init(size, scale, fullscreen);
- 
-     // Wait until the output window is configured by the host compositor.
-@@ -591,6 +591,11 @@ WaylandOutput *WaylandBackend::createOutput(const QString &name, const QSize &si
-     return waylandOutput;
- }
- 
-+WaylandOutput *WaylandBackend::createOutputObject(const QString &name, HostOutput *hostOutput)
+diff --git a/src/backends/android/host_output.cpp b/src/backends/android/host_output.cpp
+new file mode 100644
+index 0000000..beb3443
+--- /dev/null
++++ b/src/backends/android/host_output.cpp
+@@ -0,0 +1,106 @@
++/*
++    SPDX-FileCopyrightText: 2026 Rungic
++
++    SPDX-License-Identifier: GPL-2.0-or-later
++*/
++#include "host_output.h"
++
++#include <wayland-client-protocol.h>
++
++namespace KWin
 +{
-+    return new WaylandOutput(name, this, hostOutput);
++namespace Android
++{
++
++HostOutput::HostOutput(wl_output *output, uint32_t version, QObject *parent)
++    : QObject(parent)
++    , m_output(output)
++    , m_version(version)
++{
++    static const wl_output_listener listener{
++        .geometry = &HostOutput::handleGeometry,
++        .mode = &HostOutput::handleMode,
++        .done = &HostOutput::handleDone,
++        .scale = &HostOutput::handleScale,
++        .name = &HostOutput::handleName,
++        .description = &HostOutput::handleDescription,
++    };
++    wl_output_add_listener(m_output, &listener, this);
 +}
 +
- static bool isCastHostOutput(HostOutput *hostOutput)
- {
-     return hostOutput->manufacturer() == QLatin1String("Moto") && hostOutput->model() == QLatin1String("Cast");
-diff --git a/src/backends/wayland/wayland_backend.h b/src/backends/wayland/wayland_backend.h
-index 38b1be1..2cc08c3 100644
---- a/src/backends/wayland/wayland_backend.h
-+++ b/src/backends/wayland/wayland_backend.h
-@@ -263,6 +263,10 @@ public:
- Q_SIGNALS:
-     void pointerLockChanged(bool locked);
- 
-+protected:
-+    /// A new output object (src/backends/android derives its own).
-+    virtual WaylandOutput *createOutputObject(const QString &name, HostOutput *hostOutput);
-+
- private:
-     void createOutputs();
-     void destroyOutputs();
-diff --git a/src/backends/wayland/wayland_output.cpp b/src/backends/wayland/wayland_output.cpp
-index 75ea371..b237bc3 100644
---- a/src/backends/wayland/wayland_output.cpp
-+++ b/src/backends/wayland/wayland_output.cpp
-@@ -355,6 +355,25 @@ bool WaylandOutput::present(const QList<OutputLayer *> &layersToUpdate, const st
-     return true;
- }
- 
-+QList<std::shared_ptr<OutputMode>> WaylandOutput::modesFor(const QSize &size, uint32_t rate) const
++HostOutput::~HostOutput()
 +{
-+    return {std::make_shared<OutputMode>(size, rate)};
++    if (m_version >= WL_OUTPUT_RELEASE_SINCE_VERSION) {
++        wl_output_release(m_output);
++    } else {
++        wl_output_destroy(m_output);
++    }
 +}
 +
-+void WaylandOutput::applyExtraChanges([[maybe_unused]] State &next, [[maybe_unused]] const OutputChangeSet &props,
-+                                      [[maybe_unused]] OutputConfiguration::Source source)
++wl_output *HostOutput::output() const
 +{
-+    // intentionally ignored, as it would get overwritten
-+    // with the fractional scale protocol anyways
-+    // next.scale = props->scale.value_or(m_state.scale);
++    return m_output;
 +}
 +
-+void WaylandOutput::setRefreshRate(uint32_t rate)
++QString HostOutput::manufacturer() const
 +{
-+    m_refreshRate = rate;
-+    m_renderLoop->setRefreshRate(rate);
++    return m_manufacturer;
 +}
 +
- void WaylandOutput::frameDiscarded()
- {
-     m_frames.pop_front();
-@@ -366,8 +385,10 @@ void WaylandOutput::framePresented(std::chrono::nanoseconds timestamp, uint32_t
-         m_refreshRate = refreshRate;
-         const auto mode = std::make_shared<OutputMode>(pixelSize(), m_refreshRate);
-         State next = m_state;
--        next.modes = {mode};
--        next.currentMode = mode;
-+        next.modes = modesFor(pixelSize(), m_refreshRate);
-+        next.currentMode = *std::ranges::find_if(next.modes, [&](const auto &candidate) {
-+            return candidate->size() == pixelSize() && candidate->refreshRate() == m_refreshRate;
-+        });
-         setState(next);
-         m_renderLoop->setRefreshRate(m_refreshRate);
-     }
-@@ -394,20 +415,7 @@ void WaylandOutput::applyChanges(const OutputConfiguration &config)
-     next.enabled = props->enabled.value_or(m_state.enabled);
-     next.transform = props->transform.value_or(m_state.transform);
-     next.position = props->pos.value_or(m_state.position);
--    if (qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT")) {
--        next.scale = props->scale.value_or(m_state.scale);
--        next.scaleSetting = props->scaleSetting.value_or(m_state.scaleSetting);
--        // The Android host owns the buffer size and physical refresh. Only
--        // explicit user changes may override it; replaying saved system state
--        // must not undo rotation, automatic refresh or the host preference.
--        if (config.source == OutputConfiguration::Source::User && props->mode) {
--            if (const auto mode = props->mode->lock()) {
--                next.currentMode = mode;
--                m_refreshRate = mode->refreshRate();
--                m_renderLoop->setRefreshRate(m_refreshRate);
--            }
--        }
--    }
-+    applyExtraChanges(next, *props, config.source);
-     next.desiredModeSize = props->desiredModeSize.value_or(m_state.desiredModeSize);
-     next.desiredModeRefreshRate = props->desiredModeRefreshRate.value_or(m_state.desiredModeRefreshRate);
-     next.desiredModeFlags = props->desiredModeFlags.value_or(m_state.desiredModeFlags);
-@@ -435,11 +443,6 @@ bool WaylandOutput::isCast() const
-     return m_hostOutput != nullptr;
- }
- 
--bool WaylandOutput::androidPrimary() const
--{
--    return qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT") && !m_hostOutput;
--}
--
- KWayland::Client::Surface *WaylandOutput::surface() const
- {
-     return m_surface.get();
-@@ -476,8 +479,10 @@ void WaylandOutput::init(const QSize &pixelSize, qreal scale, bool fullscreen)
-     auto mode = std::make_shared<OutputMode>(pixelSize, m_refreshRate);
- 
-     State initialState;
--    initialState.modes = {mode};
--    initialState.currentMode = mode;
-+    initialState.modes = modesFor(pixelSize, m_refreshRate);
-+    initialState.currentMode = *std::ranges::find_if(initialState.modes, [&](const auto &candidate) {
-+        return candidate->size() == pixelSize && candidate->refreshRate() == m_refreshRate;
-+    });
-     initialState.scale = scale;
-     setState(initialState);
- 
-@@ -525,8 +530,10 @@ void WaylandOutput::applyConfigure(const QSize &size, quint32 serial)
-         auto mode = std::make_shared<OutputMode>(pixels, m_refreshRate);
- 
-         State next = m_state;
--        next.modes = {mode};
--        next.currentMode = mode;
-+        next.modes = modesFor(mode->size(), m_refreshRate);
-+        next.currentMode = *std::ranges::find_if(next.modes, [&](const auto &candidate) {
-+            return candidate->size() == mode->size() && candidate->refreshRate() == m_refreshRate;
-+        });
-         next.scale = androidOutput ? m_state.scale : m_pendingScale;
-         setState(next);
- 
-diff --git a/src/backends/wayland/wayland_output.h b/src/backends/wayland/wayland_output.h
-index 345bf0d..fbd5fe7 100644
---- a/src/backends/wayland/wayland_output.h
-+++ b/src/backends/wayland/wayland_output.h
-@@ -9,6 +9,7 @@
- #pragma once
- 
- #include "core/backendoutput.h"
-+#include "core/outputconfiguration.h"
- 
- #include <KWayland/Client/xdgshell.h>
- #include <QObject>
-@@ -111,6 +112,15 @@ public:
-     void setOutputLayers(std::vector<std::unique_ptr<OutputLayer>> &&layers);
-     QList<OutputLayer *> outputLayers() const;
- 
-+protected:
-+    /// The modes offered for a host window of `size` pixels at `rate` mHz; one of them must be
-+    /// that size and rate. The host decides the size, so by default it is the only mode.
-+    virtual QList<std::shared_ptr<OutputMode>> modesFor(const QSize &size, uint32_t rate) const;
-+    /// Settings of a configuration that the nested output does not apply itself (the host owns
-+    /// scale and mode); a derived backend may (src/backends/android).
-+    virtual void applyExtraChanges(State &next, const OutputChangeSet &props, OutputConfiguration::Source source);
-+    void setRefreshRate(uint32_t rate);
++QString HostOutput::model() const
++{
++    return m_model;
++}
 +
- private:
-     void handleConfigure(const QSize &size, KWayland::Client::XdgShellSurface::States states, quint32 serial);
-     void updateWindowTitle();
-@@ -135,8 +145,6 @@ private:
-     bool m_hasPointerLock = false;
-     bool m_ready = false;
-     HostOutput *m_hostOutput = nullptr;
--    /// The phone output of the Android host: phone modes, size and display settings.
--    bool androidPrimary() const;
-     bool m_mapped = false;
-     struct FrameData
-     {
-diff --git a/src/input.cpp b/src/input.cpp
-index a79bb3a..c30edb9 100644
---- a/src/input.cpp
-+++ b/src/input.cpp
-@@ -3472,6 +3472,9 @@ void InputRedirection::addIdleInhibitor(Window *inhibitor)
-         for (IdleDetector *idleDetector : std::as_const(m_idleDetectors)) {
-             idleDetector->setInhibited(true);
-         }
-+        if (m_idleInhibitors.size() == 1) {
-+            Q_EMIT idleInhibitedChanged(true);
-+        }
-     }
- }
- 
-@@ -3481,6 +3484,7 @@ void InputRedirection::removeIdleInhibitor(Window *inhibitor)
-         for (IdleDetector *idleDetector : std::as_const(m_idleDetectors)) {
-             idleDetector->setInhibited(false);
-         }
-+        Q_EMIT idleInhibitedChanged(false);
-     }
- }
- 
-diff --git a/src/input.h b/src/input.h
-index e6ce8a9..dee44de 100644
---- a/src/input.h
-+++ b/src/input.h
-@@ -209,6 +209,8 @@ public:
-     void addInputBackend(std::unique_ptr<InputBackend> &&inputBackend);
- 
- Q_SIGNALS:
-+    /// Whether any window inhibits idle changed (a nested backend tells its host, src/backends/android).
-+    void idleInhibitedChanged(bool inhibited);
-     void deviceAdded(InputDevice *device);
-     void deviceRemoved(InputDevice *device);
-     /**
++QSize HostOutput::physicalSize() const
++{
++    return m_physicalSize;
++}
++
++QSize HostOutput::pixelSize() const
++{
++    return m_pixelSize;
++}
++
++int HostOutput::refreshRate() const
++{
++    return m_refreshRate;
++}
++
++void HostOutput::handleGeometry(void *data, wl_output *, int32_t, int32_t, int32_t physicalWidth, int32_t physicalHeight,
++                                int32_t, const char *make, const char *model, int32_t)
++{
++    auto self = static_cast<HostOutput *>(data);
++    self->m_physicalSize = QSize(physicalWidth, physicalHeight);
++    self->m_manufacturer = QString::fromUtf8(make);
++    self->m_model = QString::fromUtf8(model);
++}
++
++void HostOutput::handleMode(void *data, wl_output *, uint32_t flags, int32_t width, int32_t height, int32_t refresh)
++{
++    if (flags & WL_OUTPUT_MODE_CURRENT) {
++        auto self = static_cast<HostOutput *>(data);
++        self->m_pixelSize = QSize(width, height);
++        self->m_refreshRate = refresh;
++    }
++}
++
++void HostOutput::handleDone(void *data, wl_output *)
++{
++    Q_EMIT static_cast<HostOutput *>(data)->changed();
++}
++
++void HostOutput::handleScale(void *, wl_output *, int32_t)
++{
++}
++
++void HostOutput::handleName(void *, wl_output *, const char *)
++{
++}
++
++void HostOutput::handleDescription(void *, wl_output *, const char *)
++{
++}
++
++} // namespace Android
++} // namespace KWin
+diff --git a/src/backends/android/host_output.h b/src/backends/android/host_output.h
+new file mode 100644
+index 0000000..53dcc6d
+--- /dev/null
++++ b/src/backends/android/host_output.h
+@@ -0,0 +1,64 @@
++/*
++    SPDX-FileCopyrightText: 2026 Rungic
++
++    SPDX-License-Identifier: GPL-2.0-or-later
++*/
++#pragma once
++
++#include <QObject>
++#include <QSize>
++#include <QString>
++
++struct wl_output;
++
++namespace KWin
++{
++namespace Android
++{
++
++/**
++ * A wl_output of the host compositor (docs/58, docs/72): identity and current mode.
++ * Read from the raw protocol instead of KWayland::Client::Output, whose
++ * addMode() keeps an iterator across QList::erase and crashes when the host
++ * announces a mode again (every refresh or resolution change of the phone).
++ */
++class HostOutput : public QObject
++{
++    Q_OBJECT
++
++public:
++    HostOutput(wl_output *output, uint32_t version, QObject *parent);
++    ~HostOutput() override;
++
++    wl_output *output() const;
++    QString manufacturer() const;
++    QString model() const;
++    QSize physicalSize() const;
++    QSize pixelSize() const;
++    /// mHz
++    int refreshRate() const;
++
++Q_SIGNALS:
++    /// A complete set of properties arrived (wl_output.done).
++    void changed();
++
++private:
++    static void handleGeometry(void *data, wl_output *output, int32_t x, int32_t y, int32_t physicalWidth, int32_t physicalHeight,
++                               int32_t subpixel, const char *make, const char *model, int32_t transform);
++    static void handleMode(void *data, wl_output *output, uint32_t flags, int32_t width, int32_t height, int32_t refresh);
++    static void handleDone(void *data, wl_output *output);
++    static void handleScale(void *data, wl_output *output, int32_t factor);
++    static void handleName(void *data, wl_output *output, const char *name);
++    static void handleDescription(void *data, wl_output *output, const char *description);
++
++    wl_output *m_output;
++    uint32_t m_version;
++    QString m_manufacturer;
++    QString m_model;
++    QSize m_physicalSize;
++    QSize m_pixelSize;
++    int m_refreshRate = 0;
++};
++
++} // namespace Android
++} // namespace KWin
+diff --git a/src/backends/android/host_text_input.cpp b/src/backends/android/host_text_input.cpp
+new file mode 100644
+index 0000000..25dd64c
+--- /dev/null
++++ b/src/backends/android/host_text_input.cpp
+@@ -0,0 +1,59 @@
++/*
++    SPDX-FileCopyrightText: 2026 Rungic
++
++    SPDX-License-Identifier: GPL-2.0-or-later
++*/
++#include "host_text_input.h"
++#include "inputmethod.h"
++#include "main.h"
++
++#include "wayland-text-input-unstable-v3-client-protocol.h"
++
++#include <utility>
++
++namespace KWin
++{
++namespace Android
++{
++
++static void enable(zwp_text_input_v3 *textInput)
++{
++    zwp_text_input_v3_enable(textInput);
++    zwp_text_input_v3_set_content_type(textInput, ZWP_TEXT_INPUT_V3_CONTENT_HINT_NONE, ZWP_TEXT_INPUT_V3_CONTENT_PURPOSE_NORMAL);
++    zwp_text_input_v3_commit(textInput);
++}
++
++HostTextInput::HostTextInput(zwp_text_input_manager_v3 *manager, wl_seat *seat)
++    : m_textInput(zwp_text_input_manager_v3_get_text_input(manager, seat))
++{
++    static const zwp_text_input_v3_listener listener{
++        .enter = [](void *, zwp_text_input_v3 *textInput, wl_surface *) {
++            enable(textInput);
++        },
++        .leave = [](void *, zwp_text_input_v3 *, wl_surface *) {},
++        .preedit_string = [](void *, zwp_text_input_v3 *, const char *, int32_t, int32_t) {},
++        .commit_string = [](void *data, zwp_text_input_v3 *, const char *text) {
++            static_cast<HostTextInput *>(data)->m_pendingCommit = QString::fromUtf8(text);
++        },
++        .delete_surrounding_text = [](void *, zwp_text_input_v3 *, uint32_t, uint32_t) {},
++        .done = [](void *data, zwp_text_input_v3 *, uint32_t) {
++            auto self = static_cast<HostTextInput *>(data);
++            const QString text = std::exchange(self->m_pendingCommit, QString());
++            if (!text.isEmpty() && kwinApp()->inputMethod()) {
++                kwinApp()->inputMethod()->commitHostText(text);
++            }
++        },
++    };
++    zwp_text_input_v3_add_listener(m_textInput, &listener, this);
++    // The host sends enter only when its keyboard focus changes; it may already be on one of our
++    // surfaces. It accepts enable from the focused client.
++    enable(m_textInput);
++}
++
++HostTextInput::~HostTextInput()
++{
++    zwp_text_input_v3_destroy(m_textInput);
++}
++
++} // namespace Android
++} // namespace KWin
+diff --git a/src/backends/android/host_text_input.h b/src/backends/android/host_text_input.h
+new file mode 100644
+index 0000000..49402e1
+--- /dev/null
++++ b/src/backends/android/host_text_input.h
+@@ -0,0 +1,37 @@
++/*
++    SPDX-FileCopyrightText: 2026 Rungic
++
++    SPDX-License-Identifier: GPL-2.0-or-later
++*/
++#pragma once
++
++#include <QString>
++
++struct wl_seat;
++struct zwp_text_input_manager_v3;
++struct zwp_text_input_v3;
++
++namespace KWin
++{
++namespace Android
++{
++
++/**
++ * Text the Android host commits from its keyboard (Chinese, emoji...: what no key can type) over
++ * text-input-v3 to the focused surface, which is one of KWin's output windows (docs/58 step 3).
++ * Text input stays enabled on them; each commit goes to KWin's input method, which gives it to
++ * the focused client's text input or, failing that, types it with a temporary keymap.
++ */
++class HostTextInput
++{
++public:
++    HostTextInput(zwp_text_input_manager_v3 *manager, wl_seat *seat);
++    ~HostTextInput();
++
++private:
++    zwp_text_input_v3 *m_textInput;
++    QString m_pendingCommit;
++};
++
++} // namespace Android
++} // namespace KWin
 diff --git a/src/main_wayland.cpp b/src/main_wayland.cpp
-index 57d5dfe..a599297 100644
+index 57d5dfe..3eb97aa 100644
 --- a/src/main_wayland.cpp
 +++ b/src/main_wayland.cpp
 @@ -12,6 +12,7 @@
@@ -645,24 +1205,28 @@ index 57d5dfe..a599297 100644
  #include "backends/wayland/wayland_backend.h"
  #include "compositor.h"
  #include "core/outputbackend.h"
-@@ -325,6 +326,8 @@ int main(int argc, char *argv[])
+@@ -325,6 +326,10 @@ int main(int argc, char *argv[])
                                              i18n("The Wayland Display to use in windowed mode on platform Wayland."),
                                              QStringLiteral("display"));
      QCommandLineOption virtualFbOption(QStringLiteral("virtual"), i18n("Render to a virtual framebuffer."));
 +    // Rungic: nested in the Android host compositor (src/backends/android, docs/72).
 +    QCommandLineOption androidHostOption(QStringLiteral("android-host"), i18n("The Wayland display is the Android host's (Rungic)."));
++    QCommandLineOption androidRenderDeviceOption(QStringLiteral("android-render-device"), i18n("The GPU node on the Android host."), QStringLiteral("path"));
++    QCommandLineOption androidAllocatorOption(QStringLiteral("android-allocator"), i18n("The Android host's buffer lease socket."), QStringLiteral("path"));
      QCommandLineOption widthOption(QStringLiteral("width"),
                                     i18n("The width for windowed mode. Default width is 1024."),
                                     QStringLiteral("width"));
-@@ -385,6 +388,7 @@ int main(int argc, char *argv[])
+@@ -385,6 +390,9 @@ int main(int argc, char *argv[])
      parser.addOption(x11DisplayOption);
  #endif
      parser.addOption(waylandDisplayOption);
 +    parser.addOption(androidHostOption);
++    parser.addOption(androidRenderDeviceOption);
++    parser.addOption(androidAllocatorOption);
      parser.addOption(virtualFbOption);
      parser.addOption(widthOption);
      parser.addOption(heightOption);
-@@ -564,13 +568,18 @@ int main(int argc, char *argv[])
+@@ -564,13 +572,25 @@ int main(int argc, char *argv[])
              socketName = qgetenv("WAYLAND_DISPLAY");
          }
          a.setSession(KWin::Session::create(KWin::Session::Type::Noop));
@@ -676,7 +1240,14 @@ index 57d5dfe..a599297 100644
 -        }));
 +        };
 +        if (parser.isSet(androidHostOption)) {
-+            a.setOutputBackend(std::make_unique<KWin::Android::AndroidBackend>(options));
++            KWin::Android::AndroidBackendOptions android;
++            if (parser.isSet(androidRenderDeviceOption)) {
++                android.renderDevice = parser.value(androidRenderDeviceOption);
++            }
++            if (parser.isSet(androidAllocatorOption)) {
++                android.allocator = parser.value(androidAllocatorOption).toUtf8();
++            }
++            a.setOutputBackend(std::make_unique<KWin::Android::AndroidBackend>(options, android));
 +        } else {
 +            a.setOutputBackend(std::make_unique<KWin::Wayland::WaylandBackend>(options));
 +        }

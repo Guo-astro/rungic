@@ -1,40 +1,33 @@
 From: clawd20130 <clawd20130@gmail.com>
-Date: Fri, 25 Sep 2026 14:24:33 +0900
+Date: Sat, 26 Sep 2026 18:47:33 +0900
 Subject: KWin moto17: host scrolling keeps its source,
  its stop and the output scale
 
 The nested Wayland backend forwarded host axis events as a wheel of unknown
-source without axis_stop, and in host pixels while positions are divided by a
-flat output's scale: two-finger scrolling on the TV (CAST-1 at 1.75) went 1.75
+source without axis_stop, and in host pixels while positions are mapped from host coordinates: two-finger scrolling on the TV (CAST-1 at 1.75) went 1.75
 times too far and clients scrolled it as a wheel. Now axis_source is kept, a
 stop goes on as a zero delta (as libinput reports finger scrolling), the delta
 is divided by the scale, and host finger scrolling is marked natural.
 
-Forwarded: not-needed
+The scale and the natural direction come from the backend (WaylandOutput::hostScale(),
+WaylandBackend::hostFingerScrollIsNatural()) since the round-2 fold (docs/72).
+
+Forwarded: no
 Last-Update: 2026-09-26
-X-Rungic-Status: Inappropriate [Android host specific: runs nested in the Android APK compositor]
+X-Rungic-Status: Pending [axis source and stop are generic for nested KWin; the scale and direction come from the backend]
 X-Rungic-Tests: none (gap: no scenario scrolls on a scaled output)
-X-Rungic-Docs: docs/66
+X-Rungic-Docs: docs/66 docs/72
 Origin: vendor, commit:02db74e1
 ---
- src/backends/wayland/wayland_backend.cpp | 49 ++++++++++++++++++++++++++++++--
+ src/backends/wayland/wayland_backend.cpp | 42 ++++++++++++++++++++++++++++++--
  src/backends/wayland/wayland_backend.h   |  4 +++
- 2 files changed, 50 insertions(+), 3 deletions(-)
+ 2 files changed, 44 insertions(+), 2 deletions(-)
 
 diff --git a/src/backends/wayland/wayland_backend.cpp b/src/backends/wayland/wayland_backend.cpp
-index a80c681..ea50aa1 100644
+index 1997533..713bac0 100644
 --- a/src/backends/wayland/wayland_backend.cpp
 +++ b/src/backends/wayland/wayland_backend.cpp
-@@ -110,7 +110,7 @@ WaylandInputDevice::WaylandInputDevice(KWayland::Client::Pointer *pointer, Wayla
-         WaylandOutput *output = m_seat->backend()->findOutput(m_pointer->enteredSurface());
-         Q_ASSERT(output);
-         const auto subsurface = m_seat->backend()->findSubSurface(m_pointer->enteredSurface());
--        const QPointF absolutePos = output->position() + relativeToSurface / (qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT") ? output->scale() : 1.0)
-+        const QPointF absolutePos = output->position() + relativeToSurface / hostPixelsPerLogical()
-             + (subsurface ? subsurface->position() : QPoint());
-         Q_EMIT pointerMotionAbsolute(absolutePos, std::chrono::milliseconds(time), this);
-     });
-@@ -128,7 +128,28 @@ WaylandInputDevice::WaylandInputDevice(KWayland::Client::Pointer *pointer, Wayla
+@@ -124,7 +124,28 @@ WaylandInputDevice::WaylandInputDevice(KWayland::Client::Pointer *pointer, Wayla
          }
          Q_EMIT pointerButtonChanged(button, state, std::chrono::milliseconds(time), this);
      });
@@ -64,7 +57,7 @@ index a80c681..ea50aa1 100644
      connect(pointer, &Pointer::axisChanged, this, [this](quint32 time, Pointer::Axis nativeAxis, qreal delta) {
          PointerAxis axis;
          switch (nativeAxis) {
-@@ -141,11 +162,16 @@ WaylandInputDevice::WaylandInputDevice(KWayland::Client::Pointer *pointer, Wayla
+@@ -137,11 +158,16 @@ WaylandInputDevice::WaylandInputDevice(KWayland::Client::Pointer *pointer, Wayla
          default:
              Q_UNREACHABLE();
          }
@@ -82,32 +75,27 @@ index a80c681..ea50aa1 100644
      });
  
      KWayland::Client::PointerGestures *pointerGestures = m_seat->backend()->display()->pointerGestures();
-@@ -280,6 +306,23 @@ bool WaylandInputDevice::isLidSwitch() const
+@@ -276,6 +302,18 @@ bool WaylandInputDevice::isLidSwitch() const
      return false;
  }
  
 +qreal WaylandInputDevice::hostPixelsPerLogical() const
 +{
-+    // A flat output's host surface is in the output's device pixels (MOTO_KWIN_FLAT_OUTPUT): host
-+    // pointer positions and scroll distances are divided by its scale into logical ones.
-+    if (!qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT")) {
-+        return 1.0;
-+    }
++    // Host scroll distances are in host coordinates, like positions (WaylandOutput::mapFromHost).
 +    const WaylandOutput *output = m_seat->backend()->findOutput(m_pointer->enteredSurface());
-+    return output ? output->scale() : 1.0;
++    return output ? output->scale() / output->hostScale() : 1.0;
 +}
 +
 +bool WaylandInputDevice::naturalScroll() const
 +{
-+    // The Android host scrolls with fingers as a touch screen does: the content follows them.
-+    return m_axisSource == PointerAxisSource::Finger && qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT");
++    return m_axisSource == PointerAxisSource::Finger && m_seat->backend()->hostFingerScrollIsNatural();
 +}
 +
  KWayland::Client::Pointer *WaylandInputDevice::nativePointer() const
  {
      return m_pointer.get();
 diff --git a/src/backends/wayland/wayland_backend.h b/src/backends/wayland/wayland_backend.h
-index bda74da..38b1be1 100644
+index fb2bbd4..5733377 100644
 --- a/src/backends/wayland/wayland_backend.h
 +++ b/src/backends/wayland/wayland_backend.h
 @@ -87,6 +87,9 @@ public:

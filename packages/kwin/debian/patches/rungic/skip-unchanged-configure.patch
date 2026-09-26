@@ -1,0 +1,40 @@
+From: clawd20130 <clawd20130@gmail.com>
+Date: Sat, 26 Sep 2026 18:47:33 +0900
+Subject: Wayland backend: a host configure without a size change is not an
+ output change
+
+A host may configure its windows again without a size change (the Android host does whenever
+its app returns to the foreground). Re-querying the outputs rebuilt every output's scene view,
+and a burst of these left the cast output's clients without frame callbacks, freezing the TV.
+
+Split from the cast change (5c6e0958) in the round-2 fold (docs/72).
+
+Forwarded: no
+Last-Update: 2026-09-26
+X-Rungic-Status: Pending [generic for nested KWin]
+X-Rungic-Tests: none (gap: casting needs a TV receiver; manual list)
+X-Rungic-Docs: docs/58 docs/72
+Origin: vendor, commit:5c6e0958
+---
+ src/backends/wayland/wayland_output.cpp | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/src/backends/wayland/wayland_output.cpp b/src/backends/wayland/wayland_output.cpp
+index 2389045..a9d2b0c 100644
+--- a/src/backends/wayland/wayland_output.cpp
++++ b/src/backends/wayland/wayland_output.cpp
+@@ -531,6 +531,14 @@ void WaylandOutput::applyConfigure(const QSize &size, quint32 serial)
+     if (!size.isEmpty()) {
+         const bool ownScale = ownsScale();
+         const QSize pixels = ownScale ? size * hostScale() : size * m_pendingScale;
++        // A host may configure its windows again without a size change (when its app returns to
++        // the foreground, say). That is not an output change; re-querying the outputs rebuilds every
++        // output's scene view, and a burst of these left another output's clients without frame
++        // callbacks.
++        if (m_state.currentMode && m_state.currentMode->size() == pixels && m_state.currentMode->refreshRate() == m_refreshRate
++            && (ownScale || m_state.scale == m_pendingScale)) {
++            return;
++        }
+         auto mode = std::make_shared<OutputMode>(pixels, m_refreshRate);
+ 
+         State next = m_state;

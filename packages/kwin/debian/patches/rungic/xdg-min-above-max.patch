@@ -1,5 +1,5 @@
 From: clawd20130 <clawd20130@gmail.com>
-Date: Fri, 25 Sep 2026 01:22:16 +0900
+Date: Sat, 26 Sep 2026 18:44:41 +0900
 Subject: KWin moto16: a minimum size above the maximum no longer disconnects
  the client
 
@@ -12,9 +12,7 @@ wayland-client probe committing min 700x400 / max 360x800.
 
 Forwarded: not-needed
 Last-Update: 2026-09-26
-X-Rungic-Status: Inappropriate [deviates from xdg-shell: a maximum below the minimum is a protocol
- error (xdg-shell.xml, set_max_size/set_min_size); works around WeChat 4.1, whose static Qt 6 takes
- the maximum from the first wl_output; the fix belongs in the client]
+X-Rungic-Status: Inappropriate [deviates from xdg-shell: a maximum below the minimum is a protocol error (xdg-shell.xml, set_max_size/set_min_size); works around WeChat 4.1, whose static Qt 6 takes the maximum from the first wl_output; the fix belongs in the client]
 X-Rungic-Tests: L1:testXdgShellWindow::testMinimumAboveMaximum; probe:plasma/diagnostics/wayland-probes/minmax-probe.c
 X-Rungic-Docs: docs/42
 Origin: vendor, commit:f47ee505

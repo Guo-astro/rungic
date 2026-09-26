@@ -1,5 +1,5 @@
 From: clawd20130 <clawd20130@gmail.com>
-Date: Thu, 24 Sep 2026 15:16:45 +0900
+Date: Sat, 26 Sep 2026 18:44:41 +0900
 Subject: KWin moto13: outputs expose 'internal' to scripts
 
 Lets window rules differ between the device's own panel and external displays.

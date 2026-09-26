@@ -1,0 +1,142 @@
+From: clawd20130 <clawd20130@gmail.com>
+Date: Sat, 26 Sep 2026 18:45:02 +0900
+Subject: Input method: text from a nested host,
+ and the on-screen keyboard only on internal outputs
+
+InputMethod::commitHostText() gives text a nested backend's host committed (the Android
+keyboard: Chinese, emoji, what no key can type) to the focused client's text input, or types
+it with a temporary keymap when the client has none; the D-Bus commitText (next patch) uses it
+too. KWIN_IM_SHOW_ALWAYS applies to text fields on internal outputs only: a field on an
+external output (a TV the phone casts to, where the phone is the touchpad) does not pop up
+the on-screen keyboard.
+
+Split from the cast/host-text change (e07d7448) in the round-2 fold (docs/72).
+
+Forwarded: no
+Last-Update: 2026-09-26
+X-Rungic-Status: Pending [the internal-only rule may interest upstream; commitHostText serves the Android backend and D-Bus]
+X-Rungic-Tests: L3:input.text (host text through the Android backend); none for the TV rule (manual list)
+X-Rungic-Docs: docs/58 docs/60 docs/72
+Origin: vendor
+---
+ src/inputmethod.cpp | 39 ++++++++++++++++++++++++++++++++++-----
+ src/inputmethod.h   |  4 ++++
+ 2 files changed, 38 insertions(+), 5 deletions(-)
+
+diff --git a/src/inputmethod.cpp b/src/inputmethod.cpp
+index 4ce5459..bc282bf 100644
+--- a/src/inputmethod.cpp
++++ b/src/inputmethod.cpp
+@@ -9,6 +9,7 @@
+ #include "inputmethod.h"
+ 
+ #include "config-kwin.h"
++#include "core/output.h"
+ 
+ #include "effect/effecthandler.h"
+ #include "input.h"
+@@ -122,7 +123,7 @@ void InputMethod::init()
+     connect(waylandServer()->seat(), &SeatInterface::focusedTextInputSurfaceChanged, this, &InputMethod::handleFocusedSurfaceChanged);
+ 
+     TextInputV1Interface *textInputV1 = waylandServer()->seat()->textInputV1();
+-    connect(textInputV1, &TextInputV1Interface::requestShowInputPanel, this, &InputMethod::show);
++    connect(textInputV1, &TextInputV1Interface::requestShowInputPanel, this, &InputMethod::showForTextInput);
+     connect(textInputV1, &TextInputV1Interface::requestHideInputPanel, this, &InputMethod::hide);
+     connect(textInputV1, &TextInputV1Interface::surroundingTextChanged, this, &InputMethod::surroundingTextChanged);
+     connect(textInputV1, &TextInputV1Interface::contentTypeChanged, this, &InputMethod::contentTypeChanged);
+@@ -133,7 +134,7 @@ void InputMethod::init()
+     connect(textInputV1, &TextInputV1Interface::cursorRectangleChanged, this, &InputMethod::cursorRectangleChanged);
+ 
+     TextInputV2Interface *textInputV2 = waylandServer()->seat()->textInputV2();
+-    connect(textInputV2, &TextInputV2Interface::requestShowInputPanel, this, &InputMethod::show);
++    connect(textInputV2, &TextInputV2Interface::requestShowInputPanel, this, &InputMethod::showForTextInput);
+     connect(textInputV2, &TextInputV2Interface::requestHideInputPanel, this, &InputMethod::hide);
+     connect(textInputV2, &TextInputV2Interface::surroundingTextChanged, this, &InputMethod::surroundingTextChanged);
+     connect(textInputV2, &TextInputV2Interface::contentTypeChanged, this, &InputMethod::contentTypeChanged);
+@@ -196,10 +197,33 @@ void InputMethod::hide()
+ bool InputMethod::shouldShowOnActive() const
+ {
+     static bool alwaysShowIm = qEnvironmentVariableIntValue("KWIN_IM_SHOW_ALWAYS") != 0;
+-    return alwaysShowIm || input()->touch() == input()->lastInputHandler()
++    return (alwaysShowIm && !textInputOnExternalOutput()) || input()->touch() == input()->lastInputHandler()
+         || input()->tablet() == input()->lastInputHandler();
+ }
+ 
++bool InputMethod::textInputOnExternalOutput() const
++{
++    // docs/58: on an external output such as a Miracast TV the phone is its touchpad
++    // and keyboard; KWIN_IM_SHOW_ALWAYS (for the phone's touch screen) does not apply.
++    const Window *window = nullptr;
++    if (auto surface = waylandServer()->seat()->focusedTextInputSurface()) {
++        window = waylandServer()->findWindow(surface);
++    }
++    const LogicalOutput *output = window ? window->output() : workspace()->activeOutput();
++    return output && !output->isInternal();
++}
++
++void InputMethod::showForTextInput()
++{
++    // The panel's permission to show is sticky once granted, so a text field on the
++    // external output must not request it unless the user is touching (docs/58).
++    if (!shouldShowOnActive()) {
++        hide();
++        return;
++    }
++    show();
++}
++
+ void InputMethod::refreshActive()
+ {
+     auto seat = waylandServer()->seat();
+@@ -526,7 +550,7 @@ void InputMethod::textInputInterfaceV3EnabledChanged()
+     auto t3 = waylandServer()->seat()->textInputV3();
+     refreshActive();
+     if (t3->isEnabled()) {
+-        show();
++        showForTextInput();
+     } else {
+         // reset value of preedit when textinput is disabled
+         resetPendingPreedit();
+@@ -615,6 +639,11 @@ void InputMethod::keysymReceived(quint32 serial, quint32 time, quint32 sym, Keyb
+     }
+ }
+ 
++void InputMethod::commitHostText(const QString &text)
++{
++    commitString(0, text);
++}
++
+ void InputMethod::commitString(qint32 serial, const QString &text)
+ {
+     if (auto t1 = waylandServer()->seat()->textInputV1(); t1 && t1->isEnabled()) {
+@@ -1102,7 +1131,7 @@ void InputMethod::forceActivate()
+ void InputMethod::textInputInterfaceV3EnableRequested()
+ {
+     refreshActive();
+-    show();
++    showForTextInput();
+ }
+ }
+ 
+diff --git a/src/inputmethod.h b/src/inputmethod.h
+index f0df33d..f4480ee 100644
+--- a/src/inputmethod.h
++++ b/src/inputmethod.h
+@@ -70,6 +70,8 @@ public:
+     void forceActivate();
+ 
+     void commitPendingText();
++    /// Text from the host compositor's keyboard (nested Wayland backend, docs/58).
++    void commitHostText(const QString &text);
+ 
+     // for use by the QPA
+     InternalInputMethodContext *internalContext() const
+@@ -115,6 +117,8 @@ private:
+     void updateInputPanelState();
+     void adoptInputMethodContext();
+     void commitString(qint32 serial, const QString &text);
++    bool textInputOnExternalOutput() const;
++    void showForTextInput();
+     void keysymReceived(quint32 serial, quint32 time, quint32 sym, KeyboardKeyState state, quint32 modifiers);
+     void deleteSurroundingText(int32_t index, uint32_t length);
+     void setCursorPosition(qint32 index, qint32 anchor);

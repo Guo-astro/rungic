@@ -1,5 +1,5 @@
 From: clawd20130 <clawd20130@gmail.com>
-Date: Thu, 24 Sep 2026 01:19:59 +0900
+Date: Sat, 26 Sep 2026 18:47:32 +0900
 Subject: KWin: timestamped FTrace markers around the Android output handoff
 
 Write trace_marker through a plain fd with one write() per marker. The
@@ -16,13 +16,13 @@ X-Rungic-Tests: L1:test_ftrace L3:perf.compositor
 X-Rungic-Docs: docs/55 docs/57
 Origin: vendor, commit:61f86c45
 ---
- src/backends/wayland/wayland_egl_backend.cpp |  7 ++++++-
+ src/backends/wayland/wayland_egl_backend.cpp |  9 ++++++++-
  src/ftrace.cpp                               | 12 ++++++++----
  src/ftrace.h                                 | 20 ++++++++++++++++----
- 3 files changed, 30 insertions(+), 9 deletions(-)
+ 3 files changed, 32 insertions(+), 9 deletions(-)
 
 diff --git a/src/backends/wayland/wayland_egl_backend.cpp b/src/backends/wayland/wayland_egl_backend.cpp
-index 8cbb598..eb6d594 100644
+index 7f6dba1..7339691 100644
 --- a/src/backends/wayland/wayland_egl_backend.cpp
 +++ b/src/backends/wayland/wayland_egl_backend.cpp
 @@ -10,6 +10,7 @@
@@ -33,25 +33,35 @@ index 8cbb598..eb6d594 100644
  #include "core/gbmgraphicsbufferallocator.h"
  #include "opengl/eglswapchain.h"
  #include "opengl/glrendertimequery.h"
-@@ -105,13 +106,17 @@ bool WaylandEglLayer::doEndFrame(const Region &renderedDeviceRegion, const Regio
-     // Flush rendering commands to the dmabuf.
-     if (qEnvironmentVariableIsSet("MOTO_GPU_ALLOCATOR")) {
-         // Android vendor import has no explicit synchronization protocol yet.
+@@ -110,10 +111,12 @@ bool WaylandEglLayer::doEndFrame(const Region &renderedDeviceRegion, const Regio
+     const bool implicitSync = m_backend->backend()->implicitSync();
+     zwp_linux_surface_synchronization_v1 *sync = implicitSync ? nullptr : output->surfaceSynchronization();
+     if (!implicitSync && !sync) {
 +        fTraceDuration("GpuWait (", m_output->name(), ")");
          glFinish();
-     } else {
-         glFlush();
      }
      EGLNativeFence releaseFence{m_backend->eglDisplayObject()};
+     if (sync && !releaseFence.isValid()) {
++        fTraceDuration("GpuWait (", m_output->name(), ")");
+         glFinish(); // no native fence: fall back to waiting
+         sync = nullptr;
+     }
+@@ -121,10 +124,14 @@ bool WaylandEglLayer::doEndFrame(const Region &renderedDeviceRegion, const Regio
+         glFlush();
+     }
  
 -    setBuffer(m_backend->backend()->importBuffer(m_buffer->buffer()), damagedDeviceRegion);
 +    {
 +        fTraceDuration("Import (", m_output->name(), ")");
 +        setBuffer(m_backend->backend()->importBuffer(m_buffer->buffer()), damagedDeviceRegion);
 +    }
+     if (sync) {
+         // Double-buffered: applies to the buffer attached above at the output's next commit.
+         // libwayland duplicates the fd while marshalling.
++        fTrace("AcquireFence (", m_output->name(), ")");
+         zwp_linux_surface_synchronization_v1_set_acquire_fence(sync, releaseFence.fileDescriptor().get());
+     }
      m_swapchain->release(m_buffer, releaseFence.takeFileDescriptor());
- 
-     m_damageJournal.add(damagedDeviceRegion);
 diff --git a/src/ftrace.cpp b/src/ftrace.cpp
 index 20076e4..98f2ae3 100644
 --- a/src/ftrace.cpp
