@@ -87,15 +87,30 @@ def maintainer_scripts(pkg, root):
     obsolete = pkg.get('obsolete', [])
     post = ['#!/bin/sh', 'set -e', '']
     if obsolete:
-        post += ['# Files of the manual installation this package replaces (docs/61).',
+        items = ' '.join(p if '*' in p else shlex.quote(p) for p in obsolete)   # patterns with * expand
+        post += ['# Files of the manual installation this package replaces (docs/61). Symlinks go only when',
+                 '# dangling: an old enable link has the same path as the one systemctl enable makes now.',
                  'if [ "$1" = configure ]; then',
-                 # Patterns with * expand; other paths are quoted.
-                 '  for f in ' + ' '.join(p if '*' in p else shlex.quote(p) for p in obsolete) + '; do',
-                 '    if [ -L "$f" ] || [ -f "$f" ]; then rm -f "$f"; elif [ -d "$f" ]; then rm -rf "$f"; fi',
+                 f'  for f in {items}; do',
+                 '    if [ -L "$f" ]; then continue; elif [ -f "$f" ]; then rm -f "$f"; elif [ -d "$f" ]; then rm -rf "$f"; fi',
+                 '  done',
+                 f'  for f in {items}; do',
+                 '    if [ -L "$f" ] && [ ! -e "$f" ]; then rm -f "$f"; fi',
                  '  done',
                  'fi', '']
     if units.get('system') or units.get('user') or pkg.get('user_systemd'):
         post += ['if [ -d /run/systemd/system ]; then systemctl daemon-reload || true; fi']
+    for unit in units.get('system', []):
+        # debhelper's pattern: enable on first installation; keep an enabled unit enabled (and its
+        # links current) on upgrades; respect an administrator's disable.
+        post += [f'if [ "$1" = configure ] || [ "$1" = abort-upgrade ]; then',
+                 f"  if deb-systemd-helper debian-installed '{unit}'; then",
+                 f"    if deb-systemd-helper --quiet was-enabled '{unit}'; then deb-systemd-helper enable '{unit}' >/dev/null || true;",
+                 f"    else deb-systemd-helper update-state '{unit}' >/dev/null || true; fi",
+                 f"  else deb-systemd-helper enable '{unit}' >/dev/null || true; fi",
+                 'fi']
+    for unit in units.get('user', []):
+        post += [f'if [ "$1" = configure ]; then systemctl --global enable {unit} || true; fi']
     if units.get('user') or pkg.get('user_systemd'):
         # Running user managers keep the unit files and drop-ins they loaded; a session restart
         # would otherwise start the old (possibly deleted) command lines.
@@ -104,17 +119,13 @@ def maintainer_scripts(pkg, root):
                  '  name=$(getent passwd "$uid" | cut -d: -f1); [ -n "$name" ] || continue',
                  '  runuser -u "$name" -- env XDG_RUNTIME_DIR="$dir" systemctl --user daemon-reload || true',
                  'done']
-    for unit in units.get('system', []):
-        post += [f'if [ "$1" = configure ] && [ -z "$2" ]; then systemctl enable {unit} || true; fi']
-    for unit in units.get('user', []):
-        post += [f'if [ "$1" = configure ]; then systemctl --global enable {unit} || true; fi']
     custom = pkg['dir'] / 'postinst'
     if custom.exists():
         post += ['', custom.read_text().replace('#!/bin/sh\n', '')]
     scripts = {'postinst': '\n'.join(post) + '\n'}
     prerm = ['#!/bin/sh', 'set -e']
     for unit in units.get('system', []):
-        prerm += [f'if [ "$1" = remove ]; then systemctl disable {unit} || true; fi']
+        prerm += [f"if [ \"$1\" = remove ]; then deb-systemd-helper disable '{unit}' >/dev/null || true; fi"]
     for unit in units.get('user', []):
         prerm += [f'if [ "$1" = remove ]; then systemctl --global disable {unit} || true; fi']
     if (pkg['dir'] / 'prerm').exists():
@@ -132,6 +143,13 @@ def maintainer_scripts(pkg, root):
                        if (p.is_file() or p.is_symlink()) and not p.is_symlink()) if etc.exists() else []
     if conffiles:
         (debian / 'conffiles').write_text('\n'.join(conffiles) + '\n')
+
+
+def unit_list(pkg):
+    """/usr/share/moto/units/NAME.list: the units this package enables, for moto-integrity."""
+    units = pkg.get('units', {})
+    lines = [f'system {u}' for u in units.get('system', [])] + [f'user {u}' for u in units.get('user', [])]
+    return '\n'.join(lines) + '\n' if lines else None
 
 
 def control(pkg, version, root, extra_depends=''):
@@ -182,6 +200,9 @@ def build_host(pkg, tree):
         env = dict(os.environ, DESTDIR=str(root), SRC=str(WORKSPACE), SOURCE_DATE_EPOCH=epoch, LC_ALL='C.UTF-8')
         subprocess.run(['sh', '-eu', str(pkg['dir'] / 'build.sh')], cwd=WORKSPACE, env=env, check=True)
         maintainer_scripts(pkg, root)
+        if unit_list(pkg):
+            (root / 'usr/share/moto/units').mkdir(parents=True, exist_ok=True)
+            (root / f"usr/share/moto/units/{pkg['name']}.list").write_text(unit_list(pkg))
         for path in [root, *root.rglob('*')]:   # normalized modes and times: reproducible output
             if not path.is_symlink():
                 mode = path.stat().st_mode
@@ -245,6 +266,12 @@ def build_device(pkg, tree, jobs=4):
         if script.name != 'conffiles':
             moto_device.to_container(script, f'{base}/debian-scripts/{script.name}', '755')
     shutil.rmtree(work)
+    run(f'rm -f {base}/unit.list', 'container')
+    if unit_list(pkg):
+        listing = WORKSPACE / f'.work/cache/{name}-unit.list'
+        listing.write_text(unit_list(pkg))
+        moto_device.to_container(listing, f'{base}/unit.list', '644')
+        listing.unlink()
     epoch = git('log', '-1', '--format=%ct')
     unit = f'moto-package-{name}'
     script = f'''set -e
@@ -253,6 +280,7 @@ export DESTDIR={base}/root SRC={base}/src SOURCE_DATE_EPOCH={epoch} JOBS={jobs} 
 rm -rf "$DESTDIR"; mkdir -p "$DESTDIR/DEBIAN"
 sh -eu "$SRC/{pkg['dir'].relative_to(WORKSPACE)}/build.sh"
 cp debian-scripts/* "$DESTDIR/DEBIAN/"
+if [ -f unit.list ]; then install -Dm644 unit.list "$DESTDIR/usr/share/moto/units/{name}.list"; fi
 # Debug information to {base}/dbgsym by build-id (for NAME-dbgsym), then strip (docs/61).
 rm -rf {base}/dbgsym
 find "$DESTDIR" -type f ! -path "$DESTDIR/DEBIAN/*" | while read -r f; do

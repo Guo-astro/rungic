@@ -18,6 +18,7 @@ metapackage and the local-configuration manifest say it should be:
   ownership  owner/mode of the top-level directories; files in /usr, /etc
              owned by a non-root user
   local      declared machine-local configuration: presence and permissions
+  units      units the project's packages enable (/usr/share/moto/units) are enabled
   crash      the crash chain's preconditions: no DrKonqi without
              KCRASH_DUMP_ONLY (it would take over KDE crashes and leave no
              core), systemd-coredump's core_pattern sysctl masked
@@ -331,6 +332,25 @@ def check_local(manifest):
     return result
 
 
+def check_units():
+    """Units the project's packages enable (/usr/share/moto/units/*.list) that are not enabled: an
+    upgrade once removed their enable links while the running session hid it (docs/61)."""
+    problems = []
+    for listing in sorted(glob.glob('/usr/share/moto/units/*.list')):
+        for line in open(listing):
+            scope, _, unit = line.strip().partition(' ')
+            if not unit:
+                continue
+            if scope == 'system':
+                state = run('systemctl', 'is-enabled', unit).strip()
+            else:
+                state = run('systemctl', '--global', 'is-enabled', unit).strip()
+            if state not in ('enabled', 'enabled-runtime', 'static', 'alias', 'indirect'):
+                problems.append({'unit': unit, 'scope': scope, 'state': state or 'unknown',
+                                 'package': os.path.basename(listing)[:-5]})
+    return problems
+
+
 def check_crash():
     problems = []
     drkonqi = run('dpkg-query', '-W', '-f', '${db:Status-Abbrev}', 'drkonqi').startswith('ii')
@@ -377,6 +397,7 @@ def main():
         'ownership': check_ownership(declared),
         'local': local,
         'crash': check_crash(),
+        'units': check_units(),
     }
     drift = {
         'changed_files': len(report['packages']['changed']),
@@ -393,6 +414,7 @@ def main():
         'local_missing_required': sum(1 for e in local if e['required'] and not e['present']),
         'local_permissions': sum(1 for e in local if e.get('problems')),
         'crash_chain': len(report['crash']),
+        'units_not_enabled': len(report['units']),
     }
     development = bool(report['diversions']['project'])
     state = 'drift' if any(drift.values()) else 'development' if development else 'clean'
@@ -435,6 +457,8 @@ def main():
             print(f'owner    {p} (not root)')
         for p in report['crash']:
             print(f'crash    {p}')
+        for u in report['units']:
+            print(f"unit     {u['unit']} ({u['scope']}, {u['package']}) is {u['state']}")
         for e in local:
             if not e['present']:
                 print(f"local    {e['path']} absent{' (required)' if e['required'] else ''}")
