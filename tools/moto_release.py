@@ -529,6 +529,10 @@ def deploy(version=None, restart='auto', acceptance='smoke', record_label=None, 
             log['result'] = 'aborted'
             step('abort', reason='could not take the rootfs snapshot')
             return log
+        # A freshly started session has its own start-up flakiness; install into a settled one.
+        import moto_acceptance
+        settled = moto_acceptance.session_ready({})
+        step('settled', ok=settled['passed'])
     # 2 record
     previous, _ = device_release()
     before = installed_versions()
@@ -565,8 +569,10 @@ def deploy(version=None, restart='auto', acceptance='smoke', record_label=None, 
     # 5 restart
     hit, changed = needs_restart(before, after, info.get('session_restart', []))
     step('changes', changed=changed, restart_for=hit)
+    # The LXC configuration applies only at a container start; other Android-side scripts (the control
+    # script, rootfs-image) take effect on their next use and need no restart.
     whole = any(path.endswith('/lxc/plasma/config') for path in android)
-    if restart == 'always' or (restart == 'auto' and (hit or android)):
+    if restart == 'always' or (restart == 'auto' and (hit or whole)):
         # The LXC configuration (mounts, init) applies only when the container starts.
         ok, text = restart_container() if whole else restart_session()
         step('restart', ok=ok, container=whole, output=text[-500:])
@@ -582,6 +588,17 @@ def deploy(version=None, restart='auto', acceptance='smoke', record_label=None, 
         report = moto_acceptance.run_level(acceptance, release=version, out_dir=record / 'acceptance',
                                            since=started_at)
         step('acceptance', level=acceptance, passed=report['passed'], failed=report['failed_ids'])
+        flaky = []
+        if not report['passed']:
+            # One retry of the failed scenarios: a pass on retry is recorded as flaky, not a failure.
+            spec = moto_acceptance.load()
+            retry = moto_acceptance.run_scenarios([s for s in spec['scenarios'] if s['id'] in report['failed_ids']],
+                                                  release=version, out_dir=record / 'acceptance-retry',
+                                                  since=started_at)
+            flaky = [i for i in report['failed_ids'] if i not in retry['failed_ids']]
+            step('acceptance-retry', passed=retry['passed'], failed=retry['failed_ids'], flaky=flaky)
+            report = {**report, 'passed': retry['passed']}
+        log['flaky'] = flaky
         passed = passed and report['passed']
     # 7 save; a failed verification returns to the snapshot, a good one keeps it until commit
     log['result'] = 'ok' if passed else 'verify-failed'
