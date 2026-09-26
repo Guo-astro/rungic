@@ -493,9 +493,11 @@ def screen_recording(ctx, seconds=4):
         _home()
         _quick_settings()
         _tap_label('^录屏$')
+        began = time.monotonic()
         time.sleep(seconds + 1)
         _quick_settings()
         _tap_label('^正在录屏')           # the tile while recording: "正在录屏… / 点击结束录屏"
+        elapsed = time.monotonic() - began   # opening the quick settings takes a while over AT-SPI
         text = wait_for(lambda: (lambda r: r if r.returncode == 0 and float(r.stdout.split('\n')[1]) >= started - 2
                                  else None)(user(PROBE_RECORDING)), timeout=30, interval=2)
         if not text:
@@ -511,8 +513,9 @@ def screen_recording(ctx, seconds=4):
         probe = json.loads(lines[2])
         kinds = {st['codec_type']: st for st in probe.get('streams', [])}
         duration = float(probe.get('format', {}).get('duration') or 0)
-        ok = 'video' in kinds and 'audio' in kinds and seconds - 1 <= duration <= seconds + 4
-        return result(ok, {'duration_s': round(duration, 2)}, streams=probe.get('streams'), file=path)
+        ok = 'video' in kinds and 'audio' in kinds and abs(duration - elapsed) <= 3
+        return result(ok, {'duration_s': round(duration, 2)}, between_taps_s=round(elapsed, 1),
+                      streams=probe.get('streams'), file=path)
     finally:
         if path:
             user(f'rm -f {shlex.quote(path)}')

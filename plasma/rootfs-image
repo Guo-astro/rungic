@@ -1,0 +1,191 @@
+#!/system/bin/sh
+# The Plasma container's rootfs as an ext4 image with a pre-upgrade snapshot (docs/61 §7).
+# Android side, Magisk root. Uses only Android's own tools: losetup, mke2fs, e2fsck, dmctl.
+#
+#   rootfs-image status                 mode, snapshot state and use
+#   rootfs-image attach                 loop + device-mapper device for LXC; prints its path
+#   rootfs-image detach                 remove them (container stopped)
+#   rootfs-image snapshot               keep the current state as a snapshot (container stopped)
+#   rootfs-image rollback               merge the snapshot back: the rootfs returns to it (container stopped)
+#   rootfs-image commit                 drop the snapshot, keep the current state (container stopped)
+#   rootfs-image migrate                one-time: directory rootfs -> image (container stopped)
+#
+# Layout under the LXC directory (inside the moto-lxc runtime: /var/lib/lxc/plasma):
+#   images/rootfs.img   sparse ext4, the system
+#   images/rootfs.cow   sparse copy-on-write store while a snapshot exists
+#   images/state        none | snapshot | merging
+#   state/home, state/moto-cores, state/moto-apt
+#                       bind-mounted by plasma.config: user data, crash reports and the release
+#                       repository never roll back with the system
+#
+# The device LXC mounts is always /dev/block/dm-N of "moto-plasma-root":
+#   none      linear over the image
+#   snapshot  snapshot-origin over the image (writes land in the image, old blocks go to the
+#             COW), plus a read-only "moto-plasma-before" view of the snapshot
+#   merging   snapshot-merge: the snapshot's contents are visible at once and copied back into
+#             the image in the background; when done, the next attach is linear again
+set -eu
+LXC=/data/adb/moto-lxc/runtime/var/lib/lxc/plasma
+IMAGES=$LXC/images
+IMG=$IMAGES/rootfs.img
+COW=$IMAGES/rootfs.cow
+STATE_FILE=$IMAGES/state
+ROOT_DM=moto-plasma-root
+SNAP_DM=moto-plasma-before
+IMG_SIZE=${MOTO_ROOTFS_SIZE:-160G}
+COW_SIZE=${MOTO_ROOTFS_COW_SIZE:-32G}
+CHUNK=8                                   # sectors: 4 KiB copy-on-write chunks
+CONTEXT=u:object_r:adb_data_file:s0       # the label the directory rootfs had
+
+die() { echo "rootfs-image: $*" >&2; exit 1; }
+state() { cat "$STATE_FILE" 2>/dev/null || echo none; }
+running() { [ "$(/data/adb/moto-plasma/moto-plasma-enter /usr/bin/lxc-info -n plasma -sH 2>/dev/null)" = RUNNING ]; }
+need_stopped() { ! running || die "stop the container first (moto-plasma stop)"; }
+
+loop_of() {   # the loop device attached to $1, attaching it if needed
+    dev=$(losetup -j "$1" 2>/dev/null | head -n1 | cut -d: -f1)
+    [ -n "$dev" ] || dev=$(losetup -sf "$1")
+    [ -b "$dev" ] || die "no loop device for $1"
+    echo "$dev"
+}
+
+dm_path() { dmctl getpath "$1" 2>/dev/null; }
+
+attach() {
+    [ -f "$IMG" ] || die "no image at $IMG"
+    path=$(dm_path "$ROOT_DM") && { echo "$path"; return; }
+    base=$(loop_of "$IMG")
+    size=$(blockdev --getsz "$base")
+    case "$(state)" in
+      none)
+        dmctl create "$ROOT_DM" linear 0 "$size" "$base" 0 >/dev/null ;;
+      snapshot)
+        cow=$(loop_of "$COW")
+        dmctl create "$ROOT_DM" snapshot-origin 0 "$size" "$base" >/dev/null
+        dmctl create "$SNAP_DM" -ro snapshot 0 "$size" "$base" "$cow" P "$CHUNK" >/dev/null ;;
+      merging)
+        cow=$(loop_of "$COW")
+        dmctl create "$ROOT_DM" snapshot-merge 0 "$size" "$base" "$cow" "$CHUNK" >/dev/null ;;
+      *) die "unknown state $(state)" ;;
+    esac
+    dm_path "$ROOT_DM"
+}
+
+detach() {
+    need_stopped
+    finish_merge_if_done
+    for name in "$SNAP_DM" "$ROOT_DM"; do
+        dm_path "$name" >/dev/null && dmctl delete "$name" >/dev/null
+    done
+    for file in "$COW" "$IMG"; do
+        dev=$(losetup -j "$file" 2>/dev/null | head -n1 | cut -d: -f1)
+        [ -z "$dev" ] || losetup -d "$dev"
+    done
+    true
+}
+
+# snapshot-merge status: "<allocated>/<total> <metadata>"; the merge is done when only metadata
+# remains allocated.
+merge_done() {
+    set -- $(dmctl status "$ROOT_DM" 2>/dev/null | tr '/' ' ' | awk '{print $(NF-2), $NF}')
+    [ "$#" = 2 ] && [ "$1" = "$2" ]
+}
+
+finish_merge_if_done() {
+    [ "$(state)" = merging ] || return 0
+    dm_path "$ROOT_DM" >/dev/null || return 0
+    if merge_done; then
+        dmctl delete "$ROOT_DM" >/dev/null
+        dev=$(losetup -j "$COW" | head -n1 | cut -d: -f1); [ -z "$dev" ] || losetup -d "$dev"
+        rm -f "$COW"
+        echo none > "$STATE_FILE"
+    fi
+}
+
+snapshot() {
+    need_stopped
+    [ "$(state)" = none ] || die "state is $(state), not none"
+    detach
+    rm -f "$COW"
+    truncate -s "$COW_SIZE" "$COW"          # sparse; zeroed header = new persistent snapshot
+    echo snapshot > "$STATE_FILE"
+    echo "snapshot taken; attach on the next start"
+}
+
+rollback() {
+    need_stopped
+    [ "$(state)" = snapshot ] || die "no snapshot (state $(state))"
+    detach
+    echo merging > "$STATE_FILE"
+    echo "rolling back: the next start shows the snapshot and merges it into the image"
+}
+
+commit() {
+    need_stopped
+    [ "$(state)" = snapshot ] || die "no snapshot (state $(state))"
+    detach
+    rm -f "$COW"
+    echo none > "$STATE_FILE"
+    echo "snapshot dropped"
+}
+
+status() {
+    mode=directory; [ -f "$IMG" ] && mode=image
+    echo "mode=$mode state=$(state)"
+    [ -f "$IMG" ] || return 0
+    echo "image=$(du -h "$IMG" | cut -f1)/$(ls -l "$IMG" | awk '{print $5}')B"
+    [ ! -f "$COW" ] || echo "cow=$(du -h "$COW" | cut -f1)"
+    path=$(dm_path "$ROOT_DM") && echo "root=$path table=$(dmctl table "$ROOT_DM" | tail -n1 | awk '{print $3}') status=$(dmctl status "$ROOT_DM" | tail -n1)"
+    path=$(dm_path "$SNAP_DM") && echo "before=$path status=$(dmctl status "$SNAP_DM" | tail -n1)"
+    true
+}
+
+migrate() {
+    need_stopped
+    [ ! -f "$IMG" ] || die "already an image"
+    [ -d "$LXC/rootfs/usr" ] || die "no directory rootfs"
+    mkdir -p "$IMAGES" "$LXC/state"
+    # Data that must not roll back with the system moves out first (renames on the same filesystem).
+    for pair in home:home var/lib/moto-cores:moto-cores var/lib/moto-apt:moto-apt; do
+        inner=${pair%%:*}; outer=$LXC/state/${pair#*:}
+        if [ -d "$LXC/rootfs/$inner" ] && [ ! -e "$outer" ]; then
+            mv "$LXC/rootfs/$inner" "$outer"
+            mkdir -p "$LXC/rootfs/$inner"
+        fi
+    done
+    truncate -s "$IMG_SIZE" "$IMG"
+    mke2fs -q -t ext4 -L plasma-root -m 1 "$IMG"
+    loop=$(loop_of "$IMG")
+    target=$LXC/rootfs/mnt/rootfs-image
+    mkdir -p "$target"
+    # GNU tar of the Ubuntu rootfs itself keeps hard links, ACLs and file capabilities. The mount
+    # is private to this command; the SELinux label comes from the mount context, as LXC will use.
+    unshare -m /system/bin/sh -c "
+        set -e
+        mount -t ext4 -o context=$CONTEXT $loop $target
+        chroot $LXC/rootfs /usr/bin/tar -C / --one-file-system --numeric-owner --acls --xattrs \
+            --xattrs-include='*' --xattrs-exclude='security.selinux' \
+            --exclude=./mnt/rootfs-image -cpf - . |
+        chroot $LXC/rootfs /usr/bin/tar -C /mnt/rootfs-image --numeric-owner --acls --xattrs \
+            --xattrs-include='*' --xattrs-exclude='security.selinux' -xpf -
+        umount $target"
+    rmdir "$target" 2>/dev/null || true
+    losetup -d "$loop"
+    e2fsck -fn "$IMG" >/dev/null
+    echo none > "$STATE_FILE"
+    # The directory stays as the fallback until the image has been accepted.
+    mv "$LXC/rootfs" "$LXC/rootfs.pre-image"
+    mkdir -p "$LXC/rootfs"
+    echo "migrated; directory kept as $LXC/rootfs.pre-image"
+}
+
+case "${1:-status}" in
+  attach) attach ;;
+  detach) detach ;;
+  snapshot) snapshot ;;
+  rollback) rollback ;;
+  commit) commit ;;
+  migrate) migrate ;;
+  status) status ;;
+  *) echo "usage: rootfs-image status|attach|detach|snapshot|rollback|commit|migrate" >&2; exit 2 ;;
+esac
