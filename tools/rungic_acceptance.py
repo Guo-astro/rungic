@@ -447,7 +447,8 @@ find / -xdev \( -path /proc -o -path /sys -o -path /dev -o -path /run -o -path /
   -o -path /var/tmp -o -path /root -o -path /var/lib/moto-apt -o -path /var/lib/moto-cores -o -path /var/cache \
   -o -path /var/lib/dpkg -o -path /var/lib/apt \) -prune -o -iname '*moto*' -print 2>/dev/null | while read -r p; do
   owner=$(dpkg -S "$p" 2>/dev/null | head -1 | cut -d: -f1)
-  echo "$p	$owner"
+  status=; [ -z "$owner" ] || status=$(dpkg-query -W -f '${db:Status-Abbrev}' "$owner" 2>/dev/null)
+  echo "$p	$owner	$status"
 done
 echo "@@units"; systemctl list-units --all --no-legend --plain 'moto*' | cut -d' ' -f1
 echo "@@userunits"; runuser -u "$(id -nu 1000)" -- env XDG_RUNTIME_DIR=/run/user/1000 systemctl --user list-units --all --no-legend --plain 'moto*' | cut -d' ' -f1
@@ -464,13 +465,15 @@ def rebrand_residue(ctx):
     files, _, rest = text.partition('@@units')
     units, _, rest = rest.partition('@@userunits')
     user_units, _, packages = rest.partition('@@packages')
-    owned, allowed, unowned = [], [], []
+    owned, allowed, unowned, removed = [], [], [], []
     for line in files.strip().splitlines():
-        path, _, owner = line.partition('\t')
+        path, owner, status = (line.split('\t') + ['', ''])[:3]
         if re.search(r'(?i)motor', path.rsplit('/', 1)[-1]):
             continue                                # motorway, Motorola: words, not our names
         if RESIDUE_ALLOWED.match(path):
             allowed.append(path)
+        elif owner and not status.startswith('ii'):
+            removed.append(f'{path} ({owner})')     # conffiles of a removed moto-* package, until phase D
         elif owner:
             owned.append(f'{path} ({owner})')
         else:
@@ -478,9 +481,9 @@ def rebrand_residue(ctx):
     units, user_units, packages = units.split(), user_units.split(), packages.split()
     return result(not owned and not units and not user_units and not packages,
                   {'owned': len(owned), 'units': len(units) + len(user_units), 'packages': len(packages),
-                   'unowned': len(unowned)},
+                   'unowned': len(unowned), 'removed_conffiles': len(removed)},
                   owned=owned[:40], units=units + user_units, packages=packages, allowed=sorted(set(allowed))[:20],
-                  unowned=unowned[:60])
+                  removed_conffiles=removed[:40], unowned=unowned[:60])
 
 CODEC = r"""
 set -e
