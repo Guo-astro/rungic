@@ -1,5 +1,5 @@
 #!/system/bin/sh
-BASE=/data/adb/moto-docker
+BASE=/data/adb/rungic-docker
 [ -f "$BASE/autostart" ] || exit 0
 for i in $(seq 1 180); do
     [ "$(getprop sys.boot_completed)" = 1 ] && break
@@ -9,4 +9,4 @@ for i in $(seq 1 180); do
     [ -d /storage/emulated/0 ] && break
     sleep 2
 done
-"$BASE/moto-docker" start >>"$BASE/boot.log" 2>&1
+"$BASE/rungic-docker" start >>"$BASE/boot.log" 2>&1

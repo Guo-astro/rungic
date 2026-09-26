@@ -16,7 +16,7 @@ def main():
     args = parser.parse_args()
     if args.action not in ("cli", "exec") and args.args:
         parser.error("Only cli and exec accept additional arguments")
-    command = shlex.join(["/data/adb/moto-docker/moto-docker", args.action, *args.args])
+    command = shlex.join(["/data/adb/rungic-docker/rungic-docker", args.action, *args.args])
     interactive = args.tty or args.action == "shell"
     return subprocess.call([*(rungic_device.adb() if args.transport is None else [rungic_device.adb_path(), "-s", args.transport]), "shell",
                             "-tt" if interactive else "-T",

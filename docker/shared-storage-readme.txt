@@ -19,4 +19,4 @@ docker compose -f /sdcard/Docker/compose-example.yaml down
 普通卷默认保存在 Docker 私有 ext4 中，不会自动显示在本目录。
 共享目录不是自动文件同步：容器与文件管理器访问同一份文件，删除同样会生效。
 
-详细本地文档：电脑 /home/kevinzhow/moto/20-docker-storage.md
+详细文档：仓库 range-dev 的 docs/20-docker-storage.md

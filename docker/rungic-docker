@@ -2,9 +2,9 @@
 # Root-only lifecycle and CLI entry point. Does not expose a TCP Docker API.
 set -eu
 export PATH=/product/bin:/system/bin:/system/xbin:/vendor/bin
-BASE=/data/adb/moto-docker
+BASE=/data/adb/rungic-docker
 R=$BASE/runtime
-ENTER=$BASE/moto-docker-enter
+ENTER=$BASE/rungic-docker-enter
 [ "$(id -u)" = 0 ] || { echo 'Magisk root is required' >&2; exit 1; }
 
 pid_of() {
@@ -25,7 +25,7 @@ start_engine() {
     done
     [ "$(getenforce)" = Enforcing ] || { echo 'Expected SELinux Enforcing' >&2; return 1; }
     magiskpolicy --live --apply "$BASE/sepolicy.rule"
-    chcon u:object_r:moto_docker_image:s0 "$BASE/docker-data.ext4"
+    chcon u:object_r:rungic_docker_image:s0 "$BASE/docker-data.ext4"
     loop=
     for f in /sys/block/loop*/loop/backing_file; do
         [ -r "$f" ] || continue
@@ -53,7 +53,7 @@ start_engine() {
     [ "$ready" = 1 ] || { echo 'Docker failed to start; see log' >&2; return 1; }
     "$BASE/network.sh" up || echo 'Network will be retried when Android has an uplink'
     touch "$BASE/running"
-    nohup "$BASE/moto-docker" watch-network </dev/null >>"$R/var/log/network.log" 2>&1 9>&- &
+    nohup "$BASE/rungic-docker" watch-network </dev/null >>"$R/var/log/network.log" 2>&1 9>&- &
     echo 'Docker started; Android SELinux Enforcing'
     printf 'Docker SELinux domain: '; "$ENTER" --selinux-mode
 }
@@ -115,5 +115,5 @@ case "$action" in
             restart) stop_engine; start_engine;;
         esac
         ;;
-    *) echo 'Usage: moto-docker {start|stop|restart|status|log|enable|disable|shell|cli ARGS...|exec /PROGRAM...}' >&2; exit 2;;
+    *) echo 'Usage: rungic-docker {start|stop|restart|status|log|enable|disable|shell|cli ARGS...|exec /PROGRAM...}' >&2; exit 2;;
 esac

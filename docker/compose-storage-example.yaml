@@ -1,4 +1,4 @@
-name: moto-storage-demo
+name: rungic-storage-demo
 services:
   web:
     image: nginx:alpine

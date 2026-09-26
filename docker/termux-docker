@@ -1,8 +1,8 @@
 #!/data/data/com.termux/files/usr/bin/bash
 set -eu
 case ${0##*/} in
-    docker) root_command='/data/adb/moto-docker/moto-docker cli';;
-    docker-service) root_command='/data/adb/moto-docker/moto-docker';;
+    docker) root_command='/data/adb/rungic-docker/rungic-docker cli';;
+    docker-service) root_command='/data/adb/rungic-docker/rungic-docker';;
     *) exit 2;;
 esac
 for arg in "$@"; do

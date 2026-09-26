@@ -1,8 +1,8 @@
-name: moto-server
+name: rungic-server
 services:
   web:
     image: nginx:alpine
-    container_name: moto-nginx
+    container_name: rungic-nginx
     restart: unless-stopped
     ports:
       - "18088:80"

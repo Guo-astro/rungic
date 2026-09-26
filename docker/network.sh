@@ -2,10 +2,10 @@
 # Android policy-routing adapter for this Docker installation.
 set -eu
 export PATH=/product/bin:/system/bin:/system/xbin:/vendor/bin
-BASE=/data/adb/moto-docker
+BASE=/data/adb/rungic-docker
 CIDR=172.30.0.0/16
-FWD=MOTO_DOCKER_FWD
-NAT=MOTO_DOCKER_NAT
+FWD=RUNGIC_DOCKER_FWD
+NAT=RUNGIC_DOCKER_NAT
 
 case ${1:-up} in
     up|ensure)

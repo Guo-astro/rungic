@@ -14,7 +14,7 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 
-#define ROOT "/data/adb/moto-docker/runtime"
+#define ROOT "/data/adb/rungic-docker/runtime"
 
 static _Noreturn void fail(const char *what) {
     perror(what);
@@ -29,7 +29,7 @@ static int print_selinux_mode(void) {
     fclose(index);
     char request[160], response[256];
     int len = snprintf(request, sizeof(request),
-        "u:r:moto_docker:s0 u:object_r:moto_docker_file:s0 %u 1", cls);
+        "u:r:rungic_docker:s0 u:object_r:rungic_docker_file:s0 %u 1", cls);
     int fd = open("/sys/fs/selinux/access", O_RDWR | O_CLOEXEC);
     if (fd < 0 || write(fd, request, len) != len) fail("query Docker SELinux mode");
     if (lseek(fd, 0, SEEK_SET) < 0) fail("seek SELinux response");
@@ -48,7 +48,7 @@ static int print_selinux_mode(void) {
 
 int main(int argc, char **argv) {
     if (argc < 2 || geteuid() != 0) {
-        fprintf(stderr, "Usage (root): moto-docker-enter /absolute/program [args...]\n");
+        fprintf(stderr, "Usage (root): rungic-docker-enter /absolute/program [args...]\n");
         return 2;
     }
     if (argc == 2 && !strcmp(argv[1], "--selinux-mode"))
@@ -83,7 +83,7 @@ int main(int argc, char **argv) {
     /* Keep image layers on ext4: Android's casefold-capable F2FS cannot
      * currently be used as an OverlayFS backing filesystem.
      */
-    FILE *loop_file = fopen("/data/adb/moto-docker/data.loop", "r");
+    FILE *loop_file = fopen("/data/adb/rungic-docker/data.loop", "r");
     char loop[128];
     if (!loop_file || !fgets(loop, sizeof(loop), loop_file)) fail("read data loop");
     fclose(loop_file);
@@ -105,7 +105,7 @@ int main(int argc, char **argv) {
     if (umount2("/.oldroot", MNT_DETACH) < 0) fail("detach old Android root");
     if (chdir("/root") < 0) fail("chdir home");
     /* Enter the dedicated Docker domain; its mode is managed by policy. */
-    const char context[] = "u:r:moto_docker:s0";
+    const char context[] = "u:r:rungic_docker:s0";
     FILE *current = fopen("/proc/self/attr/current", "w");
     if (!current || fwrite(context, 1, sizeof(context) - 1, current) != sizeof(context) - 1 ||
         fclose(current) != 0)
