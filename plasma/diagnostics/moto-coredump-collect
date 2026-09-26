@@ -38,6 +38,7 @@ MAX_CORE_BYTES = 4 << 30       # total compressed cores
 KEEP_REPORTS = 200             # backtrace/info directories
 NAME = re.compile(r'^(?P<comm>.+)_(?P<pid>\d+)_(?P<time>\d+)\.core(\.gz)?$')
 RELEASE = Path('/usr/share/moto/release.json')
+RELEASE_INSTALLED = Path('/var/lib/dpkg/info/moto-plasma-release.list')   # mtime: install time
 COREDUMP_MESSAGE_ID = 'fc2e22bc6ee647b6b90729ab34a250b1'   # systemd's SD_MESSAGE_COREDUMP
 SIGNALS = {'SIGQUIT': 3, 'SIGILL': 4, 'SIGTRAP': 5, 'SIGABRT': 6, 'SIGBUS': 7, 'SIGFPE': 8, 'SIGKILL': 9,
            'SIGSEGV': 11, 'SIGSYS': 31, 'SIGXCPU': 24, 'SIGXFSZ': 25}
@@ -160,12 +161,23 @@ def package_of(path):
     return None
 
 
-def release():
+def release(crashed_at):
+    """The installed release, or None with a note when it was installed after the crash: cores
+    are collected up to minutes later, and a deploy's restart for its snapshot still runs the
+    previous release."""
     try:
         info = json.loads(RELEASE.read_text())
-        return {'version': info.get('version'), 'commit': info.get('commit')}
     except (OSError, ValueError):
         return None
+    current = {'version': info.get('version'), 'commit': info.get('commit')}
+    try:
+        installed_at = RELEASE_INSTALLED.stat().st_mtime
+    except OSError:
+        return current
+    if crashed_at < installed_at:
+        return {'version': None, 'before': current['version'],
+                'note': f"crashed before {current['version']} was installed"}
+    return current
 
 
 def journal_send(fields):
@@ -219,7 +231,7 @@ def collect(path):
             'signal': signal, 'cmdline': cmdline, 'exe': exe, 'core_bytes': stat.st_size,
             'core_zst_bytes': (report / 'core.zst').stat().st_size, 'top_frames': top,
             'signature': sig, 'signature_frames': sig_frames, 'symbolized': False,
-            'release': release(), 'package': package_of(exe),
+            'release': release(when.timestamp()), 'package': package_of(exe),
             'modules': [{'file': m['file'] or m['name'], 'build_id': m['build_id']} for m in mods]}
     (report / 'info.json').write_text(json.dumps(info, indent=1))
     path.unlink()

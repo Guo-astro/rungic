@@ -545,6 +545,9 @@ def deploy(version=None, restart='auto', acceptance='smoke', record_label=None, 
     step('sync', **sync_repo())
     ok, tail = apt_install(info, record)
     step('install', ok=ok)
+    # New crashes are counted from here: the restart for the snapshot runs the previous release, and
+    # its crashes (collected later) are not this release's (docs/61).
+    installed_at = time.time()
     if not ok:
         log['result'] = 'install-failed'
         step('abort', reason=tail[-1500:])
@@ -586,7 +589,7 @@ def deploy(version=None, restart='auto', acceptance='smoke', record_label=None, 
     if acceptance != 'none':
         import moto_acceptance
         report = moto_acceptance.run_level(acceptance, release=version, out_dir=record / 'acceptance',
-                                           since=started_at)
+                                           since=installed_at)
         step('acceptance', level=acceptance, passed=report['passed'], failed=report['failed_ids'])
         flaky = []
         if not report['passed']:
@@ -594,7 +597,7 @@ def deploy(version=None, restart='auto', acceptance='smoke', record_label=None, 
             spec = moto_acceptance.load()
             retry = moto_acceptance.run_scenarios([s for s in spec['scenarios'] if s['id'] in report['failed_ids']],
                                                   release=version, out_dir=record / 'acceptance-retry',
-                                                  since=started_at)
+                                                  since=installed_at)
             flaky = [i for i in report['failed_ids'] if i not in retry['failed_ids']]
             step('acceptance-retry', passed=retry['passed'], failed=retry['failed_ids'], flaky=flaky)
             report = {**report, 'passed': retry['passed']}
