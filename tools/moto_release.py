@@ -586,6 +586,13 @@ def deploy(version=None, restart='auto', acceptance='smoke', record_label=None, 
     # 7 save; a failed verification returns to the snapshot, a good one keeps it until commit
     log['result'] = 'ok' if passed else 'verify-failed'
     if use_snapshot and not passed:
+        # Evidence first: the journal is volatile and the rollback restarts the container.
+        try:
+            import moto_agent
+            evidence = moto_agent.snapshot(f'deploy-{version}-failed', 900)
+            step('evidence', folder=evidence['folder'])
+        except Exception as error:   # evidence must not prevent the rollback
+            step('evidence', error=f'{type(error).__name__}: {error}')
         ok, text = with_container_stopped('rollback')
         step('snapshot-rollback', ok=ok, output=text[-400:])
         if ok:
