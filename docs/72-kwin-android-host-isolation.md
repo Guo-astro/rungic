@@ -57,7 +57,12 @@
 
 **KWin构建来源切到补丁队列（完成）**：`build_on_device.py`对`packages/kwin`用`pq.py source`，发布工具从`packages/kwin/debian/changelog`取版本；`+moto20`（内容与`+moto19`相同）已构建入库，随发布20260926.17部署。第一次部署的冒烟验收因一次plasmashell崩溃（签名`6c87dacae3ce`，Qt Wayland事件线程在`wl_display_read_events`中SIGSEGV）自动回滚：崩溃发生在部署重启会话时旧会话被关闭的那一刻，之前两次KWin重启也有同类报告。它是真实缺陷（KWin退出时Qt客户端崩溃，待查），但不是新发布的回归；部署工具改为从新会话就绪时统计新崩溃，并把余量从30秒改为2秒（统计窗口按相对时长计算，不受两端时钟影响）。
 
-**B KWin侧（进行中）**：在pq分支末尾以临时提交实现，折叠进补丁队列前先构建与测试。
-- 新目录`src/backends/android/`：`AndroidBackend : WaylandBackend`（为所有输出创建`AndroidOutput`；用户修改分辨率/刷新策略时请求Android；在自己的事件队列上绑定宿主的`zwp_idle_inhibit_manager_v1`，KWin的空闲抑制状态变化时在手机输出表面上创建或销毁抑制器）、`AndroidOutput : WaylandOutput`（手机输出的物理尺寸与internal、Android分辨率×刷新率模式表；在Android宿主上由KWin决定缩放）；`android-display-client.h`移入该目录。
-- 上游文件中的钩子：H1 `main_wayland.cpp`的`--android-host`；H2 `WaylandBackend::createOutputObject`（protected virtual）；H4 `WaylandOutput::modesFor`、`applyExtraChanges`（protected virtual）与`setRefreshRate`；H8 `InputRedirection::idleInhibitedChanged`信号。`idle-android-power`补丁（D-Bus与5秒重发）整条删除，`idle_inhibition.cpp`回到上游原样。
-- 构建与L1测试：为不占用手机，在主机上建立x86的KWin构建环境（`tools/pq/build.Dockerfile`，同一`ubuntu:26.04`镜像摘要加`apt-get build-dep kwin`），先在主机上编译检查并运行KWin集成测试（虚拟后端）。
+**B KWin侧（代码完成，KWin `+moto21`，待实机验收）**
+
+- 新目录`src/backends/android/`：`AndroidBackend : WaylandBackend`（为所有输出创建`AndroidOutput`；用户修改手机输出的分辨率/刷新策略时请求Android，投屏输出不请求；在自己的事件队列上绑定宿主的`zwp_idle_inhibit_manager_v1`，KWin的空闲抑制状态变化时在手机输出表面上创建或销毁抑制器）、`AndroidOutput : WaylandOutput`（手机输出的物理尺寸与internal、Android分辨率×刷新率模式表；在Android宿主上由KWin决定缩放）；`android-display-client.h`移入该目录。
+- 上游文件中的钩子：H1 `main_wayland.cpp`的`--android-host`；H2 `WaylandBackend::createOutputObject`（protected virtual）；H4 `WaylandOutput::modesFor`、`applyExtraChanges`（protected virtual）与`setRefreshRate`；H8 `InputRedirection::idleInhibitedChanged`信号。
+- **折叠进补丁队列，而不是追加在末尾**：先在pq分支末尾开发并编译测试，再在新分支上重放原有补丁，删去`idle-android-power`与`android-display-settings`，冲突按“去掉Android显示设置部分”解决（`cast-output`、`cast-cursor-host-text-raw-outputs`两条），最后一条`android-backend`补丁把源码树补到试点结果。检验：从orig tarball用quilt应用导出的队列，结果与折叠后的源码树一致（仅上游`.gitattributes`标为export-ignore的`.clang-format`不在`git archive`中）。折叠时逐项比对搬移的代码，发现试点漏掉了`cast-output`补丁加入的`output->isCast()`判断（否则在KScreen里改电视输出会改手机分辨率），已补上。
+- **主机上的构建与L1测试**：`tools/pq/build.Dockerfile`（x86，同一`ubuntu:26.04`摘要，`build-dep kwin`加测试需要而发行版构建不装的`libei-dev`）；源码只读挂载，`.git`用tmpfs遮住（KDE的CMake会写提交钩子）。结果：`testIdleInhibition` 9/9、`testInputMethod` 23/23、`testVirtualKeyboardDBus` 5/5、`testXdgShellWindow` 63通过7失败（含新增`testMinimumAboveMaximum`）。不含我们补丁的基线（上游＋Ubuntu补丁）在同一环境中同样是这7个失败（服务端装饰、desktop文件、kill辅助程序：环境缺少已安装的组件），记为已知环境失败。
+- **量化**：我们的补丁在上游已有文件中的改动由29个文件+822/−68行变为31个文件+759/−69行（多出的是钩子所在的`input.*`、`main_wayland.cpp`、CMake），新文件由209行变为533行。再次把队列顺序合并到6.7.5：冲突由18条中15条变为17条中14条，**基本没有改善**——这种测法下第一条大补丁`android-host-graphics`在6.7上冲突后，后续依赖它的补丁连带冲突，新补丁也被牵连。试点证明了结构可行（钩子加新目录可编译、可测、可验证），但要在升级冲突上见效，必须把Wayland后端中的大补丁（图形、投屏、宿主输出）也迁入`src/backends/android/`。记录：`.work/research/patch-queue/pq-upgrade-report-pilot.txt`。
+- **兼容性**：会话脚本`plasma/kwin`传`--android-host`，旧KWin不认识该参数会退出，所以`moto-plasma-session`依赖`kwin-wayland (>= +moto21~)`；新KWin需要APK 1.46（旧APK上抑制器只被计数，不保持亮屏）。
+- **验收**：新增冒烟场景`idle.inhibit`（`moto-idle-probe`显示一个带抑制器的窗口6秒，APK窗口期间有`KEEP_SCREEN_ON`、结束后消失）。探针最初只在裸`wl_surface`上创建抑制器：直接连宿主有效，但KWin只对显示出的窗口计算空闲抑制，所以经KWin时无效——探针改为显示真实窗口，`--bare`保留给直接测试宿主。
