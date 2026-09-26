@@ -50,6 +50,12 @@ class Recorder:
                       f'! video/x-raw ! videoflip name=flip{i} video-direction=auto ! queue max-size-buffers=4 leaky=downstream '
                       f'! videoconvertscale n-threads=2 ! capsfilter name=fit{i} '
                       f'! videorate ! video/x-raw,format=I420,framerate={fps}/1 '
+                      # The encoder runs in its own thread and drops what it cannot keep up with here
+                      # (measured about 50 fps at 864x1920). Without this, videorate filled every gap
+                      # with duplicates in the converter's thread: the stream fell behind real time
+                      # (7 s per minute), the first queue dropped nearly every screen frame, and the
+                      # backlog had to be encoded before the file could be finished.
+                      f'! queue name=enc{i} max-size-buffers=4 max-size-bytes=0 max-size-time=0 leaky=downstream '
                       f'! rungich264enc bitrate={bitrate} ! h264parse ! queue ! mux{i}.video_0 ')
         audio_pipe = ''
         if sources:
