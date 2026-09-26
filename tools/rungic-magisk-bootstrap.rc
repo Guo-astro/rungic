@@ -3,4 +3,4 @@ on post-fs-data
     # it at boot-complete if no manager exists. Supply the original full APK.
     rm ${MAGISKTMP}/stub.apk
     symlink /product/etc/magisk/Magisk.apk ${MAGISKTMP}/stub.apk
-    exec u:r:magisk:s0 0 0 -- /system/bin/sh ${MAGISKTMP}/moto-magisk-bootstrap.sh
+    exec u:r:magisk:s0 0 0 -- /system/bin/sh ${MAGISKTMP}/rungic-magisk-bootstrap.sh

@@ -31,7 +31,7 @@ v2 增加三部分：
 | product.img | 406fd59c4273ecd0b0ac290b37aaf8d1f6d1e76c92f82a3c176c53a72a99d80d |
 | init_boot.img | 4a2491a64bed2771e0e77d6605c7e68fb1e18ef3092b47641fb414696b1e2589 |
 
-源码/脚本：tools/build_offline_magisk.py、verify_offline_product.py、moto-magisk-bootstrap.rc、moto-magisk-bootstrap.sh、moto-magisk-manager.sh、install_offline_v2.py。
+源码/脚本：tools/build_offline_magisk.py、verify_offline_product.py、moto-magisk-bootstrap.rc、moto-magisk-bootstrap.sh（2026-09-27 Rungic改名C阶段后为`tools/rungic-magisk-bootstrap.*`，日志`/data/adb/rungic-magisk-bootstrap.log`；下次构建并刷入ROM后生效，上表哈希对应当前刷入的moto名版本）、moto-magisk-manager.sh、install_offline_v2.py。
 
 ## 实机验证方法
 

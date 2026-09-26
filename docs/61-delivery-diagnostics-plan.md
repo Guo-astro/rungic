@@ -1,6 +1,6 @@
 # 系统交付、验收与诊断改进方案
 
-> 改名说明（2026-09-26）：Rungic改名B阶段之后，容器内的`moto-*`包、程序、单元、路径，`MOTO_*`变量和`dev.moto.*`名称改为`rungic-*`、`RUNGIC_*`、`com.rungic.*`；Android侧的名称（APK、`/data/adb/moto-*`、绑定挂载点等）在C阶段改。对照与边界见[70篇](70-rungic-rebrand.md)。下文按时间记录的内容保留当时的名称。
+> 改名说明（2026-09-26）：Rungic改名B阶段之后，容器内的`moto-*`包、程序、单元、路径，`MOTO_*`变量和`dev.moto.*`名称改为`rungic-*`、`RUNGIC_*`、`com.rungic.*`；Android侧的名称在C阶段（2026-09-27）改为APK `com.rungic.plasma`、`/data/adb/rungic-*`（镜像在`/data/adb/rungic-lxc/images/`）、容器中的`/var/lib/rungic-{host,cores,apt}`、`rungic-gpu-alloc`、`rungic-cast`、`debug.rungic.*`、dm `rungic-root`与SELinux `rungic_image`。对照与边界见[70篇](70-rungic-rebrand.md)。下文按时间记录的内容保留当时的名称。
 
 2026-09-26。本文最初是改进方案；同日按“实施记录”一节实施，前面各节保留为方案原文，与实施不同之处以实施记录为准。基线是`origin/agent-native-debugging`（`817e4a7d`），下文55–59篇均指该分支中的文档。方案遵循AGENTS.md：优先使用Linux与发行版的标准机制，在共享层解决问题；修改后用多个独立应用交叉验收；研究结论与已验证功能分开写。
 

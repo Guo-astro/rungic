@@ -1,5 +1,7 @@
 # LXC 实机部署与验证（2026-09-22）
 
+> 改名说明（2026-09-27）：Rungic改名C阶段之后，`/data/adb/moto-lxc`、`moto-lxc`、`moto-lxc-enter`改为`/data/adb/rungic-lxc`、`rungic-lxc`、`rungic-lxc-enter`（enter程序改用NDK静态编译，`tools/build_enter.sh`），Alpine主机名`rungic-alpine`。对照见[70篇](70-rungic-rebrand.md)。下文按时间记录的内容保留当时的名称。
+
 **已在原厂 Android 16 上运行 LXC 6.0.4 + Alpine 3.22.6 ARM64 容器。** 内核已刷入，容器已安装，当前 `alpine` 为 RUNNING。SELinux 全程 Enforcing；Magisk 31.0 的 `init_boot_a` 未改变。
 
 这是第一个可用的最小容器版本：支持启动、进入、执行命令、交互终端、正常停止和持久化。网络目前只有独立 namespace 内的 loopback；没有配置外网、端口映射、CPU/内存配额或自动启动。

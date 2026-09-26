@@ -1,5 +1,7 @@
 # 用 Termux 管理 LXC（2026-09-22）
 
+> 改名说明（2026-09-27）：Rungic改名C阶段之后，`/data/adb/moto-lxc`、`moto-lxc`、`moto-lxc-enter`改为`/data/adb/rungic-lxc`、`rungic-lxc`、`rungic-lxc-enter`（enter程序改用NDK静态编译，`tools/build_enter.sh`），Alpine主机名`rungic-alpine`。对照见[70篇](70-rungic-rebrand.md)。下文按时间记录的内容保留当时的名称。
+
 > 后续：同一 Termux 现已增加 `docker` / `docker-service` 入口，Docker/Compose 基础部署、代理和网络验证见 [19-docker-installation.md](19-docker-installation.md)。下文的“Docker 待验证”是本篇完成时的阶段记录；LXC 本身仍保持原来的手动启动与 loopback 配置。
 
 设备 ZY32MVJS25 已安装 Termux 0.118.3 ARM64，并配置 `lxc` 快捷命令管理现有的 Alpine 容器。Termux 是普通 Android 应用，容器操作通过 Magisk 授权取得 root。

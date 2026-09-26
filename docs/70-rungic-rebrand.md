@@ -162,4 +162,4 @@
 5. APK：安装`com.rungic.plasma`；复制`MainActivity.xml`；`pm grant`相机、麦克风；`appops set SYSTEM_ALERT_WINDOW allow`；Magisk授权用`magisk --sqlite "INSERT OR REPLACE INTO policies (uid,policy,until,logging,notification) VALUES(<uid>,2,0,1,1)"`（不返回行，不触发docs/39的NULL问题；不执行`SELECT *`与`PRAGMA`）；旧APK `pm disable-user`（保留数据与授权供`down`，D阶段卸载）。
 6. 启动新APK，验收：桌面、触摸、GPU、音频、相机/麦克风、投屏、OCR、Android侧残留检查；重启手机后再验收一次。
 
-主屏上的APK图标需要用户重新放置。ROM中的Magisk引导脚本（`tools/moto-magisk-bootstrap.*`）在仓库中改名，随下次刷ROM生效。
+主屏上的APK图标需要用户重新放置。ROM中的Magisk引导脚本在仓库中改名为`tools/rungic-magisk-bootstrap.*`，随下次刷ROM生效。

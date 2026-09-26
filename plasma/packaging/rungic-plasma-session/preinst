@@ -1,8 +1,0 @@
-#!/bin/sh
-set -e
-# account.json moved to /var/lib/moto-host (state/host on the Android side, docs/61 §7). postinst removes
-# the old /etc copy; make sure the new one exists first, so the only copy is never removed.
-if { [ "$1" = install ] || [ "$1" = upgrade ]; } && [ -f /etc/moto-plasma/account.json ] \
-        && [ ! -f /var/lib/moto-host/account.json ] && mountpoint -q /var/lib/moto-host; then
-    cp -p /etc/moto-plasma/account.json /var/lib/moto-host/account.json
-fi

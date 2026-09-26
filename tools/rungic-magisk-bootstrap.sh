@@ -22,5 +22,5 @@ chmod -R 0755 "$dst"
 # Magisk's following post-fs-data stage performs its own restorecon as well.
 chcon u:object_r:adb_data_file:s0 /data/adb
 chcon -R u:object_r:system_file:s0 "$dst"
-echo 'Magisk v31.0 runtime initialized from the built-in offline seed.' > /data/adb/moto-magisk-bootstrap.log
-chmod 0600 /data/adb/moto-magisk-bootstrap.log
+echo 'Magisk v31.0 runtime initialized from the built-in offline seed.' > /data/adb/rungic-magisk-bootstrap.log
+chmod 0600 /data/adb/rungic-magisk-bootstrap.log

@@ -1,6 +1,6 @@
 # Phosh 与 Android 后端的连接：架构、研究过程和维护方法
 
-> 改名说明（2026-09-26）：Rungic改名B阶段之后，容器内的`moto-*`包、程序、单元、路径，`MOTO_*`变量和`dev.moto.*`名称改为`rungic-*`、`RUNGIC_*`、`com.rungic.*`；Android侧的名称（APK、`/data/adb/moto-*`、绑定挂载点等）在C阶段改。对照与边界见[70篇](../70-rungic-rebrand.md)。下文按时间记录的内容保留当时的名称。
+> 改名说明（2026-09-26）：Rungic改名B阶段之后，容器内的`moto-*`包、程序、单元、路径，`MOTO_*`变量和`dev.moto.*`名称改为`rungic-*`、`RUNGIC_*`、`com.rungic.*`；Android侧的名称在C阶段（2026-09-27）改为APK `com.rungic.plasma`、`/data/adb/rungic-*`（镜像在`/data/adb/rungic-lxc/images/`）、容器中的`/var/lib/rungic-{host,cores,apt}`、`rungic-gpu-alloc`、`rungic-cast`、`debug.rungic.*`、dm `rungic-root`与SELinux `rungic_image`。对照与边界见[70篇](../70-rungic-rebrand.md)。下文按时间记录的内容保留当时的名称。
 
 > 历史研究记录：Phosh 专属实现已于2026-09-23移除。本篇保留共享硬件接口与研究结论；当前代码见 `shared/`、`native/plasma/`、`plasma/`，现行集成见 [40篇](../40-plasma-mobile-integration.md)。旧Phosh路径和已删除的原始日志不再作为可执行入口。
 
@@ -485,9 +485,9 @@ sha256sum -c .work/refs/phosh-features-20260923/SHA256SUMS
 
 Agent可直接调用的设备诊断、崩溃现场、统一追踪（perfetto + KGSL + KWin FTrace）与按控件操作见[55篇](../55-agent-native-debugging.md)；入口为工作区`.mcp.json`中的`moto` MCP服务及`tools/rungic_agent.py`等命令行。桌面输出链的分段耗时与GLES/Vulkan对照见[56篇](../56-kwin-vulkan-quantification.md)。
 
-## 名称对照（Rungic改名B阶段，2026-09-26）
+## 名称对照（Rungic改名，B阶段2026-09-26，C阶段2026-09-27）
 
-容器内的接口在B阶段改名，本文上面的描述保留原名。Android侧的名称在C阶段随APK改，届时补入本表。
+容器内的接口在B阶段改名，Android侧在C阶段随APK改名（切换工具`tools/rungic_cutover.py`，docs/70）；本文上面的描述保留原名。
 
 | 位置 | 改名前 | 改名后 |
 |---|---|---|
@@ -497,4 +497,10 @@ Agent可直接调用的设备诊断、崩溃现场、统一追踪（perfetto + K
 | 编解码 | GStreamer `motoh264enc`/`motoh26{4,5}dec`/`motovp9dec`，FFmpeg `h264_moto`等，`libmotocodec.so` | `rungich264enc`等，`h264_rungic`等，`librungiccodec.so` |
 | 相机 | PipeWire节点`moto.camera.N`、`device.api=moto-android`，libcamera相机`moto-pipewire-{back,front}` | `rungic.camera.N`、`rungic-android`、`rungic-pipewire-{back,front}` |
 | KWin与显示设置 | `MotoDisplay`命名空间（`android-display-client.h`） | `RungicDisplay` |
-| 保持不变（C阶段） | APK `dev.moto.plasma`、`/data/adb/moto-*`、`/mnt/android-wayland/moto-gpu-alloc`、容器中的`/var/lib/moto-{host,cores,apt}`、Termux音频目录`moto-plasma-audio` | — |
+| APK | `dev.moto.plasma`（Java包同名，日志标签`Moto*`，标签“Plasma Mobile”） | `com.rungic.plasma`（`Rungic*`，“Rungic”） |
+| Android侧目录与程序 | `/data/adb/moto-{plasma,lxc,wfd}`，`moto-plasma`、`moto-plasma-enter`、`moto-lxc`、`moto-cast`；镜像`…/lxc/plasma/images/` | `/data/adb/rungic-{plasma,lxc,wfd}`，`rungic-plasma`、`rungic-plasma-enter`、`rungic-lxc`、`rungic-cast`；镜像`/data/adb/rungic-lxc/images/` |
+| 镜像设备与SELinux | dm `moto-plasma-root`/`moto-plasma-before`，`moto_plasma_image` | `rungic-root`/`rungic-before`，`rungic_image` |
+| 容器绑定挂载点 | `/var/lib/moto-{host,cores,apt}` | `/var/lib/rungic-{host,cores,apt}`（旧名同时挂载到D阶段） |
+| APK与KWin之间 | `/mnt/android-wayland/moto-gpu-alloc`，投屏输出厂商“Moto” | `rungic-gpu-alloc`（APK保留`moto-gpu-alloc`链接），厂商“Moto”保留到D阶段（KWin两者都认） |
+| 其他 | `debug.moto.*`，Termux音频目录`moto-plasma-audio`，LXC主机名`moto-plasma` | `debug.rungic.*`，`rungic-plasma-audio`，`rungic` |
+| 保持不变 | Docker（`/data/adb/moto-docker`、`moto_docker`）单独切换；ROM中的Magisk引导脚本随下次刷机 | — |

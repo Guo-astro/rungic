@@ -129,7 +129,9 @@ def stop_all(launcher, lxc, cast_watch, apk, dm):
     root(f'[ "$({lxc} status | grep -m1 State | tr -s " " | cut -d" " -f2)" != RUNNING ] || {lxc} stop', timeout=60,
          check=False)
     # The watchers: the cast reconnect loop and the audio monitor (it ends once its flag is gone).
-    root(f'pkill -f {cast_watch}; pkill -f "android-audio watch"; true', check=False)
+    # The cast watcher waits on a logcat pipeline and ends only once its children are gone.
+    root(f'for p in $(pgrep -f {cast_watch}); do pkill -P $p; kill $p; done; pkill -f "android-audio watch"; true',
+         check=False)
     left = root(f'dmctl getpath {dm} 2>/dev/null; pidof lxc-start; losetup -a | grep rootfs.img; true',
                 check=False).stdout.strip()
     if left:

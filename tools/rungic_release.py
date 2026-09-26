@@ -400,6 +400,9 @@ def ensure_apt_source():
     run(f'''set -e
 cat > /etc/apt/sources.list.d/rungic.sources.new <<'EOF'
 {SOURCES}EOF
+# The repository's path on this system (before phase C only /var/lib/moto-apt is mounted, docs/70).
+repo={DEVICE_REPO}
+sed -i "s#file:/var/lib/rungic-apt#file:$repo#" /etc/apt/sources.list.d/rungic.sources.new
 cmp -s /etc/apt/sources.list.d/rungic.sources.new /etc/apt/sources.list.d/rungic.sources 2>/dev/null \
   && rm /etc/apt/sources.list.d/rungic.sources.new || mv /etc/apt/sources.list.d/rungic.sources.new /etc/apt/sources.list.d/rungic.sources
 cat > /etc/apt/preferences.d/rungic.new <<'EOF'

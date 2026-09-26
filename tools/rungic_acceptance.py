@@ -459,9 +459,9 @@ echo "@@packages"; dpkg-query -W -f '${db:Status-Abbrev} ${Package}\n' 'moto-*' 
 
 @check
 def rebrand_residue(ctx):
-    """Phase B of the Rungic rename (docs/70): no installed package ships a file or unit under a
-    "moto" name, no such unit is loaded, no moto-* package is installed; the phase C names and
-    unowned leftovers are listed, not failed."""
+    """The Rungic rename (docs/70): no installed package ships a file or unit under a "moto" name, no
+    such unit is loaded, no moto-* package is installed, and the Android side has the Rungic layout
+    (phase C); the names kept until later phases and unowned leftovers are listed, not failed."""
     text = run(RESIDUE, 'container', timeout=300, check=False).stdout
     files, _, rest = text.partition('@@units')
     units, _, rest = rest.partition('@@userunits')
@@ -480,11 +480,50 @@ def rebrand_residue(ctx):
         else:
             unowned.append(path)
     units, user_units, packages = units.split(), user_units.split(), packages.split()
-    return result(not owned and not units and not user_units and not packages,
+    android = _android_residue()
+    return result(not owned and not units and not user_units and not packages and not android['failed'],
                   {'owned': len(owned), 'units': len(units) + len(user_units), 'packages': len(packages),
-                   'unowned': len(unowned), 'removed_conffiles': len(removed)},
+                   'unowned': len(unowned), 'removed_conffiles': len(removed),
+                   'android': len(android['failed']), 'android_later': len(android['later'])},
                   owned=owned[:40], units=units + user_units, packages=packages, allowed=sorted(set(allowed))[:20],
-                  removed_conffiles=removed[:40], unowned=unowned[:60])
+                  removed_conffiles=removed[:40], unowned=unowned[:60], android=android)
+
+
+# The Android side after the phase C cutover (docs/70, tools/rungic_cutover.py). Later phases: Docker
+# (its own cutover), phase D (the files the cutover keeps for `down`, the old APK, the Termux audio
+# directory it leaves, the container's mounts under the old names), the next ROM (Magisk bootstrap
+# logs), the next boot (debug.moto.* set by hand; nothing reads them); moto-phosh is an old leftover.
+ANDROID_LATER = re.compile(r'^(/data/adb/(moto-docker|service\.d/moto-docker\.sh|moto-phosh|moto-magisk-|rungic-cutover)'
+                           r'|/data/data/com\.termux/files/usr/tmp/moto-(plasma|phosh)-audio|package:dev\.moto\.plasma$'
+                           r'|process:.*/data/adb/moto-docker/|process:lxc-start -n plasma |property:debug\.moto\.)')
+ANDROID_RESIDUE = r"""
+[ -d /data/adb/rungic-plasma ] || { echo layout:moto; exit 0; }
+find /data/adb -maxdepth 2 -iname '*moto*' -print
+find /data/adb/rungic-lxc/runtime/var/lib/lxc/plasma -maxdepth 2 -iname '*moto*' -print
+ls -d /data/data/com.termux/files/usr/tmp/*moto* 2>/dev/null
+pm list packages | grep -x package:dev.moto.plasma
+pm list packages -e | grep -x package:dev.moto.plasma | sed 's/^/enabled:/'
+ps -A -o ARGS | grep -i -E '[m]oto-|dev[.]moto' | sed 's/^/process:/'
+getprop | grep -o '^\[debug[.]moto[.][^]]*' | sed 's/^\[/property:/'
+echo "label:$(ls -Z /data/adb/rungic-lxc/images/rootfs.img | cut -d' ' -f1)"
+"""
+
+
+def _android_residue():
+    lines = run(ANDROID_RESIDUE, 'root', timeout=120, check=False).stdout.split('\n')
+    lines = [line.strip() for line in lines if line.strip()]
+    if 'layout:moto' in lines:
+        return {'failed': ['the Android side is from before the phase C cutover'], 'later': []}
+    failed, later = [], []
+    for line in lines:
+        if line.startswith('label:'):
+            if line != 'label:u:object_r:rungic_image:s0':
+                failed.append(line)
+        elif ANDROID_LATER.match(line) and not line.startswith('enabled:'):
+            later.append(line)
+        else:
+            failed.append(line)
+    return {'failed': failed, 'later': later}
 
 CODEC = r"""
 set -e
