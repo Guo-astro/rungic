@@ -1,3 +1,12 @@
+kwin (4:6.6.6-0ubuntu0.1+moto21) resolute; urgency=medium
+
+  * Android host backend (docs/72): kwin_wayland --android-host selects
+    src/backends/android. The phone's display settings live there, and idle
+    inhibition reaches the host as a zwp_idle_inhibitor_v1 on the phone output
+    (the D-Bus path through dev.moto.Android.Power is gone). Needs APK 1.46.
+
+ -- range-dev <noreply@localhost>  Sat, 26 Sep 2026 07:50:59 +0000
+
 kwin (4:6.6.6-0ubuntu0.1+moto20) resolute; urgency=medium
 
   * Built from the patch queue in packages/kwin (docs/71): the changes are

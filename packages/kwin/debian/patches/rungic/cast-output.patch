@@ -18,15 +18,20 @@ Origin: vendor, commit:fc2cd678
  src/backends/wayland/wayland_backend.h   | 14 +++++++++-
  src/backends/wayland/wayland_display.cpp | 21 ++++++++++++++
  src/backends/wayland/wayland_display.h   |  8 ++++++
- src/backends/wayland/wayland_output.cpp  | 36 ++++++++++++++++++------
+ src/backends/wayland/wayland_output.cpp  | 41 +++++++++++++++++++++++----
  src/backends/wayland/wayland_output.h    |  7 ++++-
- 6 files changed, 120 insertions(+), 14 deletions(-)
+ 6 files changed, 129 insertions(+), 10 deletions(-)
 
 diff --git a/src/backends/wayland/wayland_backend.cpp b/src/backends/wayland/wayland_backend.cpp
-index e30f407..cad6289 100644
+index 01015f3..af56e5c 100644
 --- a/src/backends/wayland/wayland_backend.cpp
 +++ b/src/backends/wayland/wayland_backend.cpp
-@@ -22,6 +22,7 @@
+@@ -16,9 +16,12 @@
+ #include "wayland_egl_backend.h"
+ #include "wayland_logging.h"
+ #include "wayland_output.h"
++#include <cmath>
++#include "core/outputconfiguration.h"
  #include "wayland_qpainter_backend.h"
  
  #include <KWayland/Client/keyboard.h>
@@ -34,7 +39,7 @@ index e30f407..cad6289 100644
  #include <KWayland/Client/pointer.h>
  #include <KWayland/Client/pointergestures.h>
  #include <KWayland/Client/relativepointer.h>
-@@ -449,6 +450,13 @@ bool WaylandBackend::initialize()
+@@ -446,6 +449,13 @@ bool WaylandBackend::initialize()
      }
  
      createOutputs();
@@ -48,7 +53,7 @@ index e30f407..cad6289 100644
  
      m_seat = std::make_unique<WaylandSeat>(m_display->seat(), this);
  
-@@ -481,9 +489,9 @@ void WaylandBackend::createOutputs()
+@@ -478,9 +488,9 @@ void WaylandBackend::createOutputs()
      Q_EMIT outputsQueried();
  }
  
@@ -60,7 +65,7 @@ index e30f407..cad6289 100644
      waylandOutput->init(size, scale, fullscreen);
  
      // Wait until the output window is configured by the host compositor.
-@@ -494,6 +502,40 @@ WaylandOutput *WaylandBackend::createOutput(const QString &name, const QSize &si
+@@ -491,6 +501,40 @@ WaylandOutput *WaylandBackend::createOutput(const QString &name, const QSize &si
      return waylandOutput;
  }
  
@@ -101,17 +106,8 @@ index e30f407..cad6289 100644
  void WaylandBackend::destroyOutputs()
  {
      while (!m_outputs.isEmpty()) {
-@@ -565,7 +607,7 @@ OutputConfigurationError WaylandBackend::applyOutputChanges(const OutputConfigur
-     if (qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT") && config.source == OutputConfiguration::Source::User) {
-         for (WaylandOutput *output : m_outputs) {
-             const auto props = config.constChangeSet(output);
--            if (!props) continue;
-+            if (!props || output->isCast()) continue;
-             if (props->scale && (!std::isfinite(*props->scale) || *props->scale < 0.5 || *props->scale > 3.0)) {
-                 return OutputConfigurationError::Unknown;
-             }
 diff --git a/src/backends/wayland/wayland_backend.h b/src/backends/wayland/wayland_backend.h
-index 06ebfb4..57bbe00 100644
+index dd6f1cd..ee94a64 100644
 --- a/src/backends/wayland/wayland_backend.h
 +++ b/src/backends/wayland/wayland_backend.h
 @@ -43,6 +43,14 @@ class SubSurface;
@@ -129,7 +125,7 @@ index 06ebfb4..57bbe00 100644
  namespace KWin
  {
  class GraphicsBuffer;
-@@ -256,13 +264,17 @@ Q_SIGNALS:
+@@ -255,13 +263,17 @@ Q_SIGNALS:
  private:
      void createOutputs();
      void destroyOutputs();
@@ -230,7 +226,7 @@ index f1525bd..96cccea 100644
  
  }
 diff --git a/src/backends/wayland/wayland_output.cpp b/src/backends/wayland/wayland_output.cpp
-index fe81d72..3c8de4b 100644
+index d49001d..e68d62f 100644
 --- a/src/backends/wayland/wayland_output.cpp
 +++ b/src/backends/wayland/wayland_output.cpp
 @@ -7,6 +7,7 @@
@@ -238,10 +234,10 @@ index fe81d72..3c8de4b 100644
  */
  #include "wayland_output.h"
 +#include <KWayland/Client/output.h>
- #include "android-display-client.h"
  #include "color_manager.h"
  #include "compositor.h"
-@@ -120,13 +121,14 @@ const wp_fractional_scale_v1_listener WaylandOutput::s_fractionalScaleListener{
+ #include "core/outputconfiguration.h"
+@@ -119,13 +120,14 @@ const wp_fractional_scale_v1_listener WaylandOutput::s_fractionalScaleListener{
      .preferred_scale = &WaylandOutput::handleFractionalScaleChanged,
  };
  
@@ -257,36 +253,42 @@ index fe81d72..3c8de4b 100644
  {
      m_renderLoop->setMaxPendingFrameCount(2);
      if (KWayland::Client::XdgDecorationManager *manager = m_backend->display()->xdgDecorationManager()) {
-@@ -152,13 +154,15 @@ WaylandOutput::WaylandOutput(const QString &name, WaylandBackend *backend)
-         wp_fractional_scale_v1_add_listener(m_fractionalScale, &s_fractionalScaleListener, this);
-     }
+@@ -153,7 +155,9 @@ WaylandOutput::WaylandOutput(const QString &name, WaylandBackend *backend)
      m_viewport = backend->display()->viewporter()->createViewport(*m_surface);
--    const auto androidInfo = qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT") ? MotoDisplay::info() : QJsonObject{};
-+    const auto androidInfo = androidPrimary() ? MotoDisplay::info() : QJsonObject{};
      setInformation(Information{
          .name = name,
 -        .model = name,
--        .physicalSize = QSize(androidInfo.value("physicalWidthMM").toInt(-1), androidInfo.value("physicalHeightMM").toInt(-1)),
 +        .manufacturer = m_hostOutput ? m_hostOutput->manufacturer() : QString(),
 +        .model = m_hostOutput ? m_hostOutput->model() : name,
-+        .physicalSize = m_hostOutput ? m_hostOutput->physicalSize()
-+                                     : QSize(androidInfo.value("physicalWidthMM").toInt(-1), androidInfo.value("physicalHeightMM").toInt(-1)),
++        .physicalSize = m_hostOutput ? m_hostOutput->physicalSize() : QSize(),
          .capabilities = caps,
--        .internal = qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT"),
-+        .internal = androidPrimary(),
      });
  
-     m_configureThrottleTimer.setSingleShot(true);
-@@ -399,7 +403,7 @@ void WaylandOutput::framePresented(std::chrono::nanoseconds timestamp, uint32_t
-         m_refreshRate = refreshRate;
-         const auto mode = std::make_shared<OutputMode>(pixelSize(), m_refreshRate);
-         State next = m_state;
--        next.modes = qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT") ? androidModes(pixelSize(), m_refreshRate) : QList{mode};
-+        next.modes = androidPrimary() ? androidModes(pixelSize(), m_refreshRate) : QList{mode};
-         next.currentMode = *std::ranges::find_if(next.modes, [&](const auto &candidate) {
-             return candidate->size() == pixelSize() && candidate->refreshRate() == m_refreshRate;
-         });
-@@ -465,6 +469,16 @@ bool WaylandOutput::isReady() const
+@@ -390,9 +394,20 @@ void WaylandOutput::applyChanges(const OutputConfiguration &config)
+     next.enabled = props->enabled.value_or(m_state.enabled);
+     next.transform = props->transform.value_or(m_state.transform);
+     next.position = props->pos.value_or(m_state.position);
+-    // intentionally ignored, as it would get overwritten
+-    // with the fractional scale protocol anyways
+-    // next.scale = props->scale.value_or(m_state.scale);
++    if (qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT")) {
++        next.scale = props->scale.value_or(m_state.scale);
++        next.scaleSetting = props->scaleSetting.value_or(m_state.scaleSetting);
++        // The Android host owns the buffer size and physical refresh. Only
++        // explicit user changes may override it; replaying saved system state
++        // must not undo rotation, automatic refresh or the host preference.
++        if (config.source == OutputConfiguration::Source::User && props->mode) {
++            if (const auto mode = props->mode->lock()) {
++                next.currentMode = mode;
++                m_refreshRate = mode->refreshRate();
++                m_renderLoop->setRefreshRate(m_refreshRate);
++            }
++        }
++    }
+     next.desiredModeSize = props->desiredModeSize.value_or(m_state.desiredModeSize);
+     next.desiredModeRefreshRate = props->desiredModeRefreshRate.value_or(m_state.desiredModeRefreshRate);
+     next.desiredModeFlags = props->desiredModeFlags.value_or(m_state.desiredModeFlags);
+@@ -415,6 +430,16 @@ bool WaylandOutput::isReady() const
      return m_ready;
  }
  
@@ -303,7 +305,7 @@ index fe81d72..3c8de4b 100644
  KWayland::Client::Surface *WaylandOutput::surface() const
  {
      return m_surface.get();
-@@ -493,19 +507,23 @@ bool WaylandOutput::presentAsync(OutputLayer *layer, std::optional<std::chrono::
+@@ -443,6 +468,9 @@ bool WaylandOutput::presentAsync(OutputLayer *layer, std::optional<std::chrono::
  
  void WaylandOutput::init(const QSize &pixelSize, qreal scale, bool fullscreen)
  {
@@ -313,13 +315,7 @@ index fe81d72..3c8de4b 100644
      m_renderLoop->setRefreshRate(m_refreshRate);
  
      auto mode = std::make_shared<OutputMode>(pixelSize, m_refreshRate);
- 
-     State initialState;
--    initialState.modes = qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT") ? androidModes(pixelSize, m_refreshRate) : QList{mode};
-+    initialState.modes = androidPrimary() ? androidModes(pixelSize, m_refreshRate) : QList{mode};
-     initialState.currentMode = *std::ranges::find_if(initialState.modes, [&](const auto &candidate) {
-         return candidate->size() == pixelSize && candidate->refreshRate() == m_refreshRate;
-     });
+@@ -453,7 +481,8 @@ void WaylandOutput::init(const QSize &pixelSize, qreal scale, bool fullscreen)
      initialState.scale = scale;
      setState(initialState);
  
@@ -329,17 +325,8 @@ index fe81d72..3c8de4b 100644
      m_surface->commit(KWayland::Client::Surface::CommitFlag::None);
  }
  
-@@ -534,7 +552,7 @@ void WaylandOutput::applyConfigure(const QSize &size, quint32 serial)
-         auto mode = std::make_shared<OutputMode>(androidOutput ? size : size * m_pendingScale, m_refreshRate);
- 
-         State next = m_state;
--        next.modes = androidOutput ? androidModes(size, m_refreshRate) : QList{mode};
-+        next.modes = androidPrimary() ? androidModes(size, m_refreshRate) : QList{mode};
-         next.currentMode = *std::ranges::find_if(next.modes, [&](const auto &candidate) {
-             return candidate->size() == mode->size() && candidate->refreshRate() == m_refreshRate;
-         });
 diff --git a/src/backends/wayland/wayland_output.h b/src/backends/wayland/wayland_output.h
-index 7929953..dccdfe6 100644
+index d818fc7..fb18857 100644
 --- a/src/backends/wayland/wayland_output.h
 +++ b/src/backends/wayland/wayland_output.h
 @@ -80,7 +80,7 @@ class WaylandOutput : public BackendOutput
@@ -360,7 +347,7 @@ index 7929953..dccdfe6 100644
      KWayland::Client::Surface *surface() const;
      /// Explicit synchronization for the output surface, or null when the host lacks it.
      zwp_linux_surface_synchronization_v1 *surfaceSynchronization();
-@@ -132,6 +134,9 @@ private:
+@@ -131,6 +133,9 @@ private:
      std::unique_ptr<WaylandCursor> m_cursor;
      bool m_hasPointerLock = false;
      bool m_ready = false;

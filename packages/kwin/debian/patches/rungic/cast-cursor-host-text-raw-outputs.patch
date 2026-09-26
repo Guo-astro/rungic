@@ -34,7 +34,7 @@ Origin: vendor, commit:e07d7448
  10 files changed, 295 insertions(+), 46 deletions(-)
 
 diff --git a/src/backends/wayland/wayland_backend.cpp b/src/backends/wayland/wayland_backend.cpp
-index cad6289..c3ca18c 100644
+index af56e5c..a80c681 100644
 --- a/src/backends/wayland/wayland_backend.cpp
 +++ b/src/backends/wayland/wayland_backend.cpp
 @@ -11,6 +11,8 @@
@@ -46,7 +46,7 @@ index cad6289..c3ca18c 100644
  #include "wayland-client/linuxdmabuf.h"
  #include "wayland_display.h"
  #include "wayland_egl_backend.h"
-@@ -22,7 +24,6 @@
+@@ -21,7 +23,6 @@
  #include "wayland_qpainter_backend.h"
  
  #include <KWayland/Client/keyboard.h>
@@ -54,7 +54,7 @@ index cad6289..c3ca18c 100644
  #include <KWayland/Client/pointer.h>
  #include <KWayland/Client/pointergestures.h>
  #include <KWayland/Client/relativepointer.h>
-@@ -42,6 +43,7 @@
+@@ -41,6 +42,7 @@
  #include <wayland-client-core.h>
  
  #include "wayland-linux-dmabuf-unstable-v1-client-protocol.h"
@@ -62,7 +62,7 @@ index cad6289..c3ca18c 100644
  
  namespace KWin
  {
-@@ -315,6 +317,7 @@ WaylandSeat::WaylandSeat(KWayland::Client::Seat *nativeSeat, WaylandBackend *bac
+@@ -314,6 +316,7 @@ WaylandSeat::WaylandSeat(KWayland::Client::Seat *nativeSeat, WaylandBackend *bac
      , m_seat(nativeSeat)
      , m_backend(backend)
  {
@@ -70,7 +70,7 @@ index cad6289..c3ca18c 100644
      auto updateKeyboardDevice = [this](){
          if (m_seat->hasKeyboard()) {
              createKeyboardDevice();
-@@ -351,11 +354,55 @@ WaylandSeat::WaylandSeat(KWayland::Client::Seat *nativeSeat, WaylandBackend *bac
+@@ -350,11 +353,55 @@ WaylandSeat::WaylandSeat(KWayland::Client::Seat *nativeSeat, WaylandBackend *bac
  
  WaylandSeat::~WaylandSeat()
  {
@@ -126,7 +126,7 @@ index cad6289..c3ca18c 100644
  void WaylandSeat::createPointerDevice()
  {
      m_pointerDevice = std::make_unique<WaylandInputDevice>(m_seat->createPointer(), this);
-@@ -454,7 +501,7 @@ bool WaylandBackend::initialize()
+@@ -453,7 +500,7 @@ bool WaylandBackend::initialize()
      // (docs/58); give it its own output, shown fullscreen on that host output.
      connect(m_display.get(), &WaylandDisplay::hostOutputChanged, this, &WaylandBackend::handleHostOutput);
      connect(m_display.get(), &WaylandDisplay::hostOutputRemoved, this, &WaylandBackend::handleHostOutputRemoved);
@@ -135,7 +135,7 @@ index cad6289..c3ca18c 100644
          handleHostOutput(hostOutput);
      }
  
-@@ -489,7 +536,7 @@ void WaylandBackend::createOutputs()
+@@ -488,7 +535,7 @@ void WaylandBackend::createOutputs()
      Q_EMIT outputsQueried();
  }
  
@@ -144,7 +144,7 @@ index cad6289..c3ca18c 100644
  {
      WaylandOutput *waylandOutput = new WaylandOutput(name, this, hostOutput);
      waylandOutput->init(size, scale, fullscreen);
-@@ -502,12 +549,12 @@ WaylandOutput *WaylandBackend::createOutput(const QString &name, const QSize &si
+@@ -501,12 +548,12 @@ WaylandOutput *WaylandBackend::createOutput(const QString &name, const QSize &si
      return waylandOutput;
  }
  
@@ -159,7 +159,7 @@ index cad6289..c3ca18c 100644
  {
      if (!isCastHostOutput(hostOutput) || m_castOutputs.contains(hostOutput) || hostOutput->pixelSize().isEmpty()) {
          return;
-@@ -517,7 +564,15 @@ void WaylandBackend::handleHostOutput(KWayland::Client::Output *hostOutput)
+@@ -516,7 +563,15 @@ void WaylandBackend::handleHostOutput(KWayland::Client::Output *hostOutput)
      if (!ok || scale < 0.5 || scale > 4.0) {
          scale = 1.5;
      }
@@ -176,7 +176,7 @@ index cad6289..c3ca18c 100644
      qCInfo(KWIN_WAYLAND_BACKEND) << "Cast output added" << output->name() << hostOutput->pixelSize() << "scale" << scale;
      m_castOutputs.insert(hostOutput, output);
      m_outputs << output;
-@@ -525,7 +580,7 @@ void WaylandBackend::handleHostOutput(KWayland::Client::Output *hostOutput)
+@@ -524,7 +579,7 @@ void WaylandBackend::handleHostOutput(KWayland::Client::Output *hostOutput)
      Q_EMIT outputsQueried();
  }
  
@@ -186,7 +186,7 @@ index cad6289..c3ca18c 100644
      WaylandOutput *output = m_castOutputs.take(hostOutput);
      if (output && m_outputs.removeAll(output)) {
 diff --git a/src/backends/wayland/wayland_backend.h b/src/backends/wayland/wayland_backend.h
-index 57bbe00..4b86f3e 100644
+index ee94a64..bda74da 100644
 --- a/src/backends/wayland/wayland_backend.h
 +++ b/src/backends/wayland/wayland_backend.h
 @@ -26,6 +26,7 @@
@@ -234,7 +234,7 @@ index 57bbe00..4b86f3e 100644
  
      std::unique_ptr<WaylandInputDevice> m_pointerDevice;
      std::unique_ptr<WaylandInputDevice> m_relativePointerDevice;
-@@ -264,17 +263,16 @@ Q_SIGNALS:
+@@ -263,17 +262,16 @@ Q_SIGNALS:
  private:
      void createOutputs();
      void destroyOutputs();
@@ -569,7 +569,7 @@ index 6c4f32d..6b98407 100644
  }
  
 diff --git a/src/backends/wayland/wayland_output.cpp b/src/backends/wayland/wayland_output.cpp
-index 3c8de4b..212d20a 100644
+index e68d62f..bb03fe3 100644
 --- a/src/backends/wayland/wayland_output.cpp
 +++ b/src/backends/wayland/wayland_output.cpp
 @@ -7,7 +7,6 @@
@@ -577,10 +577,10 @@ index 3c8de4b..212d20a 100644
  */
  #include "wayland_output.h"
 -#include <KWayland/Client/output.h>
- #include "android-display-client.h"
  #include "color_manager.h"
  #include "compositor.h"
-@@ -33,6 +32,7 @@
+ #include "core/outputconfiguration.h"
+@@ -32,6 +31,7 @@
  #include "wayland-single-pixel-buffer-v1-client-protocol.h"
  #include "wayland-linux-explicit-synchronization-unstable-v1-client-protocol.h"
  #include "wayland-tearing-control-v1-client-protocol.h"
@@ -588,7 +588,7 @@ index 3c8de4b..212d20a 100644
  #include "wayland-xdg-toplevel-icon-v1-client-protocol.h"
  #include "workspace.h"
  
-@@ -121,7 +121,7 @@ const wp_fractional_scale_v1_listener WaylandOutput::s_fractionalScaleListener{
+@@ -120,7 +120,7 @@ const wp_fractional_scale_v1_listener WaylandOutput::s_fractionalScaleListener{
      .preferred_scale = &WaylandOutput::handleFractionalScaleChanged,
  };
  
@@ -597,7 +597,7 @@ index 3c8de4b..212d20a 100644
      : BackendOutput()
      , m_renderLoop(std::make_unique<RenderLoop>(this))
      , m_surface(backend->display()->compositor()->createSurface())
-@@ -523,7 +523,11 @@ void WaylandOutput::init(const QSize &pixelSize, qreal scale, bool fullscreen)
+@@ -482,7 +482,11 @@ void WaylandOutput::init(const QSize &pixelSize, qreal scale, bool fullscreen)
      setState(initialState);
  
      // A cast output is shown fullscreen on its own host output (docs/58).
@@ -611,7 +611,7 @@ index 3c8de4b..212d20a 100644
  }
  
 diff --git a/src/backends/wayland/wayland_output.h b/src/backends/wayland/wayland_output.h
-index dccdfe6..d1e8460 100644
+index fb18857..345bf0d 100644
 --- a/src/backends/wayland/wayland_output.h
 +++ b/src/backends/wayland/wayland_output.h
 @@ -51,6 +51,7 @@ namespace Wayland
@@ -631,7 +631,7 @@ index dccdfe6..d1e8460 100644
      ~WaylandOutput() override;
  
      RenderLoop *renderLoop() const override;
-@@ -134,7 +135,7 @@ private:
+@@ -133,7 +134,7 @@ private:
      std::unique_ptr<WaylandCursor> m_cursor;
      bool m_hasPointerLock = false;
      bool m_ready = false;

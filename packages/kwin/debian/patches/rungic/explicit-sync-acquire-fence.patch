@@ -153,10 +153,10 @@ index eb6d594..6c4f32d 100644
  
      m_damageJournal.add(damagedDeviceRegion);
 diff --git a/src/backends/wayland/wayland_output.cpp b/src/backends/wayland/wayland_output.cpp
-index ec59a0f..fe81d72 100644
+index 8a65266..d49001d 100644
 --- a/src/backends/wayland/wayland_output.cpp
 +++ b/src/backends/wayland/wayland_output.cpp
-@@ -30,6 +30,7 @@
+@@ -29,6 +29,7 @@
  #include "wayland-keyboard-shortcuts-inhibit-unstable-v1-client-protocol.h"
  #include "wayland-presentation-time-client-protocol.h"
  #include "wayland-single-pixel-buffer-v1-client-protocol.h"
@@ -164,7 +164,7 @@ index ec59a0f..fe81d72 100644
  #include "wayland-tearing-control-v1-client-protocol.h"
  #include "wayland-xdg-toplevel-icon-v1-client-protocol.h"
  #include "workspace.h"
-@@ -188,9 +189,22 @@ WaylandOutput::~WaylandOutput()
+@@ -184,9 +185,22 @@ WaylandOutput::~WaylandOutput()
      m_viewport.reset();
      m_xdgDecoration.reset();
      m_xdgShellSurface.reset();
@@ -188,7 +188,7 @@ index ec59a0f..fe81d72 100644
  {
      const auto &preferred = m_colorSurfaceFeedback->preferredColor();
 diff --git a/src/backends/wayland/wayland_output.h b/src/backends/wayland/wayland_output.h
-index 433ba9f..7929953 100644
+index 7c30ce3..d818fc7 100644
 --- a/src/backends/wayland/wayland_output.h
 +++ b/src/backends/wayland/wayland_output.h
 @@ -37,6 +37,8 @@ struct zwp_keyboard_shortcuts_inhibitor_v1;
@@ -209,7 +209,7 @@ index 433ba9f..7929953 100644
      WaylandCursor *cursor() const;
      WaylandBackend *backend() const;
  
-@@ -120,6 +124,7 @@ private:
+@@ -119,6 +123,7 @@ private:
      std::vector<std::unique_ptr<OutputLayer>> m_layers;
      std::unique_ptr<RenderLoop> m_renderLoop;
      std::unique_ptr<KWayland::Client::Surface> m_surface;

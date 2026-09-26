@@ -60,6 +60,12 @@
       "title": "PipeWire camera delivers varied frames with increasing timestamps and goes idle after"
     },
     {
+      "id": "idle.inhibit",
+      "level": "smoke",
+      "check": "idle_inhibit",
+      "title": "A Wayland client inhibiting idle keeps the phone screen on while it does (moto-idle-probe through KWin to the host)"
+    },
+    {
       "id": "audio.playback",
       "level": "smoke",
       "check": "audio_playback",

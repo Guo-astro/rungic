@@ -17,5 +17,6 @@ export KWIN_IM_SHOW_ALWAYS=1
 scale=$(awk -v w="$width" -v h="$height" 'BEGIN { edge=(w<h?w:h); print edge / 360 }')
 width=$(awk -v w="$width" -v s="$scale" 'BEGIN { printf "%d", w/s }')
 height=$(awk -v h="$height" -v s="$scale" 'BEGIN { printf "%d", h/s }')
-exec /usr/bin/kwin_wayland_wrapper --wayland-display=/mnt/android-wayland/wayland-0 \
+# --android-host: KWin's Android backend (docs/72), which needs kwin-wayland +moto21 or later.
+exec /usr/bin/kwin_wayland_wrapper --wayland-display=/mnt/android-wayland/wayland-0 --android-host \
     --width="$width" --height="$height" --scale="$scale" --no-lockscreen

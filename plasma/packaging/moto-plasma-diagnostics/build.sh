@@ -24,4 +24,10 @@ g++ -O2 -g1 -std=c++20 -fPIC -o "$B/apps-probe" "$D/probes/apps-probe.cpp" $(pkg
     -I/usr/include/KF6/KService -I/usr/include/KF6/KCoreAddons -lKF6Service -lKF6CoreAddons
 sh "$SRC/plasma/bench/compbench/build.sh" "$SRC/plasma/bench/compbench/build" >/dev/null
 install -m755 "$SRC/plasma/bench/compbench/build/compbench" "$B/moto-compbench"
-    "$B"/apps-probe "$B"/moto-compbench
+# Wayland protocol probes (docs/42, docs/60, docs/72); the idle probe backs acceptance idle.inhibit.
+W=$(mktemp -d)
+sh "$D/wayland-probes/build.sh" "$W" >/dev/null
+for probe in idle minmax size; do
+    install -m755 "$W/$probe-probe" "$B/moto-$probe-probe"
+done
+rm -rf "$W"

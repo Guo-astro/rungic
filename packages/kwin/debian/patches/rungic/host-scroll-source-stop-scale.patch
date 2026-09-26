@@ -22,10 +22,10 @@ Origin: vendor, commit:02db74e1
  2 files changed, 50 insertions(+), 3 deletions(-)
 
 diff --git a/src/backends/wayland/wayland_backend.cpp b/src/backends/wayland/wayland_backend.cpp
-index c3ca18c..35a41e7 100644
+index a80c681..ea50aa1 100644
 --- a/src/backends/wayland/wayland_backend.cpp
 +++ b/src/backends/wayland/wayland_backend.cpp
-@@ -111,7 +111,7 @@ WaylandInputDevice::WaylandInputDevice(KWayland::Client::Pointer *pointer, Wayla
+@@ -110,7 +110,7 @@ WaylandInputDevice::WaylandInputDevice(KWayland::Client::Pointer *pointer, Wayla
          WaylandOutput *output = m_seat->backend()->findOutput(m_pointer->enteredSurface());
          Q_ASSERT(output);
          const auto subsurface = m_seat->backend()->findSubSurface(m_pointer->enteredSurface());
@@ -34,7 +34,7 @@ index c3ca18c..35a41e7 100644
              + (subsurface ? subsurface->position() : QPoint());
          Q_EMIT pointerMotionAbsolute(absolutePos, std::chrono::milliseconds(time), this);
      });
-@@ -129,7 +129,28 @@ WaylandInputDevice::WaylandInputDevice(KWayland::Client::Pointer *pointer, Wayla
+@@ -128,7 +128,28 @@ WaylandInputDevice::WaylandInputDevice(KWayland::Client::Pointer *pointer, Wayla
          }
          Q_EMIT pointerButtonChanged(button, state, std::chrono::milliseconds(time), this);
      });
@@ -64,7 +64,7 @@ index c3ca18c..35a41e7 100644
      connect(pointer, &Pointer::axisChanged, this, [this](quint32 time, Pointer::Axis nativeAxis, qreal delta) {
          PointerAxis axis;
          switch (nativeAxis) {
-@@ -142,11 +163,16 @@ WaylandInputDevice::WaylandInputDevice(KWayland::Client::Pointer *pointer, Wayla
+@@ -141,11 +162,16 @@ WaylandInputDevice::WaylandInputDevice(KWayland::Client::Pointer *pointer, Wayla
          default:
              Q_UNREACHABLE();
          }
@@ -82,7 +82,7 @@ index c3ca18c..35a41e7 100644
      });
  
      KWayland::Client::PointerGestures *pointerGestures = m_seat->backend()->display()->pointerGestures();
-@@ -281,6 +307,23 @@ bool WaylandInputDevice::isLidSwitch() const
+@@ -280,6 +306,23 @@ bool WaylandInputDevice::isLidSwitch() const
      return false;
  }
  
@@ -107,7 +107,7 @@ index c3ca18c..35a41e7 100644
  {
      return m_pointer.get();
 diff --git a/src/backends/wayland/wayland_backend.h b/src/backends/wayland/wayland_backend.h
-index 4b86f3e..6bf862a 100644
+index bda74da..38b1be1 100644
 --- a/src/backends/wayland/wayland_backend.h
 +++ b/src/backends/wayland/wayland_backend.h
 @@ -87,6 +87,9 @@ public:

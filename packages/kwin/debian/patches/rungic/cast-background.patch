@@ -31,10 +31,10 @@ Origin: vendor, commit:5c6e0958
  1 file changed, 11 insertions(+), 1 deletion(-)
 
 diff --git a/src/backends/wayland/wayland_output.cpp b/src/backends/wayland/wayland_output.cpp
-index 212d20a..05e8a13 100644
+index bb03fe3..75ea371 100644
 --- a/src/backends/wayland/wayland_output.cpp
 +++ b/src/backends/wayland/wayland_output.cpp
-@@ -553,7 +553,17 @@ void WaylandOutput::applyConfigure(const QSize &size, quint32 serial)
+@@ -512,7 +512,17 @@ void WaylandOutput::applyConfigure(const QSize &size, quint32 serial)
      m_xdgShellSurface->ackConfigure(serial);
      if (!size.isEmpty()) {
          const bool androidOutput = qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT");
@@ -52,4 +52,4 @@ index 212d20a..05e8a13 100644
 +        auto mode = std::make_shared<OutputMode>(pixels, m_refreshRate);
  
          State next = m_state;
-         next.modes = androidPrimary() ? androidModes(size, m_refreshRate) : QList{mode};
+         next.modes = {mode};

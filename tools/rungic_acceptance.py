@@ -315,6 +315,32 @@ def audio_record(ctx):
                   default_source=default, samples=samples)
 
 
+def _keep_screen_on():
+    text = run("dumpsys window windows | grep -A30 'dev.moto.plasma/dev.moto.plasma.MainActivity' "
+               "| grep -m1 -o 'fl=[^ ]*'", 'shell', 30, check=False).stdout
+    return 'KEEP_SCREEN_ON' in text
+
+
+@check
+def idle_inhibit(ctx, seconds=6):
+    """A Wayland client inhibiting idle keeps the phone screen on, and only while it does (docs/72):
+    through KWin to the Android host, whichever way KWin forwards it."""
+    before = _keep_screen_on()
+    import threading
+    probe = {}
+    thread = threading.Thread(target=lambda: probe.setdefault(
+        'result', user(f'WAYLAND_DISPLAY=wayland-0 moto-idle-probe {seconds}', timeout=seconds + 30)), daemon=True)
+    thread.start()
+    during = wait_for(_keep_screen_on, timeout=seconds - 1, interval=0.5)
+    thread.join(seconds + 30)
+    after = wait_for(lambda: not _keep_screen_on(), timeout=5, interval=0.5)
+    ran = probe.get('result')
+    ok = ran is not None and ran.returncode == 0
+    return result(ok and not before and during and after, before=before, during=during, released=after,
+                  probe=(ran.stdout + ran.stderr).strip()[-300:] if ran else 'no result',
+                  note='inconclusive: the screen was kept on before the probe' if before else '')
+
+
 # ---------------------------------------------------------------- full level
 
 @check

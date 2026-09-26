@@ -1,10 +1,8 @@
 relax-plasma-internal-build-deps.patch
 fix-drm-open-fallback-to-logind-fd.patch
 rungic/android-host-graphics.patch
-rungic/idle-android-power.patch
 rungic/screencast-mobile-shell.patch
 rungic/screencast-gles-readback.patch
-rungic/android-display-settings.patch
 rungic/android-shared-headers.patch
 rungic/ftrace-fd-markers.patch
 rungic/explicit-sync-acquire-fence.patch
@@ -16,3 +14,4 @@ rungic/cast-background.patch
 rungic/virtualkeyboard-commit-text.patch
 rungic/xdg-min-above-max.patch
 rungic/host-scroll-source-stop-scale.patch
+rungic/android-backend.patch
