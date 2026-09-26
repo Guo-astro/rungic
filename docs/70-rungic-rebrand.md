@@ -70,3 +70,4 @@
 ## 进度
 
 - **A（2026-09-26完成）**：11个主机Python工具改名，MCP服务改名为`rungic`（`.mcp.json`），引用它们的工具、文档与注释同步修改。`moto_*_enter.c`与Magisk引导脚本属于C阶段。新的MCP实例列出全部21个工具并调用成功，`rungic_release.py status`正常。
+- **B0（2026-09-26完成）**：`tools/rungic_package.py`按debhelper 14的autoscripts生成单元脚本：postinst用`was-enabled`/`enable`/`update-state`（用户单元加`--user`，不再`systemctl --global enable`；不执行debhelper的遗留`unmask`，避免覆盖管理员的mask），prerm只在`remove`时停止系统单元，postrm只在`purge`时清理记录。带单元的4个包（bridges、diagnostics、session、voice-agent）重建后发布20260926.15，冒烟验收通过，全部10个单元保持启用。实测：禁用`moto-coredump.path`后`dpkg -r`再`dpkg -i`，仍为disabled（旧脚本会重新启用），随后恢复启用。
