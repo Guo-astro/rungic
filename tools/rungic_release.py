@@ -416,7 +416,9 @@ def apt_install(info, record):
     pins = ' '.join(shlex.quote(f'{n}={v}') for n, v in sorted(info['packages'].items()))
     unit = f'rungic-deploy-{int(time.time())}'
     result = run(f'''set -e
-apt-get -q update {APT_OURS} >/dev/null
+# Our repository's Origin/Label changed with the Rungic rename (moto -> rungic, docs/70); apt refuses
+# such a change unless allowed. The source is this project's own, local and trusted.
+apt-get -q update --allow-releaseinfo-change {APT_OURS} >/dev/null
 systemd-run --unit={unit} --wait --pipe --collect --quiet -p TimeoutStartSec=3600 \\
   --setenv=DEBIAN_FRONTEND=noninteractive \\
   apt-get -q -y --allow-downgrades --allow-change-held-packages --no-install-recommends \\
