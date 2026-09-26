@@ -13,7 +13,7 @@ export GDK_BACKEND=wayland
 export MOZ_ENABLE_WAYLAND=1
 export QT_QUICK_BACKEND=software
 export KWIN_COMPOSE=Q
-export MOTO_ANDROID_DISPLAY=/mnt/android-wayland/android-display.ini
+export RUNGIC_ANDROID_DISPLAY=/mnt/android-wayland/android-display.ini
 export PULSE_SERVER=unix:$XDG_RUNTIME_DIR/pulse/native
 export PULSE_COOKIE=/var/lib/moto-host/audio-cookie
 . /etc/profile.d/proxy.sh
