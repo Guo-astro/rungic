@@ -257,7 +257,7 @@ btrfs的收益是多快照、廉价克隆的测试容器、send/receive增量备
 
 ### 实施中发现的问题
 
-- **kaccess abort循环**：kaccess强制xcb平台，会话没有X显示，每次会话启动崩溃数次（签名`f6f8756afbd8`，列为已知签名，未修复）。
+- **kaccess abort循环**（已修复）：plasma-desktop 6.6.6的`kaccess/main.cpp`写死`QT_QPA_PLATFORM=xcb`（注释：只与X有关，也为Xwayland应用服务）；会话的KWin不带`--xwayland`，没有`DISPLAY`，Qt连不上显示即abort（KCrash初始化之前），`plasma-workspace.target`拉起的`plasma-kaccess.service`带`Restart=on-failure`，每次会话启动崩溃5–6次后被systemd放弃（签名`f6f8756afbd8`；9-25为30个core，9-26因反复部署达165个）。它的功能是X11的XKB辅助功能（Wayland下由KWin的StickyKeys/SlowKeys/BounceKeys/MouseKeys插件提供）、屏幕阅读器快捷键Meta+Alt+S与登录时启动Orca（崩溃在注册之前，从未生效；Orca未安装）。moto-plasma-config加入`plasma-kaccess.service.d/moto.conf`：`ConditionEnvironment=DISPLAY`，没有X显示时跳过（状态inactive、结果success，目标仍active），将来Xwayland导出`DISPLAY`后自动恢复；不用mask。已知签名随之从`acceptance.json`删除，再出现即验收失败。剩余：`kcm_access`保存时直接`startDetached("kaccess")`，绕过systemd仍会崩一次；手机版设置默认只列handset模块，该KCM未声明FormFactors且`NoDisplay=true`，只有手动运行`systemsettings kcm_access`才会遇到。
 - **会话重启就绪误报**（已修复）：`moto-plasma restart-session`在旧KWin/plasmashell退出前就判定就绪，且`set -e`下两次会话之间的空`pidof`使脚本退出；现在要求新PID。
 - **私有FFmpeg命令行不可用**（moto-codec已修复）：rpath只含`/usr/local/lib/moto-codec`，工具加载了系统libavformat。
 - **录屏收尾超时**（未修复）：停止后`Timed out finalizing recording`，只留下`.partial.mp4`；`~/Videos`已有多组此类残留。本次在手机编译负载下测得，空闲时的表现待复测。
