@@ -2,9 +2,9 @@
 # Root control; audio itself runs as the installed Termux application user.
 set -eu
 PREFIX=/data/data/com.termux/files/usr
-STATE=$PREFIX/tmp/moto-plasma-audio
-ROOT=/data/adb/moto-lxc/runtime/var/lib/lxc/plasma/rootfs
-BASE=/data/adb/moto-plasma
+STATE=$PREFIX/tmp/rungic-plasma-audio
+ROOT=/data/adb/rungic-lxc/runtime/var/lib/lxc/plasma/rootfs
+BASE=/data/adb/rungic-plasma
 uid=$(stat -c %u /data/data/com.termux/files)
 [ "$uid" -ge 10000 ] || exit 1
 [ -x "$PREFIX/bin/pulseaudio" ] || { echo 'Termux pulseaudio is missing' >&2; exit 1; }
@@ -44,8 +44,8 @@ ensure_audio() {
         # New native-protocol clients may connect while AAudio is opening.
         healthy || { echo 'Android audio server did not become responsive' >&2; return 1; }
     fi
-    # state/host is bind-mounted at /var/lib/moto-host in the container (docs/61 §7).
-    host=/data/adb/moto-lxc/runtime/var/lib/lxc/plasma/state/host
+    # state/host is bind-mounted at /var/lib/rungic-host in the container (docs/61 §7).
+    host=/data/adb/rungic-lxc/runtime/var/lib/lxc/plasma/state/host
     mkdir -p "$host"
     cp "$STATE/cookie" "$host/audio-cookie"
     chown 1000:1000 "$host/audio-cookie"

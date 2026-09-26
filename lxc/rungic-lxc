@@ -1,0 +1,21 @@
+#!/system/bin/sh
+set -eu
+ENTER=/data/adb/rungic-lxc/rungic-lxc-enter
+if [ "$(id -u)" != 0 ]; then
+    echo 'Run with Magisk root: su -c /data/adb/rungic-lxc/rungic-lxc ...' >&2
+    exit 1
+fi
+ACTION=${1:-status}
+if [ "$#" -gt 0 ]; then shift; fi
+case "$ACTION" in
+    start) exec "$ENTER" /usr/bin/lxc-start -n alpine -d -l INFO -o /var/log/lxc/alpine.log ;;
+    stop) exec "$ENTER" /usr/bin/lxc-stop -n alpine -t 15 ;;
+    status) exec "$ENTER" /usr/bin/lxc-info -n alpine ;;
+    shell) exec "$ENTER" /usr/bin/lxc-attach -n alpine -- /bin/sh -l ;;
+    exec)
+        if [ "$#" -eq 0 ]; then echo 'exec requires a command' >&2; exit 2; fi
+        exec "$ENTER" /usr/bin/lxc-attach -n alpine -- "$@"
+        ;;
+    log) exec "$ENTER" /usr/bin/tail -n 80 /var/log/lxc/alpine.log ;;
+    *) echo 'Usage: rungic-lxc {start|stop|status|shell|exec COMMAND...|log}' >&2; exit 2 ;;
+esac

@@ -27,7 +27,7 @@ def main():
     parser.add_argument('--scenario', choices=['scroll', 'launch'], default='scroll')
     args = parser.parse_args()
     layers = shell('dumpsys', 'SurfaceFlinger', '--list')
-    matches = [l for l in layers.splitlines() if 'SurfaceView[dev.moto.plasma/' in l and '(BLAST)' in l]
+    matches = [l for l in layers.splitlines() if re.search(r'SurfaceView\[(com\.rungic|dev\.moto)\.plasma/', l) and '(BLAST)' in l]
     if len(matches) != 1:
         raise SystemExit('Expected one Plasma BLAST surface: ' + repr(matches))
     layer = re.search(r'\{(.*?) parentId=', matches[0])[1] if 'RequestedLayerState{' in matches[0] else matches[0]

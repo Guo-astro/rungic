@@ -1,4 +1,4 @@
-// JNI for dev.moto.plasma.OcrBridge (docs/64): one ppocr::Engine per handle, used from one thread.
+// JNI for com.rungic.plasma.OcrBridge (docs/64): one ppocr::Engine per handle, used from one thread.
 #include <jni.h>
 
 #include <cstdint>
@@ -54,7 +54,7 @@ std::string JsonText(const std::string& s) {
 
 extern "C" {
 
-JNIEXPORT jlong JNICALL Java_dev_moto_plasma_OcrBridge_nativeCreate(JNIEnv* env, jclass, jstring model_dir,
+JNIEXPORT jlong JNICALL Java_com_rungic_plasma_OcrBridge_nativeCreate(JNIEnv* env, jclass, jstring model_dir,
                                                                     jstring lib_dir, jstring cache_dir, jboolean fp32) {
   ppocr::Options options;
   options.model_dir = Str(env, model_dir);
@@ -70,12 +70,12 @@ JNIEXPORT jlong JNICALL Java_dev_moto_plasma_OcrBridge_nativeCreate(JNIEnv* env,
   return reinterpret_cast<jlong>(engine.release());
 }
 
-JNIEXPORT jstring JNICALL Java_dev_moto_plasma_OcrBridge_nativeDescribe(JNIEnv* env, jclass, jlong handle) {
+JNIEXPORT jstring JNICALL Java_com_rungic_plasma_OcrBridge_nativeDescribe(JNIEnv* env, jclass, jlong handle) {
   return env->NewStringUTF(reinterpret_cast<ppocr::Engine*>(handle)->Describe().c_str());
 }
 
 // `pixels` is a direct ByteBuffer of width*height*3 RGB bytes. Returns the reply's JSON object.
-JNIEXPORT jstring JNICALL Java_dev_moto_plasma_OcrBridge_nativeRecognize(JNIEnv* env, jclass, jlong handle,
+JNIEXPORT jstring JNICALL Java_com_rungic_plasma_OcrBridge_nativeRecognize(JNIEnv* env, jclass, jlong handle,
                                                                         jobject pixels, jint width, jint height,
                                                                         jfloat det_scale) {
   auto* engine = reinterpret_cast<ppocr::Engine*>(handle);
@@ -107,7 +107,7 @@ JNIEXPORT jstring JNICALL Java_dev_moto_plasma_OcrBridge_nativeRecognize(JNIEnv*
   return env->NewStringUTF(json.c_str());
 }
 
-JNIEXPORT void JNICALL Java_dev_moto_plasma_OcrBridge_nativeDestroy(JNIEnv*, jclass, jlong handle) {
+JNIEXPORT void JNICALL Java_com_rungic_plasma_OcrBridge_nativeDestroy(JNIEnv*, jclass, jlong handle) {
   delete reinterpret_cast<ppocr::Engine*>(handle);
 }
 

@@ -159,38 +159,38 @@
   ],
   "android": [
     {
-      "source": "plasma/moto-plasma",
-      "path": "/data/adb/moto-plasma/moto-plasma",
+      "source": "plasma/rungic-plasma",
+      "path": "/data/adb/rungic-plasma/rungic-plasma",
       "mode": "755"
     },
     {
       "source": "plasma/android-audio",
-      "path": "/data/adb/moto-plasma/android-audio",
+      "path": "/data/adb/rungic-plasma/android-audio",
       "mode": "755"
     },
     {
       "source": "plasma/android-audio.pa",
-      "path": "/data/adb/moto-plasma/android-audio.pa",
+      "path": "/data/adb/rungic-plasma/android-audio.pa",
       "mode": "644"
     },
     {
       "source": "plasma/plasma.config",
-      "path": "/data/adb/moto-lxc/runtime/var/lib/lxc/plasma/config",
+      "path": "/data/adb/rungic-lxc/runtime/var/lib/lxc/plasma/config",
       "mode": "644"
     },
     {
       "source": "plasma/rootfs-image",
-      "path": "/data/adb/moto-plasma/rootfs-image",
+      "path": "/data/adb/rungic-plasma/rootfs-image",
       "mode": "755"
     },
     {
       "source": "plasma/rootfs.sepolicy.rule",
-      "path": "/data/adb/moto-plasma/rootfs.sepolicy.rule",
+      "path": "/data/adb/rungic-plasma/rootfs.sepolicy.rule",
       "mode": "644"
     },
     {
       "source": "plasma/rootfs-mount-hook",
-      "path": "/data/adb/moto-plasma/rootfs-mount-hook",
+      "path": "/data/adb/rungic-plasma/rootfs-mount-hook",
       "mode": "755"
     }
   ]

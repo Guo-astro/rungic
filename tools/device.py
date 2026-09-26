@@ -1,7 +1,7 @@
 import subprocess,shlex,pathlib
 import rungic_device
 ADB=rungic_device.adb()
-ROOT='/data/adb/moto-lxc/runtime/var/lib/lxc/plasma/rootfs'
+ROOT='/data/adb/rungic-lxc/runtime/var/lib/lxc/plasma/rootfs'
 def root(cmd,**kwargs):
  return subprocess.run(ADB+['shell','su -c '+shlex.quote(cmd)],check=True,**kwargs)
 def put(src,dest,mode='644',owner='0:0'):

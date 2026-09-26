@@ -7,7 +7,7 @@ A release is rungic-release=<version>: a metapackage with an exact dependency on
 package in plasma/release/packages.json (rebuilt Ubuntu packages, this project's rungic-*
 packages, and the Ubuntu packages coupled to them), plus /usr/share/rungic/release.json with the
 git commit. The repository is .work/apt/repo on this computer (the pool of .debs is build
-output); deploy mirrors it to /var/lib/moto-apt in the container, where it is a trusted file:
+output); deploy mirrors it to /var/lib/rungic-apt in the container, where it is a trusted file:
 source pinned at 1001, so its versions win over the archive and older releases can be
 reinstalled. The Android-side files listed under "android" are part of a release too.
 
@@ -55,7 +55,8 @@ POOL = APT / 'repo'                  # flat repository: .debs, Packages, Release
 RELEASES = APT / 'releases'          # <version>.json: what each metapackage pins
 DEPLOY = WORKSPACE / '.work/deploy'
 HISTORY = DEPLOY / 'history.json'
-DEVICE_REPO = '/var/lib/moto-apt'
+# /var/lib/moto-apt before the Rungic rename; both name the same directory from phase C to D (docs/70).
+DEVICE_REPO = rungic_device.first_path('/var/lib/rungic-apt', '/var/lib/moto-apt')
 META = 'rungic-release'
 # The metapackage and the release file before the Rungic rename (docs/70): releases up to
 # 20260926.20 are moto-plasma-release, and a rollback may go back to one of them.
@@ -373,7 +374,7 @@ def integrity_summary():
 
 
 def sync_repo():
-    """Mirror .work/apt/repo to /var/lib/moto-apt: push missing .debs, replace the index."""
+    """Mirror .work/apt/repo to /var/lib/rungic-apt: push missing .debs, replace the index."""
     listing = run(f'mkdir -p {DEVICE_REPO} && cd {DEVICE_REPO} && ls -1', 'container').stdout.split()
     local = {p.name for p in POOL.iterdir() if p.is_file()}
     send = sorted((local - set(listing)) | {'Packages', 'Packages.gz', 'Packages.xz', 'Release'})
@@ -448,6 +449,16 @@ def android_source_changes(info):
     """Android-side files of the release that neither the working tree nor its commit has (a deploy
     would stop halfway on them)."""
     return [item['source'] for item in (info.get('android') or {}).values() if android_content(info, item) is None]
+
+
+def android_layouts(info):
+    """(the phone's, the release's) Android-side layout: 'rungic' after the phase C cutover
+    (/data/adb/rungic-*, tools/rungic_cutover.py), 'moto' before it; the release's is None when it
+    installs no Android-side files (docs/70)."""
+    device = run('[ -d /data/adb/rungic-plasma ] && echo rungic || echo moto', 'root').stdout.strip()
+    paths = [path for path in (info.get('android') or {})]
+    release = ('rungic' if any(path.startswith('/data/adb/rungic-') for path in paths) else 'moto') if paths else None
+    return device, release
 
 
 def sync_android(info, record):
@@ -547,7 +558,7 @@ def restart_container():
 
 
 def rootfs(action):
-    """plasma/rootfs-image through moto-plasma (Android side): status, snapshot, rollback, commit."""
+    """plasma/rootfs-image through the Android-side launcher (plasma/rungic-plasma): status, snapshot, rollback, commit."""
     result = run(f'{rungic_device.PLASMA} rootfs {action}', 'root', timeout=900, check=False)
     return result.returncode == 0, (result.stdout + result.stderr).strip()
 
@@ -636,6 +647,14 @@ def deploy(version=None, restart='auto', acceptance='smoke', record_label=None, 
         step('abort', reason=f'Android-side files of release {version} are neither in the working tree nor at its '
              f'commit: {", ".join(changed)}')
         return log
+    # A release for the other Android-side layout (docs/70): a Rungic one needs the cutover first; one from
+    # before it keeps the current Android side, which still serves those releases until phase D.
+    device_layout, release_layout = android_layouts(info)
+    if release_layout == 'rungic' and device_layout == 'moto':
+        log['result'] = 'aborted'
+        step('abort', reason='the Android side is from before the Rungic cutover: tools/rungic_cutover.py up first')
+        return log
+    keep_android = release_layout == 'moto' and device_layout == 'rungic'
     # 1b snapshot of the whole rootfs (image rootfs, docs/61 §7): a failed release rolls back to it
     mode, state = rootfs_state()
     use_snapshot = snapshot == 'always' or (snapshot == 'auto' and mode == 'image')
@@ -695,8 +714,8 @@ def deploy(version=None, restart='auto', acceptance='smoke', record_label=None, 
             return log
         # The Android side names paths inside the container: it follows a successful install,
         # so a failed one leaves both sides at the previous release.
-        android = sync_android(info, record)
-        step('android', changed=android)
+        android = [] if keep_android else sync_android(info, record)
+        step('android', changed=android, kept=keep_android)
         after = installed_versions()
         (record / 'after.json').write_text(json.dumps({'release': version, 'packages': after}, indent=1) + '\n')
         # Protection is the release's pin and exact dependencies now; drop the holds they replace.

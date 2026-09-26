@@ -14,7 +14,7 @@ Android thermal status <= --max-thermal.
   kwin_pipeline_run.py OUT_DIR [--rounds 3] [--seconds 10] [--swipes 8] [--plasmashell-rhi vulkan]
                       [--zerocopy on,off] [--kwin-env KEY=VALUE ...]
 
---zerocopy alternates the host's debug.moto.zerocopy property per round (ABBA)
+--zerocopy alternates the host's debug.rungic.zerocopy property per round (ABBA)
 and summarises each setting separately; the property is left on afterwards.
 --kwin-env sets environment variables for kwin_wayland through a runtime drop-in
 and restarts the session; the drop-in is removed and the session restarted after.
@@ -93,7 +93,7 @@ def main():
         if args.kwin_env:
             kwin_env([])
         if args.zerocopy:
-            run('setprop debug.moto.zerocopy 1', 'root')
+            run('setprop debug.rungic.zerocopy 1', 'root')
     if args.zerocopy:
         for setting in args.zerocopy.split(','):
             summarise(args, [r for r in rounds if r.get('zerocopy') == setting], drivers, f'-zerocopy-{setting}')
@@ -108,7 +108,7 @@ def measure(args):
              for i in range(args.rounds * len(settings))]  # ABBA
     for i, setting in enumerate(order, 1):
         if setting:
-            run(f"setprop debug.moto.zerocopy {'0' if setting == 'off' else '1'}", 'root')
+            run(f"setprop debug.rungic.zerocopy {'0' if setting == 'off' else '1'}", 'root')
             time.sleep(1)  # the host re-reads the property every 500 ms
         thermal = compbench_run.wait_cool(args.max_thermal)
         run(f'{PLASMA} home', 'root', check=False)
@@ -141,7 +141,9 @@ def summarise(args, rounds, drivers, suffix=''):
                 values.append(v)
         return round(statistics.median(values), 3) if values else None
 
-    gpu_key = lambda r, name: next((v for k, v in r['gpu']['per_process'].items() if name in k), {})
+    # The APK's process: com.rungic.plasma, dev.moto.plasma before the Rungic rename.
+    gpu_key = lambda r, name: next((v for k, v in r['gpu']['per_process'].items()
+                                    if (name if name != 'apk' else '.plasma[') in k), {})
     summary = {
         'rounds': len(rounds), 'plasmashell_rhi': args.plasmashell_rhi or 'default', 'plasmashell_drivers': drivers,
         'kwin_env': args.kwin_env,
@@ -160,9 +162,9 @@ def summarise(args, rounds, drivers, suffix=''):
         'bw_mbps': {dev: round(statistics.median(r.get('gpu', {}).get('bw_mbps', {}).get(dev, 0) for r in rounds), 1)
                     for dev in sorted({d for r in rounds for d in r.get('gpu', {}).get('bw_mbps', {})})},
         'gpu_total_ms': {name: round(statistics.median(gpu_key(r, name).get('total_ms', 0) for r in rounds), 2)
-                         for name in ('kwin_wayland', 'plasmashell', 'dev.moto.plasma')},
+                         for name in ('kwin_wayland', 'plasmashell', 'apk')},
         'gpu_submission_ms_mean': {name: round(statistics.median(gpu_key(r, name).get('mean', 0) for r in rounds), 3)
-                                   for name in ('kwin_wayland', 'plasmashell', 'dev.moto.plasma')},
+                                   for name in ('kwin_wayland', 'plasmashell', 'apk')},
     }
     (args.out / f'summary{suffix}.json').write_text(json.dumps(summary, indent=1))
     print(json.dumps(summary, indent=1))

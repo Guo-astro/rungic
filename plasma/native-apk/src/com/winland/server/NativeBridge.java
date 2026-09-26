@@ -44,7 +44,7 @@ public final class NativeBridge {
     public static native String getLastNativeError();
     public static native String getWaylandRuntimeStats();
     public static native void sendClipboardTextToWayland(String text);
-    public static void onKeyboardInitFailed(String reason) { Log.e("MotoWayland", reason); }
+    public static void onKeyboardInitFailed(String reason) { Log.e("RungicWayland", reason); }
     public static void onWaylandClipboardChanged(String text) { }
     public static void onWaylandShowSoftKeyboard() { }
     public static void onWaylandHideSoftKeyboard() { }

@@ -2,6 +2,6 @@
 # store (plasma/rootfs-image, docs/61 §7). Without it the loop device returns I/O errors: the
 # worker runs as u:r:kernel:s0, which may not read adb_data_file. Same approach as
 # docker/sepolicy.rule (docs/19).
-type moto_plasma_image file_type
-typeattribute moto_plasma_image data_file_type
-allow kernel moto_plasma_image file { open read write getattr ioctl lock map }
+type rungic_image file_type
+typeattribute rungic_image data_file_type
+allow kernel rungic_image file { open read write getattr ioctl lock map }

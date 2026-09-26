@@ -320,7 +320,8 @@ def audio_record(ctx):
 
 
 def _keep_screen_on():
-    text = run("dumpsys window windows | grep -A30 'dev.moto.plasma/dev.moto.plasma.MainActivity' "
+    apk = rungic_device.apk()
+    text = run(f"dumpsys window windows | grep -A30 '{apk}/{apk}.MainActivity' "
                "| grep -m1 -o 'fl=[^ ]*'", 'shell', 30, check=False).stdout
     return 'KEEP_SCREEN_ON' in text
 

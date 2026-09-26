@@ -143,3 +143,23 @@
 
 新出现的崩溃：`9891060f148d`（plasmashell在KWayland客户端处理Wayland事件时SIGSEGV），发生在完整验收的录屏场景中，只出现过一次，重跑没有复现。
 
+
+### C阶段方案（2026-09-27）
+
+盘点（设备与仓库）：APK `dev.moto.plasma`（UID 10352；私有数据只有`shared_prefs/MainActivity.xml`；相机、麦克风运行时授权，悬浮窗`appops`，Magisk su授权）；`/data/adb/moto-plasma`（启动脚本、enter程序、`rootfs-image`、挂载hook、音频桥、SELinux规则）；`/data/adb/moto-lxc`（LXC控制环境，含plasma的镜像`images/`与`state/{home,host,moto-cores,moto-apt}`，以及alpine与已停用的phosh）；`/data/adb/moto-wfd`（投屏工具`moto-cast`与jar）；`/data/adb/moto-docker`（独立运行、开机自启）；`service.d`中3个脚本；Termux音频目录`moto-plasma-audio`；APK提供给KWin的`moto-gpu-alloc` socket；`debug.moto.*`属性；镜像当前状态`none`（无快照）。
+
+**两步切换，分开验收**
+
+1. **C1 Android侧切换（容器发布不变，仍是`20260927.5`）**：新APK `com.rungic.plasma`与新的`/data/adb/rungic-*`布局一次切换。新的启动脚本、LXC配置和APK在D之前向旧名称兼容：状态目录同时挂载到`/var/lib/rungic-*`和`/var/lib/moto-*`，APK在`rungic-gpu-alloc`旁放一个`moto-gpu-alloc`链接。因此`20260927.5`及更早的容器发布在新布局上照常运行，C1可以单独验收。
+2. **C2 容器发布**：容器改用`/var/lib/rungic-{host,cores,apt}`，KWin改连`rungic-gpu-alloc`（重建`+rungic2`），APT源、账户、诊断随之修改。按包回滚到C1之前的容器发布仍可用（上面的兼容挂载）；这种回滚跳过旧发布中`/data/adb/moto-*`路径的Android侧文件，保留当前（向后兼容的）启动脚本。发布在Android侧还是旧布局的设备上部署时拒绝，提示先切换。
+3. Docker（`rungic-docker`、SELinux `rungic_docker*`）与APK无关，C1、C2验收后单独切换，需要在停止状态下`chcon -R`整个runtime与数据镜像。
+
+**C1步骤**（`tools/rungic_cutover.py up`，每步记录到`.work/cutover/`，`down`按相反顺序恢复）：
+1. 留存现状：`dumpsys package`、`appops get`、`rootfs-image status`、`/data/adb`列表；要求镜像状态`none`。
+2. 停止：`moto-plasma stop`（容器、镜像、音频），确认无`moto-plasma-root`、镜像无loop；停止alpine；`am force-stop`旧APK与投屏监视进程。
+3. 目录改名（同一f2fs，O(1)）：`moto-plasma`→`rungic-plasma`，`moto-lxc`→`rungic-lxc`，`moto-wfd`→`rungic-wfd`；镜像目录移到`/data/adb/rungic-lxc/images/`（`rootfs-image`检查路径不超过63字节）；`state/moto-{cores,apt}`→`state/rungic-*`。
+4. 安装新文件：启动脚本`rungic-plasma`、enter程序（NDK静态编译）、`rootfs-image`（dm `rungic-root`/`rungic-before`，SELinux `rungic_image`，下次attach时chcon）、挂载hook、音频桥（Termux目录`rungic-plasma-audio`）、LXC配置（主机名`rungic`）、`rungic-lxc`、`rungic-cast`；`service.d`中换成`rungic-cast-watch.sh`与`rungic-wfd-sepolicy.sh`。
+5. APK：安装`com.rungic.plasma`；复制`MainActivity.xml`；`pm grant`相机、麦克风；`appops set SYSTEM_ALERT_WINDOW allow`；Magisk授权用`magisk --sqlite "INSERT OR REPLACE INTO policies (uid,policy,until,logging,notification) VALUES(<uid>,2,0,1,1)"`（不返回行，不触发docs/39的NULL问题；不执行`SELECT *`与`PRAGMA`）；旧APK `pm disable-user`（保留数据与授权供`down`，D阶段卸载）。
+6. 启动新APK，验收：桌面、触摸、GPU、音频、相机/麦克风、投屏、OCR、Android侧残留检查；重启手机后再验收一次。
+
+主屏上的APK图标需要用户重新放置。ROM中的Magisk引导脚本（`tools/moto-magisk-bootstrap.*`）在仓库中改名，随下次刷ROM生效。

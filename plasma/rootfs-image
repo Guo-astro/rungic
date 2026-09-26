@@ -10,42 +10,46 @@
 #   rootfs-image commit                 drop the snapshot, keep the current state (container stopped)
 #   rootfs-image migrate                one-time: directory rootfs -> image (container stopped)
 #
-# Layout under the LXC directory (inside the moto-lxc runtime: /var/lib/lxc/plasma):
-#   images/rootfs.img   sparse ext4, the system
-#   images/rootfs.cow   sparse copy-on-write store while a snapshot exists
-#   images/state        none | snapshot | merging
-#   state/home, state/moto-cores, state/moto-apt
-#                       bind-mounted by plasma.config: user data, crash reports and the release
+# Layout:
+#   /data/adb/rungic-lxc/images/        outside the runtime: toybox losetup takes paths under 64 bytes
+#     rootfs.img        sparse ext4, the system
+#     rootfs.cow        sparse copy-on-write store while a snapshot exists
+#     state             none | snapshot | merging
+#   the LXC directory (inside the rungic-lxc runtime: /var/lib/lxc/plasma)
+#     state/home, state/rungic-cores, state/rungic-apt
+#                       bind-mounted by rungic-plasma: user data, crash reports and the release
 #                       repository never roll back with the system
 #
-# The device LXC mounts is always /dev/block/dm-N of "moto-plasma-root":
+# The device LXC mounts is always /dev/block/dm-N of "rungic-root":
 #   none      linear over the image
 #   snapshot  snapshot-origin over the image (writes land in the image, old blocks go to the
-#             COW), plus a read-only "moto-plasma-before" view of the snapshot
+#             COW), plus a read-only "rungic-before" view of the snapshot
 #   merging   snapshot-merge: the snapshot's contents are visible at once and copied back into
 #             the image in the background; when done, the next attach is linear again
 set -eu
-LXC=/data/adb/moto-lxc/runtime/var/lib/lxc/plasma
-IMAGES=$LXC/images
-IMG=$IMAGES/rootfs.img              # toybox losetup takes paths under 64 bytes: these are 63
+LXC=/data/adb/rungic-lxc/runtime/var/lib/lxc/plasma
+IMAGES=/data/adb/rungic-lxc/images
+IMG=$IMAGES/rootfs.img
 COW=$IMAGES/rootfs.cow
 STATE_FILE=$IMAGES/state
-ROOT_DM=moto-plasma-root
-SNAP_DM=moto-plasma-before
-IMG_SIZE=${MOTO_ROOTFS_SIZE:-160G}
-COW_SIZE=${MOTO_ROOTFS_COW_SIZE:-32G}
+ROOT_DM=rungic-root
+SNAP_DM=rungic-before
+IMG_SIZE=${RUNGIC_ROOTFS_SIZE:-160G}
+COW_SIZE=${RUNGIC_ROOTFS_COW_SIZE:-32G}
 CHUNK=8                                   # sectors: 4 KiB copy-on-write chunks
 CONTEXT=u:object_r:adb_data_file:s0       # the label the directory rootfs had (root of the image)
 
 die() { echo "rootfs-image: $*" >&2; exit 1; }
 state() { cat "$STATE_FILE" 2>/dev/null || echo none; }
-running() { [ "$(/data/adb/moto-plasma/moto-plasma-enter /usr/bin/lxc-info -n plasma -sH 2>/dev/null)" = RUNNING ]; }
-need_stopped() { ! running || die "stop the container first (moto-plasma stop)"; }
+running() { [ "$(/data/adb/rungic-plasma/rungic-plasma-enter /usr/bin/lxc-info -n plasma -sH 2>/dev/null)" = RUNNING ]; }
+need_stopped() { ! running || die "stop the container first (rungic-plasma stop)"; }
 
-POLICY=/data/adb/moto-plasma/rootfs.sepolicy.rule
-LABEL=u:object_r:moto_plasma_image:s0
+POLICY=/data/adb/rungic-plasma/rootfs.sepolicy.rule
+LABEL=u:object_r:rungic_image:s0
 
 loop_of() {   # the loop device attached to $1, attaching it if needed
+    # toybox losetup attaches first and fails on a longer name afterwards (lo_file_name, 64 bytes).
+    [ "${#1}" -le 63 ] || die "$1: path longer than 63 bytes"
     dev=$(losetup -j "$1" 2>/dev/null | head -n1 | cut -d: -f1)
     if [ -z "$dev" ]; then
         # The kernel's loop worker may read only files of this type (rootfs.sepolicy.rule).
@@ -189,10 +193,10 @@ migrate() {
         chcon $CONTEXT $target
         chroot $LXC/rootfs /usr/bin/tar -C / --one-file-system --numeric-owner --acls --xattrs \
             --xattrs-include='*' --exclude=./mnt/rootfs-image --exclude=./home/* \
-            --exclude=./var/lib/moto-cores/* --exclude=./var/lib/moto-apt/* -cpf - . |
+            --exclude=./var/lib/rungic-cores/* --exclude=./var/lib/rungic-apt/* -cpf - . |
         chroot $LXC/rootfs /usr/bin/tar -C /mnt/rootfs-image --numeric-owner --acls --xattrs \
             --xattrs-include='*' -xpf -
-        mkdir -p $target/home $target/var/lib/moto-cores $target/var/lib/moto-apt
+        mkdir -p $target/home $target/var/lib/rungic-cores $target/var/lib/rungic-apt
         chcon $CONTEXT $target
         umount $target"; then
         losetup -d "$loop" 2>/dev/null || true
@@ -202,7 +206,7 @@ migrate() {
     rmdir "$target" 2>/dev/null || true
     losetup -d "$loop" 2>/dev/null || true   # toybox sets autoclear: the umount may have released it
     e2fsck -fn "$IMG" >/dev/null || { rm -f "$IMG"; die "the new image does not check clean"; }
-    for pair in home:home var/lib/moto-cores:moto-cores var/lib/moto-apt:moto-apt; do
+    for pair in home:home var/lib/rungic-cores:rungic-cores var/lib/rungic-apt:rungic-apt; do
         inner=${pair%%:*}; outer=$LXC/state/${pair#*:}
         if [ -d "$LXC/rootfs/$inner" ] && [ ! -e "$outer" ]; then
             mv "$LXC/rootfs/$inner" "$outer"

@@ -1,6 +1,6 @@
 load-module module-device-restore
 load-module module-stream-restore
 load-module module-sles-sink sink_name=android_output rate=48000 channels=2 format=s16le latency=20
-load-module module-native-protocol-unix socket=/data/data/com.termux/files/usr/tmp/moto-plasma-audio/native auth-cookie=/data/data/com.termux/files/usr/tmp/moto-plasma-audio/cookie auth-anonymous=0
+load-module module-native-protocol-unix socket=/data/data/com.termux/files/usr/tmp/rungic-plasma-audio/native auth-cookie=/data/data/com.termux/files/usr/tmp/rungic-plasma-audio/cookie auth-anonymous=0
 load-module module-suspend-on-idle timeout=3
 set-default-sink android_output

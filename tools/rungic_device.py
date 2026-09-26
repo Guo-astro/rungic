@@ -13,22 +13,47 @@ environment wins. The names from before the Rungic rename (MOTO_ADB, ...) still 
 
 prog() and first_path() name the container's programs and files as a shell word that takes the
 Rungic name and falls back to the name from before the rename (docs/70), so these tools keep
-working on a release that is rolled back to. Without RUNGIC_TRANSPORT the phone is found by ro.serialno, so
-a changing wireless-debugging port needs no edits.
+working on a release that is rolled back to. PLASMA and LXC_DIR do the same for the Android side
+(/data/adb/rungic-* after the phase C cutover, /data/adb/moto-* before), and apk() for the APK.
+Without RUNGIC_TRANSPORT the phone is found by ro.serialno, so a changing wireless-debugging port
+needs no edits.
 
 Scripts are sent on stdin instead of being nested inside `adb shell su -c`
 quoting. The exit status of the script is returned.
 """
 import functools
 import os
+import shlex
 import shutil
 import subprocess
 from pathlib import Path
 
 WORKSPACE = Path(__file__).resolve().parent.parent
 DEFAULT_SERIAL = 'ZY32MVJS25'
-PLASMA = '/data/adb/moto-plasma/moto-plasma'
-PLASMA_ROOTFS = '/data/adb/moto-lxc/runtime/var/lib/lxc/plasma/rootfs'
+# Sets $p to the Android-side launcher (plasma/rungic-plasma), under its name before the cutover if
+# that is what the phone has.
+LAUNCHER_SH = 'p=/data/adb/rungic-plasma/rungic-plasma; [ -x $p ] || p=/data/adb/moto-plasma/moto-plasma'
+# Shell words for root scripts: the launcher, and the Plasma LXC directory (config, state/).
+PLASMA = f'"$({LAUNCHER_SH}; echo $p)"'
+LXC_DIR = ('"$(d=/data/adb/rungic-lxc; [ -d $d ] || d=/data/adb/moto-lxc; '
+           'echo $d/runtime/var/lib/lxc/plasma)"')
+
+
+APK = 'com.rungic.plasma'
+FORMER_APK = 'dev.moto.plasma'
+
+
+@functools.cache
+def apk():
+    """Package name of the desktop APK on the phone: com.rungic.plasma, or dev.moto.plasma before the
+    phase C cutover (docs/70)."""
+    enabled = out('pm list packages -e', 'shell')
+    return APK if f'package:{APK}\n' in enabled + '\n' else FORMER_APK
+
+
+def plasma_command(*args):
+    """A root command line that runs the launcher with args (for su -c)."""
+    return f'{LAUNCHER_SH}; exec $p {shlex.join(args)}'
 
 
 class DeviceError(RuntimeError):
@@ -127,8 +152,8 @@ def _run(argv, script, timeout, check):
 LEVELS = {
     'shell': 'sh',                                  # Android shell user
     'root': 'su -c sh',                             # Android root (Magisk)
-    'container': f'su -c "{PLASMA} exec sh"',       # LXC root
-    'user': f'su -c "{PLASMA} user-exec sh"',       # desktop user, session environment
+    'container': 'su -c ' + shlex.quote(plasma_command('exec', 'sh')),        # LXC root
+    'user': 'su -c ' + shlex.quote(plasma_command('user-exec', 'sh')),        # desktop user, session environment
 }
 
 
@@ -149,24 +174,18 @@ def push(src, name=None, timeout=300):
     return remote
 
 
-# Files between this computer and the container (docs/61 §7). The container's rootfs may be an image
-# mounted only in the container's namespace, so nothing is read or written under PLASMA_ROOTFS from
-# Android: files pass through state/host/transfer, bind-mounted at /var/lib/moto-host/transfer.
-HOST_TRANSFER = '/data/adb/moto-lxc/runtime/var/lib/lxc/plasma/state/host/transfer'
-CONTAINER_TRANSFER = '/var/lib/moto-host/transfer'
+# Files between this computer and the container (docs/61 §7). The container's rootfs is an image
+# mounted only in the container's namespace, so nothing is read or written under it from Android:
+# files pass through state/host/transfer, bind-mounted at /var/lib/rungic-host (/var/lib/moto-host
+# before phase C, and alongside it until phase D).
+HOST_TRANSFER = f'{LXC_DIR}/state/host/transfer'
 
 
-_transfer_host = None
-
-
-def _host_transfer():
-    """Android path of the transfer directory: state/host when it is bind-mounted (image rootfs, or after
-    the release that adds the mount), else the same directory inside a directory rootfs."""
-    global _transfer_host
-    if _transfer_host is None:
-        mounted = run('mountpoint -q /var/lib/moto-host', 'container', check=False).returncode == 0
-        _transfer_host = HOST_TRANSFER if mounted else PLASMA_ROOTFS + CONTAINER_TRANSFER
-    return _transfer_host
+@functools.cache
+def container_transfer():
+    """Container path of the transfer directory."""
+    rungic = run('mountpoint -q /var/lib/rungic-host', 'container', check=False).returncode == 0
+    return f"/var/lib/{'rungic' if rungic else 'moto'}-host/transfer"
 
 
 def _transfer_name(hint):
@@ -179,9 +198,9 @@ def to_container(src, dest=None, mode=None, timeout=600):
     without dest, only into the transfer directory; returns the container path."""
     name = _transfer_name(src)
     remote = push(src, name, timeout)
-    host = _host_transfer()
+    host = HOST_TRANSFER
     run(f'mkdir -p {host} && cp {remote} {host}/{name} && chmod 644 {host}/{name}; rm -f {remote}', 'root', timeout)
-    staged = f'{CONTAINER_TRANSFER}/{name}'
+    staged = f'{container_transfer()}/{name}'
     if dest is None:
         return staged
     install = f'install -o 0 -g 0 -m {mode} ' if mode else 'install -o 0 -g 0 '
@@ -192,15 +211,15 @@ def to_container(src, dest=None, mode=None, timeout=600):
 def from_container(path, target, timeout=1800):
     """Copy a file from the container to a local path."""
     name = _transfer_name(path)
-    run(f'mkdir -p {CONTAINER_TRANSFER} && cp {path} {CONTAINER_TRANSFER}/{name} && '
-        f'chmod 644 {CONTAINER_TRANSFER}/{name}', 'container', timeout)
+    transfer = container_transfer()
+    run(f'mkdir -p {transfer} && cp {path} {transfer}/{name} && chmod 644 {transfer}/{name}', 'container', timeout)
     stage = f'/data/local/tmp/{name}'
     try:
-        run(f'cp {_host_transfer()}/{name} {stage} && chmod 644 {stage}', 'root', timeout)
+        run(f'cp {HOST_TRANSFER}/{name} {stage} && chmod 644 {stage}', 'root', timeout)
         subprocess.run(adb('pull', stage, str(target)), check=True, capture_output=True, timeout=timeout,
                        stdin=subprocess.DEVNULL)
     finally:
-        run(f'rm -f {stage} {_host_transfer()}/{name}', 'root', check=False)
+        run(f'rm -f {stage} {HOST_TRANSFER}/{name}', 'root', check=False)
 
 
 def extract_in_container(archive, directory, timeout=1800):

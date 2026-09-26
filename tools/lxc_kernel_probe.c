@@ -37,7 +37,7 @@ static long mount_fs(const char *src,const char *dst,const char *type,long flags
 }
 static char paths[12][512];
 static int mounts(const char *base) {
-    if(!prefix(base,"/data/local/tmp/moto-lxc-audit-"))return 2;
+    if(!prefix(base,"/data/local/tmp/rungic-lxc-audit-"))return 2;
     if(report("unshare_mount",S(97,0x20000,0,0,0,0))<0)return 1;
     /* Source and filesystem arguments must be NULL for propagation changes. */
     if(report("mount_private_root",mount_fs(0,"/",0,(1L<<18)|(1L<<14),0))<0)return 1;
@@ -85,7 +85,7 @@ struct load_attr {
 struct attach_attr {u32 target_fd,prog_fd,type,flags,replace_fd;};
 static char verifier[8192];
 static int bpf_device(const char *cg) {
-    if(!prefix(cg,"/sys/fs/cgroup/moto-lxc-probe-"))return 2;
+    if(!prefix(cg,"/sys/fs/cgroup/rungic-lxc-probe-"))return 2;
     /* Deny all device opens for this helper while inside the test cgroup. */
     struct insn program[]={{0xb7,0,0,0},{0x95,0,0,0}};
     struct load_attr load={0};load.type=15;load.count=2;load.insns=(u64)program;

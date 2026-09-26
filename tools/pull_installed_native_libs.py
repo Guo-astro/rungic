@@ -21,7 +21,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('out', type=Path, nargs='?', default=DEFAULT)
     args = parser.parse_args()
-    remote = rungic_device.out('pm path dev.moto.plasma', 'shell').splitlines()[0].split(':', 1)[1]
+    remote = rungic_device.out(f'pm path {rungic_device.apk()}', 'shell').splitlines()[0].split(':', 1)[1]
     apk = rungic_device.WORKSPACE / '.work/cache/installed-plasma.apk'
     apk.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(rungic_device.adb('pull', remote, str(apk)), check=True, capture_output=True,

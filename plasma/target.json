@@ -3,7 +3,7 @@
   "status": "Native 1080x2400 display and Android refresh controls deployed; paired GLES/Zink and native Vulkan benchmarks completed, production KWin remains GLES; media validation and remaining display GUI regression continue",
   "architecture": "arm64",
   "container": "plasma",
-  "android_application_id": "dev.moto.plasma",
+  "android_application_id": "com.rungic.plasma",
   "base_preference": "Ubuntu 26.04 LTS (resolute), deployed",
   "selected_upstream_release": "6.6.5",
   "upstream_minimums": {

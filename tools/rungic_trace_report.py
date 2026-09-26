@@ -28,7 +28,8 @@ from pathlib import Path
 from perfetto.trace_processor import TraceProcessor, TraceProcessorConfig
 
 GPU_TICK_HZ = 19.2e6
-PROCESSES = {'kwin': '%kwin_wayland', 'plasmashell': '%plasmashell', 'apk': 'dev.moto.plasma',
+# apk: com.rungic.plasma, or dev.moto.plasma before the Rungic rename.
+PROCESSES = {'kwin': '%kwin_wayland', 'plasmashell': '%plasmashell', 'apk': '%.plasma',
              'surfaceflinger': '%surfaceflinger'}
 MARKER = re.compile(r'^(?P<name>.+?) begin_ctx=(?P<ctx>\d+)$|^(?P<ename>.+?) end_ctx=(?P<ectx>\d+)$')
 KGSL = re.compile(r'^\s*(?P<task>.+)-(?P<tid>\d+)\s+\(\s*(?P<tgid>\d+)\)\s+\[\d+\]\s+\S+\s+'
@@ -65,7 +66,7 @@ def analyse(trace, start_s=None, end_s=None):
     # "queueBuffer" and nest; count only the outer one (one per presented buffer).
     queue = rows(tp, f"""select s.ts, s.dur from slice s join thread_track tt on s.track_id = tt.id
         join thread t using(utid) join process p using(upid) left join slice parent on s.parent_id = parent.id
-        where s.name = 'queueBuffer' and p.name = 'dev.moto.plasma' and s.ts >= {t0} and s.ts < {t1}
+        where s.name = 'queueBuffer' and p.name like '%.plasma' and s.ts >= {t0} and s.ts < {t1}
           and (parent.name is null or parent.name != 'queueBuffer') order by s.ts""")
     result['host_queue'] = {'buffers': len(queue), 'per_s': round(len(queue) / window, 2) if window else None,
                             'interval_ms': stats([(b.ts - a.ts) / 1e6 for a, b in zip(queue, queue[1:])]),

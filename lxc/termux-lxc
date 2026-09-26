@@ -13,12 +13,12 @@ Usage: lxc {status|start|shell|stop|log|exec COMMAND...}
   lxc log          Show the last 80 LXC log lines
   lxc exec COMMAND Run a command inside Alpine
 
-This shortcut manages /data/adb/moto-lxc via Magisk.
+This shortcut manages /data/adb/rungic-lxc via Magisk.
 HELP
     exit 0
 fi
 
-root_command='PATH=/product/bin:/system/bin:/system/xbin:/vendor/bin /data/adb/moto-lxc/moto-lxc'
+root_command='PATH=/product/bin:/system/bin:/system/xbin:/vendor/bin /data/adb/rungic-lxc/rungic-lxc'
 for arg in "$@"; do
     # Quote each argument for Android's shell without evaluating its contents.
     escaped=${arg//\'/\'\\\'\'}

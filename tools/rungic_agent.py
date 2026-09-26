@@ -24,10 +24,10 @@ from pathlib import Path
 import rungic_device
 from rungic_device import DeviceError, out, run
 
-PACKAGE = 'dev.moto.plasma'
 DIAG_DIR = rungic_device.WORKSPACE / '.work/diag'
 SESSION_LOG = '/var/log/plasma/session.log'
-LOGCAT_TAGS = ('WinlandNative', 'MotoWayland', 'MotoPlasma', 'DisplayPacer')   # the APK's tags (renamed with it, docs/70 phase C)
+# The APK's tags; Moto* are those of the APK from before the Rungic rename (docs/70, until phase D).
+LOGCAT_TAGS = ('WinlandNative', 'RungicWayland', 'RungicPlasma', 'DisplayPacer', 'MotoWayland', 'MotoPlasma')
 PRIORITY = {'V': 7, 'D': 7, 'I': 6, 'W': 4, 'E': 3, 'F': 2}  # logcat -> syslog
 LEVEL_NAME = {0: 'emerg', 1: 'alert', 2: 'crit', 3: 'err', 4: 'warning', 5: 'notice', 6: 'info', 7: 'debug'}
 
@@ -58,7 +58,7 @@ def noise_reason(message):
 
 
 def package_uid():
-    return int(out(f'stat -c %u /data/data/{PACKAGE}').strip())
+    return int(out(f'stat -c %u /data/data/{rungic_device.apk()}').strip())
 
 
 # ---------------------------------------------------------------- status
@@ -69,8 +69,8 @@ def status():
 echo "time=$(date +%s.%N)"
 echo "uptime=$(cut -d' ' -f1 /proc/uptime)"
 echo "selinux=$(getenforce)"
-echo "apk=$(dumpsys package {PACKAGE} | grep -m1 versionName | cut -d= -f2)"
-echo "apk_pid=$(pidof {PACKAGE})"
+echo "apk=$(dumpsys package {rungic_device.apk()} | grep -m1 versionName | cut -d= -f2)"
+echo "apk_pid=$(pidof {rungic_device.apk()})"
 echo "wakefulness=$(dumpsys power | grep -m1 mWakefulness= | cut -d= -f2)"
 echo "top=$(dumpsys activity activities | grep -m1 topResumedActivity | sed 's/.* u0 //;s/ .*//')"
 echo "thermal=$(dumpsys thermalservice | grep -m1 'Thermal Status' | cut -d: -f2 | tr -d ' ')"
@@ -248,8 +248,10 @@ done
     reports = run(f'''python3 - <<'PY'
 import json, pathlib
 since = {now - since_seconds}
+# /var/lib/moto-cores before the Rungic rename (docs/70)
+store = next((p for p in map(pathlib.Path, ('/var/lib/rungic-cores', '/var/lib/moto-cores')) if p.is_dir()), pathlib.Path('/var/lib/rungic-cores'))
 cores = []
-for info in pathlib.Path('/var/lib/moto-cores').glob('*/info.json'):
+for info in store.glob('*/info.json'):
     if info.stat().st_mtime >= since:
         cores.append({{'id': info.parent.name, **json.loads(info.read_text())}})
 apport = [{{'id': str(p), 'time': p.stat().st_mtime}} for p in pathlib.Path('/var/crash').glob('*.crash')
@@ -272,8 +274,10 @@ def crash_groups(since_seconds=30 * 86400, release=None):
     text = run(f'''python3 - <<'PY'
 import json, pathlib
 since = {now - since_seconds}
+# /var/lib/moto-cores before the Rungic rename (docs/70)
+store = next((p for p in map(pathlib.Path, ('/var/lib/rungic-cores', '/var/lib/moto-cores')) if p.is_dir()), pathlib.Path('/var/lib/rungic-cores'))
 rows = []
-for info in pathlib.Path('/var/lib/moto-cores').glob('*/info.json'):
+for info in store.glob('*/info.json'):
     try:
         d = json.loads(info.read_text())
     except ValueError:
@@ -334,7 +338,8 @@ def crash_get(crash_id, lines=160):
     if re.fullmatch(r'tombstone_\d+', crash_id):
         return out(f'head -n {int(lines)} /data/tombstones/{crash_id}')
     if re.fullmatch(r'\d{8}-\d{6}-[^/\s]+-\d+', crash_id):
-        return out(f'head -n {int(lines) * 4} /var/lib/moto-cores/{crash_id}/backtrace.txt', 'container')
+        store = rungic_device.first_path('/var/lib/rungic-cores', '/var/lib/moto-cores')
+        return out(f'head -n {int(lines) * 4} {store}/{crash_id}/backtrace.txt', 'container')
     if re.fullmatch(r'/var/crash/[^/\s]+\.crash', crash_id):
         return out(f'grep -v "^ " {shlex.quote(crash_id)} | head -n {int(lines)}', 'container')
     raise ValueError('crash_id: tombstone_NN, a container core id (YYYYmmdd-HHMMSS-comm-pid) '

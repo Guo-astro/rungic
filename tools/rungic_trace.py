@@ -77,7 +77,7 @@ buffers {{ size_kb: 4096 fill_policy: RING_BUFFER }}
 data_sources {{ config {{ name: "linux.ftrace" target_buffer: 0 ftrace_config {{
 {events}
 {categories}
-      atrace_apps: "dev.moto.plasma"
+      atrace_apps: "{rungic_device.apk()}"
       buffer_size_kb: 16384
       drain_period_ms: 250
       symbolize_ksyms: false

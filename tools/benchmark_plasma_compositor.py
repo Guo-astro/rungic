@@ -28,7 +28,7 @@ def summary(intervals):
         'over_16_9_ms':sum(x>16.9 for x in intervals),'over_33_7_ms':sum(x>33.7 for x in intervals)}
 def measure(scenario,out):
     layers=frames.shell('dumpsys','SurfaceFlinger','--list')
-    matches=[x for x in layers.splitlines() if 'SurfaceView[dev.moto.plasma/' in x and '(BLAST)' in x]
+    matches=[x for x in layers.splitlines() if re.search(r'SurfaceView\[(com\.rungic|dev\.moto)\.plasma/',x) and '(BLAST)' in x]
     if len(matches)!=1: raise RuntimeError(matches)
     layer=re.search(r'\{(.*?) parentId=',matches[0])[1] if 'RequestedLayerState{' in matches[0] else matches[0]
     frames.shell('dumpsys','SurfaceFlinger','--latency-clear')

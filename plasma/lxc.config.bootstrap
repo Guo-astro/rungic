@@ -1,5 +1,5 @@
 # Plasma: Android network namespace, no network-admin/raw capabilities.
-lxc.uts.name = moto-plasma
+lxc.uts.name = rungic
 lxc.rootfs.path = dir:/var/lib/lxc/plasma/rootfs
 lxc.init.cmd = /bin/sleep infinity
 lxc.signal.halt = SIGUSR1

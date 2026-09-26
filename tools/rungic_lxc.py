@@ -17,7 +17,7 @@ def main():
         parser.error("Only exec accepts a command and its arguments")
     if args.action == "exec" and not args.args:
         parser.error("exec requires a command")
-    command = shlex.join(["/data/adb/moto-lxc/moto-lxc", args.action, *args.args])
+    command = shlex.join(["/data/adb/rungic-lxc/rungic-lxc", args.action, *args.args])
     return subprocess.call([
         *(rungic_device.adb() if args.transport is None else [rungic_device.adb_path(), "-s", args.transport]), "shell",
         "-tt" if args.action == "shell" else "-T",

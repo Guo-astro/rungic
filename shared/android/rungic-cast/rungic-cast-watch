@@ -1,0 +1,71 @@
+#!/system/bin/sh
+# Reconnect the TV after the TV side dropped the cast session (docs/58).
+# Installed as /data/adb/rungic-wfd/rungic-cast-watch; started at boot by
+# /data/adb/service.d/rungic-cast-watch.sh.
+#
+# WifiDisplayController tells the two kinds of disconnect apart by order. A
+# disconnect requested on the phone (rungic-cast, Android's cast controls) first
+# stops listening for RTSP and then sees the session close; when the TV ends
+# the session, "Closed RTSP connection" comes first. Only the latter is
+# reconnected. A user request (rungic-cast connect/disconnect) cancels a
+# reconnect in progress.
+DIR=/data/adb/rungic-wfd
+RUN=$DIR/run
+LOG=$RUN/watch.log
+RETRY_FOR=180       # seconds of reconnect attempts (the TV can need a minute)
+AGAIN_WITHIN=120    # the TV ends the session again this soon after a reconnect: leave it
+
+mkdir -p "$RUN"
+log() { echo "$(date '+%m-%d %H:%M:%S') $*" >> "$LOG"; }
+
+if [ "$1" = reconnect ]; then
+    echo $$ > "$RUN/reconnecting"
+    trap 'rm -f "$RUN/reconnecting"' EXIT
+    rm -f "$RUN/cancel-reconnect"
+    deadline=$(( $(date +%s) + RETRY_FOR ))
+    sleep 3
+    while [ "$(date +%s)" -lt "$deadline" ]; do
+        [ -f "$RUN/cancel-reconnect" ] && { log "reconnect cancelled by a user request"; exit 0; }
+        out=$(RUNGIC_CAST_AUTO=1 "$DIR/rungic-cast" connect last 40)
+        [ -f "$RUN/cancel-reconnect" ] && { log "reconnect cancelled by a user request"; exit 0; }
+        case "$out" in
+        *'"active_state":2'*) date +%s > "$RUN/last-reconnect"; log "reconnected"; exit 0 ;;
+        esac
+        log "reconnect attempt failed: $out"
+        sleep 5
+    done
+    log "gave up reconnecting"
+    exit 0
+fi
+
+# One watcher (mksh closes exec'd descriptors in children, so no flock on a fd).
+pid=$(cat "$RUN/watch.pid" 2>/dev/null)
+if [ -n "$pid" ] && [ "$pid" != $$ ] && grep -q rungic-cast-watch "/proc/$pid/cmdline" 2>/dev/null; then exit 0; fi
+echo $$ > "$RUN/watch.pid"
+[ "$(wc -c < "$LOG" 2>/dev/null || echo 0)" -gt 262144 ] && mv "$LOG" "$LOG.old"
+log "watching (pid $$)"
+while true; do
+    case "$("$DIR/rungic-cast" status)" in
+    *'"active_state":2'*) connected=1 ;;
+    *) connected=0 ;;
+    esac
+    logcat -b system -v raw -T "$(date '+%m-%d %H:%M:%S.000')" -s WifiDisplayController:I | while IFS= read -r line; do
+        case "$line" in
+        "Connected to Wifi display: "*) connected=1 ;;
+        "Stopped listening for RTSP connection"*) connected=0 ;;
+        "Closed RTSP connection with Wifi display: "*)
+            [ "$connected" = 1 ] || continue
+            connected=0
+            last=$(cat "$RUN/last-reconnect" 2>/dev/null || echo 0)
+            if [ $(( $(date +%s) - last )) -lt "$AGAIN_WITHIN" ]; then
+                log "TV ended the session again soon after a reconnect; leaving it off"
+            else
+                log "TV ended the session (${line#*: }); reconnecting"
+                "$0" reconnect < /dev/null > /dev/null 2>&1 &
+            fi
+            ;;
+        esac
+    done
+    log "logcat ended; restarting"
+    sleep 5
+done

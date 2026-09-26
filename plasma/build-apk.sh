@@ -1,22 +1,22 @@
 #!/bin/bash
 set -euo pipefail
 task_root=$(cd "$(dirname "$0")/.." && pwd)
-# SDK locations differ per machine; override with MOTO_ANDROID_BUILD_TOOLS / MOTO_ANDROID_JAR.
+# SDK locations differ per machine; override with RUNGIC_ANDROID_BUILD_TOOLS / RUNGIC_ANDROID_JAR.
 task_sdk=${ANDROID_HOME:-$HOME/android-sdk}
-task_bt=${MOTO_ANDROID_BUILD_TOOLS:-}
+task_bt=${RUNGIC_ANDROID_BUILD_TOOLS:-}
 [ -n "$task_bt" ] || for task_bt in "$HOME/moto-android-sdk/android-16" $(ls -d "$task_sdk"/build-tools/* 2>/dev/null | sort -V -r); do [ -x "$task_bt/aapt2" ] && break; done
-task_jar=${MOTO_ANDROID_JAR:-}
+task_jar=${RUNGIC_ANDROID_JAR:-}
 [ -n "$task_jar" ] || for task_jar in "$HOME/moto-android-sdk/android-36/android.jar" "$task_sdk/platforms/android-36/android.jar"; do [ -f "$task_jar" ] && break; done
-task_out=${MOTO_APK_OUT:-$task_root/.work/refs/plasma-mobile-20260923}
+task_out=${RUNGIC_APK_OUT:-$task_root/.work/refs/plasma-mobile-20260923}
 # Prebuilt lib/arm64-v8a from the Rust build, or tools/pull_installed_native_libs.py.
-task_native=${MOTO_NATIVE_LIBS:-$task_root/.work/refs/plasma-mobile-20260923/native-libs}
+task_native=${RUNGIC_NATIVE_LIBS:-$task_root/.work/refs/plasma-mobile-20260923/native-libs}
 task_version=$(sed -n 's/.*android:versionName="\([^"]*\)".*/\1/p' "$task_root/plasma/native-apk/AndroidManifest.xml")
-task_key=${MOTO_APK_KEYSTORE:-$task_root/signing/development/launcher-signing.p12}
+task_key=${RUNGIC_APK_KEYSTORE:-$task_root/signing/development/launcher-signing.p12}
 task_build=$task_out/apk-build
 mkdir -p "$task_build/classes" "$task_build/dex"
 # On-device OCR (docs/64): LiteRT runtime and PP-OCRv6 models pinned in provenance/ocr-20260925,
-# and libmotoocr.so built with the NDK (MOTO_ANDROID_NDK, else the newest under $task_sdk/ndk).
-task_ndk=${MOTO_ANDROID_NDK:-$(ls -d "$task_sdk"/ndk/* 2>/dev/null | sort -V | tail -1)}
+# and librungicocr.so built with the NDK (RUNGIC_ANDROID_NDK, else the newest under $task_sdk/ndk).
+task_ndk=${RUNGIC_ANDROID_NDK:-$(ls -d "$task_sdk"/ndk/* 2>/dev/null | sort -V | tail -1)}
 task_ocr=$task_build/ocr
 rm -rf "$task_ocr" "$task_build/assets"
 python3 "$task_root/tools/fetch_ocr_assets.py" "$task_ocr"
@@ -24,7 +24,7 @@ mkdir -p "$task_ocr/include/litert/build_common"
 cp "$task_root/vendor/litert/litert/build_common/config/build_config_gpu.h" "$task_ocr/include/litert/build_common/build_config.h"
 "$task_ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android30-clang++" -std=c++17 -O2 -fPIC -shared \
     -Wall -Wextra -Wno-unused-parameter -I"$task_ocr/include" -I"$task_root/vendor/litert" \
-    -o "$task_ocr/lib/arm64-v8a/libmotoocr.so" "$task_root"/plasma/native-apk/jni/ocr/{ppocr,jni}.cc \
+    -o "$task_ocr/lib/arm64-v8a/librungicocr.so" "$task_root"/plasma/native-apk/jni/ocr/{ppocr,jni}.cc \
     -L"$task_ocr/lib/arm64-v8a" -lLiteRt -llog -static-libstdc++ -Wl,--no-undefined
 cp -r "$task_root/plasma/native-apk/assets" "$task_build/assets"
 cp -r "$task_ocr/assets/ocr" "$task_build/assets/ocr"
@@ -40,5 +40,5 @@ cp "$task_build/resources.apk" "$task_build/unsigned.apk"
 (cd "$task_native" && zip -qr "$task_build/unsigned.apk" lib)
 (cd "$task_ocr" && zip -qr "$task_build/unsigned.apk" lib)
 "$task_bt/zipalign" -f 4 "$task_build/unsigned.apk" "$task_build/aligned.apk"
-"$task_bt/apksigner" sign --ks "$task_key" --ks-key-alias launcher --ks-pass pass:android --out "$task_out/Plasma-Mobile-$task_version.apk" "$task_build/aligned.apk"
-"$task_bt/apksigner" verify "$task_out/Plasma-Mobile-$task_version.apk"
+"$task_bt/apksigner" sign --ks "$task_key" --ks-key-alias launcher --ks-pass pass:android --out "$task_out/Rungic-$task_version.apk" "$task_build/aligned.apk"
+"$task_bt/apksigner" verify "$task_out/Rungic-$task_version.apk"
