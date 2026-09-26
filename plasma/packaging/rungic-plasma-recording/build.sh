@@ -1,6 +1,6 @@
 # rungic-plasma-recording: the quick setting (its QML module and package), recorder, settings window.
 R=$SRC/plasma/recording
-cmake -S "$R" -B "$R/build" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_CXX_FLAGS=-g1
+cmake -S "$R" -B "$R/build" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PREFIX=/usr -DKDE_INSTALL_USE_QT_SYS_PATHS=ON -DCMAKE_CXX_FLAGS=-g1
 cmake --build "$R/build" -j"${JOBS:-4}"
 DESTDIR="$DESTDIR" cmake --install "$R/build"
 q=$DESTDIR/usr/share/plasma/quicksettings/com.rungic.quicksetting.record
