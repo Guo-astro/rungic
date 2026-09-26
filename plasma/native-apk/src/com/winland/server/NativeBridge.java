@@ -37,6 +37,10 @@ public final class NativeBridge {
     public static native void setAgentScreen(boolean enabled, int width, int height, int refreshMhz);
     /** Phone as the TV's touchpad: 0 enable, 1 motion, 2 button, 3 scroll, 4 scroll stop (docs/58). */
     public static native void castPointer(int op, float x, float y);
+    /** Whether a Wayland client (KWin, for an idle-inhibiting window) inhibits idle (docs/72). */
+    public static native boolean idleInhibited();
+    /** eventfd that becomes readable when idleInhibited() changes; the reader drains it. */
+    public static native int idleInhibitFd();
     public static native String getLastNativeError();
     public static native String getWaylandRuntimeStats();
     public static native void sendClipboardTextToWayland(String text);

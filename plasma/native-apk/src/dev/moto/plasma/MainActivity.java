@@ -121,6 +121,10 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         if(android.os.Build.VERSION.SDK_INT>=34 && edgeBackCallback!=null)
             getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(edgeBackCallback);
         pacer.stop();
+        if (idleInhibitFd != null) {
+            android.os.Looper.getMainLooper().getQueue().removeOnFileDescriptorEventListener(idleInhibitFd.getFileDescriptor());
+            try { idleInhibitFd.close(); } catch (IOException ignored) {}
+        }
         castTest.release();
         castDesktop.release();
         try { capture.close(); } catch(IOException ignored) {}
@@ -129,10 +133,27 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         super.onDestroy();
     }
 
-    // FLAG_KEEP_SCREEN_ON has two owners: the Linux session (keep-awake op, e.g.
-    // video playback) and a running cast; the flag is the union of both.
-    static final int AWAKE_LINUX = 1, AWAKE_CAST = 2;
+    // FLAG_KEEP_SCREEN_ON has three owners: the Linux session (keep-awake op, e.g.
+    // video playback through PowerDevil), a running cast, and Wayland idle inhibition
+    // (KWin inhibits on its output surface while a window does, docs/72); the flag is the union.
+    static final int AWAKE_LINUX = 1, AWAKE_CAST = 2, AWAKE_WAYLAND = 4;
     private int keepAwake;
+    private android.os.ParcelFileDescriptor idleInhibitFd;
+    private final android.os.MessageQueue.OnFileDescriptorEventListener idleInhibitChanged = (fd, events) -> {
+        try { android.system.Os.read(fd, new byte[8], 0, 8); } catch (Exception e) { }
+        setKeepAwake(AWAKE_WAYLAND, NativeBridge.idleInhibited());
+        return android.os.MessageQueue.OnFileDescriptorEventListener.EVENT_INPUT;
+    };
+
+    /** Follow the host's idle inhibition from now on (main thread, once the host exists). */
+    private void watchIdleInhibit() {
+        if (idleInhibitFd != null) return;
+        try { idleInhibitFd = android.os.ParcelFileDescriptor.fromFd(NativeBridge.idleInhibitFd()); }
+        catch (IOException e) { Log.e("MotoWayland", "idle inhibition not followed", e); return; }
+        android.os.Looper.getMainLooper().getQueue().addOnFileDescriptorEventListener(idleInhibitFd.getFileDescriptor(),
+            android.os.MessageQueue.OnFileDescriptorEventListener.EVENT_INPUT, idleInhibitChanged);
+        setKeepAwake(AWAKE_WAYLAND, NativeBridge.idleInhibited());
+    }
 
     void setKeepAwake(int source, boolean on) {
         keepAwake = on ? keepAwake | source : keepAwake & ~source;
@@ -297,6 +318,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
                     NativeBridge.setInputMode(1);
                     NativeBridge.setScale(1);
                     NativeBridge.setRefreshRate(display.getDisplay().getRefreshRate());
+                    runOnUiThread(this::watchIdleInhibit);
                 } else NativeBridge.rebindSurface(holder.getSurface());
                 NativeBridge.resumeRendering();
                 // The assistant's screen first, so a TV connected before the desktop (re)started
