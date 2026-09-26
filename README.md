@@ -106,3 +106,4 @@ Vendor适配应放在哪一层、哪些可以抽离到共享后端，见[54篇�
 | [70-rungic-rebrand.md](docs/70-rungic-rebrand.md) | Rungic（AgentOS）改名：命名规则、迁移调研、分阶段计划与进度 |
 | [71-upstream-patch-queue.md](docs/71-upstream-patch-queue.md) | 上游组件改为补丁队列：业界做法、目录与补丁规范、工具与测试分层、KWin试点 |
 | [72-kwin-android-host-isolation.md](docs/72-kwin-android-host-isolation.md) | KWin的Android宿主适配：协议化与独立后端（调研、目标结构、试点） |
+| [73-reduce-upstream-changes.md](docs/73-reduce-upstream-changes.md) | 减少对上游源码的修改：补丁队列收尾、扩展点与共享系统服务替代（总方案与进度） |
