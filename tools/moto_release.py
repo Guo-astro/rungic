@@ -19,7 +19,12 @@ reinstalled. The Android-side files listed under "android" are part of a release
   moto_release.py list                releases in the repository
   moto_release.py deploy [V]          preflight, record, sync, install, restart, verify (latest by default)
   moto_release.py rollback            deploy the release that was installed before the current one
-  moto_release.py status              installed release, its commit, repository and integrity state
+  moto_release.py rollback --snapshot return the whole rootfs to the snapshot the last deploy took
+  moto_release.py commit              keep the current system: drop that snapshot
+  moto_release.py status              installed release, its commit, rootfs, repository and integrity
+
+With an image rootfs (docs/61 §7) deploy first takes a snapshot of the whole rootfs; a failed
+install or verification returns to it automatically, a good release keeps it until commit.
 
 Every deploy leaves a record under .work/deploy/<time>-<version>/.
 """
@@ -450,11 +455,39 @@ def restart_container():
     return True, '\n'.join(outputs)
 
 
+def rootfs(action):
+    """plasma/rootfs-image through moto-plasma (Android side): status, snapshot, rollback, commit."""
+    result = run(f'{moto_device.PLASMA} rootfs {action}', 'root', timeout=900, check=False)
+    return result.returncode == 0, (result.stdout + result.stderr).strip()
+
+
+def rootfs_state():
+    ok, text = rootfs('status')
+    fields = dict(part.split('=', 1) for part in text.split() if '=' in part) if ok else {}
+    return fields.get('mode'), fields.get('state')
+
+
+def with_container_stopped(action):
+    """Stop the container, run a rootfs action, start it again."""
+    outputs = []
+    for step in ('stop', action, 'start'):
+        if step in ('stop', 'start'):
+            result = subprocess.run([sys.executable, str(WORKSPACE / 'tools/moto_plasma.py'), step],
+                                    capture_output=True, text=True, timeout=300)
+            ok, text = result.returncode == 0, (result.stdout + result.stderr).strip()
+        else:
+            ok, text = rootfs(step)
+        outputs.append(f'{step}: {text}')
+        if not ok:
+            return False, '\n'.join(outputs)
+    return True, '\n'.join(outputs)
+
+
 def history():
     return json.loads(HISTORY.read_text()) if HISTORY.exists() else []
 
 
-def deploy(version=None, restart='auto', acceptance='smoke', record_label=None):
+def deploy(version=None, restart='auto', acceptance='smoke', record_label=None, snapshot='auto'):
     all_releases = releases()
     if not all_releases:
         raise SystemExit('no release built yet: moto_release.py build')
@@ -481,6 +514,21 @@ def deploy(version=None, restart='auto', acceptance='smoke', record_label=None):
         log['result'] = 'aborted'
         step('abort', reason='; '.join(fatal))
         return log
+    # 1b snapshot of the whole rootfs (image rootfs, docs/61 §7): a failed release rolls back to it
+    mode, state = rootfs_state()
+    use_snapshot = snapshot == 'always' or (snapshot == 'auto' and mode == 'image')
+    if use_snapshot:
+        if state != 'none':
+            log['result'] = 'aborted'
+            step('abort', reason=f'the rootfs has a kept snapshot (state {state}): moto_release.py commit '
+                 'to keep the current system, or rollback --snapshot to return to the snapshot, first')
+            return log
+        ok, text = with_container_stopped('snapshot')
+        step('snapshot', ok=ok, output=text[-400:])
+        if not ok:
+            log['result'] = 'aborted'
+            step('abort', reason='could not take the rootfs snapshot')
+            return log
     # 2 record
     previous, _ = device_release()
     before = installed_versions()
@@ -496,6 +544,10 @@ def deploy(version=None, restart='auto', acceptance='smoke', record_label=None):
     if not ok:
         log['result'] = 'install-failed'
         step('abort', reason=tail[-1500:])
+        if use_snapshot:
+            ok, text = with_container_stopped('rollback')
+            step('snapshot-rollback', ok=ok, output=text[-400:])
+            log['result'] = 'install-failed, rolled back to the snapshot' if ok else log['result']
         return log
     # The Android side names paths inside the container: it follows a successful install,
     # so a failed one leaves both sides at the previous release.
@@ -531,14 +583,39 @@ def deploy(version=None, restart='auto', acceptance='smoke', record_label=None):
                                            since=started_at)
         step('acceptance', level=acceptance, passed=report['passed'], failed=report['failed_ids'])
         passed = passed and report['passed']
-    # 7 save
+    # 7 save; a failed verification returns to the snapshot, a good one keeps it until commit
     log['result'] = 'ok' if passed else 'verify-failed'
+    if use_snapshot and not passed:
+        ok, text = with_container_stopped('rollback')
+        step('snapshot-rollback', ok=ok, output=text[-400:])
+        if ok:
+            log['result'] = 'verify-failed, rolled back to the snapshot'
+    elif use_snapshot:
+        log['snapshot'] = 'kept: moto_release.py commit once the release is accepted'
     step('done', result=log['result'])
     entries = history()
     entries.append({'time': stamp, 'version': version, 'previous': previous, 'result': log['result'],
                     'record': str(record.relative_to(WORKSPACE))})
     HISTORY.write_text(json.dumps(entries, indent=1) + '\n')
     return log
+
+
+def commit():
+    """Keep the current system: drop the rootfs snapshot the last deploy took."""
+    mode, state = rootfs_state()
+    if state != 'snapshot':
+        raise SystemExit(f'no kept snapshot (rootfs {mode}, state {state})')
+    ok, text = with_container_stopped('commit')
+    return {'ok': ok, 'output': text}
+
+
+def rollback_snapshot():
+    """Return the whole rootfs (Ubuntu base included) to the snapshot the last deploy took."""
+    mode, state = rootfs_state()
+    if state != 'snapshot':
+        raise SystemExit(f'no kept snapshot (rootfs {mode}, state {state})')
+    ok, text = with_container_stopped('rollback')
+    return {'ok': ok, 'output': text, 'release': device_release()[0]}
 
 
 def rollback(restart='auto', acceptance='smoke'):
@@ -564,6 +641,7 @@ def status():
         'built': (info or {}).get('built'),
         'latest_in_repository': built[-1]['version'] if built else None,
         'releases_in_repository': [r['version'] for r in built][-8:],
+        'rootfs': dict(zip(('mode', 'state'), rootfs_state())),
         'integrity': (report or {}).get('summary'),
         'release_mismatch': (report or {}).get('release', {}).get('mismatch'),
         'last_deploys': history()[-5:],
@@ -582,8 +660,14 @@ def main():
         p = sub.add_parser(name)
         if name == 'deploy':
             p.add_argument('version', nargs='?')
+            p.add_argument('--snapshot', choices=['auto', 'always', 'never'], default='auto',
+                           help='rootfs snapshot before installing (auto: when the rootfs is an image)')
+        else:
+            p.add_argument('--snapshot', action='store_true',
+                           help='return the whole rootfs to the snapshot the last deploy took')
         p.add_argument('--restart', choices=['auto', 'always', 'never'], default='auto')
         p.add_argument('--acceptance', choices=['smoke', 'full', 'none'], default='smoke')
+    sub.add_parser('commit')
     sub.add_parser('status')
     a = parser.parse_args()
     if a.cmd == 'import-installed':
@@ -596,9 +680,11 @@ def main():
     elif a.cmd == 'list':
         result = [{k: r[k] for k in ('version', 'commit', 'built', 'note')} for r in releases()]
     elif a.cmd == 'deploy':
-        result = deploy(a.version, a.restart, a.acceptance)
+        result = deploy(a.version, a.restart, a.acceptance, snapshot=a.snapshot)
     elif a.cmd == 'rollback':
-        result = rollback(a.restart, a.acceptance)
+        result = rollback_snapshot() if a.snapshot else rollback(a.restart, a.acceptance)
+    elif a.cmd == 'commit':
+        result = commit()
     else:
         result = status()
     print(json.dumps(result, indent=1, ensure_ascii=False))

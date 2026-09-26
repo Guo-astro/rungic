@@ -95,7 +95,7 @@ detach() {
 # snapshot-merge status: "<allocated>/<total> <metadata>"; the merge is done when only metadata
 # remains allocated.
 merge_done() {
-    set -- $(dmctl status "$ROOT_DM" 2>/dev/null | tr '/' ' ' | awk '{print $(NF-2), $NF}')
+    set -- $(dmctl status "$ROOT_DM" 2>/dev/null | tail -n1 | tr '/' ' ' | awk '{print $(NF-2), $NF}')
     [ "$#" = 2 ] && [ "$1" = "$2" ]
 }
 
