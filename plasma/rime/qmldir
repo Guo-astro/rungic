@@ -1,2 +1,2 @@
-module Moto.Rime
-plugin motorimeplugin
+module Rungic.Rime
+plugin rungicrimeplugin

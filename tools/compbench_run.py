@@ -30,7 +30,7 @@ import rungic_trace  # noqa: E402
 import rungic_trace_report  # noqa: E402
 from rungic_device import PLASMA, run  # noqa: E402
 
-BINARY = '/usr/bin/moto-compbench'
+BINARY = '/usr/bin/rungic-compbench'
 
 
 def bench(variant, args, seconds, warmup, box):
@@ -113,7 +113,7 @@ def main():
     results = []
     try:
         if not args.keep_session:
-            run('systemctl stop moto-plasma-session.service', 'container', timeout=60)
+            run('systemctl stop rungic-plasma-session.service', 'container', timeout=60)
             time.sleep(3)
         for index, variant in enumerate(order, 1):
             summary = one_run(variant, args, args.out, index)

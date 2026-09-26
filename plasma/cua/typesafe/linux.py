@@ -1,23 +1,23 @@
-"""Linux adapter: KDE Plasma on Wayland, through moto-cua's AT-SPI, KWin and portal access (docs/64).
+"""Linux adapter: KDE Plasma on Wayland, through rungic-cua's AT-SPI, KWin and portal access (docs/64).
 
-The same functions macos.py and windows.py provide, for the Plasma Mobile desktop of the Moto phone.
+The same functions macos.py and windows.py provide, for the Rungic desktop (Plasma Mobile on the phone).
 Wayland gives a client no global coordinates and no input injection, so each part goes through the
 desktop's own service:
 
-  - capture: KWin ScreenShot2, through the small moto-screenshot helper that holds the permission;
-  - windows: KWin scripting (moto_cua.kwin), one query per capture;
-  - accessibility: AT-SPI over D-Bus (moto_cua.a11y), the active window's tree read once per capture;
+  - capture: KWin ScreenShot2, through the small rungic-screenshot helper that holds the permission;
+  - windows: KWin scripting (rungic_cua.kwin), one query per capture;
+  - accessibility: AT-SPI over D-Bus (rungic_cua.a11y), the active window's tree read once per capture;
   - input: the RemoteDesktop portal (pointer, keys) and KWin's input-method commit for text.
 
 "The display" is the output the active window is on, the phone's panel or the TV, and screen points
 are that output's logical coordinates from its top-left corner. A capture is in native pixels, so
 the scale is the output's device pixel ratio.
 
-A press on an accessibility element is a real pointer click on its current position, as moto-cua
+A press on an accessibility element is a real pointer click on its current position, as rungic-cua
 does everywhere: Qt applications, WeChat among them, accept pointer input far more reliably than
 AT-SPI actions. The action interface is only for elements without a position.
 
-The escape hatch is a file instead of a screen corner: creating $XDG_RUNTIME_DIR/moto-clicker/abort
+The escape hatch is a file instead of a screen corner: creating $XDG_RUNTIME_DIR/rungic-clicker/abort
 stops the run at the next check (the voice assistant does this when the user says stop).
 """
 
@@ -34,12 +34,12 @@ from PIL import Image
 from .ax_walk import AX_PRESS, AxAttrs, Frame, walk_actionable
 from .models import TEXT_ROLES, Abort, AxNode, Field, Missed
 
-from moto_cua import a11y  # noqa: I001 - moto-cua is on PYTHONPATH (/usr/local/lib/moto-cua)
-from moto_cua.a11y import Node
-from moto_cua.backend import CLICK_ACTIONS, LinuxAtspiBackend
+from rungic_cua import a11y  # noqa: I001 - rungic-cua is on PYTHONPATH (/usr/local/lib/rungic-cua)
+from rungic_cua.a11y import Node
+from rungic_cua.backend import CLICK_ACTIONS, LinuxAtspiBackend
 
-SCREENSHOT = os.environ.get("MOTO_SCREENSHOT", "/usr/local/libexec/moto-screenshot")
-ABORT_FILE = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")) / "moto-clicker" / "abort"
+SCREENSHOT = os.environ.get("RUNGIC_SCREENSHOT", "/usr/local/libexec/rungic-screenshot")
+ABORT_FILE = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")) / "rungic-clicker" / "abort"
 MIN_WINDOW_SIDE_PT = 50.0
 CLICK_TOLERANCE_PT = 2.0
 TEXT_SETTLE = 0.15  # seconds for committed text to reach the client and its accessibility object
@@ -77,7 +77,7 @@ ROLE_TO_AX = {
     "filler": "AXGroup",
     "section": "AXGroup",
 }
-# Keys the actions press, on moto_cua.portal's key names. Command becomes Control, except
+# Keys the actions press, on rungic_cua.portal's key names. Command becomes Control, except
 # Command-[, a browser's Back, which is Alt-Left here as on Windows.
 KEYS = {"return": "ENTER", "tab": "TAB", "escape": "ESCAPE", "a": "A", "delete": "DELETE", "left": "ARROW_LEFT", "[": "LEFT_BRACKET"}
 COMMAND_CHORDS = {"[": ["ALT", "ARROW_LEFT"]}
@@ -133,7 +133,7 @@ def image_from_raw(header: dict, data: bytes) -> Image.Image:
 
 
 class _Desktop:
-    """moto-cua's objects, and what the latest capture saw.
+    """rungic-cua's objects, and what the latest capture saw.
 
     One LinuxAtspiBackend supplies the accessibility bus, KWin and the portal session, so a run asks
     for the RemoteDesktop grant once. The AT-SPI tree is read at most once per capture and dropped
@@ -230,7 +230,7 @@ class _Root:
 
 def _window_node(bus, active: dict) -> Node | None:
     """The AT-SPI window of KWin's active window: the active frame of that process, else the one
-    whose title matches KWin's caption (moto_cua.backend.active_window, without asking KWin again)."""
+    whose title matches KWin's caption (rungic_cua.backend.active_window, without asking KWin again)."""
     candidates = []
     for app in bus.applications():
         if bus.pid(app[0]) == active["pid"]:
@@ -270,7 +270,7 @@ def sleep_watching(seconds: float) -> None:
 
 
 def accessibility_trusted() -> bool:
-    """No permission gate here: the accessibility bus is switched on for the session (moto-cua)."""
+    """No permission gate here: the accessibility bus is switched on for the session (rungic-cua)."""
     try:
         return _desktop().backend.bus.enabled()
     except Exception:
@@ -287,7 +287,7 @@ def _input():
 
 
 def click_at(point: tuple[float, float]) -> None:
-    """Glide there, confirm the pointer arrived, then press and release (moto_cua.portal)."""
+    """Glide there, confirm the pointer arrived, then press and release (rungic_cua.portal)."""
     d = _desktop()
     if d.output is None or not on_output(point, d.output):
         raise Missed(f"{point} is not on the display")
@@ -410,7 +410,7 @@ def screenshot() -> Image.Image:
         raise RuntimeError("KWin reports no output")
     result = subprocess.run([SCREENSHOT, "screen", d.output["name"]], capture_output=True, timeout=15)
     if result.returncode != 0:
-        raise RuntimeError(f"moto-screenshot failed: {result.stderr.decode(errors='replace').strip()}")
+        raise RuntimeError(f"rungic-screenshot failed: {result.stderr.decode(errors='replace').strip()}")
     header_end = result.stdout.index(b"\n")
     header = json.loads(result.stdout[:header_end])
     return image_from_raw(header, result.stdout[header_end + 1 :])
@@ -462,7 +462,7 @@ def focused_field() -> Field | None:
 
 def actionable_elements(pid: int, display_w_pt: float, display_h_pt: float) -> tuple[list[AxNode], list[AxNode], bool]:
     """Labelled controls of the active window and its popups, in screen points. Hidden nodes are not
-    read (moto_cua reads showing nodes only), so the off-screen list stays empty."""
+    read (rungic_cua reads showing nodes only), so the off-screen list stays empty."""
     d = _desktop()
     active = d.active
     if not active or active["pid"] != pid:

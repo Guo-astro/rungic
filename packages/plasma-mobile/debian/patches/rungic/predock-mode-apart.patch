@@ -17,7 +17,7 @@ X-Rungic-Docs: docs/58
  1 file changed, 23 insertions(+), 12 deletions(-)
 
 diff --git a/components/mobileshell/qml/popups/kscreenosd/KScreenOSDProvider.qml b/components/mobileshell/qml/popups/kscreenosd/KScreenOSDProvider.qml
-index 2256ae1..23f3df5 100644
+index 2256ae1..8016e90 100644
 --- a/components/mobileshell/qml/popups/kscreenosd/KScreenOSDProvider.qml
 +++ b/components/mobileshell/qml/popups/kscreenosd/KScreenOSDProvider.qml
 @@ -3,6 +3,7 @@
@@ -33,7 +33,7 @@ index 2256ae1..23f3df5 100644
   * This switches between docked / convergence mode and normal when a monitor
   * is plugged in or unplugged.
 + *
-+ * Moto (docs/58): the mode from before the display was plugged in is kept in its
++ * Rungic (docs/58): the mode from before the display was plugged in is kept in its
 + * own settings, together with whether this switch docked the shell. Upstream
 + * read it back from convergenceModeEnabled itself at startup, so a shell that
 + * restarted while docked (e.g. the Android host restarting during a cast) took

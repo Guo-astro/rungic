@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Rungic Screenshot
+Comment=Screen capture for desktop automation (docs/64)
+Exec=/usr/libexec/rungic-screenshot
+NoDisplay=true
+X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2

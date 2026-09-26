@@ -5,7 +5,7 @@ Subject: Desktop automation types through KWin, not the Android host
 KWin moto15 adds VirtualKeyboard.commitText(): the text goes to the
 focused field the way an input method commits it (text-input v1/v2/v3,
 else key events), so any language works without the on-screen keyboard.
-moto-cua uses it instead of the Android host's text-commit path, which
+rungic-cua uses it instead of the Android host's text-commit path, which
 went through the APK and back and failed with Plasma in the background.
 
 desktop_launch matches app names in every language of the .desktop file:

@@ -62,7 +62,7 @@ bool RecordUtil::startRecordingScreens(const QVariantList &screens){
   args<<QString::number(node)<<m_outputs.at(i);
  }
  m_error.clear();m_pending.clear();
- m_process.start(QStringLiteral("/usr/bin/moto-screen-recorder"),args);
+ m_process.start(QStringLiteral("/usr/bin/rungic-screen-recorder"),args);
  if(!m_process.waitForStarted(1000))return false;
  m_running=true;m_stopping=false;changed();return true;
 }

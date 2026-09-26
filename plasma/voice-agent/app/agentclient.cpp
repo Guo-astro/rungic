@@ -5,8 +5,8 @@
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 
-static const QString Service = QStringLiteral("dev.moto.VoiceAgent");
-static const QString Path = QStringLiteral("/dev/moto/VoiceAgent");
+static const QString Service = QStringLiteral("com.rungic.VoiceAgent");
+static const QString Path = QStringLiteral("/com/rungic/VoiceAgent");
 
 AgentClient::AgentClient(QObject *parent)
     : QObject(parent)

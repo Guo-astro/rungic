@@ -7,7 +7,7 @@ import QtQuick
 import QtQuick.Window
 import QtQuick.Controls as QQC2
 import org.kde.kirigami as Kirigami
-import dev.moto.voiceassistant
+import com.rungic.voiceassistant
 
 Kirigami.Page {
     id: page

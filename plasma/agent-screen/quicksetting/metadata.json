@@ -4,7 +4,7 @@
         "Description": "The assistant's desktop screen, in a floating window or on the TV",
         "Description[zh_CN]": "助理用的桌面屏：浮窗显示，或投到电视",
         "Icon": "video-display",
-        "Id": "dev.moto.quicksetting.agentscreen",
+        "Id": "com.rungic.quicksetting.agentscreen",
         "License": "GPL-2.0+",
         "Name": "Assistant Screen",
         "Name[zh_CN]": "助理屏"

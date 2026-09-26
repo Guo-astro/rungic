@@ -1,3 +1,11 @@
+plasma-mobile (6.6.5-0ubuntu0.1+rungic1) resolute; urgency=medium
+
+  * Rungic rename (docs/70): the voice assistant's D-Bus name
+    com.rungic.VoiceAssistant, "Rungic:" markers of the project's changes; the
+    recording quick setting starts rungic-screen-recorder.
+
+ -- range-dev <noreply@localhost>  Sat, 26 Sep 2026 15:00:00 +0000
+
 plasma-mobile (6.6.5-0ubuntu0.1+moto2) resolute; urgency=medium
 
   * preinst takes over the project's local diversions of plasma-mobile files: removes

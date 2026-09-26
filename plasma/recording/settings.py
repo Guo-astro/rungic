@@ -6,10 +6,10 @@ import gi
 gi.require_version('Gtk','4.0')
 gi.require_version('Adw','1')
 from gi.repository import Adw, Gtk
-PATH=Path.home()/'.config/moto-screen-recording.ini'
+PATH=Path.home()/'.config/rungic-screen-recording.ini'
 class App(Adw.Application):
     def __init__(self):
-        super().__init__(application_id='dev.moto.RecordingSettings')
+        super().__init__(application_id='com.rungic.RecordingSettings')
         self.connect('activate',self.activate)
         self.window=None
     def activate(self,*_):

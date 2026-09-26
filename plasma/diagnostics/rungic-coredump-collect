@@ -1,0 +1,306 @@
+#!/usr/bin/python3
+# SPDX-License-Identifier: MIT
+"""Move finished cores from /data/app_dump into /var/lib/moto-cores with a backtrace.
+
+Started by rungic-coredump.path. Each report directory holds info.json,
+backtrace.txt and core.zst. One journal line at err priority names the report,
+so log queries find crashes without reading cores; a second entry in
+systemd-coredump's format (MESSAGE_ID, COREDUMP_*, COREDUMP_FILENAME) makes the
+report visible to `coredumpctl list/info/debug` (docs/61).
+
+info.json records the release (/usr/share/rungic/release.json), the package
+of the executable, the build-id of every mapped module (eu-unstrip) and a crash
+signature: the crashing thread's first frames after the signal and abort
+machinery, as function names where symbols exist and module+offset otherwise.
+rungic-crash-symbols installs debug symbols for a report and recomputes it.
+
+Every spool file is moved or deleted, never left behind, so the path unit
+cannot loop.
+"""
+import compression.zstd as zstd
+import datetime
+import hashlib
+import json
+import os
+import re
+import shutil
+import socket
+import struct
+import subprocess
+import time
+from pathlib import Path
+
+SPOOL = Path('/data/app_dump')
+STORE = Path('/var/lib/moto-cores')
+KEEP_CORES = 8                 # newest reports that keep core.zst
+KEEP_CORES_PER_SIGNATURE = 2
+MAX_CORE_BYTES = 4 << 30       # total compressed cores
+KEEP_REPORTS = 200             # backtrace/info directories
+NAME = re.compile(r'^(?P<comm>.+)_(?P<pid>\d+)_(?P<time>\d+)\.core(\.gz)?$')
+RELEASE = Path('/usr/share/rungic/release.json')
+RELEASE_INSTALLED = Path('/var/lib/dpkg/info/rungic-release.list')   # mtime: install time
+COREDUMP_MESSAGE_ID = 'fc2e22bc6ee647b6b90729ab34a250b1'   # systemd's SD_MESSAGE_COREDUMP
+SIGNALS = {'SIGQUIT': 3, 'SIGILL': 4, 'SIGTRAP': 5, 'SIGABRT': 6, 'SIGBUS': 7, 'SIGFPE': 8, 'SIGKILL': 9,
+           'SIGSEGV': 11, 'SIGSYS': 31, 'SIGXCPU': 24, 'SIGXFSZ': 25}
+# Frames that only deliver the crash: libc abort/raise, Qt's fatal-message path,
+# KCrash's handler, C++ terminate. The signature starts below them.
+PLUMBING = re.compile(r'^(raise$|abort$|gsignal$|__GI_|__pthread_kill|pthread_kill|__libc_|__assert|'
+                      r'__syscall_cancel|__internal_syscall_cancel|'
+                      r'__restore_rt|qAbort$|qt_maybe_message_fatal|qt_message_fatal|qt_message$|qt_assert|'
+                      r'qFatal|QMessageLogger::fatal|qt_message_output|KCrash::|std::terminate|'
+                      r'__gnu_cxx::__verbose_terminate|__cxxabiv1::|std::__terminate)')
+LIBC_MODULES = re.compile(r'^(libc|ld-linux[^/]*)\.so')
+SIGNATURE_FRAMES = 5
+
+
+def log(priority, message):
+    print(f'<{priority}>{message}', flush=True)
+
+
+def wait_complete(path, pid, timeout=180):
+    """The kernel writes the core before the crashing task is reaped."""
+    deadline = time.monotonic() + timeout
+    last = -1
+    while time.monotonic() < deadline:
+        size = path.stat().st_size
+        if size == last and not Path(f'/proc/{pid}').exists():
+            return True
+        last = size
+        time.sleep(1)
+    return False
+
+
+def gdb(*args, timeout=300):
+    try:
+        return subprocess.run(['gdb', '-batch', '-nx', '-ex', 'set pagination off', *args],
+                              capture_output=True, text=True, timeout=timeout, errors='replace').stdout
+    except subprocess.TimeoutExpired:
+        return '<gdb timed out>\n'
+
+
+def modules(core, exe):
+    """Mapped modules of the core: [{start, end, build_id, file}] (eu-unstrip -n)."""
+    try:
+        text = subprocess.run(['eu-unstrip', '-n', f'--core={core}', *(['-e', exe] if exe else [])],
+                              capture_output=True, text=True, timeout=60, errors='replace').stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    result = []
+    for line in text.splitlines():
+        m = re.match(r'0x([0-9a-f]+)\+0x([0-9a-f]+) (\S+?)(?:@0x[0-9a-f]+)? (\S+) (\S+) (\S+)', line)
+        if m:
+            start = int(m[1], 16)
+            result.append({'start': start, 'end': start + int(m[2], 16),
+                           'build_id': None if m[3] == '-' else m[3],
+                           'file': None if m[4] in ('-', '.') else m[4], 'name': m[6]})
+    return result
+
+
+def parse_frames(text):
+    """gdb `bt` lines -> [{pc, function, source, library, handler}]."""
+    frames = []
+    for line in text.splitlines():
+        m = re.match(r'#(\d+)\s+(?:(0x[0-9a-f]+) in )?(.*)$', line)
+        if not m:
+            continue
+        rest = m[3]
+        if rest.startswith('<signal handler called>'):
+            frames.append({'handler': True})
+            continue
+        library = re.search(r' from (\S+)$', rest)
+        source = re.search(r' at (\S+:\d+)$', rest)
+        function = rest.split(' (', 1)[0].strip()
+        frames.append({'pc': int(m[2], 16) if m[2] else None, 'function': function,
+                       'source': source[1] if source else None, 'library': library[1] if library else None})
+    return frames
+
+
+def signature(comm, frames, mods):
+    """Stable identity of a crash: executable name plus the first meaningful frames."""
+    # With KCrash (or any handler) the frames above "<signal handler called>" are the handler's.
+    for index, frame in enumerate(frames):
+        if frame.get('handler'):
+            frames = frames[index + 1:]
+            break
+    frames = [f for f in frames if not f.get('handler')]
+    # An inlined frame has no address of its own; it lives in the next frame that has one.
+    pcs = [f['pc'] for f in frames]
+    for index in range(len(pcs) - 2, -1, -1):
+        if pcs[index] is None:
+            pcs[index] = pcs[index + 1]
+    parts = []
+    for frame, pc in zip(frames, pcs):
+        function = re.sub(r'<.*>$', '', frame['function'])
+        if function != '??' and PLUMBING.match(function):
+            continue
+        module = next((m for m in mods if pc is not None and m['start'] <= pc < m['end']), None)
+        where = os.path.basename((module and (module['file'] or module['name'])) or frame['library'] or '?')
+        if function == '??':
+            if LIBC_MODULES.search(where) and not parts:
+                continue   # unsymbolized libc frames above the first real frame are abort plumbing
+            offset = pc - module['start'] if module and pc is not None else None
+            parts.append(f'{where}+{offset:#x}' if offset is not None else f'{where}+?')
+        else:
+            parts.append(re.sub(r'\[abi:[^]]*\]|<[^<>]*>', '', function) + f' ({where})')
+        if len(parts) == SIGNATURE_FRAMES:
+            break
+    key = '\n'.join([comm, *parts])
+    return hashlib.sha1(key.encode()).hexdigest()[:12], parts
+
+
+def package_of(path):
+    if not path:
+        return None
+    owner = subprocess.run(['dpkg-query', '-S', path], capture_output=True, text=True).stdout
+    for line in owner.splitlines():
+        name = line.split(':', 1)[0] if not line.startswith('diversion') else None
+        if name:
+            version = subprocess.run(['dpkg-query', '-W', '-f', '${Version}', name],
+                                     capture_output=True, text=True).stdout
+            return {'name': name, 'version': version}
+    return None
+
+
+def release(crashed_at):
+    """The installed release, or None with a note when it was installed after the crash: cores
+    are collected up to minutes later, and a deploy's restart for its snapshot still runs the
+    previous release."""
+    try:
+        info = json.loads(RELEASE.read_text())
+    except (OSError, ValueError):
+        return None
+    current = {'version': info.get('version'), 'commit': info.get('commit')}
+    try:
+        installed_at = RELEASE_INSTALLED.stat().st_mtime
+    except OSError:
+        return current
+    if crashed_at < installed_at:
+        return {'version': None, 'before': current['version'],
+                'note': f"crashed before {current['version']} was installed"}
+    return current
+
+
+def journal_send(fields):
+    """One entry over journald's native protocol (binary-safe values)."""
+    data = b''
+    for key, value in fields.items():
+        value = str(value).encode()
+        if b'\n' in value:
+            data += key.encode() + b'\n' + struct.pack('<Q', len(value)) + value + b'\n'
+        else:
+            data += key.encode() + b'=' + value + b'\n'
+    with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as sock:
+        sock.sendto(data, '/run/systemd/journal/socket')
+
+
+def backtrace(core, exe):
+    """Header, crashing-thread bt and all threads, from one gdb run."""
+    text = gdb('-ex', 'info sharedlibrary', '-ex', 'echo @@BT\\n', '-ex', 'bt 60', '-ex', 'echo @@ALL\\n',
+               '-ex', 'thread apply all bt 30', *([exe] if exe else []), str(core))
+    crashing = text.split('@@BT\n', 1)[-1].split('@@ALL\n', 1)[0]
+    return text.replace('@@BT\n', '').replace('@@ALL\n', ''), crashing
+
+
+def collect(path):
+    m = NAME.match(path.name)
+    comm, pid = (m['comm'], int(m['pid'])) if m else (path.name, 0)
+    if pid and not wait_complete(path, pid):
+        log(4, f'coredump: {path.name} still changing after 180 s; collecting anyway')
+    stat = path.stat()
+    when = datetime.datetime.fromtimestamp(int(m['time']) if m else stat.st_mtime)
+    report = STORE / f"{when:%Y%m%d-%H%M%S}-{comm}-{pid}"
+    report.mkdir(parents=True, exist_ok=True)
+    header = gdb('-c', str(path), timeout=60)
+    cmdline = re.search(r"Core was generated by `(.*)'\.", header)
+    cmdline = cmdline[1] if cmdline else ''
+    signal = re.search(r'Program terminated with signal (\w+)', header)
+    signal = signal[1] if signal else 'unknown'
+    exe = cmdline.split()[0] if cmdline else ''
+    if not exe.startswith('/'):
+        exe = shutil.which(exe or comm) or ''
+    trace, crashing = backtrace(path, exe)
+    text = '\n'.join(l for l in (header + '\n' + trace).splitlines() if not l.startswith('[New LWP'))
+    (report / 'backtrace.txt').write_text(text + '\n')
+    frames = parse_frames(crashing)
+    top = [l for l in crashing.splitlines() if re.match(r'#\d+', l)][:4]
+    mods = modules(path, exe)
+    sig, sig_frames = signature(comm, frames, mods)
+    with open(path, 'rb') as source, zstd.open(report / 'core.zst', 'wb', level=3) as target:
+        shutil.copyfileobj(source, target, 1 << 20)
+    info = {'time': when.timestamp(), 'comm': comm, 'pid': pid, 'uid': stat.st_uid, 'gid': stat.st_gid,
+            'signal': signal, 'cmdline': cmdline, 'exe': exe, 'core_bytes': stat.st_size,
+            'core_zst_bytes': (report / 'core.zst').stat().st_size, 'top_frames': top,
+            'signature': sig, 'signature_frames': sig_frames, 'symbolized': False,
+            'release': release(when.timestamp()), 'package': package_of(exe),
+            'modules': [{'file': m['file'] or m['name'], 'build_id': m['build_id']} for m in mods]}
+    (report / 'info.json').write_text(json.dumps(info, indent=1))
+    path.unlink()
+    summary = ' | '.join(re.sub(r'\s+', ' ', f) for f in top[:2])
+    log(3, f'coredump: {comm}[{pid}] {signal} exe={exe or "?"} sig={sig} report={report} top: {summary}')
+    try:
+        journal_send({
+            'MESSAGE_ID': COREDUMP_MESSAGE_ID, 'PRIORITY': 2, 'SYSLOG_IDENTIFIER': 'rungic-coredump',
+            'MESSAGE': f'Process {pid} ({comm}) of user {stat.st_uid} dumped core.\n\n'
+                       f'Signature {sig}: ' + ' < '.join(sig_frames),
+            'COREDUMP_PID': pid, 'COREDUMP_UID': stat.st_uid, 'COREDUMP_GID': stat.st_gid,
+            'COREDUMP_SIGNAL': SIGNALS.get(signal, 0), 'COREDUMP_SIGNAL_NAME': signal,
+            'COREDUMP_TIMESTAMP': int(when.timestamp() * 1_000_000), 'COREDUMP_COMM': comm,
+            'COREDUMP_EXE': exe, 'COREDUMP_CMDLINE': cmdline, 'COREDUMP_HOSTNAME': socket.gethostname(),
+            'COREDUMP_FILENAME': str(report / 'core.zst'),
+            'COREDUMP_PACKAGE_NAME': (info['package'] or {}).get('name', ''),
+            'COREDUMP_PACKAGE_VERSION': (info['package'] or {}).get('version', ''),
+            'RUNGIC_CRASH_SIGNATURE': sig, 'RUNGIC_CRASH_REPORT': str(report),
+            'RUNGIC_RELEASE': (info['release'] or {}).get('version') or '',
+        })
+    except OSError as error:
+        log(4, f'coredump: journal entry for {report.name} failed: {error}')
+
+
+def prune():
+    """Keep the newest reports; cores for the newest KEEP_CORES_PER_SIGNATURE of each signature, so a
+    crash loop (188 kaccess aborts in two days) cannot evict every other crash's core."""
+    reports = sorted((p for p in STORE.iterdir() if p.is_dir() and p.name != 'unprocessed'),
+                     key=lambda p: p.name, reverse=True)
+    total, kept, per_key = 0, 0, {}
+    for index, report in enumerate(reports):
+        core = report / 'core.zst'
+        if index >= KEEP_REPORTS:
+            shutil.rmtree(report)
+            continue
+        if not core.exists():
+            continue
+        try:
+            info = json.loads((report / 'info.json').read_text())
+            key = info.get('signature') or f"{info.get('comm')}:{info.get('signal')}"
+        except (OSError, ValueError):
+            key = report.name
+        per_key[key] = per_key.get(key, 0) + 1
+        size = core.stat().st_size
+        if per_key[key] > KEEP_CORES_PER_SIGNATURE or kept >= KEEP_CORES or total + size > MAX_CORE_BYTES:
+            core.unlink()
+            continue
+        kept += 1
+        total += size
+
+
+def main():
+    STORE.mkdir(mode=0o750, parents=True, exist_ok=True)
+    for path in sorted(SPOOL.iterdir()):
+        try:
+            if path.is_file():
+                collect(path)
+            else:
+                shutil.rmtree(path)
+        except Exception as error:  # never leave a file that re-triggers the path unit
+            failed = STORE / 'unprocessed'
+            failed.mkdir(exist_ok=True)
+            try:
+                shutil.move(str(path), failed / path.name)
+            except OSError:
+                path.unlink(missing_ok=True)
+            log(3, f'coredump: could not process {path.name}: {type(error).__name__}: {error}')
+    prune()
+
+
+if __name__ == '__main__':
+    main()

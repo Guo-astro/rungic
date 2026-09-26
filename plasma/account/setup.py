@@ -69,7 +69,7 @@ def configure(data):
         raise SetupError('此账户已有密码，请使用系统账户设置')
     # Stop the user session before usermod: renaming a logged-in account is
     # deliberately refused by shadow-utils. The root attach process survives.
-    call(['systemctl', 'stop', 'moto-plasma-session.service'])
+    call(['systemctl', 'stop', 'rungic-plasma-session.service'])
     call(['loginctl', 'terminate-user', str(OWNER_UID)], check=False)
     call(['systemctl', 'stop', 'user@1000.service'], check=False)
     # logind tears down session scopes asynchronously; wait for the UID to exit.

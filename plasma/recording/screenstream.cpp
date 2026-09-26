@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2020 Aleix Pol Gonzalez <aleixpol@kde.org>
-// SPDX-FileCopyrightText: 2026 Moto Linux integration
+// SPDX-FileCopyrightText: 2026 Rungic
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "screenstream.h"
 

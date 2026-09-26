@@ -61,7 +61,7 @@ def wait_for(condition, timeout=10, interval=0.5):
 def session_ready(ctx, settle_s=15, timeout=90):
     """KWin and plasmashell up with stable PIDs, and plasmashell running long enough to have
     loaded its launcher model: later checks must not race a session that is still starting."""
-    probe = ('test -f /run/user/1000/moto-session.env && echo env; k=$(pidof kwin_wayland) && echo kwin $k; '
+    probe = ('{ test -f /run/user/1000/rungic-session.env || test -f /run/user/1000/moto-session.env; } && echo env; k=$(pidof kwin_wayland) && echo kwin $k; '
              'p=$(pidof -s plasmashell) && echo shell $p $(ps -o etimes= -p $p)')
     samples, deadline = [], time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -79,6 +79,8 @@ def session_ready(ctx, settle_s=15, timeout=90):
 
 @check
 def user_units(ctx, critical=()):
+    # A release rolled back to has the names from before the Rungic rename (docs/70).
+    critical = [n for p in critical for n in {p, p.replace('rungic-', 'moto-')}]
     failed = user('systemctl --user --failed --no-legend --plain | cut -d" " -f1').stdout.split()
     bad = [u for u in failed if any(re.fullmatch(p.replace('*', '.*'), u) for p in critical)]
     return result(not bad, {'failed_units': len(failed)}, failed=failed, critical_failed=bad)
@@ -150,12 +152,12 @@ print(json.dumps([[t, float(sc), [int(v) for v in b[0]]] for t, sc, b in zip(out
 
 
 def ocr_screen():
-    """Text on the phone's screen: [text, score, [x, y]] from RapidOCR in moto-clicker's venv."""
+    """Text on the phone's screen: [text, score, [x, y]] from RapidOCR in rungic-clicker's venv."""
     shot = rungic_agent.screenshot()
-    rungic_device.to_container(shot, '/var/tmp/moto-acceptance-ocr.png', '644')
-    text = user('py=/usr/lib/moto-clicker/venv/bin/python; [ -x $py ] || py=/usr/local/lib/moto-clicker/venv/bin/python; '
+    rungic_device.to_container(shot, '/var/tmp/rungic-acceptance-ocr.png', '644')
+    text = user('py=/usr/lib/rungic-clicker/venv/bin/python; [ -x $py ] || py=/usr/lib/moto-clicker/venv/bin/python; '
                 f"$py -c {shlex.quote(OCR)} "
-                '/var/tmp/moto-acceptance-ocr.png 2>/dev/null; rm -f /var/tmp/moto-acceptance-ocr.png', timeout=120)
+                '/var/tmp/rungic-acceptance-ocr.png 2>/dev/null; rm -f /var/tmp/rungic-acceptance-ocr.png', timeout=120)
     return json.loads(text.stdout.strip().splitlines()[-1]), shot
 
 
@@ -240,7 +242,9 @@ def _node_state(name):
 
 
 @check
-def camera_frames(ctx, node='moto.camera.0', frames=20):
+def camera_frames(ctx, node='rungic.camera.0', frames=20):
+    if _node_state(node) is None and _node_state(node.replace('rungic.', 'moto.', 1)) is not None:
+        node = node.replace('rungic.', 'moto.', 1)      # a release from before the rename (docs/70)
     probe = user(f"python3 -c {shlex.quote(CAMERA_PROBE)} {shlex.quote(node)} {int(frames)}", timeout=90)
     try:
         data = json.loads(probe.stdout.strip().splitlines()[-1])
@@ -280,20 +284,20 @@ def audio_playback(ctx):
     # 1 s of a quiet 440 Hz tone at 5 % stream volume: enough to route, barely audible.
     user('''python3 - <<'PY'
 import math, struct, wave
-with wave.open('/tmp/moto-acceptance-tone.wav', 'wb') as w:
+with wave.open('/tmp/rungic-acceptance-tone.wav', 'wb') as w:
     w.setnchannels(2); w.setsampwidth(2); w.setframerate(48000)
     w.writeframes(b''.join(struct.pack('<hh', v, v) for v in
                   (int(800 * math.sin(2 * math.pi * 440 * i / 48000)) for i in range(48000 * 2))))
 PY''')
     import threading
-    player = threading.Thread(target=user, args=('paplay --volume=3277 --client-name=moto-acceptance '
-                                                 '/tmp/moto-acceptance-tone.wav',), daemon=True)
+    player = threading.Thread(target=user, args=('paplay --volume=3277 --client-name=rungic-acceptance '
+                                                 '/tmp/rungic-acceptance-tone.wav',), daemon=True)
     player.start()
     stream = wait_for(lambda: [r for r in _pactl_short('sink-inputs')], timeout=4, interval=0.2)
     sink_index = stream[0][1] if stream else None
     sink_name = next((name for name, row in sinks.items() if row[0] == sink_index), None)
     player.join(15)
-    user('rm -f /tmp/moto-acceptance-tone.wav')
+    user('rm -f /tmp/rungic-acceptance-tone.wav')
     suspended = wait_for(lambda: dict((r[1], r[-1]) for r in _pactl_short('sinks')).get(default) in
                          ('SUSPENDED', 'IDLE'), timeout=12)
     return result(bool(stream) and sink_name == default and suspended, default_sink=default,
@@ -303,11 +307,11 @@ PY''')
 @check
 def audio_record(ctx):
     default = user('pactl get-default-source').stdout.strip()
-    rec = user('timeout 2.5 parecord --raw --format=s16le --channels=1 --rate=48000 --client-name=moto-acceptance '
-               '/tmp/moto-acceptance.raw; python3 -c "import struct,sys; d=open(\'/tmp/moto-acceptance.raw\','
+    rec = user('timeout 2.5 parecord --raw --format=s16le --channels=1 --rate=48000 --client-name=rungic-acceptance '
+               '/tmp/rungic-acceptance.raw; python3 -c "import struct,sys; d=open(\'/tmp/rungic-acceptance.raw\','
                '\'rb\').read(); n=len(d)//2; s=struct.unpack(\'<%dh\'%n, d[:n*2]); '
                'print(n, max(map(abs, s)) if s else 0, (sum(x*x for x in s)/max(n,1))**0.5)"; '
-               'rm -f /tmp/moto-acceptance.raw', timeout=30).stdout.split()
+               'rm -f /tmp/rungic-acceptance.raw', timeout=30).stdout.split()
     samples, peak, rms = (int(rec[0]), int(rec[1]), float(rec[2])) if len(rec) == 3 else (0, 0, 0.0)
     suspended = wait_for(lambda: dict((r[1], r[-1]) for r in _pactl_short('sources')).get(default) in
                          ('SUSPENDED', 'IDLE'), timeout=12)
@@ -329,7 +333,7 @@ def idle_inhibit(ctx, seconds=6):
     import threading
     probe = {}
     thread = threading.Thread(target=lambda: probe.setdefault(
-        'result', user(f'WAYLAND_DISPLAY=wayland-0 moto-idle-probe {seconds}', timeout=seconds + 30)), daemon=True)
+        'result', user(f"WAYLAND_DISPLAY=wayland-0 {rungic_device.prog('idle-probe')} {seconds}", timeout=seconds + 30)), daemon=True)
     thread.start()
     during = wait_for(_keep_screen_on, timeout=seconds - 1, interval=0.5)
     thread.join(seconds + 30)
@@ -358,7 +362,7 @@ def agent_screen_output(ctx):
     Android backend's host outputs)."""
     def state(command, timeout=60):
         try:
-            return json.loads(user(f'moto-agent-screen {command}', timeout=timeout).stdout)
+            return json.loads(user(f"{rungic_device.prog('agent-screen')} {command}", timeout=timeout).stdout)
         except ValueError:
             return {}
     before = state('status')
@@ -437,19 +441,20 @@ def display_scale_roundtrip(ctx, other=2.75):
 
 CODEC = r"""
 set -e
-d=$(mktemp -d /var/tmp/moto-codec.XXXXXX); trap 'rm -rf "$d"' EXIT
-bin=/usr/lib/moto-codec/ffmpeg/bin; [ -x $bin/ffprobe ] || bin=/usr/local/lib/moto-codec/ffmpeg/bin
-# The /usr/local build's rpath lacked ffmpeg/lib, so its tools picked up the system libav* (fixed in moto-codec).
+d=$(mktemp -d /var/tmp/rungic-codec.XXXXXX); trap 'rm -rf "$d"' EXIT
+# The names from before the Rungic rename (docs/70) on a release rolled back to.
+name=rungic; [ -x /usr/lib/rungic-codec/ffmpeg/bin/ffprobe ] || name=moto
+bin=/usr/lib/$name-codec/ffmpeg/bin
 export LD_LIBRARY_PATH=$bin/../lib:$bin/../..
 now() { python3 -c 'import time; print(time.monotonic())'; }
 t0=$(now)
 gst-launch-1.0 -q videotestsrc num-buffers=FRAMES pattern=ball ! video/x-raw,width=1280,height=720,framerate=30/1 \
-  ! motoh264enc ! h264parse ! mp4mux ! filesink location=$d/t.mp4
+  ! ${name}h264enc ! h264parse ! mp4mux ! filesink location=$d/t.mp4
 t1=$(now)
 $bin/ffprobe -v error -count_frames -select_streams v:0 -show_entries stream=codec_name,nb_read_frames,width,height \
   -show_entries format=duration -of json $d/t.mp4
 t2=$(now)
-decoded=$($bin/ffmpeg -v error -c:v h264_moto -i $d/t.mp4 -f framemd5 - 2>/dev/null | grep -vc '^#')
+decoded=$($bin/ffmpeg -v error -c:v h264_$name -i $d/t.mp4 -f framemd5 - 2>/dev/null | grep -vc '^#')
 t3=$(now)
 echo "@@ encode_s=$(python3 -c "print(round($t1 - $t0, 2))") decode_s=$(python3 -c "print(round($t3 - $t2, 2))") decoded=$decoded"
 """
@@ -457,8 +462,8 @@ echo "@@ encode_s=$(python3 -c "print(round($t1 - $t0, 2))") decode_s=$(python3 
 
 @check
 def codec_roundtrip(ctx, frames=90):
-    """Android hardware H.264 encode through the GStreamer element (motoh264enc), then decode through the
-    private FFmpeg's h264_moto: frame counts, duration and resolution checked."""
+    """Android hardware H.264 encode through the GStreamer element (rungich264enc), then decode through the
+    private FFmpeg's h264_rungic: frame counts, duration and resolution checked."""
     text = user(CODEC.replace('FRAMES', str(int(frames))), timeout=180)
     body, _, tail = text.stdout.partition('@@ ')
     try:
@@ -479,31 +484,32 @@ def codec_roundtrip(ctx, frames=90):
 @check
 def rime_input(ctx):
     """Chinese input, in two automatic parts: the Rime engine and data commit Chinese first candidates
-    (moto-rime-check: nihao, zhongguo, ceshi, 300 compositions), and focusing a Qt text field
-    (moto-input-probe) brings up the keyboard (its keys appear on AT-SPI). Android key events reach the
+    (rungic-rime-check: nihao, zhongguo, ceshi, 300 compositions), and focusing a Qt text field
+    (rungic-input-probe) brings up the keyboard (its keys appear on AT-SPI). Android key events reach the
     client directly, not through Rime, so typing on the virtual keyboard itself stays a manual item."""
-    check = run('for p in /usr/libexec/moto-rime-check /usr/local/libexec/moto-rime-check; do [ -x $p ] && '
+    check = run('for p in /usr/libexec/rungic-rime-check /usr/libexec/moto-rime-check; do [ -x $p ] && '
                 'exec $p; done; exit 9', 'user', timeout=120, check=False)
     engine = check.returncode == 0
     enabled = rungic_agent.a11y('state')['enabled']
     if not enabled:
         rungic_agent.ui_enable(True)
         time.sleep(2)
-    probe = next((p for p in ('/usr/bin/moto-input-probe', '/usr/local/bin/moto-input-probe')
+    probe = next((p for p in ('/usr/bin/rungic-input-probe', '/usr/bin/moto-input-probe')
                   if run(f'test -x {p}', 'container', check=False).returncode == 0), None)
     keyboard = False
-    # By its command line: the process name is cut to 15 characters ("moto-input-prob"), so
-    # `pkill -x moto-input-probe` never matched and each run left a probe window behind.
+    # By its command line: the process name is cut to 15 characters ("rungic-input-pr"), so
+    # `pkill -x` by the program name never matches (it left a probe window behind each run).
     stop_probe = f'pkill -f -x {probe}' if probe else 'true'
+    app = probe.rsplit('/', 1)[1] if probe else None     # its AT-SPI application name
     try:
         if probe:
             run(stop_probe, 'container', check=False)
             user(f'(setsid {probe} >/dev/null 2>&1 &) ; true')
-            field = wait_for(lambda: next((f for f in rungic_agent.ui_find('moto-input-probe', role='text')), None)
-                             if any(a['name'] == 'moto-input-probe' for a in rungic_agent.a11y('apps')) else None,
+            field = wait_for(lambda: next((f for f in rungic_agent.ui_find(app, role='text')), None)
+                             if any(a['name'] == app for a in rungic_agent.a11y('apps')) else None,
                              timeout=20)
             if field:
-                rungic_agent.ui_tap('moto-input-probe', field['path'])
+                rungic_agent.ui_tap(app, field['path'])
                 keyboard = bool(wait_for(lambda: [n for n in rungic_agent.ui_find('plasma-keyboard', role='label')
                                                   if n['name'] in ('q', 'a', 'z')], timeout=8))
         return result(engine and keyboard, engine=check.stdout.strip() or f'exit {check.returncode}',
@@ -538,7 +544,7 @@ def _tap_label(pattern):
 PROBE_RECORDING = r"""
 f=$(ls -t "$HOME"/Videos/screen-recording*.mp4 2>/dev/null | grep -v '\.partial\.mp4$' | head -1)
 [ -n "$f" ] && [ -s "$f" ] || exit 3
-bin=/usr/lib/moto-codec/ffmpeg/bin; [ -x $bin/ffprobe ] || bin=/usr/local/lib/moto-codec/ffmpeg/bin
+bin=/usr/lib/rungic-codec/ffmpeg/bin; [ -x $bin/ffprobe ] || bin=/usr/lib/moto-codec/ffmpeg/bin
 export LD_LIBRARY_PATH=$bin/../lib:$bin/../..
 echo "$f"; stat -c %Y "$f"
 $bin/ffprobe -v error -show_entries stream=codec_type,codec_name,avg_frame_rate -show_entries format=duration -of json "$f"

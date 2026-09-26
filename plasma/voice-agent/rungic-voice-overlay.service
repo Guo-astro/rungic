@@ -1,0 +1,15 @@
+[Unit]
+Description=Voice assistant overlay (holding the Home button, docs/67)
+After=plasma-plasmashell.service rungic-voice-agent.service
+Wants=rungic-voice-agent.service
+PartOf=graphical-session.target
+
+[Service]
+Type=dbus
+BusName=com.rungic.VoiceAssistant
+ExecStart=/usr/bin/rungic-voice-assistant --overlay
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=plasma-workspace.target

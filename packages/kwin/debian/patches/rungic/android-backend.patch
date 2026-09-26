@@ -87,7 +87,7 @@ index 0000000..71bde69
 +)
 diff --git a/src/backends/android/android-display-client.h b/src/backends/android/android-display-client.h
 new file mode 100644
-index 0000000..89a89b8
+index 0000000..e4a53be
 --- /dev/null
 +++ b/src/backends/android/android-display-client.h
 @@ -0,0 +1,89 @@
@@ -106,7 +106,7 @@ index 0000000..89a89b8
 +#include <sys/un.h>
 +#include <unistd.h>
 +
-+namespace MotoDisplay
++namespace RungicDisplay
 +{
 +inline QJsonObject info()
 +{
@@ -331,7 +331,7 @@ index 0000000..88fe7ef
 +}
 diff --git a/src/backends/android/android_backend.cpp b/src/backends/android/android_backend.cpp
 new file mode 100644
-index 0000000..82d1243
+index 0000000..2436ff7
 --- /dev/null
 +++ b/src/backends/android/android_backend.cpp
 @@ -0,0 +1,301 @@
@@ -624,7 +624,7 @@ index 0000000..82d1243
 +            if (mode->refreshRate() != output->refreshRate()) {
 +                request.insert(QStringLiteral("refreshPolicy"), int(std::round(mode->refreshRate() / 1000.0)));
 +            }
-+            const auto reply = MotoDisplay::request(request);
++            const auto reply = RungicDisplay::request(request);
 +            if (reply.contains(QStringLiteral("error"))) {
 +                qCWarning(KWIN_WAYLAND_BACKEND) << "Android display rejected configuration:" << reply;
 +                return OutputConfigurationError::Unknown;
@@ -728,7 +728,7 @@ index 0000000..2acf241
 +} // namespace KWin
 diff --git a/src/backends/android/android_output.cpp b/src/backends/android/android_output.cpp
 new file mode 100644
-index 0000000..fa5a35b
+index 0000000..feb1413
 --- /dev/null
 +++ b/src/backends/android/android_output.cpp
 @@ -0,0 +1,116 @@
@@ -756,7 +756,7 @@ index 0000000..fa5a35b
 +{
 +    Information information = m_information;
 +    if (m_phone) {
-+        const QJsonObject info = MotoDisplay::info();
++        const QJsonObject info = RungicDisplay::info();
 +        information.physicalSize = QSize(info.value("physicalWidthMM").toInt(-1), info.value("physicalHeightMM").toInt(-1));
 +        information.internal = true;
 +    } else {
@@ -800,7 +800,7 @@ index 0000000..fa5a35b
 +    if (!m_phone) {
 +        return WaylandOutput::modesFor(size, rate);
 +    }
-+    const QJsonObject info = MotoDisplay::info();
++    const QJsonObject info = RungicDisplay::info();
 +    QJsonArray resolutions = info.value(QStringLiteral("renderModes")).toArray();
 +    QJsonArray rates = info.value(QStringLiteral("refreshRates")).toArray();
 +    if (resolutions.isEmpty()) resolutions.append(QJsonObject{{"width", size.width()}, {"height", size.height()}});

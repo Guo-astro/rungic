@@ -1,6 +1,7 @@
 From: clawd20130 <clawd20130@gmail.com>
 Date: Sat, 26 Sep 2026 18:44:41 +0900
-Subject: Screencast: do not exclude the Plasma Mobile shell when it is the recorder
+Subject: Screencast: do not exclude the Plasma Mobile shell when it is the
+ recorder
 
 Plasma Mobile records the screen from its own shell process; excluding the recorder's windows
 then removed the wallpaper, launcher and panels (a black home screen). Like the portal, the

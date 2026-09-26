@@ -1,5 +1,5 @@
 {
-  "comment": "What a release of the Plasma container consists of (docs/61). tools/rungic_release.py builds moto-plasma-release with an exact dependency on every package listed here; the .debs themselves are build output in .work/apt/pool. 'rebuilt' are Ubuntu packages rebuilt from vendor/ (+motoN); 'project' are this repository's own packages (plasma/packaging, built by tools/rungic_package.py; their versions come from .work/apt/project-builds.json and must be current for the commit); 'coupled' are Ubuntu packages pinned to the version installed when the release is built, because files of theirs are diverted or their private ABI is used by code that is not rebuilt with them yet. 'android' are files outside the container that a release installs (backed up by deploy for rollback); the APK is versioned separately.",
+  "comment": "What a release of the Plasma container consists of (docs/61). tools/rungic_release.py builds rungic-release with an exact dependency on every package listed here; the .debs themselves are build output in .work/apt/pool. 'rebuilt' are Ubuntu packages rebuilt from vendor/ (+motoN); 'project' are this repository's own packages (plasma/packaging, built by tools/rungic_package.py; their versions come from .work/apt/project-builds.json and must be current for the commit); 'coupled' are Ubuntu packages pinned to the version installed when the release is built, because files of theirs are diverted or their private ABI is used by code that is not rebuilt with them yet. 'android' are files outside the container that a release installs (backed up by deploy for rollback); the APK is versioned separately.",
   "rebuilt": {
     "kwin": {
       "source": "packages/kwin",
@@ -92,47 +92,47 @@
     }
   },
   "project": {
-    "moto-plasma-config": {
-      "source": "plasma/packaging/moto-plasma-config"
+    "rungic-plasma-config": {
+      "source": "plasma/packaging/rungic-plasma-config"
     },
-    "moto-plasma-session": {
-      "source": "plasma/packaging/moto-plasma-session"
+    "rungic-plasma-session": {
+      "source": "plasma/packaging/rungic-plasma-session"
     },
-    "moto-plasma-bridges": {
-      "source": "plasma/packaging/moto-plasma-bridges"
+    "rungic-plasma-bridges": {
+      "source": "plasma/packaging/rungic-plasma-bridges"
     },
-    "moto-plasma-input": {
-      "source": "plasma/packaging/moto-plasma-input"
+    "rungic-plasma-input": {
+      "source": "plasma/packaging/rungic-plasma-input"
     },
-    "moto-plasma-recording": {
-      "source": "plasma/packaging/moto-plasma-recording"
+    "rungic-plasma-recording": {
+      "source": "plasma/packaging/rungic-plasma-recording"
     },
-    "moto-plasma-diagnostics": {
-      "source": "plasma/packaging/moto-plasma-diagnostics"
+    "rungic-plasma-diagnostics": {
+      "source": "plasma/packaging/rungic-plasma-diagnostics"
     },
-    "moto-voice-agent": {
-      "source": "plasma/packaging/moto-voice-agent"
+    "rungic-voice-agent": {
+      "source": "plasma/packaging/rungic-voice-agent"
     },
-    "moto-cua": {
-      "source": "plasma/packaging/moto-cua"
+    "rungic-cua": {
+      "source": "plasma/packaging/rungic-cua"
     },
-    "moto-agent-screen": {
-      "source": "plasma/packaging/moto-agent-screen"
+    "rungic-agent-screen": {
+      "source": "plasma/packaging/rungic-agent-screen"
     },
-    "moto-cast": {
-      "source": "plasma/packaging/moto-cast"
+    "rungic-cast": {
+      "source": "plasma/packaging/rungic-cast"
     },
-    "moto-codex": {
-      "source": "plasma/packaging/moto-codex"
+    "rungic-codex": {
+      "source": "plasma/packaging/rungic-codex"
     },
-    "moto-codec": {
-      "source": "plasma/packaging/moto-codec"
+    "rungic-codec": {
+      "source": "plasma/packaging/rungic-codec"
     },
-    "moto-firefox": {
-      "source": "plasma/packaging/moto-firefox"
+    "rungic-firefox": {
+      "source": "plasma/packaging/rungic-firefox"
     },
-    "moto-snapshot": {
-      "source": "plasma/packaging/moto-snapshot"
+    "rungic-snapshot": {
+      "source": "plasma/packaging/rungic-snapshot"
     }
   },
   "coupled": [
@@ -155,10 +155,10 @@
     "plasma-keyboard",
     "xdg-desktop-portal-kde",
     "libqt6multimedia6",
-    "moto-plasma-session",
-    "moto-plasma-bridges",
-    "moto-plasma-input",
-    "moto-plasma-config"
+    "rungic-plasma-session",
+    "rungic-plasma-bridges",
+    "rungic-plasma-input",
+    "rungic-plasma-config"
   ],
   "android": [
     {

@@ -1,7 +1,7 @@
 From: kevinzhow <kevinzhow@local>
 Date: Wed, 23 Sep 2026 21:00:53 +0800
-Subject: Record video with this project's H.264 encoder (motoh264enc) when it
- is available
+Subject: Record video with this project's H.264 encoder (rungich264enc) when
+ it is available
 
 Snapshot recognises the GStreamer element of the Android hardware codec bridge as an H.264 encoder,
 hardware accelerated, and sets its bitrate, ahead of openh264enc and x264enc.
@@ -17,7 +17,7 @@ X-Rungic-Docs: docs/48 docs/54
  2 files changed, 17 insertions(+), 1 deletion(-)
 
 diff --git a/aperture/src/utils.rs b/aperture/src/utils.rs
-index 72ab13b..7c36d53 100644
+index 72ab13b..516a8fd 100644
 --- a/aperture/src/utils.rs
 +++ b/aperture/src/utils.rs
 @@ -173,7 +173,9 @@ pub(crate) mod caps {
@@ -25,7 +25,7 @@ index 72ab13b..7c36d53 100644
  pub fn is_h264_encoding_supported() -> bool {
      let registry = gst::Registry::get();
 -    registry.lookup_feature("openh264enc").is_some() || registry.lookup_feature("x264enc").is_some()
-+    registry.lookup_feature("motoh264enc").is_some()
++    registry.lookup_feature("rungich264enc").is_some()
 +        || registry.lookup_feature("openh264enc").is_some()
 +        || registry.lookup_feature("x264enc").is_some()
  }
@@ -35,12 +35,12 @@ index 72ab13b..7c36d53 100644
              registry.lookup_feature("vah264lpenc").is_some()
                  || registry.lookup_feature("vah264enc").is_some()
                  || registry.lookup_feature("v4l2h264enc").is_some()
-+                || registry.lookup_feature("motoh264enc").is_some()
++                || registry.lookup_feature("rungich264enc").is_some()
          }
          crate::VideoFormat::Vp8Webm => {
              registry.lookup_feature("vavp8lpenc").is_some()
 diff --git a/aperture/src/viewfinder.rs b/aperture/src/viewfinder.rs
-index 7209cb5..6459d09 100644
+index 7209cb5..930646e 100644
 --- a/aperture/src/viewfinder.rs
 +++ b/aperture/src/viewfinder.rs
 @@ -907,6 +907,11 @@ impl Viewfinder {
@@ -48,7 +48,7 @@ index 7209cb5..6459d09 100644
          // Video encoder properties
          let video_properties_map = ElementProperties::builder_map()
 +            .item(
-+                ElementPropertiesMapItem::builder("motoh264enc")
++                ElementPropertiesMapItem::builder("rungich264enc")
 +                    .field("bitrate", 4000u32)
 +                    .build(),
 +            )
@@ -59,7 +59,7 @@ index 7209cb5..6459d09 100644
                      }
                      hw_encoder_found = true;
                  }
-+                if let Some(encoder) = registry.lookup_feature("motoh264enc") {
++                if let Some(encoder) = registry.lookup_feature("rungich264enc") {
 +                    encoder.set_rank(if self.enable_hw_encoding() {
 +                        gst::Rank::PRIMARY + 32
 +                    } else {

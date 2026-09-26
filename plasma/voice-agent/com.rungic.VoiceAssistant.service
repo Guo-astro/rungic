@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=com.rungic.VoiceAssistant
+Exec=/usr/bin/rungic-voice-assistant --overlay
+SystemdService=rungic-voice-overlay.service

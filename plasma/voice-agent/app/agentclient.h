@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// D-Bus client of the voice assistant service dev.moto.VoiceAgent (docs/59).
+// D-Bus client of the voice assistant service com.rungic.VoiceAgent (docs/59).
 #pragma once
 
 #include <QDBusInterface>

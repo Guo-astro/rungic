@@ -20,7 +20,7 @@ import QtQuick.Window
 import QtQuick.Controls as QQC2
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.private.mobileshell.state as MobileShellState
-import dev.moto.voiceassistant
+import com.rungic.voiceassistant
 
 Window {
     id: win

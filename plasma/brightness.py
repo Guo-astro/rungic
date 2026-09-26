@@ -96,7 +96,7 @@ class Brightness(dbus.service.Object):
                 GLib.idle_add(self.update, level)
                 GLib.idle_add(lambda: (reply(), False)[1])
             except (OSError, ValueError) as exception:
-                failure = dbus.DBusException(str(exception), name='dev.moto.Android.Unavailable')
+                failure = dbus.DBusException(str(exception), name='com.rungic.Android.Unavailable')
                 GLib.idle_add(lambda: (error(failure), False)[1])
         self.pool.submit(write)
 
@@ -111,7 +111,7 @@ names = [dbus.service.BusName(name, bus, do_not_queue=True) for name in
          ('org.kde.Solid.PowerManagement', INTERFACE, 'org.freedesktop.PowerManagement.Inhibit', 'org.freedesktop.ScreenSaver')]
 service = Brightness(bus)
 import importlib.util
-spec = importlib.util.spec_from_file_location('moto_power_policy', '/usr/libexec/moto-power-policy.py')
+spec = importlib.util.spec_from_file_location('rungic_power_policy', '/usr/libexec/rungic-power-policy.py')
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 policy = module.Policy(bus, host)

@@ -1,11 +1,11 @@
 #!/usr/bin/python3
 # SPDX-License-Identifier: MIT
-"""Keyboard layouts for the Rime keyboard (moto-plasma-input build, docs/41, docs/61).
+"""Keyboard layouts for the Rime keyboard (rungic-plasma-input build, docs/41, docs/61).
 
   layouts.py SOURCE DEST
 
 SOURCE is plasma-keyboard's installed layouts directory. The Chinese layout is copied with
-its Pinyin input method replaced by Moto.Rime's; every other layout is a link to SOURCE,
+its Pinyin input method replaced by Rungic.Rime's; every other layout is a link to SOURCE,
 so plasma-keyboard updates reach them.
 """
 import shutil
@@ -24,4 +24,4 @@ main = dest / 'zh_CN/main.qml'
 text = main.read_text()
 old = 'import QtQuick.VirtualKeyboard.Plugins; PinyinInputMethod {}'
 assert old in text, 'Upstream Chinese layout changed; review before upgrading'
-main.write_text(text.replace(old, 'import Moto.Rime 1.0; RimeInputMethod {}'))
+main.write_text(text.replace(old, 'import Rungic.Rime 1.0; RimeInputMethod {}'))

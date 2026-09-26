@@ -17,7 +17,7 @@ import gi
 gi.require_version('Gst', '1.0')
 from gi.repository import Gst, GLib
 
-CONFIG = Path.home() / '.config/moto-screen-recording.ini'
+CONFIG = Path.home() / '.config/rungic-screen-recording.ini'
 PROFILES = {'standard': (4000, 30), 'high': (8000, 30), 'smooth': (12000, 60)}
 SOURCES = {'none': [], 'system': ['android.monitor'], 'microphone': ['android_microphone'],
            'both': ['android.monitor', 'android_microphone']}
@@ -50,7 +50,7 @@ class Recorder:
                       f'! video/x-raw ! videoflip name=flip{i} video-direction=auto ! queue max-size-buffers=4 leaky=downstream '
                       f'! videoconvertscale n-threads=2 ! capsfilter name=fit{i} '
                       f'! videorate ! video/x-raw,format=I420,framerate={fps}/1 '
-                      f'! motoh264enc bitrate={bitrate} ! h264parse ! queue ! mux{i}.video_0 ')
+                      f'! rungich264enc bitrate={bitrate} ! h264parse ! queue ! mux{i}.video_0 ')
         audio_pipe = ''
         if sources:
             # Both sources use the pipeline clock; silence source keeps idle intervals timed.
@@ -221,7 +221,7 @@ class Recorder:
 if __name__ == '__main__':
     args = sys.argv[1:]
     if len(args) < 2 or len(args) % 2 or not all(a.isdigit() for a in args[0::2]):
-        raise SystemExit('usage: moto-screen-recorder NODE OUTPUT.mp4 [NODE OUTPUT.mp4 ...]')
+        raise SystemExit('usage: rungic-screen-recorder NODE OUTPUT.mp4 [NODE OUTPUT.mp4 ...]')
     try:
         raise SystemExit(Recorder([(int(n), o) for n, o in zip(args[0::2], args[1::2])]).run())
     except Exception as e:

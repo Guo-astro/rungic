@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
-"""Build this project's own Debian packages (moto-*) from plasma/packaging/<name>/ (docs/61).
+"""Build this project's own Debian packages (rungic-*) from plasma/packaging/<name>/ (docs/61).
 
 Each package directory holds:
   package.json  name, architecture (all|arm64), build (host|device), paths (repository paths
@@ -8,6 +8,8 @@ Each package directory holds:
                 components, packages/<name>, whose patched source build.sh finds in
                 $SRC/upstream/<name>; docs/71), depends,
                 build_depends (installed on the phone before a device build), description,
+                formerly (the package's name before the Rungic rename: Conflicts, Replaces and the
+                enable state of its renamed units carry over, docs/70),
                 obsolete (files of the old manual installs that postinst removes once the
                 package's own copies are in place), units {system: [...], user: [...]} to enable,
                 conffiles are every file under /etc
@@ -45,7 +47,7 @@ import rungic_release
 
 PACKAGING = WORKSPACE / 'plasma/packaging'
 BUILDS = rungic_release.APT / 'project-builds.json'
-DEVICE_BASE = '/root/moto-packages'
+DEVICE_BASE = '/root/rungic-packages'
 MAINTAINER = 'range-dev <noreply@localhost>'
 
 
@@ -93,6 +95,14 @@ def current(pkg):
         (rungic_release.POOL / record['file']).exists()
 
 
+def former_unit(pkg, unit):
+    """The unit's name under the package's former name ('formerly', docs/70), if it had one."""
+    former = pkg.get('formerly')
+    if not former or not unit.startswith('rungic-'):
+        return None
+    return 'moto-' + unit[len('rungic-'):]
+
+
 def maintainer_scripts(pkg, root):
     """DEBIAN/{preinst,postinst,prerm,postrm} and conffiles."""
     debian = root / 'DEBIAN'
@@ -119,8 +129,19 @@ def maintainer_scripts(pkg, root):
             # a first installation enables; an administrator's disable survives upgrades, and removal
             # followed by reinstallation (prerm no longer disables, docs/70).
             post += ['if [ "$1" = configure ] || [ "$1" = abort-upgrade ] || [ "$1" = abort-deconfigure ] || '
-                     '[ "$1" = abort-remove ]; then',
-                     f"  if deb-systemd-helper --quiet{flag} was-enabled '{unit}'; then",
+                     '[ "$1" = abort-remove ]; then']
+            former = former_unit(pkg, unit)
+            if former:
+                # Renamed (docs/70): an administrator's disable of the old unit carries over to the new
+                # one on its first installation; without a record of the old unit it is enabled.
+                post += [f"  if ! deb-systemd-helper{flag} debian-installed '{unit}' && "
+                         f"deb-systemd-helper{flag} debian-installed '{former}' && "
+                         f"! deb-systemd-helper --quiet{flag} was-enabled '{former}'; then",
+                         f"    deb-systemd-helper{flag} update-state '{unit}' >/dev/null || true",
+                         f"  elif deb-systemd-helper --quiet{flag} was-enabled '{unit}'; then"]
+            else:
+                post += [f"  if deb-systemd-helper --quiet{flag} was-enabled '{unit}'; then"]
+            post += [
                      f"    deb-systemd-helper{flag} enable '{unit}' >/dev/null || true",
                      f"  else deb-systemd-helper{flag} update-state '{unit}' >/dev/null || true; fi",
                      'fi']
@@ -171,7 +192,7 @@ def maintainer_scripts(pkg, root):
 
 
 def unit_list(pkg):
-    """/usr/share/moto/units/NAME.list: the units this package enables, for moto-integrity."""
+    """/usr/share/rungic/units/NAME.list: the units this package enables, for rungic-integrity."""
     units = pkg.get('units', {})
     lines = [f'system {u}' for u in units.get('system', [])] + [f'user {u}' for u in units.get('user', [])]
     return '\n'.join(lines) + '\n' if lines else None
@@ -182,9 +203,13 @@ def control(pkg, version, root, extra_depends=''):
     depends = ', '.join(d for d in (pkg.get('depends', ''), extra_depends) if d)
     fields = {'Package': pkg['name'], 'Version': version, 'Architecture': pkg['architecture'],
               'Maintainer': MAINTAINER, 'Installed-Size': str(size), 'Section': 'misc', 'Priority': 'optional'}
+    # A renamed package (docs/70) conflicts with and replaces its former name, without a version:
+    # installing it removes the old package, and going back to a release with the old name removes it.
+    former = [pkg['formerly']] if pkg.get('formerly') else []
+    extra = {'conflicts': former, 'replaces': former}
     for key, name in (('depends', 'Depends'), ('recommends', 'Recommends'), ('conflicts', 'Conflicts'),
                       ('replaces', 'Replaces'), ('breaks', 'Breaks'), ('provides', 'Provides')):
-        value = depends if key == 'depends' else pkg.get(key)
+        value = depends if key == 'depends' else ', '.join(v for v in [pkg.get(key)] + extra.get(key, []) if v)
         if value:
             fields[name] = value
     summary, _, body = pkg['description'].partition('\n')
@@ -226,8 +251,8 @@ def build_host(pkg, tree):
         subprocess.run(['sh', '-eu', str(pkg['dir'] / 'build.sh')], cwd=WORKSPACE, env=env, check=True)
         maintainer_scripts(pkg, root)
         if unit_list(pkg):
-            (root / 'usr/share/moto/units').mkdir(parents=True, exist_ok=True)
-            (root / f"usr/share/moto/units/{pkg['name']}.list").write_text(unit_list(pkg))
+            (root / 'usr/share/rungic/units').mkdir(parents=True, exist_ok=True)
+            (root / f"usr/share/rungic/units/{pkg['name']}.list").write_text(unit_list(pkg))
         for path in [root, *root.rglob('*')]:   # normalized modes and times: reproducible output
             if not path.is_symlink():
                 mode = path.stat().st_mode
@@ -303,14 +328,14 @@ def build_device(pkg, tree, jobs=4):
         rungic_device.to_container(listing, f'{base}/unit.list', '644')
         listing.unlink()
     epoch = git('log', '-1', '--format=%ct')
-    unit = f'moto-package-{name}'
+    unit = f'rungic-package-{name}'
     script = f'''set -e
 cd {base}
 export DESTDIR={base}/root SRC={base}/src SOURCE_DATE_EPOCH={epoch} JOBS={jobs} LC_ALL=C.UTF-8
 rm -rf "$DESTDIR"; mkdir -p "$DESTDIR/DEBIAN"
 sh -eu "$SRC/{pkg['dir'].relative_to(WORKSPACE)}/build.sh"
 cp debian-scripts/* "$DESTDIR/DEBIAN/"
-if [ -f unit.list ]; then install -Dm644 unit.list "$DESTDIR/usr/share/moto/units/{name}.list"; fi
+if [ -f unit.list ]; then install -Dm644 unit.list "$DESTDIR/usr/share/rungic/units/{name}.list"; fi
 # Debug information to {base}/dbgsym by build-id (for NAME-dbgsym), then strip (docs/61).
 rm -rf {base}/dbgsym
 find "$DESTDIR" -type f ! -path "$DESTDIR/DEBIAN/*" | while read -r f; do
@@ -340,7 +365,7 @@ fi
 find "$DESTDIR" -newermt "@$SOURCE_DATE_EPOCH" -exec touch -h -d "@$SOURCE_DATE_EPOCH" {{}} + 2>/dev/null || true
 du -sk --exclude=DEBIAN "$DESTDIR" | cut -f1 > size.txt
 '''
-    run(f'mkdir -p {base} && cat > {base}/build-run.sh <<\'MOTO_EOF\'\n{script}MOTO_EOF', 'container')
+    run(f'mkdir -p {base} && cat > {base}/build-run.sh <<\'RUNGIC_EOF\'\n{script}RUNGIC_EOF', 'container')
     result = run(f'''systemctl reset-failed {unit} 2>/dev/null || true
 systemd-run --unit={unit} --wait --pipe --collect --quiet -p TimeoutStartSec=14400 --nice=10 \\
   -p IOSchedulingClass=idle --setenv=HOME=/root sh -eu {base}/build-run.sh > {base}/build.log 2>&1; echo "exit=$?"; tail -30 {base}/build.log''',
@@ -368,7 +393,7 @@ systemd-run --unit={unit} --wait --pipe --collect --quiet -p TimeoutStartSec=144
     ctl.unlink()
     debs = [deb_name]
     # Debug symbols, when there are any: NAME-dbgsym at the same version, in the release repository
-    # for moto-crash-symbols; never a dependency of the release.
+    # for rungic-crash-symbols; never a dependency of the release.
     dbg_name = f'{name}-dbgsym_{version}_{pkg["architecture"]}.deb'
     dbg_control = (f'Package: {name}-dbgsym\nVersion: {version}\nArchitecture: {pkg["architecture"]}\n'
                    f'Maintainer: {MAINTAINER}\nSection: debug\nPriority: optional\n'

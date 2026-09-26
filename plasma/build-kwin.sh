@@ -1,5 +1,5 @@
 #!/bin/sh
-# Run in Ubuntu ARM64. Vendor includes Ubuntu and Moto patches already.
+# Run in Ubuntu ARM64. Vendor includes Ubuntu and Rungic patches already.
 # Requires apt build-dep kwin and devscripts; builds without installing.
 set -eu
 [ "$#" -eq 0 ] || { echo "Edit vendor sources; this script no longer accepts pristine-source arguments." >&2; exit 2; }

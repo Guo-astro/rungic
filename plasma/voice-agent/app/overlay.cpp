@@ -66,7 +66,7 @@ void Overlay::present(const QString &screenName)
     // A layer surface is bound to its output when created: moving means mapping again.
     m_window->setVisible(false);
     auto layer = LayerShellQt::Window::get(m_window);
-    layer->setScope(QStringLiteral("moto-voice-assistant"));
+    layer->setScope(QStringLiteral("rungic-voice-assistant"));
     layer->setLayer(LayerShellQt::Window::LayerOverlay);
     layer->setAnchors(LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
                                                     | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight));
@@ -150,7 +150,7 @@ void Overlay::loadEffects(bool on)
 
 void Overlay::openInApp(const QString &conversation)
 {
-    QProcess::startDetached(QStringLiteral("moto-voice-assistant"), {QStringLiteral("--conversation"), conversation});
+    QProcess::startDetached(QStringLiteral("rungic-voice-assistant"), {QStringLiteral("--conversation"), conversation});
 }
 
 void Overlay::Hold(bool pressed, const QString &screen)

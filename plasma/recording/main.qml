@@ -16,7 +16,7 @@ QS.QuickSetting {
     icon: "camera-video-symbolic"
     enabled: RecordUtil.isRecording
     available: true
-    settingsCommand: "/usr/bin/moto-recording-settings"
+    settingsCommand: "/usr/bin/rungic-recording-settings"
 
     // Screens to capture, this (the phone's) screen first: one KWin stream and
     // one file per screen, so a cast TV is recorded together with the phone.

@@ -1,5 +1,0 @@
-#!/bin/sh
-set -e
-if [ "$1" = remove ] || [ "$1" = abort-install ] || [ "$1" = disappear ]; then
-    dpkg-divert --package moto-firefox --remove --rename --divert /usr/bin/firefox.moto-orig /usr/bin/firefox
-fi

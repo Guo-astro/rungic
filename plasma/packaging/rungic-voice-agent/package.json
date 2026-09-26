@@ -1,0 +1,15 @@
+{
+  "name": "rungic-voice-agent",
+  "formerly": "moto-voice-agent",
+  "architecture": "arm64",
+  "build": "device",
+  "paths": ["plasma/voice-agent"],
+  "depends": "rungic-codex, rungic-cua, rungic-plasma-bridges, python3, python3-gi, python3-websocket, python3-pypinyin, python3-opencc, pulseaudio-utils, libkf6config-bin",
+  "build_depends": ["cmake", "qt6-base-dev", "qt6-declarative-dev", "qt6-shadertools-dev", "liblayershellqtinterface-dev",
+                    "libkf6windowsystem-dev", "libkf6colorscheme-dev", "libkf6config-dev"],
+  "description": "Plasma Mobile on Android: voice assistant\nThe resident voice agent (GPT Realtime with a Codex app-server behind it, D-Bus\ncom.rungic.VoiceAgent), the assistant app and the Home-button overlay, their prompts and\nthe phone-desktop skill (docs/59, docs/67).",
+  "units": {"user": ["rungic-voice-agent.service", "rungic-voice-overlay.service"]},
+  "obsolete": ["/usr/local/bin/moto-voice-agent", "/usr/local/lib/moto-voice-agent", "/usr/local/share/moto-voice-agent",
+               "/usr/local/bin/moto-voice-assistant", "/usr/local/share/moto-voice-assistant",
+               "/usr/local/share/applications/dev.moto.VoiceAssistant.desktop"]
+}

@@ -27,7 +27,7 @@ from rungic_device import DeviceError, out, run
 PACKAGE = 'dev.moto.plasma'
 DIAG_DIR = rungic_device.WORKSPACE / '.work/diag'
 SESSION_LOG = '/var/log/plasma/session.log'
-LOGCAT_TAGS = ('WinlandNative', 'MotoWayland', 'MotoPlasma', 'DisplayPacer')
+LOGCAT_TAGS = ('WinlandNative', 'MotoWayland', 'MotoPlasma', 'DisplayPacer')   # the APK's tags (renamed with it, docs/70 phase C)
 PRIORITY = {'V': 7, 'D': 7, 'I': 6, 'W': 4, 'E': 3, 'F': 2}  # logcat -> syslog
 LEVEL_NAME = {0: 'emerg', 1: 'alert', 2: 'crit', 3: 'err', 4: 'warning', 5: 'notice', 6: 'info', 7: 'debug'}
 
@@ -39,7 +39,7 @@ KNOWN_NOISE = [
     (re.compile(r'binder: release \d+:\d+ transaction \d+ out, still active'), 'Android binder teardown chatter'),
     (re.compile(r'MotoPrcPermissionService: noteOperationInternal code: ACCESS_CLIPBOARD'), 'Moto clipboard audit for the desktop APK'),
     (re.compile(r'AtSpiAdaptor::applicationInterface does not implement "GetApplicationBusAddress"'),
-     'Qt AT-SPI bridge while accessibility is enabled (moto-a11y); harmless'),
+     'Qt AT-SPI bridge while accessibility is enabled (rungic-a11y); harmless'),
 ]
 
 
@@ -243,7 +243,7 @@ done
     journal = logs(since_seconds, sources=('journal',), priority=6,
                    grep=r'coredump:|dumped core|code=dumped|code=killed|SIGSEGV|SIGABRT|KCrash', limit=100)
     result['container'] = journal['entries']
-    # Reports of plasma/diagnostics/moto-coredump-collect, and apport's Python
+    # Reports of plasma/diagnostics/rungic-coredump-collect, and apport's Python
     # exception reports in /var/crash.
     reports = run(f'''python3 - <<'PY'
 import json, pathlib
@@ -264,7 +264,7 @@ PY
 
 
 def crash_groups(since_seconds=30 * 86400, release=None):
-    """Container crash reports grouped by signature (plasma/diagnostics/moto-coredump-collect).
+    """Container crash reports grouped by signature (plasma/diagnostics/rungic-coredump-collect).
 
     With release, also lists the signatures seen only in that release: new there, or not seen
     in the reports still kept from earlier ones."""
@@ -318,13 +318,13 @@ PY
 
 
 def crash_symbolize(report_ids=(), recent=0):
-    """Install debug symbols for crash reports and redo their backtraces (moto-crash-symbols).
+    """Install debug symbols for crash reports and redo their backtraces (rungic-crash-symbols).
     Installs -dbgsym packages in the container; can take minutes the first time."""
     ids = [r for r in report_ids if re.fullmatch(r'\d{8}-\d{6}-[^/\s]+-\d+', r)]
     if len(ids) != len(report_ids):
         raise ValueError('report ids look like YYYYmmdd-HHMMSS-comm-pid')
     args = ' '.join(ids) + (f' --recent {int(recent)}' if recent else '')
-    text = run('for p in /usr/bin/moto-crash-symbols /usr/local/bin/moto-crash-symbols; do '
+    text = run('for p in /usr/bin/rungic-crash-symbols /usr/bin/moto-crash-symbols; do '
                f'[ -x $p ] && exec $p {args}; done; echo null', 'container', timeout=1800, check=False)
     return json.loads(text.stdout) if text.stdout.strip() not in ('', 'null') else text.stderr
 
@@ -345,12 +345,12 @@ def crash_get(crash_id, lines=160):
 
 def integrity():
     """Drift of the container rootfs against dpkg, the release and the local-config manifest
-    (plasma/diagnostics/moto-integrity, docs/61). Read-only; takes about a minute (dpkg --verify)."""
-    text = run('for p in /usr/bin/moto-integrity /usr/local/bin/moto-integrity; do '
+    (plasma/diagnostics/rungic-integrity, docs/61). Read-only; takes about a minute (dpkg --verify)."""
+    text = run('for p in /usr/bin/rungic-integrity /usr/bin/moto-integrity; do '
                '[ -x $p ] && exec $p --json; done; echo null', 'container', timeout=300, check=False).stdout
     report = json.loads(text)
     if report is None:
-        raise DeviceError('moto-integrity is not installed in the container')
+        raise DeviceError('rungic-integrity is not installed in the container')
     return report
 
 
@@ -368,7 +368,7 @@ def host_request(op):
     """Read-only request to the Android host bridge (platform.sock)."""
     if op not in READ_OPS:
         raise ValueError(f'Read-only ops: {sorted(READ_OPS)}')
-    text = out('moto-platform --request ' + shlex.quote(json.dumps({'op': op})), 'user')
+    text = out(rungic_device.prog('platform') + ' --request ' + shlex.quote(json.dumps({'op': op})), 'user')
     return json.loads(text)
 
 
@@ -380,7 +380,7 @@ def screenshot(path=None):
     """
     path = Path(path) if path else DIAG_DIR / f"screen-{time.strftime('%Y%m%d-%H%M%S')}.png"
     path.parent.mkdir(parents=True, exist_ok=True)
-    remote = '/data/local/tmp/moto-agent-screen.png'
+    remote = '/data/local/tmp/rungic-agent-screen.png'
     run(f'screencap -p {remote}', 'shell')
     try:
         subprocess.run(rungic_device.adb('pull', remote, str(path)), check=True, capture_output=True,
@@ -393,8 +393,8 @@ def screenshot(path=None):
 # ---------------------------------------------------------------- desktop UI (AT-SPI)
 
 def a11y(*args, timeout=120):
-    """Run plasma/diagnostics/moto-a11y as the desktop user; returns parsed JSON."""
-    return json.loads(out(shlex.join(['moto-a11y', *map(str, args)]), 'user', timeout=timeout))
+    """Run plasma/diagnostics/rungic-a11y as the desktop user; returns parsed JSON."""
+    return json.loads(out(rungic_device.prog('a11y') + ' ' + shlex.join(map(str, args)), 'user', timeout=timeout))
 
 
 def ui_enable(enabled=True):
@@ -416,7 +416,7 @@ def ui_press(app, path, action=None):
 
 
 def ui_windows():
-    """KWin's window list with global logical geometry (moto-a11y windows)."""
+    """KWin's window list with global logical geometry (rungic-a11y windows)."""
     return a11y('windows')
 
 

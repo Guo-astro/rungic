@@ -210,10 +210,10 @@ int main(int argc,char **argv) {
     s.core=pw_context_connect(s.context,nullptr,0);if(!s.core)return 1;
     s.timer=pw_loop_add_timer(pw_main_loop_get_loop(s.loop),tick,&s);
     pw_loop_add_signal(pw_main_loop_get_loop(s.loop),SIGINT,stop,&s);pw_loop_add_signal(pw_main_loop_get_loop(s.loop),SIGTERM,stop,&s);
-    std::string name="moto.camera."+s.id;
+    std::string name="rungic.camera."+s.id;
     s.stream=pw_stream_new(s.core,name.c_str(),pw_properties_new(PW_KEY_MEDIA_CLASS,"Video/Source",
         PW_KEY_MEDIA_ROLE,"Camera",PW_KEY_NODE_NAME,name.c_str(),PW_KEY_NODE_DESCRIPTION,s.facing=="front"?"Android 前置相机":"Android 后置相机",
-        PW_KEY_NODE_SUPPORTS_REQUEST,"1",PW_KEY_NODE_VIRTUAL,"true", "device.api","moto-android", "api.libcamera.location",s.facing.c_str(),NULL));
+        PW_KEY_NODE_SUPPORTS_REQUEST,"1",PW_KEY_NODE_VIRTUAL,"true", "device.api","rungic-android", "api.libcamera.location",s.facing.c_str(),NULL));
     static const pw_stream_events events={.version=PW_VERSION_STREAM_EVENTS,.state_changed=state_changed,.param_changed=param_changed,.process=on_process};
     pw_stream_add_listener(s.stream,&s.listener,&events,&s);
     uint8_t bytes[1024];spa_pod_builder builder=SPA_POD_BUILDER_INIT(bytes,sizeof(bytes));

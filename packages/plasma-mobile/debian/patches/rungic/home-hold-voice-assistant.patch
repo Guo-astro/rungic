@@ -42,14 +42,14 @@ index d0828a7..d1116b1 100644
  
          NavigationPanelButton {
 diff --git a/components/mobileshell/qml/navigationpanel/NavigationPanelAction.qml b/components/mobileshell/qml/navigationpanel/NavigationPanelAction.qml
-index 097387a..8f5435d 100644
+index 097387a..59ff2a0 100644
 --- a/components/mobileshell/qml/navigationpanel/NavigationPanelAction.qml
 +++ b/components/mobileshell/qml/navigationpanel/NavigationPanelAction.qml
 @@ -14,5 +14,11 @@ QtObject {
      // Description of the action for assistive technology (backport from upstream master).
      property string accessibleText
  
-+    // Holding the button (Moto: the Home button summons the assistant): past the long-press
++    // Holding the button (Rungic: the Home button summons the assistant): past the long-press
 +    // time held() comes instead of triggered(), and holdReleased() when the finger lifts.
 +    property bool holdable: false
 +
@@ -111,17 +111,17 @@ index a24c53a..38aae8a 100644
      Rectangle {
          id: rect
 diff --git a/containments/taskpanel/qml/NavigationPanelComponent.qml b/containments/taskpanel/qml/NavigationPanelComponent.qml
-index 871b2b8..cf7ecb6 100644
+index 871b2b8..23839f1 100644
 --- a/containments/taskpanel/qml/NavigationPanelComponent.qml
 +++ b/containments/taskpanel/qml/NavigationPanelComponent.qml
 @@ -92,7 +92,13 @@ MobileShell.NavigationPanel {
  
          onTriggered: {
              MobileShellState.ShellDBusClient.openHomeScreen();
-+            Plasmoid.assistantDismiss(); // Moto: Home also puts the assistant's overlay away
++            Plasmoid.assistantDismiss(); // Rungic: Home also puts the assistant's overlay away
          }
 +
-+        // Moto: holding Home talks to the voice assistant; lifting the finger ends what was said.
++        // Rungic: holding Home talks to the voice assistant; lifting the finger ends what was said.
 +        holdable: true
 +        onHeld: Plasmoid.assistantHold(true, Screen.name)
 +        onHoldReleased: Plasmoid.assistantHold(false, Screen.name)
@@ -129,7 +129,7 @@ index 871b2b8..cf7ecb6 100644
  
      // close app/keyboard button
 diff --git a/containments/taskpanel/taskpanel.cpp b/containments/taskpanel/taskpanel.cpp
-index 385a4e3..931c090 100644
+index 385a4e3..de5a206 100644
 --- a/containments/taskpanel/taskpanel.cpp
 +++ b/containments/taskpanel/taskpanel.cpp
 @@ -31,4 +31,24 @@ void TaskPanel::triggerTaskSwitcher() const
@@ -140,9 +140,9 @@ index 385a4e3..931c090 100644
 +{
 +    // The assistant's overlay (plasma/voice-agent, docs/67). Asynchronous: no reply is
 +    // awaited, and without the overlay the call fails harmlessly.
-+    QDBusMessage message = QDBusMessage::createMethodCall(QStringLiteral("dev.moto.VoiceAssistant"),
++    QDBusMessage message = QDBusMessage::createMethodCall(QStringLiteral("com.rungic.VoiceAssistant"),
 +                                                          QStringLiteral("/Assistant"),
-+                                                          QStringLiteral("dev.moto.VoiceAssistant.Assistant"),
++                                                          QStringLiteral("com.rungic.VoiceAssistant.Assistant"),
 +                                                          QStringLiteral("Hold"));
 +    message.setArguments({pressed, screen});
 +    QDBusConnection::sessionBus().send(message);
@@ -150,23 +150,23 @@ index 385a4e3..931c090 100644
 +
 +void TaskPanel::assistantDismiss() const
 +{
-+    QDBusConnection::sessionBus().send(QDBusMessage::createMethodCall(QStringLiteral("dev.moto.VoiceAssistant"),
++    QDBusConnection::sessionBus().send(QDBusMessage::createMethodCall(QStringLiteral("com.rungic.VoiceAssistant"),
 +                                                                      QStringLiteral("/Assistant"),
-+                                                                      QStringLiteral("dev.moto.VoiceAssistant.Assistant"),
++                                                                      QStringLiteral("com.rungic.VoiceAssistant.Assistant"),
 +                                                                      QStringLiteral("Hide")));
 +}
 +
  #include "taskpanel.moc"
 diff --git a/containments/taskpanel/taskpanel.h b/containments/taskpanel/taskpanel.h
-index 6bf4552..3ffccd1 100644
+index 6bf4552..72cc4ca 100644
 --- a/containments/taskpanel/taskpanel.h
 +++ b/containments/taskpanel/taskpanel.h
 @@ -15,4 +15,8 @@ class TaskPanel : public Plasma::Containment
  public:
      TaskPanel(QObject *parent, const KPluginMetaData &data, const QVariantList &args);
      Q_INVOKABLE void triggerTaskSwitcher() const;
-+    // Moto: the Home button held (pressed) and lifted, on the screen named `screen`.
++    // Rungic: the Home button held (pressed) and lifted, on the screen named `screen`.
 +    Q_INVOKABLE void assistantHold(bool pressed, const QString &screen) const;
-+    // Moto: Home tapped; the assistant's overlay goes away.
++    // Rungic: Home tapped; the assistant's overlay goes away.
 +    Q_INVOKABLE void assistantDismiss() const;
  };

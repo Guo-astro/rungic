@@ -38,8 +38,8 @@ import rungic_trace_report  # noqa: E402
 from rungic_device import PLASMA, run  # noqa: E402
 
 
-DROPIN = '/run/user/1000/systemd/user/plasma-plasmashell.service.d/90-moto-rhi-audit.conf'
-KWIN_DROPIN = '/run/user/1000/systemd/user/plasma-kwin_wayland.service.d/90-moto-env-audit.conf'
+DROPIN = '/run/user/1000/systemd/user/plasma-plasmashell.service.d/90-rungic-rhi-audit.conf'
+KWIN_DROPIN = '/run/user/1000/systemd/user/plasma-kwin_wayland.service.d/90-rungic-env-audit.conf'
 
 
 def kwin_env(pairs):

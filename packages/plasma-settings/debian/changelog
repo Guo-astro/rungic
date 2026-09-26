@@ -1,3 +1,9 @@
+plasma-settings (25.12.0-1+rungic1) resolute; urgency=medium
+
+  * Rungic rename (docs/70): the device panel is /usr/bin/rungic-platform.
+
+ -- range-dev <noreply@localhost>  Sat, 26 Sep 2026 15:00:00 +0000
+
 plasma-settings (25.12.0-1+moto1) resolute; urgency=medium
 
   * Modules model fix and the Android hardware settings route (vendored changes,

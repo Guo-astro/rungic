@@ -18,7 +18,7 @@ X-Rungic-Docs: docs/42
  1 file changed, 23 insertions(+)
 
 diff --git a/src/settingsapp.cpp b/src/settingsapp.cpp
-index 2c398ad..f060878 100644
+index 2c398ad..ce4e30e 100644
 --- a/src/settingsapp.cpp
 +++ b/src/settingsapp.cpp
 @@ -9,6 +9,8 @@
@@ -45,12 +45,12 @@ index 2c398ad..f060878 100644
 +            target = u"bluetooth"_s;
 +        }
 +        if (!target.isEmpty()) {
-+            QProcess::startDetached(u"/usr/bin/moto-platform"_s,
++            QProcess::startDetached(u"/usr/bin/rungic-platform"_s,
 +                {u"--request"_s, u"{\"op\":\"settings\",\"target\":\""_s + target + u"\"}"_s});
 +            return;
 +        }
 +        if (id == u"kcm_mobile_power"_s || id == u"kcm_powerdevilprofilesconfig"_s) {
-+            QProcess::startDetached(u"/usr/bin/moto-platform"_s, {});
++            QProcess::startDetached(u"/usr/bin/rungic-platform"_s, {});
 +            return;
 +        }
 +    }

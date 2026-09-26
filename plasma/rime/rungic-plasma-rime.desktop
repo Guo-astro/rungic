@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Plasma Keyboard (Rime)
+Name[zh_CN]=Plasma 键盘（Rime 拼音）
+Exec=/usr/libexec/rungic-plasma-rime
+Type=Application
+X-KDE-Wayland-VirtualKeyboard=true
+Icon=input-keyboard-virtual
+NoDisplay=true

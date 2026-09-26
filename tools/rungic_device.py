@@ -4,12 +4,16 @@
 
 Machine-specific values stay outside the repository:
 
-  MOTO_ADB        adb executable (default: PATH, then common SDK locations)
-  MOTO_SERIAL     hardware serial, ro.serialno (default ZY32MVJS25)
-  MOTO_TRANSPORT  adb transport id to use as-is, e.g. 10.77.0.16:44995
+  RUNGIC_ADB        adb executable (default: PATH, then common SDK locations)
+  RUNGIC_SERIAL     hardware serial, ro.serialno (default ZY32MVJS25)
+  RUNGIC_TRANSPORT  adb transport id to use as-is, e.g. 10.77.0.16:44995
 
 The same keys may be written as KEY=VALUE lines in .work/device.env; the
-environment wins. Without MOTO_TRANSPORT the phone is found by ro.serialno, so
+environment wins. The names from before the Rungic rename (MOTO_ADB, ...) still work.
+
+prog() and first_path() name the container's programs and files as a shell word that takes the
+Rungic name and falls back to the name from before the rename (docs/70), so these tools keep
+working on a release that is rolled back to. Without RUNGIC_TRANSPORT the phone is found by ro.serialno, so
 a changing wireless-debugging port needs no edits.
 
 Scripts are sent on stdin instead of being nested inside `adb shell su -c`
@@ -41,32 +45,48 @@ def config():
             if line and not line.startswith('#') and '=' in line:
                 key, value = line.split('=', 1)
                 values[key.strip()] = value.strip().strip('"\'')
-    for key in ('MOTO_ADB', 'MOTO_SERIAL', 'MOTO_TRANSPORT'):
-        if os.environ.get(key):
-            values[key] = os.environ[key]
+    for key in ('RUNGIC_ADB', 'RUNGIC_SERIAL', 'RUNGIC_TRANSPORT'):
+        former = 'MOTO_' + key[len('RUNGIC_'):]
+        if key not in values and former in values:
+            values[key] = values.pop(former)
+        for name in (key, former):
+            if os.environ.get(name):
+                values[key] = os.environ[name]
+                break
     return values
+
+
+def prog(name):
+    """Shell word for the container program rungic-NAME, or moto-NAME on a release from before the
+    Rungic rename (docs/70)."""
+    return f'"$(command -v rungic-{name} || command -v moto-{name} || echo rungic-{name})"'
+
+
+def first_path(new, old):
+    """Shell word for a container path under its Rungic name, else its name before the rename."""
+    return f'"$( [ -e {new} ] || [ ! -e {old} ] && echo {new} || echo {old})"'
 
 
 @functools.cache
 def adb_path():
-    candidates = [config().get('MOTO_ADB'), shutil.which('adb'),
+    candidates = [config().get('RUNGIC_ADB'), shutil.which('adb'),
                   str(Path.home() / 'Android/Sdk/platform-tools/adb'),
                   str(Path.home() / 'android-sdk/platform-tools/adb')]
     for candidate in candidates:
         if candidate and os.access(candidate, os.X_OK):
             return candidate
-    raise DeviceError('adb not found; set MOTO_ADB')
+    raise DeviceError('adb not found; set RUNGIC_ADB')
 
 
 def serial():
-    return config().get('MOTO_SERIAL', DEFAULT_SERIAL)
+    return config().get('RUNGIC_SERIAL', DEFAULT_SERIAL)
 
 
 @functools.cache
 def transport():
     """Return the adb transport id of the phone whose ro.serialno matches."""
-    if config().get('MOTO_TRANSPORT'):
-        return config()['MOTO_TRANSPORT']
+    if config().get('RUNGIC_TRANSPORT'):
+        return config()['RUNGIC_TRANSPORT']
     # stdin=DEVNULL: adb shell otherwise consumes the caller's stdin (e.g. an MCP stdio stream).
     out = subprocess.run([adb_path(), 'devices'], capture_output=True, text=True, timeout=15,
                          stdin=subprocess.DEVNULL).stdout
@@ -84,7 +104,7 @@ def transport():
         if found == serial():
             return device
     raise DeviceError(f'Phone {serial()} not among adb devices {devices}; '
-                      'connect it or set MOTO_TRANSPORT')
+                      'connect it or set RUNGIC_TRANSPORT')
 
 
 def adb(*args):

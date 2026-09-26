@@ -1,6 +1,6 @@
 #!/bin/sh
 set -e
-# Moto (docs/61): before this build, the project installed its plasma-mobile changes over
+# Rungic (docs/61): before this build, the project installed its plasma-mobile changes over
 # the packaged files with local dpkg diversions. This package carries those changes: drop
 # the old override and the diversion, so dpkg installs this package's files in place.
 if [ "$1" = install ] || [ "$1" = upgrade ]; then

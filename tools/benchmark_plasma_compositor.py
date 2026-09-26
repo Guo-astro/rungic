@@ -85,20 +85,20 @@ def main():
     if 'Geometry: 0,0,360x800' not in info or 'Refresh Rate: 120000' not in info: raise SystemExit('Unexpected display configuration')
     user('pkill','-x','kalk',check=False)
     # Warm application/shader caches outside measurement.
-    user('systemd-run','--user','--collect','--unit=moto-bench-warm','kalk'); time.sleep(2)
+    user('systemd-run','--user','--collect','--unit=rungic-bench-warm','kalk'); time.sleep(2)
     shot(a.out/'warm-calculator.png')
     frames.shell('input','tap','810','2340'); time.sleep(1)
     drawer(); shot(a.out/'drawer.png')
-    sampler=subprocess.Popen(PLASMA+['user-exec','python3','/opt/moto-gpu-bench/sample-cpu.py',
-        '/home/linux/.cache/moto-bench-cpu.json','120'],stdout=subprocess.DEVNULL)
+    sampler=subprocess.Popen(PLASMA+['user-exec','python3','/opt/rungic-gpu-bench/sample-cpu.py',
+        '/home/linux/.cache/rungic-bench-cpu.json','120'],stdout=subprocess.DEVNULL)
     try:
         measure('scroll',a.out/'scroll.json')
         measure('launch',a.out/'launch.json')
     finally:
         # The sampler completes independently; wait only for collection time.
-        user('pkill','-f','^python3 /opt/moto-gpu-bench/sample-cpu.py',check=False)
+        user('pkill','-f','^python3 /opt/rungic-gpu-bench/sample-cpu.py',check=False)
         sampler.wait(timeout=10)
-        cpu=user('cat','/home/linux/.cache/moto-bench-cpu.json').stdout
+        cpu=user('cat','/home/linux/.cache/rungic-bench-cpu.json').stdout
         (a.out/'cpu.json').write_text(cpu)
     shot(a.out/'final.png')
 if __name__=='__main__': main()

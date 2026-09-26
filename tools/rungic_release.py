@@ -3,9 +3,9 @@
 """Versioned releases of the Plasma container: local APT repository, release metapackage,
 deploy, rollback and status (docs/61).
 
-A release is moto-plasma-release=<version>: a metapackage with an exact dependency on every
-package in plasma/release/packages.json (rebuilt Ubuntu packages, this project's moto-*
-packages, and the Ubuntu packages coupled to them), plus /usr/share/moto/release.json with the
+A release is rungic-release=<version>: a metapackage with an exact dependency on every
+package in plasma/release/packages.json (rebuilt Ubuntu packages, this project's rungic-*
+packages, and the Ubuntu packages coupled to them), plus /usr/share/rungic/release.json with the
 git commit. The repository is .work/apt/repo on this computer (the pool of .debs is build
 output); deploy mirrors it to /var/lib/moto-apt in the container, where it is a trusted file:
 source pinned at 1001, so its versions win over the archive and older releases can be
@@ -56,15 +56,23 @@ RELEASES = APT / 'releases'          # <version>.json: what each metapackage pin
 DEPLOY = WORKSPACE / '.work/deploy'
 HISTORY = DEPLOY / 'history.json'
 DEVICE_REPO = '/var/lib/moto-apt'
-META = 'moto-plasma-release'
+META = 'rungic-release'
+# The metapackage and the release file before the Rungic rename (docs/70): releases up to
+# 20260926.20 are moto-plasma-release, and a rollback may go back to one of them.
+FORMER_META = 'moto-plasma-release'
+
+
+def meta_of(version):
+    """The metapackage name of release `version` in the repository."""
+    return FORMER_META if (POOL / f'{FORMER_META}_{version}_all.deb').exists() else META
 # The build directories on the phone that hold .debs of installed versions (import-installed).
-DEVICE_DEB_DIRS = ['/root/moto-build/*', '/root/moto-mesa-debs', '/root/moto-display-packages',
-                   '/root/moto-media-packages', '/root/moto-packages/*', '/root']
-# The source and pin that moto-plasma-config ships; deploy installs the same bytes before the
+DEVICE_DEB_DIRS = ['/root/rungic-build/*', '/root/moto-build/*', '/root/moto-mesa-debs', '/root/moto-display-packages',
+                   '/root/moto-media-packages', '/root/rungic-packages/*', '/root/moto-packages/*', '/root']
+# The source and pin that rungic-plasma-config ships; deploy installs the same bytes before the
 # package exists, so dpkg later takes them over as unchanged conffiles.
-SOURCES = (WORKSPACE / 'plasma/config/etc/apt/sources.list.d/moto.sources').read_text()
-PREFERENCES = (WORKSPACE / 'plasma/config/etc/apt/preferences.d/moto').read_text()
-APT_OURS = ('-o Dir::Etc::SourceList=/etc/apt/sources.list.d/moto.sources -o Dir::Etc::SourceParts=- '
+SOURCES = (WORKSPACE / 'plasma/config/etc/apt/sources.list.d/rungic.sources').read_text()
+PREFERENCES = (WORKSPACE / 'plasma/config/etc/apt/preferences.d/rungic').read_text()
+APT_OURS = ('-o Dir::Etc::SourceList=/etc/apt/sources.list.d/rungic.sources -o Dir::Etc::SourceParts=- '
             '-o APT::Get::List-Cleanup=0')
 
 
@@ -99,7 +107,7 @@ def pool_debs():
 
 def pull(path, target, timeout=1800):
     """adb pull of a root-only file: staged through /data/local/tmp."""
-    stage = f'/data/local/tmp/moto-pull-{int(time.time() * 1000)}'
+    stage = f'/data/local/tmp/rungic-pull-{int(time.time() * 1000)}'
     run(f'cp {shlex.quote(path)} {stage} && chmod 644 {stage}', 'root', timeout=timeout)
     try:
         subprocess.run(rungic_device.adb('pull', stage, str(target)), check=True, capture_output=True,
@@ -150,7 +158,7 @@ def import_installed():
             raise SystemExit(f'{name}: packages.json says {version}, the phone has {installed.get(name)}')
     patterns = ' '.join(f"{d}/{upstream_name(n, v)}_*.deb" for n, v in missing for d in DEVICE_DEB_DIRS)
     script = f'''set -e
-tmp=$(mktemp -d /var/tmp/moto-import.XXXXXX)
+tmp=$(mktemp -d /var/tmp/rungic-import.XXXXXX)
 for f in {patterns}; do
   [ -f "$f" ] || continue
   b=$(basename "$f"); [ -e "$tmp/$b" ] && continue
@@ -173,15 +181,15 @@ with tarfile.open(fileobj=sys.stdin.buffer, mode="r|") as t:
   fi
   rm -f "$tmp/.sums"
 done
-tar -C "$tmp" -cf /var/tmp/moto-import.tar .
+tar -C "$tmp" -cf /var/tmp/rungic-import.tar .
 rm -rf "$tmp"
 '''
     run(f"bash -c {shlex.quote(script)}", 'container', timeout=600)
     local = APT / 'incoming'
     shutil.rmtree(local, ignore_errors=True)
     local.mkdir(parents=True)
-    rungic_device.from_container('/var/tmp/moto-import.tar', local / 'x.tar')
-    run('rm -f /var/tmp/moto-import.tar', 'container')
+    rungic_device.from_container('/var/tmp/rungic-import.tar', local / 'x.tar')
+    run('rm -f /var/tmp/rungic-import.tar', 'container')
     with tarfile.open(local / 'x.tar') as tar:
         tar.extractall(local, filter='data')
     (local / 'x.tar').unlink()
@@ -207,7 +215,7 @@ def build_meta(version, deps, info):
     root.chmod(0o755)   # dpkg-deb refuses mkdtemp's 0700
     try:
         (root / 'DEBIAN').mkdir(mode=0o755)
-        doc = root / 'usr/share/moto'
+        doc = root / 'usr/share/rungic'
         doc.mkdir(parents=True)
         (doc / 'release.json').write_text(json.dumps(info, indent=1, ensure_ascii=False) + '\n')
         depends = ', '.join(f'{n} (= {v})' for n, v in sorted(deps.items()))
@@ -218,7 +226,9 @@ Maintainer: range-dev <noreply@localhost>
 Priority: optional
 Section: metapackages
 Depends: {depends}
-Description: Plasma Mobile on Android: release {version}
+Conflicts: {FORMER_META}
+Replaces: {FORMER_META}
+Description: Rungic: release {version}
  Pins every package of this project's release {version} (git {info["commit"][:12]}).
  See docs/61-delivery-diagnostics-plan.md.
 ''')
@@ -233,16 +243,17 @@ Description: Plasma Mobile on Android: release {version}
 
 
 def index():
-    """Flat repository index: Packages(.gz,.xz) and Release with origin moto / label moto-plasma."""
+    """Flat repository index: Packages(.gz,.xz) and Release with origin and label rungic (the pin of
+    plasma/config/etc/apt/preferences.d/rungic; moto / moto-plasma before the Rungic rename)."""
     packages = subprocess.run(['apt-ftparchive', 'packages', '.'], cwd=POOL, capture_output=True,
                               check=True).stdout
     (POOL / 'Packages').write_bytes(packages)
     (POOL / 'Packages.gz').write_bytes(gzip.compress(packages, mtime=0))
     (POOL / 'Packages.xz').write_bytes(lzma.compress(packages))
-    release = subprocess.run(['apt-ftparchive', '-o', 'APT::FTPArchive::Release::Origin=moto',
-                              '-o', 'APT::FTPArchive::Release::Label=moto-plasma',
-                              '-o', 'APT::FTPArchive::Release::Suite=moto',
-                              '-o', 'APT::FTPArchive::Release::Codename=moto', 'release', '.'],
+    release = subprocess.run(['apt-ftparchive', '-o', 'APT::FTPArchive::Release::Origin=rungic',
+                              '-o', 'APT::FTPArchive::Release::Label=rungic',
+                              '-o', 'APT::FTPArchive::Release::Suite=rungic',
+                              '-o', 'APT::FTPArchive::Release::Codename=rungic', 'release', '.'],
                              cwd=POOL, capture_output=True, check=True).stdout
     (POOL / 'Release').write_bytes(release)
 
@@ -284,7 +295,7 @@ def build(version=None, allow_dirty=False, note=''):
             raise SystemExit(f"coupled packages not installed: {sorted(set(s['coupled']) - set(coupled))}")
         deps.update(coupled)
     version = version or next_version()
-    if (POOL / f'{META}_{version}_all.deb').exists():
+    if (POOL / f'{META}_{version}_all.deb').exists() or (POOL / f'{FORMER_META}_{version}_all.deb').exists():
         raise SystemExit(f'release {version} exists already')
     info = {'version': version, 'commit': commit, 'dirty': dirty, 'built': datetime.datetime.now().isoformat(
         timespec='seconds'), 'note': note, 'packages': deps, 'coupled': sorted(coupled),
@@ -315,8 +326,10 @@ def releases():
 # ---------------------------------------------------------------- device
 
 def device_release():
-    text = run(f"cat /usr/share/moto/release.json 2>/dev/null; dpkg-query -W -f '\\n@@${{Version}}' {META} "
-               '2>/dev/null', 'container', check=False).stdout
+    text = run(f'''cat /usr/share/rungic/release.json 2>/dev/null || cat /usr/share/moto/release.json 2>/dev/null
+for p in {META} {FORMER_META}; do
+  [ "$(dpkg-query -W -f '${{db:Status-Abbrev}}' $p 2>/dev/null)" = "ii " ] && dpkg-query -W -f '\n@@${{Version}}' $p && break
+done''', 'container', check=False).stdout
     body, _, version = text.partition('\n@@')
     try:
         info = json.loads(body) if body.strip() else None
@@ -349,7 +362,7 @@ def installed_versions():
 
 
 def integrity_summary():
-    text = run('for p in /usr/bin/moto-integrity /usr/local/bin/moto-integrity; do [ -x $p ] && exec $p --json; '
+    text = run('for p in /usr/bin/rungic-integrity /usr/bin/moto-integrity; do [ -x $p ] && exec $p --json; '
                'done; echo null', 'container', timeout=300, check=False).stdout
     try:
         report = json.loads(text)
@@ -381,16 +394,16 @@ cd {DEVICE_REPO} && rm -f {' '.join(map(shlex.quote, remove)) or '/dev/null/none
 
 
 def ensure_apt_source():
-    """The source and pin (moto-plasma-config ships the same files once installed)."""
+    """The source and pin (rungic-plasma-config ships the same files once installed)."""
     run(f'''set -e
-cat > /etc/apt/sources.list.d/moto.sources.new <<'EOF'
+cat > /etc/apt/sources.list.d/rungic.sources.new <<'EOF'
 {SOURCES}EOF
-cmp -s /etc/apt/sources.list.d/moto.sources.new /etc/apt/sources.list.d/moto.sources 2>/dev/null \
-  && rm /etc/apt/sources.list.d/moto.sources.new || mv /etc/apt/sources.list.d/moto.sources.new /etc/apt/sources.list.d/moto.sources
-cat > /etc/apt/preferences.d/moto.new <<'EOF'
+cmp -s /etc/apt/sources.list.d/rungic.sources.new /etc/apt/sources.list.d/rungic.sources 2>/dev/null \
+  && rm /etc/apt/sources.list.d/rungic.sources.new || mv /etc/apt/sources.list.d/rungic.sources.new /etc/apt/sources.list.d/rungic.sources
+cat > /etc/apt/preferences.d/rungic.new <<'EOF'
 {PREFERENCES}EOF
-cmp -s /etc/apt/preferences.d/moto.new /etc/apt/preferences.d/moto 2>/dev/null \
-  && rm /etc/apt/preferences.d/moto.new || mv /etc/apt/preferences.d/moto.new /etc/apt/preferences.d/moto
+cmp -s /etc/apt/preferences.d/rungic.new /etc/apt/preferences.d/rungic 2>/dev/null \
+  && rm /etc/apt/preferences.d/rungic.new || mv /etc/apt/preferences.d/rungic.new /etc/apt/preferences.d/rungic
 ''', 'container')
 
 
@@ -401,13 +414,13 @@ def apt_install(info, record):
     dependencies on its own, which a rollback needs."""
     version = info['version']
     pins = ' '.join(shlex.quote(f'{n}={v}') for n, v in sorted(info['packages'].items()))
-    unit = f'moto-deploy-{int(time.time())}'
+    unit = f'rungic-deploy-{int(time.time())}'
     result = run(f'''set -e
 apt-get -q update {APT_OURS} >/dev/null
 systemd-run --unit={unit} --wait --pipe --collect --quiet -p TimeoutStartSec=3600 \\
   --setenv=DEBIAN_FRONTEND=noninteractive \\
   apt-get -q -y --allow-downgrades --allow-change-held-packages --no-install-recommends \\
-  -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install {META}={version} {pins} 2>&1
+  -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install {meta_of(version)}={version} {pins} 2>&1
 ''', 'container', timeout=3900, check=False)
     (record / 'apt.log').write_text(result.stdout + result.stderr)
     return result.returncode == 0, result.stdout[-3000:] + result.stderr[-2000:]
@@ -438,7 +451,7 @@ def sync_android(info, record):
         saved = backup / path.strip('/').replace('/', '__')
         if current:
             pull(path, saved)
-        remote = push(source, 'moto-android-file')
+        remote = push(source, 'rungic-android-file')
         run(f'install -m{item["mode"]} {remote} {shlex.quote(path)}.new && mv {shlex.quote(path)}.new '
             f'{shlex.quote(path)} && rm -f {remote}', 'root')
         changed.append(path)
@@ -460,7 +473,7 @@ def restore_android(record):
     for item in json.loads(listing.read_text()):
         path = shlex.quote(item['path'])
         if item['saved']:
-            remote = push(record / 'android-before' / item['saved'], 'moto-android-file')
+            remote = push(record / 'android-before' / item['saved'], 'rungic-android-file')
             run(f'install -m{item["mode"]} {remote} {path}.new && mv {path}.new {path} && rm -f {remote}', 'root')
         else:
             run(f'rm -f {path}', 'root')
@@ -472,6 +485,19 @@ def needs_restart(before, after, patterns):
     changed = [n for n in set(before) | set(after) if before.get(n) != after.get(n)]
     hit = sorted(n for n in changed if any(fnmatch.fnmatch(n, p) for p in patterns))
     return hit, sorted(changed)
+
+
+def rebrand_down():
+    """Before a release from before the Rungic rename replaces this one (docs/70): the desktop user's
+    settings get the names that release knows. /home is not in the rootfs snapshot, so neither a
+    package rollback nor a snapshot rollback takes it back. The session is stopped first (its
+    programs write their settings on exit) and started by the release's restart. None when this
+    system has no Rungic names."""
+    if run('test -x /usr/libexec/rungic-rebrand-user', 'container', check=False).returncode:
+        return None
+    run('systemctl stop rungic-plasma-session.service', 'container', timeout=180, check=False)
+    result = run('/usr/libexec/rungic-rebrand-user down', 'user', timeout=300, check=False)
+    return {'ok': result.returncode == 0, 'output': (result.stdout + result.stderr).strip()[-600:]}
 
 
 def restart_session():
@@ -587,6 +613,9 @@ def deploy(version=None, restart='auto', acceptance='smoke', record_label=None, 
     passed, error = False, None
     installed_at = time.time()
     try:
+        rebrand = rebrand_down() if meta_of(version) == FORMER_META else None
+        if rebrand:
+            step('rebrand-down', **rebrand)
         # 3 sync and install
         ensure_apt_source()
         step('sync', **sync_repo())
@@ -623,7 +652,7 @@ def deploy(version=None, restart='auto', acceptance='smoke', record_label=None, 
         # The LXC configuration applies only at a container start; other Android-side scripts (the control
         # script, rootfs-image) take effect on their next use and need no restart.
         whole = any(path.endswith('/lxc/plasma/config') for path in android)
-        if restart == 'always' or (restart == 'auto' and (hit or whole)):
+        if restart == 'always' or rebrand or (restart == 'auto' and (hit or whole)):
             # The LXC configuration (mounts, init) applies only when the container starts.
             ok, text = restart_container() if whole else restart_session()
             step('restart', ok=ok, container=whole, output=text[-500:])
@@ -698,8 +727,10 @@ def rollback_snapshot():
     # The Android side of the deploy that took the snapshot goes back with it.
     kept = [e for e in history() if 'snapshot' not in e['result']]
     record = WORKSPACE / kept[-1]['record'] if kept else None
+    rebrand = rebrand_down() if kept and kept[-1].get('previous') and meta_of(kept[-1]['previous']) == FORMER_META \
+        else None
     ok, text = with_container_stopped('rollback', before_start=(lambda: restore_android(record)) if record else None)
-    return {'ok': ok, 'output': text, 'release': device_release()[0]}
+    return {'ok': ok, 'output': text, 'release': device_release()[0], 'rebrand_down': rebrand}
 
 
 def rollback(restart='auto', acceptance='smoke'):
@@ -780,4 +811,4 @@ if __name__ == '__main__':
     try:
         main()
     except DeviceError as error:
-        sys.exit(f'moto_release: {error}')
+        sys.exit(f'rungic_release: {error}')

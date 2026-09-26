@@ -11,7 +11,7 @@ import rungic_device
 
 ADB=rungic_device.adb()
 PLASMA=['python3','tools/rungic_plasma.py']
-DROP='/run/user/1000/systemd/user/plasma-kwin_wayland.service.d/90-moto-zink-audit.conf'
+DROP='/run/user/1000/systemd/user/plasma-kwin_wayland.service.d/90-rungic-zink-audit.conf'
 def user(*args,check=True,combined=False):
     result=subprocess.run(PLASMA+['user-exec',*args],check=check,text=True,capture_output=True)
     return result.stdout+(result.stderr if combined else '')
@@ -56,10 +56,10 @@ def main():
             for i,backend in enumerate(['opengl','vulkan','vulkan','opengl','opengl','vulkan'],1):
                 wake();tag=f'{scene}-{i}-{backend}';print('START quick',tag,flush=True)
                 health(a.out/(tag+'-health.txt'))
-                remote='/home/linux/.cache/moto-bench-'+tag+'.json'
-                result=user('systemd-run','--user','--wait','--pipe','--collect','--unit=moto-quick-bench',
+                remote='/home/linux/.cache/rungic-bench-'+tag+'.json'
+                result=user('systemd-run','--user','--wait','--pipe','--collect','--unit=rungic-quick-bench',
                     'env','QSG_RHI_BACKEND='+backend,'QSG_INFO=1',
-                    '/opt/moto-gpu-bench/quick-render','/opt/moto-gpu-bench/'+scene+'-scene.qml',remote,combined=True)
+                    '/opt/rungic-gpu-bench/quick-render','/opt/rungic-gpu-bench/'+scene+'-scene.qml',remote,combined=True)
                 (a.out/(tag+'.log')).write_text(result)
                 raw=user('cat',remote);data=json.loads(raw)
                 (a.out/(tag+'.json')).write_text(raw)

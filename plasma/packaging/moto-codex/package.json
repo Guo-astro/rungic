@@ -1,9 +1,0 @@
-{
-  "name": "moto-codex",
-  "architecture": "arm64",
-  "build": "host",
-  "paths": ["plasma/codex"],
-  "depends": "",
-  "description": "Codex CLI for the Plasma desktop\nOpenAI's official Codex CLI package (aarch64 musl, version pinned in plasma/codex/codex.json)\nunder /usr/lib/codex, and /usr/bin/codex, which loads the desktop's HTTP proxy for every\nCodex process (docs/59).",
-  "obsolete": ["/usr/local/bin/codex", "/usr/local/lib/codex"]
-}

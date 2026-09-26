@@ -5,7 +5,7 @@ ROOT='/data/adb/moto-lxc/runtime/var/lib/lxc/plasma/rootfs'
 def root(cmd,**kwargs):
  return subprocess.run(ADB+['shell','su -c '+shlex.quote(cmd)],check=True,**kwargs)
 def put(src,dest,mode='644',owner='0:0'):
- tmp='/data/local/tmp/moto-feature-upload'
+ tmp='/data/local/tmp/rungic-feature-upload'
  subprocess.run(ADB+['push',str(src),tmp],check=True,stdout=subprocess.DEVNULL)
  root('mkdir -p '+shlex.quote(str(pathlib.PurePosixPath(dest).parent))+' && cp '+tmp+' '+shlex.quote(dest)+' && chown '+owner+' '+shlex.quote(dest)+' && chmod '+mode+' '+shlex.quote(dest))
 def linux(*args,user=False,**kwargs):

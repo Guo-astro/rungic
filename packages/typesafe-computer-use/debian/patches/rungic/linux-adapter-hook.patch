@@ -32,7 +32,7 @@ index 6bfa8a7..a0d8400 100644
  
  if _absent("Quartz"):
 diff --git a/typesafe_computer_use/platform_adapter.py b/typesafe_computer_use/platform_adapter.py
-index e8e8c7b..a57ecdb 100644
+index e8e8c7b..4a97157 100644
 --- a/typesafe_computer_use/platform_adapter.py
 +++ b/typesafe_computer_use/platform_adapter.py
 @@ -1,7 +1,8 @@
@@ -41,7 +41,7 @@ index e8e8c7b..a57ecdb 100644
  Every other module reaches the platform through `desktop` and never imports macos.py or windows.py
 -itself. Windows gets windows.py. Every other OS gets macos.py, the default: on macOS it is the real
 +itself. Windows gets windows.py. Linux gets linux.py when CLICKER_PLATFORM=linux
-+(the Moto phone's Plasma desktop, set by its moto-clicker launcher). Every other OS gets macos.py, the default: on macOS it is the real
++(Rungic's Plasma desktop on the phone, set by its rungic-clicker launcher). Every other OS gets macos.py, the default: on macOS it is the real
  adapter, and on the Linux test runner tests/conftest.py stands in for the modules it imports, so the
  suite runs there unchanged. Only the Windows path imports a Windows-only package.
  
@@ -58,7 +58,7 @@ index e8e8c7b..a57ecdb 100644
  if sys.platform == "win32":
      from . import windows as _adapter
 +elif sys.platform == "linux" and os.environ.get("CLICKER_PLATFORM") == "linux":
-+    from . import linux as _adapter  # the Moto phone's Plasma desktop, through moto-cua (docs/64)
++    from . import linux as _adapter  # Rungic's Plasma desktop on the phone, through rungic-cua (docs/64)
  else:
      from . import macos as _adapter
  

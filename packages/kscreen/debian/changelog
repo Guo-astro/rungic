@@ -1,3 +1,9 @@
+kscreen (4:6.6.5-0ubuntu0.1+rungic1) resolute; urgency=medium
+
+  * Rungic rename (docs/70): RungicDisplay namespace. No functional change.
+
+ -- range-dev <noreply@localhost>  Sat, 26 Sep 2026 15:00:00 +0000
+
 kscreen (4:6.6.5-0ubuntu0.1+moto3) resolute; urgency=medium
 
   * Built from source with the project's patch queue (docs/71): the display KCM's

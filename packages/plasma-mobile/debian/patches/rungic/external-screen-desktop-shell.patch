@@ -95,13 +95,13 @@ index 73a9586..4c5fc1c 100644
      KScreen::ConfigPtr m_config{nullptr};
      int m_outputs{0};
 diff --git a/shell/contents/applet/CompactApplet.qml b/shell/contents/applet/CompactApplet.qml
-index f57f9e4..3a431cf 100644
+index f57f9e4..b1de294 100644
 --- a/shell/contents/applet/CompactApplet.qml
 +++ b/shell/contents/applet/CompactApplet.qml
 @@ -1,137 +1,41 @@
  /*
 - *  SPDX-FileCopyrightText: 2013 Marco Martin <mart@kde.org>
-+ *  SPDX-FileCopyrightText: 2026 Moto Linux integration
++ *  SPDX-FileCopyrightText: 2026 Rungic
   *
   *  SPDX-License-Identifier: GPL-2.0-or-later
   */

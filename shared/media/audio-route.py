@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 """Route one application's audio through the Linux microphone / speaker (docs/62).
 
-  moto-audio-route --binary wechat --microphone [--speaker]
+  rungic-audio-route --binary wechat --microphone [--speaker]
 
 While this runs, the application's capture streams are moved to
 linux_microphone and (with --speaker) its playback streams to linux_speaker,

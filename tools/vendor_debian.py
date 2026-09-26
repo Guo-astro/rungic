@@ -4,7 +4,7 @@
 
   vendor_debian.py import COMPONENT DSC     debian/ and quilt state (.pc) from an Ubuntu source
                   [--new-upstream V]        package; its distribution patches applied to vendor/
-  vendor_debian.py changelog COMPONENT TEXT a +motoN changelog entry for this project's build
+  vendor_debian.py changelog COMPONENT TEXT a +rungicN changelog entry for this project's build
 
 `import` is the "upstream import" step of the vendor rules: commit its result on its own,
 before the project's changes. The source package's orig tarball must have the same content
@@ -104,8 +104,11 @@ def changelog(component, text, distribution='resolute'):
     current = path.read_text()
     head = re.match(r'(\S+) \(([^)]+)\)', current)
     source, version = head[1], head[2]
-    m = re.search(r'\+moto(\d+)$', version)
-    new = f'{version[:m.start()]}+moto{int(m[1]) + 1}' if m else f'{version}+moto1'
+    # The suffix is +rungicN; a component still at +motoN (named before the Rungic rename, docs/70)
+    # starts again at +rungic1, which dpkg orders after every +motoN.
+    m = re.search(r'\+(rungic|moto)(\d+)$', version)
+    new = (f'{version[:m.start()]}+rungic{int(m[2]) + 1}' if m and m[1] == 'rungic'
+           else f'{version[:m.start()]}+rungic1' if m else f'{version}+rungic1')
     when = datetime.datetime.now(datetime.timezone.utc).strftime('%a, %d %b %Y %H:%M:%S +0000')
     body = '\n'.join(f'  * {line}' if i == 0 else f'    {line}' for i, line in enumerate(text.strip().splitlines()))
     entry = f'{source} ({new}) {distribution}; urgency=medium\n\n{body}\n\n -- range-dev <noreply@localhost>  {when}\n\n'

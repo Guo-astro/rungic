@@ -1,6 +1,6 @@
-# Moto Android / Plasma Mobile
+# Rungic
 
-Motorola moto g100s（XT2537-4 / Adreno710）上的Android与Linux桌面适配项目。当前维护Ubuntu 26.04 ARM64、Plasma Mobile 6.6系列，以及Android宿主、GPU、输入、网络和媒体桥。
+Rungic是运行在Android手机上的AgentOS：Ubuntu容器中的Plasma Mobile桌面，加上Android宿主、硬件桥和语音/桌面自动化代理。开发设备是Motorola moto g100s（XT2537-4 / Adreno710）。2026-09-26起项目改名为Rungic（原名Moto Android / Plasma Mobile），名称迁移见[70篇](docs/70-rungic-rebrand.md)。当前维护Ubuntu 26.04 ARM64、Plasma Mobile 6.6系列，以及Android宿主、GPU、输入、网络和媒体桥。
 
 2026-09-23按用户要求停止维护Phosh。共享媒体/网络/剪贴板实现保留在`shared/`；本次仅整理本地项目，没有卸载或更改手机中的系统。
 
@@ -10,7 +10,8 @@ Motorola moto g100s（XT2537-4 / Adreno710）上的Android与Linux桌面适配�
 |---|---|
 | `plasma/` | KDE与Android APK适配、会话配置、构建脚本 |
 | `native/plasma/` | Rust/Smithay原生Wayland后端 |
-| `vendor/` | KWin、Mesa、Qt及桌面/媒体组件的完整源码，已包含本机适配 |
+| `packages/` | 已迁为补丁队列的上游组件：固定上游来源加DEP-3补丁（[71篇](docs/71-upstream-patch-queue.md)） |
+| `vendor/` | 尚未迁移的上游组件（Mesa、Qt、libcamera等）的完整源码，已包含本机适配 |
 | `shared/` | Linux媒体、网络、剪贴板与GPU公共接口 |
 | `tools/` | 管理、ROM、构建辅助和诊断工具 |
 | `kernel/`、`lxc/`、`docker/`、`cutout/` | 内核、容器与设备相关配置 |
@@ -29,11 +30,11 @@ Motorola moto g100s（XT2537-4 / Adreno710）上的Android与Linux桌面适配�
 - 媒体和显示尚有剩余验收项，以[48篇](docs/48-plasma-media-pipelines.md)、[50篇](docs/50-plasma-display-settings.md)为准，不把安装成功等同于完整验收。
 - 设备管理：`python3 tools/rungic_plasma.py status`。开发环境：`source tools/work-env.sh`。APK构建：`bash plasma/build-apk.sh`，产物写入`.work/`。
 - 图形和后端架构见[40篇](docs/40-plasma-mobile-integration.md)及[共享桥说明](shared/README.md)。全新机器构建仍需准备SDK/NDK及部分依赖。
-- 远程源码核对和多机协作见[53篇](docs/53-remote-system-development.md)。上游组件直接修改[Vendor源码](vendor/README.md)，`python3 tools/stage_vendor.py kwin`可创建独立构建副本；历史patch不再重复应用。
+- 远程源码核对和多机协作见[53篇](docs/53-remote-system-development.md)。已迁移的上游组件在`packages/`中以补丁队列维护（`tools/pq.py`），其余组件直接修改[Vendor源码](vendor/README.md)；历史patch不再重复应用。
 
 Vendor适配应放在哪一层、哪些可以抽离到共享后端，见[54篇架构评审](docs/54-vendor-adaptation-boundaries.md)。
 
-系统交付、验收与诊断见[61篇](docs/61-delivery-diagnostics-plan.md)：容器rootfs上本项目的文件都来自包（`plasma/packaging`、vendor重建包），经本地APT仓库与发布元包部署（`tools/rungic_release.py deploy|rollback|status`），部署后自动验收（`tools/rungic_acceptance.py`），`moto-integrity`检查漂移。rootfs是ext4镜像（`plasma/rootfs-image`），部署前自动建dm-snapshot，验收失败即回到快照；`/home`、崩溃报告与本地仓库不随之回滚。
+系统交付、验收与诊断见[61篇](docs/61-delivery-diagnostics-plan.md)：容器rootfs上本项目的文件都来自包（`plasma/packaging`、补丁队列与vendor重建包），经本地APT仓库与发布元包部署（`tools/rungic_release.py deploy|rollback|status`），部署后自动验收（`tools/rungic_acceptance.py`），`rungic-integrity`检查漂移。rootfs是ext4镜像（`plasma/rootfs-image`），部署前自动建dm-snapshot，验收失败即回到快照；`/home`、崩溃报告与本地仓库不随之回滚。
 
 ## 文档索引
 
@@ -92,7 +93,7 @@ Vendor适配应放在哪一层、哪些可以抽离到共享后端，见[54篇�
 | [57-zero-copy-explicit-sync.md](docs/57-zero-copy-explicit-sync.md) | 零拷贝呈现与显式同步 |
 | [58-miracast-desktop-feasibility.md](docs/58-miracast-desktop-feasibility.md) | Miracast投屏桌面与手机触控板可行性 |
 | [59-voice-agent.md](docs/59-voice-agent.md) | 语音Agent：GPT Realtime驱动Codex |
-| [60-computer-use.md](docs/60-computer-use.md) | 电脑操作：arc-cua + JEV的Linux后端（moto-cua） |
+| [60-computer-use.md](docs/60-computer-use.md) | 电脑操作：arc-cua + JEV的Linux后端（rungic-cua） |
 | [61-delivery-diagnostics-plan.md](docs/61-delivery-diagnostics-plan.md) | 系统交付、验收与诊断：打包、发布、回滚、验收、崩溃链、rootfs快照 |
 | [62-linux-virtual-audio.md](docs/62-linux-virtual-audio.md) | Linux扬声器与Linux麦克风（系统级虚拟音频设备） |
 | [63-call-proxy.md](docs/63-call-proxy.md) | 通话代理：语音助手替用户打电话、接电话 |

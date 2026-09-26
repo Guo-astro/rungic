@@ -1,3 +1,10 @@
+kwin (4:6.6.6-0ubuntu0.1+rungic1) resolute; urgency=medium
+
+  * Rungic rename (docs/70): the Android backend's display client namespace
+    RungicDisplay; patch descriptions. No functional change.
+
+ -- range-dev <noreply@localhost>  Sat, 26 Sep 2026 15:00:00 +0000
+
 kwin (4:6.6.6-0ubuntu0.1+moto22) resolute; urgency=medium
 
   * Every change for the Android host in src/backends/android (docs/72 round 2):

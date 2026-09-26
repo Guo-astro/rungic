@@ -172,10 +172,10 @@ static void connect_host(void) {
 }
 
 static void allocate_buffers(void) {
-    const char *socket = getenv("MOTO_GPU_ALLOCATOR") ? getenv("MOTO_GPU_ALLOCATOR") : "/mnt/android-wayland/moto-gpu-alloc";
+    const char *socket = getenv("RUNGIC_GPU_ALLOCATOR") ? getenv("RUNGIC_GPU_ALLOCATOR") : "/mnt/android-wayland/moto-gpu-alloc";
     for (int i = 0; i < opt.buffers; i++) {
         struct output_buffer *b = &out_buf[i];
-        if (!moto_gpu_allocate(socket, opt.width, opt.height, FOURCC_XB24, &b->lease, &b->fd, &b->stride))
+        if (!rungic_gpu_allocate(socket, opt.width, opt.height, FOURCC_XB24, &b->lease, &b->fd, &b->stride))
             die("host allocator refused an AHardwareBuffer lease");
         struct zwp_linux_buffer_params_v1 *params = zwp_linux_dmabuf_v1_create_params(dmabuf);
         zwp_linux_buffer_params_v1_add(params, b->fd, 0, 0, b->stride, 0, 0);  // DRM_FORMAT_MOD_LINEAR

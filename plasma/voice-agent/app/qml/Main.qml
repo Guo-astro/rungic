@@ -12,7 +12,7 @@ Kirigami.ApplicationWindow {
     title: "语音助手"
     width: Kirigami.Units.gridUnit * 26
     height: Kirigami.Units.gridUnit * 40
-    // Flat: the navigation panel below takes this same colour (MotoVoiceAssistant.colors).
+    // Flat: the navigation panel below takes this same colour (RungicVoiceAssistant.colors).
     color: Style.ground
 
     pageStack.initialPage: ConversationsPage {}

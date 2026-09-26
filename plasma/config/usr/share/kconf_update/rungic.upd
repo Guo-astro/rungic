@@ -1,0 +1,23 @@
+Version=6
+# One-time per-user migrations of this project (docs/61). kded runs them at
+# session start and records them in ~/.config/kconf_updaterc.
+
+# The legacy nested output's inconsistent scale (plasma/migrate-display.py).
+Id=rungic-native-display-v1
+Script=rungic-migrate-display.py,python3
+
+# Quick setting tiles of cast and the assistant's screen, next to their
+# neighbours (formerly done by the cast and agent-screen install scripts).
+Id=rungic-quicksettings-v1
+Script=rungic-quicksettings.sh,sh
+
+# The per-user Firefox launcher override is replaced by rungic-firefox's
+# /usr/bin/firefox wrapper.
+Id=rungic-firefox-launcher-v1
+Script=rungic-firefox-launcher.sh,sh
+
+# Settings naming the programs' old /usr/local paths (kwinrc input method, the
+# per-user portal override). plasma/session runs kconf_update before KWin
+# starts, so KWin already reads the new input method path.
+Id=rungic-usr-paths-v1
+Script=rungic-usr-paths.sh,sh

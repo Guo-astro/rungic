@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// Moto recording backend for Plasma Mobile's existing quick setting.
+// Rungic recording backend for Plasma Mobile's existing quick setting.
 #pragma once
 #include <QObject>
 #include <QProcess>

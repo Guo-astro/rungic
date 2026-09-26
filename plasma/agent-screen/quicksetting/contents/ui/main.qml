@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// The assistant's screen on or off (docs/65): moto-agent-screen turns the host's second output on
+// The assistant's screen on or off (docs/65): rungic-agent-screen turns the host's second output on
 // and opens its floating window; with a TV connected the TV shows it instead.
 
 import QtQuick
@@ -27,7 +27,7 @@ QS.QuickSetting {
     }
 
     function run(command) {
-        executable.connectSource("/usr/bin/moto-agent-screen " + command);
+        executable.connectSource("/usr/bin/rungic-agent-screen " + command);
     }
 
     function toggle() {
@@ -57,11 +57,11 @@ QS.QuickSetting {
             try {
                 result = JSON.parse(data["stdout"]);
             } catch (e) {
-                result = { error: (data["stderr"] || "moto-agent-screen 没有返回结果").trim() };
+                result = { error: (data["stderr"] || "rungic-agent-screen 没有返回结果").trim() };
             }
             if (command === "toggle") root.busy = false;
             if (result.error) {
-                console.warn("moto-agent-screen " + command + ": " + result.error);
+                console.warn("rungic-agent-screen " + command + ": " + result.error);
                 root.error = "操作失败";
                 return;
             }

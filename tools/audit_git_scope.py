@@ -31,7 +31,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, help="Write detailed JSON locally")
     args = parser.parse_args()
-    with tempfile.TemporaryDirectory(prefix="moto-git-scope-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="rungic-git-scope-") as temporary:
         gitdir = Path(temporary) / "metadata.git"
         env = os.environ.copy()
         for key in list(env):

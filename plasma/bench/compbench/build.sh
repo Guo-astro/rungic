@@ -13,7 +13,7 @@ for xml in stable/linux-dmabuf/linux-dmabuf-v1.xml stable/presentation-time/pres
 done
 glslangValidator -V --quiet --vn quad_vert -o "$out/quad.vert.h" "$src/quad.vert"
 glslangValidator -V --quiet --vn quad_frag -o "$out/quad.frag.h" "$src/quad.frag"
-cc -O2 -g -Wall -Wextra -Wno-missing-field-initializers -I"$out" -I"$src" -I"${MOTO_SHARED_GRAPHICS:-$src/../../../shared/graphics}" -o "$out/compbench" \
+cc -O2 -g -Wall -Wextra -Wno-missing-field-initializers -I"$out" -I"$src" -I"${RUNGIC_SHARED_GRAPHICS:-$src/../../../shared/graphics}" -o "$out/compbench" \
     "$src/compbench.c" "$src/gles.c" "$src/vulkan.c" "$out"/*-protocol.c \
     $(pkg-config --cflags --libs wayland-client egl glesv2 gbm vulkan) -lm
 echo "$out/compbench"

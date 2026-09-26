@@ -6,12 +6,12 @@ import subprocess
 import os
 
 root = Path(__file__).resolve().parent.parent
-stage = Path(os.environ.get('MOTO_MESA_STAGE', root / '.work/stage/mesa'))
-output = Path(os.environ.get('MOTO_MESA_PACKAGES', root / '.work/packages/mesa'))
-version = os.environ.get('MOTO_MESA_VERSION', '26.3.0~devel20260824+moto1')
+stage = Path(os.environ.get('RUNGIC_MESA_STAGE', root / '.work/stage/mesa'))
+output = Path(os.environ.get('RUNGIC_MESA_PACKAGES', root / '.work/packages/mesa'))
+version = os.environ.get('RUNGIC_MESA_VERSION', '26.3.0~devel20260824+moto1')
 # The Mesa source the stage was built from (its docs/license.rst) and its commit, for the package docs.
-source = Path(os.environ.get('MOTO_MESA_SOURCE', root / 'vendor/mesa'))
-commit = os.environ.get('MOTO_MESA_COMMIT', 'unknown')
+source = Path(os.environ.get('RUNGIC_MESA_SOURCE', root / 'vendor/mesa'))
+commit = os.environ.get('RUNGIC_MESA_COMMIT', 'unknown')
 packages = ('mesa-libgallium', 'libegl-mesa0', 'libglx-mesa0', 'libgbm1',
             'libgbm-dev', 'libgl1-mesa-dri', 'mesa-vulkan-drivers')
 external = ('libc6 (>= 2.43), libdrm2 (>= 2.4.125), libexpat1, libelf1t64, '
@@ -115,7 +115,7 @@ for name in packages:
     doc = output / name / 'usr/share/doc' / name
     doc.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source / 'docs/license.rst', doc / 'copyright')
-    (doc / 'moto-build.txt').write_text(
+    (doc / 'rungic-build.txt').write_text(
         f'Built from vendor/mesa of range-dev {commit} (KGSL branch 98f3d6229d61, vendor/manifest.json),\n'
         'natively for Ubuntu glibc. GLVND dispatchers remain distribution packages.\n')
     subprocess.run(['dpkg-deb', '--build', '--root-owner-group', str(output / name),

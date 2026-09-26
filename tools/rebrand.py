@@ -10,7 +10,10 @@ protected and move in phase C with the APK. Hardware names (Motorola, moto g100s
   rebrand.py apply [--paths]      rewrite contents; --paths also git-mv renamed paths
   rebrand.py residue              occurrences left (protected ones excluded)
 
-The rewritten tree is reviewed by hand before it is committed: the rules are mechanical.
+The rewritten tree is reviewed by hand before it is committed: the rules are mechanical. `apply`
+ran once for phase B (2026-09-26); the review then restored names the rules cannot tell apart
+(state written before the rename that migrations read, Motorola's and the APK's log tags), so
+`list` shows those files again and `apply` must not run again over them.
 """
 import argparse
 import re
@@ -29,6 +32,11 @@ SKIP = [
     r'^plasma/native-apk/', r'^native/', r'^shared/android/', r'^docker/', r'^lxc/', r'^cutout/', r'^kernel/', r'^plasma/build-apk\.sh$', r'^plasma/build-native-core\.sh$',
     r'^tools/moto-magisk-bootstrap\.', r'^tools/moto_.*enter', r'enter\.c$',
     r'^plasma/rootfs-image$', r'^plasma/rootfs-mount-hook$', r'^plasma/rootfs\.sepolicy\.rule$',
+    r'^plasma/build-launcher\.sh$',        # builds the Android-side enter program
+    r'^plasma/android-audio(\.pa)?$',     # Termux PulseAudio on Android; the enter program binds its directory
+    # ROM and product-partition tools: host directories that exist, the delta file format's magic
+    r'^tools/(assemble_clean_rom|build_offline_magisk|build_product_delta|product_delta|test_product_delta|'
+    r'restore_gki_module_certificate|verify_clean_rom|verify_offline_device|verify_offline_product)\.py$',
     r'\.(png|jpg|jpeg|webp|ico|jar|apk|so|a|p12|keystore|ttf|otf|gz|xz|zst|deb|bin|img|pcm|wav|ogg|mp4)$',
 ]
 

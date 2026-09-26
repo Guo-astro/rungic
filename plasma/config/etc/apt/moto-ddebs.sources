@@ -1,8 +1,0 @@
-# Ubuntu debug symbols, used only by moto-crash-symbols (docs/61) through
-# -o Dir::Etc::SourceList, so the daily apt update does not fetch these
-# indexes. Not in sources.list.d on purpose.
-Types: deb
-URIs: http://ddebs.ubuntu.com/
-Suites: resolute resolute-updates
-Components: main restricted universe multiverse
-Signed-By: /usr/share/keyrings/ubuntu-dbgsym-keyring.gpg

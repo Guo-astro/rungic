@@ -57,7 +57,7 @@ while True:
             info = config['display']
             if info.getint('version') != 1:
                 raise ValueError('Unsupported display protocol')
-            screens = json.loads(subprocess.check_output(['moto-plasma-screen-metrics'], timeout=10))
+            screens = json.loads(subprocess.check_output(['rungic-plasma-screen-metrics'], timeout=10))
             outputs = json.loads(subprocess.check_output(['kscreen-doctor', '-j'], timeout=10))['outputs']
             screen = screens[0]
             output = next(o for o in outputs if o['name'] == screen['name'])

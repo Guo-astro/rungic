@@ -1,0 +1,12 @@
+[Unit]
+Description=Android window brightness for Plasma Mobile
+Before=plasma-plasmashell.service
+PartOf=graphical-session.target
+
+[Service]
+ExecStart=/usr/libexec/rungic-plasma-brightness
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=plasma-workspace.target

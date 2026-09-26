@@ -1,0 +1,10 @@
+#!/bin/sh
+# Desktop computer use (JEV + AT-SPI) for Codex and the command line (docs/60).
+# Codex starts MCP servers with a reduced environment: restore the session bus,
+# Wayland and the HTTP proxy the JEV API needs.
+[ -r /etc/profile.d/proxy.sh ] && . /etc/profile.d/proxy.sh
+: "${XDG_RUNTIME_DIR:=/run/user/$(id -u)}"
+: "${DBUS_SESSION_BUS_ADDRESS:=unix:path=$XDG_RUNTIME_DIR/bus}"
+: "${WAYLAND_DISPLAY:=wayland-0}"
+export XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS WAYLAND_DISPLAY
+PYTHONPATH=/usr/lib/rungic-cua${PYTHONPATH:+:$PYTHONPATH} exec python3 -m rungic_cua "$@"

@@ -94,7 +94,7 @@ index 1a27996..dc05537 100644
 +    return m_windowColorsRevision;
 +}
 diff --git a/components/mobileshellstate/shelldbusobject.h b/components/mobileshellstate/shelldbusobject.h
-index b39f1cb..93eff7e 100644
+index b39f1cb..6644f14 100644
 --- a/components/mobileshellstate/shelldbusobject.h
 +++ b/components/mobileshellstate/shelldbusobject.h
 @@ -3,6 +3,7 @@
@@ -118,7 +118,7 @@ index b39f1cb..93eff7e 100644
  
      StartupFeedbackModel *startupFeedbackModel();
  
-+    // Moto: the colours of the app shown on a screen, so its panels match it (docs/59).
++    // Rungic: the colours of the app shown on a screen, so its panels match it (docs/59).
 +    // `colorSet` is a colour scheme group ("Window", "Header"); an empty string when the
 +    // app gave no colour scheme of its own (the panels keep the theme's).
 +    Q_INVOKABLE QString windowBackground(const QString &screen, const QString &colorSet) const;
@@ -133,7 +133,7 @@ index b39f1cb..93eff7e 100644
      Q_SCRIPTABLE void showVolumeOSD();
      Q_SCRIPTABLE void openLockScreenKeypad();
  
-+    // Moto: the colour scheme of the window just activated on `screen`, as KWin has it
++    // Rungic: the colour scheme of the window just activated on `screen`, as KWin has it
 +    // (Window::colorScheme: the path an app gave through the KDE palette protocol, or
 +    // "kdeglobals"). Sent by the convergentwindows KWin script.
 +    Q_SCRIPTABLE void setActiveWindowColorScheme(const QString &screen, const QString &colorScheme);
@@ -151,7 +151,7 @@ index b39f1cb..93eff7e 100644
      StartupFeedbackModel *m_startupFeedbackModel{nullptr};
  };
 diff --git a/containments/panel/qml/StatusBarWrapper.qml b/containments/panel/qml/StatusBarWrapper.qml
-index 4488f55..6b01ba3 100644
+index 4488f55..31af742 100644
 --- a/containments/panel/qml/StatusBarWrapper.qml
 +++ b/containments/panel/qml/StatusBarWrapper.qml
 @@ -3,6 +3,7 @@
@@ -167,7 +167,7 @@ index 4488f55..6b01ba3 100644
      signal updatePanelPropertiesRequested()
  
 -    Kirigami.Theme.colorSet: forcedComplementary ? Kirigami.Theme.Complementary : Kirigami.Theme.Header
-+    // Moto (docs/59): an app that gave its own colour scheme gets the status bar in its
++    // Rungic (docs/59): an app that gave its own colour scheme gets the status bar in its
 +    // colours, as one surface with it, and content that reads on them.
 +    readonly property string appBackground: {
 +        MobileShellState.ShellDBusObject.windowColorsRevision;
@@ -190,7 +190,7 @@ index 4488f55..6b01ba3 100644
          transform: [
              Translate {
 diff --git a/containments/taskpanel/qml/NavigationPanelComponent.qml b/containments/taskpanel/qml/NavigationPanelComponent.qml
-index cf7ecb6..67841c3 100644
+index 23839f1..107ec65 100644
 --- a/containments/taskpanel/qml/NavigationPanelComponent.qml
 +++ b/containments/taskpanel/qml/NavigationPanelComponent.qml
 @@ -31,8 +31,16 @@ MobileShell.NavigationPanel {
@@ -199,7 +199,7 @@ index cf7ecb6..67841c3 100644
      // - transparent if on the homescreen
 -    backgroundColor: opaqueBar ? Kirigami.Theme.backgroundColor : "transparent"
 -    foregroundColorGroup: forcedComplementary ? Kirigami.Theme.Complementary : Kirigami.Theme.Window
-+    // Moto (docs/59): an app that gave its own colour scheme gets the bar in its colours.
++    // Rungic (docs/59): an app that gave its own colour scheme gets the bar in its colours.
 +    readonly property string appBackground: {
 +        MobileShellState.ShellDBusObject.windowColorsRevision;
 +        return MobileShellState.ShellDBusObject.windowBackground(Screen.name, "Window");
@@ -214,12 +214,12 @@ index cf7ecb6..67841c3 100644
      MobileShellState.PanelSettingsDBusClient {
 diff --git a/kwin/scripts/convergentwindows/contents/ui/WindowColors.qml b/kwin/scripts/convergentwindows/contents/ui/WindowColors.qml
 new file mode 100644
-index 0000000..15564e2
+index 0000000..e1fbb46
 --- /dev/null
 +++ b/kwin/scripts/convergentwindows/contents/ui/WindowColors.qml
 @@ -0,0 +1,45 @@
 +// SPDX-License-Identifier: LGPL-2.1-or-later
-+// Moto (docs/59): tells the mobile shell the colour scheme of the app window made active on
++// Rungic (docs/59): tells the mobile shell the colour scheme of the app window made active on
 +// each screen, so the status bar and navigation panel take that app's colours. The scheme
 +// is what the app gave through the KDE palette protocol (KWin's Window::colorScheme: a
 +// .colors path, or "kdeglobals" for none); apps without one keep the theme's panels.
@@ -264,14 +264,14 @@ index 0000000..15564e2
 +    }
 +}
 diff --git a/kwin/scripts/convergentwindows/contents/ui/main.qml b/kwin/scripts/convergentwindows/contents/ui/main.qml
-index c3f5a31..f705c5e 100644
+index d4da777..963b6ac 100644
 --- a/kwin/scripts/convergentwindows/contents/ui/main.qml
 +++ b/kwin/scripts/convergentwindows/contents/ui/main.qml
 @@ -11,6 +11,9 @@ Loader {
  
      property var currentWindow: KWinComponents.Workspace.activeWindow
  
-+    // Moto (docs/59): the active app's colour scheme to the panels.
++    // Rungic (docs/59): the active app's colour scheme to the panels.
 +    property Item windowColors: WindowColors {}
 +
      // Windows this script maximized for the phone; they get a desktop-sized

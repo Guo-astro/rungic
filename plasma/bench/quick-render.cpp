@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
     QSurfaceFormat::setDefaultFormat(format);
     QGuiApplication app(argc,argv);
     if (argc != 3) return 2;
-    QQuickView view; view.setTitle("Moto GPU benchmark");
+    QQuickView view; view.setTitle("Rungic GPU benchmark");
     view.setResizeMode(QQuickView::SizeRootObjectToView);
     view.setSource(QUrl::fromLocalFile(argv[1]));
     if (view.status() == QQuickView::Error) return 3;

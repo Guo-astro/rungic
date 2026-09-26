@@ -1,17 +1,17 @@
 # SPDX-License-Identifier: CC0-1.0
 # Names are existing Android-backed PipeWire nodes, not new hardware paths.
-moto-pipewire-back:
+rungic-pipewire-back:
   model: Android 后置相机
   location: CameraLocationBack
-  pipewire_node: moto.camera.0
+  pipewire_node: rungic.camera.0
   supported_formats:
     - width: 720
       height: 1280
       frame_rates: [30]
-moto-pipewire-front:
+rungic-pipewire-front:
   model: Android 前置相机
   location: CameraLocationFront
-  pipewire_node: moto.camera.1
+  pipewire_node: rungic.camera.1
   supported_formats:
     - width: 720
       height: 1280

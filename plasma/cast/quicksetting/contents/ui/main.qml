@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// Cast to a TV from Plasma (docs/58): moto-cast connects Android's Wi-Fi Display;
+// Cast to a TV from Plasma (docs/58): rungic-cast connects Android's Wi-Fi Display;
 // the TV then appears as the session's second screen (CAST-1).
 
 import QtQuick
@@ -10,12 +10,12 @@ import org.kde.plasma.private.mobileshell.quicksettingsplugin as QS
 QS.QuickSetting {
     id: root
 
-    // A TV connected (moto-cast's status). Not "a second screen": the assistant's screen (docs/65)
+    // A TV connected (rungic-cast's status). Not "a second screen": the assistant's screen (docs/65)
     // is one too, with or without a TV.
     property bool casting: false
     readonly property int screens: Qt.application.screens.length
-    property string busy: ""          // "connect" or "disconnect" while moto-cast runs
-    property bool reconnecting: false // the TV dropped the session; moto-cast-watch is reconnecting
+    property string busy: ""          // "connect" or "disconnect" while rungic-cast runs
+    property bool reconnecting: false // the TV dropped the session; rungic-cast-watch is reconnecting
     property string tvName: ""
     property string error: ""
 
@@ -34,7 +34,7 @@ QS.QuickSetting {
     }
 
     function run(command) {
-        executable.connectSource("/usr/bin/moto-cast " + command);
+        executable.connectSource("/usr/bin/rungic-cast " + command);
     }
 
     function toggle() {
@@ -80,11 +80,11 @@ QS.QuickSetting {
             try {
                 result = JSON.parse(data["stdout"]);
             } catch (e) {
-                result = { error: (data["stderr"] || "moto-cast 没有返回结果").trim() };
+                result = { error: (data["stderr"] || "rungic-cast 没有返回结果").trim() };
             }
             if (command === root.busy) root.busy = "";
             if (result.error) {
-                console.warn("moto-cast " + command + ": " + result.error);
+                console.warn("rungic-cast " + command + ": " + result.error);
                 root.error = command === "connect" ? "没有连上电视" : "操作失败";
             } else {
                 root.apply(result);

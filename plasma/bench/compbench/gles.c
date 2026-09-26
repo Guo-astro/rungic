@@ -62,7 +62,7 @@ static GLuint shader(GLenum type, const char *src) {
 }
 
 static void init(void) {
-    int fd = open(getenv("MOTO_KWIN_RENDER_DEVICE") ? getenv("MOTO_KWIN_RENDER_DEVICE") : "/dev/kgsl-3d0", O_RDWR | O_CLOEXEC);
+    int fd = open(getenv("RUNGIC_KWIN_RENDER_DEVICE") ? getenv("RUNGIC_KWIN_RENDER_DEVICE") : "/dev/kgsl-3d0", O_RDWR | O_CLOEXEC);
     if (fd < 0) die("cannot open the render device");
     struct gbm_device *gbm = gbm_create_device(fd);
     if (!gbm) die("gbm_create_device failed");

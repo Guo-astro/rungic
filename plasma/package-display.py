@@ -7,7 +7,7 @@ import re
 import shutil
 import subprocess
 
-DEST = Path('/root/moto-display-packages')
+DEST = Path('/root/rungic-display-packages')
 DEST.mkdir(exist_ok=True)
 
 def repack(original, replacements, version):

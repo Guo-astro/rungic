@@ -34,7 +34,7 @@ from gi.repository import Adw, Gtk, GLib
 
 class DeviceApp(Adw.Application):
     def __init__(self):
-        super().__init__(application_id='dev.moto.Platform')
+        super().__init__(application_id='com.rungic.Platform')
         self.connect('activate', self.activate)
         self.pool = ThreadPoolExecutor(max_workers=1)
         self.rows = {}

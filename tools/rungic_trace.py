@@ -36,7 +36,7 @@ FTRACE_EVENTS = {
 ATRACE = {'frame': ['gfx', 'view', 'input', 'sched', 'freq'], 'light': ['gfx']}
 # Perfetto on this user build only accepts its allowlisted ftrace events, so the
 # KGSL events go to a separate tracefs instance on the same boot clock.
-GPU_INSTANCE = '/sys/kernel/tracing/instances/moto_gpu'
+GPU_INSTANCE = '/sys/kernel/tracing/instances/rungic_gpu'
 GPU_EVENTS = ['adreno_cmdbatch_queued', 'adreno_cmdbatch_submitted', 'adreno_cmdbatch_retired',
               'adreno_drawctxt_switch', 'kgsl_context_create', 'kgsl_pwrlevel']
 
@@ -105,7 +105,7 @@ qdbus6 org.kde.KWin /FTrace org.kde.kwin.FTrace.setEnabled {'true' if enable els
 def capture(duration_s=10, label='trace', preset='frame', during=None):
     """Record a trace; `during` (callable) runs on the host while recording. Returns the local path."""
     stamp = time.strftime('%Y%m%d-%H%M%S')
-    name = f'moto-{stamp}-{label}.pftrace'
+    name = f'rungic-{stamp}-{label}.pftrace'
     local = DIAG_DIR / name
     local.parent.mkdir(parents=True, exist_ok=True)
     # Enable KWin's markers only once perfetto is recording: with tracing off the

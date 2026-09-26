@@ -4,7 +4,7 @@
 // the pairs were computed for both looks, docs/59).
 pragma Singleton
 import QtQuick
-import dev.moto.voiceassistant
+import com.rungic.voiceassistant
 
 QtObject {
     readonly property bool dark: SystemTheme.dark

@@ -3,7 +3,7 @@
 """Build a vendored Debian package natively in the phone's Ubuntu ARM64 container.
 
 The staged tree (tools/stage_vendor.py) is copied into a persistent
-/root/moto-build/<component>/src with `rsync --checksum`, so unchanged files
+/root/rungic-build/<component>/src with `rsync --checksum`, so unchanged files
 keep their timestamps and the kept obj-aarch64-linux-gnu tree rebuilds only
 what changed.
 
@@ -19,8 +19,8 @@ what changed.
   divert       install built files over distribution ones with dpkg-divert
                (--file BUILT=INSTALLED, repeatable); the original stays as .distrib
 
-Builds run as the transient system unit moto-build-<component>, so they
-survive adb disconnects; the log is /root/moto-build/<component>/build.log.
+Builds run as the transient system unit rungic-build-<component>, so they
+survive adb disconnects; the log is /root/rungic-build/<component>/build.log.
 """
 import argparse
 import subprocess
@@ -30,7 +30,7 @@ import time
 import rungic_device
 from rungic_device import WORKSPACE, out, run
 
-BASE = '/root/moto-build'
+BASE = '/root/rungic-build'
 # Line tables only (-g1): enough for symbolized backtraces (docs/61) at a fraction of -g2's
 # compile memory; debhelper strips the packages and puts the symbols into -dbgsym packages
 # for the release repository.
@@ -97,19 +97,19 @@ def start(component, mode, jobs, targets=(), lto=True, cmake_args=()):
                  f"cd {work}/src && test -d {obj} && make -C {obj} -j{jobs} && debian/rules binary")
     run(f'''set -e
 # RemainAfterExit keeps the last build's result and MemoryPeak readable until the next one.
-systemctl stop moto-build-{component} 2>/dev/null || true
-systemctl reset-failed moto-build-{component} 2>/dev/null || true
-systemd-run --unit=moto-build-{component} --nice=10 --property=IOSchedulingClass=idle --property=MemoryAccounting=yes \\
+systemctl stop rungic-build-{component} 2>/dev/null || true
+systemctl reset-failed rungic-build-{component} 2>/dev/null || true
+systemd-run --unit=rungic-build-{component} --nice=10 --property=IOSchedulingClass=idle --property=MemoryAccounting=yes \\
   --property=RemainAfterExit=yes \\
   --setenv=HOME=/root --property=StandardOutput=truncate:{work}/build.log --property=StandardError=inherit \\
   /bin/sh -c "{steps}"
 ''', 'container')
-    print(f'started moto-build-{component} ({mode}); follow with: build_on_device.py {component} status')
+    print(f'started rungic-build-{component} ({mode}); follow with: build_on_device.py {component} status')
 
 
 def status(component):
     return out(f'''systemctl show -p ActiveState -p SubState -p Result -p ExecMainStartTimestamp -p ExecMainExitTimestamp \
-  -p ExecMainStatus -p MemoryPeak -p CPUUsageNSec moto-build-{component}
+  -p ExecMainStatus -p MemoryPeak -p CPUUsageNSec rungic-build-{component}
 grep -E '^\\[ *[0-9]+%\\]|^\\[[0-9]+/[0-9]+\\]|error|Error|warning: unused|dpkg-deb: building' {BASE}/{component}/build.log 2>/dev/null | tail -n 8 | cut -c1-200
 ls -1t {BASE}/{component}/*.deb 2>/dev/null | head -12''', 'container')
 

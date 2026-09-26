@@ -1,5 +1,5 @@
-#ifndef MOTO_GPU_ALLOCATOR_CLIENT_H
-#define MOTO_GPU_ALLOCATOR_CLIENT_H
+#ifndef RUNGIC_GPU_ALLOCATOR_CLIENT_H
+#define RUNGIC_GPU_ALLOCATOR_CLIENT_H
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/time.h>
@@ -7,7 +7,7 @@
 /* Protocol v1: little-endian magic, width, height, fourcc. Reply: magic,
  * byte stride, fourcc plus one SCM_RIGHTS fd. Keeping the socket open leases
  * the AHardwareBuffer. Its contents remain on the GPU display path. */
-static bool moto_gpu_allocate(const char *path, int width, int height,
+static bool rungic_gpu_allocate(const char *path, int width, int height,
         uint32_t format, int *lease, int *buffer_fd, uint32_t *stride) {
     union { struct sockaddr generic; struct sockaddr_un local; } address = { .local.sun_family=AF_UNIX };
     if (strlen(path) >= sizeof(address.local.sun_path)) return false;

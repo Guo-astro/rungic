@@ -17,11 +17,11 @@
 #include "overlay.h"
 #include "systemtheme.h"
 
-// One app: a second start hands its conversation to the first (dev.moto.VoiceAssistantApp).
+// One app: a second start hands its conversation to the first (com.rungic.VoiceAssistantApp).
 class AppInstance : public QObject
 {
     Q_OBJECT
-    Q_CLASSINFO("D-Bus Interface", "dev.moto.VoiceAssistantApp")
+    Q_CLASSINFO("D-Bus Interface", "com.rungic.VoiceAssistantApp")
 public:
     explicit AppInstance(QQmlApplicationEngine *engine)
         : QObject(engine)
@@ -52,9 +52,9 @@ private:
 int main(int argc, char *argv[])
 {
     QGuiApplication app(argc, argv);
-    QGuiApplication::setApplicationName(QStringLiteral("moto-voice-assistant"));
+    QGuiApplication::setApplicationName(QStringLiteral("rungic-voice-assistant"));
     QGuiApplication::setApplicationDisplayName(QStringLiteral("语音助手"));
-    QGuiApplication::setDesktopFileName(QStringLiteral("dev.moto.VoiceAssistant"));
+    QGuiApplication::setDesktopFileName(QStringLiteral("com.rungic.VoiceAssistant"));
     QGuiApplication::setWindowIcon(QIcon::fromTheme(QStringLiteral("audio-input-microphone")));
     if (qEnvironmentVariableIsEmpty("QT_QUICK_CONTROLS_STYLE")) {
         QQuickStyle::setStyle(QStringLiteral("org.kde.desktop"));
@@ -70,21 +70,21 @@ int main(int argc, char *argv[])
                      Qt::QueuedConnection);
     if (overlay) {
         Overlay *object = Overlay::instance();
-        engine.loadFromModule("dev.moto.voiceassistant", "AssistantOverlay");
+        engine.loadFromModule("com.rungic.voiceassistant", "AssistantOverlay");
         if (engine.rootObjects().isEmpty()) {
             return 1;
         }
         object->setWindow(qobject_cast<QQuickWindow *>(engine.rootObjects().constFirst()));
-        if (!bus.registerService(QStringLiteral("dev.moto.VoiceAssistant"))
+        if (!bus.registerService(QStringLiteral("com.rungic.VoiceAssistant"))
             || !bus.registerObject(QStringLiteral("/Assistant"), object, QDBusConnection::ExportScriptableSlots)) {
-            qWarning("dev.moto.VoiceAssistant: already running or no session bus");
+            qWarning("com.rungic.VoiceAssistant: already running or no session bus");
             return 1;
         }
         return app.exec();
     }
-    if (!bus.registerService(QStringLiteral("dev.moto.VoiceAssistantApp"))) {
-        QDBusMessage open = QDBusMessage::createMethodCall(QStringLiteral("dev.moto.VoiceAssistantApp"), QStringLiteral("/App"),
-                                                           QStringLiteral("dev.moto.VoiceAssistantApp"), QStringLiteral("Open"));
+    if (!bus.registerService(QStringLiteral("com.rungic.VoiceAssistantApp"))) {
+        QDBusMessage open = QDBusMessage::createMethodCall(QStringLiteral("com.rungic.VoiceAssistantApp"), QStringLiteral("/App"),
+                                                           QStringLiteral("com.rungic.VoiceAssistantApp"), QStringLiteral("Open"));
         open.setArguments({conversation});
         bus.call(open);
         return 0;
@@ -94,9 +94,9 @@ int main(int argc, char *argv[])
     // and Kirigami reads it, so the shell's status bar and navigation panel take the same
     // colours. Applied again when the system switches.
     const auto applyScheme = [&app] {
-        const QString name = SystemTheme::instance()->dark() ? QStringLiteral("MotoVoiceAssistant.colors")
-                                                             : QStringLiteral("MotoVoiceAssistantLight.colors");
-        const QString scheme = QStandardPaths::locate(QStandardPaths::GenericDataLocation, QStringLiteral("moto-voice-assistant/") + name);
+        const QString name = SystemTheme::instance()->dark() ? QStringLiteral("RungicVoiceAssistant.colors")
+                                                             : QStringLiteral("RungicVoiceAssistantLight.colors");
+        const QString scheme = QStandardPaths::locate(QStandardPaths::GenericDataLocation, QStringLiteral("rungic-voice-assistant/") + name);
         if (!scheme.isEmpty()) {
             app.setProperty("KDE_COLOR_SCHEME_PATH", scheme);
             QGuiApplication::setPalette(KColorScheme::createApplicationPalette(KSharedConfig::openConfig(scheme)));
@@ -105,7 +105,7 @@ int main(int argc, char *argv[])
     applyScheme();
     QObject::connect(SystemTheme::instance(), &SystemTheme::darkChanged, &app, applyScheme);
     engine.setInitialProperties({{QStringLiteral("initialConversation"), conversation}});
-    engine.loadFromModule("dev.moto.voiceassistant", "Main");
+    engine.loadFromModule("com.rungic.voiceassistant", "Main");
     bus.registerObject(QStringLiteral("/App"), new AppInstance(&engine), QDBusConnection::ExportScriptableSlots);
     return app.exec();
 }

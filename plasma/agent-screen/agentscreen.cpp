@@ -160,7 +160,7 @@ void AgentScreen::poll()
     m_enabled = state.value(QStringLiteral("enabled")).toBool();
     m_onTv = state.value(QStringLiteral("tv")).toBool();
     m_fullscreen = state.value(QStringLiteral("fullscreen")).toBool();
-    if (!m_enabled) {  // turned off elsewhere (quick setting, moto-agent-screen off)
+    if (!m_enabled) {  // turned off elsewhere (quick setting, rungic-agent-screen off)
         QCoreApplication::quit();
         return;
     }

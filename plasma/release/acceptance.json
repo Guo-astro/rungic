@@ -14,11 +14,11 @@
       "check": "user_units",
       "params": {
         "critical": [
-          "moto-plasma-*",
+          "rungic-plasma-*",
           "plasma-plasmashell.service",
           "plasma-kwin_wayland.service",
-          "moto-voice-agent.service",
-          "moto-voice-overlay.service",
+          "rungic-voice-agent.service",
+          "rungic-voice-overlay.service",
           "pulseaudio.service",
           "pipewire.service",
           "wireplumber.service"
@@ -54,7 +54,7 @@
       "level": "smoke",
       "check": "camera_frames",
       "params": {
-        "node": "moto.camera.0",
+        "node": "rungic.camera.0",
         "frames": 20
       },
       "title": "PipeWire camera delivers varied frames with increasing timestamps and goes idle after"
@@ -63,7 +63,7 @@
       "id": "idle.inhibit",
       "level": "smoke",
       "check": "idle_inhibit",
-      "title": "A Wayland client inhibiting idle keeps the phone screen on while it does (moto-idle-probe through KWin to the host)"
+      "title": "A Wayland client inhibiting idle keeps the phone screen on while it does (rungic-idle-probe through KWin to the host)"
     },
     {
       "id": "audio.playback",
@@ -111,7 +111,7 @@
       "level": "full",
       "check": "camera_frames",
       "params": {
-        "node": "moto.camera.1",
+        "node": "rungic.camera.1",
         "frames": 20
       },
       "title": "Second camera node delivers frames"

@@ -21,7 +21,7 @@ X-Rungic-Docs: docs/50
  4 files changed, 144 insertions(+), 2 deletions(-)
 
 diff --git a/kcm/kcm.cpp b/kcm/kcm.cpp
-index 4eee9b0..2e58a77 100644
+index 4eee9b0..b49a605 100644
 --- a/kcm/kcm.cpp
 +++ b/kcm/kcm.cpp
 @@ -4,6 +4,7 @@
@@ -88,7 +88,7 @@ index 4eee9b0..2e58a77 100644
 +
 +void KCMKScreen::readAndroidDisplay()
 +{
-+    const auto value = MotoDisplay::info().toVariantMap();
++    const auto value = RungicDisplay::info().toVariantMap();
 +    if (value.isEmpty()) return;
 +    if (!needsSave() && !m_stopUpdatesFromBackend) {
 +        const int oldPolicy = m_androidPolicy;
@@ -145,7 +145,7 @@ index 4eee9b0..2e58a77 100644
      }
  
 +    if (androidDisplay()) {
-+        const auto result = MotoDisplay::request(QJsonObject{{"refreshPolicy", m_androidPolicy}});
++        const auto result = RungicDisplay::request(QJsonObject{{"refreshPolicy", m_androidPolicy}});
 +        if (result.contains(QStringLiteral("error"))) {
 +            Q_EMIT errorOnSave(result.value(QStringLiteral("error")).toString());
 +            return;
@@ -162,7 +162,7 @@ index 4eee9b0..2e58a77 100644
  
      KQuickManagedConfigModule::load();
 +    if (androidDisplay()) {
-+        m_androidInfo = MotoDisplay::info().toVariantMap();
++        m_androidInfo = RungicDisplay::info().toVariantMap();
 +        m_androidPolicy = m_androidInfo.value(QStringLiteral("refreshPolicy")).toInt();
 +        m_androidSavedPolicy = m_androidPolicy;
 +        Q_EMIT androidRefreshPolicyChanged();

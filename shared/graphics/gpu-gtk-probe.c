@@ -29,4 +29,4 @@ static void activate(GtkApplication *app,gpointer data) {
     GtkWidget *area=gtk_gl_area_new();gtk_gl_area_set_use_es(GTK_GL_AREA(area),TRUE);gtk_gl_area_set_required_version(GTK_GL_AREA(area),3,2);gtk_widget_set_vexpand(area,TRUE);gtk_box_append(GTK_BOX(box),area);g_signal_connect(area,"render",G_CALLBACK(render),NULL);
     gtk_window_present(GTK_WINDOW(window));g_timeout_add_seconds(15,quit,app);
 }
-int main(int argc,char **argv){GtkApplication *app=gtk_application_new("dev.moto.GpuCheck",G_APPLICATION_NON_UNIQUE);g_signal_connect(app,"activate",G_CALLBACK(activate),NULL);int status=g_application_run(G_APPLICATION(app),argc,argv);g_object_unref(app);return status;}
+int main(int argc,char **argv){GtkApplication *app=gtk_application_new("com.rungic.GpuCheck",G_APPLICATION_NON_UNIQUE);g_signal_connect(app,"activate",G_CALLBACK(activate),NULL);int status=g_application_run(G_APPLICATION(app),argc,argv);g_object_unref(app);return status;}

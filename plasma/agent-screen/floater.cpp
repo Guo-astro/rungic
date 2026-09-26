@@ -37,7 +37,7 @@ void Floater::attach(QQuickWindow *window)
 {
     m_window = window;
     auto layer = LayerShellQt::Window::get(window);
-    layer->setScope(QStringLiteral("moto-agent-screen"));
+    layer->setScope(QStringLiteral("rungic-agent-screen"));
     // Top: above apps and panels, below the shell's overlays (control center, lock screen, OSDs).
     layer->setLayer(LayerShellQt::Window::LayerTop);
     layer->setAnchors(LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom

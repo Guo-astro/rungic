@@ -21,9 +21,9 @@ import time
 
 from PIL import Image
 
-SOCKET = os.environ.get("MOTO_PLATFORM_SOCKET", "/mnt/android-wayland/platform.sock")
+SOCKET = os.environ.get("RUNGIC_PLATFORM_SOCKET", "/mnt/android-wayland/platform.sock")
 TIMEOUT = 20.0
-ENGINE = os.environ.get("MOTO_OCR", "android")  # android | local
+ENGINE = os.environ.get("RUNGIC_OCR", "android")  # android | local
 DET_PIXELS_PER_POINT = 1.5
 
 Line = tuple[str, float, tuple[float, float, float, float]]

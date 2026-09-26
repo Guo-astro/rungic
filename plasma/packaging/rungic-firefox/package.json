@@ -1,0 +1,10 @@
+{
+  "name": "rungic-firefox",
+  "formerly": "moto-firefox",
+  "architecture": "all",
+  "build": "host",
+  "paths": ["plasma/firefox", "plasma/firefox-mobile", "plasma/firefox-policies.json", "plasma/firefox-codec-prefs.js"],
+  "depends": "firefox, rungic-codec",
+  "description": "Firefox for Plasma Mobile on Android\nmobile-config-firefox (touch UI), policies and preferences, and /usr/bin/firefox as a\nwrapper that gives Firefox the private FFmpeg with Android hardware codecs (docs/48). The\npackaged /usr/bin/firefox is diverted to /usr/bin/firefox.rungic-orig.",
+  "obsolete": ["/usr/local/bin/firefox", "/usr/local/libexec/moto-firefox-launcher"]
+}

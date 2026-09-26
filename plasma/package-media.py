@@ -5,7 +5,7 @@ Run inside the Ubuntu container after building; originals remain in APT cache.
 """
 from pathlib import Path
 import hashlib, shutil, subprocess
-ROOT=Path('/root/moto-media-packages')
+ROOT=Path('/root/rungic-media-packages')
 ROOT.mkdir(exist_ok=True)
 
 def package(name, original, version, replacements, dependencies=None, extra=None, assets=()):
@@ -44,7 +44,7 @@ camlibs=Path('/root/libcamera-stage/usr/lib/aarch64-linux-gnu')
 package('libcamera0.7',cache/'libcamera0.7_0.7.0-1ubuntu2_arm64.deb',camver,
  [(camlibs/n,'/usr/lib/aarch64-linux-gnu/'+n) for n in ['libcamera.so.0.7.0','libcamera-base.so.0.7.0']],
  extra='libgstreamer-plugins-base1.0-0 (>= 1.28), libgstreamer1.0-0 (>= 1.28), libjpeg-turbo8, gstreamer1.0-pipewire, gstreamer1.0-plugins-base',
- assets=[('/root/moto-media-config/virtual.yaml','/usr/share/libcamera/pipeline/virtual/virtual.yaml')])
+ assets=[('/root/rungic-media-config/virtual.yaml','/usr/share/libcamera/pipeline/virtual/virtual.yaml')])
 package('libcamera-dev',cache/'libcamera-dev_0.7.0-1ubuntu2_arm64.deb',camver,[],
  {'libcamera0.7 (= 0.7.0-1ubuntu2)':'libcamera0.7 (= '+camver+')'})
 package('libqt6multimedia6',cache/'libqt6multimedia6_6.10.2-2_arm64.deb',qtver,

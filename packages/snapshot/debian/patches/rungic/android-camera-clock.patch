@@ -3,7 +3,7 @@ Date: Wed, 23 Sep 2026 21:00:53 +0800
 Subject: Android camera source: no pipeline clock of its own,
  timestamps on arrival
 
-The Android camera source (device.api moto-android) timestamps frames with CLOCK_MONOTONIC. With it
+The Android camera source (device.api rungic-android) timestamps frames with CLOCK_MONOTONIC. With it
 providing the pipeline clock, camerabin lost sync when it added or removed the audio recorder; the
 source now provides no clock and timestamps buffers on arrival.
 
@@ -17,7 +17,7 @@ X-Rungic-Docs: docs/research/35
  1 file changed, 8 insertions(+)
 
 diff --git a/aperture/src/camera.rs b/aperture/src/camera.rs
-index fbe0f06..5801ca2 100644
+index fbe0f06..deca707 100644
 --- a/aperture/src/camera.rs
 +++ b/aperture/src/camera.rs
 @@ -148,6 +148,14 @@ impl Camera {
@@ -25,7 +25,7 @@ index fbe0f06..5801ca2 100644
          let element = self.device().create_element(None)?;
          element.set_property("client-name", crate::APP_ID.get().unwrap());
 +        if self.properties().get("device.api").and_then(|v| v.get::<String>().ok()).as_deref()
-+            == Some("moto-android")
++            == Some("rungic-android")
 +        {
 +            // The Android source uses CLOCK_MONOTONIC. Keep camerabin on a
 +            // stable system clock when it adds/removes the audio recorder.

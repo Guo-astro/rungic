@@ -1,0 +1,14 @@
+{
+  "name": "rungic-agent-screen",
+  "formerly": "moto-agent-screen",
+  "architecture": "arm64",
+  "build": "device",
+  "paths": ["plasma/agent-screen"],
+  "depends": "python3, kwin-wayland, plasma-mobile",
+  "build_depends": ["cmake", "qt6-base-dev", "qt6-declarative-dev", "qt6-wayland-dev", "liblayershellqtinterface-dev",
+                    "plasma-wayland-protocols"],
+  "description": "Plasma Mobile on Android: the assistant's screen\nA virtual screen the assistant operates on, shown as a floating window that folds to the\nedge (docs/65), with its quick setting.",
+  "obsolete": ["/usr/local/bin/moto-agent-screen", "/usr/local/libexec/moto-agent-screen-window",
+               "/usr/local/bin/moto-virtual-screen", "/usr/share/applications/dev.moto.VirtualScreen.desktop",
+               "/etc/xdg/autostart/dev.moto.VirtualScreen.desktop"]
+}

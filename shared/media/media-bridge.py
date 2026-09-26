@@ -22,9 +22,9 @@ import time
 from pathlib import Path
 
 RUNTIME = Path(os.environ['XDG_RUNTIME_DIR'])
-FIFO = RUNTIME / 'moto-microphone.pcm'
+FIFO = RUNTIME / 'rungic-microphone.pcm'
 SOURCE = 'android_microphone'
-PHONE_FIFO = RUNTIME / 'moto-phone-output.pcm'
+PHONE_FIFO = RUNTIME / 'rungic-phone-output.pcm'
 PHONE_SINK = 'android_phone'
 # Virtual devices (docs/62). A program that should hear an application plays
 # nothing itself: the application outputs to linux_speaker and the listener
@@ -251,7 +251,7 @@ class Cameras:
                 self.retry_at[key] = time.monotonic() + 2
         for key, metadata in desired.items():
             if key not in self.children and time.monotonic() >= self.retry_at.get(key, 0):
-                args = ['/usr/bin/moto-camera-source', key]
+                args = ['/usr/bin/rungic-camera-source', key]
                 args.extend(str(metadata[k]) for k in ('width', 'height', 'rotation', 'facing'))
                 self.children[key] = subprocess.Popen(args)
                 LOG.info('camera %s available (%s)', key, metadata['facing'])
@@ -353,7 +353,7 @@ def stop(*_):
 
 def main():
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
-    lock = open(RUNTIME / 'moto-media.lock', 'w')
+    lock = open(RUNTIME / 'rungic-media.lock', 'w')
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:

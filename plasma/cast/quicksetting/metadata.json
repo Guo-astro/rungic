@@ -4,7 +4,7 @@
         "Description": "Cast the desktop to a TV (Wi-Fi Display)",
         "Description[zh_CN]": "把桌面投到电视（无线投屏）",
         "Icon": "video-television",
-        "Id": "dev.moto.quicksetting.cast",
+        "Id": "com.rungic.quicksetting.cast",
         "License": "GPL-2.0+",
         "Name": "Cast to TV",
         "Name[zh_CN]": "投屏"

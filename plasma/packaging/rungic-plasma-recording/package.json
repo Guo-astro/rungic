@@ -1,0 +1,10 @@
+{
+  "name": "rungic-plasma-recording",
+  "formerly": "moto-plasma-recording",
+  "architecture": "all",
+  "build": "host",
+  "paths": ["plasma/recording/recorder.py", "plasma/recording/settings.py"],
+  "depends": "plasma-mobile (>= 6.6.5-0ubuntu0.1+moto1), rungic-codec, python3-gi, gir1.2-gst-plugins-base-1.0, gir1.2-adw-1, gstreamer1.0-pipewire, gstreamer1.0-pulseaudio",
+  "description": "Plasma Mobile on Android: screen recording\nThe recorder behind the recording quick setting (KWin screencast streams encoded by\nthe Android hardware codec, one file per screen) and its settings window.",
+  "obsolete": ["/usr/local/bin/moto-screen-recorder", "/usr/local/bin/moto-recording-settings"]
+}

@@ -33,7 +33,7 @@ class Policy(dbus.service.Object):
         GLib.timeout_add_seconds(2, self.sync)
         self.sync()
 
-    @dbus.service.method('dev.moto.Android.Power', in_signature='b', sender_keyword='sender')
+    @dbus.service.method('com.rungic.Android.Power', in_signature='b', sender_keyword='sender')
     def SetWaylandInhibition(self, enabled, sender=None):
         key = ('wayland', sender)
         if enabled and key not in self.records:

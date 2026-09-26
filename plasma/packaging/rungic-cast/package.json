@@ -1,0 +1,10 @@
+{
+  "name": "rungic-cast",
+  "formerly": "moto-cast",
+  "architecture": "all",
+  "build": "host",
+  "paths": ["plasma/cast"],
+  "depends": "python3, plasma-mobile",
+  "description": "Plasma Mobile on Android: TV casting (Linux side)\nThe cast command and quick setting; the Android side lives in shared/android/moto-cast\n(docs/58).",
+  "obsolete": ["/usr/local/bin/moto-cast"]
+}

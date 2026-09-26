@@ -21,8 +21,8 @@ and upstream changes meet them at these hooks only (docs/72):
   EglDisplay::create() with the render node; OutputBackend::maxLinuxDmabufVersion(), used when
   the server creates zwp_linux_dmabuf_v1; InputRedirection::idleInhibitedChanged().
 
-Replaces the environment-variable checks (MOTO_KWIN_FLAT_OUTPUT, MOTO_KWIN_RENDER_DEVICE,
-MOTO_GPU_ALLOCATOR, MOTO_KWIN_ANDROID_SHM) that the earlier patches spread over these files.
+Replaces the environment-variable checks (RUNGIC_KWIN_FLAT_OUTPUT, RUNGIC_KWIN_RENDER_DEVICE,
+RUNGIC_GPU_ALLOCATOR, RUNGIC_KWIN_ANDROID_SHM) that the earlier patches spread over these files.
 
 Forwarded: not-needed
 Last-Update: 2026-09-26

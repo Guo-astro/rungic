@@ -11,7 +11,7 @@
  },
  "fetch": "https://ffmpeg.org/releases/{file}",
  "overlay": {
-  "libavcodec/moto-codec-client.h": "shared/media/codec-client.h",
-  "libavcodec/moto_codec.c": "shared/media/ffmpeg-moto-codec.c"
+  "libavcodec/rungic-codec-client.h": "shared/media/codec-client.h",
+  "libavcodec/rungic_codec.c": "shared/media/ffmpeg-rungic-codec.c"
  }
 }

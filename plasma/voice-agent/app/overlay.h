@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // The assistant's overlay (docs/67): a resident layer-shell window that holding the Home
-// button brings up. D-Bus dev.moto.VoiceAssistant /Assistant, called by the Plasma Mobile
+// button brings up. D-Bus com.rungic.VoiceAssistant /Assistant, called by the Plasma Mobile
 // navigation panel (plasma-mobile containments/taskpanel, packages/plasma-mobile).
 #pragma once
 
@@ -16,7 +16,7 @@ class QQuickWindow;
 class Overlay : public QObject
 {
     Q_OBJECT
-    Q_CLASSINFO("D-Bus Interface", "dev.moto.VoiceAssistant.Assistant")
+    Q_CLASSINFO("D-Bus Interface", "com.rungic.VoiceAssistant.Assistant")
     QML_ELEMENT
     QML_SINGLETON
 public:

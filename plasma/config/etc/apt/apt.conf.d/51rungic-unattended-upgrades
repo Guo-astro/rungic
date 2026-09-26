@@ -1,0 +1,29 @@
+// Rungic (docs/61): unattended-upgrades must not replace the packages this
+// project rebuilds (+rungicN; +motoN before the rename), nor the ones whose
+// files it diverts or whose Qt private ABI the diverted plugins link against;
+// they move only through a
+// release. Other packages keep their automatic security updates.
+// Entries are regular expressions matched against package names.
+Unattended-Upgrade::Package-Blacklist {
+	"kwin";
+	"libkwin";
+	"kscreen$";
+	"libkscreen";
+	"plasma-mobile";
+	"plasma-workspace";
+	"libplasma";
+	"plasma-camera";
+	"libcamera";
+	"qt6-";
+	"libqt6";
+	"qml6-module-qt";
+	"mesa-";
+	"libegl-mesa";
+	"libgl1-mesa";
+	"libglx-mesa";
+	"libgbm";
+	"xdg-desktop-portal-kde";
+	"plasma-settings";
+	"plasma-keyboard";
+	"wl-clipboard";
+};

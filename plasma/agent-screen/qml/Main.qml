@@ -25,7 +25,7 @@ Window {
     // Shown once main.cpp has made it a layer surface.
     property bool ready: false
     visible: ready && agent.status !== "tv" && agent.status !== "fullscreen"
-    title: "moto-agent-screen"
+    title: "rungic-agent-screen"
     color: "transparent"
 
     property string mode: "window"      // window | tab

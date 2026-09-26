@@ -1,0 +1,99 @@
+#!/usr/bin/python3
+"""The assistant's screen (docs/65): a 1920x1080 desktop output for the assistant's work, shown in a
+floating window on the phone or on the TV, switching between the two without moving any window.
+
+  rungic-agent-screen on | off | toggle | status | ensure      prints one JSON object
+
+`on` turns the host's second output on, starts the floating window and waits for KWin's output
+(CAST-n). `off` turns it off (its windows move to the phone); the window quits by itself. `ensure`
+is `status` that also restarts the floating window of a screen that is on (after the Android host
+restarted, say); the quick setting polls it.
+"""
+import json
+import os
+import socket
+import subprocess
+import sys
+import time
+
+SOCKET = '/mnt/android-wayland/platform.sock'
+WINDOW = '/usr/libexec/rungic-agent-screen-window'
+
+
+def bridge(request, timeout=5):
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
+        conn.settimeout(timeout)
+        conn.connect(SOCKET)
+        conn.sendall(json.dumps(request).encode() + b'\n')
+        reply = b''
+        while not reply.endswith(b'\n'):
+            chunk = conn.recv(65536)
+            if not chunk:
+                break
+            reply += chunk
+    result = json.loads(reply)
+    if 'error' in result:
+        raise SystemExit(json.dumps({'error': result['error']}, ensure_ascii=False))
+    return result
+
+
+def window_running():
+    return subprocess.run(['pgrep', '-f', WINDOW], capture_output=True).returncode == 0
+
+
+def output():
+    """KWin's name for the assistant's screen, or None while it has none."""
+    out = subprocess.run(['kscreen-doctor', '-j'], capture_output=True, text=True, timeout=10).stdout
+    try:
+        outputs = json.loads(out).get('outputs', [])
+    except ValueError:
+        return None
+    return next((o['name'] for o in outputs if o.get('name', '').startswith('CAST') and o.get('enabled')), None)
+
+
+def status():
+    state = bridge({'op': 'agent-screen'})
+    shown_on = 'tv' if state.get('tv') else 'phone fullscreen' if state.get('fullscreen') else 'floating window'
+    return {'enabled': state['enabled'], 'shown_on': shown_on,
+            'size': f"{state['width']}x{state['height']}", 'output': output() if state['enabled'] else None,
+            'window_running': window_running()}
+
+
+def start_window():
+    if not window_running():
+        subprocess.Popen(['kstart', '--application', 'com.rungic.AgentScreen'], stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, start_new_session=True)
+
+
+def ensure():
+    if bridge({'op': 'agent-screen'})['enabled']:
+        start_window()
+    return status()
+
+
+def on():
+    bridge({'op': 'agent-screen', 'enabled': True})
+    start_window()
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline and not output():
+        time.sleep(0.3)
+    return status()
+
+
+def off():
+    bridge({'op': 'agent-screen', 'enabled': False})
+    return status()
+
+
+def main():
+    command = sys.argv[1] if len(sys.argv) > 1 else 'status'
+    if command == 'toggle':
+        command = 'off' if bridge({'op': 'agent-screen'})['enabled'] else 'on'
+    actions = {'on': on, 'off': off, 'status': status, 'ensure': ensure}
+    if command not in actions:
+        raise SystemExit(__doc__)
+    print(json.dumps(actions[command](), ensure_ascii=False))
+
+
+if __name__ == '__main__':
+    main()

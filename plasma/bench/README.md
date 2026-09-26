@@ -1,14 +1,14 @@
-# Moto GLES / Vulkan diagnostics
+# Rungic GLES / Vulkan diagnostics
 
 These are diagnostic workloads, not a native KWin Vulkan backend. Results and
 measurement limits are documented in ../../docs/51-plasma-vulkan-benchmark.md.
 
 The target is the existing Ubuntu ARM64 container with Qt 6.10, its coherent
 Mesa build, and Vulkan enabled for the ordinary desktop user. Build inside that
-container after placing this directory at /opt/moto-gpu-bench:
+container after placing this directory at /opt/rungic-gpu-bench:
 
 ```sh
-cd /opt/moto-gpu-bench
+cd /opt/rungic-gpu-bench
 c++ -O2 -std=c++17 -fPIC quick-render.cpp -o quick-render $(pkg-config --cflags --libs Qt6Quick Qt6Gui Qt6Core)
 ```
 

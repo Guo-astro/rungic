@@ -1,0 +1,6 @@
+Version=6
+# The desktop user's Codex (docs/59, docs/64): the phone-desktop skill and the
+# rungic-desktop MCP server (formerly written by the voice agent and cua install
+# scripts for the first user only).
+Id=rungic-codex-v1
+Script=rungic-codex-setup.sh,sh

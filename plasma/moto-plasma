@@ -62,7 +62,7 @@ case "$action" in
     exec 9>"$BASE/control.lock"
     flock 9 9>&9
     if ! running; then start_container; fi
-    attach /usr/libexec/moto-plasma-account-setup 9>&-
+    attach /usr/libexec/rungic-plasma-account-setup 9>&-
     ;;
   lock)
     # Acknowledge before Android suspends the foreground APK on screen-off.
@@ -86,7 +86,7 @@ case "$action" in
     "$BASE/android-audio" start 9>&-
     # The container binds /storage/emulated/0/Plasma when it starts. After an Android
     # userspace restart vold remounts storage and that bind goes stale; only a
-    # container restart recreates it (moto-plasma-shared otherwise fails forever).
+    # container restart recreates it (rungic-plasma-shared otherwise fails forever).
     if running && ! attach /bin/sh -c 'test -r /mnt/android-shared/.' 9>&-; then
       echo 'Android storage was remounted; restarting the Plasma container' >&2
       "$ENTER" /usr/bin/lxc-stop -n plasma -t 15 9>&- || true
@@ -95,14 +95,14 @@ case "$action" in
     if [ "$action" = restart-session ] && running; then
       # The old compositor and shell take a moment to exit: readiness must see new ones.
       old_pids=$(attach /bin/sh -c 'echo $(pidof kwin_wayland) $(pidof plasmashell)' 9>&-) || old_pids=
-      attach /bin/sh -c 'systemctl restart moto-plasma-session.service' 9>&-
+      attach /bin/sh -c 'systemctl restart rungic-plasma-session.service' 9>&-
     fi
     if ! running; then
       start_container
     fi
     ready=0
     for i in $(seq 1 60); do
-      pids=$(attach /bin/sh -c 'test -f /run/user/1000/moto-session.env && k=$(pidof kwin_wayland) && p=$(pidof plasmashell) && echo $k $p' 9>&-) || pids=
+      pids=$(attach /bin/sh -c 'test -f /run/user/1000/rungic-session.env && k=$(pidof kwin_wayland) && p=$(pidof plasmashell) && echo $k $p' 9>&-) || pids=
       if [ -n "$pids" ]; then
         new=1
         for pid in $pids; do case " $old_pids " in *" $pid "*) new=0 ;; esac; done
@@ -122,20 +122,20 @@ case "$action" in
     exec "$BASE/rootfs-image" "$@" 9>&-
     ;;
   hide-keyboard|home)
-    exec "$ENTER" /usr/bin/lxc-attach -n plasma -- /usr/bin/moto-plasma-user-exec /usr/libexec/moto-plasma-desktop-action "$action"
+    exec "$ENTER" /usr/bin/lxc-attach -n plasma -- /usr/bin/rungic-plasma-user-exec /usr/libexec/rungic-plasma-desktop-action "$action"
     ;;
   shell) exec "$ENTER" /usr/bin/lxc-attach -n plasma -- /bin/sh -l ;;
   exec|user-exec)
     [ "$#" -gt 0 ] || { echo 'Command required' >&2; exit 2; }
     if [ "$action" = user-exec ]; then
-      exec "$ENTER" /usr/bin/lxc-attach -n plasma -- /usr/bin/moto-plasma-user-exec "$@"
+      exec "$ENTER" /usr/bin/lxc-attach -n plasma -- /usr/bin/rungic-plasma-user-exec "$@"
     fi
     exec "$ENTER" /usr/bin/lxc-attach -n plasma -- "$@"
     ;;
   log)
     # The session writes to the container journal; the file holds output from before that change.
     if running; then
-      exec "$ENTER" /usr/bin/lxc-attach -n plasma -- journalctl -b -n 70 --no-pager -o short-precise -u moto-plasma-session.service
+      exec "$ENTER" /usr/bin/lxc-attach -n plasma -- journalctl -b -n 70 --no-pager -o short-precise -u rungic-plasma-session.service
     fi
     tail -n 70 "$ROOT/var/log/plasma/session.log"
     ;;

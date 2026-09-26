@@ -13,7 +13,7 @@ public:
     static RimeRuntime &instance() { static RimeRuntime r; return r; }
 private:
     RimeRuntime() {
-        QString path = qEnvironmentVariable("MOTO_RIME_USER_DIR");
+        QString path = qEnvironmentVariable("RUNGIC_RIME_USER_DIR");
         if (path.isEmpty()) path = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + "/plasma-rime";
         QDir().mkpath(path);
         QFile::setPermissions(path, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
@@ -27,7 +27,7 @@ private:
         traits.shared_data_dir = "/usr/share/rime-data";
         traits.user_data_dir = user.constData();
         traits.distribution_name = "Plasma Rime";
-        traits.distribution_code_name = "moto-plasma-rime";
+        traits.distribution_code_name = "rungic-plasma-rime";
         traits.distribution_version = "1.0";
         traits.app_name = "rime.plasma";
         traits.min_log_level = 2;

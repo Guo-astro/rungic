@@ -1,0 +1,14 @@
+[Unit]
+Description=Android shared files for Plasma
+Before=rungic-plasma-session.service
+
+[Service]
+ExecStart=/usr/libexec/rungic-plasma-shared
+# bindfs runs in the foreground, so without this the unit counts as started
+# before the mount exists and the session (ordered after it) can start first.
+ExecStartPost=/bin/sh -c 'for i in $(seq 100); do mountpoint -q /home/linux/Shared && exit 0; sleep 0.1; done; exit 1'
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

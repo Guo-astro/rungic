@@ -13,7 +13,7 @@
 #include <sys/un.h>
 #include <unistd.h>
 
-namespace MotoDisplay
+namespace RungicDisplay
 {
 inline QJsonObject info()
 {

@@ -3,7 +3,7 @@ set -eu
 [ "$#" -eq 0 ] || { echo "Edit vendor sources; this script no longer accepts pristine-source arguments." >&2; exit 2; }
 task_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 source_dir=$(python3 "$task_root/tools/stage_vendor.py" mesa)
-task_stage=${MOTO_MESA_STAGE:-$task_root/.work/stage/mesa}
+task_stage=${RUNGIC_MESA_STAGE:-$task_root/.work/stage/mesa}
 mkdir -p "$task_stage"
 task_stage=$(CDPATH= cd -- "$task_stage" && pwd)
 cd "$source_dir"

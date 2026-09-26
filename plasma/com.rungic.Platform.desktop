@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Android 设备
+Comment=手机状态、亮度与 Android 系统设置
+Exec=/usr/bin/rungic-platform
+Icon=phone-symbolic
+Terminal=false
+Categories=Settings;System;
+StartupNotify=true
+X-Purism-FormFactor=Workstation;Mobile;

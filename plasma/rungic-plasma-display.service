@@ -1,0 +1,12 @@
+[Unit]
+Description=Android display insets for Plasma Mobile
+After=plasma-plasmashell.service
+PartOf=graphical-session.target
+
+[Service]
+ExecStart=/usr/libexec/rungic-plasma-display
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=plasma-workspace.target

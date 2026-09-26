@@ -17,7 +17,7 @@ X-Rungic-Docs: docs/58
  1 file changed, 109 insertions(+), 38 deletions(-)
 
 diff --git a/kwin/scripts/convergentwindows/contents/ui/main.qml b/kwin/scripts/convergentwindows/contents/ui/main.qml
-index 97103c4..7a03f26 100644
+index 97103c4..0ac77e6 100644
 --- a/kwin/scripts/convergentwindows/contents/ui/main.qml
 +++ b/kwin/scripts/convergentwindows/contents/ui/main.qml
 @@ -11,6 +11,99 @@ Loader {
@@ -30,7 +30,7 @@ index 97103c4..7a03f26 100644
 +    // Windows whose outputChanged signal is connected.
 +    property var tracked: ({})
 +
-+    // Moto (docs/58): docked mode applies per output. The device's own screen
++    // Rungic (docs/58): docked mode applies per output. The device's own screen
 +    // keeps the mobile rules (borderless, maximized) while external screens get
 +    // desktop windows. Upstream applied docked mode to every window, so plugging
 +    // in a display turned the phone's apps into decorated, unmaximized windows.

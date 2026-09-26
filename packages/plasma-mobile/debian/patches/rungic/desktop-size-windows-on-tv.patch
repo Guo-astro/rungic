@@ -17,7 +17,7 @@ X-Rungic-Docs: docs/60
  1 file changed, 43 insertions(+), 2 deletions(-)
 
 diff --git a/kwin/scripts/convergentwindows/contents/ui/main.qml b/kwin/scripts/convergentwindows/contents/ui/main.qml
-index 7a03f26..c3f5a31 100644
+index 0ac77e6..d4da777 100644
 --- a/kwin/scripts/convergentwindows/contents/ui/main.qml
 +++ b/kwin/scripts/convergentwindows/contents/ui/main.qml
 @@ -16,6 +16,39 @@ Loader {
@@ -28,7 +28,7 @@ index 7a03f26..c3f5a31 100644
 +    // on an external screen.
 +    property var added: ({})
 +
-+    // Moto (docs/60): some applications size a new window from the primary
++    // Rungic (docs/60): some applications size a new window from the primary
 +    // screen, which is the phone (360 px wide), even when it opens on the TV;
 +    // WeChat's main window came up 420 px wide and fell back to its narrow
 +    // layout without the chat list. A window that opens on an external screen
@@ -58,7 +58,7 @@ index 7a03f26..c3f5a31 100644
 +        return false;
 +    }
  
-     // Moto (docs/58): docked mode applies per output. The device's own screen
+     // Rungic (docs/58): docked mode applies per output. The device's own screen
      // keeps the mobile rules (borderless, maximized) while external screens get
 @@ -48,6 +81,7 @@ Loader {
          window.closed.connect(() => {

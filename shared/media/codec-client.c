@@ -58,23 +58,23 @@ static void after_fork_child(void) {
  connect_broker();errno=saved;
 }
 __attribute__((constructor)) static void preload_broker(void) {
- if(getenv("MOTO_CODEC_PRECONNECT")) {
+ if(getenv("RUNGIC_CODEC_PRECONNECT")) {
   int saved=errno;connect_broker();
   pthread_atfork(before_fork,after_fork_parent,after_fork_child);
   errno=saved;
  }
 }
-void moto_codec_init(MotoCodec *c){memset(c,0,sizeof(*c));c->fd=-1;}
-static int fail(MotoCodec *c,const char *what) {
+void rungic_codec_init(RungicCodec *c){memset(c,0,sizeof(*c));c->fd=-1;}
+static int fail(RungicCodec *c,const char *what) {
  snprintf(c->error,sizeof(c->error),"%s: %s",what,strerror(errno));return -1;
 }
-static int remote_error(MotoCodec *c) {
+static int remote_error(RungicCodec *c) {
  uint32_t n;if(get32(c->fd,&n) || n>=sizeof(c->error)) {errno=EPROTO;return fail(c,"Backend error");}
  if(io(c->fd,c->error,n,0))return fail(c,"Read error");c->error[n]=0;return -1;
 }
-int moto_codec_open(MotoCodec *c,const MotoCodecConfig *config) {
- moto_codec_close(c);c->ended=0;c->input_count=c->output_count=0;c->error[0]=0;
- const char *disabled=getenv("MOTO_CODEC_DISABLE");
+int rungic_codec_open(RungicCodec *c,const RungicCodecConfig *config) {
+ rungic_codec_close(c);c->ended=0;c->input_count=c->output_count=0;c->error[0]=0;
+ const char *disabled=getenv("RUNGIC_CODEC_DISABLE");
  if(disabled && !strcmp(disabled,"1")){errno=ENODEV;return fail(c,"Hardware disabled by environment");}
  int fdlist[4]={-1,-1,-1,-1},count=0,result=-1;
  pthread_mutex_lock(&broker_lock);
@@ -101,59 +101,59 @@ int moto_codec_open(MotoCodec *c,const MotoCodecConfig *config) {
  /* Android SharedMemory can be an ashmem character device (st_size=0),
   * or a regular memfd. The trusted broker creates exactly two 16 MiB halves. */
  if(fstat(fdlist[1],&statbuf) ||
-    !(statbuf.st_size==MOTO_CODEC_HALF*2 || (S_ISCHR(statbuf.st_mode) && statbuf.st_size==0))){errno=EPROTO;goto out;}
- c->memory=mmap(NULL,MOTO_CODEC_HALF*2,PROT_READ|PROT_WRITE,MAP_SHARED,fdlist[1],0);
+    !(statbuf.st_size==RUNGIC_CODEC_HALF*2 || (S_ISCHR(statbuf.st_mode) && statbuf.st_size==0))){errno=EPROTO;goto out;}
+ c->memory=mmap(NULL,RUNGIC_CODEC_HALF*2,PROT_READ|PROT_WRITE,MAP_SHARED,fdlist[1],0);
  if(c->memory==MAP_FAILED){c->memory=NULL;goto out;}
  result=0;goto out;
 broker_error:
  if(broker>=0)close(broker);broker=-1;
 out:
  {int error=errno;for(int i=0;i<count;i++)if(fdlist[i]>=0)close(fdlist[i]);pthread_mutex_unlock(&broker_lock);errno=error;}
- if(result<0){fail(c,"Open codec channel");moto_codec_close(c);return -1;}
+ if(result<0){fail(c,"Open codec channel");rungic_codec_close(c);return -1;}
  const int values[]={MAGIC,config->encoder,config->kind,config->width,config->height,config->fps_num,config->fps_den,config->bitrate,config->key_interval,config->color_standard,config->color_range,config->color_transfer};
  for(size_t i=0;i<sizeof(values)/sizeof(values[0]);i++)if(put32(c->fd,values[i]))goto config_error;
  if(get32(c->fd,&word))goto config_error;
- if(word==(uint32_t)-1){remote_error(c);moto_codec_close(c);return -1;}
- if(word!=MOTO_DONE || get32(c->fd,&word) || word>=sizeof(c->name)){errno=EPROTO;goto config_error;}
+ if(word==(uint32_t)-1){remote_error(c);rungic_codec_close(c);return -1;}
+ if(word!=RUNGIC_DONE || get32(c->fd,&word) || word>=sizeof(c->name)){errno=EPROTO;goto config_error;}
  if(io(c->fd,c->name,word,0))goto config_error;c->name[word]=0;
  return 0;
-config_error:fail(c,"Configure codec");moto_codec_close(c);return -1;
+config_error:fail(c,"Configure codec");rungic_codec_close(c);return -1;
 }
-int moto_codec_exchange(MotoCodec *c,int cmd,int id,int64_t pts,int flags,int length,MotoCodecOutput callback,void *user) {
+int rungic_codec_exchange(RungicCodec *c,int cmd,int id,int64_t pts,int flags,int length,RungicCodecOutput callback,void *user) {
  int consumer_failed=0;
  if(c->fd<0){errno=ENOTCONN;return fail(c,"Codec closed");}
  if(put32(c->fd,cmd))goto error;
- if(cmd==MOTO_FRAME) {
-  if(length<=0 || (unsigned)length>MOTO_CODEC_HALF){errno=EINVAL;goto error;}
+ if(cmd==RUNGIC_FRAME) {
+  if(length<=0 || (unsigned)length>RUNGIC_CODEC_HALF){errno=EINVAL;goto error;}
   const uint32_t data[]={id,(uint64_t)pts>>32,(uint32_t)pts,flags,length};
   for(size_t i=0;i<5;i++)if(put32(c->fd,data[i]))goto error;
   c->input_count++;
  }
  for(;;) {
   uint32_t type;if(get32(c->fd,&type))goto error;
-  if(type==MOTO_DONE){if(cmd==MOTO_FLUSH)c->ended=0;return consumer_failed?-1:0;}
+  if(type==RUNGIC_DONE){if(cmd==RUNGIC_FLUSH)c->ended=0;return consumer_failed?-1:0;}
   if(type==(uint32_t)-1)return remote_error(c);
-  if(type==MOTO_EOS){c->ended=1;continue;}
-  if(type<MOTO_ENCODED || type>MOTO_CONFIG){errno=EPROTO;goto error;}
+  if(type==RUNGIC_EOS){c->ended=1;continue;}
+  if(type<RUNGIC_ENCODED || type>RUNGIC_CONFIG){errno=EPROTO;goto error;}
   uint32_t h[18];for(int i=0;i<18;i++)if(get32(c->fd,&h[i]))goto error;
-  MotoCodecFrame frame={.type=type,.id=h[0],.flags=h[1],.size=h[2],.pts=(int64_t)(((uint64_t)h[3]<<32)|h[4]),.width=h[5],.height=h[6],.crop_x=h[7],.crop_y=h[8],.data=c->memory+MOTO_CODEC_HALF};
-  if(frame.size<0 || (unsigned)frame.size>MOTO_CODEC_HALF){errno=EPROTO;goto error;}
+  RungicCodecFrame frame={.type=type,.id=h[0],.flags=h[1],.size=h[2],.pts=(int64_t)(((uint64_t)h[3]<<32)|h[4]),.width=h[5],.height=h[6],.crop_x=h[7],.crop_y=h[8],.data=c->memory+RUNGIC_CODEC_HALF};
+  if(frame.size<0 || (unsigned)frame.size>RUNGIC_CODEC_HALF){errno=EPROTO;goto error;}
   for(int p=0;p<3;p++){frame.plane[p].stride=h[9+p*3];frame.plane[p].step=h[10+p*3];frame.plane[p].length=h[11+p*3];}
   int r=callback && !consumer_failed?callback(user,&frame):0;
   if(put32(c->fd,0xac))goto error;
-  if(type!=MOTO_CONFIG)c->output_count++;
+  if(type!=RUNGIC_CONFIG)c->output_count++;
   /* A downstream FLUSHING result must not leave response records unread.
    * Consume/ack the rest of this exchange before the next FLUSH command. */
   if(r){snprintf(c->error,sizeof(c->error),"Output consumer stopped");consumer_failed=1;}
  }
 error:return fail(c,"Codec exchange");
 }
-void moto_codec_close(MotoCodec *c) {
+void rungic_codec_close(RungicCodec *c) {
  if(c->fd>=0){shutdown(c->fd,SHUT_RDWR);close(c->fd);c->fd=-1;}
- if(c->memory){munmap(c->memory,MOTO_CODEC_HALF*2);c->memory=NULL;}
+ if(c->memory){munmap(c->memory,RUNGIC_CODEC_HALF*2);c->memory=NULL;}
 }
-int moto_codec_copy_i420(const MotoCodecFrame *f,uint8_t *const dst[3],const int stride[3]) {
- if(f->type!=MOTO_DECODED || f->width<1 || f->height<1 || f->width>2560 || f->height>2560 || f->crop_x<0 || f->crop_y<0)return -1;
+int rungic_codec_copy_i420(const RungicCodecFrame *f,uint8_t *const dst[3],const int stride[3]) {
+ if(f->type!=RUNGIC_DECODED || f->width<1 || f->height<1 || f->width>2560 || f->height>2560 || f->crop_x<0 || f->crop_y<0)return -1;
  size_t offset=0;
  for(int p=0;p<3;p++) {
   int w=p?(f->width+1)/2:f->width,h=p?(f->height+1)/2:f->height;

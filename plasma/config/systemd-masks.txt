@@ -1,4 +1,4 @@
-# Units masked in the container (symlinks to /dev/null, shipped by moto-plasma-config).
+# Units masked in the container (symlinks to /dev/null, shipped by rungic-plasma-config).
 # Android owns these functions or the container cannot provide them (docs/40, docs/42).
 system ModemManager.service
 system NetworkManager-wait-online.service
