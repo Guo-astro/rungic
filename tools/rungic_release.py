@@ -79,8 +79,9 @@ APT_OURS = ('-o Dir::Etc::SourceList=/etc/apt/sources.list.d/rungic.sources -o D
 def spec():
     data = json.loads(SPEC.read_text())
     for component in data.get('rebuilt', {}).values():
-        # A patch-queue component (docs/71): its version is the first entry of its changelog.
-        if 'version' not in component and component.get('source', '').startswith('packages/'):
+        # A patch-queue component (docs/71): its version is the first entry of its changelog, always
+        # (a 'version' left in packages.json from the vendor days pinned the old build, docs/70).
+        if component.get('source', '').startswith('packages/'):
             changelog = (WORKSPACE / component['source'] / 'debian/changelog').read_text()
             component['version'] = re.match(r'^\S+ \(([^)]+)\)', changelog)[1]
     return data
