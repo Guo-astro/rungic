@@ -1,0 +1,172 @@
+From: kevinzhow <kevinzhow@local>
+Date: Fri, 25 Sep 2026 15:21:20 +0900
+Subject: Navigation panel: holding Home summons the voice assistant
+
+Navigation panel buttons can be held (NavigationPanelAction.holdable): past Android's 400 ms
+long-press time a held press emits held() instead of triggered(), and holdReleased() when the
+finger lifts. The task panel sends Home held and lifted, with the screen, to the voice assistant
+over D-Bus (asynchronous, harmless without it); a Home tap also sends Hide.
+
+Forwarded: not-needed
+Last-Update: 2026-09-26
+X-Rungic-Status: Inappropriate [calls this project's voice assistant; a holdable button alone could go upstream]
+X-Rungic-Tests: none (gap: no scenario holds Home)
+X-Rungic-Docs: docs/67
+---
+ .../qml/navigationpanel/NavigationPanel.qml        |  5 ++-
+ .../qml/navigationpanel/NavigationPanelAction.qml  |  6 ++++
+ .../qml/navigationpanel/NavigationPanelButton.qml  | 38 +++++++++++++++++++++-
+ .../taskpanel/qml/NavigationPanelComponent.qml     |  6 ++++
+ containments/taskpanel/taskpanel.cpp               | 20 ++++++++++++
+ containments/taskpanel/taskpanel.h                 |  4 +++
+ 6 files changed, 77 insertions(+), 2 deletions(-)
+
+diff --git a/components/mobileshell/qml/navigationpanel/NavigationPanel.qml b/components/mobileshell/qml/navigationpanel/NavigationPanel.qml
+index d0828a7..d1116b1 100644
+--- a/components/mobileshell/qml/navigationpanel/NavigationPanel.qml
++++ b/components/mobileshell/qml/navigationpanel/NavigationPanel.qml
+@@ -100,11 +100,14 @@ Item {
+             shrinkSize: root.middleAction.shrinkSize
+             iconSource: root.middleAction.iconSource
+             Accessible.name: root.middleAction.accessibleText
++            holdable: root.middleAction.holdable
+             onClicked: {
+-                if (enabled) {
++                if (enabled && !held) {
+                     root.middleAction.triggered();
+                 }
+             }
++            onHoldStarted: root.middleAction.held()
++            onHoldEnded: root.middleAction.holdReleased()
+         }
+ 
+         NavigationPanelButton {
+diff --git a/components/mobileshell/qml/navigationpanel/NavigationPanelAction.qml b/components/mobileshell/qml/navigationpanel/NavigationPanelAction.qml
+index 097387a..8f5435d 100644
+--- a/components/mobileshell/qml/navigationpanel/NavigationPanelAction.qml
++++ b/components/mobileshell/qml/navigationpanel/NavigationPanelAction.qml
+@@ -14,5 +14,11 @@ QtObject {
+     // Description of the action for assistive technology (backport from upstream master).
+     property string accessibleText
+ 
++    // Holding the button (Moto: the Home button summons the assistant): past the long-press
++    // time held() comes instead of triggered(), and holdReleased() when the finger lifts.
++    property bool holdable: false
++
+     signal triggered()
++    signal held()
++    signal holdReleased()
+ }
+diff --git a/components/mobileshell/qml/navigationpanel/NavigationPanelButton.qml b/components/mobileshell/qml/navigationpanel/NavigationPanelButton.qml
+index a24c53a..38aae8a 100644
+--- a/components/mobileshell/qml/navigationpanel/NavigationPanelButton.qml
++++ b/components/mobileshell/qml/navigationpanel/NavigationPanelButton.qml
+@@ -23,11 +23,47 @@ Controls.AbstractButton {
+     property int shrinkSize: 0
+     property alias iconSource: icon.source
+ 
++    // Long press (NavigationPanelAction.holdable). A held press is no click.
++    property bool holdable: false
++    readonly property bool held: holdTimer.fired
++    signal holdStarted()
++    signal holdEnded()
++
+     MobileShell.HapticsEffect {
+         id: haptics
+     }
+ 
+-    onPressed: haptics.buttonVibrate()
++    Timer {
++        id: holdTimer
++        property bool fired: false
++        interval: 400   // Android's long-press timeout
++        onTriggered: {
++            fired = true;
++            haptics.buttonVibrate();
++            button.holdStarted();
++        }
++    }
++
++    onPressed: {
++        haptics.buttonVibrate();
++        holdTimer.fired = false;
++        if (holdable) {
++            holdTimer.restart();
++        }
++    }
++    onReleased: {
++        holdTimer.stop();
++        if (holdTimer.fired) {
++            button.holdEnded();
++        }
++    }
++    onCanceled: {
++        holdTimer.stop();
++        if (holdTimer.fired) {
++            holdTimer.fired = false;
++            button.holdEnded();
++        }
++    }
+ 
+     Rectangle {
+         id: rect
+diff --git a/containments/taskpanel/qml/NavigationPanelComponent.qml b/containments/taskpanel/qml/NavigationPanelComponent.qml
+index 871b2b8..cf7ecb6 100644
+--- a/containments/taskpanel/qml/NavigationPanelComponent.qml
++++ b/containments/taskpanel/qml/NavigationPanelComponent.qml
+@@ -92,7 +92,13 @@ MobileShell.NavigationPanel {
+ 
+         onTriggered: {
+             MobileShellState.ShellDBusClient.openHomeScreen();
++            Plasmoid.assistantDismiss(); // Moto: Home also puts the assistant's overlay away
+         }
++
++        // Moto: holding Home talks to the voice assistant; lifting the finger ends what was said.
++        holdable: true
++        onHeld: Plasmoid.assistantHold(true, Screen.name)
++        onHoldReleased: Plasmoid.assistantHold(false, Screen.name)
+     }
+ 
+     // close app/keyboard button
+diff --git a/containments/taskpanel/taskpanel.cpp b/containments/taskpanel/taskpanel.cpp
+index 385a4e3..931c090 100644
+--- a/containments/taskpanel/taskpanel.cpp
++++ b/containments/taskpanel/taskpanel.cpp
+@@ -31,4 +31,24 @@ void TaskPanel::triggerTaskSwitcher() const
+     QDBusConnection::sessionBus().send(message);
+ }
+ 
++void TaskPanel::assistantHold(bool pressed, const QString &screen) const
++{
++    // The assistant's overlay (plasma/voice-agent, docs/67). Asynchronous: no reply is
++    // awaited, and without the overlay the call fails harmlessly.
++    QDBusMessage message = QDBusMessage::createMethodCall(QStringLiteral("dev.moto.VoiceAssistant"),
++                                                          QStringLiteral("/Assistant"),
++                                                          QStringLiteral("dev.moto.VoiceAssistant.Assistant"),
++                                                          QStringLiteral("Hold"));
++    message.setArguments({pressed, screen});
++    QDBusConnection::sessionBus().send(message);
++}
++
++void TaskPanel::assistantDismiss() const
++{
++    QDBusConnection::sessionBus().send(QDBusMessage::createMethodCall(QStringLiteral("dev.moto.VoiceAssistant"),
++                                                                      QStringLiteral("/Assistant"),
++                                                                      QStringLiteral("dev.moto.VoiceAssistant.Assistant"),
++                                                                      QStringLiteral("Hide")));
++}
++
+ #include "taskpanel.moc"
+diff --git a/containments/taskpanel/taskpanel.h b/containments/taskpanel/taskpanel.h
+index 6bf4552..3ffccd1 100644
+--- a/containments/taskpanel/taskpanel.h
++++ b/containments/taskpanel/taskpanel.h
+@@ -15,4 +15,8 @@ class TaskPanel : public Plasma::Containment
+ public:
+     TaskPanel(QObject *parent, const KPluginMetaData &data, const QVariantList &args);
+     Q_INVOKABLE void triggerTaskSwitcher() const;
++    // Moto: the Home button held (pressed) and lifted, on the screen named `screen`.
++    Q_INVOKABLE void assistantHold(bool pressed, const QString &screen) const;
++    // Moto: Home tapped; the assistant's overlay goes away.
++    Q_INVOKABLE void assistantDismiss() const;
+ };

@@ -1,0 +1,57 @@
+From: kevinzhow <kevinzhow@local>
+Date: Wed, 23 Sep 2026 21:00:53 +0800
+Subject: Top panel: keep the layer-shell exclusive zone equal to the panel
+ thickness
+
+Android cutout metadata can change the top panel's thickness after its first Wayland configure.
+Resizing the visible panel alone left the original exclusive zone, so applications kept the old
+reserved area. The panel now sets its layer-shell exclusion zone to its real thickness whenever
+the thickness, visibility mode or floating state changes.
+
+Forwarded: not-needed
+Last-Update: 2026-09-26
+X-Rungic-Status: Pending [a thickness change after the first configure is not Android specific; check upstream master first]
+X-Rungic-Tests: L3:display.geometry
+X-Rungic-Docs: docs/43
+---
+ shell/contents/views/Panel.qml | 20 ++++++++++++++++++++
+ 1 file changed, 20 insertions(+)
+
+diff --git a/shell/contents/views/Panel.qml b/shell/contents/views/Panel.qml
+index fc195a8..7672d1f 100644
+--- a/shell/contents/views/Panel.qml
++++ b/shell/contents/views/Panel.qml
+@@ -15,6 +15,7 @@ import org.kde.taskmanager 0.1 as TaskManager
+ import org.kde.kwindowsystem 1.0
+ import org.kde.kirigami as Kirigami
+ import org.kde.plasma.shell.panel 0.1 as Panel
++import org.kde.layershell 1.0 as LayerShell
+ 
+ import org.kde.plasma.plasmoid 2.0
+ 
+@@ -33,6 +34,25 @@ Item {
+         }
+     }
+ 
++    // Android cutout metadata can change the top panel thickness after its
++    // initial Wayland configure. Keep the reserved application area in sync;
++    // resizing the visible panel alone can leave the original exclusive zone.
++    // Use the real (integer) PanelView thickness, not a second safe-area margin.
++    function syncTopPanelExclusion() {
++        if (containment?.plasmoid?.location === PlasmaCore.Types.TopEdge
++                && panel.visibilityMode === Panel.Global.NormalPanel
++                && !panel.floating) {
++            panel.LayerShell.Window.exclusionZone = panel.thickness;
++            panel.requestUpdate();
++        }
++    }
++    Component.onCompleted: Qt.callLater(root.syncTopPanelExclusion)
++    Connections {
++        target: panel
++        function onThicknessChanged() { Qt.callLater(root.syncTopPanelExclusion); }
++        function onVisibilityModeChanged() { Qt.callLater(root.syncTopPanelExclusion); }
++    }
++
+     // NOTE: Below is taken straight out of Plasma Desktop so that we can
+     //       support desktop panels properly, try to keep it in sync:
+     //       plasma-desktop/desktoppackage/contents/views/Panel.qml

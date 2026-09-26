@@ -59,3 +59,4 @@
 - 用`tools/stage_vendor.py`生成`.work`构建副本；不要把唯一修改留在忽略目录。保留符号链接所指的共享文件，避免同一桥接代码出现多份。
 - 上游导入和本机修改分别提交，升级时更新基线和许可证记录。跨组件协议变更在同一组Git提交中同步；本机和K8用功能分支及提交SHA协作。
 - Vendor中原始测试素材、发布包自带Cargo依赖及必要quilt状态属于源码；本机生成的产物仍只能进入`.work`。审计仅按精确哈希豁免已核对的上游公开文件，不豁免整个vendor目录。
+- 2026-09-26起逐步改为业界通行的“固定上游＋补丁队列”（docs/71）：已迁移的组件（KWin、kscreen、plasma-mobile、plasma-settings、FFmpeg、Snapshot、typesafe-computer-use）只在`packages/<名称>/`维护，用`tools/pq.py prepare/export`修改补丁，不再有vendor目录；共享文件用配方的`overlay`放入源码树，不复制进补丁。其余组件迁移前仍按上面的vendor规则。

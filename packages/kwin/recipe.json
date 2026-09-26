@@ -6,6 +6,7 @@
  "series": "resolute-updates",
  "git_ubuntu_tag": "import/4%6.6.6-0ubuntu0.1",
  "upstream": "https://invent.kde.org/plasma/kwin",
+ "licenses": "GPL-2.0-or-later; see LICENSES and debian/copyright",
  "files": {
   "kwin_6.6.6-0ubuntu0.1.dsc": "4fda1d85b25c5f1c09a5c292065050ea038946e2f60f2b997e70e3d3c8e3eea0",
   "kwin_6.6.6.orig.tar.xz": "76314bb5053943003c089bd8997b159c70a8bc35ba87dc3a10885ade8f561953",

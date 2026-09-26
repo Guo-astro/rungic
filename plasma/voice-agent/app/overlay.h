@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // The assistant's overlay (docs/67): a resident layer-shell window that holding the Home
 // button brings up. D-Bus dev.moto.VoiceAssistant /Assistant, called by the Plasma Mobile
-// navigation panel (vendor/plasma-mobile containments/taskpanel).
+// navigation panel (plasma-mobile containments/taskpanel, packages/plasma-mobile).
 #pragma once
 
 #include <QObject>

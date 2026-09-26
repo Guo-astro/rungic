@@ -1,0 +1,279 @@
+From: kevinzhow <kevinzhow@local>
+Date: Fri, 25 Sep 2026 22:35:35 +0900
+Subject: Status bar and navigation panel take the colours of the app shown
+
+Apps give KWin their colour scheme (Window::colorScheme). The convergentwindows script reports the
+scheme of the window activated on each screen to the shell (org.kde.plasmashell /Mobile
+setActiveWindowColorScheme), and the panels use its Header/Window background, with light content on
+a dark one. Apps without a scheme of their own keep the theme's panels.
+
+Forwarded: not-needed
+Last-Update: 2026-09-26
+X-Rungic-Status: Pending
+X-Rungic-Tests: none (gap: no scenario compares panel colours)
+X-Rungic-Docs: docs/59
+---
+ components/mobileshellstate/CMakeLists.txt         |  1 +
+ components/mobileshellstate/shelldbusobject.cpp    | 42 ++++++++++++++++++++
+ components/mobileshellstate/shelldbusobject.h      | 18 +++++++++
+ containments/panel/qml/StatusBarWrapper.qml        | 14 ++++++-
+ .../taskpanel/qml/NavigationPanelComponent.qml     | 12 +++++-
+ .../convergentwindows/contents/ui/WindowColors.qml | 45 ++++++++++++++++++++++
+ .../scripts/convergentwindows/contents/ui/main.qml |  3 ++
+ 7 files changed, 131 insertions(+), 4 deletions(-)
+ create mode 100644 kwin/scripts/convergentwindows/contents/ui/WindowColors.qml
+
+diff --git a/components/mobileshellstate/CMakeLists.txt b/components/mobileshellstate/CMakeLists.txt
+index abd53c9..106adc7 100644
+--- a/components/mobileshellstate/CMakeLists.txt
++++ b/components/mobileshellstate/CMakeLists.txt
+@@ -67,6 +67,7 @@ target_link_libraries(mobileshellstateplugin
+         KF6::I18n
+         KF6::Notifications
+         KF6::Screen
++        KF6::ConfigCore
+         Plasma::PlasmaQuick
+ )
+ 
+diff --git a/components/mobileshellstate/shelldbusobject.cpp b/components/mobileshellstate/shelldbusobject.cpp
+index 1a27996..dc05537 100644
+--- a/components/mobileshellstate/shelldbusobject.cpp
++++ b/components/mobileshellstate/shelldbusobject.cpp
+@@ -4,7 +4,13 @@
+ #include "shelldbusobject.h"
+ #include "mobileadaptor.h"
+ 
++#include <KConfigGroup>
++#include <KSharedConfig>
++
++#include <QColor>
+ #include <QDBusConnection>
++#include <QFileInfo>
++#include <QStandardPaths>
+ 
+ ShellDBusObject::ShellDBusObject(QObject *parent)
+     : QObject{parent}
+@@ -155,3 +161,39 @@ void ShellDBusObject::openLockScreenKeypad()
+ {
+     Q_EMIT openLockScreenKeypadRequested();
+ }
++
++void ShellDBusObject::setActiveWindowColorScheme(const QString &screen, const QString &colorScheme)
++{
++    // A scheme is a .colors file: an absolute path, or a name under color-schemes/.
++    QString path;
++    if (!colorScheme.isEmpty() && colorScheme != QLatin1String("kdeglobals")) {
++        path = QFileInfo(colorScheme).isAbsolute()
++            ? colorScheme
++            : QStandardPaths::locate(QStandardPaths::GenericDataLocation, QStringLiteral("color-schemes/%1.colors").arg(colorScheme));
++    }
++    if (m_windowColorSchemes.value(screen) == path) {
++        return;
++    }
++    m_windowColorSchemes.insert(screen, path);
++    m_windowColorsRevision++;
++    Q_EMIT windowColorsChanged();
++}
++
++QString ShellDBusObject::windowBackground(const QString &screen, const QString &colorSet) const
++{
++    const QString path = m_windowColorSchemes.value(screen);
++    if (path.isEmpty() || !QFileInfo::exists(path)) {
++        return {};
++    }
++    const auto config = KSharedConfig::openConfig(path, KConfig::SimpleConfig);
++    const QStringList rgb = KConfigGroup(config, QStringLiteral("Colors:%1").arg(colorSet)).readEntry("BackgroundNormal", QStringList{});
++    if (rgb.size() < 3) {
++        return {};
++    }
++    return QColor(rgb[0].trimmed().toInt(), rgb[1].trimmed().toInt(), rgb[2].trimmed().toInt()).name();
++}
++
++int ShellDBusObject::windowColorsRevision() const
++{
++    return m_windowColorsRevision;
++}
+diff --git a/components/mobileshellstate/shelldbusobject.h b/components/mobileshellstate/shelldbusobject.h
+index b39f1cb..93eff7e 100644
+--- a/components/mobileshellstate/shelldbusobject.h
++++ b/components/mobileshellstate/shelldbusobject.h
+@@ -3,6 +3,7 @@
+ 
+ #pragma once
+ 
++#include <QHash>
+ #include <QObject>
+ #include <QString>
+ #include <qqmlregistration.h>
+@@ -16,6 +17,8 @@ class ShellDBusObject : public QObject
+     QML_SINGLETON
+     Q_CLASSINFO("D-Bus Interface", "org.kde.plasmashell")
+     Q_PROPERTY(StartupFeedbackModel *startupFeedbackModel READ startupFeedbackModel CONSTANT)
++    // Bumped whenever a screen's app colours change: bindings on windowBackground() re-read.
++    Q_PROPERTY(int windowColorsRevision READ windowColorsRevision NOTIFY windowColorsChanged)
+ 
+ public:
+     ShellDBusObject(QObject *parent = nullptr);
+@@ -25,7 +28,14 @@ public:
+ 
+     StartupFeedbackModel *startupFeedbackModel();
+ 
++    // Moto: the colours of the app shown on a screen, so its panels match it (docs/59).
++    // `colorSet` is a colour scheme group ("Window", "Header"); an empty string when the
++    // app gave no colour scheme of its own (the panels keep the theme's).
++    Q_INVOKABLE QString windowBackground(const QString &screen, const QString &colorSet) const;
++    int windowColorsRevision() const;
++
+ Q_SIGNALS:
++    void windowColorsChanged();
+     Q_SCRIPTABLE void doNotDisturbChanged();
+     Q_SCRIPTABLE void isActionDrawerOpenChanged();
+     Q_SCRIPTABLE void isVolumeOSDOpenChanged();
+@@ -73,6 +83,11 @@ public Q_SLOTS:
+     Q_SCRIPTABLE void showVolumeOSD();
+     Q_SCRIPTABLE void openLockScreenKeypad();
+ 
++    // Moto: the colour scheme of the window just activated on `screen`, as KWin has it
++    // (Window::colorScheme: the path an app gave through the KDE palette protocol, or
++    // "kdeglobals"). Sent by the convergentwindows KWin script.
++    Q_SCRIPTABLE void setActiveWindowColorScheme(const QString &screen, const QString &colorScheme);
++
+ private:
+     bool m_initialized{false};
+ 
+@@ -84,5 +99,8 @@ private:
+ 
+     QString m_panelState{};
+ 
++    QHash<QString, QString> m_windowColorSchemes;   // screen name -> colour scheme file
++    int m_windowColorsRevision{0};
++
+     StartupFeedbackModel *m_startupFeedbackModel{nullptr};
+ };
+diff --git a/containments/panel/qml/StatusBarWrapper.qml b/containments/panel/qml/StatusBarWrapper.qml
+index 4488f55..6b01ba3 100644
+--- a/containments/panel/qml/StatusBarWrapper.qml
++++ b/containments/panel/qml/StatusBarWrapper.qml
+@@ -3,6 +3,7 @@
+ 
+ import QtQuick
+ import QtQuick.Layouts
++import QtQuick.Window
+ 
+ import org.kde.kirigami as Kirigami
+ 
+@@ -27,7 +28,16 @@ Item {
+     // Request the panel itself to reapply settings (ex. for updating touch area).
+     signal updatePanelPropertiesRequested()
+ 
+-    Kirigami.Theme.colorSet: forcedComplementary ? Kirigami.Theme.Complementary : Kirigami.Theme.Header
++    // Moto (docs/59): an app that gave its own colour scheme gets the status bar in its
++    // colours, as one surface with it, and content that reads on them.
++    readonly property string appBackground: {
++        MobileShellState.ShellDBusObject.windowColorsRevision;
++        return MobileShellState.ShellDBusObject.windowBackground(Screen.name, "Header");
++    }
++    readonly property bool appColors: !transparentBackground && appBackground !== ""
++
++    Kirigami.Theme.colorSet: forcedComplementary || (appColors && Kirigami.ColorUtils.brightnessForColor(appBackground) === Kirigami.ColorUtils.Dark)
++        ? Kirigami.Theme.Complementary : Kirigami.Theme.Header
+     Kirigami.Theme.inherit: false
+ 
+     property real offset: 0
+@@ -40,7 +50,7 @@ Item {
+         showTime: !MobileShellState.LockscreenDBusClient.lockscreenActive // Don't show time on the lockscreen, since we already have a massive clock
+ 
+         showDropShadow: root.forcedComplementary
+-        backgroundColor: root.transparentBackground ? "transparent" : Kirigami.Theme.backgroundColor
++        backgroundColor: root.transparentBackground ? "transparent" : root.appColors ? root.appBackground : Kirigami.Theme.backgroundColor
+ 
+         transform: [
+             Translate {
+diff --git a/containments/taskpanel/qml/NavigationPanelComponent.qml b/containments/taskpanel/qml/NavigationPanelComponent.qml
+index cf7ecb6..67841c3 100644
+--- a/containments/taskpanel/qml/NavigationPanelComponent.qml
++++ b/containments/taskpanel/qml/NavigationPanelComponent.qml
+@@ -31,8 +31,16 @@ MobileShell.NavigationPanel {
+     // - opaque if an app is shown or vkbd is shown
+     // - translucent if the task switcher is open
+     // - transparent if on the homescreen
+-    backgroundColor: opaqueBar ? Kirigami.Theme.backgroundColor : "transparent"
+-    foregroundColorGroup: forcedComplementary ? Kirigami.Theme.Complementary : Kirigami.Theme.Window
++    // Moto (docs/59): an app that gave its own colour scheme gets the bar in its colours.
++    readonly property string appBackground: {
++        MobileShellState.ShellDBusObject.windowColorsRevision;
++        return MobileShellState.ShellDBusObject.windowBackground(Screen.name, "Window");
++    }
++    readonly property bool appColors: opaqueBar && appBackground !== ""
++
++    backgroundColor: !opaqueBar ? "transparent" : appColors ? appBackground : Kirigami.Theme.backgroundColor
++    foregroundColorGroup: forcedComplementary || (appColors && Kirigami.ColorUtils.brightnessForColor(appBackground) === Kirigami.ColorUtils.Dark)
++        ? Kirigami.Theme.Complementary : Kirigami.Theme.Window
+     shadow: forcedComplementary
+ 
+     MobileShellState.PanelSettingsDBusClient {
+diff --git a/kwin/scripts/convergentwindows/contents/ui/WindowColors.qml b/kwin/scripts/convergentwindows/contents/ui/WindowColors.qml
+new file mode 100644
+index 0000000..15564e2
+--- /dev/null
++++ b/kwin/scripts/convergentwindows/contents/ui/WindowColors.qml
+@@ -0,0 +1,45 @@
++// SPDX-License-Identifier: LGPL-2.1-or-later
++// Moto (docs/59): tells the mobile shell the colour scheme of the app window made active on
++// each screen, so the status bar and navigation panel take that app's colours. The scheme
++// is what the app gave through the KDE palette protocol (KWin's Window::colorScheme: a
++// .colors path, or "kdeglobals" for none); apps without one keep the theme's panels.
++import QtQuick
++import org.kde.kwin as KWinComponents
++
++Item {
++    id: root
++    property var window: null
++
++    KWinComponents.DBusCall {
++        id: report
++        service: "org.kde.plasmashell"
++        path: "/Mobile"
++        dbusInterface: "org.kde.plasmashell"
++        method: "setActiveWindowColorScheme"
++    }
++
++    function send(window) {
++        if (!window || !window.output) {
++            return;
++        }
++        report.arguments = [window.output.name, window.colorScheme];
++        report.call();
++    }
++
++    Connections {
++        target: KWinComponents.Workspace
++        function onWindowActivated(window) {
++            // Only apps' own windows: panels, the shell and overlays keep the last app's colours.
++            if (window && window.normalWindow) {
++                root.window = window;
++                root.send(window);
++            }
++        }
++    }
++    Connections {
++        target: root.window
++        ignoreUnknownSignals: true
++        function onColorSchemeChanged() { root.send(root.window); }
++        function onOutputChanged() { root.send(root.window); }
++    }
++}
+diff --git a/kwin/scripts/convergentwindows/contents/ui/main.qml b/kwin/scripts/convergentwindows/contents/ui/main.qml
+index c3f5a31..f705c5e 100644
+--- a/kwin/scripts/convergentwindows/contents/ui/main.qml
++++ b/kwin/scripts/convergentwindows/contents/ui/main.qml
+@@ -11,6 +11,9 @@ Loader {
+ 
+     property var currentWindow: KWinComponents.Workspace.activeWindow
+ 
++    // Moto (docs/59): the active app's colour scheme to the panels.
++    property Item windowColors: WindowColors {}
++
+     // Windows this script maximized for the phone; they get a desktop-sized
+     // geometry when they move to an external screen.
+     property var mobileMaximized: ({})

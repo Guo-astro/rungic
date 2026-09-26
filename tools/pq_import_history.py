@@ -9,9 +9,13 @@ adds one patch-queue commit per step with the plan's DEP-3 and X-Rungic-* traile
 that the result equals the vendored tree. `tools/pq.py export` then writes debian/patches.
 
 Symlinks into the repository (shared headers) are replaced by the file they point to at that
-commit: a patch cannot carry a symlink.
+commit: a patch cannot carry a symlink. Paths in the recipe's 'overlay' (shared files placed into
+the tree by tools/pq.py) are left out of the steps: the base already has them. A step marked
+"distribution" is a change the distribution's own patches make (applied on import to the vendored
+tree): it is recorded but not repeated.
 
-  pq_import_history.py kwin            build .work/pq/kwin and verify against HEAD:vendor/kwin
+  pq_import_history.py kwin [--ref C]  build .work/pq/kwin and verify against C:vendor/kwin (default
+                                      HEAD; the vendored trees are gone after their migration commit)
 """
 import argparse
 import json
@@ -75,6 +79,7 @@ def trailers(step):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('package')
+    parser.add_argument('--ref', default='HEAD', help='commit whose vendor/<component> the result must equal')
     args = parser.parse_args()
     plan = json.loads((WORKSPACE / 'tools/pq-history' / f'{args.package}.json').read_text())
     component = plan['vendor']                       # e.g. vendor/kwin
@@ -85,16 +90,32 @@ def main():
         shutil.rmtree(d, ignore_errors=True)
         d.mkdir(parents=True)
 
-    # Packaging branch: the Ubuntu source as git-ubuntu imports it (patches unapplied).
-    subprocess.run(['docker', 'run', '--rm', '-u', f'{uid()}:{gid()}', '-v', f'{sources}:/src:ro',
-                    '-v', f'{work.parent}:/w', '-w', '/w', IMAGE, 'dpkg-source', '-q', '--skip-patches', '-x',
-                    f"/src/{plan['dsc']}", f'{args.package}.x'], capture_output=True, check=True)
+    sys.path.insert(0, str(WORKSPACE / 'tools'))
+    import pq
     shutil.rmtree(work)
-    (work.parent / f'{args.package}.x').rename(work)
+    if 'dsc' in plan:
+        # Packaging branch: the Ubuntu source as git-ubuntu imports it (patches unapplied).
+        subprocess.run(['docker', 'run', '--rm', '-u', f'{uid()}:{gid()}', '-v', f'{sources}:/src:ro',
+                        '-v', f'{work.parent}:/w', '-w', '/w', IMAGE, 'dpkg-source', '-q', '--skip-patches', '-x',
+                        f"/src/{plan['dsc']}", f'{args.package}.x'], capture_output=True, check=True)
+        (work.parent / f'{args.package}.x').rename(work)
+    else:
+        # An upstream one of this project's packages builds: its tarball, and an empty series for gbp.
+        unpack = scratch / 'upstream'
+        with tarfile.open(pq.orig_tarball(args.package)) as tar:
+            tar.extractall(unpack, filter='tar')
+        [top] = list(unpack.iterdir())
+        top.rename(work)
+        (work / 'debian/patches').mkdir(parents=True)
+        (work / 'debian/patches/series').write_text('')
+        pq.gbp_stub(args.package, work)
+    overlay = pq.overlay(args.package)
+    pq.add_overlay(args.package, work)
     git('init', '-q', '-b', 'rungic', cwd=work)
     git('add', '-A', cwd=work)
     git('-c', 'user.name=Rungic', '-c', 'user.email=noreply@rungic.invalid', 'commit', '-q', '-m',
-        f"{args.package} {plan['version']} (Ubuntu source, patches unapplied)", cwd=work)
+        f"{args.package} {plan['version']} ({'Ubuntu source' if 'dsc' in plan else 'upstream'}, patches unapplied"
+        + (', shared overlay files' if overlay else '') + ')', cwd=work)
     tool(work, 'gbp', 'pq', 'import')
 
     # One commit per step, each the difference its step made to the vendored tree: every state is
@@ -123,8 +144,12 @@ def main():
         else:
             new = tree_at(step['commit'], component, after)
         record(new, step['name'])
-        diff = git('diff', '--binary', 'HEAD~1', 'HEAD', '--', '.', ':!debian', cwd=hist)
+        diff = git('diff', '--binary', 'HEAD~1', 'HEAD', '--', '.', ':!debian',
+                   *[f':!{path}' for path in overlay], cwd=hist)
         previous = new
+        if step.get('distribution'):
+            print(f"{step['name']}: made by the distribution's patches, not repeated")
+            continue
         if not diff.strip():
             print(f"{step['name']}: no change outside debian/")
             continue
@@ -136,11 +161,10 @@ def main():
             '--date', step.get('date', '2026-09-23T00:00:00'), cwd=work)
 
     # The patch queue applied must be the vendored tree (debian/ is compared separately).
-    final = tree_at('HEAD', component, scratch / 'head') / ''
-    result = subprocess.run(['diff', '-r', '-q', '-x', '.pc', '-x', 'debian', '-x', '.git', str(work), str(final)],
-                            capture_output=True, text=True)
-    print(result.stdout or f'{args.package}: patch queue reproduces HEAD:{component} (debian/ and .pc aside)')
-    return result.returncode
+    final = tree_at(args.ref, component, scratch / 'head') / ''
+    lines = pq.tree_diff(work, final, ('.pc', 'debian', '.git'))
+    print('\n'.join(lines) or f'{args.package}: patch queue reproduces {args.ref}:{component} (debian/ and .pc aside)')
+    return 1 if lines else 0
 
 
 if __name__ == '__main__':

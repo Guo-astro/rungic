@@ -4,7 +4,9 @@
 
 Each package directory holds:
   package.json  name, architecture (all|arm64), build (host|device), paths (repository paths
-                the package is built from: a change there means a rebuild), depends,
+                the package is built from: a change there means a rebuild), upstream (patch-queue
+                components, packages/<name>, whose patched source build.sh finds in
+                $SRC/upstream/<name>; docs/71), depends,
                 build_depends (installed on the phone before a device build), description,
                 obsolete (files of the old manual installs that postinst removes once the
                 package's own copies are in place), units {system: [...], user: [...]} to enable,
@@ -60,9 +62,20 @@ def git(*args):
     return subprocess.run(['git', *args], cwd=WORKSPACE, capture_output=True, text=True, check=True).stdout.strip()
 
 
+def identity_paths(pkg):
+    """What a package is built from: its paths, its directory, and for each upstream component its
+    recipe and patches (packages/<name>) and the shared files its overlay places."""
+    import pq
+    paths = set(pkg['paths']) | {str(pkg['dir'].relative_to(WORKSPACE))}
+    for name in pkg.get('upstream', []):
+        paths.add(f'packages/{name}')
+        paths.update(entry['from'] for entry in pq.overlay(name).values())
+    return sorted(paths)
+
+
 def tree_hash(pkg):
-    """Content identity of a package: the git trees/blobs of its paths and its own directory."""
-    paths = sorted(set(pkg['paths']) | {str(pkg['dir'].relative_to(WORKSPACE))})
+    """Content identity of a package: the git trees/blobs of identity_paths()."""
+    paths = identity_paths(pkg)
     dirty = git('status', '--porcelain', '--', *paths)
     if dirty:
         raise SystemExit(f"{pkg['name']}: uncommitted changes in its paths:\n{dirty}")
@@ -255,6 +268,11 @@ def stage_sources(pkg):
     with tarfile.open(archive, 'w', dereference=True) as tar:
         for name in filter(None, files):
             tar.add(WORKSPACE / name, arcname=name, recursive=False)
+        for name in pkg.get('upstream', []):
+            import pq
+            tree = pq.source(name, WORKSPACE / f".work/cache/{pkg['name']}-upstream/{name}")
+            tar.add(tree, arcname=f'upstream/{name}', filter=lambda info: None if '/.pc' in info.name
+                    or info.name.endswith('/.pc') else info)
     return archive
 
 

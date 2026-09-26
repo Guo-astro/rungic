@@ -1,0 +1,14 @@
+relax-plasma-internal-build-deps.patch
+rungic/panel-exclusive-zone.patch
+rungic/convergent-keyboard.patch
+rungic/navigation-accessible-names.patch
+rungic/marquee-stop-when-hidden.patch
+rungic/kscreenosd-read-config.patch
+rungic/predock-mode-apart.patch
+rungic/external-screen-desktop-shell.patch
+rungic/docked-rules-per-output.patch
+rungic/activate-on-tapped-screen.patch
+rungic/desktop-size-windows-on-tv.patch
+rungic/home-hold-voice-assistant.patch
+rungic/panels-app-colours.patch
+rungic/recording-quicksetting.patch

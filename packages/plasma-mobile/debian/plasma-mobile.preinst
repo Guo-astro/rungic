@@ -1,0 +1,29 @@
+#!/bin/sh
+set -e
+# Moto (docs/61): before this build, the project installed its plasma-mobile changes over
+# the packaged files with local dpkg diversions. This package carries those changes: drop
+# the old override and the diversion, so dpkg installs this package's files in place.
+if [ "$1" = install ] || [ "$1" = upgrade ]; then
+    qt=/usr/lib/aarch64-linux-gnu/qt6
+    for f in \
+        /usr/share/plasma/shells/org.kde.plasma.mobileshell/contents/views/Panel.qml \
+        /usr/share/plasma/shells/org.kde.plasma.mobileshell/contents/applet/CompactApplet.qml \
+        /usr/share/kwin/scripts/convergentwindows/contents/ui/main.qml \
+        /usr/share/plasma/quicksettings/org.kde.plasma.quicksetting.record/contents/ui/main.qml \
+        $qt/qml/org/kde/plasma/quicksetting/record/librecordplugin.so \
+        $qt/qml/org/kde/plasma/private/mobileshell/libmobileshellplugin.so \
+        $qt/qml/org/kde/plasma/private/mobileshell/windowplugin/libwindowplugin.so \
+        $qt/qml/org/kde/plasma/private/mobileshell/state/libmobileshellstateplugin.so \
+        $qt/qml/org/kde/plasma/quicksetting/kscreenosd/libkscreenosdplugin.so \
+        $qt/plugins/plasma/applets/org.kde.plasma.mobile.panel.so \
+        $qt/plugins/plasma/applets/org.kde.plasma.mobile.taskpanel.so \
+        $qt/plugins/plasma/applets/org.kde.plasma.mobile.homescreen.folio.so
+    do
+        if dpkg-divert --list "$f" | grep -q '^local diversion'; then
+            rm -f "$f"
+            dpkg-divert --local --rename --remove "$f" >/dev/null
+        fi
+    done
+fi
+
+#DEBHELPER#

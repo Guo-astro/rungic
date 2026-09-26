@@ -1,0 +1,80 @@
+From: kevinzhow <kevinzhow@local>
+Date: Thu, 24 Sep 2026 13:54:41 +0900
+Subject: KScreenOSDProvider: keep the mode from before docking apart from
+ convergenceModeEnabled
+
+The mode from before a display was plugged in was read back from convergenceModeEnabled itself, so
+a shell restarted while docked stayed docked after unplugging. The auto-dock state and the earlier
+mode now live in their own settings.
+
+Forwarded: not-needed
+Last-Update: 2026-09-26
+X-Rungic-Status: Pending [check upstream master first]
+X-Rungic-Tests: none (gap: needs a shell restart while an external screen is connected)
+X-Rungic-Docs: docs/58
+---
+ .../qml/popups/kscreenosd/KScreenOSDProvider.qml   | 35 ++++++++++++++--------
+ 1 file changed, 23 insertions(+), 12 deletions(-)
+
+diff --git a/components/mobileshell/qml/popups/kscreenosd/KScreenOSDProvider.qml b/components/mobileshell/qml/popups/kscreenosd/KScreenOSDProvider.qml
+index 2256ae1..23f3df5 100644
+--- a/components/mobileshell/qml/popups/kscreenosd/KScreenOSDProvider.qml
++++ b/components/mobileshell/qml/popups/kscreenosd/KScreenOSDProvider.qml
+@@ -3,6 +3,7 @@
+ 
+ import QtQuick
+ import QtQml
++import QtCore
+ 
+ import org.kde.plasma.quicksetting.kscreenosd 1.0
+ import org.kde.plasma.private.mobileshell.shellsettingsplugin as ShellSettings
+@@ -11,27 +12,37 @@ import org.kde.plasma.private.mobileshell.shellsettingsplugin as ShellSettings
+ /**
+  * This switches between docked / convergence mode and normal when a monitor
+  * is plugged in or unplugged.
++ *
++ * Moto (docs/58): the mode from before the display was plugged in is kept in its
++ * own settings, together with whether this switch docked the shell. Upstream
++ * read it back from convergenceModeEnabled itself at startup, so a shell that
++ * restarted while docked (e.g. the Android host restarting during a cast) took
++ * "docked" as the original mode and never left it after unplugging.
+  */
+ QtObject {
+     id: component
+ 
+-    property bool initialConvergenceMode: false
++    property Settings autoDock: Settings {
++        category: "KScreenOSDAutoDock"
++        property bool docked: false
++        property bool modeBefore: false
++    }
+ 
+     property var apiListener: Connections {
+         target: KScreenOSDUtil
+         function onOutputsChanged() {
+-            if (KScreenOSDUtil.outputs > 1) {
+-                initialConvergenceMode = ShellSettings.Settings.convergenceModeEnabled;
++            const outputs = KScreenOSDUtil.outputs;
++            if (outputs > 1) {
++                if (!component.autoDock.docked) {
++                    component.autoDock.modeBefore = ShellSettings.Settings.convergenceModeEnabled;
++                    component.autoDock.docked = true;
++                }
++                ShellSettings.Settings.convergenceModeEnabled = true;
++            } else if (outputs === 1 && component.autoDock.docked) {
++                // 0 means the KScreen configuration has not arrived yet.
++                ShellSettings.Settings.convergenceModeEnabled = component.autoDock.modeBefore;
++                component.autoDock.docked = false;
+             }
+--            console.log("KScreenOSDProvider convergenceModeEnabled: "
+--                        + (KScreenOSDUtil.outputs > 1 ? "true" : (initialConvergenceMode ? "TRUE" : "FALSE")));
+-            ShellSettings.Settings.convergenceModeEnabled = KScreenOSDUtil.outputs > 1 ? true : initialConvergenceMode;
+-        }
+-    }
+-
+-    Component.onCompleted: {
+-        if (KScreenOSDUtil.outputs < 2) {
+-            initialConvergenceMode = ShellSettings.Settings.convergenceModeEnabled;
+         }
+     }
+ }

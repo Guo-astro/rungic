@@ -19,7 +19,7 @@ python3 -m venv --system-site-packages "$clicker/venv"
 # The venv was made under DESTDIR: point its scripts and config at the installed path.
 grep -rlI --null "$DESTDIR" "$clicker/venv" | xargs -0 -r sed -i "s#$DESTDIR##g"
 find "$clicker" -name __pycache__ -prune -exec rm -rf {} +
-cp -r "$SRC/vendor/typesafe-computer-use/typesafe_computer_use" "$clicker/"
+cp -r "$SRC/upstream/typesafe-computer-use/typesafe_computer_use" "$clicker/"
 install -m644 "$C/moto_clicker.py" "$clicker/moto_clicker.py"
 install -Dm755 "$C/moto-clicker" "$DESTDIR/usr/bin/moto-clicker"
 find "$DESTDIR" -name __pycache__ -prune -exec rm -rf {} +

@@ -1,0 +1,203 @@
+From: kevinzhow <kevinzhow@local>
+Date: Thu, 24 Sep 2026 15:16:45 +0900
+Subject: convergentwindows: docked window rules per output
+
+Docked mode applied to every window, so connecting a TV gave the phone's apps title bars and
+unmaximized geometry. Windows on the internal screen keep the mobile rules, windows on external
+screens get desktop rules; a window moving between screens is re-evaluated, and one maximized for
+the phone gets a centered desktop geometry on the TV.
+
+Forwarded: not-needed
+Last-Update: 2026-09-26
+X-Rungic-Status: Pending
+X-Rungic-Tests: none (gap: needs a window on the TV; manual)
+X-Rungic-Docs: docs/58
+---
+ .../scripts/convergentwindows/contents/ui/main.qml | 147 +++++++++++++++------
+ 1 file changed, 109 insertions(+), 38 deletions(-)
+
+diff --git a/kwin/scripts/convergentwindows/contents/ui/main.qml b/kwin/scripts/convergentwindows/contents/ui/main.qml
+index 97103c4..7a03f26 100644
+--- a/kwin/scripts/convergentwindows/contents/ui/main.qml
++++ b/kwin/scripts/convergentwindows/contents/ui/main.qml
+@@ -11,6 +11,99 @@ Loader {
+ 
+     property var currentWindow: KWinComponents.Workspace.activeWindow
+ 
++    // Windows this script maximized for the phone; they get a desktop-sized
++    // geometry when they move to an external screen.
++    property var mobileMaximized: ({})
++    // Windows whose outputChanged signal is connected.
++    property var tracked: ({})
++
++    // Moto (docs/58): docked mode applies per output. The device's own screen
++    // keeps the mobile rules (borderless, maximized) while external screens get
++    // desktop windows. Upstream applied docked mode to every window, so plugging
++    // in a display turned the phone's apps into decorated, unmaximized windows.
++    // KWin without the `internal` output property keeps the upstream behaviour.
++    function desktopRules(window) {
++        if (!ShellSettings.Settings.convergenceModeEnabled) {
++            return false;
++        }
++        const output = window.output;
++        if (!output || output.internal === undefined) {
++            return true;
++        }
++        return !output.internal;
++    }
++
++    function track(window) {
++        const id = window.internalId.toString();
++        if (root.tracked[id]) {
++            return;
++        }
++        root.tracked[id] = true;
++        window.outputChanged.connect(() => {
++            // Mid-drag the output changes under the pointer; decide on release.
++            if (!window.move && !window.resize) {
++                root.run(window);
++            }
++        });
++        window.closed.connect(() => {
++            delete root.tracked[id];
++            delete root.mobileMaximized[id];
++        });
++    }
++
++    function runDesktop(window) {
++        const id = window.internalId.toString();
++        window.noBorder = false;
++
++        // A window maximized for the phone would stay phone-sized or fill the
++        // whole TV; give it a regular desktop window instead.
++        if (root.mobileMaximized[id]) {
++            delete root.mobileMaximized[id];
++            if (window.fullScreen) {
++                return;
++            }
++            const desktop = window.desktops[0];
++            if (desktop === undefined) {
++                return;
++            }
++            const area = KWinComponents.Workspace.clientArea(KWinComponents.Workspace.MaximizeArea, window.output, desktop);
++            window.setMaximize(false, false);
++            const width = Math.round(area.width * 0.7);
++            const height = Math.round(area.height * 0.8);
++            window.frameGeometry = Qt.rect(area.x + Math.round((area.width - width) / 2),
++                                           area.y + Math.round((area.height - height) / 2),
++                                           width, height);
++        }
++    }
++
++    function runMobile(window) {
++        // The direct resize only works around a decoration change. Once
++        // borderless, KWin owns the maximized geometry, including the OSK.
++        // Reapplying MaximizeArea on activation discards keyboard avoidance.
++        if (!window.fullScreen && !window.noBorder) {
++            const output = window.output;
++            const desktop = window.desktops[0]; // assume it's the first desktop that the window is on
++            if (desktop === undefined) {
++                return;
++            }
++            const maximizeRect = KWinComponents.Workspace.clientArea(KWinComponents.Workspace.MaximizeArea, output, desktop);
++
++            // set the window to the maximized size and position instantly, avoiding race condition
++            // between maximizing and window decorations being turned off (changing window height)
++            // see: https://invent.kde.org/teams/plasma-mobile/issues/-/issues/256
++            window.frameGeometry = maximizeRect;
++        }
++
++        // turn off window decorations
++        window.noBorder = true;
++
++        if (!window.fullScreen) {
++            // run maximize after to ensure the state is maximized
++            window.setMaximize(true, true);
++            root.mobileMaximized[window.internalId.toString()] = true;
++        }
++    }
++
+     function run(window) {
+         // HACK: don't maximize xwaylandvideobridge
+         // see: https://invent.kde.org/plasma/plasma-mobile/-/issues/324
+@@ -22,36 +115,26 @@ Loader {
+             return;
+         }
+ 
+-        if (ShellSettings.Settings.convergenceModeEnabled) {
+-            window.noBorder = false;
+-        } else {
+-            // The direct resize only works around a decoration change. Once
+-            // borderless, KWin owns the maximized geometry, including the OSK.
+-            // Reapplying MaximizeArea on activation discards keyboard avoidance.
+-            if (!window.fullScreen && !window.noBorder) {
+-                const output = window.output;
+-                const desktop = window.desktops[0]; // assume it's the first desktop that the window is on
+-                if (desktop === undefined) {
+-                    return;
+-                }
+-                const maximizeRect = KWinComponents.Workspace.clientArea(KWinComponents.Workspace.MaximizeArea, output, desktop);
+-
+-                // set the window to the maximized size and position instantly, avoiding race condition
+-                // between maximizing and window decorations being turned off (changing window height)
+-                // see: https://invent.kde.org/teams/plasma-mobile/issues/-/issues/256
+-                window.frameGeometry = maximizeRect;
+-            }
++        root.track(window);
+ 
+-            // turn off window decorations
+-            window.noBorder = true;
++        if (root.desktopRules(window)) {
++            root.runDesktop(window);
++        } else {
++            root.runMobile(window);
++        }
++    }
+ 
+-            if (!window.fullScreen) {
+-                // run maximize after to ensure the state is maximized
+-                window.setMaximize(true, true);
++    function runAll() {
++        const windows = KWinComponents.Workspace.windows;
++        for (let i = 0; i < windows.length; i++) {
++            if (windows[i].normalWindow) {
++                root.run(windows[i]);
+             }
+         }
+     }
+ 
++    Component.onCompleted: runAll()
++
+     Connections {
+         target: currentWindow
+ 
+@@ -75,13 +158,7 @@ Loader {
+         target: ShellSettings.Settings
+ 
+         function onConvergenceModeEnabledChanged() {
+-            const windows = KWinComponents.Workspace.windows;
+-
+-            for (let i = 0; i < windows.length; i++) {
+-                if (windows[i].normalWindow) {
+-                    root.run(windows[i]);
+-                }
+-            }
++            root.runAll();
+         }
+     }
+ 
+@@ -104,13 +181,7 @@ Loader {
+             // Windows are moved from the external screen
+             // to the internal screen if the external screen
+             // is disconnected.
+-            const windows = KWinComponents.Workspace.windows;
+-
+-            for (var i = 0; i < windows.length; i++) {
+-                if (windows[i].normalWindow) {
+-                    root.run(windows[i]);
+-                }
+-            }
++            root.runAll();
+         }
+     }
+ }

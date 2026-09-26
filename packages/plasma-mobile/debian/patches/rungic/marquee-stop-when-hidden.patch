@@ -1,0 +1,158 @@
+From: kevinzhow <kevinzhow@local>
+Date: Thu, 24 Sep 2026 04:40:38 +0900
+Subject: MarqueeLabel: stop the marquee while the quick settings are hidden;
+ no mask when the text fits
+
+Quick settings labels whose text overflowed kept their marquee animation running while the panel
+was closed, so plasmashell advanced animations about 100 times a second on a static desktop
+(8.5-10.5% of a core). Context-only differences against 6.6.5 were merged by hand.
+
+Origin: backport, upstream ce647d80 and 0f35c4af
+Forwarded: not-needed
+Last-Update: 2026-09-26
+X-Rungic-Status: Backport
+X-Rungic-Tests: L3:perf.compositor (plasmashell CPU on an idle desktop)
+X-Rungic-Docs: docs/57
+---
+ .../qml/actiondrawer/private/QuickSettings.qml     |  1 +
+ .../private/QuickSettingsFullDelegate.qml          |  4 ++
+ .../mobileshell/qml/components/MarqueeLabel.qml    | 49 ++++++++++++----------
+ 3 files changed, 31 insertions(+), 23 deletions(-)
+
+diff --git a/components/mobileshell/qml/actiondrawer/private/QuickSettings.qml b/components/mobileshell/qml/actiondrawer/private/QuickSettings.qml
+index 7f93571..87f8b39 100644
+--- a/components/mobileshell/qml/actiondrawer/private/QuickSettings.qml
++++ b/components/mobileshell/qml/actiondrawer/private/QuickSettings.qml
+@@ -161,6 +161,7 @@ Item {
+                                 padding: Kirigami.Units.smallSpacing
+ 
+                                 contentItem: QuickSettingsFullDelegate {
++                                    animationsEnabled: actionDrawer.intendedToBeVisible && root.fullViewProgress > 0 && flow.index === swipeView.currentIndex
+                                     restrictedPermissions: actionDrawer.restrictedPermissions
+ 
+                                     text: modelData.text
+diff --git a/components/mobileshell/qml/actiondrawer/private/QuickSettingsFullDelegate.qml b/components/mobileshell/qml/actiondrawer/private/QuickSettingsFullDelegate.qml
+index 2f5e4ef..7ceb68d 100644
+--- a/components/mobileshell/qml/actiondrawer/private/QuickSettingsFullDelegate.qml
++++ b/components/mobileshell/qml/actiondrawer/private/QuickSettingsFullDelegate.qml
+@@ -18,6 +18,8 @@ import org.kde.plasma.components 3.0 as PlasmaComponents
+ QuickSettingsDelegate {
+     id: root
+ 
++    required property bool animationsEnabled
++
+     padding: Kirigami.Units.smallSpacing * 2
+     iconItem: icon
+ 
+@@ -87,6 +89,7 @@ QuickSettingsDelegate {
+             anchors.bottom: parent.bottom
+ 
+             MobileShell.MarqueeLabel {
++                scrollingEnabled: root.animationsEnabled
+                 Layout.fillWidth: true
+                 inputText: root.text
+                 font.pointSize: Kirigami.Theme.defaultFont.pointSize * 0.75 // TODO base height off of size of delegate
+@@ -94,6 +97,7 @@ QuickSettingsDelegate {
+             }
+ 
+             MobileShell.MarqueeLabel {
++                scrollingEnabled: root.animationsEnabled
+                 // if no status is given, just use On/Off
+                 inputText: root.status ? root.status : (root.enabled ? i18n("On") : i18n("Off"))
+                 opacity: 0.6
+diff --git a/components/mobileshell/qml/components/MarqueeLabel.qml b/components/mobileshell/qml/components/MarqueeLabel.qml
+index 0608d88..2b8dae4 100644
+--- a/components/mobileshell/qml/components/MarqueeLabel.qml
++++ b/components/mobileshell/qml/components/MarqueeLabel.qml
+@@ -15,7 +15,7 @@ import Qt5Compat.GraphicalEffects
+  * This is a simple marquee (flowing) label based on PlasmaComponents Label.
+  */
+ 
+-OpacityMask {
++Item {
+     id: root
+     height: row.height
+ 
+@@ -23,22 +23,25 @@ OpacityMask {
+     required property string inputText
+     property font font
+     property var textFormat: Text.RichText
++    property bool scrollingEnabled: true
+     // properties for the marquee label scroll speed and wait duration
+     readonly property real scrollSpeed: 0.025
+     readonly property int waitDuration: 2000
+ 
+     readonly property string filteredText: inputText.replace(/\n/g, ' ') // remove new line characters
+-    readonly property bool charactersOverflowing: txtMeter.advanceWidth > root.width // true when text is overflowing
++
++    readonly property real textAdvanceWidth: txtMeter.advanceWidth // Cache TextMetrics.advanceWidth
++    readonly property bool charactersOverflowing: textAdvanceWidth > root.width // true when text is overflowing
++    readonly property bool shouldAnimate: scrollingEnabled && charactersOverflowing && visible && Window.window && Window.window.visible
+ 
+     // update animation values and text positions whenever the label overflows or changes
+-    onFilteredTextChanged: if (root.charactersOverflowing) { textAnimationLoop.restart() }
++    onFilteredTextChanged: if (root.shouldAnimate) { textAnimationLoop.restart() }
+     onCharactersOverflowingChanged: if (charactersOverflowing) { row.scrollPosition = 0 }
+ 
+     Item {
+         id: rowContaner
+         anchors.fill: parent
+         height: row.height
+-        opacity: 0 // we display with the opacity gradient below
+ 
+         // use two identical labels for scrolling so we can give the illusion of infinite scrolling
+         RowLayout {
+@@ -85,34 +88,34 @@ OpacityMask {
+         }
+     }
+ 
+-    // setting the gradient mask source
+-    source: rowContaner
+-
+     // if the label is overflowing, this animation in a loop smoothly scrolling thought the text
+     SequentialAnimation {
+         id: textAnimationLoop
+-        running: root.charactersOverflowing && root.visible
++        running: root.shouldAnimate
+         onRunningChanged: row.scrollPosition = 0
+         loops: Animation.Infinite
+         PauseAnimation { duration: root.waitDuration }
+-        NumberAnimation { target: row; property: "scrollPosition"; from: 0; to: -txtMeter.advanceWidth - row.spacing; duration: (txtMeter.advanceWidth + row.spacing) / root.scrollSpeed }
++        NumberAnimation { target: row; property: "scrollPosition"; from: 0; to: -root.textAdvanceWidth - row.spacing; duration: (root.textAdvanceWidth + row.spacing) / root.scrollSpeed }
+     }
+ 
+     // gradient mask to smoothly fade the ends of the label when it is scrolling
+-    maskSource: Rectangle {
+-        id: mask
+-        width: root.width
+-        height: root.height
+-
+-        property real gradientPct: (Kirigami.Units.gridUnit * 0.35) / root.width
+-
+-        gradient: Gradient {
+-            orientation: Gradient.Horizontal
+-
+-            GradientStop { position: 0; color: row.scrollPosition == 0 || row.scrollPosition < -txtMeter.advanceWidth ? 'white' : 'transparent' } // remove the beginning of the gradient when at the start of the label so the front text is fully visible
+-            GradientStop { position: 0 + mask.gradientPct; color: 'white' }
+-            GradientStop { position: 1.0 - mask.gradientPct; color: 'white' }
+-            GradientStop { position: 1.0; color: 'transparent' }
++    layer.enabled: root.charactersOverflowing
++    layer.effect: OpacityMask {
++        maskSource: Rectangle {
++            id: mask
++            width: root.width
++            height: root.height
++
++            property real gradientPct: (Kirigami.Units.gridUnit * 0.35) / root.width
++
++            gradient: Gradient {
++                orientation: Gradient.Horizontal
++
++                GradientStop { position: 0; color: row.scrollPosition == 0 || row.scrollPosition < -root.textAdvanceWidth ? 'white' : 'transparent' } // remove the beginning of the gradient when at the start of the label so the front text is fully visible
++                GradientStop { position: 0 + mask.gradientPct; color: 'white' }
++                GradientStop { position: 1.0 - mask.gradientPct; color: 'white' }
++                GradientStop { position: 1.0; color: 'transparent' }
++            }
+         }
+     }
+ }

@@ -1,0 +1,17 @@
+{
+ "comment": "Pinned upstream of the private FFmpeg (docs/71) that rungic-codec builds: the release tarball. The shared codec client and FFmpeg adapter are this repository's shared/media, placed into the tree by the overlay.",
+ "kind": "upstream",
+ "source": "ffmpeg",
+ "version": "8.1.2",
+ "upstream": "https://git.ffmpeg.org/ffmpeg.git",
+ "licenses": "see LICENSE.md and COPYING.*; configured build enables GPL",
+ "tarball": "ffmpeg-8.1.2.tar.xz",
+ "files": {
+  "ffmpeg-8.1.2.tar.xz": "464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c"
+ },
+ "fetch": "https://ffmpeg.org/releases/{file}",
+ "overlay": {
+  "libavcodec/moto-codec-client.h": "shared/media/codec-client.h",
+  "libavcodec/moto_codec.c": "shared/media/ffmpeg-moto-codec.c"
+ }
+}

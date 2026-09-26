@@ -1,0 +1,268 @@
+{
+ "package": "plasma-mobile",
+ "vendor": "vendor/plasma-mobile",
+ "version": "6.6.5-0ubuntu0.1",
+ "dsc": "plasma-mobile_6.6.5-0ubuntu0.1.dsc",
+ "base": "dffc717e",
+ "steps": [
+  {
+   "name": "panel-exclusive-zone",
+   "patch": "plasma/panel-exclusive-zone.patch",
+   "date": "2026-09-23T21:00:53+08:00",
+   "subject": "Top panel: keep the layer-shell exclusive zone equal to the panel thickness",
+   "description": "Android cutout metadata can change the top panel's thickness after its first Wayland configure.\nResizing the visible panel alone left the original exclusive zone, so applications kept the old\nreserved area. The panel now sets its layer-shell exclusion zone to its real thickness whenever\nthe thickness, visibility mode or floating state changes.",
+   "dep3": {
+    "Forwarded": "not-needed",
+    "Last-Update": "2026-09-26",
+    "X-Rungic-Status": "Pending [a thickness change after the first configure is not Android specific; check upstream master first]",
+    "X-Rungic-Tests": "L3:display.geometry",
+    "X-Rungic-Docs": "docs/43"
+   },
+   "author_name": "kevinzhow",
+   "author_email": "kevinzhow@local"
+  },
+  {
+   "name": "convergent-keyboard",
+   "patch": "plasma/convergent-keyboard.patch",
+   "date": "2026-09-23T21:00:53+08:00",
+   "subject": "convergentwindows: do not reapply MaximizeArea to borderless windows (keyboard avoidance)",
+   "description": "The direct resize only works around a decoration change. Once a window is borderless KWin owns its\nmaximized geometry, including the room the on-screen keyboard takes; reapplying MaximizeArea on\nevery activation discarded that keyboard avoidance. currentWindow also starts from the active window.",
+   "dep3": {
+    "Forwarded": "not-needed",
+    "Last-Update": "2026-09-26",
+    "X-Rungic-Status": "Pending",
+    "X-Rungic-Tests": "L3:input.text",
+    "X-Rungic-Docs": "docs/47"
+   },
+   "author_name": "kevinzhow",
+   "author_email": "kevinzhow@local"
+  },
+  {
+   "name": "navigation-accessible-names",
+   "commit": "f85ab58e",
+   "date": "2026-09-24T01:19:59+09:00",
+   "subject": "Navigation panel buttons have accessible names",
+   "description": "NavigationPanelAction.accessibleText, bound to Accessible.name, so assistive technology and AT-SPI\nautomation can tell Task switcher, Home and Close app apart.",
+   "dep3": {
+    "Origin": "backport, upstream master (NavigationPanelAction.accessibleText)",
+    "Forwarded": "not-needed",
+    "Last-Update": "2026-09-26",
+    "X-Rungic-Status": "Backport",
+    "X-Rungic-Tests": "L3:app.launch (presses Home by its accessible name)",
+    "X-Rungic-Docs": "docs/55"
+   },
+   "author_name": "kevinzhow",
+   "author_email": "kevinzhow@local"
+  },
+  {
+   "name": "marquee-stop-when-hidden",
+   "commit": "33bc327a",
+   "date": "2026-09-24T04:40:38+09:00",
+   "subject": "MarqueeLabel: stop the marquee while the quick settings are hidden; no mask when the text fits",
+   "description": "Quick settings labels whose text overflowed kept their marquee animation running while the panel\nwas closed, so plasmashell advanced animations about 100 times a second on a static desktop\n(8.5-10.5% of a core). Context-only differences against 6.6.5 were merged by hand.",
+   "dep3": {
+    "Origin": "backport, upstream ce647d80 and 0f35c4af",
+    "Forwarded": "not-needed",
+    "Last-Update": "2026-09-26",
+    "X-Rungic-Status": "Backport",
+    "X-Rungic-Tests": "L3:perf.compositor (plasmashell CPU on an idle desktop)",
+    "X-Rungic-Docs": "docs/57"
+   },
+   "author_name": "kevinzhow",
+   "author_email": "kevinzhow@local"
+  },
+  {
+   "name": "kscreenosd-read-config",
+   "commit": "6a54de8c",
+   "date": "2026-09-24T09:54:40+09:00",
+   "subject": "kscreenosd: read the KScreen configuration at startup",
+   "description": "KScreenOSDUtil never called retrieveKScreen(), so its output count stayed 0 and plugging a display\nnever switched to convergence (docked) mode.",
+   "dep3": {
+    "Forwarded": "not-needed",
+    "Last-Update": "2026-09-26",
+    "X-Rungic-Status": "Pending [a plain bug; check upstream master first]",
+    "X-Rungic-Tests": "L3:cast.agent_screen",
+    "X-Rungic-Docs": "docs/58"
+   },
+   "author_name": "kevinzhow",
+   "author_email": "kevinzhow@local"
+  },
+  {
+   "name": "predock-mode-apart",
+   "commit": "b0f3c8e1",
+   "date": "2026-09-24T13:54:41+09:00",
+   "subject": "KScreenOSDProvider: keep the mode from before docking apart from convergenceModeEnabled",
+   "description": "The mode from before a display was plugged in was read back from convergenceModeEnabled itself, so\na shell restarted while docked stayed docked after unplugging. The auto-dock state and the earlier\nmode now live in their own settings.",
+   "dep3": {
+    "Forwarded": "not-needed",
+    "Last-Update": "2026-09-26",
+    "X-Rungic-Status": "Pending [check upstream master first]",
+    "X-Rungic-Tests": "none (gap: needs a shell restart while an external screen is connected)",
+    "X-Rungic-Docs": "docs/58"
+   },
+   "author_name": "kevinzhow",
+   "author_email": "kevinzhow@local"
+  },
+  {
+   "name": "external-screen-desktop-shell",
+   "commit": "034eadeb",
+   "date": "2026-09-24T14:18:27+09:00",
+   "subject": "External screens get a desktop shell; the phone keeps the mobile shell",
+   "description": "Upstream puts a second Folio home screen and no panels on external screens (desktop panels there\nare only in the unmerged draft !548). An idempotent shell script (contents/external-desktop.js), run\nby KScreenOSDUtil when a screen is added, gives every screen after the phone a Folder View desktop\nand a Plasma Desktop panel. Applets of desktop panels and desktops use Plasma Desktop's AppletPopup\nnext to the panel instead of the mobile full-screen overlay.",
+   "dep3": {
+    "Forwarded": "not-needed",
+    "Last-Update": "2026-09-26",
+    "X-Rungic-Status": "Inappropriate [interim until upstream desktop panels on external screens (!548)]",
+    "X-Rungic-Tests": "L3:cast.agent_screen (output appears); desktop shell on the TV: manual",
+    "X-Rungic-Docs": "docs/58"
+   },
+   "author_name": "kevinzhow",
+   "author_email": "kevinzhow@local"
+  },
+  {
+   "name": "docked-rules-per-output",
+   "commit": "7b35ed60",
+   "date": "2026-09-24T15:16:45+09:00",
+   "subject": "convergentwindows: docked window rules per output",
+   "description": "Docked mode applied to every window, so connecting a TV gave the phone's apps title bars and\nunmaximized geometry. Windows on the internal screen keep the mobile rules, windows on external\nscreens get desktop rules; a window moving between screens is re-evaluated, and one maximized for\nthe phone gets a centered desktop geometry on the TV.",
+   "dep3": {
+    "Forwarded": "not-needed",
+    "Last-Update": "2026-09-26",
+    "X-Rungic-Status": "Pending",
+    "X-Rungic-Tests": "none (gap: needs a window on the TV; manual)",
+    "X-Rungic-Docs": "docs/58"
+   },
+   "author_name": "kevinzhow",
+   "author_email": "kevinzhow@local"
+  },
+  {
+   "name": "activate-on-tapped-screen",
+   "commit": "809d04d8",
+   "date": "2026-09-25T00:44:27+09:00",
+   "subject": "Tapping a running app's icon brings its window to the screen tapped on",
+   "description": "launchOrActivateApp only asked KWin to activate a window where it was, so an app moved to the TV\nstayed there when its icon was tapped on the phone. The launcher passes the screen it was tapped on;\nWindowUtil sends a window on another output there (org_kde_plasma_window.send_to_output) before\nactivating it. Used by the Folio home screen and the media controls.",
+   "dep3": {
+    "Forwarded": "not-needed",
+    "Last-Update": "2026-09-26",
+    "X-Rungic-Status": "Pending",
+    "X-Rungic-Tests": "none (gap: needs a window on the TV; manual)",
+    "X-Rungic-Docs": "docs/58"
+   },
+   "author_name": "kevinzhow",
+   "author_email": "kevinzhow@local"
+  },
+  {
+   "name": "desktop-size-windows-on-tv",
+   "commit": "6c49c2fc",
+   "date": "2026-09-25T02:54:18+09:00",
+   "subject": "convergentwindows: an app's first window opened on the TV gets the desktop size",
+   "description": "Applications size a new window from the primary screen, the phone (360 px wide), even when it opens\non the TV; WeChat's main window then used its narrow layout without the chat list. A new window on\nan external screen gets the desktop size, like windows moved from the phone.",
+   "dep3": {
+    "Forwarded": "not-needed",
+    "Last-Update": "2026-09-26",
+    "X-Rungic-Status": "Pending",
+    "X-Rungic-Tests": "none (gap: needs a window on the TV; manual)",
+    "X-Rungic-Docs": "docs/60"
+   },
+   "author_name": "kevinzhow",
+   "author_email": "kevinzhow@local"
+  },
+  {
+   "name": "home-hold-voice-assistant",
+   "commit": "826f48c9",
+   "date": "2026-09-25T15:21:20+09:00",
+   "subject": "Navigation panel: holding Home summons the voice assistant",
+   "description": "Navigation panel buttons can be held (NavigationPanelAction.holdable): past Android's 400 ms\nlong-press time a held press emits held() instead of triggered(), and holdReleased() when the\nfinger lifts. The task panel sends Home held and lifted, with the screen, to the voice assistant\nover D-Bus (asynchronous, harmless without it); a Home tap also sends Hide.",
+   "dep3": {
+    "Forwarded": "not-needed",
+    "Last-Update": "2026-09-26",
+    "X-Rungic-Status": "Inappropriate [calls this project's voice assistant; a holdable button alone could go upstream]",
+    "X-Rungic-Tests": "none (gap: no scenario holds Home)",
+    "X-Rungic-Docs": "docs/67"
+   },
+   "author_name": "kevinzhow",
+   "author_email": "kevinzhow@local"
+  },
+  {
+   "name": "desktop-size-first-window-only",
+   "commit": "3ccd5a4f",
+   "date": "2026-09-25T16:47:10+09:00",
+   "subject": "fixup! convergentwindows: an app's first window opened on the TV gets the desktop size",
+   "description": "Folded into the patch above.",
+   "dep3": {
+    "Forwarded": "not-needed",
+    "Last-Update": "2026-09-26",
+    "X-Rungic-Status": "Pending",
+    "X-Rungic-Tests": "none",
+    "X-Rungic-Docs": "docs/60"
+   },
+   "author_name": "kevinzhow",
+   "author_email": "kevinzhow@local"
+  },
+  {
+   "name": "panels-app-colours",
+   "commit": "3d0cc876",
+   "date": "2026-09-25T22:35:35+09:00",
+   "subject": "Status bar and navigation panel take the colours of the app shown",
+   "description": "Apps give KWin their colour scheme (Window::colorScheme). The convergentwindows script reports the\nscheme of the window activated on each screen to the shell (org.kde.plasmashell /Mobile\nsetActiveWindowColorScheme), and the panels use its Header/Window background, with light content on\na dark one. Apps without a scheme of their own keep the theme's panels.",
+   "dep3": {
+    "Forwarded": "not-needed",
+    "Last-Update": "2026-09-26",
+    "X-Rungic-Status": "Pending",
+    "X-Rungic-Tests": "none (gap: no scenario compares panel colours)",
+    "X-Rungic-Docs": "docs/59"
+   },
+   "author_name": "kevinzhow",
+   "author_email": "kevinzhow@local"
+  },
+  {
+   "name": "desktop-size-comment",
+   "commit": "d27491b5",
+   "date": "2026-09-26T04:14:33+09:00",
+   "subject": "fixup! convergentwindows: an app's first window opened on the TV gets the desktop size",
+   "description": "Folded into the patch above.",
+   "dep3": {
+    "Forwarded": "not-needed",
+    "Last-Update": "2026-09-26",
+    "X-Rungic-Status": "Pending",
+    "X-Rungic-Tests": "none",
+    "X-Rungic-Docs": "docs/60"
+   },
+   "author_name": "kevinzhow",
+   "author_email": "kevinzhow@local"
+  },
+  {
+   "name": "ubuntu-packaging",
+   "commit": "a11d50bf",
+   "distribution": true,
+   "subject": "-",
+   "dep3": {},
+   "author_name": "kevinzhow",
+   "author_email": "kevinzhow@local"
+  },
+  {
+   "name": "recording-quicksetting",
+   "commit": "121d8ccb",
+   "date": "2026-09-26T06:00:55+09:00",
+   "subject": "Recording quick setting: this project's recorder (KWin screencast stream, shared codec)",
+   "description": "The quick setting records the KWin screencast stream through the shared Android codec instead of\nKPipeWire. Its sources are this repository's plasma/recording, placed into quicksettings/record by\nthe recipe's overlay (they replace recordutil.* and the QML wholesale); this patch builds them.",
+   "dep3": {
+    "Forwarded": "not-needed",
+    "Last-Update": "2026-09-26",
+    "X-Rungic-Status": "Inappropriate [uses the Android hardware codec bridge of this project]",
+    "X-Rungic-Tests": "L3:recording.quicksetting",
+    "X-Rungic-Docs": "docs/46 docs/61"
+   },
+   "author_name": "kevinzhow",
+   "author_email": "kevinzhow@local"
+  },
+  {
+   "name": "preinst-diversions",
+   "commit": "c6896881",
+   "subject": "-",
+   "dep3": {},
+   "author_name": "kevinzhow",
+   "author_email": "kevinzhow@local"
+  }
+ ]
+}

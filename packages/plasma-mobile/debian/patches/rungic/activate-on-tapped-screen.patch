@@ -1,0 +1,174 @@
+From: kevinzhow <kevinzhow@local>
+Date: Fri, 25 Sep 2026 00:44:27 +0900
+Subject: Tapping a running app's icon brings its window to the screen tapped
+ on
+
+launchOrActivateApp only asked KWin to activate a window where it was, so an app moved to the TV
+stayed there when its icon was tapped on the phone. The launcher passes the screen it was tapped on;
+WindowUtil sends a window on another output there (org_kde_plasma_window.send_to_output) before
+activating it. Used by the Folio home screen and the media controls.
+
+Forwarded: not-needed
+Last-Update: 2026-09-26
+X-Rungic-Status: Pending
+X-Rungic-Tests: none (gap: needs a window on the TV; manual)
+X-Rungic-Docs: docs/58
+---
+ .../mobileshell/qml/components/AppLaunch.qml       |  6 ++--
+ .../widgets/mediacontrols/MediaControlsWidget.qml  |  2 +-
+ components/windowplugin/windowutil.cpp             | 39 +++++++++++++++++++---
+ components/windowplugin/windowutil.h               |  8 ++++-
+ .../homescreens/folio/qml/delegate/AppDelegate.qml |  2 +-
+ 5 files changed, 47 insertions(+), 10 deletions(-)
+
+diff --git a/components/mobileshell/qml/components/AppLaunch.qml b/components/mobileshell/qml/components/AppLaunch.qml
+index b3bc086..8b77607 100644
+--- a/components/mobileshell/qml/components/AppLaunch.qml
++++ b/components/mobileshell/qml/components/AppLaunch.qml
+@@ -13,8 +13,10 @@ QtObject {
+ 
+     /**
+      * Activates an application by storage id if it is already running, or launch the application.
++     * With screenName (Screen.name of the item launching it), a running app's window
++     * is brought to that screen first, e.g. back from a TV to the phone.
+      */
+-    function launchOrActivateApp(storageId) {
++    function launchOrActivateApp(storageId, screenName) {
+ 
+         // We don't want to import WindowPlugin initially because it has side-effects and slows down initial load.
+         // -> only import it if we actually run the function
+@@ -25,7 +27,7 @@ QtObject {
+ 
+             QtObject {
+                 Component.onCompleted: {
+-                    const launched = WindowPlugin.WindowUtil.activateWindowByStorageId("${storageId}");
++                    const launched = WindowPlugin.WindowUtil.activateWindowByStorageId("${storageId}", "${screenName || ""}");
+ 
+                     if (!launched) {
+                         MobileShell.ShellUtil.launchApp("${storageId}");
+diff --git a/components/mobileshell/qml/widgets/mediacontrols/MediaControlsWidget.qml b/components/mobileshell/qml/widgets/mediacontrols/MediaControlsWidget.qml
+index bb54080..f515143 100644
+--- a/components/mobileshell/qml/widgets/mediacontrols/MediaControlsWidget.qml
++++ b/components/mobileshell/qml/widgets/mediacontrols/MediaControlsWidget.qml
+@@ -114,7 +114,7 @@ Item {
+                     implicitWidth: root.width
+ 
+                     onPressAndHold: {
+-                        MobileShell.AppLaunch.launchOrActivateApp(model.desktopEntry + ".desktop");
++                        MobileShell.AppLaunch.launchOrActivateApp(model.desktopEntry + ".desktop", mouseArea.Screen.name);
+                         MobileShellState.ShellDBusClient.closeActionDrawer();
+                     }
+ 
+diff --git a/components/windowplugin/windowutil.cpp b/components/windowplugin/windowutil.cpp
+index 51427e4..295790a 100644
+--- a/components/windowplugin/windowutil.cpp
++++ b/components/windowplugin/windowutil.cpp
+@@ -10,6 +10,7 @@
+ #include <KApplicationTrader>
+ 
+ #include <QGuiApplication>
++#include <QScreen>
+ 
+ constexpr int ACTIVE_WINDOW_UPDATE_INVERVAL = 0;
+ 
+@@ -69,6 +70,16 @@ void WindowUtil::initWayland()
+         m_activeWindowTimer->start();
+     });
+ 
++    // Outputs by name (wl_output v4), to send windows to a screen.
++    connect(registry, &Registry::outputAnnounced, this, [this, registry](quint32 name, quint32 version) {
++        auto *output = registry->createOutput(name, std::min(version, 4u), this);
++        m_outputs.append(output);
++        connect(output, &Output::removed, this, [this, output]() {
++            m_outputs.removeOne(output);
++            output->deleteLater();
++        });
++    });
++
+     connect(registry, &Registry::plasmaActivationFeedbackAnnounced, this, [this, registry](quint32 name, quint32 version) {
+         auto iface = registry->createPlasmaActivationFeedback(name, version, this);
+ 
+@@ -146,16 +157,34 @@ bool WindowUtil::hasCloseableActiveWindow() const
+     return m_activeWindow && m_activeWindow->isCloseable() /*&& !m_activeWindow->isMinimized()*/;
+ }
+ 
+-bool WindowUtil::activateWindowByStorageId(const QString &storageId)
++bool WindowUtil::activateWindowByStorageId(const QString &storageId, const QString &screenName)
+ {
+     auto windows = windowsFromStorageId(storageId);
+ 
+-    if (!windows.empty()) {
+-        windows[0]->requestActivate();
+-        return true;
++    if (windows.empty()) {
++        return false;
+     }
+ 
+-    return false;
++    auto *window = windows[0];
++    if (!screenName.isEmpty()) {
++        // Geometries are global logical coordinates, as QScreen's are.
++        QScreen *screen = nullptr;
++        for (QScreen *s : QGuiApplication::screens()) {
++            if (s->name() == screenName) {
++                screen = s;
++            }
++        }
++        if (screen && !screen->geometry().contains(window->geometry().center())) {
++            for (auto *output : std::as_const(m_outputs)) {
++                if (output->name() == screenName) {
++                    window->sendToOutput(output);
++                    break;
++                }
++            }
++        }
++    }
++    window->requestActivate();
++    return true;
+ }
+ 
+ void WindowUtil::closeActiveWindow()
+diff --git a/components/windowplugin/windowutil.h b/components/windowplugin/windowutil.h
+index b13fdad..4115fc3 100644
+--- a/components/windowplugin/windowutil.h
++++ b/components/windowplugin/windowutil.h
+@@ -18,6 +18,7 @@
+ #include <KSharedConfig>
+ 
+ #include <KWayland/Client/connection_thread.h>
++#include <KWayland/Client/output.h>
+ #include <KWayland/Client/plasmawindowmanagement.h>
+ #include <KWayland/Client/registry.h>
+ #include <KWayland/Client/surface.h>
+@@ -67,7 +68,11 @@ public:
+      * @param storageId the window's storage id
+      * @returns whether a window was activated
+      */
+-    Q_INVOKABLE bool activateWindowByStorageId(const QString &storageId);
++    /**
++     * Activates the app's window. With screenName, a window on another screen (a
++     * cast TV) is first sent to that screen: the app is brought to where it was tapped.
++     */
++    Q_INVOKABLE bool activateWindowByStorageId(const QString &storageId, const QString &screenName = QString());
+ 
+     /**
+      * Close the current active window.
+@@ -128,4 +133,5 @@ private:
+     bool m_activeWindowIsShell = false;
+ 
+     QHash<QString, QList<KWayland::Client::PlasmaWindow *>> m_windows; // <storageId, window>
++    QList<KWayland::Client::Output *> m_outputs;
+ };
+diff --git a/containments/homescreens/folio/qml/delegate/AppDelegate.qml b/containments/homescreens/folio/qml/delegate/AppDelegate.qml
+index 45232a3..91a6243 100644
+--- a/containments/homescreens/folio/qml/delegate/AppDelegate.qml
++++ b/containments/homescreens/folio/qml/delegate/AppDelegate.qml
+@@ -44,7 +44,7 @@ AbstractDelegate {
+         }
+ 
+         application.setMinimizedDelegate(root);
+-        MobileShell.AppLaunch.launchOrActivateApp(application.storageId);
++        MobileShell.AppLaunch.launchOrActivateApp(application.storageId, root.Screen.name);
+     }
+ 
+     onAfterClickAnimation: {

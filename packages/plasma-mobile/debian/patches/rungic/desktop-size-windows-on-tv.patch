@@ -1,0 +1,101 @@
+From: kevinzhow <kevinzhow@local>
+Date: Fri, 25 Sep 2026 02:54:18 +0900
+Subject: convergentwindows: an app's first window opened on the TV gets the
+ desktop size
+
+Applications size a new window from the primary screen, the phone (360 px wide), even when it opens
+on the TV; WeChat's main window then used its narrow layout without the chat list. A new window on
+an external screen gets the desktop size, like windows moved from the phone.
+
+Forwarded: not-needed
+Last-Update: 2026-09-26
+X-Rungic-Status: Pending
+X-Rungic-Tests: none (gap: needs a window on the TV; manual)
+X-Rungic-Docs: docs/60
+---
+ .../scripts/convergentwindows/contents/ui/main.qml | 45 +++++++++++++++++++++-
+ 1 file changed, 43 insertions(+), 2 deletions(-)
+
+diff --git a/kwin/scripts/convergentwindows/contents/ui/main.qml b/kwin/scripts/convergentwindows/contents/ui/main.qml
+index 7a03f26..c3f5a31 100644
+--- a/kwin/scripts/convergentwindows/contents/ui/main.qml
++++ b/kwin/scripts/convergentwindows/contents/ui/main.qml
+@@ -16,6 +16,39 @@ Loader {
+     property var mobileMaximized: ({})
+     // Windows whose outputChanged signal is connected.
+     property var tracked: ({})
++    // When each window appeared (ms), to recognize windows that open directly
++    // on an external screen.
++    property var added: ({})
++
++    // Moto (docs/60): some applications size a new window from the primary
++    // screen, which is the phone (360 px wide), even when it opens on the TV;
++    // WeChat's main window came up 420 px wide and fell back to its narrow
++    // layout without the chat list. A window that opens on an external screen
++    // at about the phone's width gets the regular desktop size.
++    // Only an application's first window: its later ones (WeChat's call window, a chat opened
++    // in its own window, dialogs) come in the size the app chose. A call window is a narrow
++    // portrait panel; stretched to the desktop size it was mostly black, its buttons under the
++    // panel (docs/63).
++    function firstOfItsApp(window) {
++        const windows = KWinComponents.Workspace.windows;
++        for (let i = 0; i < windows.length; i++) {
++            const other = windows[i];
++            if (other !== window && other.pid === window.pid && other.normalWindow) {
++                return false;
++            }
++        }
++        return true;
++    }
++
++    function phoneSized(window) {
++        const screens = KWinComponents.Workspace.screens;
++        for (let i = 0; i < screens.length; i++) {
++            if (screens[i].internal) {
++                return window.frameGeometry.width <= screens[i].geometry.width + 120;
++            }
++        }
++        return false;
++    }
+ 
+     // Moto (docs/58): docked mode applies per output. The device's own screen
+     // keeps the mobile rules (borderless, maximized) while external screens get
+@@ -48,6 +81,7 @@ Loader {
+         window.closed.connect(() => {
+             delete root.tracked[id];
+             delete root.mobileMaximized[id];
++            delete root.added[id];
+         });
+     }
+ 
+@@ -55,14 +89,20 @@ Loader {
+         const id = window.internalId.toString();
+         window.noBorder = false;
+ 
++        const justOpened = root.added[id] !== undefined && Date.now() - root.added[id] < 5000;
++        const phoneSizedNew = justOpened && window.resizeable && !window.transient && !window.maximized
++                              && root.phoneSized(window) && root.firstOfItsApp(window);
++        delete root.added[id];
++
+         // A window maximized for the phone would stay phone-sized or fill the
+         // whole TV; give it a regular desktop window instead.
+-        if (root.mobileMaximized[id]) {
++        if (root.mobileMaximized[id] || phoneSizedNew) {
+             delete root.mobileMaximized[id];
+             if (window.fullScreen) {
+                 return;
+             }
+-            const desktop = window.desktops[0];
++            // A window that has just appeared may not list its desktops yet.
++            const desktop = window.desktops[0] || KWinComponents.Workspace.currentDesktop;
+             if (desktop === undefined) {
+                 return;
+             }
+@@ -167,6 +207,7 @@ Loader {
+ 
+         function onWindowAdded(window) {
+             if (window && window.normalWindow) {
++                root.added[window.internalId.toString()] = Date.now();
+                 root.run(window);
+             }
+         }

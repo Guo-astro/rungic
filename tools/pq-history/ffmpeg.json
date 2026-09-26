@@ -1,0 +1,40 @@
+{
+ "package": "ffmpeg",
+ "vendor": "vendor/ffmpeg",
+ "version": "8.1.2",
+ "base": "dffc717e",
+ "steps": [
+  {
+   "name": "libx264-software-name",
+   "patch": ".work/pq-input/ffmpeg-libx264-sw.patch",
+   "author_name": "kevinzhow",
+   "author_email": "kevinzhow@local",
+   "date": "2026-09-23T21:00:53+08:00",
+   "subject": "libx264 registers as libx264_sw",
+   "description": "The name libx264 goes to this project's H.264 encoder (hardware through the Android codec bridge,\nsoftware otherwise), so applications that ask for libx264 by name get it; the x264 encoder stays\navailable as libx264_sw, which that encoder uses as its software fallback.",
+   "dep3": {
+    "Forwarded": "not-needed",
+    "Last-Update": "2026-09-26",
+    "X-Rungic-Status": "Inappropriate [makes room for the Android hardware codec under the name applications ask for]",
+    "X-Rungic-Tests": "L3:codec.hw",
+    "X-Rungic-Docs": "docs/54 docs/research/35"
+   }
+  },
+  {
+   "name": "android-codec-registration",
+   "commit": "d1301f2e",
+   "author_name": "kevinzhow",
+   "author_email": "kevinzhow@local",
+   "date": "2026-09-23T21:00:53+08:00",
+   "subject": "Register this project's Android hardware codecs (H.264/HEVC encode and decode, VP9 decode)",
+   "description": "The codecs run on Android's MediaCodec through the shared codec client (shared/media, placed into\nlibavcodec by the recipe's overlay as moto_codec.c and moto-codec-client.h); this patch adds them to\nthe build and to the codec list, the automatic encoders ahead of the software ones.",
+   "dep3": {
+    "Forwarded": "not-needed",
+    "Last-Update": "2026-09-26",
+    "X-Rungic-Status": "Inappropriate [Android host specific: MediaCodec through the APK]",
+    "X-Rungic-Tests": "L3:codec.hw",
+    "X-Rungic-Docs": "docs/54 docs/research/35"
+   }
+  }
+ ]
+}

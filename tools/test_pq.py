@@ -106,5 +106,56 @@ class FetchTests(PackageTree):
         self.assertEqual(sorted(p.name for p in cache.iterdir()), ['demo.orig.tar.xz'])
 
 
+class OverlayTests(PackageTree):
+    def setUp(self):
+        super().setUp()
+        p = patch.object(pq, 'WORKSPACE', self.root)
+        p.start()
+        self.addCleanup(p.stop)
+        (self.root / 'shared').mkdir()
+        (self.root / 'shared/ours.cpp').write_text('ours\n')
+        self.tree = self.root / 'tree'
+        (self.tree / 'src').mkdir(parents=True)
+        (self.tree / 'src/theirs.cpp').write_text('theirs\n')
+
+    def overlay(self, entries):
+        self.package({}, recipe={'files': {}, 'overlay': entries})
+        pq.add_overlay('demo', self.tree)
+
+    def test_new_file(self):
+        self.overlay({'src/new.cpp': 'shared/ours.cpp'})
+        self.assertEqual((self.tree / 'src/new.cpp').read_text(), 'ours\n')
+
+    def test_upstream_file_needs_its_hash(self):
+        with self.assertRaisesRegex(SystemExit, 'exists in the upstream tree'):
+            self.overlay({'src/theirs.cpp': 'shared/ours.cpp'})
+
+    def test_replaces_upstream_file_with_the_recorded_hash(self):
+        digest = hashlib.sha256(b'theirs\n').hexdigest()
+        self.overlay({'src/theirs.cpp': {'from': 'shared/ours.cpp', 'replaces': digest}})
+        self.assertEqual((self.tree / 'src/theirs.cpp').read_text(), 'ours\n')
+
+    def test_refuses_once_upstream_changed(self):
+        with self.assertRaisesRegex(SystemExit, 'upstream src/theirs.cpp changed'):
+            self.overlay({'src/theirs.cpp': {'from': 'shared/ours.cpp', 'replaces': '0' * 64}})
+
+    def test_refuses_when_the_replaced_file_is_gone(self):
+        with self.assertRaisesRegex(SystemExit, 'which is gone'):
+            self.overlay({'src/gone.cpp': {'from': 'shared/ours.cpp', 'replaces': '0' * 64}})
+
+
+class VerifyTests(PackageTree):
+    def test_unresolvable_symlink_is_a_difference(self):
+        mine, ref = self.root / 'mine', self.root / 'ref'
+        mine.mkdir()
+        ref.mkdir()
+        (mine / 'f').write_text('x')
+        (ref / 'f').symlink_to('../nowhere/f')
+        with patch.object(pq, 'source', return_value=mine):
+            ok, text = pq.verify('demo', ref)
+        self.assertFalse(ok)
+        self.assertIn('No such file', text)
+
+
 if __name__ == '__main__':
     unittest.main()

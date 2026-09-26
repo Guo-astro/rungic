@@ -1,0 +1,16 @@
+{
+ "comment": "Pinned upstream of typesafe-computer-use (docs/71), which rungic-cua's clicker ships. No release tarballs: pinned by commit, checked by its tree hash. Our Linux adapter is this repository's code (plasma/cua/typesafe), placed into the tree by the overlay; the patches only hook it in.",
+ "kind": "git",
+ "source": "typesafe-computer-use",
+ "version": "0.2.0",
+ "git": "https://github.com/awlevin/typesafe-computer-use",
+ "commit": "24eb2924c2a95de5b18c2e5d6fdc692cbe87b5ff",
+ "tree": "e22e74366749508089ca64757e13b03ca45412f6",
+ "upstream": "https://github.com/awlevin/typesafe-computer-use",
+ "licenses": "MIT; see LICENSE",
+ "files": {},
+ "overlay": {
+  "typesafe_computer_use/linux.py": "plasma/cua/typesafe/linux.py",
+  "typesafe_computer_use/linux_ocr.py": "plasma/cua/typesafe/linux_ocr.py"
+ }
+}

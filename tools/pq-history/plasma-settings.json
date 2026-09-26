@@ -1,0 +1,64 @@
+{
+ "package": "plasma-settings",
+ "vendor": "vendor/plasma-settings",
+ "version": "25.12.0-1",
+ "dsc": "plasma-settings_25.12.0-1.dsc",
+ "base": "dffc717e",
+ "steps": [
+  {
+   "name": "modules-model-children",
+   "patch": "plasma/settings-model.patch",
+   "date": "2026-09-23T21:00:53+08:00",
+   "author_name": "kevinzhow",
+   "author_email": "kevinzhow@local",
+   "subject": "ModulesModel: children of an excepted category without mutating the list being iterated",
+   "description": "childrenList() removed and appended items of the list it was iterating over, so modules of an\nexcepted category could be skipped or repeated; data() also rejected valid indexes past rowCount()\nof the root. The children are now collected into a new list.",
+   "dep3": {
+    "Forwarded": "no",
+    "Last-Update": "2026-09-26",
+    "X-Rungic-Status": "Pending [a plain bug; check upstream master first]",
+    "X-Rungic-Tests": "none (gap: no scenario opens the settings module list)",
+    "X-Rungic-Docs": "docs/42"
+   }
+  },
+  {
+   "name": "android-hardware-settings",
+   "patch": "plasma/settings-hardware.patch",
+   "date": "2026-09-23T21:00:53+08:00",
+   "author_name": "kevinzhow",
+   "author_email": "kevinzhow@local",
+   "subject": "Android host: network, Bluetooth and power settings open the Android settings",
+   "description": "On the Android host the phone's radios, networks and suspend belong to Android. When the host's\nplatform socket exists, the Wi-Fi, network, cellular, Bluetooth and power modules hand over to the\nproject's platform helper, which opens the matching Android settings page; other sessions keep the\ndesktop modules.",
+   "dep3": {
+    "Forwarded": "not-needed",
+    "Last-Update": "2026-09-26",
+    "X-Rungic-Status": "Inappropriate [Android host specific: hands the hardware settings to Android]",
+    "X-Rungic-Tests": "none (gap: no scenario opens these modules)",
+    "X-Rungic-Docs": "docs/42"
+   }
+  },
+  {
+   "name": "ubuntu-packaging",
+   "commit": "a11d50bf",
+   "distribution": true,
+   "subject": "-",
+   "dep3": {}
+  },
+  {
+   "name": "usr-paths",
+   "commit": "af07f77f",
+   "date": "2026-09-26T06:18:38+09:00",
+   "author_name": "kevinzhow",
+   "author_email": "kevinzhow@local",
+   "subject": "fixup! Android host: network, Bluetooth and power settings open the Android settings",
+   "description": "Folded into the patch above.",
+   "dep3": {
+    "Forwarded": "not-needed",
+    "Last-Update": "2026-09-26",
+    "X-Rungic-Status": "-",
+    "X-Rungic-Tests": "-",
+    "X-Rungic-Docs": "-"
+   }
+  }
+ ]
+}

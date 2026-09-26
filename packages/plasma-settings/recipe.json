@@ -1,0 +1,16 @@
+{
+ "comment": "Pinned upstream of the plasma-settings source package (docs/71): Debian's 25.12.0-1 as synced into Ubuntu resolute; its orig is KDE's signed release tarball, identical in content to the tag tarball vendor/plasma-settings was imported from. packages/plasma-settings/debian replaces its debian/ (Debian's packaging plus our patches under debian/patches/rungic).",
+ "kind": "ubuntu",
+ "source": "plasma-settings",
+ "version": "25.12.0-1",
+ "series": "resolute",
+ "upstream": "https://invent.kde.org/plasma-mobile/plasma-settings",
+ "licenses": "see LICENSES",
+ "files": {
+  "plasma-settings_25.12.0-1.dsc": "c7683f4a825793ebc8bef31f071c2e6dd049eb67a67221f09835ac90607bf973",
+  "plasma-settings_25.12.0.orig.tar.xz": "bc286f2df392f377dbbacaa6e5629e8538500c3ed24ec6f45e6838cc6df62971",
+  "plasma-settings_25.12.0.orig.tar.xz.asc": "376037514269837e2cd26e96b4402657e1d304f498e72f2fbf8601a2625a1685",
+  "plasma-settings_25.12.0-1.debian.tar.xz": "2981798074a87d7c68440b3ee549e25f2ee57d86ec585547f0f05ccc6bd79e2d"
+ },
+ "fetch": "https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/plasma-settings/25.12.0-1/{file}"
+}

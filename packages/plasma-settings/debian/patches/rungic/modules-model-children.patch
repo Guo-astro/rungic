@@ -1,0 +1,52 @@
+From: kevinzhow <kevinzhow@local>
+Date: Wed, 23 Sep 2026 21:00:53 +0800
+Subject: ModulesModel: children of an excepted category without mutating the
+ list being iterated
+
+childrenList() removed and appended items of the list it was iterating over, so modules of an
+excepted category could be skipped or repeated; data() also rejected valid indexes past rowCount()
+of the root. The children are now collected into a new list.
+
+Forwarded: no
+Last-Update: 2026-09-26
+X-Rungic-Status: Pending [a plain bug; check upstream master first]
+X-Rungic-Tests: none (gap: no scenario opens the settings module list)
+X-Rungic-Docs: docs/42
+---
+ src/modulesmodel.cpp | 12 +++++++-----
+ 1 file changed, 7 insertions(+), 5 deletions(-)
+
+diff --git a/src/modulesmodel.cpp b/src/modulesmodel.cpp
+index 1d598be..996f610 100644
+--- a/src/modulesmodel.cpp
++++ b/src/modulesmodel.cpp
+@@ -133,7 +133,7 @@ void ModulesModel::initMenuList(MenuItem *parent, const QList<KPluginMetaData> &
+ 
+ QVariant ModulesModel::data(const QModelIndex &index, int role) const
+ {
+-    if (!index.isValid() || index.row() < 0 || index.row() >= rowCount()) {
++    if (!index.isValid()) {
+         return {};
+     }
+ 
+@@ -276,14 +276,16 @@ QModelIndex ModulesModel::parent(const QModelIndex &index) const
+ 
+ QList<MenuItem *> ModulesModel::childrenList(MenuItem *parent) const
+ {
+-    QList<MenuItem *> children = parent->children();
++    QList<MenuItem *> result;
++    const auto children = parent->children();
+     for (MenuItem *child : children) {
+         if (m_exceptions.contains(child)) {
+-            children.removeOne(child);
+-            children.append(child->children());
++            result.append(child->children());
++        } else {
++            result.append(child);
+         }
+     }
+-    return children;
++    return result;
+ }
+ 
+ MenuItem *ModulesModel::parentItem(MenuItem *child) const

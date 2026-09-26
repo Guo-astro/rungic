@@ -1,0 +1,122 @@
+From: kevinzhow <kevinzhow@local>
+Date: Thu, 24 Sep 2026 01:19:59 +0900
+Subject: Navigation panel buttons have accessible names
+
+NavigationPanelAction.accessibleText, bound to Accessible.name, so assistive technology and AT-SPI
+automation can tell Task switcher, Home and Close app apart.
+
+Origin: backport, upstream master (NavigationPanelAction.accessibleText)
+Forwarded: not-needed
+Last-Update: 2026-09-26
+X-Rungic-Status: Backport
+X-Rungic-Tests: L3:app.launch (presses Home by its accessible name)
+X-Rungic-Docs: docs/55
+---
+ components/mobileshell/qml/navigationpanel/NavigationPanel.qml     | 5 +++++
+ .../mobileshell/qml/navigationpanel/NavigationPanelAction.qml      | 2 ++
+ containments/taskpanel/qml/NavigationPanelComponent.qml            | 7 +++++++
+ 3 files changed, 14 insertions(+)
+
+diff --git a/components/mobileshell/qml/navigationpanel/NavigationPanel.qml b/components/mobileshell/qml/navigationpanel/NavigationPanel.qml
+index fcac9bb..d0828a7 100644
+--- a/components/mobileshell/qml/navigationpanel/NavigationPanel.qml
++++ b/components/mobileshell/qml/navigationpanel/NavigationPanel.qml
+@@ -65,6 +65,7 @@ Item {
+             enabled: root.leftCornerAction.enabled
+             shrinkSize: root.leftCornerAction.shrinkSize
+             iconSource: root.leftCornerAction.iconSource
++            Accessible.name: root.leftCornerAction.accessibleText
+             onClicked: {
+                 if (enabled) {
+                     root.leftCornerAction.triggered();
+@@ -81,6 +82,7 @@ Item {
+             enabled: root.leftAction.enabled
+             shrinkSize: root.leftAction.shrinkSize
+             iconSource: root.leftAction.iconSource
++            Accessible.name: root.leftAction.accessibleText
+             onClicked: {
+                 if (enabled) {
+                     root.leftAction.triggered();
+@@ -97,6 +99,7 @@ Item {
+             enabled: root.middleAction.enabled
+             shrinkSize: root.middleAction.shrinkSize
+             iconSource: root.middleAction.iconSource
++            Accessible.name: root.middleAction.accessibleText
+             onClicked: {
+                 if (enabled) {
+                     root.middleAction.triggered();
+@@ -112,6 +115,7 @@ Item {
+             enabled: root.rightAction.enabled
+             shrinkSize: root.rightAction.shrinkSize
+             iconSource: root.rightAction.iconSource
++            Accessible.name: root.rightAction.accessibleText
+             onClicked: {
+                 if (enabled) {
+                     root.rightAction.triggered();
+@@ -127,6 +131,7 @@ Item {
+             enabled: root.rightCornerAction.enabled
+             shrinkSize: root.rightCornerAction.shrinkSize
+             iconSource: root.rightCornerAction.iconSource
++            Accessible.name: root.rightCornerAction.accessibleText
+             onClicked: {
+                 if (enabled) {
+                     root.rightCornerAction.triggered();
+diff --git a/components/mobileshell/qml/navigationpanel/NavigationPanelAction.qml b/components/mobileshell/qml/navigationpanel/NavigationPanelAction.qml
+index 1fa3a96..097387a 100644
+--- a/components/mobileshell/qml/navigationpanel/NavigationPanelAction.qml
++++ b/components/mobileshell/qml/navigationpanel/NavigationPanelAction.qml
+@@ -11,6 +11,8 @@ QtObject {
+     property bool visible: true
+     property string iconSource
+     property real shrinkSize
++    // Description of the action for assistive technology (backport from upstream master).
++    property string accessibleText
+ 
+     signal triggered()
+ }
+diff --git a/containments/taskpanel/qml/NavigationPanelComponent.qml b/containments/taskpanel/qml/NavigationPanelComponent.qml
+index 7634604..871b2b8 100644
+--- a/containments/taskpanel/qml/NavigationPanelComponent.qml
++++ b/containments/taskpanel/qml/NavigationPanelComponent.qml
+@@ -71,6 +71,7 @@ MobileShell.NavigationPanel {
+     // toggle task switcher button
+     leftAction: MobileShell.NavigationPanelAction {
+         id: taskSwitcherAction
++        accessibleText: i18nc("@action:button", "Task switcher")
+ 
+         enabled: true
+         iconSource: "mobile-task-switcher"
+@@ -84,6 +85,7 @@ MobileShell.NavigationPanel {
+     // home button
+     middleAction: MobileShell.NavigationPanelAction {
+         id: homeAction
++        accessibleText: i18nc("@action:button", "Home")
+ 
+         enabled: true
+         iconSource: "start-here-kde"
+@@ -96,6 +98,8 @@ MobileShell.NavigationPanel {
+     // close app/keyboard button
+     rightAction: MobileShell.NavigationPanelAction {
+         id: closeAppAction
++        accessibleText: Keyboards.KWinVirtualKeyboard.visible ? i18nc("@action:button", "Hide keyboard")
++                                                              : i18nc("@action:button", "Close app")
+ 
+         enabled: Keyboards.KWinVirtualKeyboard.visible || WindowPlugin.WindowUtil.hasCloseableActiveWindow
+         iconSource: Keyboards.KWinVirtualKeyboard.visible ? "go-down-symbolic" : "mobile-close-app"
+@@ -117,6 +121,7 @@ MobileShell.NavigationPanel {
+ 
+     leftCornerAction: MobileShell.NavigationPanelAction {
+         id: rotationAction
++        accessibleText: i18nc("@action:button", "Rotate screen")
+         visible: RotationPlugin.RotationUtil.showRotationButton
+         enabled: true
+         iconSource: "rotation-allowed-symbolic"
+@@ -129,6 +134,8 @@ MobileShell.NavigationPanel {
+ 
+     rightCornerAction: MobileShell.NavigationPanelAction {
+         id: keyboardToggleAction
++        accessibleText: Keyboards.KWinVirtualKeyboard.active ? i18nc("@action:button", "Hide keyboard")
++                                                             : i18nc("@action:button", "Show keyboard")
+         visible: ShellSettings.Settings.alwaysShowKeyboardToggleOnNavigationPanel ||
+                  (Keyboards.KWinVirtualKeyboard.available && !Keyboards.KWinVirtualKeyboard.activeClientSupportsTextInput)
+         enabled: true

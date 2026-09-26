@@ -9,7 +9,7 @@ not required. Android-side services are in `plasma/native-apk/`.
 | `media/camera-source.cpp` | Android Camera2 → PipeWire cameras → libcamera / Snapshot / Firefox |
 | `media/media-bridge.py` | Demand-driven camera and microphone lifecycle; PulseAudio microphone source; `android_phone` sink that always plays on the phone (not the cast screen); virtual "Linux 扬声器"/"Linux 麦克风" devices for software taking part in calls ([docs/62](../docs/62-linux-virtual-audio.md)) |
 | `media/codec-client.*`, `gst-moto-codec.c`, `ffmpeg-moto-codec.c` | Android MediaCodec IPC → GStreamer / FFmpeg / Firefox |
-| `media/snapshot-moto-codec.patch` | Historical Snapshot import patch; active source is `vendor/snapshot/` |
+| `media/snapshot-moto-codec.patch` | Historical Snapshot import patch; active source is `packages/snapshot/` (patch queue) |
 | `platform/network-manager.py` | Android networking → NetworkManager D-Bus interface |
 | `platform/clipboard.py` | Android clipboard ↔ Wayland clipboard |
 | `graphics/` | EGL/GBM/AHB diagnostic helpers |

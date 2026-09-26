@@ -1,0 +1,13 @@
+{
+ "comment": "Pinned upstream of Snapshot (docs/71), which rungic-snapshot builds: GNOME's release tarball, with its bundled Cargo dependencies.",
+ "kind": "upstream",
+ "source": "snapshot",
+ "version": "51.0",
+ "upstream": "https://gitlab.gnome.org/GNOME/snapshot",
+ "licenses": "GPL-3.0-or-later; aperture LGPL-2.1-or-later; see LICENSE and bundled licenses",
+ "tarball": "snapshot-51.0.tar.xz",
+ "files": {
+  "snapshot-51.0.tar.xz": "3e64fa4cd1a742ae34b6f6d8e6d9614a2d3eab88a1b0071c11ab53617eb214c2"
+ },
+ "fetch": "https://download.gnome.org/sources/snapshot/51/{file}"
+}

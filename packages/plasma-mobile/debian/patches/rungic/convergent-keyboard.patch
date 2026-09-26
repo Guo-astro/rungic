@@ -1,0 +1,91 @@
+From: kevinzhow <kevinzhow@local>
+Date: Wed, 23 Sep 2026 21:00:53 +0800
+Subject: convergentwindows: do not reapply MaximizeArea to borderless windows
+ (keyboard avoidance)
+
+The direct resize only works around a decoration change. Once a window is borderless KWin owns its
+maximized geometry, including the room the on-screen keyboard takes; reapplying MaximizeArea on
+every activation discarded that keyboard avoidance. currentWindow also starts from the active window.
+
+Forwarded: not-needed
+Last-Update: 2026-09-26
+X-Rungic-Status: Pending
+X-Rungic-Tests: L3:input.text
+X-Rungic-Docs: docs/47
+---
+ .../scripts/convergentwindows/contents/ui/main.qml | 28 +++++++++-------------
+ 1 file changed, 11 insertions(+), 17 deletions(-)
+
+diff --git a/kwin/scripts/convergentwindows/contents/ui/main.qml b/kwin/scripts/convergentwindows/contents/ui/main.qml
+index 3eaf2a6..97103c4 100644
+--- a/kwin/scripts/convergentwindows/contents/ui/main.qml
++++ b/kwin/scripts/convergentwindows/contents/ui/main.qml
+@@ -9,7 +9,7 @@ import org.kde.plasma.private.mobileshell.shellsettingsplugin as ShellSettings
+ Loader {
+     id: root
+ 
+-    property var currentWindow
++    property var currentWindow: KWinComponents.Workspace.activeWindow
+ 
+     function run(window) {
+         // HACK: don't maximize xwaylandvideobridge
+@@ -25,7 +25,10 @@ Loader {
+         if (ShellSettings.Settings.convergenceModeEnabled) {
+             window.noBorder = false;
+         } else {
+-            if (!window.fullScreen) {
++            // The direct resize only works around a decoration change. Once
++            // borderless, KWin owns the maximized geometry, including the OSK.
++            // Reapplying MaximizeArea on activation discards keyboard avoidance.
++            if (!window.fullScreen && !window.noBorder) {
+                 const output = window.output;
+                 const desktop = window.desktops[0]; // assume it's the first desktop that the window is on
+                 if (desktop === undefined) {
+@@ -52,10 +55,11 @@ Loader {
+     Connections {
+         target: currentWindow
+ 
++        function onInteractiveMoveResizeFinished() {
++            root.run(currentWindow);
++        }
++
+         function onFullScreenChanged() {
+-            currentWindow.interactiveMoveResizeFinished.connect((currentWindow) => {
+-                root.run(currentWindow);
+-            });
+             root.run(currentWindow);
+         }
+ 
+@@ -63,9 +67,6 @@ Loader {
+             if (!currentWindow.maximizable) {
+                 return;
+             }
+-            currentWindow.interactiveMoveResizeFinished.connect((currentWindow) => {
+-                root.run(currentWindow);
+-            });
+             root.run(currentWindow);
+         }
+     }
+@@ -88,20 +89,13 @@ Loader {
+         target: KWinComponents.Workspace
+ 
+         function onWindowAdded(window) {
+-            if (window.normalWindow) {
+-                window.interactiveMoveResizeFinished.connect((window) => {
+-                    root.run(window);
+-                });
++            if (window && window.normalWindow) {
+                 root.run(window);
+             }
+         }
+ 
+         function onWindowActivated(window) {
+-            if (window.normalWindow) {
+-                currentWindow = window;
+-                window.interactiveMoveResizeFinished.connect((window) => {
+-                    root.run(window);
+-                });
++            if (window && window.normalWindow) {
+                 root.run(window);
+             }
+         }

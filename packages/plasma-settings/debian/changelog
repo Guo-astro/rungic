@@ -1,0 +1,81 @@
+plasma-settings (25.12.0-1+moto1) resolute; urgency=medium
+
+  * Modules model fix and the Android hardware settings route (vendored changes,
+    docs/50); the device panel is /usr/bin/moto-platform now. Built as the package
+    instead of /usr/local/bin/plasma-settings shadowing it through PATH (docs/61).
+
+ -- range-dev <noreply@localhost>  Fri, 25 Sep 2026 21:17:08 +0000
+
+plasma-settings (25.12.0-1) unstable; urgency=medium
+
+  * Team upload.
+
+  [ Marco Mattiolo ]
+  * New upstream release (25.12.0).
+  * Migrate to debian/watch version 5 syntax.
+  * d/control: drop redundant Rules-Requires-Root.
+
+  [ Aurélien COUDERC ]
+  * Bump Standards-Version to 4.7.3, no change required.
+
+ -- Aurélien COUDERC <coucouf@debian.org>  Sun, 11 Jan 2026 22:49:08 +0100
+
+plasma-settings (25.07.0-1) unstable; urgency=medium
+
+  [ Marco Mattiolo ]
+  * New upstream release (25.07.0).
+  * Update build-deps and deps with the info from cmake.
+  * Add/update Devin Lin’s key in upstream keyring.
+
+  [ Aurélien COUDERC ]
+  * Drop extra signatures on upstream signing keys.
+
+ -- Marco Mattiolo <marco.mattiolo@hotmail.it>  Thu, 14 Aug 2025 14:25:43 +0200
+
+plasma-settings (25.02.0-2) unstable; urgency=medium
+
+  * Add/update Carl Schwan’s key in upstream keyring.
+  * Bump Standards-Version to 4.7.2, no change required.
+
+ -- Marco Mattiolo <marco.mattiolo@hotmail.it>  Sat, 15 Mar 2025 16:24:19 +0100
+
+plasma-settings (25.02.0-1) unstable; urgency=medium
+
+  [ Marco Mattiolo ]
+  * New upstream release (25.02.0).
+  * Update build-deps and deps with the info from cmake.
+  * d/copyright: update after lintian notes.
+  * d/control: bump Std-Ver (no changes needed).
+  * Change maintainer to the Qt/KDE Team.
+  * Update Vcs-* URLs to the new location in the Qt/KDE team’s GitLab group.
+  * Drop gbp.conf.
+  * Simplify packaging by using dh-* build-deps.
+  * Refresh upstream metadata.
+  * d/watch: set pgpsigurlmangle option for uscan to check upstream signatures.
+
+ -- Marco Mattiolo <marco.mattiolo@hotmail.it>  Wed, 05 Mar 2025 20:42:39 +0100
+
+plasma-settings (24.02.0-1) unstable; urgency=medium
+
+  * New upstream release
+  * Update d/control after upstream changes (Closes: #1079479)
+  * Update d/rules after upstream migrating from KF5 to KF6
+  * Update d/copyright after upstream changes
+  * Bump standards-version to 4.7.0 (no changes needed)
+  * Drop d/patches because the patch was accepted upstream
+
+ -- Marco Mattiolo <marco.mattiolo@hotmail.it>  Sat, 13 Jul 2024 16:14:56 +0200
+
+plasma-settings (23.01.0-1) unstable; urgency=medium
+
+  [ Marco Mattiolo ]
+  * New upstream release
+
+ -- Arnaud Ferraris <aferraris@debian.org>  Sat, 11 Feb 2023 22:18:39 +0100
+
+plasma-settings (22.11-1) unstable; urgency=medium
+
+  [ Marco Mattiolo ]
+  * Initial release. Closes: #1023252
+
+ -- Arnaud Ferraris <aferraris@debian.org>  Tue, 24 Jan 2023 23:30:54 +0100

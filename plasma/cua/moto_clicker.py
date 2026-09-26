@@ -1,6 +1,6 @@
 """moto-clicker: whole desktop goals, every step chosen by JEV (docs/64).
 
-typesafe-computer-use (vendor/typesafe-computer-use) with the Linux platform adapter: each step
+typesafe-computer-use (packages/typesafe-computer-use, adapter in plasma/cua/typesafe) with the Linux platform adapter: each step
 captures the display, reads it (OCR plus the accessibility tree), and asks JEV which action
 comes next. The writer model only writes text: what to type, and the answer when JEV stops.
 

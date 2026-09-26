@@ -25,7 +25,7 @@
       ]
     },
     "kscreen": {
-      "source": "vendor/kscreen (plasma/package-display.py)",
+      "source": "packages/kscreen",
       "version": "4:6.6.5-0ubuntu0.1+moto2",
       "packages": [
         "kscreen"
@@ -55,7 +55,7 @@
       ]
     },
     "plasma-mobile": {
-      "source": "vendor/plasma-mobile",
+      "source": "packages/plasma-mobile",
       "version": "6.6.5-0ubuntu0.1+moto2",
       "packages": [
         "plasma-mobile",
@@ -63,7 +63,7 @@
       ]
     },
     "plasma-settings": {
-      "source": "vendor/plasma-settings",
+      "source": "packages/plasma-settings",
       "version": "25.12.0-1+moto1",
       "packages": [
         "plasma-settings"

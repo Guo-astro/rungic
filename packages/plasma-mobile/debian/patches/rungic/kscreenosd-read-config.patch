@@ -1,0 +1,30 @@
+From: kevinzhow <kevinzhow@local>
+Date: Thu, 24 Sep 2026 09:54:40 +0900
+Subject: kscreenosd: read the KScreen configuration at startup
+
+KScreenOSDUtil never called retrieveKScreen(), so its output count stayed 0 and plugging a display
+never switched to convergence (docked) mode.
+
+Forwarded: not-needed
+Last-Update: 2026-09-26
+X-Rungic-Status: Pending [a plain bug; check upstream master first]
+X-Rungic-Tests: L3:cast.agent_screen
+X-Rungic-Docs: docs/58
+---
+ quicksettings/kscreenosd/kscreenosdutil.cpp | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/quicksettings/kscreenosd/kscreenosdutil.cpp b/quicksettings/kscreenosd/kscreenosdutil.cpp
+index d5db928..bce4069 100644
+--- a/quicksettings/kscreenosd/kscreenosdutil.cpp
++++ b/quicksettings/kscreenosd/kscreenosdutil.cpp
+@@ -20,6 +20,9 @@ KScreenOSDUtil::KScreenOSDUtil(QObject *parent)
+         }
+         setOutputs(m_config->outputs().size());
+     });
++    // Without a config the output count stays 0 and KScreenOSDProvider never
++    // switches to docked (convergence) mode when a display is added (docs/58).
++    retrieveKScreen();
+ }
+ 
+ void KScreenOSDUtil::retrieveKScreen()

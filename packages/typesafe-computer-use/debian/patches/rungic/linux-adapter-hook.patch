@@ -1,0 +1,64 @@
+From: kevinzhow <kevinzhow@local>
+Date: Fri, 25 Sep 2026 06:00:17 +0900
+Subject: Select a Linux platform adapter with CLICKER_PLATFORM=linux
+
+On Linux the adapter was always macos.py (tests/conftest.py stands in for the modules it imports).
+With CLICKER_PLATFORM=linux, platform_adapter imports linux.py instead: this project's adapter for
+KDE Plasma on Wayland (AT-SPI, KWin, portal), placed into the tree by the recipe's overlay. The tests
+clear CLICKER_PLATFORM so the suite keeps its macOS stand-ins.
+
+Forwarded: no
+Last-Update: 2026-09-26
+X-Rungic-Status: Pending [the selection hook could go upstream with a Linux adapter; ours depends on rungic-cua]
+X-Rungic-Tests: none (gap: the adapter is exercised by the voice agent's computer use, not by an acceptance scenario)
+X-Rungic-Docs: docs/64
+---
+ tests/conftest.py                         | 3 +++
+ typesafe_computer_use/platform_adapter.py | 6 +++++-
+ 2 files changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/tests/conftest.py b/tests/conftest.py
+index 6bfa8a7..a0d8400 100644
+--- a/tests/conftest.py
++++ b/tests/conftest.py
+@@ -44,6 +44,9 @@ def _stub(name: str) -> types.ModuleType:
+     return module
+ 
+ 
++# The Linux adapter drives the desktop it runs on; it is chosen only on request, never in tests.
++os.environ.pop("CLICKER_PLATFORM", None)
++
+ REAL_ACCESSIBILITY = not _absent("ApplicationServices")
+ 
+ if _absent("Quartz"):
+diff --git a/typesafe_computer_use/platform_adapter.py b/typesafe_computer_use/platform_adapter.py
+index e8e8c7b..a57ecdb 100644
+--- a/typesafe_computer_use/platform_adapter.py
++++ b/typesafe_computer_use/platform_adapter.py
+@@ -1,7 +1,8 @@
+ """The desktop this process drives: one platform adapter, chosen once, behind one name.
+ 
+ Every other module reaches the platform through `desktop` and never imports macos.py or windows.py
+-itself. Windows gets windows.py. Every other OS gets macos.py, the default: on macOS it is the real
++itself. Windows gets windows.py. Linux gets linux.py when CLICKER_PLATFORM=linux
++(the Moto phone's Plasma desktop, set by its moto-clicker launcher). Every other OS gets macos.py, the default: on macOS it is the real
+ adapter, and on the Linux test runner tests/conftest.py stands in for the modules it imports, so the
+ suite runs there unchanged. Only the Windows path imports a Windows-only package.
+ 
+@@ -11,6 +12,7 @@ them to it, parameter for parameter.
+ 
+ from __future__ import annotations
+ 
++import os
+ import sys
+ from pathlib import Path
+ from typing import Protocol
+@@ -61,6 +63,8 @@ class Desktop(Protocol):
+ 
+ if sys.platform == "win32":
+     from . import windows as _adapter
++elif sys.platform == "linux" and os.environ.get("CLICKER_PLATFORM") == "linux":
++    from . import linux as _adapter  # the Moto phone's Plasma desktop, through moto-cua (docs/64)
+ else:
+     from . import macos as _adapter
+ 

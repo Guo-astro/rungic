@@ -1,0 +1,54 @@
+From: kevinzhow <kevinzhow@local>
+Date: Wed, 23 Sep 2026 21:00:53 +0800
+Subject: Register this project's Android hardware codecs (H.264/HEVC encode
+ and decode, VP9 decode)
+
+The codecs run on Android's MediaCodec through the shared codec client (shared/media, placed into
+libavcodec by the recipe's overlay as moto_codec.c and moto-codec-client.h); this patch adds them to
+the build and to the codec list, the automatic encoders ahead of the software ones.
+
+Forwarded: not-needed
+Last-Update: 2026-09-26
+X-Rungic-Status: Inappropriate [Android host specific: MediaCodec through the APK]
+X-Rungic-Tests: L3:codec.hw
+X-Rungic-Docs: docs/54 docs/research/35
+---
+ libavcodec/Makefile    | 8 ++++++++
+ libavcodec/allcodecs.c | 8 ++++++++
+ 2 files changed, 16 insertions(+)
+
+diff --git a/libavcodec/Makefile b/libavcodec/Makefile
+index 1410bd8..a57936b 100644
+--- a/libavcodec/Makefile
++++ b/libavcodec/Makefile
+@@ -1439,3 +1439,11 @@ $(SUBDIR)pcm.o: $(SUBDIR)pcm_tables.h
+ $(SUBDIR)qdm2.o: $(SUBDIR)qdm2_tables.h
+ $(SUBDIR)sinewin.o: $(SUBDIR)sinewin_tables.h
+ endif
++
++OBJS-$(CONFIG_H264_MOTO_AUTO_ENCODER) += moto_codec.o
++OBJS-$(CONFIG_HEVC_MOTO_AUTO_ENCODER) += moto_codec.o
++OBJS-$(CONFIG_H264_MOTO_DECODER) += moto_codec.o
++OBJS-$(CONFIG_HEVC_MOTO_DECODER) += moto_codec.o
++OBJS-$(CONFIG_VP9_MOTO_DECODER) += moto_codec.o
++OBJS-$(CONFIG_H264_MOTO_ENCODER) += moto_codec.o
++OBJS-$(CONFIG_HEVC_MOTO_ENCODER) += moto_codec.o
+diff --git a/libavcodec/allcodecs.c b/libavcodec/allcodecs.c
+index 695214f..18a57af 100644
+--- a/libavcodec/allcodecs.c
++++ b/libavcodec/allcodecs.c
+@@ -36,6 +36,14 @@
+ #include "codec_internal.h"
+ #include "codec_desc.h"
+ 
++extern const FFCodec ff_h264_moto_auto_encoder;
++extern const FFCodec ff_hevc_moto_auto_encoder;
++extern const FFCodec ff_h264_moto_decoder;
++extern const FFCodec ff_hevc_moto_decoder;
++extern const FFCodec ff_vp9_moto_decoder;
++extern const FFCodec ff_h264_moto_encoder;
++extern const FFCodec ff_hevc_moto_encoder;
++
+ extern const FFCodec ff_a64multi_encoder;
+ extern const FFCodec ff_a64multi5_encoder;
+ extern const FFCodec ff_aasc_decoder;

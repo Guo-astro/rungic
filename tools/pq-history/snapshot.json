@@ -1,0 +1,40 @@
+{
+ "package": "snapshot",
+ "vendor": "vendor/snapshot",
+ "version": "51.0",
+ "base": "dffc717e",
+ "steps": [
+  {
+   "name": "android-h264-encoder",
+   "patch": ".work/pq-input/snapshot-encoder.patch",
+   "author_name": "kevinzhow",
+   "author_email": "kevinzhow@local",
+   "date": "2026-09-23T21:00:53+08:00",
+   "subject": "Record video with this project's H.264 encoder (motoh264enc) when it is available",
+   "description": "Snapshot recognises the GStreamer element of the Android hardware codec bridge as an H.264 encoder,\nhardware accelerated, and sets its bitrate, ahead of openh264enc and x264enc.",
+   "dep3": {
+    "Forwarded": "not-needed",
+    "Last-Update": "2026-09-26",
+    "X-Rungic-Status": "Inappropriate [the encoder is this project's Android codec bridge]",
+    "X-Rungic-Tests": "none (gap: no scenario records video in Snapshot)",
+    "X-Rungic-Docs": "docs/48 docs/54"
+   }
+  },
+  {
+   "name": "android-camera-clock",
+   "commit": "d1301f2e",
+   "author_name": "kevinzhow",
+   "author_email": "kevinzhow@local",
+   "date": "2026-09-23T21:00:53+08:00",
+   "subject": "Android camera source: no pipeline clock of its own, timestamps on arrival",
+   "description": "The Android camera source (device.api moto-android) timestamps frames with CLOCK_MONOTONIC. With it\nproviding the pipeline clock, camerabin lost sync when it added or removed the audio recorder; the\nsource now provides no clock and timestamps buffers on arrival.",
+   "dep3": {
+    "Forwarded": "not-needed",
+    "Last-Update": "2026-09-26",
+    "X-Rungic-Status": "Inappropriate [the camera source is this project's Android camera bridge]",
+    "X-Rungic-Tests": "none (gap: no scenario records video in Snapshot)",
+    "X-Rungic-Docs": "docs/research/35"
+   }
+  }
+ ]
+}

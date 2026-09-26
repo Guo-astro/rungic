@@ -2,9 +2,12 @@
 """Upstream components as pinned sources plus patch queues (docs/71).
 
 A component is packages/<name>/: recipe.json (the pinned upstream: files and their sha256) and
-debian/ (the complete packaging; our changes are debian/patches/rungic/*.patch in DEP-3 form,
-listed in debian/patches/series after the distribution's own). Upstream sources are cached in
-.work/sources/<name>/; packaging tools run from the pinned toolchain image (tools/pq/Dockerfile).
+debian/ (the complete packaging, or only debian/patches for an upstream that one of this project's
+packages builds: recipe kind "upstream" or "git"). Our changes are debian/patches/rungic/*.patch in
+DEP-3 form, listed in debian/patches/series after the distribution's own. A recipe's 'overlay' names shared
+files of this repository placed into the tree before the patches (see overlay()). Upstream sources
+are cached in .work/sources/<name>/; packaging tools run from the pinned toolchain image
+(tools/pq/Dockerfile).
 
   pq.py fetch NAME            download the recipe's files, check their sha256
   pq.py source NAME [--output DIR]
@@ -63,6 +66,8 @@ def fetch(name, opener=urllib.request.urlopen):
     info = recipe(name)
     cache = SOURCES / name
     cache.mkdir(parents=True, exist_ok=True)
+    if info.get('kind') == 'git':
+        return fetch_git(name, info, cache)
     for file, want in info['files'].items():
         target = cache / file
         if target.exists() and sha256(target) == want:
@@ -78,6 +83,29 @@ def fetch(name, opener=urllib.request.urlopen):
     return cache
 
 
+def fetch_git(name, info, cache):
+    """kind "git": an upstream without release tarballs, pinned by commit. The commit's tree hash is
+    the recipe's check; the tarball is `git archive` of it, so it is the same wherever it is made."""
+    repo, commit = cache / 'repo.git', info['commit']
+    tarball = cache / f"{name}-{commit[:12]}.tar"
+    if tarball.exists():
+        return cache
+    if not repo.exists():
+        subprocess.run(['git', 'init', '-q', '--bare', str(repo)], check=True)
+    have = subprocess.run(['git', '-C', str(repo), 'cat-file', '-e', f'{commit}^{{commit}}'], capture_output=True)
+    if have.returncode:
+        subprocess.run(['git', '-C', str(repo), 'fetch', '-q', '--depth=1', info['git'], commit], check=True)
+    tree = subprocess.run(['git', '-C', str(repo), 'rev-parse', f'{commit}^{{tree}}'], capture_output=True,
+                          text=True, check=True).stdout.strip()
+    if tree != info['tree']:
+        raise SystemExit(f"{name}: commit {commit} has tree {tree}, recipe says {info['tree']}")
+    partial = tarball.with_suffix('.part')
+    subprocess.run(['git', '-C', str(repo), 'archive', '--format=tar', f'--prefix={name}/', '-o', str(partial),
+                    commit], check=True)
+    partial.rename(tarball)
+    return cache
+
+
 def docker(workdir, *argv, env=()):
     command = ['docker', 'run', '--rm', '-u', f'{os.getuid()}:{os.getgid()}', '-e', 'HOME=/tmp',
                *[a for e in env for a in ('-e', e)], '-v', f'{workdir}:/w', '-w', '/w', IMAGE, *argv]
@@ -88,11 +116,45 @@ def docker(workdir, *argv, env=()):
 
 
 def orig_tarball(name):
+    """The upstream source: a Debian source's .orig tarball, an upstream release tarball
+    (kind "upstream", the recipe's 'tarball'), or an archive of a pinned commit (kind "git")."""
     info = recipe(name)
-    tars = [f for f in info['files'] if '.orig.tar.' in f]
+    if info.get('kind') == 'git':
+        return fetch(name) / f"{name}-{info['commit'][:12]}.tar"
+    if info.get('kind') == 'upstream':
+        return fetch(name) / info['tarball']
+    tars = [f for f in info['files'] if '.orig.tar.' in f and not f.endswith(('.asc', '.sig'))]
     if len(tars) != 1:
         raise SystemExit(f'{name}: recipe needs exactly one .orig.tar.* file')
     return fetch(name) / tars[0]
+
+
+def overlay(name):
+    """The recipe's 'overlay': path in the source tree -> the repository's own shared file (a
+    header or bridge source several components build). Placed before the patches apply, never
+    patched: one copy of the shared code, as the vendored trees had with symlinks (AGENTS.md).
+    An entry {"from": FILE, "replaces": SHA256} replaces an upstream file wholesale (our own
+    implementation, where a diff against upstream would say nothing); it is refused once the
+    upstream file differs from SHA256, so an upgrade that changes it gets reviewed."""
+    return {dest: (src if isinstance(src, dict) else {'from': src})
+            for dest, src in recipe(name).get('overlay', {}).items()}
+
+
+def add_overlay(name, tree):
+    for dest, entry in overlay(name).items():
+        target = Path(tree) / dest
+        replaces = entry.get('replaces')
+        if target.exists() or target.is_symlink():
+            if not replaces:
+                raise SystemExit(f'{name}: overlay {dest} exists in the upstream tree')
+            if sha256(target) != replaces:
+                raise SystemExit(f'{name}: upstream {dest} changed (sha256 {sha256(target)}, the overlay '
+                                 f'replaced {replaces}); review it against {entry["from"]}')
+            target.unlink()
+        elif replaces:
+            raise SystemExit(f'{name}: overlay {dest} should replace an upstream file, which is gone')
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(WORKSPACE / entry['from'], target)
 
 
 def source(name, output=None):
@@ -111,9 +173,23 @@ def source(name, output=None):
     unpack.rmdir()
     shutil.rmtree(output / 'debian', ignore_errors=True)
     shutil.copytree(PACKAGES / name / 'debian', output / 'debian', symlinks=True)
+    add_overlay(name, output)
     if (output / 'debian/patches/series').exists():
         docker(output, 'quilt', 'push', '-a', '-q', env=('QUILT_PATCHES=debian/patches',))
     return output
+
+
+def gbp_stub(name, tree):
+    """gbp reads the source name from debian/control and a version from debian/changelog. An upstream
+    that one of this project's packages builds has only debian/patches: the editing tree (never the
+    repository) gets a minimal control and changelog."""
+    debian = Path(tree) / 'debian'
+    if not (debian / 'control').exists():
+        (debian / 'control').write_text(f'Source: {name}\n\nPackage: {name}\nArchitecture: all\n')
+    if not (debian / 'changelog').exists():
+        (debian / 'changelog').write_text(
+            f"{name} ({recipe(name)['version']}) unstable; urgency=medium\n\n  * Upstream (docs/71).\n\n"
+            ' -- Rungic <noreply@rungic.invalid>  Sat, 26 Sep 2026 00:00:00 +0000\n')
 
 
 def prepare(name):
@@ -124,6 +200,7 @@ def prepare(name):
     shutil.rmtree(tree / '.pc', ignore_errors=True)
     shutil.rmtree(work, ignore_errors=True)
     tree.rename(work)
+    gbp_stub(name, work)
     for args in (('init', '-q', '-b', 'rungic'), ('add', '-A'),
                  ('-c', 'user.name=Rungic', '-c', 'user.email=noreply@rungic.invalid', 'commit', '-q', '-m',
                   f"{name} {recipe(name)['version']} with packages/{name}/debian (patches unapplied)")):
@@ -192,11 +269,29 @@ def lint_package(name):
     return problems
 
 
+def tree_diff(mine, theirs, exclude=()):
+    """`diff -r -q` of two trees; lines for every difference. An empty directory present on one side
+    only is not one (git does not track empty directories, so a vendored tree lacks them); stderr is
+    (a symlink that does not resolve is an error, not a match)."""
+    result = subprocess.run(['diff', '-r', '-q', *[a for x in exclude for a in ('-x', x)], str(mine), str(theirs)],
+                            capture_output=True, text=True)
+    lines = []
+    for line in result.stdout.splitlines():
+        m = re.match(r'Only in (.+): (.+)$', line)
+        if m and (Path(m[1]) / m[2]).is_dir() and not any((Path(m[1]) / m[2]).iterdir()):
+            continue
+        lines.append(line)
+    if result.returncode > 1:
+        lines.append(result.stderr.strip())
+    return lines
+
+
 def verify(name, against):
     tree = source(name)
-    result = subprocess.run(['diff', '-r', '-q', '-x', '.pc', '-x', 'patches', '-x', '.git', str(tree), str(against)],
-                            capture_output=True, text=True)
-    return result.returncode == 0, result.stdout
+    # A reference without debian/ (a vendored upstream our own package built) is compared without it.
+    skip = () if (Path(against) / 'debian').exists() else ('debian',)
+    lines = tree_diff(tree, against, ('.pc', 'patches', '.git', *skip))
+    return not lines, '\n'.join(lines)
 
 
 def test_matrix(selected):
@@ -249,7 +344,7 @@ def main():
         return 1 if any(problems.values()) else 0
     elif args.command == 'verify':
         ok, text = verify(args.name, args.against)
-        print(text or f'{args.name}: patched source equals {args.against}')
+        print(f'{args.name}: patched source equals {args.against}' if ok else text or 'diff failed')
         return 0 if ok else 1
     elif args.command == 'tests':
         rows = test_matrix(args.names or names())

@@ -1,0 +1,30 @@
+From: kevinzhow <kevinzhow@local>
+Date: Wed, 23 Sep 2026 21:00:53 +0800
+Subject: libx264 registers as libx264_sw
+
+The name libx264 goes to this project's H.264 encoder (hardware through the Android codec bridge,
+software otherwise), so applications that ask for libx264 by name get it; the x264 encoder stays
+available as libx264_sw, which that encoder uses as its software fallback.
+
+Forwarded: not-needed
+Last-Update: 2026-09-26
+X-Rungic-Status: Inappropriate [makes room for the Android hardware codec under the name applications ask for]
+X-Rungic-Tests: L3:codec.hw
+X-Rungic-Docs: docs/54 docs/research/35
+---
+ libavcodec/libx264.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/libavcodec/libx264.c b/libavcodec/libx264.c
+index b688d4f..6adb666 100644
+--- a/libavcodec/libx264.c
++++ b/libavcodec/libx264.c
+@@ -1608,7 +1608,7 @@ static const AVClass x264_class = {
+ };
+ 
+ const FFCodec ff_libx264_encoder = {
+-    .p.name           = "libx264",
++    .p.name           = "libx264_sw",
+     CODEC_LONG_NAME("libx264 H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10"),
+     .p.type           = AVMEDIA_TYPE_VIDEO,
+     .p.id             = AV_CODEC_ID_H264,
