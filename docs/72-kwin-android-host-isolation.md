@@ -72,3 +72,28 @@
 **部署工具的一次事故与修复**：部署.18时手写的版本排序把旧的20260926.9选成了“最新”。工具把容器降级安装为.9后，在同步Android侧文件时发现源码已变，直接退出，没有回滚，留下降级的rootfs与仍在运行的.17会话。用`rollback --snapshot`回到部署前（快照由该次部署建立，Android侧文件未改动）。修复：Android侧源码在建快照之前检查；快照之后的任何异常都像验收失败一样保存证据并回滚；单元测试复现了这两种情况（修复前失败、修复后通过）。部署改为不带版本参数（默认最新）。
 
 **另外发现的既有缺陷（未修复）**：快捷设置录屏在.17时连续两次失败——停止后只有`video0`接受了EOS，向PulseAudio监听源`pulsesrc`发送EOS的调用被阻塞，收尾线程一直等待，12秒后超时，只留下`.partial.mp4`。.18时同一场景通过，属于间歇性问题，但阻塞位置已经明确。
+
+## 第二轮：全部迁入Android后端（2026-09-26，用户决定）
+
+用户要求把KWin中剩余的Android宿主相关改动全部搬进`src/backends/android/`，按试点方法进行。不搬的只有不依赖Android、改的是KWin核心职责的补丁：`xdg-min-above-max`（窗口协议）、`virtualkeyboard-commit-text`（D-Bus接口）、`output-internal-to-scripts`（输出属性）、`ftrace-fd-markers`中的写入缺陷修正；它们保留为小补丁，但不再依赖任何环境变量。
+
+**原则**：每个环境变量判断换成它实际表达的含义，写成钩子（基类是上游行为，Android后端覆盖），而不是把“是否Android”的判断搬个地方。
+
+| 现在的判断 | 实际含义 | 改为 |
+|---|---|---|
+| `MOTO_KWIN_FLAT_OUTPUT`（输入坐标、视口、配置尺寸、缩放、主图层、层数、黑底） | 宿主按设备像素显示KWin表面；缩放由KWin决定；主图层直接画在输出表面上 | `WaylandOutput::hostScale()`（上游=scale，Android=1）、`ownsScale()`、`singleSurface()`；输入坐标经`mapFromHost()` |
+| `MOTO_KWIN_RENDER_DEVICE`（打开设备、EGL渲染节点） | GPU节点不是DRM设备，宿主dmabuf没有main_device | `WaylandBackend::renderDevicePath()`（上游取dmabuf main_device，Android取`/dev/kgsl-3d0`）；Wayland后端把自己打开的设备路径交给`EglDisplay::create()` |
+| 同上（宿主dmabuf只接受v4） | 宿主只提供v3 | 宿主dmabuf v3也可接受，缺main_device时由后端给设备 |
+| 同上（给KWin的客户端只开放dmabuf v3） | 客户端无法解析非DRM的main_device | `OutputBackend::maxLinuxDmabufVersion()`（上游5，Android 3），`WaylandServer`据此创建全局对象 |
+| `MOTO_GPU_ALLOCATOR`（GBM分配改走宿主租借） | 输出缓冲由宿主分配 | `DrmDevice`可注入分配器；Android后端注入宿主租借分配器（`androidgraphicsbuffer.h`移入后端目录），路径为后端配置 |
+| 同上（glFinish/显式同步fence、禁止扫描输出客户端缓冲、光标层glFinish） | 这些缓冲没有隐式同步；宿主只能直接显示自己分配的缓冲 | `WaylandBackend::implicitSync()`、`hostImportsClientBuffers()`；有显式同步全局对象时用fence |
+| `MOTO_KWIN_UBWC` | 宿主格式表含QCOM UBWC modifier | 按modifier交集自动启用 |
+| `MOTO_KWIN_ANDROID_SHM` | 容器memfd过不了APK的SELinux标签 | Android后端的QPainter分配器用`/dev/shm`，不再影响全局SHM分配 |
+| 宿主重启（`MOTO_GPU_ALLOCATOR`借作判断） | 宿主会重启，KWin应等它回来 | `WaylandBackendOptions`加宿主会重启的选项，断线处理交给后端 |
+| `Moto`/`Cast`字符串、`MOTO_KWIN_CAST_SCALE` | 宿主通告的投屏输出 | 宿主输出跟踪与投屏输出移入Android后端（registry钩子）；投屏初始缩放按物理尺寸推算 |
+| 录屏的两处`MOTO_KWIN_FLAT_OUTPUT` | 录制者是shell本身；GLES读回方向 | 前者改为按录制程序判断（通用）；后者先查根因 |
+
+**分批与验收**：每批先在主机上编译并运行L1测试，再在手机上构建、部署、完整验收，最后统一折叠进补丁队列。
+1. 图形与输出：渲染设备、分配器注入、UBWC、SHM、扁平输出、显式同步/隐式同步、宿主重启。
+2. 投屏与宿主输入：宿主输出、投屏输出与光标、后台投屏、宿主文本输入、宿主滚动。助手屏在KWin看来也是投屏输出，可用它自动验收投屏代码路径；连接电视的部分需要人工验收。
+3. 收尾：录屏两处；删除全部`MOTO_KWIN_*`、`MOTO_GPU_ALLOCATOR`环境变量；模拟升级到6.7.5并比较冲突。
