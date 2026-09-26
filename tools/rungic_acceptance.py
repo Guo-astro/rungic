@@ -467,6 +467,8 @@ def rebrand_residue(ctx):
     owned, allowed, unowned = [], [], []
     for line in files.strip().splitlines():
         path, _, owner = line.partition('\t')
+        if re.search(r'(?i)motor', path.rsplit('/', 1)[-1]):
+            continue                                # motorway, Motorola: words, not our names
         if RESIDUE_ALLOWED.match(path):
             allowed.append(path)
         elif owner:
