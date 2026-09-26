@@ -127,3 +127,19 @@
 - `rungic_release.py`的三处快照回滚统一为`rollback_to_snapshot()`：回到改名前的发布时先`rebrand_down`（原来验收失败的回滚路径缺这一步，第2次回滚后home留在了`/home/kevinzhow`，已手工移回）；回滚后比较内核的ext4错误数并运行完整性检查，结果写入部署记录。
 - 在查明之前，B阶段的部署不依赖快照回滚：以`--acceptance none`部署并保留现场，需要退回时按包回滚（部署上一个发布）。
 
+### B阶段部署与验收（2026-09-27，发布`20260927.5`）
+
+从`20260926.20`升级到`20260927.5`，再按包回滚到`20260926.20`，最后升级回`20260927.5`，两个方向都通过。最终的完整验收18项中17项通过；`recording.quicksetting`是已知的收尾超时（pulsesrc EOS），单独重跑一次通过。`rebrand.residue`通过：已安装的包、单元和包名中都不再有`moto`名称，剩下的只有已移除的`moto-plasma-config`留下的conffile（D阶段purge）和C阶段的名称。home为`/home/kevinzhow`，组为`rungic`，用户设置已是新名称，4个系统单元与6个用户单元都已启用。
+
+部署中发现并已修正的问题：
+- APT拒绝仓库Origin变化：`apt-get update --allow-releaseinfo-change`。
+- 改名后的系统单元全部是disabled（桌面不启动）：旧包已被移除、旧的启用链接已被obsolete清理，`was-enabled`无法判断旧单元。改为读取deb-systemd-helper的记录（`.dsh-also`及其链接镜像），继承后purge旧记录；在容器中验证了5种情况。
+- 用户设置迁移没有执行：`kconf_updaterc`第一行是不属于任何组的键，configparser拒绝读取。改为按KDE配置格式读取；首次设置步骤已按新名称重新执行过时，重复的节会删除旧节，快捷设置列表会去重。
+- `libmotocodec`、`libgstmotocodec`的库名没有改（规则要求`moto`前不是字母），而GStreamer按插件文件名查找入口符号，编码器因此全部不可用；package.json描述中`\n`后的名称同理。
+- `packages.json`中残留的`version`字段，把plasma-mobile、plasma-settings、kscreen钉在了`+moto`构建上，旧的录屏快捷设置去调用已删除的程序。补丁队列组件的版本改为一律取changelog。
+- 桌面仍在运行时移除旧包，plasmashell会把桌面文件已被删除的收藏（语音助手）清理掉。现在跨越改名升级时先停止桌面；本机已手工补回该收藏。
+- 按包回滚到较早的发布需要检出其提交：部署时Android侧文件改从发布的提交中读取，并按sha256核对。
+- 另见上一节的快照回滚事故，那次回滚也没有执行`rebrand_down`，已修正。
+
+新出现的崩溃：`9891060f148d`（plasmashell在KWayland客户端处理Wayland事件时SIGSEGV），发生在完整验收的录屏场景中，只出现过一次，重跑没有复现。
+
