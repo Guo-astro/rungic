@@ -100,17 +100,17 @@ def maintainer_scripts(pkg, root):
                  'fi', '']
     if units.get('system') or units.get('user') or pkg.get('user_systemd'):
         post += ['if [ -d /run/systemd/system ]; then systemctl daemon-reload || true; fi']
-    for unit in units.get('system', []):
-        # debhelper's pattern: enable on first installation; keep an enabled unit enabled (and its
-        # links current) on upgrades; respect an administrator's disable.
-        post += [f'if [ "$1" = configure ] || [ "$1" = abort-upgrade ]; then',
-                 f"  if deb-systemd-helper debian-installed '{unit}'; then",
-                 f"    if deb-systemd-helper --quiet was-enabled '{unit}'; then deb-systemd-helper enable '{unit}' >/dev/null || true;",
-                 f"    else deb-systemd-helper update-state '{unit}' >/dev/null || true; fi",
-                 f"  else deb-systemd-helper enable '{unit}' >/dev/null || true; fi",
-                 'fi']
-    for unit in units.get('user', []):
-        post += [f'if [ "$1" = configure ]; then systemctl --global enable {unit} || true; fi']
+    for scope, flag in (('system', ''), ('user', ' --user')):
+        for unit in units.get(scope, []):
+            # debhelper 14's postinst-systemd{,-user}-enable: was-enabled is true without a record, so
+            # a first installation enables; an administrator's disable survives upgrades, and removal
+            # followed by reinstallation (prerm no longer disables, docs/70).
+            post += ['if [ "$1" = configure ] || [ "$1" = abort-upgrade ] || [ "$1" = abort-deconfigure ] || '
+                     '[ "$1" = abort-remove ]; then',
+                     f"  if deb-systemd-helper --quiet{flag} was-enabled '{unit}'; then",
+                     f"    deb-systemd-helper{flag} enable '{unit}' >/dev/null || true",
+                     f"  else deb-systemd-helper{flag} update-state '{unit}' >/dev/null || true; fi",
+                     'fi']
     if units.get('user') or pkg.get('user_systemd'):
         # Running user managers keep the unit files and drop-ins they loaded; a session restart
         # would otherwise start the old (possibly deleted) command lines.
@@ -124,16 +124,28 @@ def maintainer_scripts(pkg, root):
         post += ['', custom.read_text().replace('#!/bin/sh\n', '')]
     scripts = {'postinst': '\n'.join(post) + '\n'}
     prerm = ['#!/bin/sh', 'set -e']
-    for unit in units.get('system', []):
-        prerm += [f"if [ \"$1\" = remove ]; then deb-systemd-helper disable '{unit}' >/dev/null || true; fi"]
-    for unit in units.get('user', []):
-        prerm += [f'if [ "$1" = remove ]; then systemctl --global disable {unit} || true; fi']
+    if units.get('system'):
+        # debhelper's prerm-systemd-restart: stop on removal, keep the enable state (docs/70).
+        names = ' '.join(f"'{u}'" for u in units['system'])
+        prerm += ['if [ -z "$DPKG_ROOT" ] && [ "$1" = remove ] && [ -d /run/systemd/system ]; then',
+                  f'  deb-systemd-invoke stop {names} >/dev/null || true', 'fi']
     if (pkg['dir'] / 'prerm').exists():
         prerm += [(pkg['dir'] / 'prerm').read_text().replace('#!/bin/sh\n', '')]
     scripts['prerm'] = '\n'.join(prerm) + '\n'
-    for name in ('preinst', 'postrm'):
-        if (pkg['dir'] / name).exists():
-            scripts[name] = (pkg['dir'] / name).read_text()
+    if (pkg['dir'] / 'preinst').exists():
+        scripts['preinst'] = (pkg['dir'] / 'preinst').read_text()
+    postrm = ['#!/bin/sh', 'set -e']
+    for scope, flag in (('system', ''), ('user', ' --user')):
+        if units.get(scope):
+            # debhelper's postrm-systemd{,-user}: the enable records go only on purge.
+            names = ' '.join(f"'{u}'" for u in units[scope])
+            postrm += [f'if [ "$1" = purge ]; then deb-systemd-helper{flag} purge {names} >/dev/null || true; fi']
+    if units.get('system'):
+        postrm += ['if [ "$1" = remove ] && [ -d /run/systemd/system ]; then systemctl --system daemon-reload >/dev/null || true; fi']
+    if (pkg['dir'] / 'postrm').exists():
+        postrm += [(pkg['dir'] / 'postrm').read_text().replace('#!/bin/sh\n', '')]
+    if len(postrm) > 2:
+        scripts['postrm'] = '\n'.join(postrm) + '\n'
     for name, text in scripts.items():
         path = debian / name
         path.write_text(text)
