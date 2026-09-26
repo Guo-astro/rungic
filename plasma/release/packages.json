@@ -2,8 +2,7 @@
   "comment": "What a release of the Plasma container consists of (docs/61). tools/rungic_release.py builds moto-plasma-release with an exact dependency on every package listed here; the .debs themselves are build output in .work/apt/pool. 'rebuilt' are Ubuntu packages rebuilt from vendor/ (+motoN); 'project' are this repository's own packages (plasma/packaging, built by tools/rungic_package.py; their versions come from .work/apt/project-builds.json and must be current for the commit); 'coupled' are Ubuntu packages pinned to the version installed when the release is built, because files of theirs are diverted or their private ABI is used by code that is not rebuilt with them yet. 'android' are files outside the container that a release installs (backed up by deploy for rollback); the APK is versioned separately.",
   "rebuilt": {
     "kwin": {
-      "source": "vendor/kwin",
-      "version": "4:6.6.6-0ubuntu0.1+moto19",
+      "source": "packages/kwin",
       "packages": [
         "kwin-common",
         "kwin-data",
