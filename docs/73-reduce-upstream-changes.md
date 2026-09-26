@@ -67,4 +67,14 @@
 
 ## 进度
 
-（按阶段记录，见下文各节。）
+### 第一阶段（2026-09-27）
+
+**1.1 录屏快捷设置插件化：完成（部署验收见下）。** 录屏快捷设置成为独立插件`com.rungic.quicksetting.record`：QML模块（`recordutil`、`screenstream`，URI同名）与快捷设置包由`rungic-plasma-recording`构建（该包改为arm64、在手机上构建），通知用自己的`rungic-screen-recording.notifyrc`。plasma-mobile删除`recording-quicksetting`补丁与overlay，重建为`+rungic2`，其自带的录屏磁贴原样编译。kconf_update脚本`rungic-recording-quicksetting.sh`把新磁贴放到原录屏磁贴的位置（用户原来禁用了录屏的，新磁贴也放进禁用列表），并把plasma-mobile的磁贴移入禁用列表；无配置、在启用列表中、在禁用列表中、两者都有、都没有五种情况已在容器中核对。
+
+回滚限制：回滚到这之前的发布时，用户配置中plasma-mobile的录屏磁贴仍在禁用列表中，需要在快捷设置编辑里重新启用。
+
+**1.2 音频块大小：不可行，保留Qt的修改。** 用`plasma/diagnostics/media-probes/pa-gap.py`按Qt 6.10原版的缓冲参数（`maxlength`=1024帧）播放997Hz音并录`android.monitor`复现：每段插入62个零样本，4秒音共181处、多出0.23秒；按修正后的参数无断点。原因（PulseAudio 17源码）：`module-tunnel-sink-new`每次按远端可写量整块渲染（`pa_sink_render_full(writable)`），块大小由远端延迟决定，模块没有上限参数。把Android端输出块从20ms降到15ms/10ms后，原版参数仍有3–14处断点，而正确参数的客户端也开始出现欠载断点；已恢复20ms。Qt的修改修的是共享库本身的缺陷（所有Qt Multimedia应用受益），保留为补丁。
+
+**1.3 相机时钟：不可行，保留Snapshot的补丁。** 用`plasma/diagnostics/media-probes/camerabin-record.py`按Snapshot的方式（camerabin、pipewiresrc相机、默认音频源、MP4 H.264/AAC）录8秒对照：不带补丁（管线用PipeWire时钟）4次视频都被截短（5.3/5.3/1.9/5.3秒）；带补丁（`provide-clock=false`、`do-timestamp=true`）2次正常（8.07/8.03秒）。尝试在相机源中照V4L2源的做法由驱动节点每帧更新图时钟（`SPA_IO_Clock`，纳秒计、`NO_RATE`），结果大多数录制在停止后无法收尾，已撤销。补丁保留。
+
+另外发现（已有问题，不属本方案）：带补丁时camerabin录像也有一半次数视频被截短（5.3/0.03秒），与Snapshot早期记录的“EOS等待/零字节文件”一致，另行处理。
