@@ -103,3 +103,4 @@ Vendor适配应放在哪一层、哪些可以抽离到共享后端，见[54篇�
 | [68-luna-computer-use.md](docs/68-luna-computer-use.md) | GPT-6 Luna Computer Use（看画面决定点哪里） |
 | [69-filesystem-capabilities.md](docs/69-filesystem-capabilities.md) | 文件系统与容器能力审计 |
 | [70-rungic-rebrand.md](docs/70-rungic-rebrand.md) | Rungic（AgentOS）改名：命名规则、迁移调研、分阶段计划与进度 |
+| [71-upstream-patch-queue.md](docs/71-upstream-patch-queue.md) | 上游组件改为补丁队列：业界做法、目录与补丁规范、工具与测试分层、KWin试点 |
