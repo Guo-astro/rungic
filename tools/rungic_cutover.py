@@ -297,7 +297,9 @@ def docker_stop(base, name, recorder):
          'for f in /sys/block/loop*/loop/backing_file; do\n'
          '  case "$(cat $f 2>/dev/null)" in */docker-data.ext4) d=${f#/sys/block/}; losetup -d /dev/block/${d%%/*} ;; esac\n'
          'done; true', check=False)
-    left = root('pidof dockerd containerd bindfs; losetup -a | grep docker-data; true', check=False).stdout.strip()
+    # (bindfs also serves the Plasma container's shared folder: Docker's own ends at /storage/emulated/0.)
+    left = root('pidof dockerd containerd; pgrep -f "bindfs .* /storage/emulated/0$"; '
+                'losetup -a | grep docker-data; true', check=False).stdout.strip()
     recorder.step('docker-stopped', ok=result.returncode == 0, output=(result.stdout + result.stderr)[-300:])
     if result.returncode or left:
         raise SystemExit(f'Docker did not stop: {result.stdout}{result.stderr} {left}')
