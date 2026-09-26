@@ -21,9 +21,12 @@ task_ocr=$task_build/ocr
 rm -rf "$task_ocr" "$task_build/assets"
 python3 "$task_root/tools/fetch_ocr_assets.py" "$task_ocr"
 mkdir -p "$task_ocr/include/litert/build_common"
-cp "$task_root/vendor/litert/litert/build_common/config/build_config_gpu.h" "$task_ocr/include/litert/build_common/build_config.h"
+# LiteRT's C API headers from its pinned source (packages/litert, docs/71).
+task_litert=$task_build/litert
+python3 "$task_root/tools/pq.py" source litert --output "$task_litert" >/dev/null
+cp "$task_litert/litert/build_common/config/build_config_gpu.h" "$task_ocr/include/litert/build_common/build_config.h"
 "$task_ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android30-clang++" -std=c++17 -O2 -fPIC -shared \
-    -Wall -Wextra -Wno-unused-parameter -I"$task_ocr/include" -I"$task_root/vendor/litert" \
+    -Wall -Wextra -Wno-unused-parameter -I"$task_ocr/include" -I"$task_litert" \
     -o "$task_ocr/lib/arm64-v8a/librungicocr.so" "$task_root"/plasma/native-apk/jni/ocr/{ppocr,jni}.cc \
     -L"$task_ocr/lib/arm64-v8a" -lLiteRt -llog -static-libstdc++ -Wl,--no-undefined
 cp -r "$task_root/plasma/native-apk/assets" "$task_build/assets"

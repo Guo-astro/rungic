@@ -2,7 +2,7 @@
 C=$SRC/plasma/cua
 lib=$DESTDIR/usr/lib/rungic-cua
 mkdir -p "$lib"
-cp -r "$SRC/vendor/arc-cua/src/arc_cua" "$C/rungic_cua" "$lib/"
+cp -r "$SRC/upstream/arc-cua/src/arc_cua" "$C/rungic_cua" "$lib/"
 install -Dm755 "$C/rungic-cua" "$DESTDIR/usr/bin/rungic-cua"
 # KWin grants ScreenShot2 to this executable's desktop file only (docs/64).
 mkdir -p "$DESTDIR/usr/libexec"

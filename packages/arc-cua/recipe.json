@@ -1,0 +1,12 @@
+{
+ "comment": "Pinned upstream of arc-cua (docs/71, docs/73), whose arc_cua package rungic-cua ships. No release tarballs: pinned by commit, checked by its tree hash. No changes; our Linux backend is plasma/cua.",
+ "kind": "git",
+ "source": "arc-cua",
+ "version": "0.1.0",
+ "git": "https://github.com/shhivv/arc-cua",
+ "commit": "21d979d32bc74c136de9fe53cf4e6c9bc70a9f6b",
+ "tree": "4809b48545e035f9676f2cea14842c0d518f8d8f",
+ "upstream": "https://github.com/shhivv/arc-cua",
+ "licenses": "MIT; see LICENSE",
+ "files": {}
+}

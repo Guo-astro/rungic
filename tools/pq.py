@@ -171,8 +171,10 @@ def source(name, output=None):
     [top] = list(unpack.iterdir())
     top.rename(output)
     unpack.rmdir()
-    shutil.rmtree(output / 'debian', ignore_errors=True)
-    shutil.copytree(PACKAGES / name / 'debian', output / 'debian', symlinks=True)
+    # A pinned upstream without changes and without packaging of its own has no debian/.
+    if (PACKAGES / name / 'debian').exists():
+        shutil.rmtree(output / 'debian', ignore_errors=True)
+        shutil.copytree(PACKAGES / name / 'debian', output / 'debian', symlinks=True)
     add_overlay(name, output)
     if (output / 'debian/patches/series').exists():
         docker(output, 'quilt', 'push', '-a', '-q', env=('QUILT_PATCHES=debian/patches',))
