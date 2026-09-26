@@ -1,5 +1,7 @@
 # Docker 卷与手机共享存储（2026-09-22）
 
+> 改名说明（2026-09-27）：Rungic改名C阶段之后，`/data/adb/moto-docker`、`moto-docker`、`moto-docker-enter`、SELinux类型`moto_docker`/`moto_docker_file`/`moto_docker_image`、iptables链`MOTO_DOCKER_*`、开机脚本`moto-docker.sh`改为`rungic-*`/`rungic_docker*`/`RUNGIC_DOCKER_*`（运行时目录与数据镜像内的文件已整体重标）；示例项目`moto-server`/`moto-nginx`、`moto-storage-demo`、卷`moto-shared-example`、镜像标签`moto-alpine`改为`rungic-*`。对照见[70篇](70-rungic-rebrand.md)。下文按时间记录的内容保留当时的名称。
+
 两种存储挂载都已接通：Docker 管理的普通卷，以及手机“内部存储”目录的 bind mount。同一个容器可以同时使用它们；命名卷还可以显式指向共享目录。
 
 ## 选哪种

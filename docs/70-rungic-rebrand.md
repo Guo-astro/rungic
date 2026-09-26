@@ -185,6 +185,18 @@
 按包回滚到C之前的`20260927.5`：部署保留了当前Android侧（`android kept=True`），旧容器经兼容挂载和`moto-gpu-alloc`链接正常运行，冒烟验收通过；再部署`20260927.6`，冒烟验收首次`input.text`失败、重试通过（会话刚重启时的已知偶发项）。
 
 **剩余**
-- 重启手机后验收（需要用户在场重新打开无线调试）：开机脚本`rungic-cast-watch.sh`、`rungic-wfd-sepolicy.sh`，Magisk授权在开机清理后仍在，`debug.moto.*`临时属性消失。
-- Docker：`/data/adb/moto-docker`与SELinux类型`moto_docker*`。数据镜像`docker-data.ext4`（8G）内每个文件都带`moto_docker_file`标签，改类型需要停止Docker后挂载镜像整体重标，或保留类型名只改路径；单独评估后再做。
-- D阶段：移除兼容挂载、`moto-gpu-alloc`链接、投屏厂商“Moto”；卸载旧APK（`pm uninstall`）；删除`/data/adb/rungic-cutover`与Termux旧音频目录；purge `moto-*`的rc残留；移除`/home/linux`链接。
+- D阶段：移除兼容挂载、`moto-gpu-alloc`链接、投屏厂商“Moto”；卸载旧APK（`pm uninstall`）；删除`/data/adb/rungic-cutover`与Termux旧音频目录；purge `moto-*`的rc残留；移除`/home/linux`链接；删除Docker的旧卷与镜像标签（见下节）。
+
+### 重启验收（2026-09-27）
+
+用户重启手机后（无线调试端口变为33781，按端口扫描重新连接）：开机脚本`rungic-cast-watch.sh`与`rungic-wfd-sepolicy.sh`已执行，`debug.moto.*`属性已消失，新APK经Magisk授权自动启动容器（开机时的授权清理保留了新UID）。验收会话、单元、崩溃、显示、输入、相机、音频播放与录音、残留检查共9项全部通过。
+
+### C3：Docker（2026-09-27）
+
+用户选择整体重标签。`tools/rungic_cutover.py docker-up`：停止Docker并释放数据镜像的loop；`/data/adb/moto-docker`→`/data/adb/rungic-docker`；换上`rungic-docker`、`rungic-docker-enter`（NDK静态编译）、`network.sh`（链`RUNGIC_DOCKER_*`）、`sepolicy.rule`（`rungic_docker`、`rungic_docker_file`、`rungic_docker_image`）、开机脚本`rungic-docker.sh`与Termux的`docker`/`docker-service`；加载新规则后，运行时目录1392个文件与数据镜像内10530个文件由`moto_docker_file`重标为`rungic_docker_file`（用busybox `find -context`精确匹配，符号链接用`chcon -h`），镜像文件为`rungic_docker_image`，无遗留。旧类型留在当前策略中直到重启。
+
+工作负载改名：compose项目`moto-server`→`rungic-server`（容器`rungic-nginx`，卷数据复制到`rungic-server_webdata`，3个文件校验一致），绑定卷`rungic-shared-example`，镜像标签`rungic-alpine:3.22.6`，共享存储中的示例改为`rungic-storage-demo`。旧卷与旧标签保留到D阶段（`docker-down`依赖它们）。
+
+验收：dockerd运行在`u:r:rungic_docker:s0`，SELinux全局Enforcing、Docker域Permissive（与之前相同）；`rungic-nginx` healthy，`http://手机:18088/`返回200；Termux中`docker ps`可用；残留检查0项失败。
+
+演练与修正：先在64M测试镜像上双向演练重标签。发现toybox `losetup -f`带autoclear，`umount`后loop已被释放，再`losetup -d`会报ENXIO；停止检查原先把Plasma容器共享目录的bindfs误当成Docker的进程。

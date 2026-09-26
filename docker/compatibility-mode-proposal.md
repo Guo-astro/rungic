@@ -1,5 +1,7 @@
 # Docker 专用 permissive 域方案（2026-09-22）
 
+> 改名说明（2026-09-27）：Rungic改名C阶段之后，`/data/adb/moto-docker`、`moto-docker`、`moto-docker-enter`、SELinux类型`moto_docker`/`moto_docker_file`/`moto_docker_image`、iptables链`MOTO_DOCKER_*`、开机脚本`moto-docker.sh`改为`rungic-*`/`rungic_docker*`/`RUNGIC_DOCKER_*`（运行时目录与数据镜像内的文件已整体重标）；示例项目`moto-server`/`moto-nginx`、`moto-storage-demo`、卷`moto-shared-example`、镜像标签`moto-alpine`改为`rungic-*`。对照见[70篇](70-rungic-rebrand.md)。下文按时间记录的内容保留当时的名称。
+
 状态：用户认可后已落实。设备全局 Enforcing，`moto_docker` 域为 permissive；实际状态由内核策略查询确认。与共享存储的最终配置见 [docs/20-docker-storage.md](../docs/20-docker-storage.md)。下面保留方案的设计与回退说明。
 
 目标：今后更换标准 ARM64 镜像、增删服务、修改 Compose 时，免去针对 Docker 进程逐项维护 SELinux allow 规则的工作。

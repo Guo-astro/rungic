@@ -1,5 +1,7 @@
 # 原厂 Android 16 上运行 Docker（2026-09-22）
 
+> 改名说明（2026-09-27）：Rungic改名C阶段之后，`/data/adb/moto-docker`、`moto-docker`、`moto-docker-enter`、SELinux类型`moto_docker`/`moto_docker_file`/`moto_docker_image`、iptables链`MOTO_DOCKER_*`、开机脚本`moto-docker.sh`改为`rungic-*`/`rungic_docker*`/`RUNGIC_DOCKER_*`（运行时目录与数据镜像内的文件已整体重标）；示例项目`moto-server`/`moto-nginx`、`moto-storage-demo`、卷`moto-shared-example`、镜像标签`moto-alpine`改为`rungic-*`。对照见[70篇](70-rungic-rebrand.md)。下文按时间记录的内容保留当时的名称。
+
 设备 XT2537-4 / mumba_cn / ZY32MVJS25。沿用第 17 篇已经验证的容器内核，本次没有再次刷写 boot、init_boot 或系统分区。
 
 Docker 29.8.1、containerd 2.3.5、runc 1.5.1、Compose v5.5.1 已部署。Docker 直接使用 Android 内核，在独立 mount namespace 内运行 Alpine 管理环境；没有套在 LXC 内，也不是虚拟机。原有 LXC 保留。

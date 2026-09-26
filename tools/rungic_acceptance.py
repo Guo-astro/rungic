@@ -489,13 +489,14 @@ def rebrand_residue(ctx):
                   removed_conffiles=removed[:40], unowned=unowned[:60], android=android)
 
 
-# The Android side after the phase C cutover (docs/70, tools/rungic_cutover.py). Later phases: Docker
-# (its own cutover), phase D (the files the cutover keeps for `down`, the old APK, the Termux audio
-# directory it leaves, the container's mounts under the old names), the next ROM (Magisk bootstrap
-# logs), the next boot (debug.moto.* set by hand; nothing reads them); moto-phosh is an old leftover.
-ANDROID_LATER = re.compile(r'^(/data/adb/(moto-docker|service\.d/moto-docker\.sh|moto-phosh|moto-magisk-|rungic-cutover)'
+# The Android side after the phase C cutover (docs/70, tools/rungic_cutover.py). Later phases: phase D
+# (the files the cutover keeps for `down`, the old APK, the Termux audio directory it leaves, the
+# container's mounts under the old names, Docker's old volumes and image tag), the next ROM (Magisk
+# bootstrap logs), the next boot (debug.moto.* set by hand; nothing reads them); moto-phosh is an old
+# leftover.
+ANDROID_LATER = re.compile(r'^(/data/adb/(moto-phosh|moto-magisk-|rungic-cutover)'
                            r'|/data/data/com\.termux/files/usr/tmp/moto-(plasma|phosh)-audio|package:dev\.moto\.plasma$'
-                           r'|process:.*/data/adb/moto-docker/|process:lxc-start -n plasma |property:debug\.moto\.)')
+                           r'|process:lxc-start -n plasma |property:debug\.moto\.|docker:)')
 ANDROID_RESIDUE = r"""
 [ -d /data/adb/rungic-plasma ] || { echo layout:moto; exit 0; }
 find /data/adb -maxdepth 2 -iname '*moto*' -print
@@ -506,6 +507,12 @@ pm list packages -e | grep -x package:dev.moto.plasma | sed 's/^/enabled:/'
 ps -A -o ARGS | grep -i -E '[m]oto-|dev[.]moto' | sed 's/^/process:/'
 getprop | grep -o '^\[debug[.]moto[.][^]]*' | sed 's/^\[/property:/'
 echo "label:$(ls -Z /data/adb/rungic-lxc/images/rootfs.img | cut -d' ' -f1)"
+if [ -x /data/adb/rungic-docker/rungic-docker ]; then
+  echo "dockerlabel:$(ls -Z /data/adb/rungic-docker/docker-data.ext4 | cut -d' ' -f1)"
+  /data/adb/rungic-docker/rungic-docker cli volume ls -q 2>/dev/null | grep -i moto | sed 's/^/docker:volume:/'
+  /data/adb/rungic-docker/rungic-docker cli images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep -i moto | sed 's/^/docker:image:/'
+  /data/adb/rungic-docker/rungic-docker cli ps -a --format '{{.Names}}' 2>/dev/null | grep -i moto | sed 's/^/container:/'
+fi
 """
 
 
@@ -516,8 +523,8 @@ def _android_residue():
         return {'failed': ['the Android side is from before the phase C cutover'], 'later': []}
     failed, later = [], []
     for line in lines:
-        if line.startswith('label:'):
-            if line != 'label:u:object_r:rungic_image:s0':
+        if line.startswith(('label:', 'dockerlabel:')):
+            if line not in ('label:u:object_r:rungic_image:s0', 'dockerlabel:u:object_r:rungic_docker_image:s0'):
                 failed.append(line)
         elif ANDROID_LATER.match(line) and not line.startswith('enabled:'):
             later.append(line)

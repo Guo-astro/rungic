@@ -503,4 +503,5 @@ Agent可直接调用的设备诊断、崩溃现场、统一追踪（perfetto + K
 | 容器绑定挂载点 | `/var/lib/moto-{host,cores,apt}` | `/var/lib/rungic-{host,cores,apt}`（旧名同时挂载到D阶段） |
 | APK与KWin之间 | `/mnt/android-wayland/moto-gpu-alloc`，投屏输出厂商“Moto” | `rungic-gpu-alloc`（APK保留`moto-gpu-alloc`链接），厂商“Moto”保留到D阶段（KWin两者都认） |
 | 其他 | `debug.moto.*`，Termux音频目录`moto-plasma-audio`，LXC主机名`moto-plasma` | `debug.rungic.*`，`rungic-plasma-audio`，`rungic` |
-| 保持不变 | Docker（`/data/adb/moto-docker`、`moto_docker`）单独切换；ROM中的Magisk引导脚本随下次刷机 | — |
+| Docker | `/data/adb/moto-docker`、`moto-docker`，SELinux `moto_docker`、`moto_docker_file`、`moto_docker_image`，链`MOTO_DOCKER_*` | `/data/adb/rungic-docker`、`rungic-docker`，`rungic_docker*`，`RUNGIC_DOCKER_*`（`rungic_cutover.py docker-up`） |
+| 保持不变 | ROM中的Magisk引导脚本随下次刷机 | — |
