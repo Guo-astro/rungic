@@ -33,7 +33,7 @@ Motorola moto g100s（XT2537-4 / Adreno710）上的Android与Linux桌面适配�
 
 Vendor适配应放在哪一层、哪些可以抽离到共享后端，见[54篇架构评审](docs/54-vendor-adaptation-boundaries.md)。
 
-系统交付、验收与诊断见[61篇](docs/61-delivery-diagnostics-plan.md)：容器rootfs上本项目的文件都来自包（`plasma/packaging`、vendor重建包），经本地APT仓库与发布元包部署（`tools/moto_release.py deploy|rollback|status`），部署后自动验收（`tools/moto_acceptance.py`），`moto-integrity`检查漂移。
+系统交付、验收与诊断见[61篇](docs/61-delivery-diagnostics-plan.md)：容器rootfs上本项目的文件都来自包（`plasma/packaging`、vendor重建包），经本地APT仓库与发布元包部署（`tools/moto_release.py deploy|rollback|status`），部署后自动验收（`tools/moto_acceptance.py`），`moto-integrity`检查漂移。rootfs是ext4镜像（`plasma/rootfs-image`），部署前自动建dm-snapshot，验收失败即回到快照；`/home`、崩溃报告与本地仓库不随之回滚。
 
 ## 文档索引
 

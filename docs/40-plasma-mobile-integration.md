@@ -20,7 +20,7 @@
 
 Ubuntu rootfs SHA256：`a6a90ffe1cabfd721b3f0472c1f3db7eeb4a16d5c00e7874510a72308088bc8e`。SHA256SUMS.gpg由Ubuntu cloud image keyring验证，签名指纹`D2EB44626FDDC30B513D5BB71A5D6C4C7DB87C81`。APT使用签名验证后的resolute、updates、backports依赖；26.04镜像自带ARM64 archive.ubuntu.com配置有效，未强行套用旧ports配置。代理`http://192.168.5.45:6152`。
 
-容器`plasma`位于`/data/adb/moto-lxc/runtime/var/lib/lxc/plasma/rootfs`，旧forky引导目录另存`rootfs-forky-bootstrap`。APK `dev.moto.plasma`独立于`dev.moto.phosh`，Linux用户UID1000。Android音频、显示、硬件桥socket都使用Plasma APK自己的私有目录。
+容器`plasma`位于`/data/adb/moto-lxc/runtime/var/lib/lxc/plasma/rootfs`，旧forky引导目录另存`rootfs-forky-bootstrap`。2026-09-26起rootfs改为同目录下`images/rootfs.img`（ext4镜像，经loop与device-mapper由`lxc.hook.pre-mount`挂到`rootfs`），`/home`等可变数据在`state/`下以bind mount挂入；布局、快照与回滚见61篇P6。APK `dev.moto.plasma`独立于`dev.moto.phosh`，Linux用户UID1000。Android音频、显示、硬件桥socket都使用Plasma APK自己的私有目录。
 
 基础系统采用systemd259 PID1、logind PAM登录和systemd用户会话，参考[systemd容器接口](https://systemd.io/CONTAINER_INTERFACE/)和[cgroup委派](https://systemd.io/CGROUP_DELEGATION/)。挂载命名空间内修正根挂载suid和私有/dev/shm标签；没有改Android全局挂载。禁用容器中的实体网络、蓝牙、调制解调器和云初始化服务，Android继续拥有这些设备。
 
