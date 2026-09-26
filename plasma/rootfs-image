@@ -112,8 +112,8 @@ finish_merge_if_done() {
 
 snapshot() {
     need_stopped
+    detach                                   # finishes a completed rollback merge first
     [ "$(state)" = none ] || die "state is $(state), not none"
-    detach
     rm -f "$COW"
     truncate -s "$COW_SIZE" "$COW"          # sparse; zeroed header = new persistent snapshot
     echo snapshot > "$STATE_FILE"

@@ -518,7 +518,7 @@ def deploy(version=None, restart='auto', acceptance='smoke', record_label=None, 
     mode, state = rootfs_state()
     use_snapshot = snapshot == 'always' or (snapshot == 'auto' and mode == 'image')
     if use_snapshot:
-        if state != 'none':
+        if state not in ('none', 'merging'):     # a finished rollback merge is completed by the snapshot step
             log['result'] = 'aborted'
             step('abort', reason=f'the rootfs has a kept snapshot (state {state}): moto_release.py commit '
                  'to keep the current system, or rollback --snapshot to return to the snapshot, first')

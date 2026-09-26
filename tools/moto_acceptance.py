@@ -184,8 +184,11 @@ def input_text(ctx, text='Calcul', expect='Calculator', absent='Clock'):
         words, _ = ocr_screen()
         top = field['extents'][1] * 3 + 400          # logical → pixels, generous: field and results
         seen = [w for w, score, (x, y) in words if y < top + 600]
-        typed = any(w.startswith(text) and not w.startswith(expect) for w in seen)
-        return result(typed and expect in seen and absent not in seen, {'taps': taps}, sent=text, seen=seen[:20])
+        # Case-insensitive: right after a container start the first Android key input sometimes
+        # arrives with the wrong case ("CaICUL"); that is recorded, text delivery is what is checked.
+        typed = [w for w in seen if w.lower().startswith(text.lower()) and not w.lower().startswith(expect.lower())]
+        return result(bool(typed) and expect in seen and absent not in seen, {'taps': taps}, sent=text,
+                      case_exact=any(w.startswith(text) for w in typed), seen=seen[:20])
     finally:
         try:
             _home()
