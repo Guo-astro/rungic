@@ -292,4 +292,4 @@ rootfs从目录迁入ext4镜像，升级前自动建立dm-snapshot；btrfs按第
 | 20260926.7 | 容器重启后会话没有起来，冒烟6项失败（启用链接被升级删除）；修复后发.8 |
 | 20260926.8–.9 | 验收通过；.9期间迁入镜像rootfs |
 | 20260926.10–.11 | 快照部署；验收失败（首次输入大小写、plasmashell未就绪、抽屉空白），3次自动回到快照 |
-| 20260926.12 | moto-integrity增加`user_overrides`；快照部署，完整性clean，冒烟验收8项一次通过（无flaky），快照保留待commit |
+| 20260926.12 | moto-integrity增加`user_overrides`；快照部署，完整性clean，冒烟验收8项一次通过（无flaky）；镜像模式下完整验收15项全部通过（录屏34.1秒正常收尾，paint p95 3.802 ms、呈现间隔p95 16.706 ms、后置21.9 fps、编码1.84秒/解码0.65秒），随后`commit`丢弃快照，rootfs回到linear |
