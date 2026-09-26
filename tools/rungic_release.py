@@ -429,10 +429,25 @@ systemd-run --unit={unit} --wait --pipe --collect --quiet -p TimeoutStartSec=360
     return result.returncode == 0, result.stdout[-3000:] + result.stderr[-2000:]
 
 
+def android_content(info, item):
+    """The bytes of an Android-side file as the release has it: the working tree's when they match,
+    else the file at the release's commit (a rollback deploys an older release without checking it
+    out). None when neither matches the recorded sha256."""
+    path = WORKSPACE / item['source']
+    data = path.read_bytes() if path.exists() else b''
+    if hashlib.sha256(data).hexdigest() == item['sha256']:
+        return data
+    shown = subprocess.run(['git', 'show', f"{info.get('commit', '')}:{item['source']}"], cwd=WORKSPACE,
+                           capture_output=True)
+    if shown.returncode == 0 and hashlib.sha256(shown.stdout).hexdigest() == item['sha256']:
+        return shown.stdout
+    return None
+
+
 def android_source_changes(info):
-    """Android-side sources that differ from the release (a deploy would stop halfway on them)."""
-    return [item['source'] for item in (info.get('android') or {}).values()
-            if hashlib.sha256((WORKSPACE / item['source']).read_bytes()).hexdigest() != item['sha256']]
+    """Android-side files of the release that neither the working tree nor its commit has (a deploy
+    would stop halfway on them)."""
+    return [item['source'] for item in (info.get('android') or {}).values() if android_content(info, item) is None]
 
 
 def sync_android(info, record):
@@ -446,10 +461,13 @@ def sync_android(info, record):
         current = run(f'sha256sum {shlex.quote(path)} 2>/dev/null | cut -d" " -f1', 'root', check=False).stdout.strip()
         if current == item['sha256']:
             continue
-        source = WORKSPACE / item['source']
-        if hashlib.sha256(source.read_bytes()).hexdigest() != item['sha256']:
-            raise SystemExit(f"{item['source']} changed since release {info['version']} was built; "
-                             'check out its commit to deploy it')
+        data = android_content(info, item)
+        if data is None:
+            raise SystemExit(f"{item['source']} of release {info['version']} is neither in the working tree "
+                             'nor at its commit')
+        source = WORKSPACE / f".work/cache/android-{path.strip('/').replace('/', '__')}"
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_bytes(data)
         backup.mkdir(parents=True, exist_ok=True)
         saved = backup / path.strip('/').replace('/', '__')
         if current:
@@ -615,8 +633,8 @@ def deploy(version=None, restart='auto', acceptance='smoke', record_label=None, 
     changed = android_source_changes(info)
     if changed:
         log['result'] = 'aborted'
-        step('abort', reason=f'Android-side files changed since release {version} was built: {", ".join(changed)}; '
-             'check out its commit to deploy it')
+        step('abort', reason=f'Android-side files of release {version} are neither in the working tree nor at its '
+             f'commit: {", ".join(changed)}')
         return log
     # 1b snapshot of the whole rootfs (image rootfs, docs/61 §7): a failed release rolls back to it
     mode, state = rootfs_state()
