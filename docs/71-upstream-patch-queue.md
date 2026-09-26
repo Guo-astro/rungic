@@ -103,7 +103,7 @@ packages/<源码包名>/
 
 试点通过后依次迁移：kscreen（与KWin共享头文件）、plasma-mobile（修改最多，约1300行）、plasma-settings、plasma-keyboard、xdg-desktop-portal-kde、wl-clipboard、plasma-camera、libcamera、qtmultimedia，然后是非Debian上游（Mesa、FFmpeg、Snapshot、typesafe-computer-use、arc-cua、LiteRT）。全部完成后`vendor/`删除，仓库中的上游源码只剩补丁。
 
-与Rungic改名（docs/70）的关系：改名的B阶段暂停，等补丁队列迁移完成后再做，这样vendor中的改名只需修改相应补丁，也能用新的测试层验证。
+与Rungic改名（docs/70）的关系：改名的B阶段暂停，等补丁队列迁移完成后再做，这样vendor中的改名只需修改相应补丁，也能用新的测试层验证。2026-09-26用户决定先迁移改名涉及的6个组件（见下文“第二批”），其余组件之后按上面的顺序迁移。
 
 ## 风险与待定
 
@@ -129,3 +129,29 @@ packages/<源码包名>/
 **5 测试（部分）**：为`xdg-min-above-max`按上游写法新增集成测试`testXdgShellWindow::testMinimumAboveMaximum`（最小700×400、最大360×800的窗口保持连接并丢弃冲突的最大宽度；再把最大高度设到最小以下，两个方向都丢弃；无协议错误），经`pq.py prepare`在对应提交上fixup后导出。`pq.py tests kwin --gaps`列出6条无测试覆盖的补丁：共享头文件（随使用它的补丁覆盖）、两条投屏补丁（需要电视接收端，人工项）、宿主滚动、空闲抑制、脚本中的`internal`属性。
 
 **6 模拟升级（完成分析）**：KWin上游6.6系列止于6.6.6，下一个稳定版是6.7.5（KDE neon为resolute提供的版本）。tarball经KDE发布密钥环中Bhushan Shah的签名（`B3CB…928CAEFC`）验证。把18条补丁依次三方合并到6.7.5：4条干净（空闲抑制、两条录屏、脚本`internal`），其余冲突；逐条单独合并的结果相同。冲突集中在嵌套Wayland后端（上游6.7重构了`wayland_egl_backend`、`wayland_layer`、`wayland_output`等，`xdgshell.cpp`的尺寸改为`QSizeF`，`virtualkeyboard_dbus.cpp`、`drmdevice.cpp`也有改动）。Ubuntu的2条补丁同样冲突（其中logind回退可能已部分进入上游）。记录：`.work/research/patch-queue/pq-upgrade-report.txt`、`pq-upgrade-solo.txt`。结论：跟进一个上游大版本时，需要人工调整并重测的正是这些补丁对应的功能；降低长期成本最有效的办法是把Android宿主相关的改动集中到更少的位置（例如独立的后端或插件），并把通用修正提交上游。resolute仍是Plasma 6.6，本次不解决冲突、不部署6.7。
+
+## 第二批：改名涉及的6个组件（2026-09-26）
+
+用户决定只先迁移Rungic改名会改到的组件：plasma-mobile、plasma-settings、kscreen、FFmpeg、Snapshot、typesafe-computer-use（提交`baef71f4`）。每个组件都由`tools/pq_import_history.py`从vendor历史生成补丁队列，并与`c36596035f9e:vendor/<名称>`逐字节核对一致（空目录、`debian/`、`.pc`除外）；随后删除这6个vendor目录，以及已被`packages/kwin`取代的`vendor/kwin`。
+
+| 组件 | 上游来源 | 补丁 | 说明 |
+|---|---|---|---|
+| plasma-mobile | Ubuntu 6.6.5-0ubuntu0.1 | 13条（2条回移） | 按功能拆分；两个修正提交用autosquash并入对应功能 |
+| plasma-settings | Debian 25.12.0-1（resolute同步） | 2条 | orig是KDE签名的发布包，与vendor导入时的tag包内容相同 |
+| kscreen | Ubuntu 4:6.6.5-0ubuntu0.1 | 1条 | 以前只把重建的`kcm_kscreen.so`换进Ubuntu二进制包，现在整个源码包构建；vendor中的`PROJECT_DEP_VERSION`改动就是Ubuntu自己的补丁 |
+| FFmpeg | 8.1.2发布包（配方类型`upstream`） | 2条 | `libx264_sw`改名与编解码器注册分开 |
+| Snapshot | 51.0发布包（`upstream`，含Cargo依赖） | 2条 | 编码器识别与Android相机时钟分开 |
+| typesafe-computer-use | 固定提交`24eb292`（类型`git`，按tree哈希核对） | 1条（9行） | 我们的Linux适配器移到`plasma/cua/typesafe/`，由overlay放入 |
+
+**工具的扩展**：
+- **overlay**：配方中“源码树路径→仓库共享文件”。共享文件（录屏快捷设置、`android-display-client.h`、编解码客户端与FFmpeg适配、clicker的Linux适配器）在打补丁前放入源码树，补丁只引用、不修改，仓库里仍只有一份（与原来的符号链接等价）。整体替换上游文件时记录上游文件的sha256，上游一旦修改该文件就拒绝构建，提示复核。
+- **非Debian上游**：`upstream`（发布包＋sha256）和`git`（固定提交，`git archive`生成确定的tar，按tree哈希核对）。这类组件只有`debian/patches`；编辑时为gbp生成最小的control与changelog，只在`.work`中。构建它们的项目包在`package.json`中写`upstream`，构建目录中的`$SRC/upstream/<名称>`是补丁后的源码，包的内容标识包括配方、补丁与overlay文件。
+- **历史导入**：`distribution`步骤（发行版补丁已在vendor中应用的那一步，只记录不重复）；`--ref`（vendor目录删除后，指定删除前的提交复现导入）。
+- `verify`：参照树中无法解析的符号链接算作差异（以前只看stdout，会误报一致）；只在一侧存在的空目录不算差异。
+
+**构建核对**：版本号不变的组件在手机上从补丁队列重新构建，与发布仓库中现有的包比较`md5sums`：
+- plasma-mobile `+moto2`：1553个文件中1551个逐字节相同；另外两个是panel与taskpanel两个applet的`.so`，导出符号相同，差别是新构建中`NavigationPanelComponent.qml`多了一个QML预编译（AOT）函数。qmlcachegen能预编译哪些函数取决于构建时已安装的QML类型信息，旧包是更早的系统状态下增量构建的；源码相同，行为等价。
+- plasma-settings `+moto1`：82个文件全部逐字节相同。
+- kscreen `+moto3`（整包构建）：与以前替换插件的`+moto2`相比，文件清单与依赖相同；6个二进制文件现在由我们从源码编译（以前除`kcm_kscreen.so`外都是Ubuntu编译的），另有changelog不同。
+- 项目包（新版本0.196）：FFmpeg的9个文件去掉构建ID与debuglink后完全相同；Snapshot唯一的二进制文件，字符串差异全部是构建路径`src/vendor/snapshot`→`src/upstream/snapshot`（Rust把源码路径写进panic信息）；clicker中的`typesafe_computer_use`目录完全相同。比较时要用能识别aarch64的`llvm-objcopy`：主机的`objcopy`不认识aarch64，出错时输出为空，两边的哈希会“相同”。
+
