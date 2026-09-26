@@ -5,3 +5,8 @@ if [ "$1" = configure ] && [ -f /etc/UPower/UPower.conf ]; then
     sed -i -e 's/^AllowRiskyCriticalPowerAction=true$/AllowRiskyCriticalPowerAction=false/' \
            -e 's/^CriticalPowerAction=Ignore$/CriticalPowerAction=HybridSleep/' /etc/UPower/UPower.conf
 fi
+# The machine-local APT proxy (set up by hand, rungic-local-config.json) under its Rungic name
+# (docs/70). The old file stays for a rollback; both hold the same settings.
+if [ "$1" = configure ] && [ -f /etc/apt/apt.conf.d/80moto-proxy ] && [ ! -e /etc/apt/apt.conf.d/80rungic-proxy ]; then
+    cp -p /etc/apt/apt.conf.d/80moto-proxy /etc/apt/apt.conf.d/80rungic-proxy
+fi

@@ -439,6 +439,47 @@ def display_scale_roundtrip(ctx, other=2.75):
                   applied=bool(applied), restored=bool(restored))
 
 
+# Names that stay "moto" in phase B of the Rungic rename (docs/70): the Android side creates or reads
+# them (bind mounts, the Magisk launcher's directory), or they belong to no package (manual leftovers).
+RESIDUE_ALLOWED = re.compile(r'^/(var/lib/moto-(host|cores|apt)|opt/moto-)')
+RESIDUE = r"""
+find / -xdev \( -path /proc -o -path /sys -o -path /dev -o -path /run -o -path /home -o -path /tmp \
+  -o -path /var/tmp -o -path /root -o -path /var/lib/moto-apt -o -path /var/lib/moto-cores -o -path /var/cache \
+  -o -path /var/lib/dpkg -o -path /var/lib/apt \) -prune -o -iname '*moto*' -print 2>/dev/null | while read -r p; do
+  owner=$(dpkg -S "$p" 2>/dev/null | head -1 | cut -d: -f1)
+  echo "$p	$owner"
+done
+echo "@@units"; systemctl list-units --all --no-legend --plain 'moto*' | cut -d' ' -f1
+echo "@@userunits"; runuser -u linux -- env XDG_RUNTIME_DIR=/run/user/1000 systemctl --user list-units --all --no-legend --plain 'moto*' | cut -d' ' -f1
+echo "@@packages"; dpkg-query -W -f '${db:Status-Abbrev} ${Package}\n' 'moto-*' 2>/dev/null | grep '^ii' | cut -d' ' -f2-
+"""
+
+
+@check
+def rebrand_residue(ctx):
+    """Phase B of the Rungic rename (docs/70): no installed package ships a file or unit under a
+    "moto" name, no such unit is loaded, no moto-* package is installed; the phase C names and
+    unowned leftovers are listed, not failed."""
+    text = run(RESIDUE, 'container', timeout=300, check=False).stdout
+    files, _, rest = text.partition('@@units')
+    units, _, rest = rest.partition('@@userunits')
+    user_units, _, packages = rest.partition('@@packages')
+    owned, allowed, unowned = [], [], []
+    for line in files.strip().splitlines():
+        path, _, owner = line.partition('\t')
+        if RESIDUE_ALLOWED.match(path):
+            allowed.append(path)
+        elif owner:
+            owned.append(f'{path} ({owner})')
+        else:
+            unowned.append(path)
+    units, user_units, packages = units.split(), user_units.split(), packages.split()
+    return result(not owned and not units and not user_units and not packages,
+                  {'owned': len(owned), 'units': len(units) + len(user_units), 'packages': len(packages),
+                   'unowned': len(unowned)},
+                  owned=owned[:40], units=units + user_units, packages=packages, allowed=sorted(set(allowed))[:20],
+                  unowned=unowned[:60])
+
 CODEC = r"""
 set -e
 d=$(mktemp -d /var/tmp/rungic-codec.XXXXXX); trap 'rm -rf "$d"' EXIT

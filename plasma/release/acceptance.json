@@ -132,6 +132,12 @@
       "title": "The recording quick setting writes a playable file with video and audio tracks"
     },
     {
+      "id": "rebrand.residue",
+      "level": "full",
+      "check": "rebrand_residue",
+      "title": "Rungic rename, phase B: no installed package, unit or package name is still moto (docs/70)"
+    },
+    {
       "id": "perf.compositor",
       "level": "full",
       "check": "compositor_perf",
