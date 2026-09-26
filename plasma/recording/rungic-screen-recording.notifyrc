@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Notifications of the recording quick setting (recordutil.cpp).
+[Global]
+IconName=media-record
+Name=Screen recording
+Name[zh_CN]=录屏
+Comment=Screen recording
+Comment[zh_CN]=录屏
+
+[Event/captured]
+Name=Recording finished
+Name[zh_CN]=录屏结束
+Comment=A screen recording was saved or failed
+Comment[zh_CN]=录屏已保存或失败
+Action=Popup

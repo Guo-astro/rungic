@@ -5,7 +5,7 @@ import QtQuick
 import QtQuick.Window
 
 import org.kde.plasma.private.mobileshell.state as MobileShellState
-import org.kde.plasma.quicksetting.record
+import com.rungic.quicksetting.record
 import org.kde.plasma.private.mobileshell.quicksettingsplugin as QS
 
 QS.QuickSetting {

@@ -12,21 +12,5 @@
   "plasma-mobile_6.6.5.orig.tar.xz": "164380a6e1d75dc6fb072090caa3c4e5fb80bbb3f188d305bce767c90b9e4600",
   "plasma-mobile_6.6.5-0ubuntu0.1.debian.tar.xz": "863db8e7a406f110872520aeeec6077def0ddd34903b3e31f8109e48e926ed20"
  },
- "fetch": "https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/plasma-mobile/6.6.5-0ubuntu0.1/{file}",
- "overlay": {
-  "quicksettings/record/recordutil.cpp": {
-   "from": "plasma/recording/recordutil.cpp",
-   "replaces": "69ae8867d8573673d6f07c33ee201974c8d9e354bc18a9e7d8421c55d1de32a6"
-  },
-  "quicksettings/record/recordutil.h": {
-   "from": "plasma/recording/recordutil.h",
-   "replaces": "a36b6dcb93f290ff9c4386ca3f506303645bd9379e3dabc62a1f2561959154cd"
-  },
-  "quicksettings/record/package/contents/ui/main.qml": {
-   "from": "plasma/recording/main.qml",
-   "replaces": "925958ad0b8b4aa1fae8a1d2f30ea266b6ebdf1ef502016e84f526aacdd3d45a"
-  },
-  "quicksettings/record/screenstream.cpp": "plasma/recording/screenstream.cpp",
-  "quicksettings/record/screenstream.h": "plasma/recording/screenstream.h"
- }
+ "fetch": "https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/plasma-mobile/6.6.5-0ubuntu0.1/{file}"
 }

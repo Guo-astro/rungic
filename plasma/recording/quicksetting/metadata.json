@@ -1,0 +1,12 @@
+{
+    "KPackageStructure": "KPackage/GenericQML",
+    "KPlugin": {
+        "Description": "Record the screen (KWin screencast, Android hardware H.264)",
+        "Description[zh_CN]": "录制屏幕（KWin 屏幕流，Android 硬件 H.264 编码）",
+        "Icon": "media-record",
+        "Id": "com.rungic.quicksetting.record",
+        "License": "GPL-2.0+",
+        "Name": "Record Screen",
+        "Name[zh_CN]": "录屏"
+    }
+}

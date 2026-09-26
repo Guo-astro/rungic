@@ -20,7 +20,7 @@ RecordUtil::RecordUtil(QObject *parent):QObject(parent){
   const bool ok=code==0 && status==QProcess::NormalExit;
   m_running=false;m_stopping=false;changed();
   auto *n=new KNotification(QStringLiteral("captured"));
-  n->setComponentName(QStringLiteral("plasma_mobile_quicksetting_record"));
+  n->setComponentName(QStringLiteral("rungic-screen-recording"));
   n->setTitle(ok?QStringLiteral("录屏已保存"):QStringLiteral("录屏失败"));
   n->setText(ok?m_outputs.join(QLatin1Char('\n')):(m_error.isEmpty()?QStringLiteral("录制未完成，请检查可用空间及硬件桥接。"):m_error));
   if(ok){QList<QUrl> urls;for(const auto &o:m_outputs)urls<<QUrl::fromLocalFile(o);n->setUrls(urls);}

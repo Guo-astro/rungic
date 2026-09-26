@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// Rungic recording backend for Plasma Mobile's existing quick setting.
+// Backend of the recording quick setting (com.rungic.quicksetting.record, docs/73).
 #pragma once
 #include <QObject>
 #include <QProcess>

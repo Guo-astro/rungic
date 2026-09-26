@@ -21,3 +21,8 @@ Script=rungic-firefox-launcher.sh,sh
 # starts, so KWin already reads the new input method path.
 Id=rungic-usr-paths-v1
 Script=rungic-usr-paths.sh,sh
+
+# The recording tile is this project's own quick setting; plasma-mobile's moves to the
+# disabled list (docs/73).
+Id=rungic-recording-quicksetting-v1
+Script=rungic-recording-quicksetting.sh,sh

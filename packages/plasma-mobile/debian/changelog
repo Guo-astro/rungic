@@ -1,3 +1,12 @@
+plasma-mobile (6.6.5-0ubuntu0.1+rungic2) resolute; urgency=medium
+
+  * The recording quick setting is this project's own package
+    (com.rungic.quicksetting.record in rungic-plasma-recording, docs/73):
+    drop the patch and overlay that replaced plasma-mobile's; its tile is
+    built as upstream ships it and hidden by a per-user migration.
+
+ -- range-dev <noreply@localhost>  Sun, 27 Sep 2026 08:00:00 +0000
+
 plasma-mobile (6.6.5-0ubuntu0.1+rungic1) resolute; urgency=medium
 
   * Rungic rename (docs/70): the voice assistant's D-Bus name
