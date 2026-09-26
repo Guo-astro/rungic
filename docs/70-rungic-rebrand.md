@@ -115,3 +115,15 @@
 
 **主机工具**：`rungic_device.prog()`/`first_path()`先用新名称，找不到时用旧名称；部署、验收与诊断工具据此在回滚后的旧发布上仍可用（发布元包名按目标发布选择，关键单元、相机节点、编解码器名均兼容两种名称）。
 
+### B阶段首次部署与快照回滚事故（2026-09-27）
+
+发布`20260927.1`三次部署都没有完成，手机回到`20260926.20`：
+1. APT拒绝仓库Origin由`moto`变为`rungic`，安装前中止。`rungic_release.py`的`apt-get update`加上`--allow-releaseinfo-change`（仓库是本项目本地的可信源）。
+2. 包全部装上，重启容器后桌面没有就绪，验收失败，自动回滚到快照。原因未查明：证据包没有会话与KWin的用户日志。
+3. 再次部署时，删除`moto-cua`文件时dpkg报ext4 `Structure needs cleaning`。第2次的快照回滚没有恢复被重写的块：第2次部署删除`moto-cua`、`moto-codec`、`moto-codex`后，这些块被新包复用。第2次部署开始时完整性检查为clean，回滚后为drift。只读`e2fsck -fn`发现76个目录损坏，`e2fsck -fy`修复（456个无主文件进入`lost+found`），按原版本重装这3个包后`moto-integrity`恢复clean，smoke验收通过。home在Android侧，不受影响。
+
+**快照回滚的根因尚未查明。** `plasma/rootfs-image`的`detach`原来先删快照再删origin，`attach`先建origin再建快照，都留有“origin上没有快照”的窗口；`tools/rootfs_rollback_test.sh`在测试镜像上演示了：设备仍被占用时，旧代码会删掉快照、origin却删不掉。但事故中的那次停止打印了“stopped”（`set -eu`下`detach`失败不会打印），说明当时并未发生这种情况；测试镜像在私有挂载命名空间下，新旧代码都没有复现损坏。已做的防护：
+- `detach`先删origin（被占用时等待，最多30秒，超时即失败），再删快照；`attach`先建快照再建origin；origin已存在而快照缺失时拒绝继续。
+- `rungic_release.py`的三处快照回滚统一为`rollback_to_snapshot()`：回到改名前的发布时先`rebrand_down`（原来验收失败的回滚路径缺这一步，第2次回滚后home留在了`/home/kevinzhow`，已手工移回）；回滚后比较内核的ext4错误数并运行完整性检查，结果写入部署记录。
+- 在查明之前，B阶段的部署不依赖快照回滚：以`--acceptance none`部署并保留现场，需要退回时按包回滚（部署上一个发布）。
+

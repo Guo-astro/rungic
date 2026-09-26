@@ -557,6 +557,29 @@ def with_container_stopped(action, before_start=None):
     return True, '\n'.join(outputs)
 
 
+def ext4_errors():
+    """Kernel ext4 errors so far (dmesg), to count the ones a snapshot rollback adds."""
+    result = run("dmesg 2>/dev/null | grep -c 'EXT4-fs error' || true", 'root', check=False)
+    text = (getattr(result, 'stdout', '') or '').strip()
+    return int(text) if text.isdigit() else 0
+
+
+def rollback_to_snapshot(previous=None, record=None):
+    """Roll the rootfs back to the deploy's snapshot. The home and the user's settings are outside it:
+    for a release from before the Rungic rename they go back first (rebrand_down). Then the result is
+    checked: a snapshot rollback once left the ext4 image corrupt (2026-09-27, docs/70), which only
+    the next deploy noticed."""
+    rebrand = rebrand_down() if previous and meta_of(previous) == FORMER_META else None
+    errors_before = ext4_errors()
+    ok, text = with_container_stopped('rollback', before_start=(lambda: restore_android(record)) if record else None)
+    check = {'ext4_errors': ext4_errors() - errors_before}
+    if ok:
+        summary = (integrity_summary() or {}).get('summary', {})
+        check.update(integrity=summary.get('state'), changed_files=summary.get('changed_files'),
+                     missing_files=summary.get('missing_files'))
+    return ok, text, {'rebrand_down': rebrand, 'check': check}
+
+
 def history():
     return json.loads(HISTORY.read_text()) if HISTORY.exists() else []
 
@@ -639,8 +662,8 @@ def deploy(version=None, restart='auto', acceptance='smoke', record_label=None, 
             log['result'] = 'install-failed'
             step('abort', reason=tail[-1500:])
             if use_snapshot:
-                ok, text = with_container_stopped('rollback')
-                step('snapshot-rollback', ok=ok, output=text[-400:])
+                ok, text, after = rollback_to_snapshot(previous)
+                step('snapshot-rollback', ok=ok, output=text[-400:], **after)
                 log['result'] = 'install-failed, rolled back to the snapshot' if ok else log['result']
             return log
         # The Android side names paths inside the container: it follows a successful install,
@@ -706,8 +729,8 @@ def deploy(version=None, restart='auto', acceptance='smoke', record_label=None, 
             step('evidence', folder=evidence['folder'])
         except Exception as error:   # evidence must not prevent the rollback
             step('evidence', error=f'{type(error).__name__}: {error}')
-        ok, text = with_container_stopped('rollback', before_start=lambda: restore_android(record))
-        step('snapshot-rollback', ok=ok, output=text[-400:])
+        ok, text, after = rollback_to_snapshot(previous, record)
+        step('snapshot-rollback', ok=ok, output=text[-400:], **after)
         if ok:
             log['result'] += ', rolled back to the snapshot'
     elif use_snapshot:
@@ -737,10 +760,8 @@ def rollback_snapshot():
     # The Android side of the deploy that took the snapshot goes back with it.
     kept = [e for e in history() if 'snapshot' not in e['result']]
     record = WORKSPACE / kept[-1]['record'] if kept else None
-    rebrand = rebrand_down() if kept and kept[-1].get('previous') and meta_of(kept[-1]['previous']) == FORMER_META \
-        else None
-    ok, text = with_container_stopped('rollback', before_start=(lambda: restore_android(record)) if record else None)
-    return {'ok': ok, 'output': text, 'release': device_release()[0], 'rebrand_down': rebrand}
+    ok, text, after = rollback_to_snapshot(kept[-1].get('previous') if kept else None, record)
+    return {'ok': ok, 'output': text, 'release': device_release()[0], **after}
 
 
 def rollback(restart='auto', acceptance='smoke'):

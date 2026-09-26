@@ -59,18 +59,37 @@ loop_of() {   # the loop device attached to $1, attaching it if needed
 
 dm_path() { dmctl getpath "$1" 2>/dev/null; }
 
+# Remove a device-mapper device once nothing has it open. The container's mount namespace goes
+# with its last process, and the kernel finishes that ext4 unmount (the journal's metadata written
+# back in place) after lxc-stop returns: until then the device is busy.
+dm_delete() {
+    dm_path "$1" >/dev/null || return 0
+    for i in $(seq 1 300); do
+        dmctl delete "$1" >/dev/null 2>&1 && return 0
+        sleep 0.1
+    done
+    die "$1 is still in use"
+}
+
 attach() {
     [ -f "$IMG" ] || die "no image at $IMG"
-    path=$(dm_path "$ROOT_DM") && { echo "$path"; return; }
+    if path=$(dm_path "$ROOT_DM"); then
+        # An origin without its snapshot writes past it: a rollback could not bring those blocks
+        # back (2026-09-27, docs/70). Never go on like that.
+        [ "$(state)" != snapshot ] || dm_path "$SNAP_DM" >/dev/null || die "$ROOT_DM is up without $SNAP_DM"
+        echo "$path"; return
+    fi
     base=$(loop_of "$IMG")
     size=$(blockdev --getsz "$base")
     case "$(state)" in
       none)
         dmctl create "$ROOT_DM" linear 0 "$size" "$base" 0 >/dev/null ;;
       snapshot)
+        # The snapshot first: once the origin exists, every write to it must find the snapshot.
         cow=$(loop_of "$COW")
-        dmctl create "$ROOT_DM" snapshot-origin 0 "$size" "$base" >/dev/null
-        dmctl create "$SNAP_DM" -ro snapshot 0 "$size" "$base" "$cow" P "$CHUNK" >/dev/null ;;
+        dm_path "$SNAP_DM" >/dev/null ||
+            dmctl create "$SNAP_DM" -ro snapshot 0 "$size" "$base" "$cow" P "$CHUNK" >/dev/null
+        dmctl create "$ROOT_DM" snapshot-origin 0 "$size" "$base" >/dev/null ;;
       merging)
         cow=$(loop_of "$COW")
         dmctl create "$ROOT_DM" snapshot-merge 0 "$size" "$base" "$cow" "$CHUNK" >/dev/null ;;
@@ -82,9 +101,10 @@ attach() {
 detach() {
     need_stopped
     finish_merge_if_done
-    for name in "$SNAP_DM" "$ROOT_DM"; do
-        dm_path "$name" >/dev/null && dmctl delete "$name" >/dev/null
-    done
+    # The origin first, and only once the filesystem on it is gone: removing the snapshot while
+    # writes still reach the origin loses the blocks they overwrite.
+    dm_delete "$ROOT_DM"
+    dm_delete "$SNAP_DM"
     for file in "$COW" "$IMG"; do
         dev=$(losetup -j "$file" 2>/dev/null | head -n1 | cut -d: -f1)
         [ -z "$dev" ] || losetup -d "$dev"
@@ -103,7 +123,7 @@ finish_merge_if_done() {
     [ "$(state)" = merging ] || return 0
     dm_path "$ROOT_DM" >/dev/null || return 0
     if merge_done; then
-        dmctl delete "$ROOT_DM" >/dev/null
+        dm_delete "$ROOT_DM"
         dev=$(losetup -j "$COW" | head -n1 | cut -d: -f1); [ -z "$dev" ] || losetup -d "$dev"
         rm -f "$COW"
         echo none > "$STATE_FILE"
