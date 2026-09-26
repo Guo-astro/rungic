@@ -60,7 +60,11 @@
     "/etc/systemd/user/moto-plasma-brightness.service",
     "/etc/systemd/user/plasma-kwin_wayland.service.d",
     "/etc/systemd/user/pulseaudio.service.d",
-    "/usr/lib/aarch64-linux-gnu/qt6/plugins/kwin/plugins/screencast.so.moto3"
+    "/usr/lib/aarch64-linux-gnu/qt6/plugins/kwin/plugins/screencast.so.moto3",
+    "/etc/plasma/android-shm-context",
+    "/etc/plasma/audio-cookie",
+    "/etc/moto-plasma/account.json",
+    "/etc/moto-plasma"
   ],
   "user_systemd": true
 }
