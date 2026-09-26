@@ -1,0 +1,130 @@
+From: clawd20130 <clawd20130@gmail.com>
+Date: Fri, 25 Sep 2026 14:24:33 +0900
+Subject: KWin moto17: host scrolling keeps its source,
+ its stop and the output scale
+
+The nested Wayland backend forwarded host axis events as a wheel of unknown
+source without axis_stop, and in host pixels while positions are divided by a
+flat output's scale: two-finger scrolling on the TV (CAST-1 at 1.75) went 1.75
+times too far and clients scrolled it as a wheel. Now axis_source is kept, a
+stop goes on as a zero delta (as libinput reports finger scrolling), the delta
+is divided by the scale, and host finger scrolling is marked natural.
+
+Forwarded: not-needed
+Last-Update: 2026-09-26
+X-Rungic-Status: Inappropriate [Android host specific: runs nested in the Android APK compositor]
+X-Rungic-Tests: none (gap: no scenario scrolls on a scaled output)
+X-Rungic-Docs: docs/66
+Origin: vendor, commit:02db74e1
+---
+ src/backends/wayland/wayland_backend.cpp | 49 ++++++++++++++++++++++++++++++--
+ src/backends/wayland/wayland_backend.h   |  4 +++
+ 2 files changed, 50 insertions(+), 3 deletions(-)
+
+diff --git a/src/backends/wayland/wayland_backend.cpp b/src/backends/wayland/wayland_backend.cpp
+index c3ca18c..35a41e7 100644
+--- a/src/backends/wayland/wayland_backend.cpp
++++ b/src/backends/wayland/wayland_backend.cpp
+@@ -111,7 +111,7 @@ WaylandInputDevice::WaylandInputDevice(KWayland::Client::Pointer *pointer, Wayla
+         WaylandOutput *output = m_seat->backend()->findOutput(m_pointer->enteredSurface());
+         Q_ASSERT(output);
+         const auto subsurface = m_seat->backend()->findSubSurface(m_pointer->enteredSurface());
+-        const QPointF absolutePos = output->position() + relativeToSurface / (qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT") ? output->scale() : 1.0)
++        const QPointF absolutePos = output->position() + relativeToSurface / hostPixelsPerLogical()
+             + (subsurface ? subsurface->position() : QPoint());
+         Q_EMIT pointerMotionAbsolute(absolutePos, std::chrono::milliseconds(time), this);
+     });
+@@ -129,7 +129,28 @@ WaylandInputDevice::WaylandInputDevice(KWayland::Client::Pointer *pointer, Wayla
+         }
+         Q_EMIT pointerButtonChanged(button, state, std::chrono::milliseconds(time), this);
+     });
+-    // TODO: Send discreteDelta and source as well.
++    // TODO: Send discreteDelta as well.
++    // The source arrives before the values of its frame; finger scrolling ends with a stop, which
++    // goes on as a zero delta, the way libinput reports it, so clients can scroll kinetically.
++    connect(pointer, &Pointer::axisSourceChanged, this, [this](Pointer::AxisSource source) {
++        switch (source) {
++        case Pointer::AxisSource::Wheel:
++            m_axisSource = PointerAxisSource::Wheel;
++            break;
++        case Pointer::AxisSource::Finger:
++            m_axisSource = PointerAxisSource::Finger;
++            break;
++        case Pointer::AxisSource::Continuous:
++            m_axisSource = PointerAxisSource::Continuous;
++            break;
++        case Pointer::AxisSource::WheelTilt:
++            m_axisSource = PointerAxisSource::WheelTilt;
++            break;
++        default:
++            m_axisSource = PointerAxisSource::Unknown;
++            break;
++        }
++    });
+     connect(pointer, &Pointer::axisChanged, this, [this](quint32 time, Pointer::Axis nativeAxis, qreal delta) {
+         PointerAxis axis;
+         switch (nativeAxis) {
+@@ -142,11 +163,16 @@ WaylandInputDevice::WaylandInputDevice(KWayland::Client::Pointer *pointer, Wayla
+         default:
+             Q_UNREACHABLE();
+         }
+-        Q_EMIT pointerAxisChanged(axis, delta, 0, PointerAxisSource::Unknown, false, std::chrono::milliseconds(time), this);
++        Q_EMIT pointerAxisChanged(axis, delta / hostPixelsPerLogical(), 0, m_axisSource, naturalScroll(), std::chrono::milliseconds(time), this);
++    });
++    connect(pointer, &Pointer::axisStopped, this, [this](quint32 time, Pointer::Axis nativeAxis) {
++        const PointerAxis axis = nativeAxis == Pointer::Axis::Horizontal ? PointerAxis::Horizontal : PointerAxis::Vertical;
++        Q_EMIT pointerAxisChanged(axis, 0, 0, m_axisSource, naturalScroll(), std::chrono::milliseconds(time), this);
+     });
+ 
+     connect(pointer, &Pointer::frame, this, [this]() {
+         Q_EMIT pointerFrame(this);
++        m_axisSource = PointerAxisSource::Unknown;
+     });
+ 
+     KWayland::Client::PointerGestures *pointerGestures = m_seat->backend()->display()->pointerGestures();
+@@ -281,6 +307,23 @@ bool WaylandInputDevice::isLidSwitch() const
+     return false;
+ }
+ 
++qreal WaylandInputDevice::hostPixelsPerLogical() const
++{
++    // A flat output's host surface is in the output's device pixels (MOTO_KWIN_FLAT_OUTPUT): host
++    // pointer positions and scroll distances are divided by its scale into logical ones.
++    if (!qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT")) {
++        return 1.0;
++    }
++    const WaylandOutput *output = m_seat->backend()->findOutput(m_pointer->enteredSurface());
++    return output ? output->scale() : 1.0;
++}
++
++bool WaylandInputDevice::naturalScroll() const
++{
++    // The Android host scrolls with fingers as a touch screen does: the content follows them.
++    return m_axisSource == PointerAxisSource::Finger && qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT");
++}
++
+ KWayland::Client::Pointer *WaylandInputDevice::nativePointer() const
+ {
+     return m_pointer.get();
+diff --git a/src/backends/wayland/wayland_backend.h b/src/backends/wayland/wayland_backend.h
+index 4b86f3e..6bf862a 100644
+--- a/src/backends/wayland/wayland_backend.h
++++ b/src/backends/wayland/wayland_backend.h
+@@ -87,6 +87,9 @@ public:
+     KWayland::Client::Pointer *nativePointer() const;
+ 
+ private:
++    qreal hostPixelsPerLogical() const;
++    bool naturalScroll() const;
++
+     WaylandSeat *const m_seat;
+ 
+     std::unique_ptr<KWayland::Client::Keyboard> m_keyboard;
+@@ -97,6 +100,7 @@ private:
+     std::unique_ptr<KWayland::Client::PointerSwipeGesture> m_swipeGesture;
+ 
+     QSet<quint32> m_pressedKeys;
++    PointerAxisSource m_axisSource = PointerAxisSource::Unknown;
+ };
+ 
+ class WaylandInputBackend : public InputBackend

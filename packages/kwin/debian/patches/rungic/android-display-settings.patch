@@ -1,0 +1,219 @@
+From: kevinzhow <kevinzhow@local>
+Date: Wed, 23 Sep 2026 21:00:53 +0800
+Subject: Output configuration follows the Android display (resolution,
+ refresh policy, scale)
+
+User output changes on the flat output go to the host through android-display-client
+(MotoDisplay::request); modes and the current mode come from the host's display info.
+
+Forwarded: not-needed
+Last-Update: 2026-09-26
+X-Rungic-Status: Inappropriate [Android host specific: runs nested in the Android APK compositor]
+X-Rungic-Tests: L3:display.mode L3:display.geometry
+X-Rungic-Docs: docs/50
+---
+ src/backends/wayland/wayland_backend.cpp | 28 +++++++++++++
+ src/backends/wayland/wayland_backend.h   |  1 +
+ src/backends/wayland/wayland_output.cpp  | 72 ++++++++++++++++++++++++++++----
+ src/backends/wayland/wayland_output.h    |  1 +
+ 4 files changed, 93 insertions(+), 9 deletions(-)
+
+diff --git a/src/backends/wayland/wayland_backend.cpp b/src/backends/wayland/wayland_backend.cpp
+index 01015f3..e30f407 100644
+--- a/src/backends/wayland/wayland_backend.cpp
++++ b/src/backends/wayland/wayland_backend.cpp
+@@ -16,6 +16,9 @@
+ #include "wayland_egl_backend.h"
+ #include "wayland_logging.h"
+ #include "wayland_output.h"
++#include "android-display-client.h"
++#include <cmath>
++#include "core/outputconfiguration.h"
+ #include "wayland_qpainter_backend.h"
+ 
+ #include <KWayland/Client/keyboard.h>
+@@ -557,6 +560,31 @@ KWayland::Client::SubSurface *WaylandBackend::findSubSurface(KWayland::Client::S
+     return nullptr;
+ }
+ 
++OutputConfigurationError WaylandBackend::applyOutputChanges(const OutputConfiguration &config)
++{
++    if (qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT") && config.source == OutputConfiguration::Source::User) {
++        for (WaylandOutput *output : m_outputs) {
++            const auto props = config.constChangeSet(output);
++            if (!props) continue;
++            if (props->scale && (!std::isfinite(*props->scale) || *props->scale < 0.5 || *props->scale > 3.0)) {
++                return OutputConfigurationError::Unknown;
++            }
++            const auto mode = props->mode ? props->mode->lock() : nullptr;
++            if (!mode || (mode->size() == output->modeSize() && mode->refreshRate() == output->refreshRate())) continue;
++            QJsonObject request{{"width", mode->size().width()}, {"height", mode->size().height()}};
++            if (mode->refreshRate() != output->refreshRate()) {
++                request.insert(QStringLiteral("refreshPolicy"), int(std::round(mode->refreshRate() / 1000.0)));
++            }
++            const auto reply = MotoDisplay::request(request);
++            if (reply.contains(QStringLiteral("error"))) {
++                qCWarning(KWIN_WAYLAND_BACKEND) << "Android display rejected configuration:" << reply;
++                return OutputConfigurationError::Unknown;
++            }
++        }
++    }
++    return OutputBackend::applyOutputChanges(config);
++}
++
+ bool WaylandBackend::supportsPointerLock()
+ {
+     return m_display->pointerConstraints() && m_display->relativePointerManager();
+diff --git a/src/backends/wayland/wayland_backend.h b/src/backends/wayland/wayland_backend.h
+index dd6f1cd..06ebfb4 100644
+--- a/src/backends/wayland/wayland_backend.h
++++ b/src/backends/wayland/wayland_backend.h
+@@ -230,6 +230,7 @@ public:
+     WaylandOutput *findOutput(KWayland::Client::Surface *nativeSurface) const;
+     KWayland::Client::SubSurface *findSubSurface(KWayland::Client::Surface *nativeSurface) const;
+     QList<BackendOutput *> outputs() const override;
++    OutputConfigurationError applyOutputChanges(const OutputConfiguration &config) override;
+     QList<WaylandOutput *> waylandOutputs() const
+     {
+         return m_outputs;
+diff --git a/src/backends/wayland/wayland_output.cpp b/src/backends/wayland/wayland_output.cpp
+index 8a65266..ec59a0f 100644
+--- a/src/backends/wayland/wayland_output.cpp
++++ b/src/backends/wayland/wayland_output.cpp
+@@ -7,6 +7,7 @@
+     SPDX-License-Identifier: GPL-2.0-or-later
+ */
+ #include "wayland_output.h"
++#include "android-display-client.h"
+ #include "color_manager.h"
+ #include "compositor.h"
+ #include "core/outputconfiguration.h"
+@@ -150,10 +151,13 @@ WaylandOutput::WaylandOutput(const QString &name, WaylandBackend *backend)
+         wp_fractional_scale_v1_add_listener(m_fractionalScale, &s_fractionalScaleListener, this);
+     }
+     m_viewport = backend->display()->viewporter()->createViewport(*m_surface);
++    const auto androidInfo = qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT") ? MotoDisplay::info() : QJsonObject{};
+     setInformation(Information{
+         .name = name,
+         .model = name,
++        .physicalSize = QSize(androidInfo.value("physicalWidthMM").toInt(-1), androidInfo.value("physicalHeightMM").toInt(-1)),
+         .capabilities = caps,
++        .internal = qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT"),
+     });
+ 
+     m_configureThrottleTimer.setSingleShot(true);
+@@ -337,6 +341,39 @@ bool WaylandOutput::present(const QList<OutputLayer *> &layersToUpdate, const st
+     return true;
+ }
+ 
++QList<std::shared_ptr<OutputMode>> WaylandOutput::androidModes(const QSize &size, uint32_t rate) const
++{
++    const QJsonObject info = MotoDisplay::info();
++    QJsonArray resolutions = info.value(QStringLiteral("renderModes")).toArray();
++    QJsonArray rates = info.value(QStringLiteral("refreshRates")).toArray();
++    if (resolutions.isEmpty()) resolutions.append(QJsonObject{{"width", size.width()}, {"height", size.height()}});
++    if (rates.isEmpty()) rates.append(int(rate / 1000));
++    QList<std::shared_ptr<OutputMode>> result;
++    const auto add = [&](QSize dimensions, uint32_t refresh) {
++        for (const auto &mode : result) {
++            if (mode->size() == dimensions && mode->refreshRate() == refresh) return;
++        }
++        for (const auto &mode : m_state.modes) {
++            if (mode->size() == dimensions && mode->refreshRate() == refresh) {
++                result.append(mode);
++                return;
++            }
++        }
++        result.append(std::make_shared<OutputMode>(dimensions, refresh));
++    };
++    for (const auto &resolution : resolutions) {
++        const QJsonObject item = resolution.toObject();
++        const QSize dimensions(item.value("width").toInt(), item.value("height").toInt());
++        if (dimensions.width() < 320 || dimensions.height() < 320 || dimensions.width() > 8192 || dimensions.height() > 8192) continue;
++        for (const auto &entry : rates) {
++            const int refresh = entry.toInt();
++            if (refresh >= 20 && refresh <= 240) add(dimensions, refresh * 1000);
++        }
++    }
++    add(size, rate);
++    return result;
++}
++
+ void WaylandOutput::frameDiscarded()
+ {
+     m_frames.pop_front();
+@@ -348,8 +385,10 @@ void WaylandOutput::framePresented(std::chrono::nanoseconds timestamp, uint32_t
+         m_refreshRate = refreshRate;
+         const auto mode = std::make_shared<OutputMode>(pixelSize(), m_refreshRate);
+         State next = m_state;
+-        next.modes = {mode};
+-        next.currentMode = mode;
++        next.modes = qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT") ? androidModes(pixelSize(), m_refreshRate) : QList{mode};
++        next.currentMode = *std::ranges::find_if(next.modes, [&](const auto &candidate) {
++            return candidate->size() == pixelSize() && candidate->refreshRate() == m_refreshRate;
++        });
+         setState(next);
+         m_renderLoop->setRefreshRate(m_refreshRate);
+     }
+@@ -376,9 +415,20 @@ void WaylandOutput::applyChanges(const OutputConfiguration &config)
+     next.enabled = props->enabled.value_or(m_state.enabled);
+     next.transform = props->transform.value_or(m_state.transform);
+     next.position = props->pos.value_or(m_state.position);
+-    // intentionally ignored, as it would get overwritten
+-    // with the fractional scale protocol anyways
+-    // next.scale = props->scale.value_or(m_state.scale);
++    if (qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT")) {
++        next.scale = props->scale.value_or(m_state.scale);
++        next.scaleSetting = props->scaleSetting.value_or(m_state.scaleSetting);
++        // The Android host owns the buffer size and physical refresh. Only
++        // explicit user changes may override it; replaying saved system state
++        // must not undo rotation, automatic refresh or the host preference.
++        if (config.source == OutputConfiguration::Source::User && props->mode) {
++            if (const auto mode = props->mode->lock()) {
++                next.currentMode = mode;
++                m_refreshRate = mode->refreshRate();
++                m_renderLoop->setRefreshRate(m_refreshRate);
++            }
++        }
++    }
+     next.desiredModeSize = props->desiredModeSize.value_or(m_state.desiredModeSize);
+     next.desiredModeRefreshRate = props->desiredModeRefreshRate.value_or(m_state.desiredModeRefreshRate);
+     next.desiredModeFlags = props->desiredModeFlags.value_or(m_state.desiredModeFlags);
+@@ -434,8 +484,10 @@ void WaylandOutput::init(const QSize &pixelSize, qreal scale, bool fullscreen)
+     auto mode = std::make_shared<OutputMode>(pixelSize, m_refreshRate);
+ 
+     State initialState;
+-    initialState.modes = {mode};
+-    initialState.currentMode = mode;
++    initialState.modes = qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT") ? androidModes(pixelSize, m_refreshRate) : QList{mode};
++    initialState.currentMode = *std::ranges::find_if(initialState.modes, [&](const auto &candidate) {
++        return candidate->size() == pixelSize && candidate->refreshRate() == m_refreshRate;
++    });
+     initialState.scale = scale;
+     setState(initialState);
+ 
+@@ -468,8 +520,10 @@ void WaylandOutput::applyConfigure(const QSize &size, quint32 serial)
+         auto mode = std::make_shared<OutputMode>(androidOutput ? size : size * m_pendingScale, m_refreshRate);
+ 
+         State next = m_state;
+-        next.modes = {mode};
+-        next.currentMode = mode;
++        next.modes = androidOutput ? androidModes(size, m_refreshRate) : QList{mode};
++        next.currentMode = *std::ranges::find_if(next.modes, [&](const auto &candidate) {
++            return candidate->size() == mode->size() && candidate->refreshRate() == m_refreshRate;
++        });
+         next.scale = androidOutput ? m_state.scale : m_pendingScale;
+         setState(next);
+ 
+diff --git a/src/backends/wayland/wayland_output.h b/src/backends/wayland/wayland_output.h
+index 7c30ce3..433ba9f 100644
+--- a/src/backends/wayland/wayland_output.h
++++ b/src/backends/wayland/wayland_output.h
+@@ -105,6 +105,7 @@ public:
+     QList<OutputLayer *> outputLayers() const;
+ 
+ private:
++    QList<std::shared_ptr<OutputMode>> androidModes(const QSize &size, uint32_t rate) const;
+     void handleConfigure(const QSize &size, KWayland::Client::XdgShellSurface::States states, quint32 serial);
+     void updateWindowTitle();
+     void applyConfigure(const QSize &size, quint32 serial);

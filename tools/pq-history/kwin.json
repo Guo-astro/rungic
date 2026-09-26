@@ -1,0 +1,276 @@
+{
+ "package": "kwin",
+ "vendor": "vendor/kwin",
+ "version": "4:6.6.6-0ubuntu0.1",
+ "dsc": "kwin_6.6.6-0ubuntu0.1.dsc",
+ "base": "dffc717e",
+ "steps": [
+  {
+   "name": "android-host-graphics",
+   "patch": "plasma/kwin-android.patch",
+   "subject": "Nested Wayland backend on the Android host: KGSL render device, Android buffer allocator, flat output",
+   "description": "KWin runs nested in the APK compositor. MOTO_KWIN_RENDER_DEVICE selects /dev/kgsl-3d0 for EGL and\nlimits linux-dmabuf to v3; MOTO_GPU_ALLOCATOR allocates output buffers from the host (AHardwareBuffer)\ninstead of GBM; MOTO_KWIN_FLAT_OUTPUT maps a scaled output 1:1 onto the host surface (pointer and\ntouch positions divided by the scale); MOTO_KWIN_ANDROID_SHM places SHM buffers in /dev/shm.",
+   "author_name": "kevinzhow",
+   "author_email": "kevinzhow@local",
+   "date": "2026-09-23T21:00:53+08:00",
+   "dep3": {
+    "Forwarded": "not-needed",
+    "Last-Update": "2026-09-26",
+    "X-Rungic-Status": "Inappropriate [Android host specific: runs nested in the Android APK compositor]",
+    "X-Rungic-Tests": "L3:session.ready L3:display.geometry L3:input.text L3:perf.compositor",
+    "X-Rungic-Docs": "docs/40 docs/57"
+   }
+  },
+  {
+   "name": "idle-android-power",
+   "patch": "plasma/kwin-idle.patch",
+   "subject": "Idle inhibition is forwarded to the Android power service",
+   "description": "On the Android host (MOTO_KWIN_RENDER_DEVICE set) an idle-inhibiting window keeps the phone screen on\nthrough dev.moto.Android.Power.SetWaylandInhibition instead of KWin's own idle timers.",
+   "author_name": "kevinzhow",
+   "author_email": "kevinzhow@local",
+   "date": "2026-09-23T21:00:53+08:00",
+   "dep3": {
+    "Forwarded": "not-needed",
+    "Last-Update": "2026-09-26",
+    "X-Rungic-Status": "Inappropriate [Android host specific: runs nested in the Android APK compositor]",
+    "X-Rungic-Tests": "none (gap: no scenario plays a video and checks the screen stays on)",
+    "X-Rungic-Docs": "docs/42"
+   }
+  },
+  {
+   "name": "screencast-mobile-shell",
+   "patch": "plasma/kwin-screencast.patch",
+   "subject": "Screencast: do not exclude the Plasma Mobile shell when it is the recorder",
+   "description": "Plasma Mobile records from its own shell process; excluding the recorder's PID also removed the\nwallpaper, launcher and panels (a black home screen). Per-window excludeFromCapture still applies.\nCurrently gated on MOTO_KWIN_FLAT_OUTPUT; an upstream version would key on the shell, not the host.",
+   "author_name": "kevinzhow",
+   "author_email": "kevinzhow@local",
+   "date": "2026-09-23T21:00:53+08:00",
+   "dep3": {
+    "Forwarded": "no",
+    "Last-Update": "2026-09-26",
+    "X-Rungic-Status": "Pending",
+    "X-Rungic-Tests": "L3:recording.quicksetting",
+    "X-Rungic-Docs": "docs/46"
+   }
+  },
+  {
+   "name": "screencast-gles-readback",
+   "patch": "plasma/kwin-screencast-shm.patch",
+   "subject": "Screencast: no GLES readback flip on the flat Android output",
+   "description": "The nested GLES framebuffer on the Android host already follows the bottom-left readback\nconvention; flipping it again made SHM screencasts upside down.",
+   "author_name": "kevinzhow",
+   "author_email": "kevinzhow@local",
+   "date": "2026-09-23T21:00:53+08:00",
+   "dep3": {
+    "Forwarded": "not-needed",
+    "Last-Update": "2026-09-26",
+    "X-Rungic-Status": "Inappropriate [Android host specific: runs nested in the Android APK compositor]",
+    "X-Rungic-Tests": "L3:recording.quicksetting",
+    "X-Rungic-Docs": "docs/46"
+   }
+  },
+  {
+   "name": "android-display-settings",
+   "patch": "plasma/kwin-display-settings.patch",
+   "subject": "Output configuration follows the Android display (resolution, refresh policy, scale)",
+   "description": "User output changes on the flat output go to the host through android-display-client\n(MotoDisplay::request); modes and the current mode come from the host's display info.",
+   "author_name": "kevinzhow",
+   "author_email": "kevinzhow@local",
+   "date": "2026-09-23T21:00:53+08:00",
+   "dep3": {
+    "Forwarded": "not-needed",
+    "Last-Update": "2026-09-26",
+    "X-Rungic-Status": "Inappropriate [Android host specific: runs nested in the Android APK compositor]",
+    "X-Rungic-Tests": "L3:display.mode L3:display.geometry",
+    "X-Rungic-Docs": "docs/50"
+   }
+  },
+  {
+   "author_name": "kevinzhow",
+   "author_email": "kevinzhow@local",
+   "date": "2026-09-23T21:00:53+08:00",
+   "subject": "Android host client headers used by the patches above",
+   "description": "android-display-client.h (shared with KScreen) and the final androidgraphicsbuffer.h.\nTo be replaced by a Build-Depends on the project's -dev package (docs/71).",
+   "name": "android-shared-headers",
+   "commit": "d1301f2e",
+   "dep3": {
+    "Forwarded": "not-needed",
+    "Last-Update": "2026-09-26",
+    "X-Rungic-Status": "Inappropriate [Android host specific: runs nested in the Android APK compositor]",
+    "X-Rungic-Tests": "covered by the patches that include them",
+    "X-Rungic-Docs": "docs/71",
+    "Origin": "vendor, commit:d1301f2e"
+   }
+  },
+  {
+   "author_name": "clawd20130",
+   "author_email": "clawd20130@gmail.com",
+   "date": "2026-09-24T01:19:59+09:00",
+   "subject": "KWin: timestamped FTrace markers around the Android output handoff",
+   "description": "Write trace_marker through a plain fd with one write() per marker. The\nQFile-based logger batched markers (invalid kernel timestamps) and, once\nre-enabled over D-Bus, failed every write with \"QFile::at: Cannot set\nfile position 0\". Add GpuWait (glFinish) and Import durations to the\nWayland EGL layer so a trace shows Paint -> GPU wait -> buffer handoff.\nPackaged as 6.6.6-0ubuntu0.1+moto7.",
+   "name": "ftrace-fd-markers",
+   "commit": "61f86c45",
+   "dep3": {
+    "Forwarded": "no",
+    "Last-Update": "2026-09-26",
+    "X-Rungic-Status": "Pending [the QFile batching bug is upstream; the GpuWait/Import markers are host specific]",
+    "X-Rungic-Tests": "L1:test_ftrace L3:perf.compositor",
+    "X-Rungic-Docs": "docs/55 docs/57",
+    "Origin": "vendor, commit:61f86c45"
+   }
+  },
+  {
+   "author_name": "clawd20130",
+   "author_email": "clawd20130@gmail.com",
+   "date": "2026-09-24T02:11:47+09:00",
+   "subject": "KWin: send the output's GPU completion fence instead of glFinish",
+   "description": "When the Android host offers zwp_linux_explicit_synchronization_v1 (KGSL has\nno DRM syncobj), export an EGL native fence for each output frame and attach\nit with set_acquire_fence in the same commit; the render thread no longer\nblocks in glFinish. MOTO_KWIN_EXPLICIT_SYNC=-1 restores the old path.\nPackaged as 6.6.6-0ubuntu0.1+moto8. Measured: Paint p50 6.7 -> 2.0 ms.",
+   "name": "explicit-sync-acquire-fence",
+   "commit": "5127264a",
+   "dep3": {
+    "Forwarded": "not-needed",
+    "Last-Update": "2026-09-26",
+    "X-Rungic-Status": "Inappropriate [Android host specific: runs nested in the Android APK compositor]",
+    "X-Rungic-Tests": "L3:perf.compositor",
+    "X-Rungic-Docs": "docs/57",
+    "Origin": "vendor, commit:5127264a"
+   }
+  },
+  {
+   "author_name": "clawd20130",
+   "author_email": "clawd20130@gmail.com",
+   "date": "2026-09-24T06:11:40+09:00",
+   "subject": "KWin: UBWC output buffers and host-restart recovery (moto9, moto10)",
+   "description": "moto9: with MOTO_KWIN_UBWC=1 the Android allocator asks the host for\nQCOM_COMPRESSED buffers (lease protocol v2 carries the wanted and the\nallocated modifier).\nmoto10: on the Android host, wait for the host socket at startup, and when\nthe host connection breaks wait for it to return and exit with 133, so\nkwin_wayland_wrapper restarts KWin without counting a crash and without a\ncore dump; clients no longer reconnect into a window with no KWin.",
+   "name": "ubwc-host-restart",
+   "commit": "012e5af3",
+   "dep3": {
+    "Forwarded": "not-needed",
+    "Last-Update": "2026-09-26",
+    "X-Rungic-Status": "Inappropriate [Android host specific: runs nested in the Android APK compositor]",
+    "X-Rungic-Tests": "L3:session.ready L3:perf.compositor (gap: no host-restart scenario)",
+    "X-Rungic-Docs": "docs/57",
+    "Origin": "vendor, commit:012e5af3"
+   }
+  },
+  {
+   "author_name": "clawd20130",
+   "author_email": "clawd20130@gmail.com",
+   "date": "2026-09-24T09:54:40+09:00",
+   "subject": "KWin moto11: host Miracast display as a hot-plugged output",
+   "description": "The nested Wayland backend binds the host's wl_output globals (v3, so\nKWayland's release on removal is valid). A host output made by Moto with\nmodel Cast becomes output CAST-n whose toplevel is fullscreen on it; phone\nmodes and the internal flag stay on the primary output.",
+   "name": "cast-output",
+   "commit": "fc2cd678",
+   "dep3": {
+    "Forwarded": "not-needed",
+    "Last-Update": "2026-09-26",
+    "X-Rungic-Status": "Inappropriate [Android host specific: runs nested in the Android APK compositor]",
+    "X-Rungic-Tests": "none (gap: casting needs a TV receiver; manual list)",
+    "X-Rungic-Docs": "docs/58",
+    "Origin": "vendor, commit:fc2cd678"
+   }
+  },
+  {
+   "author_name": "clawd20130",
+   "author_email": "clawd20130@gmail.com",
+   "date": "2026-09-24T13:08:42+09:00",
+   "subject": "KWin moto12: cast cursor, host text input, raw host outputs",
+   "description": "- Cast outputs get no cursor layer; KWin renders the cursor into the TV frame.\n- Host wl_outputs are read from the raw protocol (HostOutput). KWayland's\n  Output::addMode() erases from a QList while holding an iterator and crashed\n  KWin whenever the host re-announced a mode (phone refresh changes). Host\n  outputs are released before the connection closes.\n- Text the host commits over text-input-v3 (Android keyboard: Chinese, emoji)\n  goes to InputMethod::commitHostText and the focused client.\n- KWIN_IM_SHOW_ALWAYS applies to text fields on internal outputs only; automatic\n  panel requests for a field on the TV do not show the on-screen keyboard.\n- A cast output takes the lowest free CAST-n name so a reconnected TV keeps\n  its scale.",
+   "name": "cast-cursor-host-text-raw-outputs",
+   "commit": "e07d7448",
+   "dep3": {
+    "Forwarded": "not-needed",
+    "Last-Update": "2026-09-26",
+    "X-Rungic-Status": "Inappropriate [Android host specific: runs nested in the Android APK compositor]; to be split into cast cursor, host outputs, host text input, IM on internal outputs, CAST-n naming",
+    "X-Rungic-Tests": "L3:input.text (host text input); none for casting (manual)",
+    "X-Rungic-Docs": "docs/58 docs/60",
+    "Origin": "vendor, commit:e07d7448"
+   }
+  },
+  {
+   "author_name": "clawd20130",
+   "author_email": "clawd20130@gmail.com",
+   "date": "2026-09-24T15:16:45+09:00",
+   "subject": "KWin moto13: outputs expose 'internal' to scripts",
+   "description": "Lets window rules differ between the device's own panel and external displays.",
+   "name": "output-internal-to-scripts",
+   "commit": "f4479e3e",
+   "dep3": {
+    "Forwarded": "no",
+    "Last-Update": "2026-09-26",
+    "X-Rungic-Status": "Pending",
+    "X-Rungic-Tests": "none (gap)",
+    "X-Rungic-Docs": "docs/58",
+    "Origin": "vendor, commit:f4479e3e"
+   }
+  },
+  {
+   "author_name": "clawd20130",
+   "author_email": "clawd20130@gmail.com",
+   "date": "2026-09-24T22:01:30+09:00",
+   "subject": "Cast: keep the TV running with the app in the background or the screen off",
+   "description": "With the phone surface suspended, render_all now serves only the cast\nwindow: its new buffers go to the TV presenter and only it gets frame\ncallbacks. The compositor loop waits on the Wayland fds instead of the\nphone's Choreographer, so the TV keeps KWin's own 60 Hz pace even with\nthe phone screen off.\n\nCast presentation feedback is reported on the cast output at its own\nrefresh rate (the phone's rate kept switching CAST-1 between 120 and\n30 Hz) and for every cast commit. An unchanged TV buffer is no longer\npresented again on every phone frame. update_output_mode skips windows\nwhen nothing changed, and native-stats gains cast counters.\n\nKWin moto14: a host configure without a size change no longer\nre-queries the outputs. Returning to the foreground rebuilt every\noutput's scene view and could leave the cast output frozen for good.\nAPK 1.33.",
+   "name": "cast-background",
+   "commit": "5c6e0958",
+   "dep3": {
+    "Forwarded": "not-needed",
+    "Last-Update": "2026-09-26",
+    "X-Rungic-Status": "Inappropriate [Android host specific: runs nested in the Android APK compositor]",
+    "X-Rungic-Tests": "none (gap: casting needs a TV receiver; manual list)",
+    "X-Rungic-Docs": "docs/58",
+    "Origin": "vendor, commit:5c6e0958"
+   }
+  },
+  {
+   "author_name": "clawd20130",
+   "author_email": "clawd20130@gmail.com",
+   "date": "2026-09-24T23:18:16+09:00",
+   "subject": "Desktop automation types through KWin, not the Android host",
+   "description": "KWin moto15 adds VirtualKeyboard.commitText(): the text goes to the\nfocused field the way an input method commits it (text-input v1/v2/v3,\nelse key events), so any language works without the on-screen keyboard.\nmoto-cua uses it instead of the Android host's text-commit path, which\nwent through the APK and back and failed with Plasma in the background.\n\ndesktop_launch matches app names in every language of the .desktop file:\nthe session runs in en_US while requests come in Chinese.",
+   "name": "virtualkeyboard-commit-text",
+   "commit": "fac4e7f3",
+   "dep3": {
+    "Forwarded": "no",
+    "Last-Update": "2026-09-26",
+    "X-Rungic-Status": "Pending",
+    "X-Rungic-Tests": "L1:test_virtualkeyboard_dbus (to extend); none at L3 yet (gap)",
+    "X-Rungic-Docs": "docs/60 docs/64",
+    "Origin": "vendor, commit:fac4e7f3"
+   }
+  },
+  {
+   "author_name": "clawd20130",
+   "author_email": "clawd20130@gmail.com",
+   "date": "2026-09-25T01:22:16+09:00",
+   "subject": "KWin moto16: a minimum size above the maximum no longer disconnects the client",
+   "description": "WeChat 4.1 (static Qt 6) sizes its main window's maximum from Qt's primary\nscreen, the first wl_output KWin announces (the 360 px wide phone), while\nits minimum width is larger; the invalid_size protocol error killed it right\nafter logging in, also when the window was on the TV. KWin now logs the\nconflict and drops the conflicting maximum instead. Verified with a\nwayland-client probe committing min 700x400 / max 360x800.",
+   "name": "xdg-min-above-max",
+   "commit": "f47ee505",
+   "dep3": {
+    "Forwarded": "no",
+    "Last-Update": "2026-09-26",
+    "X-Rungic-Status": "Pending",
+    "X-Rungic-Tests": "L1:xdgshellwindow_test (to write); probe:plasma/diagnostics/wayland-probes/minmax-probe.c",
+    "X-Rungic-Docs": "docs/42",
+    "Origin": "vendor, commit:f47ee505"
+   }
+  },
+  {
+   "author_name": "clawd20130",
+   "author_email": "clawd20130@gmail.com",
+   "date": "2026-09-25T14:24:33+09:00",
+   "subject": "KWin moto17: host scrolling keeps its source, its stop and the output scale",
+   "description": "The nested Wayland backend forwarded host axis events as a wheel of unknown\nsource without axis_stop, and in host pixels while positions are divided by a\nflat output's scale: two-finger scrolling on the TV (CAST-1 at 1.75) went 1.75\ntimes too far and clients scrolled it as a wheel. Now axis_source is kept, a\nstop goes on as a zero delta (as libinput reports finger scrolling), the delta\nis divided by the scale, and host finger scrolling is marked natural.",
+   "name": "host-scroll-source-stop-scale",
+   "commit": "02db74e1",
+   "dep3": {
+    "Forwarded": "not-needed",
+    "Last-Update": "2026-09-26",
+    "X-Rungic-Status": "Inappropriate [Android host specific: runs nested in the Android APK compositor]",
+    "X-Rungic-Tests": "none (gap: no scenario scrolls on a scaled output)",
+    "X-Rungic-Docs": "docs/66",
+    "Origin": "vendor, commit:02db74e1"
+   }
+  }
+ ]
+}

@@ -1,0 +1,57 @@
+From: clawd20130 <clawd20130@gmail.com>
+Date: Thu, 24 Sep 2026 23:18:16 +0900
+Subject: Desktop automation types through KWin, not the Android host
+
+KWin moto15 adds VirtualKeyboard.commitText(): the text goes to the
+focused field the way an input method commits it (text-input v1/v2/v3,
+else key events), so any language works without the on-screen keyboard.
+moto-cua uses it instead of the Android host's text-commit path, which
+went through the APK and back and failed with Plasma in the background.
+
+desktop_launch matches app names in every language of the .desktop file:
+the session runs in en_US while requests come in Chinese.
+
+Forwarded: no
+Last-Update: 2026-09-26
+X-Rungic-Status: Pending
+X-Rungic-Tests: L1:test_virtualkeyboard_dbus (to extend); none at L3 yet (gap)
+X-Rungic-Docs: docs/60 docs/64
+Origin: vendor, commit:fac4e7f3
+---
+ src/virtualkeyboard_dbus.cpp | 5 +++++
+ src/virtualkeyboard_dbus.h   | 6 ++++++
+ 2 files changed, 11 insertions(+)
+
+diff --git a/src/virtualkeyboard_dbus.cpp b/src/virtualkeyboard_dbus.cpp
+index 1bb525e..19f6068 100644
+--- a/src/virtualkeyboard_dbus.cpp
++++ b/src/virtualkeyboard_dbus.cpp
+@@ -72,6 +72,11 @@ void VirtualKeyboardDBus::forceActivate()
+ {
+     m_inputMethod->forceActivate();
+ }
++
++void VirtualKeyboardDBus::commitText(const QString &text)
++{
++    m_inputMethod->commitHostText(text);
++}
+ }
+ 
+ #include "moc_virtualkeyboard_dbus.cpp"
+diff --git a/src/virtualkeyboard_dbus.h b/src/virtualkeyboard_dbus.h
+index 6fdbb5b..cad1d67 100644
+--- a/src/virtualkeyboard_dbus.h
++++ b/src/virtualkeyboard_dbus.h
+@@ -37,6 +37,12 @@ public:
+ 
+     Q_SCRIPTABLE bool willShowOnActive() const;
+     Q_SCRIPTABLE void forceActivate();
++    /**
++     * Moto (docs/60): commit @p text to the focused text field the way an input
++     * method does (text-input v1/v2/v3, else key events). Lets desktop automation
++     * type any text, Chinese included, without the on-screen keyboard.
++     */
++    Q_SCRIPTABLE void commitText(const QString &text);
+ 
+ Q_SIGNALS:
+     Q_SCRIPTABLE void enabledChanged();

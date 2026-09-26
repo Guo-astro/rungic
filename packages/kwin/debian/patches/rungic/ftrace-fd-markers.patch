@@ -1,0 +1,145 @@
+From: clawd20130 <clawd20130@gmail.com>
+Date: Thu, 24 Sep 2026 01:19:59 +0900
+Subject: KWin: timestamped FTrace markers around the Android output handoff
+
+Write trace_marker through a plain fd with one write() per marker. The
+QFile-based logger batched markers (invalid kernel timestamps) and, once
+re-enabled over D-Bus, failed every write with "QFile::at: Cannot set
+file position 0". Add GpuWait (glFinish) and Import durations to the
+Wayland EGL layer so a trace shows Paint -> GPU wait -> buffer handoff.
+Packaged as 6.6.6-0ubuntu0.1+moto7.
+
+Forwarded: no
+Last-Update: 2026-09-26
+X-Rungic-Status: Pending [the QFile batching bug is upstream; the GpuWait/Import markers are host specific]
+X-Rungic-Tests: L1:test_ftrace L3:perf.compositor
+X-Rungic-Docs: docs/55 docs/57
+Origin: vendor, commit:61f86c45
+---
+ src/backends/wayland/wayland_egl_backend.cpp |  7 ++++++-
+ src/ftrace.cpp                               | 12 ++++++++----
+ src/ftrace.h                                 | 20 ++++++++++++++++----
+ 3 files changed, 30 insertions(+), 9 deletions(-)
+
+diff --git a/src/backends/wayland/wayland_egl_backend.cpp b/src/backends/wayland/wayland_egl_backend.cpp
+index 8cbb598..eb6d594 100644
+--- a/src/backends/wayland/wayland_egl_backend.cpp
++++ b/src/backends/wayland/wayland_egl_backend.cpp
+@@ -10,6 +10,7 @@
+ 
+ #include "wayland_egl_backend.h"
+ #include "core/drmdevice.h"
++#include "ftrace.h"
+ #include "core/gbmgraphicsbufferallocator.h"
+ #include "opengl/eglswapchain.h"
+ #include "opengl/glrendertimequery.h"
+@@ -105,13 +106,17 @@ bool WaylandEglLayer::doEndFrame(const Region &renderedDeviceRegion, const Regio
+     // Flush rendering commands to the dmabuf.
+     if (qEnvironmentVariableIsSet("MOTO_GPU_ALLOCATOR")) {
+         // Android vendor import has no explicit synchronization protocol yet.
++        fTraceDuration("GpuWait (", m_output->name(), ")");
+         glFinish();
+     } else {
+         glFlush();
+     }
+     EGLNativeFence releaseFence{m_backend->eglDisplayObject()};
+ 
+-    setBuffer(m_backend->backend()->importBuffer(m_buffer->buffer()), damagedDeviceRegion);
++    {
++        fTraceDuration("Import (", m_output->name(), ")");
++        setBuffer(m_backend->backend()->importBuffer(m_buffer->buffer()), damagedDeviceRegion);
++    }
+     m_swapchain->release(m_buffer, releaseFence.takeFileDescriptor());
+ 
+     m_damageJournal.add(damagedDeviceRegion);
+diff --git a/src/ftrace.cpp b/src/ftrace.cpp
+index 20076e4..98f2ae3 100644
+--- a/src/ftrace.cpp
++++ b/src/ftrace.cpp
+@@ -18,6 +18,9 @@
+ #include <QScopeGuard>
+ #include <QTextStream>
+ 
++#include <fcntl.h>
++#include <unistd.h>
++
+ namespace KWin
+ {
+ KWIN_SINGLETON_FACTORY(KWin::FTraceLogger)
+@@ -34,7 +37,7 @@ FTraceLogger::FTraceLogger(QObject *parent)
+ 
+ bool FTraceLogger::isEnabled() const
+ {
+-    return m_file.isOpen();
++    return m_fd >= 0;
+ }
+ 
+ void FTraceLogger::setEnabled(bool enabled)
+@@ -47,7 +50,8 @@ void FTraceLogger::setEnabled(bool enabled)
+     if (enabled) {
+         open();
+     } else {
+-        m_file.close();
++        ::close(m_fd);
++        m_fd = -1;
+     }
+     Q_EMIT enabledChanged();
+ }
+@@ -59,8 +63,8 @@ bool FTraceLogger::open()
+         return false;
+     }
+ 
+-    m_file.setFileName(path);
+-    if (!m_file.open(QIODevice::WriteOnly)) {
++    m_fd = ::open(QFile::encodeName(path).constData(), O_WRONLY | O_CLOEXEC);
++    if (m_fd < 0) {
+         qWarning() << "No access to trace marker file at:" << path;
+     }
+     return true;
+diff --git a/src/ftrace.h b/src/ftrace.h
+index 3147a5e..1314a14 100644
+--- a/src/ftrace.h
++++ b/src/ftrace.h
+@@ -17,6 +17,8 @@
+ #include <QObject>
+ #include <QTextStream>
+ 
++#include <unistd.h>
++
+ namespace KWin
+ {
+ /**
+@@ -48,11 +50,21 @@ public:
+     {
+         Q_ASSERT(isEnabled());
+         QMutexLocker lock(&m_mutex);
+-        if (!m_file.isOpen()) {
++        if (m_fd < 0) {
+             return;
+         }
+-        QTextStream stream(&m_file);
+-        (stream << ... << args) << Qt::endl;
++        // Format first, then one write(): each write is one ftrace event with the
++        // kernel timestamp of this call. A QFile on trace_marker buffers writes, and
++        // after being reopened tries to seek, which trace_marker rejects.
++        QByteArray line;
++        {
++            QTextStream stream(&line, QIODevice::WriteOnly);
++            (stream << ... << args);
++        }
++        line.append('\n');
++        if (::write(m_fd, line.constData(), line.size()) < 0) {
++            // Tracing switched off in the kernel (EBADF) or similar: drop the marker.
++        }
+     }
+ 
+ Q_SIGNALS:
+@@ -64,7 +76,7 @@ public Q_SLOTS:
+ private:
+     static QString filePath();
+     bool open();
+-    QFile m_file;
++    int m_fd = -1;
+     QMutex m_mutex;
+     KWIN_SINGLETON(FTraceLogger)
+ };

@@ -1,0 +1,372 @@
+From: clawd20130 <clawd20130@gmail.com>
+Date: Thu, 24 Sep 2026 09:54:40 +0900
+Subject: KWin moto11: host Miracast display as a hot-plugged output
+
+The nested Wayland backend binds the host's wl_output globals (v3, so
+KWayland's release on removal is valid). A host output made by Moto with
+model Cast becomes output CAST-n whose toplevel is fullscreen on it; phone
+modes and the internal flag stay on the primary output.
+
+Forwarded: not-needed
+Last-Update: 2026-09-26
+X-Rungic-Status: Inappropriate [Android host specific: runs nested in the Android APK compositor]
+X-Rungic-Tests: none (gap: casting needs a TV receiver; manual list)
+X-Rungic-Docs: docs/58
+Origin: vendor, commit:fc2cd678
+---
+ src/backends/wayland/wayland_backend.cpp | 48 ++++++++++++++++++++++++++++++--
+ src/backends/wayland/wayland_backend.h   | 14 +++++++++-
+ src/backends/wayland/wayland_display.cpp | 21 ++++++++++++++
+ src/backends/wayland/wayland_display.h   |  8 ++++++
+ src/backends/wayland/wayland_output.cpp  | 36 ++++++++++++++++++------
+ src/backends/wayland/wayland_output.h    |  7 ++++-
+ 6 files changed, 120 insertions(+), 14 deletions(-)
+
+diff --git a/src/backends/wayland/wayland_backend.cpp b/src/backends/wayland/wayland_backend.cpp
+index e30f407..cad6289 100644
+--- a/src/backends/wayland/wayland_backend.cpp
++++ b/src/backends/wayland/wayland_backend.cpp
+@@ -22,6 +22,7 @@
+ #include "wayland_qpainter_backend.h"
+ 
+ #include <KWayland/Client/keyboard.h>
++#include <KWayland/Client/output.h>
+ #include <KWayland/Client/pointer.h>
+ #include <KWayland/Client/pointergestures.h>
+ #include <KWayland/Client/relativepointer.h>
+@@ -449,6 +450,13 @@ bool WaylandBackend::initialize()
+     }
+ 
+     createOutputs();
++    // Android host: a cast display (Miracast TV) appears as an extra host wl_output
++    // (docs/58); give it its own output, shown fullscreen on that host output.
++    connect(m_display.get(), &WaylandDisplay::hostOutputChanged, this, &WaylandBackend::handleHostOutput);
++    connect(m_display.get(), &WaylandDisplay::hostOutputRemoved, this, &WaylandBackend::handleHostOutputRemoved);
++    for (KWayland::Client::Output *hostOutput : m_display->hostOutputs()) {
++        handleHostOutput(hostOutput);
++    }
+ 
+     m_seat = std::make_unique<WaylandSeat>(m_display->seat(), this);
+ 
+@@ -481,9 +489,9 @@ void WaylandBackend::createOutputs()
+     Q_EMIT outputsQueried();
+ }
+ 
+-WaylandOutput *WaylandBackend::createOutput(const QString &name, const QSize &size, qreal scale, bool fullscreen)
++WaylandOutput *WaylandBackend::createOutput(const QString &name, const QSize &size, qreal scale, bool fullscreen, KWayland::Client::Output *hostOutput)
+ {
+-    WaylandOutput *waylandOutput = new WaylandOutput(name, this);
++    WaylandOutput *waylandOutput = new WaylandOutput(name, this, hostOutput);
+     waylandOutput->init(size, scale, fullscreen);
+ 
+     // Wait until the output window is configured by the host compositor.
+@@ -494,6 +502,40 @@ WaylandOutput *WaylandBackend::createOutput(const QString &name, const QSize &si
+     return waylandOutput;
+ }
+ 
++static bool isCastHostOutput(KWayland::Client::Output *hostOutput)
++{
++    return hostOutput->manufacturer() == QLatin1String("Moto") && hostOutput->model() == QLatin1String("Cast");
++}
++
++void WaylandBackend::handleHostOutput(KWayland::Client::Output *hostOutput)
++{
++    if (!isCastHostOutput(hostOutput) || m_castOutputs.contains(hostOutput) || hostOutput->pixelSize().isEmpty()) {
++        return;
++    }
++    bool ok = false;
++    qreal scale = qEnvironmentVariable("MOTO_KWIN_CAST_SCALE").toDouble(&ok);
++    if (!ok || scale < 0.5 || scale > 4.0) {
++        scale = 1.5;
++    }
++    WaylandOutput *output = createOutput(QStringLiteral("CAST-%1").arg(++m_castOutputSerial), hostOutput->pixelSize(), scale, true, hostOutput);
++    qCInfo(KWIN_WAYLAND_BACKEND) << "Cast output added" << output->name() << hostOutput->pixelSize() << "scale" << scale;
++    m_castOutputs.insert(hostOutput, output);
++    m_outputs << output;
++    Q_EMIT outputAdded(output);
++    Q_EMIT outputsQueried();
++}
++
++void WaylandBackend::handleHostOutputRemoved(KWayland::Client::Output *hostOutput)
++{
++    WaylandOutput *output = m_castOutputs.take(hostOutput);
++    if (output && m_outputs.removeAll(output)) {
++        qCInfo(KWIN_WAYLAND_BACKEND) << "Cast output removed" << output->name();
++        Q_EMIT outputRemoved(output);
++        Q_EMIT outputsQueried();
++        output->unref();
++    }
++}
++
+ void WaylandBackend::destroyOutputs()
+ {
+     while (!m_outputs.isEmpty()) {
+@@ -565,7 +607,7 @@ OutputConfigurationError WaylandBackend::applyOutputChanges(const OutputConfigur
+     if (qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT") && config.source == OutputConfiguration::Source::User) {
+         for (WaylandOutput *output : m_outputs) {
+             const auto props = config.constChangeSet(output);
+-            if (!props) continue;
++            if (!props || output->isCast()) continue;
+             if (props->scale && (!std::isfinite(*props->scale) || *props->scale < 0.5 || *props->scale > 3.0)) {
+                 return OutputConfigurationError::Unknown;
+             }
+diff --git a/src/backends/wayland/wayland_backend.h b/src/backends/wayland/wayland_backend.h
+index 06ebfb4..57bbe00 100644
+--- a/src/backends/wayland/wayland_backend.h
++++ b/src/backends/wayland/wayland_backend.h
+@@ -43,6 +43,14 @@ class SubSurface;
+ }
+ }
+ 
++namespace KWayland
++{
++namespace Client
++{
++class Output;
++}
++}
++
+ namespace KWin
+ {
+ class GraphicsBuffer;
+@@ -256,13 +264,17 @@ Q_SIGNALS:
+ private:
+     void createOutputs();
+     void destroyOutputs();
+-    WaylandOutput *createOutput(const QString &name, const QSize &size, qreal scale, bool fullscreen);
++    WaylandOutput *createOutput(const QString &name, const QSize &size, qreal scale, bool fullscreen, KWayland::Client::Output *hostOutput = nullptr);
++    void handleHostOutput(KWayland::Client::Output *hostOutput);
++    void handleHostOutputRemoved(KWayland::Client::Output *hostOutput);
+ 
+     WaylandBackendOptions m_options;
+     std::unique_ptr<WaylandDisplay> m_display;
+     std::unique_ptr<WaylandSeat> m_seat;
+     WaylandEglBackend *m_eglBackend = nullptr;
+     QList<WaylandOutput *> m_outputs;
++    QHash<KWayland::Client::Output *, WaylandOutput *> m_castOutputs;
++    int m_castOutputSerial = 0;
+     bool m_pointerLockRequested = false;
+     std::unique_ptr<DrmDevice> m_drmDevice;
+     std::unique_ptr<EglDisplay> m_eglDisplay;
+diff --git a/src/backends/wayland/wayland_display.cpp b/src/backends/wayland/wayland_display.cpp
+index b4fc319..396b655 100644
+--- a/src/backends/wayland/wayland_display.cpp
++++ b/src/backends/wayland/wayland_display.cpp
+@@ -11,6 +11,7 @@
+ #include "wayland_logging.h"
+ 
+ #include <KWayland/Client/compositor.h>
++#include <KWayland/Client/output.h>
+ #include <KWayland/Client/pointerconstraints.h>
+ #include <KWayland/Client/pointergestures.h>
+ #include <KWayland/Client/registry.h>
+@@ -475,11 +476,31 @@ void WaylandDisplay::registry_global(void *data, wl_registry *registry, uint32_t
+         display->m_toplevelIconManager = reinterpret_cast<xdg_toplevel_icon_manager_v1 *>(wl_registry_bind(registry, name, &xdg_toplevel_icon_manager_v1_interface, 1));
+     } else if (strcmp(interface, zwp_keyboard_shortcuts_inhibit_manager_v1_interface.name) == 0) {
+         display->m_keyboardShortcutsInhibitManager = reinterpret_cast<zwp_keyboard_shortcuts_inhibit_manager_v1 *>(wl_registry_bind(registry, name, &zwp_keyboard_shortcuts_inhibit_manager_v1_interface, 1));
++    } else if (strcmp(interface, wl_output_interface.name) == 0) {
++        auto output = new KWayland::Client::Output(display);
++        // v3: KWayland::Client::Output sends wl_output.release (since 3) when it is
++        // destroyed; on a v2 object that is a protocol error that drops the connection.
++        // KWayland handles no v4 events (name/description).
++        output->setup(static_cast<wl_output *>(wl_registry_bind(registry, name, &wl_output_interface, std::min(version, 3u))));
++        display->m_hostOutputs.insert(name, output);
++        QObject::connect(output, &KWayland::Client::Output::changed, display, [display, output]() {
++            Q_EMIT display->hostOutputChanged(output);
++        });
+     }
+ }
+ 
+ void WaylandDisplay::registry_global_remove(void *data, wl_registry *registry, uint32_t name)
+ {
++    WaylandDisplay *display = static_cast<WaylandDisplay *>(data);
++    if (KWayland::Client::Output *output = display->m_hostOutputs.take(name)) {
++        Q_EMIT display->hostOutputRemoved(output);
++        output->deleteLater();
++    }
++}
++
++QList<KWayland::Client::Output *> WaylandDisplay::hostOutputs() const
++{
++    return m_hostOutputs.values();
+ }
+ 
+ }
+diff --git a/src/backends/wayland/wayland_display.h b/src/backends/wayland/wayland_display.h
+index f1525bd..96cccea 100644
+--- a/src/backends/wayland/wayland_display.h
++++ b/src/backends/wayland/wayland_display.h
+@@ -28,6 +28,7 @@ namespace KWayland
+ namespace Client
+ {
+ class Compositor;
++class Output;
+ class PointerConstraints;
+ class PointerGestures;
+ class RelativePointerManager;
+@@ -83,10 +84,16 @@ public:
+     xdg_toplevel_icon_manager_v1 *toplevelIconManager() const;
+     zwp_keyboard_shortcuts_inhibit_manager_v1 *keyboardShortcutsInhibitManager() const;
+     zwp_linux_explicit_synchronization_v1 *explicitSynchronization() const;
++    /// wl_output globals of the host compositor (the Android host adds one per cast display).
++    QList<KWayland::Client::Output *> hostOutputs() const;
+ 
+ public Q_SLOTS:
+     void flush();
+ 
++Q_SIGNALS:
++    void hostOutputChanged(KWayland::Client::Output *output);
++    void hostOutputRemoved(KWayland::Client::Output *output);
++
+ private:
+     static void registry_global(void *data, wl_registry *registry, uint32_t name, const char *interface, uint32_t version);
+     static void registry_global_remove(void *data, wl_registry *registry, uint32_t name);
+@@ -113,6 +120,7 @@ private:
+     std::unique_ptr<KWayland::Client::Seat> m_seat;
+     std::unique_ptr<KWayland::Client::XdgDecorationManager> m_xdgDecorationManager;
+     std::unique_ptr<KWayland::Client::XdgShell> m_xdgShell;
++    QHash<uint32_t, KWayland::Client::Output *> m_hostOutputs;
+ };
+ 
+ }
+diff --git a/src/backends/wayland/wayland_output.cpp b/src/backends/wayland/wayland_output.cpp
+index fe81d72..3c8de4b 100644
+--- a/src/backends/wayland/wayland_output.cpp
++++ b/src/backends/wayland/wayland_output.cpp
+@@ -7,6 +7,7 @@
+     SPDX-License-Identifier: GPL-2.0-or-later
+ */
+ #include "wayland_output.h"
++#include <KWayland/Client/output.h>
+ #include "android-display-client.h"
+ #include "color_manager.h"
+ #include "compositor.h"
+@@ -120,13 +121,14 @@ const wp_fractional_scale_v1_listener WaylandOutput::s_fractionalScaleListener{
+     .preferred_scale = &WaylandOutput::handleFractionalScaleChanged,
+ };
+ 
+-WaylandOutput::WaylandOutput(const QString &name, WaylandBackend *backend)
++WaylandOutput::WaylandOutput(const QString &name, WaylandBackend *backend, KWayland::Client::Output *hostOutput)
+     : BackendOutput()
+     , m_renderLoop(std::make_unique<RenderLoop>(this))
+     , m_surface(backend->display()->compositor()->createSurface())
+     , m_xdgShellSurface(backend->display()->xdgShell()->createSurface(m_surface.get()))
+     , m_backend(backend)
+     , m_cursor(std::make_unique<WaylandCursor>(backend))
++    , m_hostOutput(hostOutput)
+ {
+     m_renderLoop->setMaxPendingFrameCount(2);
+     if (KWayland::Client::XdgDecorationManager *manager = m_backend->display()->xdgDecorationManager()) {
+@@ -152,13 +154,15 @@ WaylandOutput::WaylandOutput(const QString &name, WaylandBackend *backend)
+         wp_fractional_scale_v1_add_listener(m_fractionalScale, &s_fractionalScaleListener, this);
+     }
+     m_viewport = backend->display()->viewporter()->createViewport(*m_surface);
+-    const auto androidInfo = qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT") ? MotoDisplay::info() : QJsonObject{};
++    const auto androidInfo = androidPrimary() ? MotoDisplay::info() : QJsonObject{};
+     setInformation(Information{
+         .name = name,
+-        .model = name,
+-        .physicalSize = QSize(androidInfo.value("physicalWidthMM").toInt(-1), androidInfo.value("physicalHeightMM").toInt(-1)),
++        .manufacturer = m_hostOutput ? m_hostOutput->manufacturer() : QString(),
++        .model = m_hostOutput ? m_hostOutput->model() : name,
++        .physicalSize = m_hostOutput ? m_hostOutput->physicalSize()
++                                     : QSize(androidInfo.value("physicalWidthMM").toInt(-1), androidInfo.value("physicalHeightMM").toInt(-1)),
+         .capabilities = caps,
+-        .internal = qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT"),
++        .internal = androidPrimary(),
+     });
+ 
+     m_configureThrottleTimer.setSingleShot(true);
+@@ -399,7 +403,7 @@ void WaylandOutput::framePresented(std::chrono::nanoseconds timestamp, uint32_t
+         m_refreshRate = refreshRate;
+         const auto mode = std::make_shared<OutputMode>(pixelSize(), m_refreshRate);
+         State next = m_state;
+-        next.modes = qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT") ? androidModes(pixelSize(), m_refreshRate) : QList{mode};
++        next.modes = androidPrimary() ? androidModes(pixelSize(), m_refreshRate) : QList{mode};
+         next.currentMode = *std::ranges::find_if(next.modes, [&](const auto &candidate) {
+             return candidate->size() == pixelSize() && candidate->refreshRate() == m_refreshRate;
+         });
+@@ -465,6 +469,16 @@ bool WaylandOutput::isReady() const
+     return m_ready;
+ }
+ 
++bool WaylandOutput::isCast() const
++{
++    return m_hostOutput != nullptr;
++}
++
++bool WaylandOutput::androidPrimary() const
++{
++    return qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT") && !m_hostOutput;
++}
++
+ KWayland::Client::Surface *WaylandOutput::surface() const
+ {
+     return m_surface.get();
+@@ -493,19 +507,23 @@ bool WaylandOutput::presentAsync(OutputLayer *layer, std::optional<std::chrono::
+ 
+ void WaylandOutput::init(const QSize &pixelSize, qreal scale, bool fullscreen)
+ {
++    if (m_hostOutput && m_hostOutput->refreshRate() > 0) {
++        m_refreshRate = m_hostOutput->refreshRate();
++    }
+     m_renderLoop->setRefreshRate(m_refreshRate);
+ 
+     auto mode = std::make_shared<OutputMode>(pixelSize, m_refreshRate);
+ 
+     State initialState;
+-    initialState.modes = qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT") ? androidModes(pixelSize, m_refreshRate) : QList{mode};
++    initialState.modes = androidPrimary() ? androidModes(pixelSize, m_refreshRate) : QList{mode};
+     initialState.currentMode = *std::ranges::find_if(initialState.modes, [&](const auto &candidate) {
+         return candidate->size() == pixelSize && candidate->refreshRate() == m_refreshRate;
+     });
+     initialState.scale = scale;
+     setState(initialState);
+ 
+-    m_xdgShellSurface->setFullscreen(fullscreen);
++    // A cast output is shown fullscreen on its own host output (docs/58).
++    m_xdgShellSurface->setFullscreen(fullscreen, m_hostOutput);
+     m_surface->commit(KWayland::Client::Surface::CommitFlag::None);
+ }
+ 
+@@ -534,7 +552,7 @@ void WaylandOutput::applyConfigure(const QSize &size, quint32 serial)
+         auto mode = std::make_shared<OutputMode>(androidOutput ? size : size * m_pendingScale, m_refreshRate);
+ 
+         State next = m_state;
+-        next.modes = androidOutput ? androidModes(size, m_refreshRate) : QList{mode};
++        next.modes = androidPrimary() ? androidModes(size, m_refreshRate) : QList{mode};
+         next.currentMode = *std::ranges::find_if(next.modes, [&](const auto &candidate) {
+             return candidate->size() == mode->size() && candidate->refreshRate() == m_refreshRate;
+         });
+diff --git a/src/backends/wayland/wayland_output.h b/src/backends/wayland/wayland_output.h
+index 7929953..dccdfe6 100644
+--- a/src/backends/wayland/wayland_output.h
++++ b/src/backends/wayland/wayland_output.h
+@@ -80,7 +80,7 @@ class WaylandOutput : public BackendOutput
+ {
+     Q_OBJECT
+ public:
+-    WaylandOutput(const QString &name, WaylandBackend *backend);
++    WaylandOutput(const QString &name, WaylandBackend *backend, KWayland::Client::Output *hostOutput = nullptr);
+     ~WaylandOutput() override;
+ 
+     RenderLoop *renderLoop() const override;
+@@ -89,6 +89,8 @@ public:
+     void init(const QSize &pixelSize, qreal scale, bool fullscreen);
+ 
+     bool isReady() const;
++    /// Shown on a cast host output (Miracast TV) rather than the phone itself.
++    bool isCast() const;
+     KWayland::Client::Surface *surface() const;
+     /// Explicit synchronization for the output surface, or null when the host lacks it.
+     zwp_linux_surface_synchronization_v1 *surfaceSynchronization();
+@@ -132,6 +134,9 @@ private:
+     std::unique_ptr<WaylandCursor> m_cursor;
+     bool m_hasPointerLock = false;
+     bool m_ready = false;
++    KWayland::Client::Output *m_hostOutput = nullptr;
++    /// The phone output of the Android host: phone modes, size and display settings.
++    bool androidPrimary() const;
+     bool m_mapped = false;
+     struct FrameData
+     {

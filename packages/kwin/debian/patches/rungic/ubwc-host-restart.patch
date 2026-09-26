@@ -1,0 +1,172 @@
+From: clawd20130 <clawd20130@gmail.com>
+Date: Thu, 24 Sep 2026 06:11:40 +0900
+Subject: KWin: UBWC output buffers and host-restart recovery (moto9, moto10)
+
+moto9: with MOTO_KWIN_UBWC=1 the Android allocator asks the host for
+QCOM_COMPRESSED buffers (lease protocol v2 carries the wanted and the
+allocated modifier).
+moto10: on the Android host, wait for the host socket at startup, and when
+the host connection breaks wait for it to return and exit with 133, so
+kwin_wayland_wrapper restarts KWin without counting a crash and without a
+core dump; clients no longer reconnect into a window with no KWin.
+
+Forwarded: not-needed
+Last-Update: 2026-09-26
+X-Rungic-Status: Inappropriate [Android host specific: runs nested in the Android APK compositor]
+X-Rungic-Tests: L3:session.ready L3:perf.compositor (gap: no host-restart scenario)
+X-Rungic-Docs: docs/57
+Origin: vendor, commit:012e5af3
+---
+ src/backends/wayland/wayland_display.cpp | 38 +++++++++++++++++++++++++++++---
+ src/core/androidgraphicsbuffer.h         | 35 +++++++++++++++++++++--------
+ 2 files changed, 61 insertions(+), 12 deletions(-)
+
+diff --git a/src/backends/wayland/wayland_display.cpp b/src/backends/wayland/wayland_display.cpp
+index 9b0ace8..b4fc319 100644
+--- a/src/backends/wayland/wayland_display.cpp
++++ b/src/backends/wayland/wayland_display.cpp
+@@ -55,13 +55,37 @@ namespace KWin
+ namespace Wayland
+ {
+ 
++// Android host (the APK's compositor, MOTO_GPU_ALLOCATOR set): the host goes away
++// whenever its app is updated or restarted. Waiting for its socket and asking
++// kwin_wayland_wrapper for a restart (exit code 133) replaces an abort per host
++// restart: no core dump, and the wrapper's crash counter (it gives up after ten)
++// is not consumed. Clients stay on the wrapper's socket and reconnect.
++static bool isAndroidHost()
++{
++    return qEnvironmentVariableIsSet("MOTO_GPU_ALLOCATOR");
++}
++
++static wl_display *connectToHost(const QByteArray &socketName, int timeoutMs)
++{
++    for (int waited = 0;; waited += 250) {
++        if (wl_display *display = wl_display_connect(socketName.constData())) {
++            return display;
++        }
++        if (waited >= timeoutMs) {
++            return nullptr;
++        }
++        usleep(250 * 1000);
++    }
++}
++
+ class WaylandEventThread : public QThread
+ {
+     Q_OBJECT
+ 
+ public:
+-    WaylandEventThread(wl_display *display)
++    WaylandEventThread(wl_display *display, const QByteArray &socketName)
+         : m_display(display)
++        , m_socketName(socketName)
+         , m_fd(wl_display_get_fd(display))
+         , m_quitPipe{-1, -1}
+         , m_reading(true)
+@@ -84,6 +108,13 @@ public:
+     {
+         while (true) {
+             if (wl_display_dispatch_pending(m_display) < 0) {
++                if (isAndroidHost()) {
++                    qCWarning(KWIN_WAYLAND_BACKEND) << "Host connection lost; waiting for the Android host to restart";
++                    if (wl_display *probe = connectToHost(m_socketName, 120000)) {
++                        wl_display_disconnect(probe);
++                    }
++                    ::_exit(133); // kwin_wayland_wrapper: restart without counting a crash
++                }
+                 qFatal("Wayland connection broke");
+             }
+ 
+@@ -155,6 +186,7 @@ protected:
+ 
+ private:
+     wl_display *const m_display;
++    const QByteArray m_socketName;
+     int m_fd;
+     int m_quitPipe[2];
+     QAtomicInteger<bool> m_reading;
+@@ -223,12 +255,12 @@ void WaylandDisplay::flush()
+ 
+ bool WaylandDisplay::initialize(const QString &socketName)
+ {
+-    m_display = wl_display_connect(socketName.toUtf8());
++    m_display = isAndroidHost() ? connectToHost(socketName.toUtf8(), 60000) : wl_display_connect(socketName.toUtf8());
+     if (!m_display) {
+         return false;
+     }
+ 
+-    m_eventThread = std::make_unique<WaylandEventThread>(m_display);
++    m_eventThread = std::make_unique<WaylandEventThread>(m_display, socketName.toUtf8());
+     connect(m_eventThread.get(), &WaylandEventThread::available, this, &WaylandDisplay::flush, Qt::QueuedConnection);
+     m_eventThread->start();
+ 
+diff --git a/src/core/androidgraphicsbuffer.h b/src/core/androidgraphicsbuffer.h
+index 4d2b466..433f68c 100644
+--- a/src/core/androidgraphicsbuffer.h
++++ b/src/core/androidgraphicsbuffer.h
+@@ -33,7 +33,11 @@ static GraphicsBuffer *allocateAndroidBuffer(const QByteArray &path, const Graph
+     if (options.software || width <= 0 || height <= 0 || width > 4096 || height > 4096 || int64_t(width) * height > 4194304) {
+         return nullptr;
+     }
+-    if (!options.modifiers.isEmpty() && !options.modifiers.contains(DRM_FORMAT_MOD_LINEAR) && !options.modifiers.contains(DRM_FORMAT_MOD_INVALID)) {
++    // MOTO_KWIN_UBWC=1: ask for an Adreno UBWC (QCOM_COMPRESSED) buffer when the host
++    // offers the modifier; Mesa must import it (FD_KGSL_DMABUF_UBWC=1). The host
++    // answers with the modifier it actually allocated, which may be LINEAR.
++    const bool wantUbwc = qEnvironmentVariableIntValue("MOTO_KWIN_UBWC") == 1 && options.modifiers.contains(DRM_FORMAT_MOD_QCOM_COMPRESSED);
++    if (!wantUbwc && !options.modifiers.isEmpty() && !options.modifiers.contains(DRM_FORMAT_MOD_LINEAR) && !options.modifiers.contains(DRM_FORMAT_MOD_INVALID)) {
+         return nullptr;
+     }
+     switch (options.format) {
+@@ -61,13 +65,18 @@ static GraphicsBuffer *allocateAndroidBuffer(const QByteArray &path, const Graph
+     if (connect(lease.get(), reinterpret_cast<sockaddr *>(&address), sizeof(address)) < 0) {
+         return nullptr;
+     }
+-    // Both endpoints are little-endian ARM64; this is protocol v1.
+-    uint32_t request[]{0x4d475055, uint32_t(width), uint32_t(height), options.format};
+-    if (send(lease.get(), request, sizeof(request), MSG_NOSIGNAL) != sizeof(request)) {
++    // Both endpoints are little-endian ARM64. v1 (16-byte request, 12-byte reply) is
++    // implicitly LINEAR; v2 appends the wanted modifier and the reply the allocated one.
++    const uint32_t magic = wantUbwc ? 0x4d475056 : 0x4d475055;
++    const uint64_t wanted = DRM_FORMAT_MOD_QCOM_COMPRESSED;
++    uint32_t request[]{magic, uint32_t(width), uint32_t(height), options.format, uint32_t(wanted), uint32_t(wanted >> 32)};
++    const ssize_t requestSize = wantUbwc ? sizeof(request) : 4 * sizeof(uint32_t);
++    if (send(lease.get(), request, requestSize, MSG_NOSIGNAL) != requestSize) {
+         return nullptr;
+     }
+-    uint32_t reply[3]{};
+-    iovec iov{.iov_base = reply, .iov_len = sizeof(reply)};
++    uint32_t reply[5]{};
++    const ssize_t replySize = wantUbwc ? sizeof(reply) : 3 * sizeof(uint32_t);
++    iovec iov{.iov_base = reply, .iov_len = size_t(replySize)};
+     alignas(cmsghdr) char control[CMSG_SPACE(8 * sizeof(int))]{};
+     msghdr message{};
+     message.msg_iov = &iov;
+@@ -86,8 +95,16 @@ static GraphicsBuffer *allocateAndroidBuffer(const QByteArray &path, const Graph
+             }
+         }
+     }
+-    if (length != sizeof(reply) || (message.msg_flags & (MSG_CTRUNC | MSG_TRUNC)) || received.size() != 1 ||
+-        reply[0] != 0x4d475055 || reply[2] != options.format || reply[1] < uint32_t(width) * 4 || reply[1] > 65536) {
++    if (length != replySize || (message.msg_flags & (MSG_CTRUNC | MSG_TRUNC)) || received.size() != 1 ||
++        reply[0] != magic || reply[2] != options.format || reply[1] < uint32_t(width) * 4 || reply[1] > 65536) {
++        return nullptr;
++    }
++    const uint64_t modifier = wantUbwc ? (uint64_t(reply[4]) << 32 | reply[3]) : DRM_FORMAT_MOD_LINEAR;
++    if (modifier != DRM_FORMAT_MOD_LINEAR && modifier != DRM_FORMAT_MOD_QCOM_COMPRESSED) {
++        return nullptr;
++    }
++    if (!options.modifiers.isEmpty() && !options.modifiers.contains(modifier)
++        && !(modifier == DRM_FORMAT_MOD_LINEAR && options.modifiers.contains(DRM_FORMAT_MOD_INVALID))) {
+         return nullptr;
+     }
+     DmaBufAttributes attributes;
+@@ -95,7 +112,7 @@ static GraphicsBuffer *allocateAndroidBuffer(const QByteArray &path, const Graph
+     attributes.width = width;
+     attributes.height = height;
+     attributes.format = options.format;
+-    attributes.modifier = DRM_FORMAT_MOD_LINEAR;
++    attributes.modifier = modifier;
+     attributes.fd[0] = std::move(received.front());
+     attributes.pitch[0] = reply[1];
+     return new AndroidGraphicsBuffer(std::move(attributes), std::move(lease));

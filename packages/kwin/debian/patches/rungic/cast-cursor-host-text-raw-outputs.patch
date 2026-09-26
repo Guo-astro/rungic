@@ -1,0 +1,774 @@
+From: clawd20130 <clawd20130@gmail.com>
+Date: Thu, 24 Sep 2026 13:08:42 +0900
+Subject: KWin moto12: cast cursor, host text input, raw host outputs
+
+- Cast outputs get no cursor layer; KWin renders the cursor into the TV frame.
+- Host wl_outputs are read from the raw protocol (HostOutput). KWayland's
+  Output::addMode() erases from a QList while holding an iterator and crashed
+  KWin whenever the host re-announced a mode (phone refresh changes). Host
+  outputs are released before the connection closes.
+- Text the host commits over text-input-v3 (Android keyboard: Chinese, emoji)
+  goes to InputMethod::commitHostText and the focused client.
+- KWIN_IM_SHOW_ALWAYS applies to text fields on internal outputs only; automatic
+  panel requests for a field on the TV do not show the on-screen keyboard.
+- A cast output takes the lowest free CAST-n name so a reconnected TV keeps
+  its scale.
+
+Forwarded: not-needed
+Last-Update: 2026-09-26
+X-Rungic-Status: Inappropriate [Android host specific: runs nested in the Android APK compositor]; to be split into cast cursor, host outputs, host text input, IM on internal outputs, CAST-n naming
+X-Rungic-Tests: L3:input.text (host text input); none for casting (manual)
+X-Rungic-Docs: docs/58 docs/60
+Origin: vendor, commit:e07d7448
+---
+ src/backends/wayland/wayland_backend.cpp          |  69 +++++++++++--
+ src/backends/wayland/wayland_backend.h            |  24 ++---
+ src/backends/wayland/wayland_display.cpp          | 119 ++++++++++++++++++++--
+ src/backends/wayland/wayland_display.h            |  61 ++++++++++-
+ src/backends/wayland/wayland_egl_backend.cpp      |   6 +-
+ src/backends/wayland/wayland_output.cpp           |  10 +-
+ src/backends/wayland/wayland_output.h             |   5 +-
+ src/backends/wayland/wayland_qpainter_backend.cpp |   4 +-
+ src/inputmethod.cpp                               |  39 ++++++-
+ src/inputmethod.h                                 |   4 +
+ 10 files changed, 295 insertions(+), 46 deletions(-)
+
+diff --git a/src/backends/wayland/wayland_backend.cpp b/src/backends/wayland/wayland_backend.cpp
+index cad6289..c3ca18c 100644
+--- a/src/backends/wayland/wayland_backend.cpp
++++ b/src/backends/wayland/wayland_backend.cpp
+@@ -11,6 +11,8 @@
+ #include "compositor.h"
+ #include "core/drmdevice.h"
+ #include "input.h"
++#include "inputmethod.h"
++#include "main.h"
+ #include "wayland-client/linuxdmabuf.h"
+ #include "wayland_display.h"
+ #include "wayland_egl_backend.h"
+@@ -22,7 +24,6 @@
+ #include "wayland_qpainter_backend.h"
+ 
+ #include <KWayland/Client/keyboard.h>
+-#include <KWayland/Client/output.h>
+ #include <KWayland/Client/pointer.h>
+ #include <KWayland/Client/pointergestures.h>
+ #include <KWayland/Client/relativepointer.h>
+@@ -42,6 +43,7 @@
+ #include <wayland-client-core.h>
+ 
+ #include "wayland-linux-dmabuf-unstable-v1-client-protocol.h"
++#include "wayland-text-input-unstable-v3-client-protocol.h"
+ 
+ namespace KWin
+ {
+@@ -315,6 +317,7 @@ WaylandSeat::WaylandSeat(KWayland::Client::Seat *nativeSeat, WaylandBackend *bac
+     , m_seat(nativeSeat)
+     , m_backend(backend)
+ {
++    createTextInput();
+     auto updateKeyboardDevice = [this](){
+         if (m_seat->hasKeyboard()) {
+             createKeyboardDevice();
+@@ -351,11 +354,55 @@ WaylandSeat::WaylandSeat(KWayland::Client::Seat *nativeSeat, WaylandBackend *bac
+ 
+ WaylandSeat::~WaylandSeat()
+ {
++    if (m_textInput) {
++        zwp_text_input_v3_destroy(m_textInput);
++    }
+     destroyPointerDevice();
+     destroyKeyboardDevice();
+     destroyTouchDevice();
+ }
+ 
++// The Android host delivers text from the Android keyboard that no key can type
++// (Chinese, emoji...) over text-input-v3 to the focused surface, which is one of
++// KWin's output windows. Keep text input enabled on them and pass each commit to
++// KWin's input method, which gives it to the focused client's text input or,
++// failing that, types it with a temporary keymap (docs/58 step 3).
++void WaylandSeat::createTextInput()
++{
++    zwp_text_input_manager_v3 *manager = m_backend->display()->textInputManager();
++    if (!manager) {
++        return;
++    }
++    static const auto enable = [](zwp_text_input_v3 *textInput) {
++        zwp_text_input_v3_enable(textInput);
++        zwp_text_input_v3_set_content_type(textInput, ZWP_TEXT_INPUT_V3_CONTENT_HINT_NONE, ZWP_TEXT_INPUT_V3_CONTENT_PURPOSE_NORMAL);
++        zwp_text_input_v3_commit(textInput);
++    };
++    static const zwp_text_input_v3_listener listener{
++        .enter = [](void *, zwp_text_input_v3 *textInput, wl_surface *) {
++            enable(textInput);
++        },
++        .leave = [](void *, zwp_text_input_v3 *, wl_surface *) {},
++        .preedit_string = [](void *, zwp_text_input_v3 *, const char *, int32_t, int32_t) {},
++        .commit_string = [](void *data, zwp_text_input_v3 *, const char *text) {
++            static_cast<WaylandSeat *>(data)->m_pendingCommit = QString::fromUtf8(text);
++        },
++        .delete_surrounding_text = [](void *, zwp_text_input_v3 *, uint32_t, uint32_t) {},
++        .done = [](void *data, zwp_text_input_v3 *, uint32_t) {
++            auto seat = static_cast<WaylandSeat *>(data);
++            const QString text = std::exchange(seat->m_pendingCommit, QString());
++            if (!text.isEmpty() && kwinApp()->inputMethod()) {
++                kwinApp()->inputMethod()->commitHostText(text);
++            }
++        },
++    };
++    m_textInput = zwp_text_input_manager_v3_get_text_input(manager, *m_seat);
++    zwp_text_input_v3_add_listener(m_textInput, &listener, this);
++    // The host sends enter only when its keyboard focus changes; it may already be on
++    // one of our surfaces. It accepts enable from the focused client.
++    enable(m_textInput);
++}
++
+ void WaylandSeat::createPointerDevice()
+ {
+     m_pointerDevice = std::make_unique<WaylandInputDevice>(m_seat->createPointer(), this);
+@@ -454,7 +501,7 @@ bool WaylandBackend::initialize()
+     // (docs/58); give it its own output, shown fullscreen on that host output.
+     connect(m_display.get(), &WaylandDisplay::hostOutputChanged, this, &WaylandBackend::handleHostOutput);
+     connect(m_display.get(), &WaylandDisplay::hostOutputRemoved, this, &WaylandBackend::handleHostOutputRemoved);
+-    for (KWayland::Client::Output *hostOutput : m_display->hostOutputs()) {
++    for (HostOutput *hostOutput : m_display->hostOutputs()) {
+         handleHostOutput(hostOutput);
+     }
+ 
+@@ -489,7 +536,7 @@ void WaylandBackend::createOutputs()
+     Q_EMIT outputsQueried();
+ }
+ 
+-WaylandOutput *WaylandBackend::createOutput(const QString &name, const QSize &size, qreal scale, bool fullscreen, KWayland::Client::Output *hostOutput)
++WaylandOutput *WaylandBackend::createOutput(const QString &name, const QSize &size, qreal scale, bool fullscreen, HostOutput *hostOutput)
+ {
+     WaylandOutput *waylandOutput = new WaylandOutput(name, this, hostOutput);
+     waylandOutput->init(size, scale, fullscreen);
+@@ -502,12 +549,12 @@ WaylandOutput *WaylandBackend::createOutput(const QString &name, const QSize &si
+     return waylandOutput;
+ }
+ 
+-static bool isCastHostOutput(KWayland::Client::Output *hostOutput)
++static bool isCastHostOutput(HostOutput *hostOutput)
+ {
+     return hostOutput->manufacturer() == QLatin1String("Moto") && hostOutput->model() == QLatin1String("Cast");
+ }
+ 
+-void WaylandBackend::handleHostOutput(KWayland::Client::Output *hostOutput)
++void WaylandBackend::handleHostOutput(HostOutput *hostOutput)
+ {
+     if (!isCastHostOutput(hostOutput) || m_castOutputs.contains(hostOutput) || hostOutput->pixelSize().isEmpty()) {
+         return;
+@@ -517,7 +564,15 @@ void WaylandBackend::handleHostOutput(KWayland::Client::Output *hostOutput)
+     if (!ok || scale < 0.5 || scale > 4.0) {
+         scale = 1.5;
+     }
+-    WaylandOutput *output = createOutput(QStringLiteral("CAST-%1").arg(++m_castOutputSerial), hostOutput->pixelSize(), scale, true, hostOutput);
++    // Reuse the lowest free number: KWin keeps an output's settings (scale) by its
++    // name, and the same TV reconnects as a new host output every time.
++    int number = 1;
++    while (std::ranges::any_of(m_castOutputs, [number](WaylandOutput *cast) {
++        return cast->name() == QStringLiteral("CAST-%1").arg(number);
++    })) {
++        number++;
++    }
++    WaylandOutput *output = createOutput(QStringLiteral("CAST-%1").arg(number), hostOutput->pixelSize(), scale, true, hostOutput);
+     qCInfo(KWIN_WAYLAND_BACKEND) << "Cast output added" << output->name() << hostOutput->pixelSize() << "scale" << scale;
+     m_castOutputs.insert(hostOutput, output);
+     m_outputs << output;
+@@ -525,7 +580,7 @@ void WaylandBackend::handleHostOutput(KWayland::Client::Output *hostOutput)
+     Q_EMIT outputsQueried();
+ }
+ 
+-void WaylandBackend::handleHostOutputRemoved(KWayland::Client::Output *hostOutput)
++void WaylandBackend::handleHostOutputRemoved(HostOutput *hostOutput)
+ {
+     WaylandOutput *output = m_castOutputs.take(hostOutput);
+     if (output && m_outputs.removeAll(output)) {
+diff --git a/src/backends/wayland/wayland_backend.h b/src/backends/wayland/wayland_backend.h
+index 57bbe00..4b86f3e 100644
+--- a/src/backends/wayland/wayland_backend.h
++++ b/src/backends/wayland/wayland_backend.h
+@@ -26,6 +26,7 @@
+ 
+ struct wl_buffer;
+ struct wl_display;
++struct zwp_text_input_v3;
+ 
+ namespace KWayland
+ {
+@@ -43,14 +44,6 @@ class SubSurface;
+ }
+ }
+ 
+-namespace KWayland
+-{
+-namespace Client
+-{
+-class Output;
+-}
+-}
+-
+ namespace KWin
+ {
+ class GraphicsBuffer;
+@@ -60,6 +53,7 @@ namespace Wayland
+ {
+ 
+ class WaylandBackend;
++class HostOutput;
+ class WaylandSeat;
+ class WaylandOutput;
+ class WaylandEglBackend;
+@@ -162,8 +156,13 @@ private:
+     void createTouchDevice();
+     void destroyTouchDevice();
+ 
++    void createTextInput();
++
+     KWayland::Client::Seat *m_seat;
+     WaylandBackend *m_backend;
++    /// Text the host commits (Android keyboard), handed to KWin's input method.
++    zwp_text_input_v3 *m_textInput = nullptr;
++    QString m_pendingCommit;
+ 
+     std::unique_ptr<WaylandInputDevice> m_pointerDevice;
+     std::unique_ptr<WaylandInputDevice> m_relativePointerDevice;
+@@ -264,17 +263,16 @@ Q_SIGNALS:
+ private:
+     void createOutputs();
+     void destroyOutputs();
+-    WaylandOutput *createOutput(const QString &name, const QSize &size, qreal scale, bool fullscreen, KWayland::Client::Output *hostOutput = nullptr);
+-    void handleHostOutput(KWayland::Client::Output *hostOutput);
+-    void handleHostOutputRemoved(KWayland::Client::Output *hostOutput);
++    WaylandOutput *createOutput(const QString &name, const QSize &size, qreal scale, bool fullscreen, HostOutput *hostOutput = nullptr);
++    void handleHostOutput(HostOutput *hostOutput);
++    void handleHostOutputRemoved(HostOutput *hostOutput);
+ 
+     WaylandBackendOptions m_options;
+     std::unique_ptr<WaylandDisplay> m_display;
+     std::unique_ptr<WaylandSeat> m_seat;
+     WaylandEglBackend *m_eglBackend = nullptr;
+     QList<WaylandOutput *> m_outputs;
+-    QHash<KWayland::Client::Output *, WaylandOutput *> m_castOutputs;
+-    int m_castOutputSerial = 0;
++    QHash<HostOutput *, WaylandOutput *> m_castOutputs;
+     bool m_pointerLockRequested = false;
+     std::unique_ptr<DrmDevice> m_drmDevice;
+     std::unique_ptr<EglDisplay> m_eglDisplay;
+diff --git a/src/backends/wayland/wayland_display.cpp b/src/backends/wayland/wayland_display.cpp
+index 396b655..8d174b0 100644
+--- a/src/backends/wayland/wayland_display.cpp
++++ b/src/backends/wayland/wayland_display.cpp
+@@ -11,7 +11,6 @@
+ #include "wayland_logging.h"
+ 
+ #include <KWayland/Client/compositor.h>
+-#include <KWayland/Client/output.h>
+ #include <KWayland/Client/pointerconstraints.h>
+ #include <KWayland/Client/pointergestures.h>
+ #include <KWayland/Client/registry.h>
+@@ -46,6 +45,7 @@
+ #include "wayland-relative-pointer-unstable-v1-client-protocol.h"
+ #include "wayland-single-pixel-buffer-v1-client-protocol.h"
+ #include "wayland-tearing-control-v1-client-protocol.h"
++#include "wayland-text-input-unstable-v3-client-protocol.h"
+ #include "wayland-viewporter-client-protocol.h"
+ #include "wayland-xdg-decoration-unstable-v1-client-protocol.h"
+ #include "wayland-xdg-shell-client-protocol.h"
+@@ -205,6 +205,9 @@ WaylandDisplay::~WaylandDisplay()
+     m_eventThread->stop();
+     m_eventThread.reset();
+ 
++    // Children would otherwise be destroyed by ~QObject, after the connection is gone.
++    qDeleteAll(m_hostOutputs);
++    m_hostOutputs.clear();
+     m_compositor.reset();
+     m_subCompositor.reset();
+     m_pointerConstraints.reset();
+@@ -217,6 +220,9 @@ WaylandDisplay::~WaylandDisplay()
+     m_colorManager.reset();
+     m_viewporter.reset();
+ 
++    if (m_textInputManager) {
++        zwp_text_input_manager_v3_destroy(m_textInputManager);
++    }
+     if (m_shm) {
+         wl_shm_destroy(m_shm);
+     }
+@@ -476,14 +482,14 @@ void WaylandDisplay::registry_global(void *data, wl_registry *registry, uint32_t
+         display->m_toplevelIconManager = reinterpret_cast<xdg_toplevel_icon_manager_v1 *>(wl_registry_bind(registry, name, &xdg_toplevel_icon_manager_v1_interface, 1));
+     } else if (strcmp(interface, zwp_keyboard_shortcuts_inhibit_manager_v1_interface.name) == 0) {
+         display->m_keyboardShortcutsInhibitManager = reinterpret_cast<zwp_keyboard_shortcuts_inhibit_manager_v1 *>(wl_registry_bind(registry, name, &zwp_keyboard_shortcuts_inhibit_manager_v1_interface, 1));
++    } else if (strcmp(interface, zwp_text_input_manager_v3_interface.name) == 0) {
++        display->m_textInputManager = reinterpret_cast<zwp_text_input_manager_v3 *>(wl_registry_bind(registry, name, &zwp_text_input_manager_v3_interface, 1));
+     } else if (strcmp(interface, wl_output_interface.name) == 0) {
+-        auto output = new KWayland::Client::Output(display);
+-        // v3: KWayland::Client::Output sends wl_output.release (since 3) when it is
+-        // destroyed; on a v2 object that is a protocol error that drops the connection.
+-        // KWayland handles no v4 events (name/description).
+-        output->setup(static_cast<wl_output *>(wl_registry_bind(registry, name, &wl_output_interface, std::min(version, 3u))));
++        // v3 at most: release on destruction exists from v3; name/description (v4) are not needed.
++        const uint32_t bound = std::min(version, 3u);
++        auto output = new HostOutput(static_cast<wl_output *>(wl_registry_bind(registry, name, &wl_output_interface, bound)), bound, display);
+         display->m_hostOutputs.insert(name, output);
+-        QObject::connect(output, &KWayland::Client::Output::changed, display, [display, output]() {
++        QObject::connect(output, &HostOutput::changed, display, [display, output]() {
+             Q_EMIT display->hostOutputChanged(output);
+         });
+     }
+@@ -492,17 +498,112 @@ void WaylandDisplay::registry_global(void *data, wl_registry *registry, uint32_t
+ void WaylandDisplay::registry_global_remove(void *data, wl_registry *registry, uint32_t name)
+ {
+     WaylandDisplay *display = static_cast<WaylandDisplay *>(data);
+-    if (KWayland::Client::Output *output = display->m_hostOutputs.take(name)) {
++    if (HostOutput *output = display->m_hostOutputs.take(name)) {
+         Q_EMIT display->hostOutputRemoved(output);
+         output->deleteLater();
+     }
+ }
+ 
+-QList<KWayland::Client::Output *> WaylandDisplay::hostOutputs() const
++zwp_text_input_manager_v3 *WaylandDisplay::textInputManager() const
++{
++    return m_textInputManager;
++}
++
++QList<HostOutput *> WaylandDisplay::hostOutputs() const
+ {
+     return m_hostOutputs.values();
+ }
+ 
++HostOutput::HostOutput(wl_output *output, uint32_t version, QObject *parent)
++    : QObject(parent)
++    , m_output(output)
++    , m_version(version)
++{
++    static const wl_output_listener listener{
++        .geometry = &HostOutput::handleGeometry,
++        .mode = &HostOutput::handleMode,
++        .done = &HostOutput::handleDone,
++        .scale = &HostOutput::handleScale,
++        .name = &HostOutput::handleName,
++        .description = &HostOutput::handleDescription,
++    };
++    wl_output_add_listener(m_output, &listener, this);
++}
++
++HostOutput::~HostOutput()
++{
++    if (m_version >= WL_OUTPUT_RELEASE_SINCE_VERSION) {
++        wl_output_release(m_output);
++    } else {
++        wl_output_destroy(m_output);
++    }
++}
++
++wl_output *HostOutput::output() const
++{
++    return m_output;
++}
++
++QString HostOutput::manufacturer() const
++{
++    return m_manufacturer;
++}
++
++QString HostOutput::model() const
++{
++    return m_model;
++}
++
++QSize HostOutput::physicalSize() const
++{
++    return m_physicalSize;
++}
++
++QSize HostOutput::pixelSize() const
++{
++    return m_pixelSize;
++}
++
++int HostOutput::refreshRate() const
++{
++    return m_refreshRate;
++}
++
++void HostOutput::handleGeometry(void *data, wl_output *, int32_t, int32_t, int32_t physicalWidth, int32_t physicalHeight,
++                                int32_t, const char *make, const char *model, int32_t)
++{
++    auto self = static_cast<HostOutput *>(data);
++    self->m_physicalSize = QSize(physicalWidth, physicalHeight);
++    self->m_manufacturer = QString::fromUtf8(make);
++    self->m_model = QString::fromUtf8(model);
++}
++
++void HostOutput::handleMode(void *data, wl_output *, uint32_t flags, int32_t width, int32_t height, int32_t refresh)
++{
++    if (flags & WL_OUTPUT_MODE_CURRENT) {
++        auto self = static_cast<HostOutput *>(data);
++        self->m_pixelSize = QSize(width, height);
++        self->m_refreshRate = refresh;
++    }
++}
++
++void HostOutput::handleDone(void *data, wl_output *)
++{
++    Q_EMIT static_cast<HostOutput *>(data)->changed();
++}
++
++void HostOutput::handleScale(void *, wl_output *, int32_t)
++{
++}
++
++void HostOutput::handleName(void *, wl_output *, const char *)
++{
++}
++
++void HostOutput::handleDescription(void *, wl_output *, const char *)
++{
++}
++
+ }
+ }
+ 
+diff --git a/src/backends/wayland/wayland_display.h b/src/backends/wayland/wayland_display.h
+index 96cccea..32b468e 100644
+--- a/src/backends/wayland/wayland_display.h
++++ b/src/backends/wayland/wayland_display.h
+@@ -8,6 +8,8 @@
+ 
+ #include <QHash>
+ #include <QObject>
++#include <QSize>
++#include <QString>
+ 
+ #include <memory>
+ 
+@@ -22,13 +24,14 @@ struct wp_single_pixel_buffer_manager_v1;
+ struct xdg_toplevel_icon_manager_v1;
+ struct zwp_keyboard_shortcuts_inhibit_manager_v1;
+ struct zwp_linux_explicit_synchronization_v1;
++struct wl_output;
++struct zwp_text_input_manager_v3;
+ 
+ namespace KWayland
+ {
+ namespace Client
+ {
+ class Compositor;
+-class Output;
+ class PointerConstraints;
+ class PointerGestures;
+ class RelativePointerManager;
+@@ -54,6 +57,51 @@ class WaylandEventThread;
+ class WaylandLinuxDmabufFeedbackV1;
+ class ColorManager;
+ 
++
++/**
++ * A wl_output of the host compositor (docs/58): identity and current mode.
++ * Read from the raw protocol instead of KWayland::Client::Output, whose
++ * addMode() keeps an iterator across QList::erase and crashes when the host
++ * announces a mode again (every refresh or resolution change of the phone).
++ */
++class HostOutput : public QObject
++{
++    Q_OBJECT
++
++public:
++    HostOutput(wl_output *output, uint32_t version, QObject *parent);
++    ~HostOutput() override;
++
++    wl_output *output() const;
++    QString manufacturer() const;
++    QString model() const;
++    QSize physicalSize() const;
++    QSize pixelSize() const;
++    /// mHz
++    int refreshRate() const;
++
++Q_SIGNALS:
++    /// A complete set of properties arrived (wl_output.done).
++    void changed();
++
++private:
++    static void handleGeometry(void *data, wl_output *output, int32_t x, int32_t y, int32_t physicalWidth, int32_t physicalHeight,
++                               int32_t subpixel, const char *make, const char *model, int32_t transform);
++    static void handleMode(void *data, wl_output *output, uint32_t flags, int32_t width, int32_t height, int32_t refresh);
++    static void handleDone(void *data, wl_output *output);
++    static void handleScale(void *data, wl_output *output, int32_t factor);
++    static void handleName(void *data, wl_output *output, const char *name);
++    static void handleDescription(void *data, wl_output *output, const char *description);
++
++    wl_output *m_output;
++    uint32_t m_version;
++    QString m_manufacturer;
++    QString m_model;
++    QSize m_physicalSize;
++    QSize m_pixelSize;
++    int m_refreshRate = 0;
++};
++
+ class WaylandDisplay : public QObject
+ {
+     Q_OBJECT
+@@ -84,15 +132,17 @@ public:
+     xdg_toplevel_icon_manager_v1 *toplevelIconManager() const;
+     zwp_keyboard_shortcuts_inhibit_manager_v1 *keyboardShortcutsInhibitManager() const;
+     zwp_linux_explicit_synchronization_v1 *explicitSynchronization() const;
++    /// Host text input: text committed by the Android keyboard (docs/58).
++    zwp_text_input_manager_v3 *textInputManager() const;
+     /// wl_output globals of the host compositor (the Android host adds one per cast display).
+-    QList<KWayland::Client::Output *> hostOutputs() const;
++    QList<HostOutput *> hostOutputs() const;
+ 
+ public Q_SLOTS:
+     void flush();
+ 
+ Q_SIGNALS:
+-    void hostOutputChanged(KWayland::Client::Output *output);
+-    void hostOutputRemoved(KWayland::Client::Output *output);
++    void hostOutputChanged(HostOutput *output);
++    void hostOutputRemoved(HostOutput *output);
+ 
+ private:
+     static void registry_global(void *data, wl_registry *registry, uint32_t name, const char *interface, uint32_t version);
+@@ -108,6 +158,7 @@ private:
+     wp_single_pixel_buffer_manager_v1 *m_singlePixelManager = nullptr;
+     xdg_toplevel_icon_manager_v1 *m_toplevelIconManager = nullptr;
+     zwp_linux_explicit_synchronization_v1 *m_explicitSynchronization = nullptr;
++    zwp_text_input_manager_v3 *m_textInputManager = nullptr;
+     zwp_keyboard_shortcuts_inhibit_manager_v1 *m_keyboardShortcutsInhibitManager = nullptr;
+     std::unique_ptr<ColorManager> m_colorManager;
+     std::unique_ptr<WaylandEventThread> m_eventThread;
+@@ -120,7 +171,7 @@ private:
+     std::unique_ptr<KWayland::Client::Seat> m_seat;
+     std::unique_ptr<KWayland::Client::XdgDecorationManager> m_xdgDecorationManager;
+     std::unique_ptr<KWayland::Client::XdgShell> m_xdgShell;
+-    QHash<uint32_t, KWayland::Client::Output *> m_hostOutputs;
++    QHash<uint32_t, HostOutput *> m_hostOutputs;
+ };
+ 
+ }
+diff --git a/src/backends/wayland/wayland_egl_backend.cpp b/src/backends/wayland/wayland_egl_backend.cpp
+index 6c4f32d..6b98407 100644
+--- a/src/backends/wayland/wayland_egl_backend.cpp
++++ b/src/backends/wayland/wayland_egl_backend.cpp
+@@ -309,7 +309,11 @@ void WaylandEglBackend::createOutputLayers(BackendOutput *output)
+         layer->subSurface()->placeAbove(static_cast<WaylandEglLayer *>(layers.back().get())->surface());
+         layers.push_back(std::move(layer));
+     }
+-    layers.push_back(std::make_unique<WaylandEglCursorLayer>(waylandOutput, this));
++    // The host shows a cast output as one buffer on the TV and draws no cursor
++    // there; without a cursor layer KWin renders the cursor into the frame.
++    if (!waylandOutput->isCast()) {
++        layers.push_back(std::make_unique<WaylandEglCursorLayer>(waylandOutput, this));
++    }
+     waylandOutput->setOutputLayers(std::move(layers));
+ }
+ 
+diff --git a/src/backends/wayland/wayland_output.cpp b/src/backends/wayland/wayland_output.cpp
+index 3c8de4b..212d20a 100644
+--- a/src/backends/wayland/wayland_output.cpp
++++ b/src/backends/wayland/wayland_output.cpp
+@@ -7,7 +7,6 @@
+     SPDX-License-Identifier: GPL-2.0-or-later
+ */
+ #include "wayland_output.h"
+-#include <KWayland/Client/output.h>
+ #include "android-display-client.h"
+ #include "color_manager.h"
+ #include "compositor.h"
+@@ -33,6 +32,7 @@
+ #include "wayland-single-pixel-buffer-v1-client-protocol.h"
+ #include "wayland-linux-explicit-synchronization-unstable-v1-client-protocol.h"
+ #include "wayland-tearing-control-v1-client-protocol.h"
++#include "wayland-xdg-shell-client-protocol.h"
+ #include "wayland-xdg-toplevel-icon-v1-client-protocol.h"
+ #include "workspace.h"
+ 
+@@ -121,7 +121,7 @@ const wp_fractional_scale_v1_listener WaylandOutput::s_fractionalScaleListener{
+     .preferred_scale = &WaylandOutput::handleFractionalScaleChanged,
+ };
+ 
+-WaylandOutput::WaylandOutput(const QString &name, WaylandBackend *backend, KWayland::Client::Output *hostOutput)
++WaylandOutput::WaylandOutput(const QString &name, WaylandBackend *backend, HostOutput *hostOutput)
+     : BackendOutput()
+     , m_renderLoop(std::make_unique<RenderLoop>(this))
+     , m_surface(backend->display()->compositor()->createSurface())
+@@ -523,7 +523,11 @@ void WaylandOutput::init(const QSize &pixelSize, qreal scale, bool fullscreen)
+     setState(initialState);
+ 
+     // A cast output is shown fullscreen on its own host output (docs/58).
+-    m_xdgShellSurface->setFullscreen(fullscreen, m_hostOutput);
++    if (fullscreen && m_hostOutput) {
++        xdg_toplevel_set_fullscreen(*m_xdgShellSurface, m_hostOutput->output());
++    } else {
++        m_xdgShellSurface->setFullscreen(fullscreen);
++    }
+     m_surface->commit(KWayland::Client::Surface::CommitFlag::None);
+ }
+ 
+diff --git a/src/backends/wayland/wayland_output.h b/src/backends/wayland/wayland_output.h
+index dccdfe6..d1e8460 100644
+--- a/src/backends/wayland/wayland_output.h
++++ b/src/backends/wayland/wayland_output.h
+@@ -51,6 +51,7 @@ namespace Wayland
+ {
+ class WaylandBackend;
+ class ColorSurfaceFeedback;
++class HostOutput;
+ 
+ class WaylandCursor
+ {
+@@ -80,7 +81,7 @@ class WaylandOutput : public BackendOutput
+ {
+     Q_OBJECT
+ public:
+-    WaylandOutput(const QString &name, WaylandBackend *backend, KWayland::Client::Output *hostOutput = nullptr);
++    WaylandOutput(const QString &name, WaylandBackend *backend, HostOutput *hostOutput = nullptr);
+     ~WaylandOutput() override;
+ 
+     RenderLoop *renderLoop() const override;
+@@ -134,7 +135,7 @@ private:
+     std::unique_ptr<WaylandCursor> m_cursor;
+     bool m_hasPointerLock = false;
+     bool m_ready = false;
+-    KWayland::Client::Output *m_hostOutput = nullptr;
++    HostOutput *m_hostOutput = nullptr;
+     /// The phone output of the Android host: phone modes, size and display settings.
+     bool androidPrimary() const;
+     bool m_mapped = false;
+diff --git a/src/backends/wayland/wayland_qpainter_backend.cpp b/src/backends/wayland/wayland_qpainter_backend.cpp
+index b433dad..2e539ae 100644
+--- a/src/backends/wayland/wayland_qpainter_backend.cpp
++++ b/src/backends/wayland/wayland_qpainter_backend.cpp
+@@ -170,7 +170,9 @@ void WaylandQPainterBackend::createOutput(BackendOutput *output)
+     const auto waylandOutput = static_cast<WaylandOutput *>(output);
+     std::vector<std::unique_ptr<OutputLayer>> layers;
+     layers.push_back(std::make_unique<WaylandQPainterPrimaryLayer>(waylandOutput, this));
+-    layers.push_back(std::make_unique<WaylandQPainterCursorLayer>(waylandOutput, this));
++    if (!waylandOutput->isCast()) {
++        layers.push_back(std::make_unique<WaylandQPainterCursorLayer>(waylandOutput, this));
++    }
+     waylandOutput->setOutputLayers(std::move(layers));
+ }
+ 
+diff --git a/src/inputmethod.cpp b/src/inputmethod.cpp
+index 4ce5459..bc282bf 100644
+--- a/src/inputmethod.cpp
++++ b/src/inputmethod.cpp
+@@ -9,6 +9,7 @@
+ #include "inputmethod.h"
+ 
+ #include "config-kwin.h"
++#include "core/output.h"
+ 
+ #include "effect/effecthandler.h"
+ #include "input.h"
+@@ -122,7 +123,7 @@ void InputMethod::init()
+     connect(waylandServer()->seat(), &SeatInterface::focusedTextInputSurfaceChanged, this, &InputMethod::handleFocusedSurfaceChanged);
+ 
+     TextInputV1Interface *textInputV1 = waylandServer()->seat()->textInputV1();
+-    connect(textInputV1, &TextInputV1Interface::requestShowInputPanel, this, &InputMethod::show);
++    connect(textInputV1, &TextInputV1Interface::requestShowInputPanel, this, &InputMethod::showForTextInput);
+     connect(textInputV1, &TextInputV1Interface::requestHideInputPanel, this, &InputMethod::hide);
+     connect(textInputV1, &TextInputV1Interface::surroundingTextChanged, this, &InputMethod::surroundingTextChanged);
+     connect(textInputV1, &TextInputV1Interface::contentTypeChanged, this, &InputMethod::contentTypeChanged);
+@@ -133,7 +134,7 @@ void InputMethod::init()
+     connect(textInputV1, &TextInputV1Interface::cursorRectangleChanged, this, &InputMethod::cursorRectangleChanged);
+ 
+     TextInputV2Interface *textInputV2 = waylandServer()->seat()->textInputV2();
+-    connect(textInputV2, &TextInputV2Interface::requestShowInputPanel, this, &InputMethod::show);
++    connect(textInputV2, &TextInputV2Interface::requestShowInputPanel, this, &InputMethod::showForTextInput);
+     connect(textInputV2, &TextInputV2Interface::requestHideInputPanel, this, &InputMethod::hide);
+     connect(textInputV2, &TextInputV2Interface::surroundingTextChanged, this, &InputMethod::surroundingTextChanged);
+     connect(textInputV2, &TextInputV2Interface::contentTypeChanged, this, &InputMethod::contentTypeChanged);
+@@ -196,10 +197,33 @@ void InputMethod::hide()
+ bool InputMethod::shouldShowOnActive() const
+ {
+     static bool alwaysShowIm = qEnvironmentVariableIntValue("KWIN_IM_SHOW_ALWAYS") != 0;
+-    return alwaysShowIm || input()->touch() == input()->lastInputHandler()
++    return (alwaysShowIm && !textInputOnExternalOutput()) || input()->touch() == input()->lastInputHandler()
+         || input()->tablet() == input()->lastInputHandler();
+ }
+ 
++bool InputMethod::textInputOnExternalOutput() const
++{
++    // docs/58: on an external output such as a Miracast TV the phone is its touchpad
++    // and keyboard; KWIN_IM_SHOW_ALWAYS (for the phone's touch screen) does not apply.
++    const Window *window = nullptr;
++    if (auto surface = waylandServer()->seat()->focusedTextInputSurface()) {
++        window = waylandServer()->findWindow(surface);
++    }
++    const LogicalOutput *output = window ? window->output() : workspace()->activeOutput();
++    return output && !output->isInternal();
++}
++
++void InputMethod::showForTextInput()
++{
++    // The panel's permission to show is sticky once granted, so a text field on the
++    // external output must not request it unless the user is touching (docs/58).
++    if (!shouldShowOnActive()) {
++        hide();
++        return;
++    }
++    show();
++}
++
+ void InputMethod::refreshActive()
+ {
+     auto seat = waylandServer()->seat();
+@@ -526,7 +550,7 @@ void InputMethod::textInputInterfaceV3EnabledChanged()
+     auto t3 = waylandServer()->seat()->textInputV3();
+     refreshActive();
+     if (t3->isEnabled()) {
+-        show();
++        showForTextInput();
+     } else {
+         // reset value of preedit when textinput is disabled
+         resetPendingPreedit();
+@@ -615,6 +639,11 @@ void InputMethod::keysymReceived(quint32 serial, quint32 time, quint32 sym, Keyb
+     }
+ }
+ 
++void InputMethod::commitHostText(const QString &text)
++{
++    commitString(0, text);
++}
++
+ void InputMethod::commitString(qint32 serial, const QString &text)
+ {
+     if (auto t1 = waylandServer()->seat()->textInputV1(); t1 && t1->isEnabled()) {
+@@ -1102,7 +1131,7 @@ void InputMethod::forceActivate()
+ void InputMethod::textInputInterfaceV3EnableRequested()
+ {
+     refreshActive();
+-    show();
++    showForTextInput();
+ }
+ }
+ 
+diff --git a/src/inputmethod.h b/src/inputmethod.h
+index f0df33d..f4480ee 100644
+--- a/src/inputmethod.h
++++ b/src/inputmethod.h
+@@ -70,6 +70,8 @@ public:
+     void forceActivate();
+ 
+     void commitPendingText();
++    /// Text from the host compositor's keyboard (nested Wayland backend, docs/58).
++    void commitHostText(const QString &text);
+ 
+     // for use by the QPA
+     InternalInputMethodContext *internalContext() const
+@@ -115,6 +117,8 @@ private:
+     void updateInputPanelState();
+     void adoptInputMethodContext();
+     void commitString(qint32 serial, const QString &text);
++    bool textInputOnExternalOutput() const;
++    void showForTextInput();
+     void keysymReceived(quint32 serial, quint32 time, quint32 sym, KeyboardKeyState state, quint32 modifiers);
+     void deleteSurroundingText(int32_t index, uint32_t length);
+     void setCursorPosition(qint32 index, qint32 anchor);

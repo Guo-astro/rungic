@@ -1,0 +1,71 @@
+From: clawd20130 <clawd20130@gmail.com>
+Date: Fri, 25 Sep 2026 01:22:16 +0900
+Subject: KWin moto16: a minimum size above the maximum no longer disconnects
+ the client
+
+WeChat 4.1 (static Qt 6) sizes its main window's maximum from Qt's primary
+screen, the first wl_output KWin announces (the 360 px wide phone), while
+its minimum width is larger; the invalid_size protocol error killed it right
+after logging in, also when the window was on the TV. KWin now logs the
+conflict and drops the conflicting maximum instead. Verified with a
+wayland-client probe committing min 700x400 / max 360x800.
+
+Forwarded: no
+Last-Update: 2026-09-26
+X-Rungic-Status: Pending
+X-Rungic-Tests: L1:xdgshellwindow_test (to write); probe:plasma/diagnostics/wayland-probes/minmax-probe.c
+X-Rungic-Docs: docs/42
+Origin: vendor, commit:f47ee505
+---
+ src/wayland/xdgshell.cpp | 22 +++++++++++++++-------
+ 1 file changed, 15 insertions(+), 7 deletions(-)
+
+diff --git a/src/wayland/xdgshell.cpp b/src/wayland/xdgshell.cpp
+index f1ae59b..014dfb7 100644
+--- a/src/wayland/xdgshell.cpp
++++ b/src/wayland/xdgshell.cpp
+@@ -11,6 +11,7 @@
+ #include "output.h"
+ #include "seat.h"
+ #include "utils/gravity.h"
++#include "utils/common.h"
+ #include "utils/resource.h"
+ 
+ #include <QTimer>
+@@ -349,22 +350,29 @@ void XdgToplevelInterfacePrivate::apply(XdgToplevelCommit *commit)
+     xdgSurfacePrivate->apply(commit);
+ 
+     const auto minSize = commit->minimumSize.value_or(minimumSize);
+-    const auto maxSize = commit->maximumSize.value_or(maximumSize);
++    auto maxSize = commit->maximumSize.value_or(maximumSize);
++    // The protocol makes a minimum above the maximum an invalid_size error, which
++    // disconnects the client. Some clients derive the maximum from the size of the
++    // screen they assume and keep a larger minimum for their content (WeChat 4.1's
++    // main window on a 360 px wide phone screen). Keep them alive: drop the
++    // conflicting maximum, the minimum is what the content needs.
+     if ((minSize.width() > 0) && (maxSize.width() > 0) && (minSize.width() > maxSize.width())) {
+-        wl_resource_post_error(resource()->handle, error_invalid_size, "minimum width can't be bigger than the maximum width");
+-        return;
++        qCWarning(KWIN_CORE) << "xdg_toplevel minimum size" << minSize << "exceeds maximum size" << maxSize
++                             << "(client" << wl_resource_get_client(resource()->handle) << "); ignoring the maximum width";
++        maxSize.setWidth(0);
+     }
+     if ((minSize.height() > 0) && (maxSize.height() > 0) && (minSize.height() > maxSize.height())) {
+-        wl_resource_post_error(resource()->handle, error_invalid_size, "minimum height can't be bigger than the maximum height");
+-        return;
++        qCWarning(KWIN_CORE) << "xdg_toplevel minimum size" << minSize << "exceeds maximum size" << maxSize
++                             << "(client" << wl_resource_get_client(resource()->handle) << "); ignoring the maximum height";
++        maxSize.setHeight(0);
+     }
+ 
+     if (commit->minimumSize && commit->minimumSize != minimumSize) {
+         minimumSize = commit->minimumSize.value();
+         Q_EMIT q->minimumSizeChanged(minimumSize);
+     }
+-    if (commit->maximumSize && commit->maximumSize != maximumSize) {
+-        maximumSize = commit->maximumSize.value();
++    if (maxSize != maximumSize) {
++        maximumSize = maxSize;
+         Q_EMIT q->maximumSizeChanged(maximumSize);
+     }
+ 

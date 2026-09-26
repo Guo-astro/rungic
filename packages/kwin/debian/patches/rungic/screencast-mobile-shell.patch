@@ -1,0 +1,37 @@
+From: kevinzhow <kevinzhow@local>
+Date: Wed, 23 Sep 2026 21:00:53 +0800
+Subject: Screencast: do not exclude the Plasma Mobile shell when it is the
+ recorder
+
+Plasma Mobile records from its own shell process; excluding the recorder's PID also removed the
+wallpaper, launcher and panels (a black home screen). Per-window excludeFromCapture still applies.
+Currently gated on MOTO_KWIN_FLAT_OUTPUT; an upstream version would key on the shell, not the host.
+
+Forwarded: no
+Last-Update: 2026-09-26
+X-Rungic-Status: Pending
+X-Rungic-Tests: L3:recording.quicksetting
+X-Rungic-Docs: docs/46
+---
+ src/plugins/screencast/screencastmanager.cpp | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/src/plugins/screencast/screencastmanager.cpp b/src/plugins/screencast/screencastmanager.cpp
+index d30c913..a4b6101 100644
+--- a/src/plugins/screencast/screencastmanager.cpp
++++ b/src/plugins/screencast/screencastmanager.cpp
+@@ -103,7 +103,13 @@ void ScreencastManager::streamWaylandOutput(ScreencastStreamV1Interface *wayland
+ 
+ static std::optional<pid_t> getPid(ScreencastStreamV1Interface *waylandStream)
+ {
+-    if (waylandStream->connection()->executablePath().contains("xdg-desktop-portal-kde")) {
++    const auto executable = waylandStream->connection()->executablePath();
++    // Plasma Mobile records from its own shell process. Excluding that PID
++    // also removes the wallpaper, launcher and panels, yielding a black home
++    // screen. Keep explicit per-window excludeFromCapture filtering intact.
++    const bool mobileShellRecorder = qEnvironmentVariableIsSet("MOTO_KWIN_FLAT_OUTPUT")
++        && executable == QStringLiteral("/usr/bin/plasmashell");
++    if (mobileShellRecorder || executable.contains("xdg-desktop-portal-kde")) {
+         // HACK to avoid the portal's windows being hidden
+         return std::nullopt;
+     }

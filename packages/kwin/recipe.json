@@ -1,0 +1,15 @@
+{
+ "comment": "Pinned upstream of the kwin source package (docs/71). The Ubuntu source is fetched and checked against these hashes; packages/kwin/debian replaces its debian/ (Ubuntu's packaging plus our patches under debian/patches/rungic).",
+ "kind": "ubuntu",
+ "source": "kwin",
+ "version": "4:6.6.6-0ubuntu0.1",
+ "series": "resolute-updates",
+ "git_ubuntu_tag": "import/4%6.6.6-0ubuntu0.1",
+ "upstream": "https://invent.kde.org/plasma/kwin",
+ "files": {
+  "kwin_6.6.6-0ubuntu0.1.dsc": "4fda1d85b25c5f1c09a5c292065050ea038946e2f60f2b997e70e3d3c8e3eea0",
+  "kwin_6.6.6.orig.tar.xz": "76314bb5053943003c089bd8997b159c70a8bc35ba87dc3a10885ade8f561953",
+  "kwin_6.6.6-0ubuntu0.1.debian.tar.xz": "f8e51babdd9fd39760cb207877f0f9f8f2efec09202aeb926498d981e4c7263c"
+ },
+ "fetch": "https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/kwin/4:6.6.6-0ubuntu0.1/{file}"
+}

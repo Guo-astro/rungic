@@ -1,0 +1,30 @@
+From: clawd20130 <clawd20130@gmail.com>
+Date: Thu, 24 Sep 2026 15:16:45 +0900
+Subject: KWin moto13: outputs expose 'internal' to scripts
+
+Lets window rules differ between the device's own panel and external displays.
+
+Forwarded: no
+Last-Update: 2026-09-26
+X-Rungic-Status: Pending
+X-Rungic-Tests: none (gap)
+X-Rungic-Docs: docs/58
+Origin: vendor, commit:f4479e3e
+---
+ src/core/output.h | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/src/core/output.h b/src/core/output.h
+index f833f06..08e87d5 100644
+--- a/src/core/output.h
++++ b/src/core/output.h
+@@ -154,6 +154,9 @@ class KWIN_EXPORT LogicalOutput : public QObject
+     Q_PROPERTY(QString manufacturer READ manufacturer CONSTANT)
+     Q_PROPERTY(QString model READ model CONSTANT)
+     Q_PROPERTY(QString serialNumber READ serialNumber CONSTANT)
++    /// The device's own panel (e.g. a phone or laptop screen), as opposed to an
++    /// external display; lets scripts keep form-factor rules per output.
++    Q_PROPERTY(bool internal READ isInternal CONSTANT)
+ 
+ public:
+     explicit LogicalOutput(BackendOutput *backendOutput);

@@ -1,0 +1,147 @@
+#!/usr/bin/env python3
+"""One-time conversion of a vendored component's history into a patch queue (docs/71).
+
+Reads a plan (tools/pq-history/<package>.json) naming, in order, the steps that turned the pristine
+upstream tree (the vendor import commit) into today's vendor/<component>: historical patch files
+and repository commits. Builds .work/pq/<package> as git-buildpackage expects (the Ubuntu source
+with patches unapplied on the packaging branch, `gbp pq import` for the distribution's patches),
+adds one patch-queue commit per step with the plan's DEP-3 and X-Rungic-* trailers, and checks
+that the result equals the vendored tree. `tools/pq.py export` then writes debian/patches.
+
+Symlinks into the repository (shared headers) are replaced by the file they point to at that
+commit: a patch cannot carry a symlink.
+
+  pq_import_history.py kwin            build .work/pq/kwin and verify against HEAD:vendor/kwin
+"""
+import argparse
+import json
+import shutil
+import subprocess
+import sys
+import tarfile
+import io
+from pathlib import Path
+
+WORKSPACE = Path(__file__).resolve().parent.parent
+IMAGE = 'rungic-pq:26.04'
+
+
+def git(*args, cwd=WORKSPACE, input=None, check=True):
+    return subprocess.run(['git', *args], cwd=cwd, input=input, capture_output=True, check=check).stdout
+
+
+def tool(work, *argv):
+    """Run a packaging tool from the pinned toolchain image (tools/pq/Dockerfile) in `work`."""
+    result = subprocess.run(['docker', 'run', '--rm', '-u', f'{uid()}:{gid()}', '-e', 'HOME=/tmp',
+                             '-v', f'{work}:/w', '-w', '/w', IMAGE, *argv], capture_output=True, text=True)
+    if result.returncode:
+        raise SystemExit(f'{argv[0]} failed:\n{result.stdout}\n{result.stderr}')
+    return result.stdout
+
+
+def uid():
+    import os
+    return os.getuid()
+
+
+def gid():
+    import os
+    return os.getgid()
+
+
+def tree_at(commit, path, dest):
+    """Extract commit:path into dest, with symlinks into the repository replaced by their target."""
+    data = git('archive', commit, path)
+    with tarfile.open(fileobj=io.BytesIO(data)) as tar:
+        tar.extractall(dest, filter='tar')
+    root = Path(dest) / path
+    for link in [p for p in root.rglob('*') if p.is_symlink()]:
+        target = (Path(path) / link.relative_to(root)).parent / link.readlink()
+        resolved = Path(subprocess.run(['realpath', '-m', '--relative-to', '.', str(target)], cwd=WORKSPACE,
+                                       capture_output=True, text=True).stdout.strip())
+        content = git('show', f'{commit}:{resolved}')
+        link.unlink()
+        link.write_bytes(content)
+    return root
+
+
+def trailers(step):
+    lines = [f'{key}: {value}' for key, value in step.get('dep3', {}).items()]
+    lines.append('Gbp-Pq: Topic rungic')
+    lines.append(f"Gbp-Pq: Name {step['name']}.patch")
+    return '\n'.join(lines)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument('package')
+    args = parser.parse_args()
+    plan = json.loads((WORKSPACE / 'tools/pq-history' / f'{args.package}.json').read_text())
+    component = plan['vendor']                       # e.g. vendor/kwin
+    sources = WORKSPACE / '.work/sources' / args.package
+    work = WORKSPACE / '.work/pq' / args.package
+    scratch = WORKSPACE / '.work/pq-history' / args.package
+    for d in (work, scratch):
+        shutil.rmtree(d, ignore_errors=True)
+        d.mkdir(parents=True)
+
+    # Packaging branch: the Ubuntu source as git-ubuntu imports it (patches unapplied).
+    subprocess.run(['docker', 'run', '--rm', '-u', f'{uid()}:{gid()}', '-v', f'{sources}:/src:ro',
+                    '-v', f'{work.parent}:/w', '-w', '/w', IMAGE, 'dpkg-source', '-q', '--skip-patches', '-x',
+                    f"/src/{plan['dsc']}", f'{args.package}.x'], capture_output=True, check=True)
+    shutil.rmtree(work)
+    (work.parent / f'{args.package}.x').rename(work)
+    git('init', '-q', '-b', 'rungic', cwd=work)
+    git('add', '-A', cwd=work)
+    git('-c', 'user.name=Rungic', '-c', 'user.email=noreply@rungic.invalid', 'commit', '-q', '-m',
+        f"{args.package} {plan['version']} (Ubuntu source, patches unapplied)", cwd=work)
+    tool(work, 'gbp', 'pq', 'import')
+
+    # One commit per step, each the difference its step made to the vendored tree: every state is
+    # committed in a scratch repository so the diffs have plain relative paths.
+    hist = scratch / 'hist'
+    hist.mkdir()
+    git('init', '-q', cwd=hist)
+
+    def record(tree, label):
+        for entry in hist.iterdir():
+            if entry.name != '.git':
+                shutil.rmtree(entry) if entry.is_dir() and not entry.is_symlink() else entry.unlink()
+        shutil.copytree(tree, hist, symlinks=True, dirs_exist_ok=True)
+        git('add', '-A', cwd=hist)
+        git('-c', 'user.name=h', '-c', 'user.email=h@h', 'commit', '-q', '--allow-empty', '-m', label, cwd=hist)
+
+    previous = tree_at(plan['base'], component, scratch / 'base')
+    record(previous, 'base')
+    for i, step in enumerate(plan['steps']):
+        after = scratch / f'step{i}'
+        if 'patch' in step:
+            shutil.copytree(previous, after, symlinks=True)
+            subprocess.run(['patch', '-s', '-p1', '--no-backup-if-mismatch', '-d', str(after),
+                            '-i', str(WORKSPACE / step['patch'])], check=True)
+            new = after
+        else:
+            new = tree_at(step['commit'], component, after)
+        record(new, step['name'])
+        diff = git('diff', '--binary', 'HEAD~1', 'HEAD', '--', '.', ':!debian', cwd=hist)
+        previous = new
+        if not diff.strip():
+            print(f"{step['name']}: no change outside debian/")
+            continue
+        subprocess.run(['git', 'apply', '--whitespace=nowarn', '-'], cwd=work, input=diff, check=True)
+        git('add', '-A', cwd=work)
+        message = f"{step['subject']}\n\n{step.get('description', '').strip()}\n\n{trailers(step)}\n"
+        git('-c', 'user.name=' + step.get('author_name', 'Rungic'), '-c',
+            'user.email=' + step.get('author_email', 'noreply@rungic.invalid'), 'commit', '-q', '-m', message,
+            '--date', step.get('date', '2026-09-23T00:00:00'), cwd=work)
+
+    # The patch queue applied must be the vendored tree (debian/ is compared separately).
+    final = tree_at('HEAD', component, scratch / 'head') / ''
+    result = subprocess.run(['diff', '-r', '-q', '-x', '.pc', '-x', 'debian', '-x', '.git', str(work), str(final)],
+                            capture_output=True, text=True)
+    print(result.stdout or f'{args.package}: patch queue reproduces HEAD:{component} (debian/ and .pc aside)')
+    return result.returncode
+
+
+if __name__ == '__main__':
+    sys.exit(main())
