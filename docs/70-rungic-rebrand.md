@@ -163,3 +163,15 @@
 6. 启动新APK，验收：桌面、触摸、GPU、音频、相机/麦克风、投屏、OCR、Android侧残留检查；重启手机后再验收一次。
 
 主屏上的APK图标需要用户重新放置。ROM中的Magisk引导脚本在仓库中改名为`tools/rungic-magisk-bootstrap.*`，随下次刷ROM生效。
+
+### C1部署与验收（2026-09-27）
+
+`tools/rungic_cutover.py up`一次完成（记录`.work/cutover/20260927-043656-up`）：安装APK 2.0约3分钟（无线adb），停止到桌面就绪共约80秒，新APK启动后9秒桌面就绪。新APK UID为10350，悬浮窗、相机、麦克风与Magisk授权都已生效，没有弹出授权提示；旧APK已停用，数据与授权保留供`down`使用。镜像标签为`rungic_image`，dm设备为`rungic-root`；容器同时挂载`/var/lib/rungic-*`和旧名；`moto-gpu-alloc`链接可用。
+
+在容器发布仍为`20260927.5`的情况下跑完整验收：18项中17项通过，Android侧残留检查通过（剩下的都属于Docker、D阶段或ROM）。`rungic-lxc status`（alpine）、`rungic-cast status`和Termux中的`lxc`快捷方式都可用。
+
+发现并已修正：`pkill`只结束了旧投屏监视进程的读取子进程，父进程阻塞在logcat管道上，没有退出（已手动结束，工具改为先结束其子进程）。
+
+未通过的`recording.quicksetting`：停止录屏时`pulsesrc`（系统声音）的EOS没有返回，收尾12秒超时。切换前`20260926.20`和`20260927.5`上已出现同样的失败（`.5`上重跑一次通过），切换后连续3次失败。单独用`gst-launch-1.0 -e pulsesrc device=android.monitor`测试时EOS正常，问题在录屏管线内部，与改名无关，另行处理。
+
+还未做：重启手机后的验收。手机通过无线调试连接，重启后端口会变化，可能需要用户重新打开无线调试，所以等用户在场时进行。
