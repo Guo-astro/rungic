@@ -351,6 +351,32 @@ def check_units():
     return problems
 
 
+def check_user_overrides():
+    """User settings that silently take the desktop off the GPU. On 2026-09-26 a kdeglobals
+    [QtQuickRendererSettings] SceneGraphBackend=software (writer not found) left the app drawer grid
+    blank while the search field and panels still drew (docs/61)."""
+    home = pwd.getpwuid(DESKTOP_UID).pw_dir
+    problems = []
+    for name in ('kdeglobals', 'plasma-mobile/kdeglobals'):
+        path = os.path.join(home, '.config', name)
+        group = None
+        try:
+            lines = open(path, errors='replace').read().splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            line = line.strip()
+            if line.startswith('['):
+                group = line.split(']')[0][1:]
+            elif group == 'QtQuickRendererSettings' and line.split('=')[0].split('[')[0] == 'SceneGraphBackend':
+                problems.append(f"{path}: [QtQuickRendererSettings] {line}")
+    env = run('sh', '-c', f'cat {home}/.config/environment.d/*.conf 2>/dev/null')
+    for line in env.splitlines():
+        if re.match(r'\s*(QT_QUICK_BACKEND|QSG_RHI_BACKEND|LIBGL_ALWAYS_SOFTWARE)=', line):
+            problems.append(f'{home}/.config/environment.d: {line.strip()}')
+    return problems
+
+
 def check_crash():
     problems = []
     drkonqi = run('dpkg-query', '-W', '-f', '${db:Status-Abbrev}', 'drkonqi').startswith('ii')
@@ -398,6 +424,7 @@ def main():
         'local': local,
         'crash': check_crash(),
         'units': check_units(),
+        'user_overrides': check_user_overrides(),
     }
     drift = {
         'changed_files': len(report['packages']['changed']),
@@ -415,6 +442,7 @@ def main():
         'local_permissions': sum(1 for e in local if e.get('problems')),
         'crash_chain': len(report['crash']),
         'units_not_enabled': len(report['units']),
+        'user_overrides': len(report['user_overrides']),
     }
     development = bool(report['diversions']['project'])
     state = 'drift' if any(drift.values()) else 'development' if development else 'clean'
@@ -457,6 +485,8 @@ def main():
             print(f'owner    {p} (not root)')
         for p in report['crash']:
             print(f'crash    {p}')
+        for p in report['user_overrides']:
+            print(f'override {p}')
         for u in report['units']:
             print(f"unit     {u['unit']} ({u['scope']}, {u['package']}) is {u['state']}")
         for e in local:
