@@ -95,5 +95,61 @@ class AndroidFilesTests(unittest.TestCase):
         self.assertEqual(rungic_release.restore_android(self.record), [])
 
 
+class DeployFailureTests(unittest.TestCase):
+    """A deploy that fails after the snapshot must return to it (2026-09-26: an Android-side
+    source check stopped a deploy halfway, after the install, and left the rootfs there)."""
+
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.root = Path(temp.name)
+        (self.root / 'plasma').mkdir()
+        (self.root / 'plasma/config').write_bytes(b'lxc config')
+        self.info = {'version': 'test', 'packages': {}, 'android': {
+            '/data/adb/x/config': {'source': 'plasma/config', 'sha256': hashlib.sha256(b'lxc config').hexdigest(),
+                                   'mode': '644'}}}
+        self.calls = []
+        stubs = dict(
+            WORKSPACE=self.root, DEPLOY=self.root / 'deploy', HISTORY=self.root / 'history.json',
+            releases=lambda: [self.info], preflight=lambda: ([], []), rootfs_state=lambda: ('image', 'none'),
+            with_container_stopped=self.stopped, device_release=lambda: ('previous', None),
+            installed_versions=lambda: {}, integrity_summary=lambda: {}, ensure_apt_source=lambda: None,
+            sync_repo=lambda: {}, apt_install=lambda info, record: (True, ''), run=lambda *a, **k: None)
+        for name, value in stubs.items():
+            p = patch.object(rungic_release, name, value)
+            p.start()
+            self.addCleanup(p.stop)
+        import rungic_acceptance
+        p = patch.object(rungic_acceptance, 'session_ready', lambda ctx: {'passed': True})
+        p.start()
+        self.addCleanup(p.stop)
+        import sys, types
+        agent = types.SimpleNamespace(snapshot=lambda label, since: {'folder': 'evidence'})
+        p = patch.dict(sys.modules, {'rungic_agent': agent})
+        p.start()
+        self.addCleanup(p.stop)
+
+    def stopped(self, action, before_start=None):
+        self.calls.append(action)
+        if before_start:
+            before_start()
+        return True, action
+
+    def test_changed_android_source_aborts_before_the_snapshot(self):
+        (self.root / 'plasma/config').write_bytes(b'edited since the build')
+        log = rungic_release.deploy('test')
+        self.assertEqual(log['result'], 'aborted')
+        self.assertEqual(self.calls, [])
+
+    def test_an_error_after_the_install_rolls_back(self):
+        def broken(info, record):
+            raise SystemExit('boom')
+        with patch.object(rungic_release, 'sync_android', broken):
+            log = rungic_release.deploy('test', acceptance='none')
+        self.assertEqual(self.calls, ['snapshot', 'rollback'])
+        self.assertEqual(log['result'], 'error, rolled back to the snapshot')
+        self.assertIn('boom', [s for s in log['steps'] if s['step'] == 'error'][0]['reason'])
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -413,6 +413,12 @@ systemd-run --unit={unit} --wait --pipe --collect --quiet -p TimeoutStartSec=360
     return result.returncode == 0, result.stdout[-3000:] + result.stderr[-2000:]
 
 
+def android_source_changes(info):
+    """Android-side sources that differ from the release (a deploy would stop halfway on them)."""
+    return [item['source'] for item in (info.get('android') or {}).values()
+            if hashlib.sha256((WORKSPACE / item['source']).read_bytes()).hexdigest() != item['sha256']]
+
+
 def sync_android(info, record):
     """Android-side files of the release: back up what is there, install what the release names."""
     files = info.get('android') or {}
@@ -546,6 +552,12 @@ def deploy(version=None, restart='auto', acceptance='smoke', record_label=None, 
         log['result'] = 'aborted'
         step('abort', reason='; '.join(fatal))
         return log
+    changed = android_source_changes(info)
+    if changed:
+        log['result'] = 'aborted'
+        step('abort', reason=f'Android-side files changed since release {version} was built: {", ".join(changed)}; '
+             'check out its commit to deploy it')
+        return log
     # 1b snapshot of the whole rootfs (image rootfs, docs/61 §7): a failed release rolls back to it
     mode, state = rootfs_state()
     use_snapshot = snapshot == 'always' or (snapshot == 'auto' and mode == 'image')
@@ -572,73 +584,81 @@ def deploy(version=None, restart='auto', acceptance='smoke', record_label=None, 
     (record / 'before.json').write_text(json.dumps({'release': previous, 'packages': before}, indent=1) + '\n')
     (record / 'integrity-before.json').write_text(json.dumps(integrity_before, indent=1, ensure_ascii=False) + '\n')
     step('record', previous=previous, integrity=(integrity_before or {}).get('summary', {}).get('state'))
-    # 3 sync and install
-    ensure_apt_source()
-    step('sync', **sync_repo())
-    ok, tail = apt_install(info, record)
-    step('install', ok=ok)
-    # New crashes are counted from here: the restart for the snapshot runs the previous release, and
-    # its crashes (collected later) are not this release's (docs/61). A session restart below moves
-    # the start again: the old session's shutdown is not the new release running.
+    passed, error = False, None
     installed_at = time.time()
-    if not ok:
-        log['result'] = 'install-failed'
-        step('abort', reason=tail[-1500:])
-        if use_snapshot:
-            ok, text = with_container_stopped('rollback')
-            step('snapshot-rollback', ok=ok, output=text[-400:])
-            log['result'] = 'install-failed, rolled back to the snapshot' if ok else log['result']
-        return log
-    # The Android side names paths inside the container: it follows a successful install,
-    # so a failed one leaves both sides at the previous release.
-    android = sync_android(info, record)
-    step('android', changed=android)
-    after = installed_versions()
-    (record / 'after.json').write_text(json.dumps({'release': version, 'packages': after}, indent=1) + '\n')
-    # Protection is the release's pin and exact dependencies now; drop the holds they replace.
-    held = run('apt-mark showhold', 'container').stdout.split()
-    released = [n for n in held if n in info['packages']]
-    if released:
-        run('apt-mark unhold ' + ' '.join(released), 'container')
-    step('holds', released=released)
-    # 4 migrations run in maintainer scripts (system) and kded's kconf_update (user, next session).
-    # 5 restart
-    hit, changed = needs_restart(before, after, info.get('session_restart', []))
-    step('changes', changed=changed, restart_for=hit)
-    # The LXC configuration applies only at a container start; other Android-side scripts (the control
-    # script, rootfs-image) take effect on their next use and need no restart.
-    whole = any(path.endswith('/lxc/plasma/config') for path in android)
-    if restart == 'always' or (restart == 'auto' and (hit or whole)):
-        # The LXC configuration (mounts, init) applies only when the container starts.
-        ok, text = restart_container() if whole else restart_session()
-        step('restart', ok=ok, container=whole, output=text[-500:])
+    try:
+        # 3 sync and install
+        ensure_apt_source()
+        step('sync', **sync_repo())
+        ok, tail = apt_install(info, record)
+        step('install', ok=ok)
+        # New crashes are counted from here: the restart for the snapshot runs the previous release, and
+        # its crashes (collected later) are not this release's (docs/61). A session restart below moves
+        # the start again: the old session's shutdown is not the new release running.
         installed_at = time.time()
-    # 6 verify
-    integrity_after = integrity_summary()
-    (record / 'integrity-after.json').write_text(json.dumps(integrity_after, indent=1, ensure_ascii=False) + '\n')
-    summary = (integrity_after or {}).get('summary', {})
-    mismatch = (integrity_after or {}).get('release', {}).get('mismatch', [])
-    step('integrity', state=summary.get('state'), release_mismatch=mismatch)
-    passed = not mismatch
-    if acceptance != 'none':
-        import rungic_acceptance
-        report = rungic_acceptance.run_level(acceptance, release=version, out_dir=record / 'acceptance',
-                                           since=installed_at)
-        step('acceptance', level=acceptance, passed=report['passed'], failed=report['failed_ids'])
-        flaky = []
-        if not report['passed']:
-            # One retry of the failed scenarios: a pass on retry is recorded as flaky, not a failure.
-            spec = rungic_acceptance.load()
-            retry = rungic_acceptance.run_scenarios([s for s in spec['scenarios'] if s['id'] in report['failed_ids']],
-                                                  release=version, out_dir=record / 'acceptance-retry',
-                                                  since=installed_at)
-            flaky = [i for i in report['failed_ids'] if i not in retry['failed_ids']]
-            step('acceptance-retry', passed=retry['passed'], failed=retry['failed_ids'], flaky=flaky)
-            report = {**report, 'passed': retry['passed']}
-        log['flaky'] = flaky
-        passed = passed and report['passed']
+        if not ok:
+            log['result'] = 'install-failed'
+            step('abort', reason=tail[-1500:])
+            if use_snapshot:
+                ok, text = with_container_stopped('rollback')
+                step('snapshot-rollback', ok=ok, output=text[-400:])
+                log['result'] = 'install-failed, rolled back to the snapshot' if ok else log['result']
+            return log
+        # The Android side names paths inside the container: it follows a successful install,
+        # so a failed one leaves both sides at the previous release.
+        android = sync_android(info, record)
+        step('android', changed=android)
+        after = installed_versions()
+        (record / 'after.json').write_text(json.dumps({'release': version, 'packages': after}, indent=1) + '\n')
+        # Protection is the release's pin and exact dependencies now; drop the holds they replace.
+        held = run('apt-mark showhold', 'container').stdout.split()
+        released = [n for n in held if n in info['packages']]
+        if released:
+            run('apt-mark unhold ' + ' '.join(released), 'container')
+        step('holds', released=released)
+        # 4 migrations run in maintainer scripts (system) and kded's kconf_update (user, next session).
+        # 5 restart
+        hit, changed = needs_restart(before, after, info.get('session_restart', []))
+        step('changes', changed=changed, restart_for=hit)
+        # The LXC configuration applies only at a container start; other Android-side scripts (the control
+        # script, rootfs-image) take effect on their next use and need no restart.
+        whole = any(path.endswith('/lxc/plasma/config') for path in android)
+        if restart == 'always' or (restart == 'auto' and (hit or whole)):
+            # The LXC configuration (mounts, init) applies only when the container starts.
+            ok, text = restart_container() if whole else restart_session()
+            step('restart', ok=ok, container=whole, output=text[-500:])
+            installed_at = time.time()
+        # 6 verify
+        integrity_after = integrity_summary()
+        (record / 'integrity-after.json').write_text(json.dumps(integrity_after, indent=1, ensure_ascii=False) + '\n')
+        summary = (integrity_after or {}).get('summary', {})
+        mismatch = (integrity_after or {}).get('release', {}).get('mismatch', [])
+        step('integrity', state=summary.get('state'), release_mismatch=mismatch)
+        passed = not mismatch
+        if acceptance != 'none':
+            import rungic_acceptance
+            report = rungic_acceptance.run_level(acceptance, release=version, out_dir=record / 'acceptance',
+                                               since=installed_at)
+            step('acceptance', level=acceptance, passed=report['passed'], failed=report['failed_ids'])
+            flaky = []
+            if not report['passed']:
+                # One retry of the failed scenarios: a pass on retry is recorded as flaky, not a failure.
+                spec = rungic_acceptance.load()
+                retry = rungic_acceptance.run_scenarios([s for s in spec['scenarios'] if s['id'] in report['failed_ids']],
+                                                      release=version, out_dir=record / 'acceptance-retry',
+                                                      since=installed_at)
+                flaky = [i for i in report['failed_ids'] if i not in retry['failed_ids']]
+                step('acceptance-retry', passed=retry['passed'], failed=retry['failed_ids'], flaky=flaky)
+                report = {**report, 'passed': retry['passed']}
+            log['flaky'] = flaky
+            passed = passed and report['passed']
+    except (Exception, SystemExit) as failure:
+        # Anything that stops a deploy after the snapshot returns to it, like a failed verification.
+        error = f'{type(failure).__name__}: {failure}'
+        step('error', reason=error[-1500:])
+        passed = False
     # 7 save; a failed verification returns to the snapshot, a good one keeps it until commit
-    log['result'] = 'ok' if passed else 'verify-failed'
+    log['result'] = 'ok' if passed else ('error' if error else 'verify-failed')
     if use_snapshot and not passed:
         # Evidence first: the journal is volatile and the rollback restarts the container.
         try:
@@ -650,7 +670,7 @@ def deploy(version=None, restart='auto', acceptance='smoke', record_label=None, 
         ok, text = with_container_stopped('rollback', before_start=lambda: restore_android(record))
         step('snapshot-rollback', ok=ok, output=text[-400:])
         if ok:
-            log['result'] = 'verify-failed, rolled back to the snapshot'
+            log['result'] += ', rolled back to the snapshot'
     elif use_snapshot:
         log['snapshot'] = 'kept: rungic_release.py commit once the release is accepted'
     step('done', result=log['result'])
