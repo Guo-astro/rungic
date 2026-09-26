@@ -152,9 +152,7 @@ print(json.dumps([[t, float(sc), [int(v) for v in b[0]]] for t, sc, b in zip(out
 def ocr_screen():
     """Text on the phone's screen: [text, score, [x, y]] from RapidOCR in moto-clicker's venv."""
     shot = moto_agent.screenshot()
-    remote = moto_device.push(shot, 'moto-acceptance-ocr.png')
-    run(f'cp {remote} {moto_device.PLASMA_ROOTFS}/var/tmp/moto-acceptance-ocr.png && '
-        f'chmod 644 {moto_device.PLASMA_ROOTFS}/var/tmp/moto-acceptance-ocr.png && rm -f {remote}', 'root')
+    moto_device.to_container(shot, '/var/tmp/moto-acceptance-ocr.png', '644')
     text = user('py=/usr/lib/moto-clicker/venv/bin/python; [ -x $py ] || py=/usr/local/lib/moto-clicker/venv/bin/python; '
                 f"$py -c {shlex.quote(OCR)} "
                 '/var/tmp/moto-acceptance-ocr.png 2>/dev/null; rm -f /var/tmp/moto-acceptance-ocr.png', timeout=120)

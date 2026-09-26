@@ -129,5 +129,66 @@ def push(src, name=None, timeout=300):
     return remote
 
 
+# Files between this computer and the container (docs/61 §7). The container's rootfs may be an image
+# mounted only in the container's namespace, so nothing is read or written under PLASMA_ROOTFS from
+# Android: files pass through state/host/transfer, bind-mounted at /var/lib/moto-host/transfer.
+HOST_TRANSFER = '/data/adb/moto-lxc/runtime/var/lib/lxc/plasma/state/host/transfer'
+CONTAINER_TRANSFER = '/var/lib/moto-host/transfer'
+
+
+_transfer_host = None
+
+
+def _host_transfer():
+    """Android path of the transfer directory: state/host when it is bind-mounted (image rootfs, or after
+    the release that adds the mount), else the same directory inside a directory rootfs."""
+    global _transfer_host
+    if _transfer_host is None:
+        mounted = run('mountpoint -q /var/lib/moto-host', 'container', check=False).returncode == 0
+        _transfer_host = HOST_TRANSFER if mounted else PLASMA_ROOTFS + CONTAINER_TRANSFER
+    return _transfer_host
+
+
+def _transfer_name(hint):
+    import secrets
+    return f'{secrets.token_hex(6)}-{Path(hint).name}'
+
+
+def to_container(src, dest=None, mode=None, timeout=600):
+    """Copy a local file into the container: to `dest` (installed root-owned, `mode` if given), or,
+    without dest, only into the transfer directory; returns the container path."""
+    name = _transfer_name(src)
+    remote = push(src, name, timeout)
+    host = _host_transfer()
+    run(f'mkdir -p {host} && cp {remote} {host}/{name} && chmod 644 {host}/{name}; rm -f {remote}', 'root', timeout)
+    staged = f'{CONTAINER_TRANSFER}/{name}'
+    if dest is None:
+        return staged
+    install = f'install -o 0 -g 0 -m {mode} ' if mode else 'install -o 0 -g 0 '
+    run(f'mkdir -p "$(dirname {dest})" && {install}{staged} {dest}; rm -f {staged}', 'container', timeout)
+    return dest
+
+
+def from_container(path, target, timeout=1800):
+    """Copy a file from the container to a local path."""
+    name = _transfer_name(path)
+    run(f'mkdir -p {CONTAINER_TRANSFER} && cp {path} {CONTAINER_TRANSFER}/{name} && '
+        f'chmod 644 {CONTAINER_TRANSFER}/{name}', 'container', timeout)
+    stage = f'/data/local/tmp/{name}'
+    try:
+        run(f'cp {_host_transfer()}/{name} {stage} && chmod 644 {stage}', 'root', timeout)
+        subprocess.run(adb('pull', stage, str(target)), check=True, capture_output=True, timeout=timeout,
+                       stdin=subprocess.DEVNULL)
+    finally:
+        run(f'rm -f {stage} {_host_transfer()}/{name}', 'root', check=False)
+
+
+def extract_in_container(archive, directory, timeout=1800):
+    """Unpack a local tar into a container directory (root-owned files)."""
+    staged = to_container(archive, timeout=timeout)
+    run(f'mkdir -p {directory} && tar -xf {staged} -C {directory} --no-same-owner; rc=$?; rm -f {staged}; exit $rc',
+        'container', timeout)
+
+
 if __name__ == '__main__':
     print(f'adb={adb_path()} serial={serial()} transport={transport()}')

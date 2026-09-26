@@ -14,7 +14,9 @@ import subprocess
 import sys
 import time
 
-STATE = Path('/etc/moto-plasma/account.json')
+# Shared with the Android side through state/host (docs/61 §7); the old location is read once.
+STATE = Path('/var/lib/moto-host/account.json')
+LEGACY_STATE = Path('/etc/moto-plasma/account.json')
 OWNER_UID = 1000
 
 class SetupError(Exception):
@@ -53,6 +55,8 @@ def shadow_entry(name):
     raise SetupError('无法读取当前账户状态')
 
 def configure(data):
+    if not STATE.exists() and LEGACY_STATE.exists():
+        STATE.write_text(LEGACY_STATE.read_text())
     if STATE.exists():
         raise SetupError('初始账户已设置，请在系统账户设置中修改密码')
     current = pwd.getpwuid(OWNER_UID)

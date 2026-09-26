@@ -38,7 +38,7 @@ import time
 from pathlib import Path
 
 import moto_device
-from moto_device import PLASMA_ROOTFS, WORKSPACE, push, run
+from moto_device import WORKSPACE, run
 import moto_release
 
 PACKAGING = WORKSPACE / 'plasma/packaging'
@@ -235,21 +235,15 @@ def build_device(pkg, tree, jobs=4):
             print(f'installing build dependencies of {name}: {" ".join(pkg["build_depends"])}', flush=True)
             run('DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends '
                 + ' '.join(pkg['build_depends']), 'container', timeout=3600)
-    remote = push(stage_sources(pkg), f'{name}-src.tar', timeout=1800)
-    run(f'''set -e
-rm -rf {PLASMA_ROOTFS}{base}/src {PLASMA_ROOTFS}{base}/root
-mkdir -p {PLASMA_ROOTFS}{base}/src
-tar -xf {remote} -C {PLASMA_ROOTFS}{base}/src --no-same-owner
-rm -f {remote}''', 'root', timeout=600)
+    run(f'rm -rf {base}/src {base}/root', 'container', timeout=600)
+    moto_device.extract_in_container(stage_sources(pkg), f'{base}/src')
     work = WORKSPACE / f'.work/cache/{name}-device'
     shutil.rmtree(work, ignore_errors=True)
     (work / 'DEBIAN').mkdir(parents=True)
     maintainer_scripts(pkg, work)          # conffiles are listed after the build, on the phone
     for script in (work / 'DEBIAN').iterdir():
         if script.name != 'conffiles':
-            run(f'mkdir -p {base}/debian-scripts', 'container')
-            r = push(script, f'{name}-{script.name}')
-            run(f'install -m755 {r} {PLASMA_ROOTFS}{base}/debian-scripts/{script.name} && rm -f {r}', 'root')
+            moto_device.to_container(script, f'{base}/debian-scripts/{script.name}', '755')
     shutil.rmtree(work)
     epoch = git('log', '-1', '--format=%ct')
     unit = f'moto-package-{name}'
@@ -309,9 +303,8 @@ systemd-run --unit={unit} --wait --pipe --collect --quiet -p TimeoutStartSec=144
                      for l in text.splitlines()) + '\n'
     ctl.write_text(text)
     shutil.rmtree(fake)
-    r = push(ctl, f'{name}-control')
     deb_name = f'{name}_{version}_{pkg["architecture"]}.deb'
-    run(f'install -m644 {r} {PLASMA_ROOTFS}{base}/root/DEBIAN/control && rm -f {r}', 'root')
+    moto_device.to_container(ctl, f'{base}/root/DEBIAN/control', '644')
     run(f'cd {base} && dpkg-deb --root-owner-group -Zxz --build root {deb_name} >/dev/null', 'container',
         timeout=1800)
     ctl.unlink()
@@ -330,7 +323,7 @@ dpkg-deb --root-owner-group -Zxz --build dbgsym {dbg_name} >/dev/null''', 'conta
         debs.append(dbg_name)
     for deb in debs:
         local = WORKSPACE / f'.work/cache/{deb}'
-        moto_release.pull(f'{PLASMA_ROOTFS}{base}/{deb}', local)
+        moto_device.from_container(f'{base}/{deb}', local)
         shutil.move(local, moto_release.POOL / deb)
     target = moto_release.POOL / deb_name
     record(pkg, version, target, tree)

@@ -18,7 +18,7 @@
       "purpose": "APT through the HTTP proxy (AGENTS.md); machine-specific"
     },
     {
-      "path": "/etc/plasma/audio-cookie",
+      "path": "/var/lib/moto-host/audio-cookie",
       "owner": "1000",
       "mode": "0600",
       "required": true,
@@ -26,14 +26,14 @@
       "purpose": "PulseAudio cookie of the Android audio bridge"
     },
     {
-      "path": "/etc/plasma/android-shm-context",
+      "path": "/var/lib/moto-host/android-shm-context",
       "owner": "root",
       "required": true,
       "source": "plasma/moto-plasma at each start",
       "purpose": "SELinux label for shared memory with the APK"
     },
     {
-      "path": "/etc/moto-plasma/account.json",
+      "path": "/var/lib/moto-host/account.json",
       "owner": "root",
       "required": false,
       "source": "plasma/account/setup.py (first-run account)",

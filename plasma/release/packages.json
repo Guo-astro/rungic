@@ -181,6 +181,11 @@
       "source": "plasma/plasma.config",
       "path": "/data/adb/moto-lxc/runtime/var/lib/lxc/plasma/config",
       "mode": "644"
+    },
+    {
+      "source": "plasma/rootfs-image",
+      "path": "/data/adb/moto-plasma/rootfs-image",
+      "mode": "755"
     }
   ]
 }

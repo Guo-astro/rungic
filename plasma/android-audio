@@ -44,9 +44,12 @@ ensure_audio() {
         # New native-protocol clients may connect while AAudio is opening.
         healthy || { echo 'Android audio server did not become responsive' >&2; return 1; }
     fi
-    cp "$STATE/cookie" "$ROOT/etc/plasma/audio-cookie"
-    chown 1000:1000 "$ROOT/etc/plasma/audio-cookie"
-    chmod 600 "$ROOT/etc/plasma/audio-cookie"
+    # state/host is bind-mounted at /var/lib/moto-host in the container (docs/61 §7).
+    host=/data/adb/moto-lxc/runtime/var/lib/lxc/plasma/state/host
+    mkdir -p "$host"
+    cp "$STATE/cookie" "$host/audio-cookie"
+    chown 1000:1000 "$host/audio-cookie"
+    chmod 600 "$host/audio-cookie"
 }
 case "${1:-start}" in
  start)

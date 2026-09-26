@@ -42,7 +42,7 @@ import time
 from pathlib import Path
 
 import moto_device
-from moto_device import DeviceError, PLASMA_ROOTFS, WORKSPACE, out, push, run
+from moto_device import DeviceError, WORKSPACE, out, push, run
 
 SPEC = WORKSPACE / 'plasma/release/packages.json'
 APT = WORKSPACE / '.work/apt'
@@ -169,7 +169,7 @@ rm -rf "$tmp"
     local = APT / 'incoming'
     shutil.rmtree(local, ignore_errors=True)
     local.mkdir(parents=True)
-    pull(f'{PLASMA_ROOTFS}/var/tmp/moto-import.tar', local / 'x.tar')
+    moto_device.from_container('/var/tmp/moto-import.tar', local / 'x.tar')
     run('rm -f /var/tmp/moto-import.tar', 'container')
     with tarfile.open(local / 'x.tar') as tar:
         tar.extractall(local, filter='data')
@@ -360,11 +360,8 @@ def sync_repo():
     archive = DEPLOY / 'repo-sync.tar'
     archive.parent.mkdir(parents=True, exist_ok=True)
     archive.write_bytes(buffer.getvalue())
-    remote = push(archive, 'moto-repo-sync.tar', timeout=1800)
+    moto_device.extract_in_container(archive, DEVICE_REPO)
     archive.unlink()
-    run(f'''set -e
-tar -xf {remote} -C {PLASMA_ROOTFS}{DEVICE_REPO} --no-same-owner
-rm -f {remote}''', 'root', timeout=600)
     run(f'''set -e
 chown -R root:root {DEVICE_REPO}; chmod 755 {DEVICE_REPO}
 cd {DEVICE_REPO} && rm -f {' '.join(map(shlex.quote, remove)) or '/dev/null/none 2>/dev/null || true'}''',
@@ -442,6 +439,17 @@ def restart_session():
     return result.returncode == 0, (result.stdout + result.stderr).strip()
 
 
+def restart_container():
+    outputs = []
+    for action in ('stop', 'start'):
+        result = subprocess.run([sys.executable, str(WORKSPACE / 'tools/moto_plasma.py'), action],
+                                capture_output=True, text=True, timeout=300)
+        outputs.append((result.stdout + result.stderr).strip())
+        if result.returncode:
+            return False, '\n'.join(outputs)
+    return True, '\n'.join(outputs)
+
+
 def history():
     return json.loads(HISTORY.read_text()) if HISTORY.exists() else []
 
@@ -505,9 +513,11 @@ def deploy(version=None, restart='auto', acceptance='smoke', record_label=None):
     # 5 restart
     hit, changed = needs_restart(before, after, info.get('session_restart', []))
     step('changes', changed=changed, restart_for=hit)
+    whole = any(path.endswith('/lxc/plasma/config') for path in android)
     if restart == 'always' or (restart == 'auto' and (hit or android)):
-        ok, text = restart_session()
-        step('restart', ok=ok, output=text[-500:])
+        # The LXC configuration (mounts, init) applies only when the container starts.
+        ok, text = restart_container() if whole else restart_session()
+        step('restart', ok=ok, container=whole, output=text[-500:])
     # 6 verify
     integrity_after = integrity_summary()
     (record / 'integrity-after.json').write_text(json.dumps(integrity_after, indent=1, ensure_ascii=False) + '\n')

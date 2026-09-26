@@ -28,7 +28,7 @@ import tarfile
 import time
 
 import moto_device
-from moto_device import PLASMA_ROOTFS, WORKSPACE, out, push, run
+from moto_device import WORKSPACE, out, run
 
 BASE = '/root/moto-build'
 # Line tables only (-g1): enough for symbolized backtraces (docs/61) at a fraction of -g2's
@@ -51,14 +51,9 @@ def stage(component):
 
 
 def sync(component):
-    remote = push(stage(component), f'moto-{component}-stage.tar')
     work = f'{BASE}/{component}'
-    out(f'''set -e
-mkdir -p {PLASMA_ROOTFS}{work}/incoming
-rm -rf {PLASMA_ROOTFS}{work}/incoming/src
-tar -xf {remote} -C {PLASMA_ROOTFS}{work}/incoming
-rm -f {remote}
-''')
+    moto_device.run(f'rm -rf {work}/incoming', 'container')
+    moto_device.extract_in_container(stage(component), f'{work}/incoming')
     # Keep obj-* (build output) and debhelper state; everything else mirrors the stage.
     print(out(f'''set -e
 chown -R root:root {work}/incoming
@@ -146,7 +141,7 @@ def collect(component):
     incoming.mkdir(parents=True, exist_ok=True)
     for name in names:
         target = incoming / (name[:-5] + '.deb' if name.endswith('.ddeb') else name)
-        moto_release.pull(f'{PLASMA_ROOTFS}{BASE}/{component}/{name}', target)
+        moto_device.from_container(f'{BASE}/{component}/{name}', target)
     added = moto_release.import_debs(sorted(incoming.glob('*.deb')))
     for path in incoming.glob('*.deb'):
         path.unlink()

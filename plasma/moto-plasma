@@ -2,7 +2,9 @@
 set -eu
 BASE=/data/adb/moto-plasma
 ENTER=$BASE/moto-plasma-enter
-ROOT=/data/adb/moto-lxc/runtime/var/lib/lxc/plasma/rootfs
+LXC=/data/adb/moto-lxc/runtime/var/lib/lxc/plasma
+ROOT=$LXC/rootfs
+HOST_STATE=$LXC/state/host
 [ "$(id -u)" = 0 ] || { echo 'Magisk root required' >&2; exit 1; }
 action=${1:-status}
 [ "$#" = 0 ] || shift
@@ -25,12 +27,30 @@ start_container() {
     case "$label" in u:object_r:app_data_file:s0:c*) ;;
       *) echo 'Cannot identify desktop APK SELinux label' >&2; exit 1;;
     esac
-    printf '%s\n' "$label" | sed 's/:app_data_file:/:appdomain_tmpfs:/' > "$ROOT/etc/plasma/android-shm-context"
-    "$ENTER" /usr/bin/lxc-start -n plasma -d -l INFO -o /var/log/lxc/plasma.log -s "$gpu_rule" -s "$heap_rule" 9>&-
+    # Files the Android side hands to the container live in state/host, bind-mounted at
+    # /var/lib/moto-host: an image rootfs is not visible from here (docs/61 §7).
+    mkdir -p "$HOST_STATE/transfer"
+    if [ ! -f "$HOST_STATE/account.json" ] && [ -f "$ROOT/etc/moto-plasma/account.json" ]; then
+      cp -p "$ROOT/etc/moto-plasma/account.json" "$HOST_STATE/account.json"
+    fi
+    printf '%s\n' "$label" | sed 's/:app_data_file:/:appdomain_tmpfs:/' > "$HOST_STATE/android-shm-context"
+    set -- -s "$gpu_rule" -s "$heap_rule"
+    # An image rootfs (plasma/rootfs-image, docs/61 §7): LXC mounts its device-mapper device, and
+    # the data that must not roll back with the system comes from state/ (bind mounts).
+    if [ -f "$LXC/images/rootfs.img" ]; then
+      dev=$("$BASE/rootfs-image" attach) || { echo 'Cannot attach the rootfs image' >&2; exit 1; }
+      set -- "$@" -s "lxc.rootfs.path=$dev" -s "lxc.rootfs.options=context=u:object_r:adb_data_file:s0"
+      for pair in home:home moto-cores:var/lib/moto-cores moto-apt:var/lib/moto-apt; do
+        set -- "$@" -s "lxc.mount.entry=/var/lib/lxc/plasma/state/${pair%%:*} ${pair#*:} none bind,create=dir 0 0"
+      done
+    fi
+    "$ENTER" /usr/bin/lxc-start -n plasma -d -l INFO -o /var/log/lxc/plasma.log "$@" 9>&-
 }
 case "$action" in
   account-status)
-    if [ -f "$ROOT/etc/moto-plasma/account.json" ]; then
+    if [ -f "$HOST_STATE/account.json" ]; then
+      cat "$HOST_STATE/account.json"
+    elif [ -f "$ROOT/etc/moto-plasma/account.json" ]; then
       cat "$ROOT/etc/moto-plasma/account.json"
     else
       echo '{"configured":false,"username":"linux"}'
@@ -56,6 +76,7 @@ case "$action" in
     flock 9 9>&9
     if [ "$action" = stop ]; then
       if running; then "$ENTER" /usr/bin/lxc-stop -n plasma -t 15 9>&-; fi
+      [ ! -f "$LXC/images/rootfs.img" ] || "$BASE/rootfs-image" detach 9>&-
       "$BASE/android-audio" stop 9>&-
       echo 'Plasma Mobile stopped'
       exit 0
@@ -91,6 +112,13 @@ case "$action" in
     echo 'Plasma Mobile ready (native Wayland)'
     ;;
   status) exec "$ENTER" /usr/bin/lxc-info -n plasma ;;
+  rootfs)
+    # status | snapshot | rollback | commit | migrate (plasma/rootfs-image); the container must be stopped
+    # for all but status.
+    exec 9>"$BASE/control.lock"
+    flock 9 9>&9
+    exec "$BASE/rootfs-image" "$@" 9>&-
+    ;;
   hide-keyboard|home)
     exec "$ENTER" /usr/bin/lxc-attach -n plasma -- /usr/bin/moto-plasma-user-exec /usr/libexec/moto-plasma-desktop-action "$action"
     ;;
