@@ -6,7 +6,7 @@ Before=rungic-plasma-session.service
 ExecStart=/usr/libexec/rungic-plasma-shared
 # bindfs runs in the foreground, so without this the unit counts as started
 # before the mount exists and the session (ordered after it) can start first.
-ExecStartPost=/bin/sh -c 'for i in $(seq 100); do mountpoint -q /home/rungic/Shared && exit 0; sleep 0.1; done; exit 1'
+ExecStartPost=/bin/sh -c 'h=$$(getent passwd 1000 | cut -d: -f6); for i in $$(seq 100); do mountpoint -q "$$h/Shared" && exit 0; sleep 0.1; done; exit 1'
 Restart=on-failure
 RestartSec=3
 

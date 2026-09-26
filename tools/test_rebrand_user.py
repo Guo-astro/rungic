@@ -52,7 +52,7 @@ class RebrandUser(unittest.TestCase):
         report = self.m.up()
         c = self.home / '.config'
         self.assertIn('rungic-plasma-rime.desktop', (c / 'kwinrc').read_text())
-        self.assertIn('file:///home/rungic/Shared/Pictures',
+        self.assertIn(f'file://{self.home}/Shared/Pictures',          # /home/linux -> the home now
                       (self.home / '.local/share/user-places.xbel').read_text())
         self.assertIn('com.rungic.quicksetting.cast,com.rungic.quicksetting.agentscreen',
                       (c / 'plasmamobilerc').read_text())
@@ -91,6 +91,14 @@ class RebrandUser(unittest.TestCase):
         self.m.up()
         self.assertEqual((c / 'rungic-voice-agent/openai-api-key').read_text(), 'sk-changed-after-up')
         self.assertEqual((c / 'kconf_updaterc').read_text().count('[rungic.upd]'), 1)
+
+
+    def test_rehome_after_the_account_setup_moved_the_home(self):
+        (self.home / '.config/dolphinrc').write_text('[General]\nLast=/home/rungic/Shared\nOther=/home/rungicx\nHome=/home/rungic\n')
+        with patch('sys.argv', ['rungic-rebrand-user', 'rehome', '/home/rungic', '/home/alice']):
+            self.m.main()
+        self.assertEqual((self.home / '.config/dolphinrc').read_text(),
+                         '[General]\nLast=/home/alice/Shared\nOther=/home/rungicx\nHome=/home/alice\n')
 
 
 if __name__ == '__main__':

@@ -107,7 +107,11 @@
 - `down`：`rungic_release.py`在部署或快照回滚到改名前的发布（元包`moto-plasma-release`）之前运行，先停会话（程序退出时会写回设置），把名称换回，把新目录中改名后变化的内容复制回旧目录并删除新目录。
 - 单元测试`tools/test_rebrand_user.py`覆盖往返：`up`→修改→`down`后配置与原来逐字节相同，修改被带回。
 
-**桌面账户**（用户要求，2026-09-26）：home由`/home/linux`改为`/home/rungic`，主组`linux`改为`rungic`；首次账户设置前的占位登录名`linux`改为`rungic`，用户在首次设置中选定的登录名（本机为`kevinzhow`）不变。`/home`在Android侧，不在快照中，由`plasma/rebrand-system.sh`（`/usr/libexec/rungic-rebrand-system up|down`）双向处理：容器init在任何服务启动前执行`up`（`mv`、`usermod -d`、`groupmod -n`）；`down`由`rungic_release.py`在用户设置迁回之后、停掉用户管理器与共享存储后执行。`/home/linux`在D阶段之前保留为指向新home的链接，供应用数据中的绝对路径使用；KDE设置、文件对话框位置与GTK书签中的路径由`rungic-rebrand-user`改写。已在Ubuntu容器中模拟已配置与占位两种账户的往返。
+**桌面账户**（用户要求，2026-09-26）：home跟随登录名，为`/home/<登录名>`，首次启动时用户在账户设置中选定用户名后即生效；主组固定为`rungic`（NetworkManager的D-Bus策略按组名授权，不能随用户名变）；首次设置前的占位登录名为`rungic`（home为`/home/rungic`）。改名前一律是`/home/linux`、组`linux`、占位登录名`linux`。
+- 首次账户设置（`plasma/account/setup.py`）改登录名时用`usermod --login --home --move-home`一起移动home（事先停止会话、用户管理器与挂在home中的共享存储；目标目录已存在时拒绝），再以该用户运行`rungic-rebrand-user rehome`改写设置中指向旧home的路径；失败时连同home一起退回。
+- 会话脚本、会话单元（`WorkingDirectory=~`）、共享存储都在运行时从`getent passwd 1000`取home，不再写死路径。
+- 已有系统由`plasma/rebrand-system.sh`（`/usr/libexec/rungic-rebrand-system up|down`）迁移：`/home`在Android侧，不在快照中。容器init在任何服务启动前执行`up`（组改名、占位登录名改名、home移到`/home/<登录名>`，本机为`/home/kevinzhow`）；`down`由`rungic_release.py`在用户设置迁回之后、停掉用户管理器与共享存储后执行，把home移回`/home/linux`并改回组名。从`/home/linux`移出的系统在D阶段之前保留`/home/linux`链接，供应用数据中的绝对路径使用；KDE设置、文件对话框位置与GTK书签中的路径由`rungic-rebrand-user`改写（home本身以及其下的路径都会改，前缀相同的其他目录不受影响）。
+- 在Ubuntu容器中模拟了已配置账户、占位账户、首次设置改名、再回滚四种情况；账户设置与设置迁移都有单元测试。
 
 **主机工具**：`rungic_device.prog()`/`first_path()`先用新名称，找不到时用旧名称；部署、验收与诊断工具据此在回滚后的旧发布上仍可用（发布元包名按目标发布选择，关键单元、相机节点、编解码器名均兼容两种名称）。
 

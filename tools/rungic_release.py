@@ -499,7 +499,7 @@ def rebrand_down():
     # As the desktop user without its session's environment (the session is stopped).
     user = run('''u=$(getent passwd 1000 | cut -d: -f1); h=$(getent passwd 1000 | cut -d: -f6)
 runuser -u "$u" -- env HOME="$h" /usr/libexec/rungic-rebrand-user down''', 'container', timeout=300, check=False)
-    # Then the account (home /home/rungic, group rungic) with none of its processes left and the
+    # Then the account (home /home/<login>, group rungic) with none of its processes left and the
     # shared storage unmounted from the home.
     system = run('''systemctl stop user@1000.service rungic-plasma-shared.service
 for i in $(seq 50); do pgrep -u 1000 >/dev/null || break; sleep 0.2; done

@@ -23,6 +23,8 @@ class Tests(unittest.TestCase):
    with self.assertRaises(m.SetupError):m.validate({'username':name,'password':password},current)
   with patch.object(m.pwd,'getpwnam',return_value=SimpleNamespace(pw_uid=0)):
    with self.assertRaises(m.SetupError):m.validate({'username':'root','password':'abcdefgh'},current)
+  with patch.object(m.os.path,'lexists',return_value=True):
+   with self.assertRaises(m.SetupError):m.validate({'username':'bob','password':'abcdefgh'},current)
  def test_success_uses_stdin_and_writes_once(self):
   calls=[]
   def call(argv,payload=None,check=True):
@@ -32,7 +34,8 @@ class Tests(unittest.TestCase):
    self.assertEqual(result['username'],'alice')
    self.assertEqual(self.state.stat().st_mode & 0o777,0o600)
    self.assertNotIn('test-only-pass',self.state.read_text())
-   self.assertTrue(any(a==['usermod','--login','alice','rungic'] for a,_ in calls))
+   self.assertTrue(any(a==['usermod','--login','alice','--home','/home/alice','--move-home','rungic'] for a,_ in calls))
+   self.assertTrue(any(a[:1]==['runuser'] and a[-3:]==['rehome','/home/rungic','/home/alice'] for a,_ in calls))
    self.assertTrue(any(a==['chpasswd'] and b==b'alice:test-only-pass\n' for a,b in calls))
    self.assertFalse(any('test-only-pass' in ' '.join(a) for a,_ in calls))
    with self.assertRaises(m.SetupError):m.configure({'username':'alice','password':'another-test-pass'})
@@ -47,7 +50,7 @@ class Tests(unittest.TestCase):
   self.assertFalse(self.state.exists())
   self.assertIn((['chpasswd','--encrypted'],b'alice:!\n'),calls)
   self.assertIn((['usermod','--groups','audio','alice'],None),calls)
-  self.assertIn((['usermod','--login','rungic','alice'],None),calls)
+  self.assertIn((['usermod','--login','rungic','--home','/home/rungic','--move-home','alice'],None),calls)
  def test_existing_password_cannot_be_bootstrapped(self):
   with patch.object(m,'shadow_entry',return_value='$y$existing'),patch.object(m,'call') as c:
    with self.assertRaises(m.SetupError):m.configure({'username':'alice','password':'test-only-pass'})

@@ -1,6 +1,7 @@
 #!/bin/sh
 set -eu
-export HOME=/home/rungic
+# The desktop account's home follows its login (/home/<login>, docs/70).
+export HOME=$(getent passwd 1000 | cut -d: -f6)
 export XDG_RUNTIME_DIR=/run/user/1000
 export DBUS_SESSION_BUS_ADDRESS=unix:path=$XDG_RUNTIME_DIR/bus
 export XDG_SESSION_TYPE=wayland

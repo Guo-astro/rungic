@@ -6,6 +6,9 @@
                              by ~/.local/state/rungic-rebrand
   rungic-rebrand-user down   tools/rungic_release.py runs it, with the session stopped, before a
                              release from before the rename replaces this one
+  rungic-rebrand-user rehome OLD NEW
+                             paths into the home in the settings, after the home moved (the
+                             first-run account setup moves it to /home/<login>)
 
 The home directory is not part of the rootfs snapshot, so a rollback does not take it back: down
 gives the older release the names it knows. Settings name desktop files, quick setting tiles, the
@@ -15,6 +18,7 @@ The kconf_update records of the renamed .upd files go along, so their steps do n
 """
 import configparser
 import os
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -37,8 +41,14 @@ NAMES = [
     ('moto-pipewire-front', 'rungic-pipewire-front'),
     ('[mcp_servers.moto-desktop]', '[mcp_servers.rungic-desktop]'),
     ('/usr/bin/moto-cua', '/usr/bin/rungic-cua'),
-    ('/home/linux/', '/home/rungic/'),      # the home itself moves at container start (rungic-rebrand-system)
 ]
+# The home was /home/linux before the rename; rungic-rebrand-system moves it to /home/<login> at
+# container start, before the session runs up.
+FORMER_HOME = '/home/linux'
+
+
+def home_pairs():
+    return [(FORMER_HOME, str(HOME))] if str(HOME) != FORMER_HOME else []
 # Files whose settings may name them: the KDE configuration files directly in ~/.config, and Codex's.
 CODEX = HOME / '.codex'
 
@@ -68,7 +78,9 @@ def settings_files():
     return files + [p for p in EXTRA if p.is_file() and not p.is_symlink()]
 
 
-def swap_names(pairs):
+def swap_names(pairs, homes=()):
+    """Replace the names in the settings files; `homes` are (old, new) home directories, replaced
+    where a path starts with them (followed by /, a quote, space, < or the line's end)."""
     changed = []
     for path in settings_files():
         try:
@@ -78,6 +90,8 @@ def swap_names(pairs):
         new = text
         for old, name in pairs:
             new = new.replace(old, name)
+        for old, home in homes:
+            new = re.sub(re.escape(old) + r'(?=[/"\'\s<]|$)', lambda m: home, new, flags=re.M)
         if new != text:
             tmp = path.with_name(path.name + '.rungic-rebrand')
             tmp.write_text(new)
@@ -133,7 +147,7 @@ def carry_kconf_records():
 def up():
     if MARKER.exists():
         return {'done': 'already'}
-    report = {'records': carry_kconf_records(), 'settings': swap_names(NAMES), 'moved': []}
+    report = {'records': carry_kconf_records(), 'settings': swap_names(NAMES, home_pairs()), 'moved': []}
     for old, new in DIRS:
         if old.exists() and not new.exists():
             copy(old, new)
@@ -145,7 +159,8 @@ def up():
 
 
 def down():
-    report = {'settings': swap_names([(new, old) for old, new in NAMES]), 'moved': []}
+    report = {'settings': swap_names([(new, old) for old, new in NAMES], [(new, old) for old, new in home_pairs()]),
+              'moved': []}
     for old, new in DIRS:
         if new.exists():
             copy(new, old)          # what changed since up goes back to the older release
@@ -157,9 +172,12 @@ def down():
 
 
 def main():
-    if len(sys.argv) != 2 or sys.argv[1] not in ('up', 'down'):
+    if len(sys.argv) == 4 and sys.argv[1] == 'rehome':
+        print({'settings': swap_names([], [(sys.argv[2].rstrip('/'), sys.argv[3].rstrip('/'))])})
+    elif len(sys.argv) == 2 and sys.argv[1] in ('up', 'down'):
+        print(up() if sys.argv[1] == 'up' else down())
+    else:
         sys.exit(__doc__)
-    print(up() if sys.argv[1] == 'up' else down())
 
 
 if __name__ == '__main__':

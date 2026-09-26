@@ -1,13 +1,15 @@
 #!/bin/sh
 set -eu
+# The desktop account's home follows its login (/home/<login>, docs/70).
+shared=$(getent passwd 1000 | cut -d: -f6)/Shared
 # A bindfs that died (e.g. when Android restarted underneath it) leaves a
 # disconnected FUSE mount; mkdir then fails and the unit would restart forever.
-if ! stat /home/rungic/Shared >/dev/null 2>&1; then
-    fusermount3 -uz /home/rungic/Shared 2>/dev/null || umount -l /home/rungic/Shared 2>/dev/null || true
+if ! stat "$shared" >/dev/null 2>&1; then
+    fusermount3 -uz "$shared" 2>/dev/null || umount -l "$shared" 2>/dev/null || true
 fi
-mkdir -p /home/rungic/Shared
-chown root:root /home/rungic/Shared
-chmod 0755 /home/rungic/Shared
+mkdir -p "$shared"
+chown root:root "$shared"
+chmod 0755 "$shared"
 # No --direct-io: with it FUSE refuses shared writable mmap (ENODEV), which
 # SQLite WAL, LMDB and MMKV need; WeChat's databases in ~/Documents failed
 # with I/O errors and were "repaired" on every start (docs/69). Without it
@@ -18,4 +20,4 @@ exec /usr/bin/bindfs -f --force-user=1000 --force-group=1000 --perms=a+rwX \
     --create-as-mounter --create-with-perms=a+rwX \
     --chmod-ignore --chown-ignore --chgrp-ignore --xattr-none \
     -o nosuid,nodev,noexec,attr_timeout=0,entry_timeout=0 \
-    /mnt/android-shared /home/rungic/Shared
+    /mnt/android-shared "$shared"

@@ -90,7 +90,7 @@ def main():
     frames.shell('input','tap','810','2340'); time.sleep(1)
     drawer(); shot(a.out/'drawer.png')
     sampler=subprocess.Popen(PLASMA+['user-exec','python3','/opt/rungic-gpu-bench/sample-cpu.py',
-        '/home/rungic/.cache/rungic-bench-cpu.json','120'],stdout=subprocess.DEVNULL)
+        '.cache/rungic-bench-cpu.json','120'],stdout=subprocess.DEVNULL)
     try:
         measure('scroll',a.out/'scroll.json')
         measure('launch',a.out/'launch.json')
@@ -98,7 +98,7 @@ def main():
         # The sampler completes independently; wait only for collection time.
         user('pkill','-f','^python3 /opt/rungic-gpu-bench/sample-cpu.py',check=False)
         sampler.wait(timeout=10)
-        cpu=user('cat','/home/rungic/.cache/rungic-bench-cpu.json').stdout
+        cpu=user('cat','.cache/rungic-bench-cpu.json').stdout
         (a.out/'cpu.json').write_text(cpu)
     shot(a.out/'final.png')
 if __name__=='__main__': main()

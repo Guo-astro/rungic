@@ -2,7 +2,8 @@
 """One-time root bootstrap, invoked only by the Magisk-authorized APK via stdin.
 
 Uses Ubuntu shadow/PAM tools. Never accepts passwords in argv or logs them.
-UID/home stay stable so existing shared files and desktop settings survive.
+The UID stays stable so existing shared files survive; the home follows the chosen login
+(/home/<name>, docs/70), moved with its contents and the paths in the user's settings.
 """
 import json
 import grp
@@ -36,10 +37,14 @@ def validate(data, current):
         existing = None
     if existing is not None and existing.pw_uid != OWNER_UID:
         raise SetupError('这个用户名已被使用')
-    # /home/linux before the Rungic rename (docs/70, rungic-rebrand-system).
-    if current.pw_uid != OWNER_UID or current.pw_dir not in ('/home/rungic', '/home/linux'):
+    if current.pw_uid != OWNER_UID or not re.fullmatch(r'/home/[a-z][a-z0-9_-]*', current.pw_dir):
         raise SetupError('账户布局与当前安装不匹配')
+    if home_of(name) != current.pw_dir and os.path.lexists(home_of(name)):
+        raise SetupError('这个用户名的主目录已存在')
     return name, password
+
+def home_of(name):
+    return '/home/' + name
 
 def call(argv, payload=None, check=True):
     result = subprocess.run(argv, input=payload, stdout=subprocess.DEVNULL,
@@ -71,6 +76,8 @@ def configure(data):
     # Stop the user session before usermod: renaming a logged-in account is
     # deliberately refused by shadow-utils. The root attach process survives.
     call(['systemctl', 'stop', 'rungic-plasma-session.service'])
+    # The shared storage is mounted inside the home, which moves with the login.
+    call(['systemctl', 'stop', 'rungic-plasma-shared.service'], check=False)
     call(['loginctl', 'terminate-user', str(OWNER_UID)], check=False)
     call(['systemctl', 'stop', 'user@1000.service'], check=False)
     # logind tears down session scopes asynchronously; wait for the UID to exit.
@@ -83,7 +90,7 @@ def configure(data):
     renamed = False
     try:
         if name != current.pw_name:
-            call(['usermod', '--login', name, current.pw_name])
+            call(['usermod', '--login', name, '--home', home_of(name), '--move-home', current.pw_name])
             renamed = True
         # Standard administrative identity for Ubuntu's normal polkit policy.
         call(['usermod', '--append', '--groups', 'sudo,systemd-journal', name])
@@ -100,12 +107,20 @@ def configure(data):
         call(['chpasswd', '--encrypted'], (name + ':' + old_hash + '\n').encode(), check=False)
         call(['usermod', '--groups', old_groups, name], check=False)
         if renamed:
-            call(['usermod', '--login', current.pw_name, name], check=False)
+            call(['usermod', '--login', current.pw_name, '--home', current.pw_dir, '--move-home', name], check=False)
         raise
     # Any legacy linger marker is a login name, unlike file ownership (UID).
     old_linger = Path('/var/lib/systemd/linger') / current.pw_name
     if renamed and old_linger.exists():
         old_linger.rename(old_linger.with_name(name))
+    if renamed and home_of(name) != current.pw_dir:
+        # Paths into the old home in the user's settings; /home/linux, the link kept since the
+        # Rungic rename (rungic-rebrand-system), follows the home.
+        call(['runuser', '-u', name, '--', 'env', 'HOME=' + home_of(name), '/usr/libexec/rungic-rebrand-user',
+              'rehome', current.pw_dir, home_of(name)], check=False)
+        if os.path.islink('/home/linux'):
+            os.unlink('/home/linux')
+            os.symlink(name, '/home/linux')
     call(['systemctl', 'try-restart', 'accounts-daemon.service'], check=False)
     return {'configured': True, 'username': name}
 
