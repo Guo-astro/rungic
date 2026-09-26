@@ -55,7 +55,7 @@ case "$action" in
     elif [ -f "$ROOT/etc/moto-plasma/account.json" ]; then
       cat "$ROOT/etc/moto-plasma/account.json"
     else
-      echo '{"configured":false,"username":"linux"}'
+      echo '{"configured":false,"username":"rungic"}'
     fi
     ;;
   account-setup)

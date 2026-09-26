@@ -56,7 +56,7 @@ def main():
             for i,backend in enumerate(['opengl','vulkan','vulkan','opengl','opengl','vulkan'],1):
                 wake();tag=f'{scene}-{i}-{backend}';print('START quick',tag,flush=True)
                 health(a.out/(tag+'-health.txt'))
-                remote='/home/linux/.cache/rungic-bench-'+tag+'.json'
+                remote='/home/rungic/.cache/rungic-bench-'+tag+'.json'
                 result=user('systemd-run','--user','--wait','--pipe','--collect','--unit=rungic-quick-bench',
                     'env','QSG_RHI_BACKEND='+backend,'QSG_INFO=1',
                     '/opt/rungic-gpu-bench/quick-render','/opt/rungic-gpu-bench/'+scene+'-scene.qml',remote,combined=True)

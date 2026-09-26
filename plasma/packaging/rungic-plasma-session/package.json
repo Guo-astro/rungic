@@ -11,6 +11,7 @@
     "plasma/user-exec",
     "plasma/desktop-action.py",
     "plasma/rebrand-user.py",
+    "plasma/rebrand-system.sh",
     "plasma/display.py",
     "plasma/brightness.py",
     "plasma/power-policy.py",

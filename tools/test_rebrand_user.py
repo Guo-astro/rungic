@@ -21,6 +21,7 @@ def load(home):
 
 
 KWINRC = '[Wayland]\nInputMethod=/usr/share/applications/moto-plasma-rime.desktop\n'
+PLACES = '<bookmark href="file:///home/linux/Shared/Pictures"/>\n'
 MOBILERC = '[QuickSettings]\nenabledQuickSettings=org.kde.plasma.quicksetting.bluetooth,dev.moto.quicksetting.cast,' \
            'dev.moto.quicksetting.agentscreen\n'
 CODEX = '[mcp_servers.moto-desktop]\ncommand = "/usr/bin/moto-cua"\nargs = ["mcp"]\n'
@@ -39,6 +40,8 @@ class RebrandUser(unittest.TestCase):
         (c / 'kwinrc').write_text(KWINRC)
         (c / 'plasmamobilerc').write_text(MOBILERC)
         (c / 'kconf_updaterc').write_text(UPDATERC)
+        (self.home / '.local/share').mkdir(parents=True)
+        (self.home / '.local/share/user-places.xbel').write_text(PLACES)
         (self.home / '.codex/skills').mkdir(parents=True)
         (self.home / '.codex/config.toml').write_text(CODEX)
         (self.home / '.codex/skills/moto-phone-desktop').symlink_to(
@@ -49,6 +52,8 @@ class RebrandUser(unittest.TestCase):
         report = self.m.up()
         c = self.home / '.config'
         self.assertIn('rungic-plasma-rime.desktop', (c / 'kwinrc').read_text())
+        self.assertIn('file:///home/rungic/Shared/Pictures',
+                      (self.home / '.local/share/user-places.xbel').read_text())
         self.assertIn('com.rungic.quicksetting.cast,com.rungic.quicksetting.agentscreen',
                       (c / 'plasmamobilerc').read_text())
         self.assertEqual((c / 'rungic-voice-agent/openai-api-key').read_text(), 'sk-test')
@@ -73,6 +78,7 @@ class RebrandUser(unittest.TestCase):
         self.m.down()
         self.assertEqual((c / 'kwinrc').read_text(), KWINRC)
         self.assertEqual((c / 'plasmamobilerc').read_text(), MOBILERC)
+        self.assertEqual((self.home / '.local/share/user-places.xbel').read_text(), PLACES)
         self.assertEqual((self.home / '.codex/config.toml').read_text(), CODEX)
         self.assertEqual((c / 'moto-voice-agent/openai-api-key').read_text(), 'sk-changed-after-up')
         self.assertFalse((c / 'rungic-voice-agent').exists())

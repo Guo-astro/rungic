@@ -37,6 +37,7 @@ NAMES = [
     ('moto-pipewire-front', 'rungic-pipewire-front'),
     ('[mcp_servers.moto-desktop]', '[mcp_servers.rungic-desktop]'),
     ('/usr/bin/moto-cua', '/usr/bin/rungic-cua'),
+    ('/home/linux/', '/home/rungic/'),      # the home itself moves at container start (rungic-rebrand-system)
 ]
 # Files whose settings may name them: the KDE configuration files directly in ~/.config, and Codex's.
 CODEX = HOME / '.codex'
@@ -57,9 +58,14 @@ UPD = [('moto.upd', 'rungic.upd', 'moto-', 'rungic-'),
        ('moto-voice-agent.upd', 'rungic-voice-agent.upd', 'moto-', 'rungic-')]
 
 
+# Other files that name paths: Codex's configuration, the file dialogs' places and bookmarks.
+EXTRA = [CODEX / 'config.toml', HOME / '.local/share/user-places.xbel', CONFIG / 'gtk-3.0/bookmarks',
+         CONFIG / 'gtk-4.0/bookmarks']
+
+
 def settings_files():
     files = [p for p in CONFIG.iterdir() if p.is_file() and not p.is_symlink()] if CONFIG.is_dir() else []
-    return files + [p for p in (CODEX / 'config.toml',) if p.is_file()]
+    return files + [p for p in EXTRA if p.is_file() and not p.is_symlink()]
 
 
 def swap_names(pairs):

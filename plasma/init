@@ -21,5 +21,7 @@ mkdir -p -m 0700 /run/rungic-proc && mount -t proc -o nosuid,nodev,noexec proc /
     echo "rungic-plasma-init: no visible proc; Flatpak sandboxes will fail"
 [ -c /dev/fuse ] || mknod /dev/fuse c 10 229
 chmod 0666 /dev/fuse
+# The desktop account across the Rungic rename (docs/70), before any of its processes run.
+/usr/libexec/rungic-rebrand-system up || echo "rungic-plasma-init: the account keeps its old home"
 export container=lxc
 exec /sbin/init

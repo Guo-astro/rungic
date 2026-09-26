@@ -1,6 +1,6 @@
 #!/bin/sh
 set -eu
-export HOME=/home/linux
+export HOME=/home/rungic
 export XDG_RUNTIME_DIR=/run/user/1000
 export DBUS_SESSION_BUS_ADDRESS=unix:path=$XDG_RUNTIME_DIR/bus
 export XDG_SESSION_TYPE=wayland

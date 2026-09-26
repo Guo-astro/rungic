@@ -450,7 +450,7 @@ find / -xdev \( -path /proc -o -path /sys -o -path /dev -o -path /run -o -path /
   echo "$p	$owner"
 done
 echo "@@units"; systemctl list-units --all --no-legend --plain 'moto*' | cut -d' ' -f1
-echo "@@userunits"; runuser -u linux -- env XDG_RUNTIME_DIR=/run/user/1000 systemctl --user list-units --all --no-legend --plain 'moto*' | cut -d' ' -f1
+echo "@@userunits"; runuser -u "$(id -nu 1000)" -- env XDG_RUNTIME_DIR=/run/user/1000 systemctl --user list-units --all --no-legend --plain 'moto*' | cut -d' ' -f1
 echo "@@packages"; dpkg-query -W -f '${db:Status-Abbrev} ${Package}\n' 'moto-*' 2>/dev/null | grep '^ii' | cut -d' ' -f2-
 """
 

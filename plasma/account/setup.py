@@ -36,7 +36,8 @@ def validate(data, current):
         existing = None
     if existing is not None and existing.pw_uid != OWNER_UID:
         raise SetupError('这个用户名已被使用')
-    if current.pw_uid != OWNER_UID or current.pw_dir != '/home/linux':
+    # /home/linux before the Rungic rename (docs/70, rungic-rebrand-system).
+    if current.pw_uid != OWNER_UID or current.pw_dir not in ('/home/rungic', '/home/linux'):
         raise SetupError('账户布局与当前安装不匹配')
     return name, password
 

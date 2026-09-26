@@ -8,7 +8,7 @@ StartLimitBurst=4
 [Service]
 User=1000
 PAMName=login
-WorkingDirectory=/home/linux
+WorkingDirectory=/home/rungic
 Environment=XDG_SESSION_TYPE=wayland
 # The phone is the local seat. Without a seat logind marks the session non-local
 # and polkit applies its "any" defaults: a password for every Flatpak ref and

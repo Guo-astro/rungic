@@ -12,6 +12,7 @@ install -Dm755 "$P/account/setup.py" "$DESTDIR/usr/libexec/rungic-plasma-account
 install -Dm644 "$P/account/rungic-account.desktop" "$DESTDIR/usr/share/applications/rungic-account.desktop"
 install -Dm755 "$P/user-exec" "$DESTDIR/usr/bin/rungic-plasma-user-exec"
 install -Dm755 "$P/rebrand-user.py" "$DESTDIR/usr/libexec/rungic-rebrand-user"
+install -Dm755 "$P/rebrand-system.sh" "$DESTDIR/usr/libexec/rungic-rebrand-system"
 mkdir -p "$DESTDIR/usr/bin"
 g++ -O2 -g1 -std=c++20 -fPIC -o "$DESTDIR/usr/bin/rungic-plasma-screen-metrics" "$P/screen-metrics.cpp" \
     $(pkg-config --cflags --libs Qt6Gui)
