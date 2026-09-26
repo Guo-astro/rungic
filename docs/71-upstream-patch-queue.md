@@ -114,4 +114,14 @@ packages/<源码包名>/
 
 ## 试点进度
 
-（进行中）
+**1 配方（完成）**：`packages/kwin/recipe.json`。三个文件从Launchpad下载，sha256与记录一致；`.dsc`签名者（Ubuntu上传者）的公钥不在Debian密钥环中，完整性以sha256为准（与调研一致）。`dpkg-source -x`的结果与原`dffc717e:vendor/kwin`逐字节一致。工具链镜像`tools/pq/Dockerfile`固定到`ubuntu@sha256:da6fc2be…`（gbp 0.9.42、quilt 0.69、lintian 2.129、dpkg-source 1.23.7）。
+
+**2 补丁队列（完成）**：`tools/pq_import_history.py`按`tools/pq-history/kwin.json`把vendor历史转成16条补丁（5个历史补丁、`d1301f2e`中的共享头文件、10个功能提交；只改changelog的提交跳过），接在Ubuntu的2条补丁之后。从orig tarball开始用quilt应用全部补丁，结果与`HEAD:vendor/kwin`逐字节一致（`debian/patches`除外，符号链接按其指向的内容比较）。`e07d7448`暂按原提交保留为一条，待拆分；共享头文件暂以补丁携带，待改为`-dev`包。
+
+**3 工具（完成）**：`tools/pq.py`（fetch、source、prepare、export、lint、verify、tests）与单元测试`tools/test_pq.py`；`prepare`→`export`往返后补丁不变；`export`只写回我们的主题与series，Ubuntu原有补丁保持原样。`tools/build_on_device.py`对有配方的组件改用`pq.py source`。
+
+**核对上游状态时的更正**：`xdg-min-above-max`原计划作为上游候选，但xdg-shell.xml（`set_max_size`/`set_min_size`）明确规定最大值小于最小值是`invalid_size`协议错误，上游KWin的行为符合协议；该补丁是为微信4.1的客户端缺陷放宽协议，改标`Inappropriate`，应向客户端报告。其余标为`Pending`的补丁（screencast-mobile-shell、ftrace-fd-markers、output-internal-to-scripts、virtualkeyboard-commit-text）在提交上游前同样逐条核对。
+
+**5 测试（部分）**：为`xdg-min-above-max`按上游写法新增集成测试`testXdgShellWindow::testMinimumAboveMaximum`（最小700×400、最大360×800的窗口保持连接并丢弃冲突的最大宽度；再把最大高度设到最小以下，两个方向都丢弃；无协议错误），经`pq.py prepare`在对应提交上fixup后导出。`pq.py tests kwin --gaps`列出6条无测试覆盖的补丁：共享头文件（随使用它的补丁覆盖）、两条投屏补丁（需要电视接收端，人工项）、宿主滚动、空闲抑制、脚本中的`internal`属性。
+
+**6 模拟升级（完成分析）**：KWin上游6.6系列止于6.6.6，下一个稳定版是6.7.5（KDE neon为resolute提供的版本）。tarball经KDE发布密钥环中Bhushan Shah的签名（`B3CB…928CAEFC`）验证。把18条补丁依次三方合并到6.7.5：4条干净（空闲抑制、两条录屏、脚本`internal`），其余冲突；逐条单独合并的结果相同。冲突集中在嵌套Wayland后端（上游6.7重构了`wayland_egl_backend`、`wayland_layer`、`wayland_output`等，`xdgshell.cpp`的尺寸改为`QSizeF`，`virtualkeyboard_dbus.cpp`、`drmdevice.cpp`也有改动）。Ubuntu的2条补丁同样冲突（其中logind回退可能已部分进入上游）。记录：`.work/research/patch-queue/pq-upgrade-report.txt`、`pq-upgrade-solo.txt`。结论：跟进一个上游大版本时，需要人工调整并重测的正是这些补丁对应的功能；降低长期成本最有效的办法是把Android宿主相关的改动集中到更少的位置（例如独立的后端或插件），并把通用修正提交上游。resolute仍是Plasma 6.6，本次不解决冲突、不部署6.7。
