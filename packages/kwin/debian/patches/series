@@ -15,3 +15,8 @@ rungic/virtualkeyboard-commit-text.patch
 rungic/xdg-min-above-max.patch
 rungic/host-scroll-source-stop-scale.patch
 rungic/android-backend.patch
+0018-WIP-round-2-batch-1-graphics-and-output-into-the-And.patch
+0019-WIP-round-2-batch-1-hooks-in-the-public-section.patch
+0020-WIP-round-2-batch-2-host-outputs-cast-outputs-and-ho.patch
+0021-WIP-round-2-batch-3-screencast-rules-without-environ.patch
+0022-WIP-round-2-batch-2-leftovers.patch

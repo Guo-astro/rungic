@@ -1,3 +1,13 @@
+kwin (4:6.6.6-0ubuntu0.1+moto22) resolute; urgency=medium
+
+  * Every change for the Android host in src/backends/android (docs/72 round 2):
+    graphics (render device, the host's buffer allocator, UBWC, SHM, flat
+    single-surface outputs, implicit/explicit synchronization, host restarts),
+    host outputs and cast outputs, host text input. Upstream files keep hooks;
+    no MOTO_* environment variable is read any more.
+
+ -- range-dev <noreply@localhost>  Sat, 26 Sep 2026 09:39:27 +0000
+
 kwin (4:6.6.6-0ubuntu0.1+moto21) resolute; urgency=medium
 
   * Android host backend (docs/72): kwin_wayland --android-host selects
