@@ -41,7 +41,12 @@ def press(name):
     return rungic_agent.ui_press('plasmashell', buttons[0]['path'])
 
 
-def open_drawer(timeout=6):
+# One AT-SPI query through adb takes about 3 s (two container round trips): a position counts as
+# settled after two equal queries, so waits leave room for at least three.
+SETTLE_TIMEOUT = 15
+
+
+def open_drawer(timeout=SETTLE_TIMEOUT):
     """Swipe the drawer open and wait until its search field sits still on screen."""
     run('input swipe 540 2000 540 600 250', 'shell')
     previous, deadline = None, time.monotonic() + timeout
@@ -55,7 +60,7 @@ def open_drawer(timeout=6):
     raise RuntimeError('app drawer did not open')
 
 
-def icon_for(app, timeout=5):
+def icon_for(app, timeout=SETTLE_TIMEOUT):
     """The launcher delegate of `app`, once its position stops changing (drawer animations)."""
     previous, deadline = None, time.monotonic() + timeout
     while time.monotonic() < deadline:

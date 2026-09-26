@@ -492,8 +492,12 @@ def rime_input(ctx):
     probe = next((p for p in ('/usr/bin/moto-input-probe', '/usr/local/bin/moto-input-probe')
                   if run(f'test -x {p}', 'container', check=False).returncode == 0), None)
     keyboard = False
+    # By its command line: the process name is cut to 15 characters ("moto-input-prob"), so
+    # `pkill -x moto-input-probe` never matched and each run left a probe window behind.
+    stop_probe = f'pkill -f -x {probe}' if probe else 'true'
     try:
         if probe:
+            run(stop_probe, 'container', check=False)
             user(f'(setsid {probe} >/dev/null 2>&1 &) ; true')
             field = wait_for(lambda: next((f for f in rungic_agent.ui_find('moto-input-probe', role='text')), None)
                              if any(a['name'] == 'moto-input-probe' for a in rungic_agent.a11y('apps')) else None,
@@ -505,7 +509,7 @@ def rime_input(ctx):
         return result(engine and keyboard, engine=check.stdout.strip() or f'exit {check.returncode}',
                       keyboard_shown=keyboard, probe=probe)
     finally:
-        run('pkill -x moto-input-probe', 'container', check=False)
+        run(stop_probe, 'container', check=False)
         try:
             _home()
         except Exception:

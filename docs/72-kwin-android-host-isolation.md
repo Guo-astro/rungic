@@ -100,7 +100,7 @@
 
 ### 第二轮进度
 
-**实现（完成，KWin `+moto22`）**：三批都在主机的x86构建环境中编译，并运行KWin全部157个测试（`ctest -j8`），与不含我们补丁的基线（上游＋Ubuntu补丁）在同一环境、同一命令下比较：失败集合完全相同（57个，均为环境原因：没有X显示、并行冲突；`testMouseKeys`一次并行失败，单独运行两边都3/3通过）。环境问题使这57个测试目前没有实际意义，之后改为xvfb、串行运行。
+**实现（完成，KWin `+moto22`）**：三批都在主机的x86构建环境中编译，并运行KWin全部157个测试（`ctest -j8`），与不含我们补丁的基线（上游＋Ubuntu补丁）在同一环境、同一命令下比较：失败集合完全相同（57个，均为环境原因：没有X显示、并行冲突；`testMouseKeys`一次并行失败，单独运行两边都3/3通过）。环境问题使这57个测试没有实际意义；随后改为在xvfb下串行运行，并对最终折叠后的源码使用全新构建目录：两边都是同样的24个失败，其余133个通过，没有只在我们这边失败的测试。
 
 **折叠（完成）**：不是把改动追加在队列末尾，而是按功能重写整个补丁队列（13条），每一步只取属于该功能的代码段，功能交织的段落手写中间状态（EGL帧结束：先只有钩子，再加显式同步fence，再加FTrace标记），每条补丁都能单独编译（在主机上检查了钩子这一步与最终状态）。从orig tarball用quilt应用后与测试过的源码树一致。顺序：xdg最小/最大尺寸、向脚本暴露internal、录屏×2、输入法接收宿主文字、虚拟键盘commitText、宿主dmabuf v3、`android-backend-hooks`、显式同步fence、FTrace、宿主滚动、跳过未变的配置、`android-backend`。
 
@@ -118,3 +118,12 @@
 - 不再读取任何`MOTO_*`环境变量；会话脚本只传`--android-host`，Mesa的`FD_KGSL_DMABUF_UBWC`保留。
 
 **新增验收**：完整级`cast.agent_screen`：打开助手屏后KWin出现`CAST-n`输出（1920×1080），关闭后移除；覆盖宿主输出跟踪与投屏输出的创建/删除（在旧KWin上先验证了场景本身）。
+
+**实机验收（发布`20260926.19`，KWin `+moto22`，会话只传`--android-host`，完成）**：部署成功（smoke首轮`input.text`是已知的会话启动后首次输入问题，重试通过），快照已提交。在同一版本上完成的full验收：17项中15项通过，其中包括新增的`idle.inhibit`、`cast.agent_screen`，以及`display.mode`、`camera.back`、`codec.hw`、`perf.compositor`（KWin绘制p95 3.74 ms，SurfaceFlinger帧间隔p95 16.72 ms，与`.18`的3.56/16.72 ms相当）。另外两项失败均与第二轮无关：
+- `recording.quicksetting`：已知的录屏结束卡住（pulsesrc EOS），另行修复。
+- `camera.frames`（前置）：只拿到1帧。`.17`、`.18`也都是首次失败、重跑通过，而`.19`相对`.18`只换了KWin、会话脚本和gpu-env（删掉的两个变量只有KWin读取），摄像头链路的组件都没有变。已知的现象：Android端相机持续打开，`capture.sock`连接已建立且接收队列为0；失败时首帧在0.025 s就到达（上一次残留的旧帧），之后的新帧没有送到pipewiresrc；会话刚重启后能通过。原因待在共享摄像头桥接中另查。
+
+验收过程中暴露并修正了两个测试工具问题（不是KWin的问题）：
+- `app.launch`报“Calculator不可见或位置不稳定”：每次AT-SPI查询经adb需要约3秒，而等待位置稳定的超时只有5～6秒（要求连续两次查询结果一致），查询稍慢就会误报。超时改为15秒（`tools/ui_launch_check.py`）。第一次失败时还见到过另一个现象：在当时的plasmashell实例里，抽屉每次打开时网格都停在下移的位置（`contentY`越界且没有回弹）。KWin发给plasmashell的触摸序列是完整的down/motion/up（`WAYLAND_DEBUG`核对过），单独重启plasmashell或整个会话后都没有复现，按完整验收顺序重跑也没有复现，因此不认定为回归；如再出现，先记录plasmashell的状态再重启。
+- `input.rime`偶发失败“找不到对应尺寸的窗口”：清理探针用的是`pkill -x moto-input-probe`，但进程名只保留15个字符（`moto-input-prob`），所以从来没有匹配上，每次运行都会留下一个探针窗口，后来的查询会找到旧的最小化窗口。改为按完整命令行匹配，并在启动前先清掉残留（`tools/rungic_acceptance.py`）。
+
