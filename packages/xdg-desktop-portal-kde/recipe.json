@@ -1,0 +1,16 @@
+{
+ "comment": "Pinned upstream of the xdg-desktop-portal-kde source package (docs/71, docs/73): Ubuntu's 6.6.6-0ubuntu0.1; packages/xdg-desktop-portal-kde/debian replaces its debian/ (Ubuntu's packaging plus our patches under debian/patches/rungic).",
+ "kind": "ubuntu",
+ "source": "xdg-desktop-portal-kde",
+ "version": "6.6.6-0ubuntu0.1",
+ "series": "resolute-updates",
+ "git_ubuntu_tag": "import/6.6.6-0ubuntu0.1",
+ "upstream": "https://invent.kde.org/plasma/xdg-desktop-portal-kde",
+ "licenses": "see LICENSES",
+ "files": {
+  "xdg-desktop-portal-kde_6.6.6-0ubuntu0.1.dsc": "3b246ee76981917a3a00e696cacddc12e89d82c943f77340f57eabc4624d7c8b",
+  "xdg-desktop-portal-kde_6.6.6.orig.tar.xz": "5015d0346985e0b5d259d656a099a1bb3af8409e6b6241030c2fdfeedacd9e78",
+  "xdg-desktop-portal-kde_6.6.6-0ubuntu0.1.debian.tar.xz": "1ee1ef5e3a871d7be9d00e84613f513fa28cbb460feac0e07aa8e13ae5f336aa"
+ },
+ "fetch": "https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/xdg-desktop-portal-kde/6.6.6-0ubuntu0.1/{file}"
+}

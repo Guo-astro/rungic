@@ -1,0 +1,7 @@
+# Compulsory line, this is a version 4 file
+version=4
+
+opts="filenamemangle=s%(?:.*?)?v?(\d[\d.]*)\.tar\.gz%<project>-$1.tar.gz%,uversionmangle=s/_/~/" \
+   https://github.com/bugaevc/wl-clipboard/tags \
+   (?:.*?/)?v?(\d[\d._a-z]*)\.tar\.gz debian uupdate
+

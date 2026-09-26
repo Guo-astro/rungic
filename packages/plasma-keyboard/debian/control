@@ -1,0 +1,43 @@
+Source: plasma-keyboard
+Section: kde
+Priority: optional
+Maintainer: Kubuntu Developers <kubuntu-devel@lists.ubuntu.com>
+XSBC-Original-Maintainer: Debian Qt/KDE Maintainers <debian-qt-kde@lists.debian.org>
+Uploaders: Yifei Zhan <debian@zhan.science>
+Build-Depends: cmake (>= 3.16~),
+               debhelper-compat (= 13),
+               dh-sequence-kf6,
+               dh-sequence-qmldeps,
+               extra-cmake-modules (>= 6.22.0~),
+               gettext,
+               kwayland-dev (>= 4:6.6.4~),
+               libkf6config-dev (>= 6.22.0~),
+               libkf6coreaddons-dev (>= 6.22.0~),
+               libkf6crash-dev (>= 6.22.0~),
+               libkf6i18n-dev (>= 6.22.0~),
+               libkf6kcmutils-dev (>= 6.22.0~),
+               libplasma-dev (>= 6.6.6~),
+               plasma-wayland-protocols,
+               qml6-module-org-kde-layershell (>= 6.6.4~),
+               qt6-base-dev (>= 6.10.0+dfsg~),
+               qt6-base-private-dev (>= 6.10.0~),
+               qt6-declarative-dev (>= 6.10.0+dfsg~),
+               qt6-virtualkeyboard-dev (>= 6.10.0~),
+               qt6-wayland-dev (>= 6.10.0~),
+               qt6-wayland-private-dev,
+               wayland-protocols,
+Standards-Version: 4.7.2
+Homepage: https://invent.kde.org/plasma/plasma-keyboard
+Vcs-Browser: https://code.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/plasma-keyboard
+Vcs-Git: https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/plasma-keyboard
+
+Package: plasma-keyboard
+Architecture: any
+Depends: qml6-module-org-kde-layershell,
+         qt6-virtualkeyboard-plugin,
+         ${misc:Depends},
+         ${qml6:Depends},
+         ${shlibs:Depends}
+Description: On-screen virtual keyboard for KDE Plasma
+ The plasma-keyboard is a virtual keyboard based on Qt Virtual
+ Keyboard designed to integrate in Plasma.

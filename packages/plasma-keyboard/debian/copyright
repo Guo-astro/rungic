@@ -1,0 +1,371 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: plasma-keyboard
+Upstream-Contact: kde-devel@kde.org
+Source: https://invent.kde.org/plasma/plasma-keyboard
+
+Files: *
+Copyright: 2024, Aleix Pol i Gonzalez <aleixpol@kde.org>
+           2024, David Edmundson <davidedmundson@kde.org>
+           2025, Devin Lin <devin@kde.org>
+           2025 Vit Pelcak <vit@pelcak.org>
+           2026 Jan Papez (honyczek)
+           2025, 2026 Emir SARI <emir_sari@icloud.com>
+           2026 Mincho Kondarev <mkondarev@yahoo.de>
+           2025, 2026 Shinjo Park <kde@peremen.name>
+           2025 KDE euskaratzeko proiektuaren arduraduna <xalba@ni.eus>
+           2025 IÃ±igo Salvador Azurmendi <xalba@ni.eus>
+           2025, 2026 Martin Hansen <mh306602@gmail.com>
+           2025, 2026 Tommi Nieminen <translator@legisign.org>
+           2025 Alexander Yavorsky <kekcuha@gmail.com>
+           2025, 2026 Yuri Chornoivan <yurchor@ukr.net>
+           2025 MatjaÅ¾ Jeran <matjaz.jeran@amis.net>
+           2025, 2026 Zayed Al-Saidi <zayed.alsaidi@gmail.com>
+           2026 giovanni <g.sora@tiscali.it>
+           2026 Sergiu Bivol <sergiu@cip.md>
+           2025, 2026 Freek de Kruijf <freekdekruijf@kde.nl>
+           2025, 2026 Toms Trasuns <toms.trasuns@posteo.net>
+           2025, 2026 Eloy Cuadra <ecuadra@eloihr.net>
+           2025 Eloy Cuadra <ecuadra@eloihr.net>
+           2025 Alois Spitzbart <spitz234@hotmail.com>
+           2025 Philipp Kiemle <l10n.daphipz@fastmail.de>
+           2025, 2026 Philipp Kiemle <l10n.daphipz@fastmail.de>
+           2025 Sveinn Ã­ Felli <sv1@fellsnet.is>
+           2025, 2026 Stefan AsserhÃ¤ll <stefan.asserhall@gmail.com>
+           2025, 2026 Xavier Besnard <xavier.besnard@kde.org>
+           2025 Paolo Zamponi <feus73@gmail.com>
+           2025 Vincenzo Reale <smart2128vr@gmail.com>
+           2025, 2026 Yaron Shahrabani <sh.yaron@gmail.com>
+           2025, 2026 Marcus Gama <marcus.gama@gmail.com>
+           2025 Guilherme MarÃ§al Silva <guimarcalsilva@gmail.com>
+           2025 Geraldo Simiao <geraldosimiao@fedoraproject.org>
+           2026 Karl Ove Hufthammer <karl@huftis.org>
+           2025 Åukasz WojniÅowicz <lukasz.wojnilowicz@gmail.com>
+           2025 Kisaragi Hiu <mail@kisaragi-hiu.com>
+           2024 Nate Graham <nate@kde.org>
+License: GPL-2.0-or-later
+
+Files: po/ca/*.po
+       po/ca@valencia/*.po
+       po/uk/*.po
+Copyright: 2025, 2026 Josep M. Ferrer <txemaq@gmail.com>
+License: LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL
+Comment: Manually collected
+
+Files: src/layouts/*
+       src/styles/breeze/*
+Copyright: 2016-2021 The Qt Company Ltd.
+           2025 Devin Lin <devin@kde.org>
+License: LicenseRef-Qt-Commercial OR GPL-3.0-only
+
+Files: src/qwaylandinputpanelsurface.cpp
+       src/qwaylandinputpanelsurface_p.h
+       src/qwaylandinputpanelshellintegration.cpp
+       src/qwaylandinputpanelshellintegration_p.h
+Copyright: 2017 Jan Arne Petersen
+           2026 Kristen McWilliam <kristen@kde.org>
+License: LGPL-2.1-only
+
+Files: kcm/CMakeLists.txt
+       src/plasmakeyboardsettings.kcfg
+       src/plasmakeyboardsettings.kcfgc
+       src/qmlplugin/BreezeConstants.qml
+       src/qmlplugin/BreezeKeyPanel.qml
+       src/qmlplugin/BreezePopup.qml
+       src/resources.qrc
+       src/vibration.cpp
+       src/vibration.h
+       src/vibrationevent.h
+       src/inputmethod.cpp
+       src/inputmethod_p.h
+       kcm/kcm_plasmakeyboard.json
+Copyright: 2025, Devin Lin <devin@kde.org>
+           2017, Jan Arne Petersen
+           2021, Aleix Pol Gonzalez <aleixpol@kde.org>
+           2026 Kristen McWilliam <kristen@kde.org>
+License: LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL
+
+Files: CMakeLists.txt
+       kcm/Messages.sh
+       src/Messages.sh
+       src/CMakeLists.txt
+       src/qmlplugin/CMakeLists.txt
+Copyright: 2024, Aleix Pol Gonzalez <aleixpol@kde.org>
+           2020-2022, Harald Sitter <sitter@kde.org>
+           2025, Devin Lin <devin@kde.org>
+           2025 Kristen McWilliam <kristen@kde.org>
+License: BSD-2-clause
+
+Files: CMakePresets.json.license
+       CMakePresets.json
+Copyright: 2021-2025, Laurent Montel <montel@kde.org>
+License: BSD-3-clause
+
+Files: README.md
+Copyright: None
+License: CC0-1.0
+
+Files: src/org.kde.plasma.keyboard.metainfo.xml
+Copyright: 2025, Aleix Pol Gonzalez <aleixpol@kde.org>
+License: FSFAP
+
+Files: src/config-plasma-keyboard.h.cmake
+       src/inputlisteneritem.*
+       src/inputmethod.cpp
+       src/inputmethod_p.h
+       src/inputpanelintegration.*
+       src/inputpanelrole.h
+       src/inputpanelwindow.*
+       src/inputplugin.*
+       src/main.cpp
+       src/overlay/candidatemodel.*
+       src/overlay/diacritics.qrc
+       src/overlay/diacriticsdataloader.*
+       src/overlay/longpresstrigger.*
+       src/overlay/overlay*
+       src/overlay/prefixquerytrigger.*
+       src/overlay/textexpansiontrigger.*
+       src/qml/*
+       kcm/*
+Copyright: 2026 Milian Wolff <mail@milianw.de>
+           2021-2025 Aleix Pol i Gonzalez <aleixpol@kde.org>
+           2025 Devin Lin <devin@kde.org>
+           2025, 2026 Kristen McWilliam <kristen@kde.org>
+           2024 David Edmundson <davidedmundson@kde.org>
+License: GPL-2.0-only OR GPL-3.0-only OR LicenseRef-KDE-Accepted-GPL
+
+Files: src/dbus/*
+Copyright: 2025 Guido Günther <agx@sigxcpu.org>
+License: GPL-3.0-or-later
+
+Files: src/sounds/*
+Copyright: 2013 Canonical Ltd.
+License: GPL-3.0-only
+
+Files: debian/*
+Copyright: 2025, Debian Qt/KDE Maintainers <debian-qt-kde@lists.debian.org>
+           2026 Scarlett Moore <sgmoore@debian.org>
+License:  GPL-2.0-or-later
+
+License: LGPL-2.1-or-later
+ This library is free software; you can redistribute it and/or modify
+ it under the terms of the GNU Lesser General Public License as
+ published by the Free Software Foundation; either version 2.1 of the
+ License, or (at your option) any later version.
+ .
+ This library is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ Lesser General Public License for more details.
+ .
+ You should have received a copy of the GNU Lesser General Public
+ License along with this library; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+ 02110-1301  USA Also add information on how to contact you by
+ electronic and paper mail.
+ .
+ On Debian systems, the complete text of the GNU Lesser General
+ Public License version 2.1 can be found in
+ `/usr/share/common-licenses/LGPL-2.1’.
+
+License: LGPL-2.1-only
+ This library is free software; you can redistribute it and/or modify
+ it under the terms of the GNU Lesser General Public License version
+ 2.1 as published by the Free Software Foundation.
+ .
+ This library is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ Lesser General Public License for more details.
+ .
+ You should have received a copy of the GNU Lesser General Public
+ License along with this library; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+ 02110-1301  USA Also add information on how to contact you by
+ electronic and paper mail.
+ .
+ On Debian systems, the complete text of the GNU Lesser General
+ Public License version 2.1 can be found in
+ `/usr/share/common-licenses/LGPL-2.1’.
+
+License: LGPL-3.0-only
+ This library is free software; you can redistribute it and/or modify
+ it under the terms of the GNU Lesser General Public License version
+ 3 as published by the Free Software Foundation.
+ .
+ This library is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ Lesser General Public License for more details.
+ .
+ You should have received a copy of the GNU Lesser General Public
+ License along with this library.  If not, see
+ <http://www.gnu.org/licenses/>.
+ .
+ On Debian systems, the complete text of the GNU Lesser General
+ Public License version 3 can be found in
+ `/usr/share/common-licenses/LGPL-3’.
+
+License: GPL-2.0-only
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation; version 2.
+ .
+ This program is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ General Public License for more details.
+ .
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+ 02110-1301, USA. Also add information on how to contact you by
+ electronic and paper mail.
+ .
+ On Debian systems, the complete text of the GNU General Public
+ License version 2 can be found in
+ `/usr/share/common-licenses/GPL-2’.
+
+License: GPL-2.0-or-later
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation; either version 2 of the License, or
+ (at your option) any later version.
+ .
+ This program is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ General Public License for more details.
+ .
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+ 02110-1301, USA. Also add information on how to contact you by
+ electronic and paper mail.
+ .
+ On Debian systems, the complete text of the GNU General Public
+ License version 2 can be found in
+ `/usr/share/common-licenses/GPL-2’.
+
+License: GPL-3.0-only
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GPL License as published by the Free
+ Software Foundation, version 3.
+ .
+ This package is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ General Public License for more details.
+ .
+ You should have received a copy of the GNU General Public License
+ along with this program. If not, see <http://www.gnu.org/licenses/>.
+ .
+ On Debian systems, the complete text of the GNU General Public
+ License version 3 can be found in
+ `/usr/share/common-licenses/GPL-3’.
+
+
+License: GPL-3.0-or-later
+ This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+ .
+ This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+ .
+ You should have received a copy of the GNU General Public License along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+License: BSD-2-clause
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions are
+ met:
+ .
+    * Redistributions of source code must retain the above copyright
+      notice, this list of conditions and the following disclaimer.
+    * Redistributions in binary form must reproduce the above
+      copyright notice, this list of conditions and the following disclaimer
+      in the documentation and/or other materials provided with the
+      distribution.
+ .
+ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+License: BSD-3-clause
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions are met:
+ .
+ 1) Redistributions of source code must retain the above copyright notice,
+ this list of conditions and the following disclaimer.
+ .
+ 2) Redistributions in binary form must reproduce the above copyright notice,
+ this list of conditions and the following disclaimer in the documentation
+ and/or other materials provided with the distribution.
+ .
+ 3) Neither the name of the ORGANIZATION nor the names of its contributors
+ may be used to endorse or promote products derived from this software
+ without specific prior written permission.
+ .
+ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ POSSIBILITY OF SUCH DAMAGE.
+
+License: CC0-1.0
+ On Debian systems the full text of the CC0-1.0 license can be found in
+ /usr/share/common-licenses/CC0-1.0
+
+License: FSFAP
+ Copying and distribution of this file, with or without modification,
+ are permitted in any medium without royalty provided the copyright
+ notice and this notice are preserved. This file is offered as-is,
+ without any warranty.
+
+License: LicenseRef-KDE-Accepted-GPL
+ This library is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation; either version 3 of the license or (at
+ your option) at any later version that is accepted by the membership
+ of KDE e.V. (or its successor approved by the membership of KDE
+ e.V.), which shall act as a proxy as defined in Section 14 of
+ version 3 of the license.
+ .
+ This program is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ General Public License for more details.
+
+License: LicenseRef-KDE-Accepted-LGPL
+ This library is free software; you can redistribute it and/or modify
+ it under the terms of the GNU Lesser General Public License as
+ published by the Free Software Foundation; either version 3 of the
+ license or (at your option) any later version that is accepted by
+ the membership of KDE e.V. (or its successor approved by the
+ membership of KDE e.V.), which shall act as a proxy as defined in
+ Section 6 of version 3 of the license.
+ .
+ This program is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ General Public License for more details.
+
+License: LicenseRef-Qt-Commercial
+ Licensees holding valid commercial Qt licenses may use this software in
+ accordance with the the terms contained in a written agreement between
+ you and The Qt Company. Alternatively, the terms and conditions that were
+ accepted by the licensee when buying and/or downloading the
+ software do apply.
+ .
+ For the latest licensing terms and conditions, see https://www.qt.io/terms-conditions.
+ For further information use the contact form at https://www.qt.io/contact-us.

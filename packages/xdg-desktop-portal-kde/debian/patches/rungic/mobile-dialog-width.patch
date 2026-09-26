@@ -1,0 +1,29 @@
+From: kevinzhow <kevinzhow@local>
+Date: Wed, 23 Sep 2026 20:28:24 +0800
+Subject: Portal dialogs: a mobile dialog wraps within the screen width
+
+On a phone the dialog was as wide as its implicit width and ran off the screen; it now takes at most
+the available width less the margins.
+
+Forwarded: no
+Last-Update: 2026-09-27
+X-Rungic-Status: Pending [a plain bug; check upstream master first]
+X-Rungic-Tests: none (gap: no scenario opens a portal dialog)
+X-Rungic-Docs: docs/42
+---
+ src/PortalDialog.qml | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/PortalDialog.qml b/src/PortalDialog.qml
+index 996b585..d30fc30 100644
+--- a/src/PortalDialog.qml
++++ b/src/PortalDialog.qml
+@@ -183,6 +183,8 @@ Kirigami.AbstractApplicationWindow {
+             anchors.fill: Kirigami.Settings.isMobile ? undefined : parent
+             anchors.centerIn: Kirigami.Settings.isMobile ? parent : undefined
+             anchors.margins: Kirigami.Settings.isMobile ? glow.cornerRadius : 0
++            // A mobile dialog must wrap within the available screen width.
++            width: Kirigami.Settings.isMobile ? Math.min(implicitWidth, Math.max(1, parent.width - 2 * Kirigami.Units.largeSpacing)) : parent.width
+             topPadding: 0
+             bottomPadding: 0
+             rightPadding: 0

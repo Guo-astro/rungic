@@ -1,0 +1,16 @@
+{
+ "comment": "Pinned upstream of the plasma-keyboard source package (docs/71, docs/73): Ubuntu's 6.6.6-0ubuntu0.1; packages/plasma-keyboard/debian replaces its debian/ (Ubuntu's packaging plus our patches under debian/patches/rungic).",
+ "kind": "ubuntu",
+ "source": "plasma-keyboard",
+ "version": "6.6.6-0ubuntu0.1",
+ "series": "resolute-updates",
+ "git_ubuntu_tag": "import/6.6.6-0ubuntu0.1",
+ "upstream": "https://invent.kde.org/plasma/plasma-keyboard",
+ "licenses": "see LICENSES",
+ "files": {
+  "plasma-keyboard_6.6.6-0ubuntu0.1.dsc": "e91c2edea9cf7ce494836e24d215a06e669614fc8f52f7d711e7514f1716da70",
+  "plasma-keyboard_6.6.6.orig.tar.xz": "fd4aa4f8b6fdc9b7b77fe0a0fba7ef2e14be1ae9487000134cda433cdb8da056",
+  "plasma-keyboard_6.6.6-0ubuntu0.1.debian.tar.xz": "3827d85f89418832979ac7a7c9172b777e75ea50a743416267ea00354ba04725"
+ },
+ "fetch": "https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/plasma-keyboard/6.6.6-0ubuntu0.1/{file}"
+}

@@ -4,4 +4,4 @@ set -eu
 export QML_IMPORT_PATH=/usr/lib/rungic-rime/qml${QML_IMPORT_PATH:+:$QML_IMPORT_PATH}
 export XDG_DATA_DIRS=/usr/share/rungic-rime:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}
 export QT_LOGGING_RULES='qt.virtualkeyboard.*.debug=false'
-exec /usr/bin/plasma-keyboard "$@"   # plasma-keyboard +moto (vendor/plasma-keyboard)
+exec /usr/bin/plasma-keyboard "$@"   # plasma-keyboard +rungic (packages/plasma-keyboard)

@@ -1,0 +1,45 @@
+From: kevinzhow <kevinzhow@local>
+Date: Wed, 23 Sep 2026 20:28:24 +0800
+Subject: Language popup: no live binding to the key that opened it
+
+A language change destroys the key that opened the popup; its position bindings then referred to a
+deleted item after closing or rotating. The popup takes the position once and closes when the
+keyboard panel's size changes.
+
+Forwarded: no
+Last-Update: 2026-09-27
+X-Rungic-Status: Pending [a plain bug; check upstream master first]
+X-Rungic-Tests: L3:input.rime
+X-Rungic-Docs: docs/41 docs/42
+---
+ src/qml/LanguagePopup.qml | 13 +++++++++++--
+ 1 file changed, 11 insertions(+), 2 deletions(-)
+
+diff --git a/src/qml/LanguagePopup.qml b/src/qml/LanguagePopup.qml
+index 78ed46d..e23cbc5 100644
+--- a/src/qml/LanguagePopup.qml
++++ b/src/qml/LanguagePopup.qml
+@@ -40,12 +40,21 @@ T.Popup {
+         languageListView.currentIndex = currentIndex
+         languageListView.positionViewAtIndex(currentIndex, ListView.Center)
+ 
+-        root.x = Qt.binding(() => keyboardPanel.mapFromItem(parentItem, 0, 0).x);
+-        root.y = Qt.binding(() => keyboardPanel.mapFromItem(parentItem, 0, -root.height).y);
++        // A language change destroys its old key. Do not retain that item in
++        // live bindings after the popup closes or the screen rotates.
++        const position = keyboardPanel.mapFromItem(parentItem, 0, -root.height);
++        root.x = position.x;
++        root.y = position.y;
+ 
+         root.visible = true
+     }
+ 
++    Connections {
++        target: root.keyboardPanel
++        function onWidthChanged() { root.close(); }
++        function onHeightChanged() { root.close(); }
++    }
++
+     TextMetrics {
+         id: languageNameTextMetrics
+         font {

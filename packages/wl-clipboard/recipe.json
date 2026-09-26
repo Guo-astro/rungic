@@ -1,0 +1,13 @@
+{
+ "comment": "Pinned upstream of wl-clipboard (docs/71, docs/73): the 2.3.0 release (ext-data-control, which the clipboard bridge needs), packaged with Ubuntu's 2.2.1-2build1 packaging adapted to it in packages/wl-clipboard/debian. No source changes.",
+ "kind": "upstream",
+ "source": "wl-clipboard",
+ "version": "2.3.0",
+ "upstream": "https://github.com/bugaevc/wl-clipboard",
+ "licenses": "GPL-3.0-or-later; see COPYING",
+ "tarball": "wl-clipboard-2.3.0.tar.gz",
+ "files": {
+  "wl-clipboard-2.3.0.tar.gz": "b4dc560973f0cd74e02f817ffa2fd44ba645a4f1ea94b7b9614dacc9f895f402"
+ },
+ "fetch": "https://github.com/bugaevc/wl-clipboard/archive/refs/tags/v2.3.0.tar.gz"
+}

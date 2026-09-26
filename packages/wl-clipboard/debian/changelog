@@ -1,0 +1,96 @@
+wl-clipboard (2.3.0-0+rungic1) resolute; urgency=medium
+
+  * Pinned upstream 2.3.0 release tarball (docs/71, docs/73) instead of
+    vendor/wl-clipboard; no source changes.
+
+ -- range-dev <noreply@localhost>  Sun, 27 Sep 2026 09:00:00 +0000
+
+wl-clipboard (2.3.0-0+moto1) resolute; urgency=medium
+
+  * New upstream release 2.3.0 (ext-data-control), as vendored: the Android
+    clipboard bridge needs it. Was built into /usr/local and shadowed the
+    packaged 2.2.1 through PATH (docs/61).
+
+ -- range-dev <noreply@localhost>  Fri, 25 Sep 2026 21:17:08 +0000
+
+wl-clipboard (2.2.1-2build1) resolute; urgency=medium
+
+  * No-change mass rebuild for Ubuntu 26.04 (LP: #2132257)
+
+ -- Sebastien Bacher <seb128@ubuntu.com>  Thu, 29 Jan 2026 22:13:47 +0100
+
+wl-clipboard (2.2.1-2) unstable; urgency=medium
+
+  * Team upload, salsa debian namespace.
+
+  [ Evangelos Ribeiro Tzaras ]
+  * d/upstream/metadata: Add Repository field.
+    This allows gbp-clone --add-upstream-vcs to work
+  * d/control: Adjust Vcs-* URLs to point to debian/ namespace
+
+ -- Chris Hofstaedtler <zeha@debian.org>  Thu, 02 Jan 2025 03:52:40 +0100
+
+wl-clipboard (2.2.1-1) unstable; urgency=medium
+
+  * New upstream release
+    - Fixes copy-paste with phoc compositor (Closes: #1051463)
+
+ -- Felipe Sateler <fsateler@debian.org>  Mon, 11 Sep 2023 20:23:34 -0300
+
+wl-clipboard (2.2.0-1) unstable; urgency=medium
+
+  * New upstream release
+    - Upload to sid
+    - Bumps minimum meson version to 0.47
+
+ -- Felipe Sateler <fsateler@debian.org>  Mon, 07 Aug 2023 21:39:13 -0400
+
+wl-clipboard (2.2.0~rc1-1) experimental; urgency=medium
+
+  * New upstream version
+    - Upload to experimental due to freeze
+
+ -- Felipe Sateler <fsateler@debian.org>  Sun, 30 Apr 2023 09:51:52 -0400
+
+wl-clipboard (2.1.0-0.1) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * New upstream version 2.1.0
+  * debian/control:
+    - bump debhelper version
+    - bump standards version
+    - add salsa ci config
+
+ -- Sai Karthik <kskarthik@disroot.org>  Sat, 28 May 2022 21:50:31 +0530
+
+wl-clipboard (2.0.0-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Use meson option for zsh install dir
+  * Add editorconfig file to exclude debian/rules from the
+    4-space indent rule
+
+ -- Felipe Sateler <fsateler@debian.org>  Sun, 06 Oct 2019 20:17:15 -0300
+
+wl-clipboard (2.0.0~beta2-1) unstable; urgency=medium
+
+  * New upstream release candidate
+    - Install new bash/zsh completions
+  * Update watch file to consider release candidates
+  * Bump debhelper from old 11 to 12.
+  * Bump Standards-Version (no changes needed)
+
+ -- Felipe Sateler <fsateler@debian.org>  Sun, 22 Sep 2019 20:47:27 -0300
+
+wl-clipboard (1.0.0-1) unstable; urgency=medium
+
+  * Import new upstream version 1.0.0
+  * Remove boilerplate comments from watch file
+
+ -- Felipe Sateler <fsateler@debian.org>  Wed, 14 Nov 2018 21:15:38 -0300
+
+wl-clipboard (0.0.20181003-1) unstable; urgency=medium
+
+  * Initial release (Closes: #910185)
+
+ -- Felipe Sateler <fsateler@debian.org>  Wed, 03 Oct 2018 05:06:20 -0300

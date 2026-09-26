@@ -67,22 +67,19 @@
       ]
     },
     "plasma-keyboard": {
-      "source": "vendor/plasma-keyboard",
-      "version": "6.6.6-0ubuntu0.1+moto1",
+      "source": "packages/plasma-keyboard",
       "packages": [
         "plasma-keyboard"
       ]
     },
     "xdg-desktop-portal-kde": {
-      "source": "vendor/xdg-desktop-portal-kde",
-      "version": "6.6.6-0ubuntu0.1+moto1",
+      "source": "packages/xdg-desktop-portal-kde",
       "packages": [
         "xdg-desktop-portal-kde"
       ]
     },
     "wl-clipboard": {
-      "source": "vendor/wl-clipboard",
-      "version": "2.3.0-0+moto1",
+      "source": "packages/wl-clipboard",
       "packages": [
         "wl-clipboard"
       ]

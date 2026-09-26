@@ -1,0 +1,55 @@
+From: kevinzhow <kevinzhow@local>
+Date: Wed, 23 Sep 2026 20:28:24 +0800
+Subject: Input listener: apply a text-input context change after its Wayland
+ batch
+
+Text fields can disable and re-enable text-input in one Wayland batch; applying each change at once
+unmapped and remapped the keyboard in between (flicker). The context change and the hide on
+deactivate are queued, so only the final state applies; the composition is still reset at once.
+
+Forwarded: no
+Last-Update: 2026-09-27
+X-Rungic-Status: Pending [a plain bug; check upstream master first]
+X-Rungic-Tests: L3:input.text
+X-Rungic-Docs: docs/47
+---
+ src/inputlisteneritem.cpp | 11 +++++++++--
+ 1 file changed, 9 insertions(+), 2 deletions(-)
+
+diff --git a/src/inputlisteneritem.cpp b/src/inputlisteneritem.cpp
+index ff7fad4..e65da0d 100644
+--- a/src/inputlisteneritem.cpp
++++ b/src/inputlisteneritem.cpp
+@@ -44,6 +44,8 @@ InputListenerItem::InputListenerItem()
+     // Grab and listen to physical keyboard input
+     m_input.setGrabbing(true);
+ 
++    // Text fields can disable and re-enable text-input in one Wayland batch.
++    // Apply the final context state without unmapping the keyboard in between.
+     connect(&m_input, &InputPlugin::contextChanged, this, [this] {
+         if (m_input.hasContext()) {
+             QGuiApplication::inputMethod()->update(Qt::ImQueryAll);
+@@ -51,7 +53,7 @@ InputListenerItem::InputListenerItem()
+         } else {
+             QGuiApplication::inputMethod()->setVisible(false);
+         }
+-    });
++    }, Qt::QueuedConnection);
+     connect(&m_input, &InputPlugin::surroundingTextChanged, this, [this] {
+         if (m_input.hasContext()) {
+             // Re-activate when text input activates, and there is context
+@@ -66,8 +68,13 @@ InputListenerItem::InputListenerItem()
+         }
+     });
+     connect(&m_input, &InputPlugin::deactivate, this, [this] {
+-        QGuiApplication::inputMethod()->setVisible(false);
++        // Clear composition immediately; do not carry it into another field.
+         QGuiApplication::inputMethod()->reset();
++        QMetaObject::invokeMethod(this, [this] {
++            if (!m_input.hasContext()) {
++                QGuiApplication::inputMethod()->setVisible(false);
++            }
++        }, Qt::QueuedConnection);
+     });
+     connect(&m_input, &InputPlugin::resetRequested, this, [] {
+         QGuiApplication::inputMethod()->reset();

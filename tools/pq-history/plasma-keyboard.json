@@ -1,0 +1,55 @@
+{
+ "package": "plasma-keyboard",
+ "vendor": "vendor/plasma-keyboard",
+ "version": "6.6.6-0ubuntu0.1",
+ "dsc": "plasma-keyboard_6.6.6-0ubuntu0.1.dsc",
+ "base": "dffc717e",
+ "steps": [
+  {
+   "name": "context-change-queued",
+   "patch": "plasma/keyboard-focus.patch",
+   "author_name": "kevinzhow",
+   "author_email": "kevinzhow@local",
+   "date": "2026-09-23T20:28:24+08:00",
+   "subject": "Input listener: apply a text-input context change after its Wayland batch",
+   "description": "Text fields can disable and re-enable text-input in one Wayland batch; applying each change at once\nunmapped and remapped the keyboard in between (flicker). The context change and the hide on\ndeactivate are queued, so only the final state applies; the composition is still reset at once.",
+   "dep3": {
+    "Forwarded": "no",
+    "Last-Update": "2026-09-27",
+    "X-Rungic-Status": "Pending [a plain bug; check upstream master first]",
+    "X-Rungic-Tests": "L3:input.text",
+    "X-Rungic-Docs": "docs/47"
+   }
+  },
+  {
+   "name": "language-popup-lifetime",
+   "patch": "plasma/keyboard-popup.patch",
+   "author_name": "kevinzhow",
+   "author_email": "kevinzhow@local",
+   "date": "2026-09-23T20:28:24+08:00",
+   "subject": "Language popup: no live binding to the key that opened it",
+   "description": "A language change destroys the key that opened the popup; its position bindings then referred to a\ndeleted item after closing or rotating. The popup takes the position once and closes when the\nkeyboard panel's size changes.",
+   "dep3": {
+    "Forwarded": "no",
+    "Last-Update": "2026-09-27",
+    "X-Rungic-Status": "Pending [a plain bug; check upstream master first]",
+    "X-Rungic-Tests": "L3:input.rime",
+    "X-Rungic-Docs": "docs/41 docs/42"
+   }
+  },
+  {
+   "name": "ubuntu-packaging",
+   "commit": "a11d50bf",
+   "distribution": true,
+   "subject": "-",
+   "dep3": {}
+  },
+  {
+   "name": "usr-paths",
+   "commit": "af07f77f",
+   "distribution": true,
+   "subject": "-",
+   "dep3": {}
+  }
+ ]
+}

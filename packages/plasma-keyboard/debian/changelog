@@ -1,0 +1,40 @@
+plasma-keyboard (6.6.6-0ubuntu0.1+rungic1) resolute; urgency=medium
+
+  * Patch queue (docs/71, docs/73): the language popup and text-input
+    context fixes as DEP-3 patches in debian/patches/rungic; built from the
+    pinned Ubuntu source instead of vendor/plasma-keyboard.
+
+ -- range-dev <noreply@localhost>  Sun, 27 Sep 2026 09:00:00 +0000
+
+plasma-keyboard (6.6.6-0ubuntu0.1+moto1) resolute; urgency=medium
+
+  * Language menu lifetime and focus fixes (vendored changes, docs/41). Built as
+    the package instead of a private /usr/local/libexec/moto-plasma-keyboard copy;
+    the Rime launcher (moto-plasma-input) starts this binary (docs/61).
+
+ -- range-dev <noreply@localhost>  Fri, 25 Sep 2026 21:17:08 +0000
+
+plasma-keyboard (6.6.6-0ubuntu0.1) resolute; urgency=medium
+
+  * New upstream bugfix release (6.6.6) (LP: #2159979)
+
+ -- Rik Mills <rikmills@kde.org>  Mon, 13 Jul 2026 10:54:28 +0100
+
+plasma-keyboard (6.6.5-0ubuntu0.1) resolute; urgency=medium
+
+  * New upstream release (6.6.5) (LP: #2152276)
+
+ -- Rik Mills <rikmills@kde.org>  Tue, 19 May 2026 10:27:55 +0100
+
+plasma-keyboard (6.6.4-0ubuntu1) resolute; urgency=medium
+
+  * New upstream bugfix release (6.6.4)
+
+ -- Rik Mills <rikmills@kde.org>  Tue, 07 Apr 2026 13:10:28 +0100
+
+plasma-keyboard (6.6.3-0ubuntu1) resolute; urgency=medium
+
+  * New release to Ubuntu. (LP: #2141757)
+  * New upstream release 6.6.3 (LP: #2142562)
+
+ -- Scarlett Moore <sgmoore@debian.org>  Sat, 21 Mar 2026 19:19:45 +0000
