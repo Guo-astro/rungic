@@ -16,7 +16,6 @@ input method and cameras; up and down swap those names in the user's KDE configu
 configuration. Directories move between their two names (down copies back what changed since up).
 The kconf_update records of the renamed .upd files go along, so their steps do not run again.
 """
-import configparser
 import os
 import re
 import shutil
@@ -78,6 +77,26 @@ def settings_files():
     return files + [p for p in EXTRA if p.is_file() and not p.is_symlink()]
 
 
+def drop_duplicate_sections(text, pairs):
+    """A section ([...] header) renamed onto one that exists already, e.g. Codex's MCP server that
+    the first-run setup wrote again under its new name: the old section goes instead."""
+    for old, new in pairs:
+        if old.startswith('[') and old in text and new in text:
+            text = re.sub(r'(?ms)^' + re.escape(old) + r'\n.*?(?=^\[|\Z)', '', text)
+    return text
+
+
+def dedupe_lists(text):
+    """Quick setting tiles named twice after the rename (old and new names both listed)."""
+    def dedupe(m):
+        seen = []
+        for item in m[2].split(','):
+            if item not in seen:
+                seen.append(item)
+        return m[1] + ','.join(seen)
+    return re.sub(r'(?m)^((?:enabled|disabled)QuickSettings=)(.*)$', dedupe, text)
+
+
 def swap_names(pairs, homes=()):
     """Replace the names in the settings files; `homes` are (old, new) home directories, replaced
     where a path starts with them (followed by /, a quote, space, < or the line's end)."""
@@ -87,9 +106,10 @@ def swap_names(pairs, homes=()):
             text = path.read_text()
         except (UnicodeDecodeError, OSError):
             continue
-        new = text
+        new = drop_duplicate_sections(text, pairs)
         for old, name in pairs:
             new = new.replace(old, name)
+        new = dedupe_lists(new)
         for old, home in homes:
             new = re.sub(re.escape(old) + r'(?=[/"\'\s<]|$)', lambda m: home, new, flags=re.M)
         if new != text:
@@ -125,21 +145,35 @@ def relink(before, after):
             new.symlink_to(after[1])
 
 
+def kde_groups(text):
+    """{group: {key: value}} of a KDE configuration file (keys before any group go under '')."""
+    groups, group = {'': {}}, ''
+    for line in text.splitlines():
+        if line.startswith('[') and line.rstrip().endswith(']'):
+            group = line.strip()[1:-1]
+            groups.setdefault(group, {})
+        elif '=' in line and not line.startswith('#'):
+            key, value = line.split('=', 1)
+            groups[group][key.strip()] = value.strip()
+    return groups
+
+
 def carry_kconf_records():
     """kconf_update keeps what it ran per .upd file name; the renamed files inherit the records."""
     rc = CONFIG / 'kconf_updaterc'
     if not rc.is_file():
         return []
-    parser = configparser.RawConfigParser(strict=False, interpolation=None)
-    parser.optionxform = str
-    parser.read(rc)
+    groups = kde_groups(rc.read_text())
     carried = []
     for old, new, prefix, new_prefix in UPD:
-        if parser.has_section(old) and not parser.has_section(new) and parser.has_option(old, 'done'):
+        if 'done' in groups.get(old, {}) and 'done' not in groups.get(new, {}):
             done = ','.join(new_prefix + i[len(prefix):] if i.startswith(prefix) else i
-                            for i in parser.get(old, 'done').split(','))
-            with rc.open('a') as f:
-                f.write(f'\n[{new}]\ndone={done}\n')
+                            for i in groups[old]['done'].split(','))
+            text = rc.read_text()
+            header = re.compile(r'(?m)^\[' + re.escape(new) + r'\]\n')
+            text = (header.sub(lambda m: m[0] + f'done={done}\n', text, count=1) if header.search(text)
+                    else text.rstrip('\n') + f'\n\n[{new}]\ndone={done}\n')
+            rc.write_text(text)
             carried.append(new)
     return carried
 

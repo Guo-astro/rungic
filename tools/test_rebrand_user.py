@@ -25,7 +25,7 @@ PLACES = '<bookmark href="file:///home/linux/Shared/Pictures"/>\n'
 MOBILERC = '[QuickSettings]\nenabledQuickSettings=org.kde.plasma.quicksetting.bluetooth,dev.moto.quicksetting.cast,' \
            'dev.moto.quicksetting.agentscreen\n'
 CODEX = '[mcp_servers.moto-desktop]\ncommand = "/usr/bin/moto-cua"\nargs = ["mcp"]\n'
-UPDATERC = '[moto.upd]\nctime=1\ndone=moto-native-display-v1,moto-quicksettings-v1\n\n' \
+UPDATERC = 'updateInfoAdded=true\n\n[moto.upd]\nctime=1\ndone=moto-native-display-v1,moto-quicksettings-v1\n\n' \
            '[moto-voice-agent.upd]\ndone=moto-codex-v1\n'
 
 
@@ -99,6 +99,24 @@ class RebrandUser(unittest.TestCase):
             self.m.main()
         self.assertEqual((self.home / '.config/dolphinrc').read_text(),
                          '[General]\nLast=/home/alice/Shared\nOther=/home/rungicx\nHome=/home/alice\n')
+
+
+    def test_setup_already_rerun_under_the_new_names(self):
+        # kconf_update ran the renamed steps as for a new user before up could carry the records.
+        c = self.home / '.config'
+        (c / 'plasmamobilerc').write_text(MOBILERC.rstrip('\n') + ',com.rungic.quicksetting.cast\n')
+        (self.home / '.codex/config.toml').write_text(
+            CODEX + '\n[mcp_servers.rungic-desktop]\ncommand = "/usr/bin/rungic-cua"\nargs = ["mcp"]\n')
+        (c / 'kconf_updaterc').write_text(UPDATERC + '\n[rungic.upd]\nctime=2\n')
+        self.m.up()
+        mobile = (c / 'plasmamobilerc').read_text()
+        self.assertEqual(mobile.count('com.rungic.quicksetting.cast'), 1)
+        codex = (self.home / '.codex/config.toml').read_text()
+        self.assertEqual(codex.count('[mcp_servers.rungic-desktop]'), 1)
+        self.assertNotIn('moto-desktop', codex)
+        updaterc = (c / 'kconf_updaterc').read_text()
+        self.assertEqual(updaterc.count('[rungic.upd]'), 1)
+        self.assertIn('[rungic.upd]\ndone=rungic-native-display-v1', updaterc)
 
 
 if __name__ == '__main__':
