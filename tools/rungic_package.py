@@ -21,8 +21,8 @@ commit differs. Built packages go to the release pool (.work/apt/repo) and are r
 .work/apt/project-builds.json with the git tree hash of their paths, so an unchanged
 package is not rebuilt.
 
-  moto_package.py list                    packages and whether they are current
-  moto_package.py build NAME... | --all   build what changed (--force: even if current)
+  rungic_package.py list                    packages and whether they are current
+  rungic_package.py build NAME... | --all   build what changed (--force: even if current)
 """
 import argparse
 import hashlib
@@ -37,12 +37,12 @@ import tempfile
 import time
 from pathlib import Path
 
-import moto_device
-from moto_device import WORKSPACE, run
-import moto_release
+import rungic_device
+from rungic_device import WORKSPACE, run
+import rungic_release
 
 PACKAGING = WORKSPACE / 'plasma/packaging'
-BUILDS = moto_release.APT / 'project-builds.json'
+BUILDS = rungic_release.APT / 'project-builds.json'
 DEVICE_BASE = '/root/moto-packages'
 MAINTAINER = 'range-dev <noreply@localhost>'
 
@@ -77,7 +77,7 @@ def builds():
 def current(pkg):
     record = builds().get(pkg['name'])
     return bool(record) and record['tree'] == tree_hash(pkg) and \
-        (moto_release.POOL / record['file']).exists()
+        (rungic_release.POOL / record['file']).exists()
 
 
 def maintainer_scripts(pkg, root):
@@ -172,7 +172,7 @@ def control(pkg, version, root, extra_depends=''):
 
 def next_version(name, file_bytes=None):
     base = f"0.{git('rev-list', '--count', 'HEAD')}"
-    have = moto_release.pool_debs().get(name, {})
+    have = rungic_release.pool_debs().get(name, {})
     if base not in have:
         return base
     if file_bytes is not None and have[base].read_bytes() == file_bytes:
@@ -219,12 +219,12 @@ def build_host(pkg, tree):
 
         # 0.<commit count>, unless the pool has that version with other contents: then +bN.
         base = f"0.{git('rev-list', '--count', 'HEAD')}"
-        existing = moto_release.pool_debs().get(pkg['name'], {}).get(base)
+        existing = rungic_release.pool_debs().get(pkg['name'], {}).get(base)
         version = base
         if existing is not None and pack(base) != existing.read_bytes():
             version = next_version(pkg['name'])
         pack(version)
-        target = moto_release.POOL / f"{pkg['name']}_{version}_{pkg['architecture']}.deb"
+        target = rungic_release.POOL / f"{pkg['name']}_{version}_{pkg['architecture']}.deb"
         if not target.exists():
             shutil.copy2(tmp, target)
         record(pkg, version, target, tree)
@@ -257,20 +257,20 @@ def build_device(pkg, tree, jobs=4):
             run('DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends '
                 + ' '.join(pkg['build_depends']), 'container', timeout=3600)
     run(f'rm -rf {base}/src {base}/root', 'container', timeout=600)
-    moto_device.extract_in_container(stage_sources(pkg), f'{base}/src')
+    rungic_device.extract_in_container(stage_sources(pkg), f'{base}/src')
     work = WORKSPACE / f'.work/cache/{name}-device'
     shutil.rmtree(work, ignore_errors=True)
     (work / 'DEBIAN').mkdir(parents=True)
     maintainer_scripts(pkg, work)          # conffiles are listed after the build, on the phone
     for script in (work / 'DEBIAN').iterdir():
         if script.name != 'conffiles':
-            moto_device.to_container(script, f'{base}/debian-scripts/{script.name}', '755')
+            rungic_device.to_container(script, f'{base}/debian-scripts/{script.name}', '755')
     shutil.rmtree(work)
     run(f'rm -f {base}/unit.list', 'container')
     if unit_list(pkg):
         listing = WORKSPACE / f'.work/cache/{name}-unit.list'
         listing.write_text(unit_list(pkg))
-        moto_device.to_container(listing, f'{base}/unit.list', '644')
+        rungic_device.to_container(listing, f'{base}/unit.list', '644')
         listing.unlink()
     epoch = git('log', '-1', '--format=%ct')
     unit = f'moto-package-{name}'
@@ -332,7 +332,7 @@ systemd-run --unit={unit} --wait --pipe --collect --quiet -p TimeoutStartSec=144
     ctl.write_text(text)
     shutil.rmtree(fake)
     deb_name = f'{name}_{version}_{pkg["architecture"]}.deb'
-    moto_device.to_container(ctl, f'{base}/root/DEBIAN/control', '644')
+    rungic_device.to_container(ctl, f'{base}/root/DEBIAN/control', '644')
     run(f'cd {base} && dpkg-deb --root-owner-group -Zxz --build root {deb_name} >/dev/null', 'container',
         timeout=1800)
     ctl.unlink()
@@ -351,9 +351,9 @@ dpkg-deb --root-owner-group -Zxz --build dbgsym {dbg_name} >/dev/null''', 'conta
         debs.append(dbg_name)
     for deb in debs:
         local = WORKSPACE / f'.work/cache/{deb}'
-        moto_device.from_container(f'{base}/{deb}', local)
-        shutil.move(local, moto_release.POOL / deb)
-    target = moto_release.POOL / deb_name
+        rungic_device.from_container(f'{base}/{deb}', local)
+        shutil.move(local, rungic_release.POOL / deb)
+    target = rungic_release.POOL / deb_name
     record(pkg, version, target, tree)
     return target
 
@@ -370,7 +370,7 @@ def build(names, force=False, jobs=4):
         print(f'building {name} ({pkg["build"]})', flush=True)
         deb = build_host(pkg, tree) if pkg['build'] == 'host' else build_device(pkg, tree, jobs)
         done.append({'package': name, 'version': builds()[name]['version'], 'built': True, 'file': deb.name})
-    moto_release.index()
+    rungic_release.index()
     return done
 
 

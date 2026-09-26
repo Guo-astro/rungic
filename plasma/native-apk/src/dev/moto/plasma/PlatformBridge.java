@@ -128,7 +128,7 @@ final class PlatformBridge implements Closeable {
         if(op.equals("capture-info"))return capture.info();
         if(op.equals("brightness-get"))return brightness();
         if(op.equals("native-stats")) {
-            // Read-only compositor counters for diagnostics (tools/moto_agent.py).
+            // Read-only compositor counters for diagnostics (tools/rungic_agent.py).
             String error=NativeBridge.getLastNativeError();
             return new JSONObject().put("stats",NativeBridge.getWaylandRuntimeStats())
                 .put("presentedFrames",NativeBridge.getPresentedFrames())

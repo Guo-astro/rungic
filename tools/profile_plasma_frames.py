@@ -14,9 +14,9 @@ import subprocess
 import threading
 import time
 
-import moto_device
+import rungic_device
 
-ADB = moto_device.adb('shell')
+ADB = rungic_device.adb('shell')
 
 def shell(*args):
     return subprocess.check_output(ADB + [shlex.join(args)], text=True)

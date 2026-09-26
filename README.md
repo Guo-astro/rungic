@@ -27,13 +27,13 @@ Motorola moto g100s（XT2537-4 / Adreno710）上的Android与Linux桌面适配�
 - 原厂Android16 + Magisk31，全局SELinux Enforcing；LXC与Docker已部署。历史v3完整刷机包尚未整合当前全部容器/桌面修改。
 - Plasma独立APK和Ubuntu容器已运行；原生1080×2400与30/60/90/120Hz/自动策略已接入。正式KWin继续使用GLES，Vulkan对照与限制见[51篇](docs/51-plasma-vulkan-benchmark.md)，KWin原生Vulkan收益量化见[56篇](docs/56-kwin-vulkan-quantification.md)。
 - 媒体和显示尚有剩余验收项，以[48篇](docs/48-plasma-media-pipelines.md)、[50篇](docs/50-plasma-display-settings.md)为准，不把安装成功等同于完整验收。
-- 设备管理：`python3 tools/moto_plasma.py status`。开发环境：`source tools/work-env.sh`。APK构建：`bash plasma/build-apk.sh`，产物写入`.work/`。
+- 设备管理：`python3 tools/rungic_plasma.py status`。开发环境：`source tools/work-env.sh`。APK构建：`bash plasma/build-apk.sh`，产物写入`.work/`。
 - 图形和后端架构见[40篇](docs/40-plasma-mobile-integration.md)及[共享桥说明](shared/README.md)。全新机器构建仍需准备SDK/NDK及部分依赖。
 - 远程源码核对和多机协作见[53篇](docs/53-remote-system-development.md)。上游组件直接修改[Vendor源码](vendor/README.md)，`python3 tools/stage_vendor.py kwin`可创建独立构建副本；历史patch不再重复应用。
 
 Vendor适配应放在哪一层、哪些可以抽离到共享后端，见[54篇架构评审](docs/54-vendor-adaptation-boundaries.md)。
 
-系统交付、验收与诊断见[61篇](docs/61-delivery-diagnostics-plan.md)：容器rootfs上本项目的文件都来自包（`plasma/packaging`、vendor重建包），经本地APT仓库与发布元包部署（`tools/moto_release.py deploy|rollback|status`），部署后自动验收（`tools/moto_acceptance.py`），`moto-integrity`检查漂移。rootfs是ext4镜像（`plasma/rootfs-image`），部署前自动建dm-snapshot，验收失败即回到快照；`/home`、崩溃报告与本地仓库不随之回滚。
+系统交付、验收与诊断见[61篇](docs/61-delivery-diagnostics-plan.md)：容器rootfs上本项目的文件都来自包（`plasma/packaging`、vendor重建包），经本地APT仓库与发布元包部署（`tools/rungic_release.py deploy|rollback|status`），部署后自动验收（`tools/rungic_acceptance.py`），`moto-integrity`检查漂移。rootfs是ext4镜像（`plasma/rootfs-image`），部署前自动建dm-snapshot，验收失败即回到快照；`/home`、崩溃报告与本地仓库不随之回滚。
 
 ## 文档索引
 
@@ -102,3 +102,4 @@ Vendor适配应放在哪一层、哪些可以抽离到共享后端，见[54篇�
 | [67-home-assistant.md](docs/67-home-assistant.md) | 长按Home呼出语音助手 |
 | [68-luna-computer-use.md](docs/68-luna-computer-use.md) | GPT-6 Luna Computer Use（看画面决定点哪里） |
 | [69-filesystem-capabilities.md](docs/69-filesystem-capabilities.md) | 文件系统与容器能力审计 |
+| [70-rungic-rebrand.md](docs/70-rungic-rebrand.md) | Rungic（AgentOS）改名：命名规则、迁移调研、分阶段计划与进度 |

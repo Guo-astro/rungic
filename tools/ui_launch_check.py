@@ -17,8 +17,8 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import moto_agent  # noqa: E402
-from moto_device import run  # noqa: E402
+import rungic_agent  # noqa: E402
+from rungic_device import run  # noqa: E402
 
 
 def running(process):
@@ -35,10 +35,10 @@ def wait_for(condition, timeout=10):
 
 
 def press(name):
-    buttons = [b for b in moto_agent.ui_find('plasmashell', role='button', name=f'^{name}$')]
+    buttons = [b for b in rungic_agent.ui_find('plasmashell', role='button', name=f'^{name}$')]
     if not buttons:
         raise RuntimeError(f'no plasmashell button named {name!r}')
-    return moto_agent.ui_press('plasmashell', buttons[0]['path'])
+    return rungic_agent.ui_press('plasmashell', buttons[0]['path'])
 
 
 def open_drawer(timeout=6):
@@ -47,7 +47,7 @@ def open_drawer(timeout=6):
     previous, deadline = None, time.monotonic() + timeout
     while time.monotonic() < deadline:
         time.sleep(0.3)
-        fields = moto_agent.ui_find('plasmashell', role='text', name='Search')
+        fields = rungic_agent.ui_find('plasmashell', role='text', name='Search')
         current = tuple(fields[0]['extents']) if fields else None
         if current and current == previous and current[1] >= 0:
             return
@@ -59,7 +59,7 @@ def icon_for(app, timeout=5):
     """The launcher delegate of `app`, once its position stops changing (drawer animations)."""
     previous, deadline = None, time.monotonic() + timeout
     while time.monotonic() < deadline:
-        labels = [n for n in moto_agent.ui_find('plasmashell', role='label', name=f'^{app}$')
+        labels = [n for n in rungic_agent.ui_find('plasmashell', role='label', name=f'^{app}$')
                   if n.get('extents', [0, 0, 0, 0])[2] > 0]
         current = (labels[0]['path'], tuple(labels[0]['extents'])) if labels else None
         if current and current == previous:
@@ -73,8 +73,8 @@ def scroll_drawer_to_top(app, attempts=3):
     """The drawer keeps its scroll position (benchmarks swipe it). An entry scrolled
     under the search field still reports extents, and a tap there hits the field."""
     for _ in range(attempts):
-        fields = moto_agent.ui_find('plasmashell', role='text', name='Search')
-        labels = [n for n in moto_agent.ui_find('plasmashell', role='label', name=f'^{app}$')
+        fields = rungic_agent.ui_find('plasmashell', role='text', name='Search')
+        labels = [n for n in rungic_agent.ui_find('plasmashell', role='label', name=f'^{app}$')
                   if n.get('extents', [0, 0, 0, 0])[2] > 0]
         if not fields or not labels:
             return
@@ -93,18 +93,18 @@ def launch(app, process, search):
         scroll_drawer_to_top(app)
     if search:
         # Kirigami's search field exposes no EditableText interface: focus it, type through Android input.
-        field = [f for f in moto_agent.ui_find('plasmashell', role='text', name='Search')]
+        field = [f for f in rungic_agent.ui_find('plasmashell', role='text', name='Search')]
         if not field:
             raise RuntimeError('drawer search field not showing')
-        moto_agent.ui_press('plasmashell', field[0]['path'], 'SetFocus')
+        rungic_agent.ui_press('plasmashell', field[0]['path'], 'SetFocus')
         run(f'input text {app[:4]}', 'shell')
         time.sleep(1.0)
-    tap = moto_agent.ui_tap('plasmashell', icon_for(app))
+    tap = rungic_agent.ui_tap('plasmashell', icon_for(app))
     started = wait_for(lambda: running(process), 10)
-    registered = wait_for(lambda: any(a['name'] == process for a in moto_agent.a11y('apps')), 10)
+    registered = wait_for(lambda: any(a['name'] == process for a in rungic_agent.a11y('apps')), 10)
     step = {'tap': tap['tap'], 'started': started, 'registered': registered}
     if not started:
-        step['screenshot'] = moto_agent.screenshot()  # evidence of what the tap hit
+        step['screenshot'] = rungic_agent.screenshot()  # evidence of what the tap hit
     return step
 
 
@@ -120,7 +120,7 @@ def main():
     parser.add_argument('--rounds', type=int, default=2)
     parser.add_argument('--search', action='store_true')
     args = parser.parse_args()
-    moto_agent.ui_enable(True)
+    rungic_agent.ui_enable(True)
     time.sleep(2)
     if running(args.process):
         close(args.process)

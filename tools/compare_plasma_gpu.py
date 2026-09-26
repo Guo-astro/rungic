@@ -7,10 +7,10 @@ One device at a time. No clock locking, thermal changes, or security changes.
 import argparse, json, shlex, subprocess, time
 from pathlib import Path
 
-import moto_device
+import rungic_device
 
-ADB=moto_device.adb()
-PLASMA=['python3','tools/moto_plasma.py']
+ADB=rungic_device.adb()
+PLASMA=['python3','tools/rungic_plasma.py']
 DROP='/run/user/1000/systemd/user/plasma-kwin_wayland.service.d/90-moto-zink-audit.conf'
 def user(*args,check=True,combined=False):
     result=subprocess.run(PLASMA+['user-exec',*args],check=check,text=True,capture_output=True)

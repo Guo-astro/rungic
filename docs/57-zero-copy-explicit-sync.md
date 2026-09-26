@@ -138,7 +138,7 @@ KWin输出缓冲原为线性。Adreno的UBWC（带宽压缩）可减少GPU写入
 | GPU忙碌 | 11.0–11.5% | 10.9% |
 | SurfaceFlinger帧间隔p95 | 16.8 ms | 16.8 ms |
 
-DDR带宽取自内核`dcvs/bw_hwmon_meas`事件（bwmon每个采样窗口测得的MB/s），已加入`moto_trace`的KGSL tracefs实例，报告与`kwin_pipeline_run`汇总给出时间加权平均`bw_mbps`。带宽含全机所有流量（plasmashell与客户端缓冲仍是线性），UBWC只作用于KWin输出与显示扫描。显示面板上的实际观感需人工确认；截屏只覆盖GPU合成路径。
+DDR带宽取自内核`dcvs/bw_hwmon_meas`事件（bwmon每个采样窗口测得的MB/s），已加入`rungic_trace`的KGSL tracefs实例，报告与`kwin_pipeline_run`汇总给出时间加权平均`bw_mbps`。带宽含全机所有流量（plasmashell与客户端缓冲仍是线性），UBWC只作用于KWin输出与显示扫描。显示面板上的实际观感需人工确认；截屏只覆盖GPU合成路径。
 
 ### 零拷贝横屏被裁半屏（同时发现并修复）
 

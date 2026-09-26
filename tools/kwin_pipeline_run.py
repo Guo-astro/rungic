@@ -32,10 +32,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import compbench_run  # noqa: E402
-import moto_agent  # noqa: E402
-import moto_trace  # noqa: E402
-import moto_trace_report  # noqa: E402
-from moto_device import PLASMA, run  # noqa: E402
+import rungic_agent  # noqa: E402
+import rungic_trace  # noqa: E402
+import rungic_trace_report  # noqa: E402
+from rungic_device import PLASMA, run  # noqa: E402
 
 
 DROPIN = '/run/user/1000/systemd/user/plasma-plasmashell.service.d/90-moto-rhi-audit.conf'
@@ -80,7 +80,7 @@ def main():
     parser.add_argument('--kwin-env', action='append', default=[], help='KEY=VALUE for kwin_wayland')
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
-    moto_agent.ui_enable(False)
+    rungic_agent.ui_enable(False)
     rounds = []
     if args.kwin_env:
         kwin_env(args.kwin_env)
@@ -115,11 +115,11 @@ def measure(args):
         time.sleep(1)
         run('input swipe 540 2000 540 600 250', 'shell')  # open the app drawer
         time.sleep(2)
-        trace = moto_trace.capture(args.seconds, f'kwin-pipeline-{i}', during=moto_trace.swipes(args.swipes, 500, 0.25))
-        report = moto_trace_report.analyse(trace, 1.5, args.seconds)
+        trace = rungic_trace.capture(args.seconds, f'kwin-pipeline-{i}', during=rungic_trace.swipes(args.swipes, 500, 0.25))
+        report = rungic_trace_report.analyse(trace, 1.5, args.seconds)
         report['thermal_before'] = thermal
         report['zerocopy'] = setting
-        report['host_native_stats'] = moto_agent.host_request('native-stats')['stats'].split('zero_copy', 1)[-1]
+        report['host_native_stats'] = rungic_agent.host_request('native-stats')['stats'].split('zero_copy', 1)[-1]
         report['thermal_after'] = compbench_run.thermal_status()
         (args.out / f'round-{i}{"-zerocopy-" + setting if setting else ""}.json').write_text(json.dumps(report, indent=1))
         rounds.append(report)

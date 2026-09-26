@@ -12,7 +12,7 @@
 
 | 来源 | 实测状态 | 对Agent的缺口 |
 |---|---|---|
-| 设备连接 | 本机adb位于`~/android-sdk`，设备为无线`10.77.0.16:44995` | `tools/device.py`、`moto_plasma.py`、`profile_plasma_frames.py`硬编码`~/Android/Sdk`和USB序列号`ZY32MVJS25`，在K8上直接失败。设备选择属于本机配置，应放在`.work/`或环境变量中 |
+| 设备连接 | 本机adb位于`~/android-sdk`，设备为无线`10.77.0.16:44995` | `tools/device.py`、`rungic_plasma.py`、`profile_plasma_frames.py`硬编码`~/Android/Sdk`和USB序列号`ZY32MVJS25`，在K8上直接失败。设备选择属于本机配置，应放在`.work/`或环境变量中 |
 | Android日志 | logcat可用，支持monotonic；Rust后端用`android_logger`，标签`WinlandNative`；Java有16处`Log.*` | 环形缓冲，不持久；本次dump中没有保留到`WinlandNative`行 |
 | Android崩溃 | `/data/tombstones`有记录；crash缓冲区可读 | 没有和桌面事件关联，也没有汇总工具 |
 | 内核 | Android root下可用dmesg；容器内`klogctl: Permission denied`；tracefs有`adreno_cmdbatch_{queued,ready,done,fault,recovery}`；`/system/bin/perfetto`、`simpleperf`存在，`persist.traced.enable=1` | KGSL的GPU提交/完成/fault事件已经可追踪，但目前没有使用 |
@@ -38,7 +38,7 @@
 
 ### 2. 调用：主机侧提供一个MCP服务作为唯一Agent入口
 
-Claude Code原生支持MCP工具，Agent可以直接获得带参数模式的工具，不必每次拼adb/su/lxc-attach的多层引号（本次探测就遇到这个问题）。工具层（实现为`tools/moto_agent.py`与`tools/moto_agent_mcp.py`）只通过adb传输，设备端复用现有`moto-plasma`入口和`platform.sock`。建议的工具分组：
+Claude Code原生支持MCP工具，Agent可以直接获得带参数模式的工具，不必每次拼adb/su/lxc-attach的多层引号（本次探测就遇到这个问题）。工具层（实现为`tools/rungic_agent.py`与`tools/rungic_agent_mcp.py`）只通过adb传输，设备端复用现有`moto-plasma`入口和`platform.sock`。建议的工具分组：
 
 | 分组 | 示例 | 实现依据 |
 |---|---|---|
@@ -80,9 +80,9 @@ Claude Code原生支持MCP工具，Agent可以直接获得带参数模式的工�
 
 **P0：设备入口与只读Agent工具**
 
-- `tools/moto_device.py`：按`MOTO_ADB`/`MOTO_SERIAL`/`MOTO_TRANSPORT`或`.work/device.env`定位adb；默认用`ro.serialno=ZY32MVJS25`在所有adb设备中查找，无线调试端口变化不需修改。脚本经stdin送到Android shell、Android root、容器root或桌面用户四个层级，避免多层引号；退出码原样返回。原7个硬编码`~/Android/Sdk`与序列号的工具改为共用此入口。
+- `tools/rungic_device.py`：按`MOTO_ADB`/`MOTO_SERIAL`/`MOTO_TRANSPORT`或`.work/device.env`定位adb；默认用`ro.serialno=ZY32MVJS25`在所有adb设备中查找，无线调试端口变化不需修改。脚本经stdin送到Android shell、Android root、容器root或桌面用户四个层级，避免多层引号；退出码原样返回。原7个硬编码`~/Android/Sdk`与序列号的工具改为共用此入口。
 - 注意：未给adb子进程关闭stdin时，`adb shell`会吞掉调用者的stdin，使MCP stdio握手无响应。已统一使用`stdin=DEVNULL`。
-- `tools/moto_agent.py`（库+命令行）与`tools/moto_agent_mcp.py`（官方MCP Python SDK 2.2，uv内联依赖），在工作区`.mcp.json`注册为`moto`。工具：`device_status`、`logs`、`session_log`、`crashes`、`crash_detail`、`kwin_info`、`host_request`、`screenshot`、`snapshot`，只读工具带`read_only_hint`。
+- `tools/rungic_agent.py`（库+命令行）与`tools/rungic_agent_mcp.py`（官方MCP Python SDK 2.2，uv内联依赖），在工作区`.mcp.json`注册为`moto`。工具：`device_status`、`logs`、`session_log`、`crashes`、`crash_detail`、`kwin_info`、`host_request`、`screenshot`、`snapshot`，只读工具带`read_only_hint`。
 - 日志以墙钟合并：logcat `-v epoch`、journald `__REALTIME_TIMESTAMP`、`dmesg -r`（保留内核自身级别；用同一脚本采样的CLOCK_REALTIME与`/proc/timer_list`单调时间换算）。`scope=plasma`只取桌面APK UID、本项目标签、crash缓冲及GPU/内存/SELinux相关内核行。已知噪声（bpf-firewall、runuser会话、binder释放、Moto剪贴板审计）只计数不显示，并注明原因。
 - 截屏：300ms RTT链路上`exec-out screencap`传1.5MB用36秒，改为设备侧写文件再`adb pull`约5秒；MCP返回540px JPEG预览，原图留在`.work/diag`。
 - 验收：Android（`log -t MotoPlasma`）、容器（`logger`）、内核（`/dev/kmsg`）各写一个标记，`logs --grep agent-marker`按实际先后返回全部3个来源，间隔约0.9–1秒（各为一次adb往返）。MCP客户端经stdio列出9个工具，逐一调用成功；`snapshot`在34秒内生成完整证据包，无采集错误。首次查询即发现一条真实错误（本次调查早先误用不存在的用户`moto`调用`systemctl --user -M`）以及`plasma-settings`在20:00:47的SIGSEGV。
@@ -100,9 +100,9 @@ Claude Code原生支持MCP工具，Agent可以直接获得带参数模式的工�
 ## P2：统一追踪
 
 - 容器内挂载tracefs：systemd自带`sys-kernel-tracing.mount`因`ConditionVirtualization=!lxc`在容器中跳过；`plasma/diagnostics/sys-kernel-tracing.conf`只清空该条件，复用标准单元，开机即挂载。容器进程为真实root（无user namespace），`trace_marker`本身在Android上即全体可写，没有扩大权限面。
-- `tools/moto_trace.py`：Android perfetto v49一次录制sched、cpu/gpu频率、dma_fence、atrace（gfx/view/input）、SurfaceFlinger帧时间线与全体进程名；容器进程以全局PID出现（例如kwin_wayland、plasmashell），与SurfaceFlinger、APK在同一时间线。录制期间经D-Bus打开KWin `/FTrace`，结束恢复原状态。
+- `tools/rungic_trace.py`：Android perfetto v49一次录制sched、cpu/gpu频率、dma_fence、atrace（gfx/view/input）、SurfaceFlinger帧时间线与全体进程名；容器进程以全局PID出现（例如kwin_wayland、plasmashell），与SurfaceFlinger、APK在同一时间线。录制期间经D-Bus打开KWin `/FTrace`，结束恢复原状态。
 - 本机为user版，perfetto只接受其白名单ftrace事件，KGSL事件被静默忽略。改为同时建立tracefs实例`moto_gpu`（`trace_clock=boot`与perfetto一致，`record-tgid`），记录`adreno_cmdbatch_queued/submitted/retired`、上下文切换与功率级别。`retired`带GPU常开计数器的start/retire（19.2MHz；实测29295 ticks=1.53ms，与事件时间差1.62ms一致），可得每次提交的GPU执行时间；`queued`的提交线程tgid给出上下文所属进程。
-- `tools/moto_trace_report.py`（trace_processor）：APK `queueBuffer`（主机提交）、SurfaceFlinger显示帧、KWin标记区间、各进程CPU、各进程GPU时间与GPU忙碌率、GPU频率分布。本机SurfaceView为原生EGL，SurfaceFlinger帧时间线没有该层的逐帧条目，因此以`queueBuffer`为主机提交时间。
+- `tools/rungic_trace_report.py`（trace_processor）：APK `queueBuffer`（主机提交）、SurfaceFlinger显示帧、KWin标记区间、各进程CPU、各进程GPU时间与GPU忙碌率、GPU频率分布。本机SurfaceView为原生EGL，SurfaceFlinger帧时间线没有该层的逐帧条目，因此以`queueBuffer`为主机提交时间。
 - 发现KWin上游缺陷：`FTraceLogger`以普通`QIODevice::WriteOnly`打开`trace_marker`，`QTextStream`的`endl`只刷到QFile内部缓冲，标记成批写入内核（一次print事件含数十行），时间戳失效；2026-09-23上游master仍如此。vendor改为`WriteOnly | Unbuffered`，并在Android输出路径的`glFinish`与导入/提交处增加`GpuWait`、`Import`区间（moto6）。
 - moto7：moto6的无缓冲QFile在经D-Bus关闭后再开启时，每次写入都失败（journal大量`QFile::at: Cannot set file position 0`；`trace_marker`不支持seek，QIODevice在重新打开后仍试图定位）。首次开启正常，所以只有会话启动后的第一次采集有KWin标记。改为普通fd，每个标记格式化后一次`write()`；写入失败（例如内核tracing关闭时返回EBADF）只丢弃该标记。上游master同样使用QFile。采集工具也改为在perfetto开始录制后才开启KWin标记。
 - 注意：容器有独立PID命名空间。perfetto/KGSL记录的是全局PID（例如KWin为22979），容器内`pgrep`看到的是命名空间PID（6606），两者不同不代表进程重启。

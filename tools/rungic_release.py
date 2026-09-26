@@ -11,17 +11,17 @@ output); deploy mirrors it to /var/lib/moto-apt in the container, where it is a 
 source pinned at 1001, so its versions win over the archive and older releases can be
 reinstalled. The Android-side files listed under "android" are part of a release too.
 
-  moto_release.py import-installed    pull the .debs of the installed +moto versions from the
+  rungic_release.py import-installed    pull the .debs of the installed +moto versions from the
                                       phone's build directories into the pool
-  moto_release.py import DEB...       add .debs to the pool
-  moto_release.py build [--version V] metapackage for the current packages.json and git commit,
+  rungic_release.py import DEB...       add .debs to the pool
+  rungic_release.py build [--version V] metapackage for the current packages.json and git commit,
                                       regenerate the repository index
-  moto_release.py list                releases in the repository
-  moto_release.py deploy [V]          preflight, record, sync, install, restart, verify (latest by default)
-  moto_release.py rollback            deploy the release that was installed before the current one
-  moto_release.py rollback --snapshot return the whole rootfs to the snapshot the last deploy took
-  moto_release.py commit              keep the current system: drop that snapshot
-  moto_release.py status              installed release, its commit, rootfs, repository and integrity
+  rungic_release.py list                releases in the repository
+  rungic_release.py deploy [V]          preflight, record, sync, install, restart, verify (latest by default)
+  rungic_release.py rollback            deploy the release that was installed before the current one
+  rungic_release.py rollback --snapshot return the whole rootfs to the snapshot the last deploy took
+  rungic_release.py commit              keep the current system: drop that snapshot
+  rungic_release.py status              installed release, its commit, rootfs, repository and integrity
 
 With an image rootfs (docs/61 §7) deploy first takes a snapshot of the whole rootfs; a failed
 install or verification returns to it automatically, a good release keeps it until commit.
@@ -46,8 +46,8 @@ import tempfile
 import time
 from pathlib import Path
 
-import moto_device
-from moto_device import DeviceError, WORKSPACE, out, push, run
+import rungic_device
+from rungic_device import DeviceError, WORKSPACE, out, push, run
 
 SPEC = WORKSPACE / 'plasma/release/packages.json'
 APT = WORKSPACE / '.work/apt'
@@ -96,7 +96,7 @@ def pull(path, target, timeout=1800):
     stage = f'/data/local/tmp/moto-pull-{int(time.time() * 1000)}'
     run(f'cp {shlex.quote(path)} {stage} && chmod 644 {stage}', 'root', timeout=timeout)
     try:
-        subprocess.run(moto_device.adb('pull', stage, str(target)), check=True, capture_output=True,
+        subprocess.run(rungic_device.adb('pull', stage, str(target)), check=True, capture_output=True,
                        timeout=timeout)
     finally:
         run(f'rm -f {stage}', 'root', check=False)
@@ -174,7 +174,7 @@ rm -rf "$tmp"
     local = APT / 'incoming'
     shutil.rmtree(local, ignore_errors=True)
     local.mkdir(parents=True)
-    moto_device.from_container('/var/tmp/moto-import.tar', local / 'x.tar')
+    rungic_device.from_container('/var/tmp/moto-import.tar', local / 'x.tar')
     run('rm -f /var/tmp/moto-import.tar', 'container')
     with tarfile.open(local / 'x.tar') as tar:
         tar.extractall(local, filter='data')
@@ -254,17 +254,17 @@ def build(version=None, allow_dirty=False, note=''):
             if upstream_name(name, component['version']).split('_', 1)[1] not in have.get(name, {}):
                 missing.append(f"{name}={component['version']}")
             deps[name] = component['version']
-    # The project's own packages: the version built from the current commit (tools/moto_package.py).
+    # The project's own packages: the version built from the current commit (tools/rungic_package.py).
     if s.get('project'):
-        import moto_package
-        definitions = moto_package.definitions()
-        built = moto_package.builds()
+        import rungic_package
+        definitions = rungic_package.definitions()
+        built = rungic_package.builds()
         for name in s['project']:
             pkg = definitions.get(name)
             if pkg is None:
                 raise SystemExit(f'{name} has no plasma/packaging definition')
-            if not moto_package.current(pkg):
-                missing.append(f'{name} (not built for the current sources: moto_package.py build {name})')
+            if not rungic_package.current(pkg):
+                missing.append(f'{name} (not built for the current sources: rungic_package.py build {name})')
                 continue
             deps[name] = built[name]['version']
     if missing:
@@ -365,7 +365,7 @@ def sync_repo():
     archive = DEPLOY / 'repo-sync.tar'
     archive.parent.mkdir(parents=True, exist_ok=True)
     archive.write_bytes(buffer.getvalue())
-    moto_device.extract_in_container(archive, DEVICE_REPO)
+    rungic_device.extract_in_container(archive, DEVICE_REPO)
     archive.unlink()
     run(f'''set -e
 chown -R root:root {DEVICE_REPO}; chmod 755 {DEVICE_REPO}
@@ -439,7 +439,7 @@ def needs_restart(before, after, patterns):
 
 
 def restart_session():
-    result = subprocess.run([sys.executable, str(WORKSPACE / 'tools/moto_plasma.py'), 'restart-session'],
+    result = subprocess.run([sys.executable, str(WORKSPACE / 'tools/rungic_plasma.py'), 'restart-session'],
                             capture_output=True, text=True, timeout=300)
     return result.returncode == 0, (result.stdout + result.stderr).strip()
 
@@ -447,7 +447,7 @@ def restart_session():
 def restart_container():
     outputs = []
     for action in ('stop', 'start'):
-        result = subprocess.run([sys.executable, str(WORKSPACE / 'tools/moto_plasma.py'), action],
+        result = subprocess.run([sys.executable, str(WORKSPACE / 'tools/rungic_plasma.py'), action],
                                 capture_output=True, text=True, timeout=300)
         outputs.append((result.stdout + result.stderr).strip())
         if result.returncode:
@@ -457,7 +457,7 @@ def restart_container():
 
 def rootfs(action):
     """plasma/rootfs-image through moto-plasma (Android side): status, snapshot, rollback, commit."""
-    result = run(f'{moto_device.PLASMA} rootfs {action}', 'root', timeout=900, check=False)
+    result = run(f'{rungic_device.PLASMA} rootfs {action}', 'root', timeout=900, check=False)
     return result.returncode == 0, (result.stdout + result.stderr).strip()
 
 
@@ -472,7 +472,7 @@ def with_container_stopped(action):
     outputs = []
     for step in ('stop', action, 'start'):
         if step in ('stop', 'start'):
-            result = subprocess.run([sys.executable, str(WORKSPACE / 'tools/moto_plasma.py'), step],
+            result = subprocess.run([sys.executable, str(WORKSPACE / 'tools/rungic_plasma.py'), step],
                                     capture_output=True, text=True, timeout=300)
             ok, text = result.returncode == 0, (result.stdout + result.stderr).strip()
         else:
@@ -490,7 +490,7 @@ def history():
 def deploy(version=None, restart='auto', acceptance='smoke', record_label=None, snapshot='auto'):
     all_releases = releases()
     if not all_releases:
-        raise SystemExit('no release built yet: moto_release.py build')
+        raise SystemExit('no release built yet: rungic_release.py build')
     info = next((r for r in all_releases if r['version'] == version), None) if version else all_releases[-1]
     if not info:
         raise SystemExit(f'release {version} is not in {RELEASES}')
@@ -520,7 +520,7 @@ def deploy(version=None, restart='auto', acceptance='smoke', record_label=None, 
     if use_snapshot:
         if state not in ('none', 'merging'):     # a finished rollback merge is completed by the snapshot step
             log['result'] = 'aborted'
-            step('abort', reason=f'the rootfs has a kept snapshot (state {state}): moto_release.py commit '
+            step('abort', reason=f'the rootfs has a kept snapshot (state {state}): rungic_release.py commit '
                  'to keep the current system, or rollback --snapshot to return to the snapshot, first')
             return log
         ok, text = with_container_stopped('snapshot')
@@ -530,8 +530,8 @@ def deploy(version=None, restart='auto', acceptance='smoke', record_label=None, 
             step('abort', reason='could not take the rootfs snapshot')
             return log
         # A freshly started session has its own start-up flakiness; install into a settled one.
-        import moto_acceptance
-        settled = moto_acceptance.session_ready({})
+        import rungic_acceptance
+        settled = rungic_acceptance.session_ready({})
         step('settled', ok=settled['passed'])
     # 2 record
     previous, _ = device_release()
@@ -587,15 +587,15 @@ def deploy(version=None, restart='auto', acceptance='smoke', record_label=None, 
     step('integrity', state=summary.get('state'), release_mismatch=mismatch)
     passed = not mismatch
     if acceptance != 'none':
-        import moto_acceptance
-        report = moto_acceptance.run_level(acceptance, release=version, out_dir=record / 'acceptance',
+        import rungic_acceptance
+        report = rungic_acceptance.run_level(acceptance, release=version, out_dir=record / 'acceptance',
                                            since=installed_at)
         step('acceptance', level=acceptance, passed=report['passed'], failed=report['failed_ids'])
         flaky = []
         if not report['passed']:
             # One retry of the failed scenarios: a pass on retry is recorded as flaky, not a failure.
-            spec = moto_acceptance.load()
-            retry = moto_acceptance.run_scenarios([s for s in spec['scenarios'] if s['id'] in report['failed_ids']],
+            spec = rungic_acceptance.load()
+            retry = rungic_acceptance.run_scenarios([s for s in spec['scenarios'] if s['id'] in report['failed_ids']],
                                                   release=version, out_dir=record / 'acceptance-retry',
                                                   since=installed_at)
             flaky = [i for i in report['failed_ids'] if i not in retry['failed_ids']]
@@ -608,8 +608,8 @@ def deploy(version=None, restart='auto', acceptance='smoke', record_label=None, 
     if use_snapshot and not passed:
         # Evidence first: the journal is volatile and the rollback restarts the container.
         try:
-            import moto_agent
-            evidence = moto_agent.snapshot(f'deploy-{version}-failed', 900)
+            import rungic_agent
+            evidence = rungic_agent.snapshot(f'deploy-{version}-failed', 900)
             step('evidence', folder=evidence['folder'])
         except Exception as error:   # evidence must not prevent the rollback
             step('evidence', error=f'{type(error).__name__}: {error}')
@@ -618,7 +618,7 @@ def deploy(version=None, restart='auto', acceptance='smoke', record_label=None, 
         if ok:
             log['result'] = 'verify-failed, rolled back to the snapshot'
     elif use_snapshot:
-        log['snapshot'] = 'kept: moto_release.py commit once the release is accepted'
+        log['snapshot'] = 'kept: rungic_release.py commit once the release is accepted'
     step('done', result=log['result'])
     entries = history()
     entries.append({'time': stamp, 'version': version, 'previous': previous, 'result': log['result'],

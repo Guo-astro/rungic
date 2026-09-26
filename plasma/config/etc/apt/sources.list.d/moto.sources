@@ -1,4 +1,4 @@
-# This project's release repository (docs/61), mirrored by tools/moto_release.py.
+# This project's release repository (docs/61), mirrored by tools/rungic_release.py.
 Types: deb
 URIs: file:/var/lib/moto-apt
 Suites: ./

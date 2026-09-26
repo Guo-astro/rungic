@@ -109,20 +109,20 @@ KWin补丁目前涉及：
 ## 维护与恢复入口
 
 ```sh
-python3 tools/moto_plasma.py status
-python3 tools/moto_plasma.py start
-python3 tools/moto_plasma.py open
-python3 tools/moto_plasma.py home
-python3 tools/moto_plasma.py hide-keyboard
-python3 tools/moto_plasma.py restart-session
-python3 tools/moto_plasma.py stop
+python3 tools/rungic_plasma.py status
+python3 tools/rungic_plasma.py start
+python3 tools/rungic_plasma.py open
+python3 tools/rungic_plasma.py home
+python3 tools/rungic_plasma.py hide-keyboard
+python3 tools/rungic_plasma.py restart-session
+python3 tools/rungic_plasma.py stop
 ```
 
 容器按APK入口按需启动。桌面程序应通过 `user-exec systemd-run --user --collect ...` 继承完整用户会话环境；直接user-exec的环境比较小，不可用它在桌面模式下“不崩溃”替代手机模式验证。
 
 构建入口：`build-mesa.sh` / `package-mesa.py`、`kwin-android.patch` / `kwin-idle.patch`、`build-native-core.sh` / `build-apk.sh`、`build-codec-linux.sh` / `build-codec-ffmpeg.sh`、`build-snapshot.sh`、`build-desktop-fixes.sh`、`rime/install.sh`。Ubuntu官方依赖及所有定制包版本另存release清单；不要仅凭旧的构建日志判断当前安装内容。
 
-> 2026-09-26起，容器内本项目的程序与配置都来自包：自有包在`plasma/packaging/`（`tools/moto_package.py`），重建的Ubuntu包在`vendor/*/debian`（`tools/build_on_device.py`），经发布仓库部署（`tools/moto_release.py`，61篇）。上面的构建入口中已被取代的脚本已删除。
+> 2026-09-26起，容器内本项目的程序与配置都来自包：自有包在`plasma/packaging/`（`tools/rungic_package.py`），重建的Ubuntu包在`vendor/*/debian`（`tools/build_on_device.py`），经发布仓库部署（`tools/rungic_release.py`，61篇）。上面的构建入口中已被取代的脚本已删除。
 
 材料位于 `.work/refs/plasma-mobile-20260923/`：GPU探针、呈现统计、截图、输入/音频/相机测试、`browser/`自动化JSON、构建日志及`release/`本地恢复材料。原始相机/录音文件不收入发布归档；应用用户profile、Rime用户词频和签名私钥不归档。
 

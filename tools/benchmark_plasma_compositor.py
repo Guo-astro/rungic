@@ -9,7 +9,7 @@ import argparse, json, re, statistics, subprocess, threading, time
 from pathlib import Path
 import profile_plasma_frames as frames
 
-PLASMA=['python3','tools/moto_plasma.py']
+PLASMA=['python3','tools/rungic_plasma.py']
 def user(*args,check=True):
     return subprocess.run(PLASMA+['user-exec',*args],check=check,text=True,capture_output=True)
 def mobile(method):

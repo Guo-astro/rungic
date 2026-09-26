@@ -1,8 +1,8 @@
 {
   "mcpServers": {
-    "moto": {
+    "rungic": {
       "command": "uv",
-      "args": ["run", "--quiet", "--script", "tools/moto_agent_mcp.py"],
+      "args": ["run", "--quiet", "--script", "tools/rungic_agent_mcp.py"],
       "env": {"PYTHONPYCACHEPREFIX": ".work/cache/python"}
     }
   }

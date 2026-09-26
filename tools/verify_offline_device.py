@@ -8,11 +8,11 @@ import subprocess
 import time
 
 from build_clean_product import APPS
-import moto_device
+import rungic_device
 
 OUT = Path('/home/kevinzhow/moto-clean-W1WAA36/offline-v3')
 # The phone may be rebooting, so use its USB serial instead of resolving a transport.
-ADB = [moto_device.adb_path(), '-s', moto_device.config().get('MOTO_TRANSPORT', moto_device.serial())]
+ADB = [rungic_device.adb_path(), '-s', rungic_device.config().get('MOTO_TRANSPORT', rungic_device.serial())]
 
 
 def shell(cmd, timeout=30):

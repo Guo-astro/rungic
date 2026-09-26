@@ -24,11 +24,11 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import moto_agent  # noqa: E402
-import moto_device  # noqa: E402
-import moto_trace  # noqa: E402
-import moto_trace_report  # noqa: E402
-from moto_device import PLASMA, run  # noqa: E402
+import rungic_agent  # noqa: E402
+import rungic_device  # noqa: E402
+import rungic_trace  # noqa: E402
+import rungic_trace_report  # noqa: E402
+from rungic_device import PLASMA, run  # noqa: E402
 
 BINARY = '/usr/bin/moto-compbench'
 
@@ -45,7 +45,7 @@ def bench(variant, args, seconds, warmup, box):
 
 
 def thermal_status():
-    text = moto_device.out("dumpsys thermalservice | grep -m1 'Thermal Status'", 'shell')
+    text = rungic_device.out("dumpsys thermalservice | grep -m1 'Thermal Status'", 'shell')
     return int(text.split(':')[1])
 
 
@@ -68,14 +68,14 @@ def one_run(variant, args, out, index):
         worker.start()
         worker.join()
 
-    trace = moto_trace.capture(args.seconds + args.warmup + 2, f'compbench-{index}-{variant.replace(":", "-")}',
+    trace = rungic_trace.capture(args.seconds + args.warmup + 2, f'compbench-{index}-{variant.replace(":", "-")}',
                                'light', during=during)
     result = box['result']
     if result.returncode:
         raise RuntimeError(f'{variant}: {result.stderr[-800:] or result.stdout[-800:]}')
     summary = json.loads(result.stdout[result.stdout.index('{'):])
     # Only the measured window: the benchmark starts ~1.5 s into the trace, plus warm-up.
-    report = moto_trace_report.analyse(trace, 1.5 + args.warmup + 0.5, 1.5 + args.warmup + args.seconds)
+    report = rungic_trace_report.analyse(trace, 1.5 + args.warmup + 0.5, 1.5 + args.warmup + args.seconds)
     gpu = {k: v for k, v in report.get('gpu', {}).get('per_process', {}).items() if 'compbench' in k}
     summary['kgsl'] = next(iter(gpu.values()), None)
     summary['gpu_busy_pct'] = report.get('gpu', {}).get('busy_pct')
@@ -108,8 +108,8 @@ def main():
     order = []
     for r in range(args.rounds):  # ABBA-style alternation against drift and warm-up effects
         order += variants if r % 2 == 0 else list(reversed(variants))
-    moto_agent.ui_enable(False)
-    meta = {'order': order, 'args': vars(args) | {'out': str(args.out)}, 'status_before': moto_agent.status()}
+    rungic_agent.ui_enable(False)
+    meta = {'order': order, 'args': vars(args) | {'out': str(args.out)}, 'status_before': rungic_agent.status()}
     results = []
     try:
         if not args.keep_session:
@@ -124,7 +124,7 @@ def main():
     finally:
         if not args.keep_session:
             run(f'{PLASMA} restart-session', 'root', timeout=240, check=False)
-        meta['status_after'] = moto_agent.status()
+        meta['status_after'] = rungic_agent.status()
         (args.out / 'meta.json').write_text(json.dumps(meta, indent=1, ensure_ascii=False))
 
     table = {}

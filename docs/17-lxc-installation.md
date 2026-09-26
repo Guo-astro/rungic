@@ -31,15 +31,15 @@
 在电脑 `/home/kevinzhow/moto` 中执行：
 
 ```bash
-python3 tools/moto_lxc.py status
-python3 tools/moto_lxc.py shell
-python3 tools/moto_lxc.py exec /bin/cat /etc/alpine-release
-python3 tools/moto_lxc.py stop
-python3 tools/moto_lxc.py start
-python3 tools/moto_lxc.py log
+python3 tools/rungic_lxc.py status
+python3 tools/rungic_lxc.py shell
+python3 tools/rungic_lxc.py exec /bin/cat /etc/alpine-release
+python3 tools/rungic_lxc.py stop
+python3 tools/rungic_lxc.py start
+python3 tools/rungic_lxc.py log
 ```
 
-`shell` 进入后用 `exit` 退出终端，容器继续运行。工具明确指定本机序列号，不会选中另一台 ADB 设备。电脑工具在 [tools/moto_lxc.py](../tools/moto_lxc.py)。
+`shell` 进入后用 `exit` 退出终端，容器继续运行。工具明确指定本机序列号，不会选中另一台 ADB 设备。电脑工具在 [tools/rungic_lxc.py](../tools/rungic_lxc.py)。
 
 设备内也可通过 Magisk root 使用：
 
@@ -108,7 +108,7 @@ su -c '/data/adb/moto-lxc/moto-lxc stop'
 | `boot-lxc-stockcert.img` | 当前实机验证的容器内核，36,663,296 字节 |
 | `boot-stock-rollback.img` | 修改前完整原厂 boot，100,663,296 字节 |
 | `moto-lxc-runtime-v1.tar.gz` | 已验证运行环境、LXC、配置、最小 rootfs 和入口，10,454,717 字节（已同步 Termux 阶段的日志路径修正） |
-| `moto_lxc.py` | 电脑端操作工具 |
+| `rungic_lxc.py` | 电脑端操作工具 |
 | `SHA256SUMS` / `artifacts.json` | 文件校验与大小 |
 
 当前 boot 镜像 SHA-256：

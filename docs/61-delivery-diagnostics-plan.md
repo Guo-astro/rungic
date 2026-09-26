@@ -80,7 +80,7 @@ Ubuntu 26.04底座（官方源，apt管理）
 
 ## 3. 发布与部署
 
-主机侧增加一个统一入口，名称待定，例如`tools/moto_release.py`，经`moto_device.py`访问设备：
+主机侧增加一个统一入口，名称待定，例如`tools/rungic_release.py`，经`rungic_device.py`访问设备：
 
 - `build`：出包，生成仓库索引，写入`.work`；
 - `deploy <版本>`：按下面的步骤部署；
@@ -113,7 +113,7 @@ Ubuntu 26.04底座（官方源，apt管理）
 
 ## 5. 发布后自动验收
 
-- 场景用数据文件描述，每个场景包括前置条件、步骤（调用现有MCP与`moto_agent`能力）、判定和证据。
+- 场景用数据文件描述，每个场景包括前置条件、步骤（调用现有MCP与`rungic_agent`能力）、判定和证据。
 - 结果写入`.work/acceptance/<发布>/<时间>/`；性能指标与上一发布比较。
 - 分三级：
   - 冒烟：每次部署运行，目标5分钟内；
@@ -237,7 +237,7 @@ btrfs的收益是多快照、廉价克隆的测试容器、send/receive增量备
 - `moto-crash-symbols`按精确版本安装报告需要的`-dbgsym`（ddebs经单独的源文件，日常`apt update`不取其索引；libc6回退到`-dbg`），重做回溯与签名。kaccess报告从`libc+0x8e0fc/libQt6Core+0xe3f5c`变为`init_platform < createPlatformIntegration`。
 - 安装systemd-coredump时先屏蔽其`50-coredump.conf`；实测`core_pattern`未变。MCP：`crash_groups`（次数、首末时间、所属发布、`new_in_release`）、`crash_symbolize`。
 
-**发布、部署与回滚（已验证）**：`tools/moto_release.py`（仓库、元包、`deploy`/`rollback`/`status`）与`tools/moto_acceptance.py`。
+**发布、部署与回滚（已验证）**：`tools/rungic_release.py`（仓库、元包、`deploy`/`rollback`/`status`）与`tools/rungic_acceptance.py`。
 - 仓库：`.work/apt/repo`，apt-ftparchive索引，origin `moto`、label `moto-plasma`；设备`/var/lib/moto-apt`，`file:`源`Trusted: yes`（仅root可写），pin 1001。选用`trusted=yes`而非本地签名：AGENTS.md只授权同步APK签名密钥。
 - 元包`moto-plasma-release=<YYYYMMDD.N>`：对`plasma/release/packages.json`中的全部包精确依赖，含`/usr/share/moto/release.json`（git提交）。
 - 部署：预检、记录dpkg状态与完整性、同步仓库、在transient unit中安装（**每个包都带精确版本**：apt不会为满足依赖自动降级，回滚需要这一点）、安装成功后再同步发布中的Android侧文件（失败时两侧都停在上一版本）、解除被发布取代的hold、按需重启会话、完整性与冒烟验收、记录到`.work/deploy/`。
@@ -247,7 +247,7 @@ btrfs的收益是多快照、廉价克隆的测试容器、send/receive增量备
 
 **完整验收（已实现）**：应用启动、KScreen缩放应用与撤销、硬件编解码往返（motoh264enc编码、私有FFmpeg `h264_moto`解码：90/90帧、1280x720、3.0秒）、快捷设置录屏、Rime（引擎提交中文首选；文本框获得焦点后键盘出现）、合成器时序（`kwin_pipeline_run.py`，paint或呈现间隔p95较上一发布劣化超过15%即失败）。
 
-**打包（P3/P4）**：`tools/moto_package.py`从`plasma/packaging/<名称>/`构建14个自有包（主机构建的可复现，设备构建的用dpkg-shlibdeps并按build-id拆出`-dbgsym`），`tools/vendor_debian.py`把Ubuntu打包导入vendor（先单独提交导入，再提交`+moto`变更）。
+**打包（P3/P4）**：`tools/rungic_package.py`从`plasma/packaging/<名称>/`构建14个自有包（主机构建的可复现，设备构建的用dpkg-shlibdeps并按build-id拆出`-dbgsym`），`tools/vendor_debian.py`把Ubuntu打包导入vendor（先单独提交导入，再提交`+moto`变更）。
 - 新增包：moto-plasma-config、-session、-bridges、-input、-recording、-diagnostics，moto-voice-agent、moto-cua（可迁移的venv）、moto-agent-screen、moto-cast、moto-codex（官方包，固定SHA256）、moto-codec（私有FFmpeg在`/usr/lib/moto-codec`）、moto-firefox（包级divert `/usr/bin/firefox`）、moto-snapshot（Ubuntu无snapshot包）。
 - 重建包：plasma-mobile `+moto2`（含录屏快捷设置，preinst接管原有的本地divert）、plasma-settings、plasma-keyboard、xdg-desktop-portal-kde `+moto1`、wl-clipboard `2.3.0-0+moto1`、KWin `+moto19`（`-g1`与dbgsym）、Mesa `+moto2`（libgallium回到包内，preinst接管divert）。
 - `/usr/local`→`/usr`：单元、D-Bus、desktop文件（KWin按可执行路径授权）、QML、脚本、Android侧`moto-plasma`与LXC init路径同步修改；用户设置中的旧路径由kconf_update迁移（kwinrc输入法、Codex MCP命令与技能链接、每用户portal覆盖与单元链接），`plasma/session`在KWin启动前运行kconf_update。
@@ -279,7 +279,7 @@ rootfs从目录迁入ext4镜像，升级前自动建立dm-snapshot；btrfs按第
 - **SELinux**：内核loop worker以`u:r:kernel:s0`运行，读不了`adb_data_file`，loop设备会返回I/O错误。仿照docker的做法，`plasma/rootfs.sepolicy.rule`定义`moto_plasma_image`，镜像文件打上这个标签，只允许kernel访问这类文件。
 - **LXC接入**：LXC的存储后端不接受普通块设备，所以配置里仍写目录，由`lxc.hook.pre-mount`（`plasma/rootfs-mount-hook`）在容器的mount namespace中把dm设备挂到该目录。`moto-plasma start`在镜像模式下先attach，`stop`后detach。
 - **踩过的坑**：toybox losetup只接受64字节以内的路径，且默认autoclear；`mount -o context=`被拒绝，改为给镜像根打标签；`snapshot-merge`状态要读`dmctl`输出的最后一行（第一行是表头）；最初的`migrate`在复制前移动了数据，改为先带排除项复制，成功后再移动。
-- **发布集成**：镜像模式下`moto_release.py deploy`先停容器建快照，重启后等待会话稳定再安装；验收（失败时重试一次）通过则保留快照，直到`moto_release.py commit`；失败则先保存证据包（`.work/diag/*-deploy-<版本>-failed`，因为journal会随回滚丢失），再停容器合并快照。`rollback --snapshot`可以手动回到快照。
+- **发布集成**：镜像模式下`rungic_release.py deploy`先停容器建快照，重启后等待会话稳定再安装；验收（失败时重试一次）通过则保留快照，直到`rungic_release.py commit`；失败则先保存证据包（`.work/diag/*-deploy-<版本>-failed`，因为journal会随回滚丢失），再停容器合并快照。`rollback --snapshot`可以手动回到快照。
 - **实测**：迁移前后冒烟验收一致；20260926.10与.11共3次验收失败，都自动回到快照，回滚后`moto-plasma-release`与dpkg状态为部署前的版本。容器启动到会话就绪：目录11.2秒，镜像8.2秒。顺序写：目录378–953 MB/s，镜像467–618 MB/s；顺序读：目录约585 MB/s，镜像约740 MB/s。合成器paint p95 3.415 ms、呈现间隔p95 16.7 ms，与迁移前处于同一水平。
 - **保留的回退**：迁移前的目录rootfs保存为`rootfs.pre-image`（约24G），确认镜像模式稳定后再删除。迁移前的包状态备份在`.work/backups/pre-packages-20260926.tar.gz`。
 

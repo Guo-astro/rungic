@@ -481,4 +481,4 @@ sha256sum -c .work/refs/phosh-features-20260923/SHA256SUMS
 
 ## 调试与性能观测入口（2026-09-24）
 
-Agent可直接调用的设备诊断、崩溃现场、统一追踪（perfetto + KGSL + KWin FTrace）与按控件操作见[55篇](../55-agent-native-debugging.md)；入口为工作区`.mcp.json`中的`moto` MCP服务及`tools/moto_agent.py`等命令行。桌面输出链的分段耗时与GLES/Vulkan对照见[56篇](../56-kwin-vulkan-quantification.md)。
+Agent可直接调用的设备诊断、崩溃现场、统一追踪（perfetto + KGSL + KWin FTrace）与按控件操作见[55篇](../55-agent-native-debugging.md)；入口为工作区`.mcp.json`中的`moto` MCP服务及`tools/rungic_agent.py`等命令行。桌面输出链的分段耗时与GLES/Vulkan对照见[56篇](../56-kwin-vulkan-quantification.md)。

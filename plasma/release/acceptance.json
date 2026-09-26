@@ -1,5 +1,5 @@
 {
-  "comment": "Post-release acceptance scenarios (docs/61), run by tools/moto_acceptance.py after every deploy (smoke) and for release candidates (full). Each scenario names a check function and its parameters; results go to .work/acceptance/<release>/<time>/ and metrics are compared with the previous release's report. Every scenario restores what it changes. 'manual' lists what automatic results do not replace.",
+  "comment": "Post-release acceptance scenarios (docs/61), run by tools/rungic_acceptance.py after every deploy (smoke) and for release candidates (full). Each scenario names a check function and its parameters; results go to .work/acceptance/<release>/<time>/ and metrics are compared with the previous release's report. Every scenario restores what it changes. 'manual' lists what automatic results do not replace.",
   "known_crash_signatures": {},
   "scenarios": [
     {

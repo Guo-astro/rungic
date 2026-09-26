@@ -10,7 +10,7 @@ reach the same buffer once tracefs is mounted in the container
 the capture and restores the previous state.
 
 Analysis uses Perfetto's trace_processor (Python package `perfetto`), see
-tools/moto_trace_report.py.
+tools/rungic_trace_report.py.
 """
 import argparse
 import subprocess
@@ -18,10 +18,10 @@ import threading
 import time
 from pathlib import Path
 
-import moto_device
-from moto_device import run
+import rungic_device
+from rungic_device import run
 
-DIAG_DIR = moto_device.WORKSPACE / '.work/diag'
+DIAG_DIR = rungic_device.WORKSPACE / '.work/diag'
 REMOTE_DIR = '/data/misc/perfetto-traces'
 
 FTRACE_EVENTS = {
@@ -135,13 +135,13 @@ def capture(duration_s=10, label='trace', preset='frame', during=None):
             kwin_ftrace(False)
     result = box.get('result')
     if result is None or result.returncode:
-        raise moto_device.DeviceError(f'perfetto failed: {result.stderr if result else "no result"}')
+        raise rungic_device.DeviceError(f'perfetto failed: {result.stderr if result else "no result"}')
     # The trace directory is not readable by adb's shell user.
     staged = f'/data/local/tmp/{name}'
     run(f'mv {REMOTE_DIR}/{name} {staged} && chmod 644 {staged}', 'root')
     try:
         for remote, target in ((staged, local), (gpu_remote, local.with_name(local.name + '.kgsl.txt'))):
-            subprocess.run(moto_device.adb('pull', remote, str(target)), check=True,
+            subprocess.run(rungic_device.adb('pull', remote, str(target)), check=True,
                            capture_output=True, timeout=600, stdin=subprocess.DEVNULL)
     finally:
         run(f'rm -f {staged} {gpu_remote}', 'root', check=False)

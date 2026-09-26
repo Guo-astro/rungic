@@ -12,19 +12,19 @@ import subprocess
 import zipfile
 from pathlib import Path
 
-import moto_device
+import rungic_device
 
-DEFAULT = moto_device.WORKSPACE / '.work/refs/plasma-mobile-20260923/native-libs'
+DEFAULT = rungic_device.WORKSPACE / '.work/refs/plasma-mobile-20260923/native-libs'
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('out', type=Path, nargs='?', default=DEFAULT)
     args = parser.parse_args()
-    remote = moto_device.out('pm path dev.moto.plasma', 'shell').splitlines()[0].split(':', 1)[1]
-    apk = moto_device.WORKSPACE / '.work/cache/installed-plasma.apk'
+    remote = rungic_device.out('pm path dev.moto.plasma', 'shell').splitlines()[0].split(':', 1)[1]
+    apk = rungic_device.WORKSPACE / '.work/cache/installed-plasma.apk'
     apk.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(moto_device.adb('pull', remote, str(apk)), check=True, capture_output=True,
+    subprocess.run(rungic_device.adb('pull', remote, str(apk)), check=True, capture_output=True,
                    stdin=subprocess.DEVNULL, timeout=600)
     sums = []
     with zipfile.ZipFile(apk) as archive:

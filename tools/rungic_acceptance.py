@@ -2,10 +2,10 @@
 # SPDX-License-Identifier: MIT
 """Post-release acceptance on the phone (docs/61): scenarios from plasma/release/acceptance.json.
 
-  moto_acceptance.py smoke [--release V]     every deploy; about two minutes
-  moto_acceptance.py full [--release V]      release candidates: smoke plus the full scenarios
-  moto_acceptance.py run ID... [--release V] selected scenarios
-  moto_acceptance.py compare A B             metrics of two reports (paths)
+  rungic_acceptance.py smoke [--release V]     every deploy; about two minutes
+  rungic_acceptance.py full [--release V]      release candidates: smoke plus the full scenarios
+  rungic_acceptance.py run ID... [--release V] selected scenarios
+  rungic_acceptance.py compare A B             metrics of two reports (paths)
 
 A check returns passed/metrics/details; metrics are compared with the newest report of an
 earlier release. Results: .work/acceptance/<release>/<time>/report.json. Every scenario
@@ -23,12 +23,12 @@ import traceback
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import moto_agent  # noqa: E402
-import moto_device  # noqa: E402
-from moto_device import out, run  # noqa: E402
+import rungic_agent  # noqa: E402
+import rungic_device  # noqa: E402
+from rungic_device import out, run  # noqa: E402
 
-SCENARIOS = moto_device.WORKSPACE / 'plasma/release/acceptance.json'
-RESULTS = moto_device.WORKSPACE / '.work/acceptance'
+SCENARIOS = rungic_device.WORKSPACE / 'plasma/release/acceptance.json'
+RESULTS = rungic_device.WORKSPACE / '.work/acceptance'
 CHECKS = {}
 
 
@@ -87,7 +87,7 @@ def user_units(ctx, critical=()):
 @check
 def new_crashes(ctx):
     since = max(1.0, time.time() - ctx['since'] + 30)
-    groups = moto_agent.crash_groups(since)['groups']
+    groups = rungic_agent.crash_groups(since)['groups']
     known = ctx['spec'].get('known_crash_signatures', {})
     new = [g for g in groups if g['signature'] not in known]
     return result(not new, {'crash_groups': len(groups), 'unknown': len(new)},
@@ -120,7 +120,7 @@ def display_geometry(ctx):
 def _home():
     """A known starting point: keyboard hidden, drawer closed, home screen."""
     import ui_launch_check as ui
-    run(f'{moto_device.PLASMA} hide-keyboard', 'root', check=False)
+    run(f'{rungic_device.PLASMA} hide-keyboard', 'root', check=False)
     for _ in range(2):
         ui.press('Home')
         time.sleep(0.8)
@@ -134,7 +134,7 @@ def _drawer_search():
     except RuntimeError:
         _home()
         ui.open_drawer()
-    fields = moto_agent.ui_find('plasmashell', role='text', name='Search')
+    fields = rungic_agent.ui_find('plasmashell', role='text', name='Search')
     if not fields:
         raise RuntimeError('drawer search field not showing')
     return fields[0]
@@ -151,8 +151,8 @@ print(json.dumps([[t, float(sc), [int(v) for v in b[0]]] for t, sc, b in zip(out
 
 def ocr_screen():
     """Text on the phone's screen: [text, score, [x, y]] from RapidOCR in moto-clicker's venv."""
-    shot = moto_agent.screenshot()
-    moto_device.to_container(shot, '/var/tmp/moto-acceptance-ocr.png', '644')
+    shot = rungic_agent.screenshot()
+    rungic_device.to_container(shot, '/var/tmp/moto-acceptance-ocr.png', '644')
     text = user('py=/usr/lib/moto-clicker/venv/bin/python; [ -x $py ] || py=/usr/local/lib/moto-clicker/venv/bin/python; '
                 f"$py -c {shlex.quote(OCR)} "
                 '/var/tmp/moto-acceptance-ocr.png 2>/dev/null; rm -f /var/tmp/moto-acceptance-ocr.png', timeout=120)
@@ -163,17 +163,17 @@ def ocr_screen():
 def input_text(ctx, text='Calcul', expect='Calculator', absent='Clock'):
     """Android text input into the drawer search, read back from the screen by OCR: right after a
     session restart the results never reach the AT-SPI tree, and the search field exposes no text."""
-    enabled = moto_agent.a11y('state')['enabled']
+    enabled = rungic_agent.a11y('state')['enabled']
     if not enabled:
-        moto_agent.ui_enable(True)
+        rungic_agent.ui_enable(True)
         time.sleep(2)
     try:
         field = _drawer_search()
         taps = 0
         for taps in range(1, 4):
-            moto_agent.ui_tap('plasmashell', field['path'])
+            rungic_agent.ui_tap('plasmashell', field['path'])
             focused = wait_for(lambda: any('focused' in f.get('states', []) for f in
-                                           moto_agent.ui_find('plasmashell', role='text', name='Search')),
+                                           rungic_agent.ui_find('plasmashell', role='text', name='Search')),
                                timeout=3, interval=0.3)
             if focused:
                 break
@@ -195,7 +195,7 @@ def input_text(ctx, text='Calcul', expect='Calculator', absent='Clock'):
         except Exception:
             pass
         if not enabled:
-            moto_agent.ui_enable(False)
+            rungic_agent.ui_enable(False)
 
 
 # ---------------------------------------------------------------- media
@@ -321,9 +321,9 @@ def audio_record(ctx):
 def app_launch(ctx, app='Calculator', process='kalk', rounds=2):
     """Launch and close through the launcher by accessible names (tools/ui_launch_check.py)."""
     import ui_launch_check as ui
-    enabled = moto_agent.a11y('state')['enabled']
+    enabled = rungic_agent.a11y('state')['enabled']
     if not enabled:
-        moto_agent.ui_enable(True)
+        rungic_agent.ui_enable(True)
         time.sleep(2)
     try:
         if ui.running(process):
@@ -343,7 +343,7 @@ def app_launch(ctx, app='Calculator', process='kalk', rounds=2):
         except Exception:
             pass
         if not enabled:
-            moto_agent.ui_enable(False)
+            rungic_agent.ui_enable(False)
 
 
 def _phone_output():
@@ -424,9 +424,9 @@ def rime_input(ctx):
     check = run('for p in /usr/libexec/moto-rime-check /usr/local/libexec/moto-rime-check; do [ -x $p ] && '
                 'exec $p; done; exit 9', 'user', timeout=120, check=False)
     engine = check.returncode == 0
-    enabled = moto_agent.a11y('state')['enabled']
+    enabled = rungic_agent.a11y('state')['enabled']
     if not enabled:
-        moto_agent.ui_enable(True)
+        rungic_agent.ui_enable(True)
         time.sleep(2)
     probe = next((p for p in ('/usr/bin/moto-input-probe', '/usr/local/bin/moto-input-probe')
                   if run(f'test -x {p}', 'container', check=False).returncode == 0), None)
@@ -434,12 +434,12 @@ def rime_input(ctx):
     try:
         if probe:
             user(f'(setsid {probe} >/dev/null 2>&1 &) ; true')
-            field = wait_for(lambda: next((f for f in moto_agent.ui_find('moto-input-probe', role='text')), None)
-                             if any(a['name'] == 'moto-input-probe' for a in moto_agent.a11y('apps')) else None,
+            field = wait_for(lambda: next((f for f in rungic_agent.ui_find('moto-input-probe', role='text')), None)
+                             if any(a['name'] == 'moto-input-probe' for a in rungic_agent.a11y('apps')) else None,
                              timeout=20)
             if field:
-                moto_agent.ui_tap('moto-input-probe', field['path'])
-                keyboard = bool(wait_for(lambda: [n for n in moto_agent.ui_find('plasma-keyboard', role='label')
+                rungic_agent.ui_tap('moto-input-probe', field['path'])
+                keyboard = bool(wait_for(lambda: [n for n in rungic_agent.ui_find('plasma-keyboard', role='label')
                                                   if n['name'] in ('q', 'a', 'z')], timeout=8))
         return result(engine and keyboard, engine=check.stdout.strip() or f'exit {check.returncode}',
                       keyboard_shown=keyboard, probe=probe)
@@ -450,7 +450,7 @@ def rime_input(ctx):
         except Exception:
             pass
         if not enabled:
-            moto_agent.ui_enable(False)
+            rungic_agent.ui_enable(False)
 
 
 def _quick_settings():
@@ -463,11 +463,11 @@ def _quick_settings():
 
 
 def _tap_label(pattern):
-    labels = [n for n in moto_agent.ui_find('plasmashell', role='label', name=pattern)
+    labels = [n for n in rungic_agent.ui_find('plasmashell', role='label', name=pattern)
               if n.get('extents', [0, 0, 0, 0])[2] > 0]
     if not labels:
         raise RuntimeError(f'no visible label {pattern!r}')
-    return moto_agent.ui_tap('plasmashell', labels[0]['path'])
+    return rungic_agent.ui_tap('plasmashell', labels[0]['path'])
 
 
 PROBE_RECORDING = r"""
@@ -484,9 +484,9 @@ $bin/ffprobe -v error -show_entries stream=codec_type,codec_name,avg_frame_rate 
 def screen_recording(ctx, seconds=4):
     """The recording quick setting, pressed as a user would (AT-SPI finds it, a touch toggles it): a playable
     MP4 with a video and an audio track and about the recorded duration. The file is deleted afterwards."""
-    enabled = moto_agent.a11y('state')['enabled']
+    enabled = rungic_agent.a11y('state')['enabled']
     if not enabled:
-        moto_agent.ui_enable(True)
+        rungic_agent.ui_enable(True)
         time.sleep(2)
     started = time.time()
     path = None
@@ -525,7 +525,7 @@ def screen_recording(ctx, seconds=4):
         except Exception:
             pass
         if not enabled:
-            moto_agent.ui_enable(False)
+            rungic_agent.ui_enable(False)
 
 
 @check
@@ -535,7 +535,7 @@ def compositor_perf(ctx, max_regression=0.15, rounds=2):
     more than max_regression."""
     import subprocess
     out_dir = ctx['out_dir'] / 'compositor'
-    run_ = subprocess.run(['uv', 'run', '--script', str(moto_device.WORKSPACE / 'tools/kwin_pipeline_run.py'),
+    run_ = subprocess.run(['uv', 'run', '--script', str(rungic_device.WORKSPACE / 'tools/kwin_pipeline_run.py'),
                            str(out_dir), '--rounds', str(rounds), '--seconds', '8', '--swipes', '6',
                            '--max-thermal', '2'], capture_output=True, text=True, timeout=1800)
     summary_path = out_dir / 'summary.json'
@@ -613,7 +613,7 @@ def run_scenarios(selected, release=None, out_dir=None, since=None):
                              trace=traceback.format_exc()[-1500:])
         if row['passed'] is False and scenario.get('screenshot_on_failure', True):
             try:
-                shot = Path(moto_agent.screenshot())
+                shot = Path(rungic_agent.screenshot())
                 target = out_dir / f"{scenario['id']}.png"
                 shot.replace(target)
                 row['details']['screenshot'] = str(target)
@@ -629,7 +629,7 @@ def run_scenarios(selected, release=None, out_dir=None, since=None):
               'failed_ids': [r['id'] for r in rows if r['passed'] is False]}
     base_path, base = previous_report(release, {r['id'] for r in rows})
     if base:
-        report['compared_with'] = str(base_path.relative_to(moto_device.WORKSPACE))
+        report['compared_with'] = str(base_path.relative_to(rungic_device.WORKSPACE))
         report['metric_changes'] = compare(report, base)
     (out_dir / 'report.json').write_text(json.dumps(report, indent=1, ensure_ascii=False) + '\n')
     report['path'] = str(out_dir / 'report.json')

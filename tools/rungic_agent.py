@@ -3,7 +3,7 @@
 """Read-only device diagnostics for agents: status, merged logs, crashes and evidence bundles.
 
 Every function returns plain data (dict/list/str) so the same code serves the
-command line and the MCP server (tools/moto_agent_mcp.py). Nothing here changes
+command line and the MCP server (tools/rungic_agent_mcp.py). Nothing here changes
 device state; see docs/55-agent-native-debugging.md for the safety classes.
 
 Timeline: Android and the LXC container share one kernel, so logcat
@@ -21,11 +21,11 @@ import sys
 import time
 from pathlib import Path
 
-import moto_device
-from moto_device import DeviceError, out, run
+import rungic_device
+from rungic_device import DeviceError, out, run
 
 PACKAGE = 'dev.moto.plasma'
-DIAG_DIR = moto_device.WORKSPACE / '.work/diag'
+DIAG_DIR = rungic_device.WORKSPACE / '.work/diag'
 SESSION_LOG = '/var/log/plasma/session.log'
 LOGCAT_TAGS = ('WinlandNative', 'MotoWayland', 'MotoPlasma', 'DisplayPacer')
 PRIORITY = {'V': 7, 'D': 7, 'I': 6, 'W': 4, 'E': 3, 'F': 2}  # logcat -> syslog
@@ -77,7 +77,7 @@ echo "thermal=$(dumpsys thermalservice | grep -m1 'Thermal Status' | cut -d: -f2
 echo "battery=$(dumpsys battery | grep -m1 ' level' | cut -d: -f2 | tr -d ' ')"
 echo "gpubusy=$(cat /sys/class/kgsl/kgsl-3d0/gpubusy)"
 echo "gpu_freq=$(cat /sys/class/kgsl/kgsl-3d0/devfreq/cur_freq)"
-echo "container=$({moto_device.PLASMA} status | grep -m1 State | tr -s ' ' | cut -d' ' -f2)"
+echo "container=$({rungic_device.PLASMA} status | grep -m1 State | tr -s ' ' | cut -d' ' -f2)"
 ''')
     result = {'android': dict(line.split('=', 1) for line in android.splitlines() if '=' in line)}
     if result['android'].get('container') != 'RUNNING':
@@ -383,7 +383,7 @@ def screenshot(path=None):
     remote = '/data/local/tmp/moto-agent-screen.png'
     run(f'screencap -p {remote}', 'shell')
     try:
-        subprocess.run(moto_device.adb('pull', remote, str(path)), check=True, capture_output=True,
+        subprocess.run(rungic_device.adb('pull', remote, str(path)), check=True, capture_output=True,
                        timeout=120, stdin=subprocess.DEVNULL)
     finally:
         run(f'rm -f {remote}', 'shell', check=False)
@@ -452,7 +452,7 @@ def snapshot(label='manual', since_seconds=300, with_screenshot=True):
     label = re.sub(r'[^A-Za-z0-9_.-]+', '-', label)[:60] or 'manual'
     folder = DIAG_DIR / f"{time.strftime('%Y%m%d-%H%M%S')}-{label}"
     folder.mkdir(parents=True)
-    manifest = {'label': label, 'created': time.time(), 'transport': moto_device.transport(), 'files': {}, 'errors': {}}
+    manifest = {'label': label, 'created': time.time(), 'transport': rungic_device.transport(), 'files': {}, 'errors': {}}
 
     def save(name, producer, text=False):
         try:

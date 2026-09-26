@@ -4,7 +4,7 @@
 # dependencies = ["perfetto>=0.58", "pandas>=2"]
 # ///
 # SPDX-License-Identifier: MIT
-"""Summarise a tools/moto_trace.py capture: presentation, KWin phases, CPU and GPU per process.
+"""Summarise a tools/rungic_trace.py capture: presentation, KWin phases, CPU and GPU per process.
 
 Inputs: <name>.pftrace (Android perfetto) and <name>.pftrace.kgsl.txt (tracefs
 instance with KGSL events, same boot clock). Durations are milliseconds.

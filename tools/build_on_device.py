@@ -15,7 +15,7 @@ what changed.
                a meson tree (Mesa) is configured with plasma/<component>-meson-options
   status       state of the build unit and the log tail
   install      dpkg -i the .debs of the last build (version from debian/changelog)
-  collect      the last build's .debs and .ddebs into the release repository pool (moto_release.py)
+  collect      the last build's .debs and .ddebs into the release repository pool (rungic_release.py)
   divert       install built files over distribution ones with dpkg-divert
                (--file BUILT=INSTALLED, repeatable); the original stays as .distrib
 
@@ -27,8 +27,8 @@ import subprocess
 import tarfile
 import time
 
-import moto_device
-from moto_device import WORKSPACE, out, run
+import rungic_device
+from rungic_device import WORKSPACE, out, run
 
 BASE = '/root/moto-build'
 # Line tables only (-g1): enough for symbolized backtraces (docs/61) at a fraction of -g2's
@@ -52,8 +52,8 @@ def stage(component):
 
 def sync(component):
     work = f'{BASE}/{component}'
-    moto_device.run(f'rm -rf {work}/incoming', 'container')
-    moto_device.extract_in_container(stage(component), f'{work}/incoming')
+    rungic_device.run(f'rm -rf {work}/incoming', 'container')
+    rungic_device.extract_in_container(stage(component), f'{work}/incoming')
     # Keep obj-* (build output) and debhelper state; everything else mirrors the stage.
     print(out(f'''set -e
 chown -R root:root {work}/incoming
@@ -132,7 +132,7 @@ dpkg-checkbuilddeps 2>/dev/null || DEBIAN_FRONTEND=noninteractive apt-get build-
 def collect(component):
     """The last build's .debs (and .ddeb debug symbols, renamed .deb for the index) into the release
     repository pool (docs/61)."""
-    import moto_release
+    import rungic_release
     from pathlib import Path
     version = out(f"dpkg-parsechangelog -l {BASE}/{component}/src/debian/changelog -S Version | sed 's/^[0-9]*://'",
                   'container').strip()
@@ -141,11 +141,11 @@ def collect(component):
     incoming.mkdir(parents=True, exist_ok=True)
     for name in names:
         target = incoming / (name[:-5] + '.deb' if name.endswith('.ddeb') else name)
-        moto_device.from_container(f'{BASE}/{component}/{name}', target)
-    added = moto_release.import_debs(sorted(incoming.glob('*.deb')))
+        rungic_device.from_container(f'{BASE}/{component}/{name}', target)
+    added = rungic_release.import_debs(sorted(incoming.glob('*.deb')))
     for path in incoming.glob('*.deb'):
         path.unlink()
-    moto_release.index()
+    rungic_release.index()
     return f'{version}: {len(names)} files, added {added}'
 
 

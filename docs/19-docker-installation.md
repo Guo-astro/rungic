@@ -32,13 +32,13 @@ docker-service shell
 电脑侧：
 
 ```sh
-python3 tools/moto_docker.py status
-python3 tools/moto_docker.py cli ps
-python3 tools/moto_docker.py cli compose -f /root/stacks/web/compose.yaml ps
-python3 tools/moto_docker.py shell
+python3 tools/rungic_docker.py status
+python3 tools/rungic_docker.py cli ps
+python3 tools/rungic_docker.py cli compose -f /root/stacks/web/compose.yaml ps
+python3 tools/rungic_docker.py shell
 ```
 
-入口默认明确指定序列号 ZY32MVJS25。交互容器终端可用 `python3 tools/moto_docker.py --tty cli exec -it moto-nginx sh`。
+入口默认明确指定序列号 ZY32MVJS25。交互容器终端可用 `python3 tools/rungic_docker.py --tty cli exec -it moto-nginx sh`。
 
 ## SELinux 与容器权限
 
