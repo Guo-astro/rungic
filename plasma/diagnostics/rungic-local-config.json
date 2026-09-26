@@ -18,6 +18,14 @@
       "purpose": "APT through the HTTP proxy (AGENTS.md); machine-specific"
     },
     {
+      "path": "/etc/apt/apt.conf.d/80moto-proxy",
+      "owner": "root",
+      "mode": "0644",
+      "required": false,
+      "source": "the same file under its name before the Rungic rename; rungic-plasma-config copied it",
+      "purpose": "kept for a rollback to a release from before the rename, until phase D (docs/70)"
+    },
+    {
       "path": "/var/lib/moto-host/audio-cookie",
       "owner": "1000",
       "mode": "0600",
