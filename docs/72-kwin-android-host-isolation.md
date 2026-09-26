@@ -51,4 +51,13 @@
 
 ## 进度
 
-（进行中）
+**A 宿主侧（完成，APK 1.46）**：`native/plasma/src/android/idle_inhibit.rs`按表面记录抑制器（同一表面多个抑制器只算一次），状态变化时写eventfd；Java主looper监听该fd，把`FLAG_KEEP_SCREEN_ON`的第三个来源`AWAKE_WAYLAND`设为当前状态（原有两个来源：Linux会话的keep-awake与投屏）。实测：`plasma/diagnostics/wayland-probes/idle-probe`直接连宿主socket持有抑制器时，APK窗口出现`KEEP_SCREEN_ON`，释放后消失；APK 1.45下同一测试无效果。
+
+**宿主单元测试首次运行**：宿主crate依赖oboe等Android库，不能在x86主机上编译测试，此前的25个`#[test]`从未运行过。新增`plasma/test-native-core.sh`：交叉编译测试程序，经adb在手机临时目录运行后删除。首次运行发现一个过期测试（发送18条命令却断言17条），已改为按列表长度断言；现27个全部通过（含`idle_inhibit`的2个）。
+
+**KWin构建来源切到补丁队列（完成）**：`build_on_device.py`对`packages/kwin`用`pq.py source`，发布工具从`packages/kwin/debian/changelog`取版本；`+moto20`（内容与`+moto19`相同）已构建入库，随发布20260926.17部署。第一次部署的冒烟验收因一次plasmashell崩溃（签名`6c87dacae3ce`，Qt Wayland事件线程在`wl_display_read_events`中SIGSEGV）自动回滚：崩溃发生在部署重启会话时旧会话被关闭的那一刻，之前两次KWin重启也有同类报告。它是真实缺陷（KWin退出时Qt客户端崩溃，待查），但不是新发布的回归；部署工具改为从新会话就绪时统计新崩溃，并把余量从30秒改为2秒（统计窗口按相对时长计算，不受两端时钟影响）。
+
+**B KWin侧（进行中）**：在pq分支末尾以临时提交实现，折叠进补丁队列前先构建与测试。
+- 新目录`src/backends/android/`：`AndroidBackend : WaylandBackend`（为所有输出创建`AndroidOutput`；用户修改分辨率/刷新策略时请求Android；在自己的事件队列上绑定宿主的`zwp_idle_inhibit_manager_v1`，KWin的空闲抑制状态变化时在手机输出表面上创建或销毁抑制器）、`AndroidOutput : WaylandOutput`（手机输出的物理尺寸与internal、Android分辨率×刷新率模式表；在Android宿主上由KWin决定缩放）；`android-display-client.h`移入该目录。
+- 上游文件中的钩子：H1 `main_wayland.cpp`的`--android-host`；H2 `WaylandBackend::createOutputObject`（protected virtual）；H4 `WaylandOutput::modesFor`、`applyExtraChanges`（protected virtual）与`setRefreshRate`；H8 `InputRedirection::idleInhibitedChanged`信号。`idle-android-power`补丁（D-Bus与5秒重发）整条删除，`idle_inhibition.cpp`回到上游原样。
+- 构建与L1测试：为不占用手机，在主机上建立x86的KWin构建环境（`tools/pq/build.Dockerfile`，同一`ubuntu:26.04`镜像摘要加`apt-get build-dep kwin`），先在主机上编译检查并运行KWin集成测试（虚拟后端）。
