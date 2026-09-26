@@ -578,7 +578,8 @@ def deploy(version=None, restart='auto', acceptance='smoke', record_label=None, 
     ok, tail = apt_install(info, record)
     step('install', ok=ok)
     # New crashes are counted from here: the restart for the snapshot runs the previous release, and
-    # its crashes (collected later) are not this release's (docs/61).
+    # its crashes (collected later) are not this release's (docs/61). A session restart below moves
+    # the start again: the old session's shutdown is not the new release running.
     installed_at = time.time()
     if not ok:
         log['result'] = 'install-failed'
@@ -611,6 +612,7 @@ def deploy(version=None, restart='auto', acceptance='smoke', record_label=None, 
         # The LXC configuration (mounts, init) applies only when the container starts.
         ok, text = restart_container() if whole else restart_session()
         step('restart', ok=ok, container=whole, output=text[-500:])
+        installed_at = time.time()
     # 6 verify
     integrity_after = integrity_summary()
     (record / 'integrity-after.json').write_text(json.dumps(integrity_after, indent=1, ensure_ascii=False) + '\n')

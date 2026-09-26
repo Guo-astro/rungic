@@ -86,7 +86,7 @@ def user_units(ctx, critical=()):
 
 @check
 def new_crashes(ctx):
-    since = max(1.0, time.time() - ctx['since'] + 30)
+    since = max(1.0, time.time() - ctx['since'] + 2)   # relative, so host and phone clocks need not agree
     groups = rungic_agent.crash_groups(since)['groups']
     known = ctx['spec'].get('known_crash_signatures', {})
     new = [g for g in groups if g['signature'] not in known]
