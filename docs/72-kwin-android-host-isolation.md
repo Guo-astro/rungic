@@ -57,7 +57,7 @@
 
 **KWin构建来源切到补丁队列（完成）**：`build_on_device.py`对`packages/kwin`用`pq.py source`，发布工具从`packages/kwin/debian/changelog`取版本；`+moto20`（内容与`+moto19`相同）已构建入库，随发布20260926.17部署。第一次部署的冒烟验收因一次plasmashell崩溃（签名`6c87dacae3ce`，Qt Wayland事件线程在`wl_display_read_events`中SIGSEGV）自动回滚：崩溃发生在部署重启会话时旧会话被关闭的那一刻，之前两次KWin重启也有同类报告。它是真实缺陷（KWin退出时Qt客户端崩溃，待查），但不是新发布的回归；部署工具改为从新会话就绪时统计新崩溃，并把余量从30秒改为2秒（统计窗口按相对时长计算，不受两端时钟影响）。
 
-**B KWin侧（代码完成，KWin `+moto21`，待实机验收）**
+**B KWin侧（完成，KWin `+moto21`，发布20260926.18）**
 
 - 新目录`src/backends/android/`：`AndroidBackend : WaylandBackend`（为所有输出创建`AndroidOutput`；用户修改手机输出的分辨率/刷新策略时请求Android，投屏输出不请求；在自己的事件队列上绑定宿主的`zwp_idle_inhibit_manager_v1`，KWin的空闲抑制状态变化时在手机输出表面上创建或销毁抑制器）、`AndroidOutput : WaylandOutput`（手机输出的物理尺寸与internal、Android分辨率×刷新率模式表；在Android宿主上由KWin决定缩放）；`android-display-client.h`移入该目录。
 - 上游文件中的钩子：H1 `main_wayland.cpp`的`--android-host`；H2 `WaylandBackend::createOutputObject`（protected virtual）；H4 `WaylandOutput::modesFor`、`applyExtraChanges`（protected virtual）与`setRefreshRate`；H8 `InputRedirection::idleInhibitedChanged`信号。
@@ -66,3 +66,9 @@
 - **量化**：我们的补丁在上游已有文件中的改动由29个文件+822/−68行变为31个文件+759/−69行（多出的是钩子所在的`input.*`、`main_wayland.cpp`、CMake），新文件由209行变为533行。再次把队列顺序合并到6.7.5：冲突由18条中15条变为17条中14条，**基本没有改善**——这种测法下第一条大补丁`android-host-graphics`在6.7上冲突后，后续依赖它的补丁连带冲突，新补丁也被牵连。试点证明了结构可行（钩子加新目录可编译、可测、可验证），但要在升级冲突上见效，必须把Wayland后端中的大补丁（图形、投屏、宿主输出）也迁入`src/backends/android/`。记录：`.work/research/patch-queue/pq-upgrade-report-pilot.txt`。
 - **兼容性**：会话脚本`plasma/kwin`传`--android-host`，旧KWin不认识该参数会退出，所以`moto-plasma-session`依赖`kwin-wayland (>= +moto21~)`；新KWin需要APK 1.46（旧APK上抑制器只被计数，不保持亮屏）。
 - **验收**：新增冒烟场景`idle.inhibit`（`moto-idle-probe`显示一个带抑制器的窗口6秒，APK窗口期间有`KEEP_SCREEN_ON`、结束后消失）。探针最初只在裸`wl_surface`上创建抑制器：直接连宿主有效，但KWin只对显示出的窗口计算空闲抑制，所以经KWin时无效——探针改为显示真实窗口，`--bare`保留给直接测试宿主。
+
+**实机验收（20260926.18，KWin `+moto21`、会话包0.187、APK 1.46）**：部署的冒烟验收通过，其中新增的`idle.inhibit`通过——空闲抑制已经从KWin的Android后端经标准`zwp_idle_inhibitor_v1`到达宿主。完整验收16项中15项通过（含`display.mode`、`display.geometry`、录屏、合成器时序：paint p95 3.559 ms、呈现间隔p95 16.721 ms）；`camera.frames`（前置）首次只收到1帧，随后两次重跑都是20帧/28.5 fps——与.17相同，只在会话启动后第一次打开前置摄像头时出现，是docs/61记录的冷启动问题，不是本次引入。快照已提交。
+
+**部署工具的一次事故与修复**：部署.18时手写的版本排序把旧的20260926.9选成了“最新”。工具把容器降级安装为.9后，在同步Android侧文件时发现源码已变，直接退出，没有回滚，留下降级的rootfs与仍在运行的.17会话。用`rollback --snapshot`回到部署前（快照由该次部署建立，Android侧文件未改动）。修复：Android侧源码在建快照之前检查；快照之后的任何异常都像验收失败一样保存证据并回滚；单元测试复现了这两种情况（修复前失败、修复后通过）。部署改为不带版本参数（默认最新）。
+
+**另外发现的既有缺陷（未修复）**：快捷设置录屏在.17时连续两次失败——停止后只有`video0`接受了EOS，向PulseAudio监听源`pulsesrc`发送EOS的调用被阻塞，收尾线程一直等待，12秒后超时，只留下`.partial.mp4`。.18时同一场景通过，属于间歇性问题，但阻塞位置已经明确。
