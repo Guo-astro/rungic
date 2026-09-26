@@ -422,14 +422,38 @@ def sync_android(info, record):
         if hashlib.sha256(source.read_bytes()).hexdigest() != item['sha256']:
             raise SystemExit(f"{item['source']} changed since release {info['version']} was built; "
                              'check out its commit to deploy it')
+        backup.mkdir(parents=True, exist_ok=True)
+        saved = backup / path.strip('/').replace('/', '__')
         if current:
-            backup.mkdir(parents=True, exist_ok=True)
-            pull(path, backup / path.strip('/').replace('/', '__'))
+            pull(path, saved)
         remote = push(source, 'moto-android-file')
         run(f'install -m{item["mode"]} {remote} {shlex.quote(path)}.new && mv {shlex.quote(path)}.new '
             f'{shlex.quote(path)} && rm -f {remote}', 'root')
         changed.append(path)
+        entry = {'path': path, 'saved': saved.name if current else None, 'mode': item['mode']}
+        listing = backup / 'changed.json'
+        # What restore_android() puts back: the old file, or nothing where there was none.
+        listing.write_text(json.dumps([*(json.loads(listing.read_text()) if listing.exists() else []), entry],
+                                      indent=1) + '\n')
     return changed
+
+
+def restore_android(record):
+    """Undo sync_android() of a deploy record: the Android side follows its rootfs back to the
+    snapshot (an LXC configuration naming files the old rootfs lacks would not start, docs/70)."""
+    listing = record / 'android-before' / 'changed.json'
+    if not listing.exists():
+        return []
+    restored = []
+    for item in json.loads(listing.read_text()):
+        path = shlex.quote(item['path'])
+        if item['saved']:
+            remote = push(record / 'android-before' / item['saved'], 'moto-android-file')
+            run(f'install -m{item["mode"]} {remote} {path}.new && mv {path}.new {path} && rm -f {remote}', 'root')
+        else:
+            run(f'rm -f {path}', 'root')
+        restored.append(item['path'])
+    return restored
 
 
 def needs_restart(before, after, patterns):
@@ -467,10 +491,12 @@ def rootfs_state():
     return fields.get('mode'), fields.get('state')
 
 
-def with_container_stopped(action):
-    """Stop the container, run a rootfs action, start it again."""
+def with_container_stopped(action, before_start=None):
+    """Stop the container, run a rootfs action (then before_start, e.g. restore_android), start it again."""
     outputs = []
     for step in ('stop', action, 'start'):
+        if step == 'start' and before_start:
+            outputs.append(f'android: restored {before_start()}')
         if step in ('stop', 'start'):
             result = subprocess.run([sys.executable, str(WORKSPACE / 'tools/rungic_plasma.py'), step],
                                     capture_output=True, text=True, timeout=300)
@@ -613,7 +639,7 @@ def deploy(version=None, restart='auto', acceptance='smoke', record_label=None, 
             step('evidence', folder=evidence['folder'])
         except Exception as error:   # evidence must not prevent the rollback
             step('evidence', error=f'{type(error).__name__}: {error}')
-        ok, text = with_container_stopped('rollback')
+        ok, text = with_container_stopped('rollback', before_start=lambda: restore_android(record))
         step('snapshot-rollback', ok=ok, output=text[-400:])
         if ok:
             log['result'] = 'verify-failed, rolled back to the snapshot'
@@ -641,7 +667,10 @@ def rollback_snapshot():
     mode, state = rootfs_state()
     if state != 'snapshot':
         raise SystemExit(f'no kept snapshot (rootfs {mode}, state {state})')
-    ok, text = with_container_stopped('rollback')
+    # The Android side of the deploy that took the snapshot goes back with it.
+    kept = [e for e in history() if 'snapshot' not in e['result']]
+    record = WORKSPACE / kept[-1]['record'] if kept else None
+    ok, text = with_container_stopped('rollback', before_start=(lambda: restore_android(record)) if record else None)
     return {'ok': ok, 'output': text, 'release': device_release()[0]}
 
 
