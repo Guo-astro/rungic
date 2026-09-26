@@ -186,6 +186,16 @@
       "source": "plasma/rootfs-image",
       "path": "/data/adb/moto-plasma/rootfs-image",
       "mode": "755"
+    },
+    {
+      "source": "plasma/rootfs.sepolicy.rule",
+      "path": "/data/adb/moto-plasma/rootfs.sepolicy.rule",
+      "mode": "644"
+    },
+    {
+      "source": "plasma/rootfs-mount-hook",
+      "path": "/data/adb/moto-plasma/rootfs-mount-hook",
+      "mode": "755"
     }
   ]
 }

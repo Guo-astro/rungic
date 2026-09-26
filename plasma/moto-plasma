@@ -35,11 +35,13 @@ start_container() {
     fi
     printf '%s\n' "$label" | sed 's/:app_data_file:/:appdomain_tmpfs:/' > "$HOST_STATE/android-shm-context"
     set -- -s "$gpu_rule" -s "$heap_rule"
-    # An image rootfs (plasma/rootfs-image, docs/61 §7): LXC mounts its device-mapper device, and
-    # the data that must not roll back with the system comes from state/ (bind mounts).
+    # An image rootfs (plasma/rootfs-image, docs/61 §7): a pre-mount hook mounts its device-mapper
+    # device onto the rootfs directory, and the data that must not roll back with the system comes
+    # from state/ (bind mounts).
     if [ -f "$LXC/images/rootfs.img" ]; then
-      dev=$("$BASE/rootfs-image" attach) || { echo 'Cannot attach the rootfs image' >&2; exit 1; }
-      set -- "$@" -s "lxc.rootfs.path=$dev" -s "lxc.rootfs.options=context=u:object_r:adb_data_file:s0"
+      "$BASE/rootfs-image" attach >/dev/null || { echo 'Cannot attach the rootfs image' >&2; exit 1; }
+      install -m 755 "$BASE/rootfs-mount-hook" "$LXC/rootfs-mount-hook"
+      set -- "$@" -s "lxc.hook.pre-mount=/var/lib/lxc/plasma/rootfs-mount-hook"
       for pair in home:home moto-cores:var/lib/moto-cores moto-apt:var/lib/moto-apt; do
         set -- "$@" -s "lxc.mount.entry=/var/lib/lxc/plasma/state/${pair%%:*} ${pair#*:} none bind,create=dir 0 0"
       done

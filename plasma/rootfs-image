@@ -27,7 +27,7 @@
 set -eu
 LXC=/data/adb/moto-lxc/runtime/var/lib/lxc/plasma
 IMAGES=$LXC/images
-IMG=$IMAGES/rootfs.img
+IMG=$IMAGES/rootfs.img              # toybox losetup takes paths under 64 bytes: these are 63
 COW=$IMAGES/rootfs.cow
 STATE_FILE=$IMAGES/state
 ROOT_DM=moto-plasma-root
@@ -35,16 +35,24 @@ SNAP_DM=moto-plasma-before
 IMG_SIZE=${MOTO_ROOTFS_SIZE:-160G}
 COW_SIZE=${MOTO_ROOTFS_COW_SIZE:-32G}
 CHUNK=8                                   # sectors: 4 KiB copy-on-write chunks
-CONTEXT=u:object_r:adb_data_file:s0       # the label the directory rootfs had
+CONTEXT=u:object_r:adb_data_file:s0       # the label the directory rootfs had (root of the image)
 
 die() { echo "rootfs-image: $*" >&2; exit 1; }
 state() { cat "$STATE_FILE" 2>/dev/null || echo none; }
 running() { [ "$(/data/adb/moto-plasma/moto-plasma-enter /usr/bin/lxc-info -n plasma -sH 2>/dev/null)" = RUNNING ]; }
 need_stopped() { ! running || die "stop the container first (moto-plasma stop)"; }
 
+POLICY=/data/adb/moto-plasma/rootfs.sepolicy.rule
+LABEL=u:object_r:moto_plasma_image:s0
+
 loop_of() {   # the loop device attached to $1, attaching it if needed
     dev=$(losetup -j "$1" 2>/dev/null | head -n1 | cut -d: -f1)
-    [ -n "$dev" ] || dev=$(losetup -sf "$1")
+    if [ -z "$dev" ]; then
+        # The kernel's loop worker may read only files of this type (rootfs.sepolicy.rule).
+        magiskpolicy --live --apply "$POLICY" >/dev/null 2>&1 || die "cannot load $POLICY"
+        chcon "$LABEL" "$1"
+        dev=$(losetup -sf "$1")
+    fi
     [ -b "$dev" ] || die "no loop device for $1"
     echo "$dev"
 }
@@ -145,33 +153,41 @@ migrate() {
     [ ! -f "$IMG" ] || die "already an image"
     [ -d "$LXC/rootfs/usr" ] || die "no directory rootfs"
     mkdir -p "$IMAGES" "$LXC/state"
-    # Data that must not roll back with the system moves out first (renames on the same filesystem).
-    for pair in home:home var/lib/moto-cores:moto-cores var/lib/moto-apt:moto-apt; do
-        inner=${pair%%:*}; outer=$LXC/state/${pair#*:}
-        if [ -d "$LXC/rootfs/$inner" ] && [ ! -e "$outer" ]; then
-            mv "$LXC/rootfs/$inner" "$outer"
-            mkdir -p "$LXC/rootfs/$inner"
-        fi
-    done
     truncate -s "$IMG_SIZE" "$IMG"
     mke2fs -q -t ext4 -L plasma-root -m 1 "$IMG"
     loop=$(loop_of "$IMG")
     target=$LXC/rootfs/mnt/rootfs-image
     mkdir -p "$target"
-    # GNU tar of the Ubuntu rootfs itself keeps hard links, ACLs and file capabilities. The mount
-    # is private to this command; the SELinux label comes from the mount context, as LXC will use.
-    unshare -m /system/bin/sh -c "
+    # GNU tar of the Ubuntu rootfs itself keeps hard links, ACLs, file capabilities and the SELinux
+    # labels (adb_data_file, as in the directory). A context= mount is refused by the policy; a
+    # plain ext4 mount keeps per-file labels, and new files inherit their directory's. The data that
+    # stays outside the image (home, crash reports, release repository) is left out and only moved
+    # once the image is complete, so a failure leaves the directory rootfs as it was.
+    if ! unshare -m /system/bin/sh -c "
         set -e
-        mount -t ext4 -o context=$CONTEXT $loop $target
+        mount -t ext4 $loop $target
+        chcon $CONTEXT $target
         chroot $LXC/rootfs /usr/bin/tar -C / --one-file-system --numeric-owner --acls --xattrs \
-            --xattrs-include='*' --xattrs-exclude='security.selinux' \
-            --exclude=./mnt/rootfs-image -cpf - . |
+            --xattrs-include='*' --exclude=./mnt/rootfs-image --exclude=./home/* \
+            --exclude=./var/lib/moto-cores/* --exclude=./var/lib/moto-apt/* -cpf - . |
         chroot $LXC/rootfs /usr/bin/tar -C /mnt/rootfs-image --numeric-owner --acls --xattrs \
-            --xattrs-include='*' --xattrs-exclude='security.selinux' -xpf -
-        umount $target"
+            --xattrs-include='*' -xpf -
+        mkdir -p $target/home $target/var/lib/moto-cores $target/var/lib/moto-apt
+        chcon $CONTEXT $target
+        umount $target"; then
+        losetup -d "$loop" 2>/dev/null || true
+        rm -f "$IMG"
+        die "copy failed; the directory rootfs is unchanged"
+    fi
     rmdir "$target" 2>/dev/null || true
-    losetup -d "$loop"
-    e2fsck -fn "$IMG" >/dev/null
+    losetup -d "$loop" 2>/dev/null || true   # toybox sets autoclear: the umount may have released it
+    e2fsck -fn "$IMG" >/dev/null || { rm -f "$IMG"; die "the new image does not check clean"; }
+    for pair in home:home var/lib/moto-cores:moto-cores var/lib/moto-apt:moto-apt; do
+        inner=${pair%%:*}; outer=$LXC/state/${pair#*:}
+        if [ -d "$LXC/rootfs/$inner" ] && [ ! -e "$outer" ]; then
+            mv "$LXC/rootfs/$inner" "$outer"
+        fi
+    done
     echo none > "$STATE_FILE"
     # The directory stays as the fallback until the image has been accepted.
     mv "$LXC/rootfs" "$LXC/rootfs.pre-image"
