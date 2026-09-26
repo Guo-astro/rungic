@@ -1,5 +1,7 @@
 # Phosh 与 Android 后端的连接：架构、研究过程和维护方法
 
+> 改名说明（2026-09-26）：Rungic改名B阶段之后，容器内的`moto-*`包、程序、单元、路径，`MOTO_*`变量和`dev.moto.*`名称改为`rungic-*`、`RUNGIC_*`、`com.rungic.*`；Android侧的名称（APK、`/data/adb/moto-*`、绑定挂载点等）在C阶段改。对照与边界见[70篇](../70-rungic-rebrand.md)。下文按时间记录的内容保留当时的名称。
+
 > 历史研究记录：Phosh 专属实现已于2026-09-23移除。本篇保留共享硬件接口与研究结论；当前代码见 `shared/`、`native/plasma/`、`plasma/`，现行集成见 [40篇](../40-plasma-mobile-integration.md)。旧Phosh路径和已删除的原始日志不再作为可执行入口。
 
 记录日期：2026-09-23。对应 moto g100s / XT2537-4，Android 16，Phosh/Phoc/Stevia 0.57.0，Linux 桌面 APK 2.3，Alpine edge 与统一 Mesa/KGSL 基线。本文依据本地实际源码、配置与上一轮实机证据整理；本次编写文档没有新增硬件验收。
@@ -482,3 +484,17 @@ sha256sum -c .work/refs/phosh-features-20260923/SHA256SUMS
 ## 调试与性能观测入口（2026-09-24）
 
 Agent可直接调用的设备诊断、崩溃现场、统一追踪（perfetto + KGSL + KWin FTrace）与按控件操作见[55篇](../55-agent-native-debugging.md)；入口为工作区`.mcp.json`中的`moto` MCP服务及`tools/rungic_agent.py`等命令行。桌面输出链的分段耗时与GLES/Vulkan对照见[56篇](../56-kwin-vulkan-quantification.md)。
+
+## 名称对照（Rungic改名B阶段，2026-09-26）
+
+容器内的接口在B阶段改名，本文上面的描述保留原名。Android侧的名称在C阶段随APK改，届时补入本表。
+
+| 位置 | 改名前 | 改名后 |
+|---|---|---|
+| 包 | `moto-plasma-*`、`moto-codec`、`moto-cua`等；发布元包`moto-plasma-release` | `rungic-plasma-*`、`rungic-codec`、`rungic-cua`等；`rungic-release` |
+| 会话与桥接单元 | `moto-plasma-session`、`moto-plasma-{display,brightness,media,clipboard,network,shared}`、`moto-voice-{agent,overlay}`、`moto-coredump.path` | 同名`rungic-*` |
+| D-Bus | `dev.moto.VoiceAssistant`、`dev.moto.VoiceAgent`（`/dev/moto/VoiceAgent`）、`dev.moto.Cua`（`/dev/moto/Cua`）、`dev.moto.Android.{Power,Network}` | `com.rungic.*`（对象路径`/com/rungic/*`） |
+| 编解码 | GStreamer `motoh264enc`/`motoh26{4,5}dec`/`motovp9dec`，FFmpeg `h264_moto`等，`libmotocodec.so` | `rungich264enc`等，`h264_rungic`等，`librungiccodec.so` |
+| 相机 | PipeWire节点`moto.camera.N`、`device.api=moto-android`，libcamera相机`moto-pipewire-{back,front}` | `rungic.camera.N`、`rungic-android`、`rungic-pipewire-{back,front}` |
+| KWin与显示设置 | `MotoDisplay`命名空间（`android-display-client.h`） | `RungicDisplay` |
+| 保持不变（C阶段） | APK `dev.moto.plasma`、`/data/adb/moto-*`、`/mnt/android-wayland/moto-gpu-alloc`、容器中的`/var/lib/moto-{host,cores,apt}`、Termux音频目录`moto-plasma-audio` | — |

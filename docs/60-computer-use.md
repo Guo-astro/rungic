@@ -1,5 +1,7 @@
 # 电脑操作：arc-cua + JEV 的 Linux 后端（moto-cua）
 
+> 改名说明（2026-09-26）：Rungic改名B阶段之后，容器内的`moto-*`包、程序、单元、路径，`MOTO_*`变量和`dev.moto.*`名称改为`rungic-*`、`RUNGIC_*`、`com.rungic.*`；Android侧的名称（APK、`/data/adb/moto-*`、绑定挂载点等）在C阶段改。对照与边界见[70篇](70-rungic-rebrand.md)。下文按时间记录的内容保留当时的名称。
+
 > 2026-09-25 起，本篇描述的是方案二（不是默认方案）。默认的电脑操作方案一见 [68 篇](68-luna-computer-use.md)（GPT-6 Luna 看画面操作）；切换方法：`moto-cua plan atspi`。
 
 2026-09-24。目标：语音助手的 Agent 能在本机 Plasma 桌面上操作图形应用。执行由 arc-cua 运行时和 TypeSafe 的 JEV 快速决策模型完成，Agent（Codex）只负责规划子任务。

@@ -1,5 +1,7 @@
 # 语音Agent：GPT Realtime 驱动 Codex
 
+> 改名说明（2026-09-26）：Rungic改名B阶段之后，容器内的`moto-*`包、程序、单元、路径，`MOTO_*`变量和`dev.moto.*`名称改为`rungic-*`、`RUNGIC_*`、`com.rungic.*`；Android侧的名称（APK、`/data/adb/moto-*`、绑定挂载点等）在C阶段改。对照与边界见[70篇](70-rungic-rebrand.md)。下文按时间记录的内容保留当时的名称。
+
 2026-09-24。目标：用户点按钮后说话，由 Agent 在本机 Linux 桌面上完成工作。第1步原型已在实机跑通。
 
 ## 选型与来源

@@ -1,5 +1,7 @@
 # Linux 应用和 Firefox 接入 Android 硬件编解码
 
+> 改名说明（2026-09-26）：Rungic改名B阶段之后，容器内的`moto-*`包、程序、单元、路径，`MOTO_*`变量和`dev.moto.*`名称改为`rungic-*`、`RUNGIC_*`、`com.rungic.*`；Android侧的名称（APK、`/data/adb/moto-*`、绑定挂载点等）在C阶段改。对照与边界见[70篇](../70-rungic-rebrand.md)。下文按时间记录的内容保留当时的名称。
+
 > 历史研究记录：Phosh 专属实现已于2026-09-23移除。本篇保留共享硬件接口与研究结论；当前代码见 `shared/`、`native/plasma/`、`plasma/`，现行集成见 [40篇](../40-plasma-mobile-integration.md)。旧Phosh路径和已删除的原始日志不再作为可执行入口。
 
 2026-09-23，moto g100s / XT2537-4，Android 16。当前 APK **2.6 / versionCode 9**，Phosh 0.57.0、Snapshot 51、Firefox 154.0-r0、GStreamer 1.28.5、私有 FFmpeg 8.1.2。第[34篇](34-hardware-codec-audit.md)是接入前审计，不能用其“尚未接入”描述当前状态。

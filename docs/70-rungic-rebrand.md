@@ -90,4 +90,22 @@
 5. 主机工具：设备上的路径和程序先试新名称，再试旧名称，保证回滚到moto发布后仍然可用。
 6. 验收：完整验收；残留检查（容器中我们的文件与运行中的配置不再出现`moto`名称，C阶段名称与硬件名称除外）；回滚到`20260926.19`再前进一次，两个方向都验收会话与关键功能。
 
+### B阶段实施（2026-09-26）
+
+提交`c65f7ef9`（改名）与`a5b9d781`（残留验收）。先用`tools/rebrand.py`按规则整体替换，再逐区人工审查。规则无法区分、审查后恢复为原名的有：
+- **迁移代码要读取的旧状态**：kconf_update迁移脚本里旧工具写下的标记与备份名、旧的`/usr/local`路径与drop-in名、各包`obsolete`列表中的历史路径。
+- **Android侧的名称**：Termux PulseAudio的`moto-plasma-audio`目录（enter程序中写死）、APK的logcat标签`MotoWayland`/`MotoPlasma`、ROM与产品分区工具（主机上的真实目录、增量文件格式标识）、`lxc/`、`docker/`、`shared/android/`。
+- **Motorola自己的名称**：如`MotoPrcPermissionService`。
+- **历史**：`plasma/*.patch`等导入证据、补丁标题中的`KWin moto15`等构建名。
+
+规则漏掉、审查时补改的有：FFmpeg编解码器的注册名与`wrapper_name`、D-Bus对象路径`/com/rungic/*`、APT仓库的Origin/Label与pin、`Rungic.Rime` QML模块、`preferences.d`文件名、元包名`rungic-release`、显示文字与版权行。
+
+**包与系统状态**：`package.json`的`formerly`生成对旧包名不带版本的`Conflicts`+`Replaces`；首次安装时，若旧单元有记录且被管理员禁用，新单元保持禁用，否则启用。本机手工放置的APT代理`80moto-proxy`由`rungic-plasma-config`复制为`80rungic-proxy`（旧文件保留）。旧包的conffile在rc状态下保留，内容与新文件相同，直到D阶段purge。
+
+**用户状态**：`/home`不在rootfs快照中，快照回滚也不会带回。`plasma/rebrand-user.py`（安装为`/usr/libexec/rungic-rebrand-user`）双向迁移：
+- `up`：会话脚本在kconf_update之前运行一次（标记`~/.local/state/rungic-rebrand`）。把KDE配置与Codex配置中的名称（快捷设置磁贴、desktop ID、输入法路径、相机ID、MCP服务与命令）换成新名称；把`~/.config`、`~/.local/share`、`~/.local/state`下的目录复制到新名称（旧目录保留）；Codex技能链接改为新名称；把`kconf_updaterc`中`moto.upd`、`moto-voice-agent.upd`的完成记录复制到新文件名下，已执行的迁移不再重复。
+- `down`：`rungic_release.py`在部署或快照回滚到改名前的发布（元包`moto-plasma-release`）之前运行，先停会话（程序退出时会写回设置），把名称换回，把新目录中改名后变化的内容复制回旧目录并删除新目录。
+- 单元测试`tools/test_rebrand_user.py`覆盖往返：`up`→修改→`down`后配置与原来逐字节相同，修改被带回。
+
+**主机工具**：`rungic_device.prog()`/`first_path()`先用新名称，找不到时用旧名称；部署、验收与诊断工具据此在回滚后的旧发布上仍可用（发布元包名按目标发布选择，关键单元、相机节点、编解码器名均兼容两种名称）。
 
