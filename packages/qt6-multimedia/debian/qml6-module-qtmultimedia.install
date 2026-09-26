@@ -1,0 +1,5 @@
+usr/lib/${DEB_HOST_MULTIARCH}/libQt6MultimediaQuick.so.*
+usr/lib/${DEB_HOST_MULTIARCH}/qt6/qml/QtMultimedia/Video.qml
+usr/lib/${DEB_HOST_MULTIARCH}/qt6/qml/QtMultimedia/libquickmultimediaplugin.so
+usr/lib/${DEB_HOST_MULTIARCH}/qt6/qml/QtMultimedia/plugins.qmltypes
+usr/lib/${DEB_HOST_MULTIARCH}/qt6/qml/QtMultimedia/qmldir

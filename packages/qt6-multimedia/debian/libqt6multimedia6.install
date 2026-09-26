@@ -1,0 +1,2 @@
+usr/lib/${DEB_HOST_MULTIARCH}/libQt6Multimedia.so.*
+usr/lib/${DEB_HOST_MULTIARCH}/qt6/plugins/multimedia/libffmpegmediaplugin.so

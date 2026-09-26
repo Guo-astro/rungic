@@ -1,0 +1,25 @@
+{
+ "package": "plasma-camera",
+ "vendor": "vendor/plasma-camera",
+ "version": "2.1.1-2build1",
+ "dsc": "plasma-camera_2.1.1-2build1.dsc",
+ "base": "dffc717e",
+ "steps": [
+  {
+   "name": "recording-frame-timestamps",
+   "patch": "plasma/camera-frame-timestamps.patch",
+   "author_name": "kevinzhow",
+   "author_email": "kevinzhow@local",
+   "date": "2026-09-23T21:29:00+08:00",
+   "subject": "Video recording: each frame stamped with the recording clock",
+   "description": "Frames were stamped from a frame counter and one QVideoFrame was re-sent with changed times, so\ndropped frames sped the video up and frames already queued in QMediaRecorder had their times\nchanged (the TODO upstream notes \"severe frame corruption\"). Each submitted frame is now its own copy\nstamped with the elapsed recording time.",
+   "dep3": {
+    "Forwarded": "no",
+    "Last-Update": "2026-09-27",
+    "X-Rungic-Status": "Pending [a plain bug; check upstream master first]",
+    "X-Rungic-Tests": "none (gap: no scenario records video in Plasma Camera)",
+    "X-Rungic-Docs": "docs/48"
+   }
+  }
+ ]
+}

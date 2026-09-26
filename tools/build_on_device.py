@@ -23,6 +23,7 @@ Builds run as the transient system unit rungic-build-<component>, so they
 survive adb disconnects; the log is /root/rungic-build/<component>/build.log.
 """
 import argparse
+import json
 import subprocess
 import tarfile
 import time
@@ -76,6 +77,13 @@ def component_uses_meson(component):
     return (WORKSPACE / f'plasma/{component}-meson-options').exists()
 
 
+def arch_only(component):
+    """A patch-queue component whose recipe sets build_arch_only: its architecture-independent
+    packages (documentation, examples) are neither built nor installed (docs/73)."""
+    recipe = WORKSPACE / 'packages' / component / 'recipe.json'
+    return recipe.exists() and bool(json.loads(recipe.read_text()).get('build_arch_only'))
+
+
 def start(component, mode, jobs, targets=(), lto=True, cmake_args=()):
     work = f'{BASE}/{component}'
     maint = '' if lto else ' DEB_BUILD_MAINT_OPTIONS=optimize=-lto'
@@ -91,7 +99,7 @@ def start(component, mode, jobs, targets=(), lto=True, cmake_args=()):
                  f"cmake --build {build} -j {jobs} --target {' '.join(targets)}")
     elif mode == 'full':
         steps = (f"export DEB_BUILD_OPTIONS='nocheck parallel={jobs}' {DEBUG_FLAGS}{maint}; "
-                 f"cd {work}/src && dpkg-buildpackage -b -uc -us")
+                 f"cd {work}/src && dpkg-buildpackage {'-B' if arch_only(component) else '-b'} -uc -us")
     else:
         steps = (f"export DEB_BUILD_OPTIONS='nocheck parallel={jobs}' {DEBUG_FLAGS}{maint}; "
                  f"cd {work}/src && test -d {obj} && make -C {obj} -j{jobs} && debian/rules binary")
@@ -130,7 +138,7 @@ def build_deps(component):
     return out(f'''set -e
 [ -r /etc/profile.d/proxy.sh ] && . /etc/profile.d/proxy.sh
 cd {BASE}/{component}/src
-dpkg-checkbuilddeps 2>/dev/null || DEBIAN_FRONTEND=noninteractive apt-get build-dep -y -q . | tail -2
+dpkg-checkbuilddeps {'-B ' if arch_only(component) else ''}2>/dev/null || DEBIAN_FRONTEND=noninteractive apt-get build-dep -y -q {'--arch-only ' if arch_only(component) else ''}. | tail -2
 ''', 'container', timeout=3600)
 
 

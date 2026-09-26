@@ -1,0 +1,3 @@
+# libQt6MultimediaQuick6 is a private lib installed in a public path
+qml6-module-qtmultimedia: package-name-doesnt-match-sonames libQt6MultimediaQuick6
+qml6-module-qtmultimedia: no-symbols-control-file usr/lib/*/libQt6MultimediaQuick.so.6.*

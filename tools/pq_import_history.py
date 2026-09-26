@@ -12,7 +12,9 @@ Symlinks into the repository (shared headers) are replaced by the file they poin
 commit: a patch cannot carry a symlink. Paths in the recipe's 'overlay' (shared files placed into
 the tree by tools/pq.py) are left out of the steps: the base already has them. A step marked
 "distribution" is a change the distribution's own patches make (applied on import to the vendored
-tree): it is recorded but not repeated.
+tree): it is recorded but not repeated. A plan with "reference_lacks_distribution_patches" compares the
+result with the vendored tree plus the distribution's patches (a vendored plain upstream whose
+libraries were swapped into the distribution's binary packages).
 
   pq_import_history.py kwin [--ref C]  build .work/pq/kwin and verify against C:vendor/kwin (default
                                       HEAD; the vendored trees are gone after their migration commit)
@@ -162,7 +164,27 @@ def main():
 
     # The patch queue applied must be the vendored tree (debian/ is compared separately).
     final = tree_at(args.ref, component, scratch / 'head') / ''
+    if plan.get('reference_lacks_distribution_patches'):
+        # The vendored tree was the plain upstream plus ours (its libraries were swapped into the
+        # distribution's binary packages): compare it with the distribution's patches applied.
+        patches = work / 'debian/patches'
+        for line in (patches / 'series').read_text().splitlines():
+            name = line.split('#')[0].strip()
+            if name and not name.startswith('rungic/'):
+                subprocess.run(['patch', '-s', '-p1', '--no-backup-if-mismatch', '-d', str(final), '-i',
+                                str(patches / name)], check=True)
+                print(f'reference: {name} (distribution) applied')
     lines = pq.tree_diff(work, final, ('.pc', 'debian', '.git'))
+
+    def overlay_only(line):
+        # Files the overlay adds (not replacing an upstream file) are ours, not in the vendored tree.
+        prefix = f'Only in {work}'
+        if not line.startswith(prefix):
+            return False
+        where, _, name = line[len(prefix):].partition(': ')
+        rel = (where.strip('/') + '/' + name).strip('/')
+        return any(path == rel or path.startswith(rel + '/') for path in overlay)
+    lines = [line for line in lines if not overlay_only(line)]
     print('\n'.join(lines) or f'{args.package}: patch queue reproduces {args.ref}:{component} (debian/ and .pc aside)')
     return 1 if lines else 0
 

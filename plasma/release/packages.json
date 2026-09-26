@@ -31,24 +31,26 @@
       ]
     },
     "libcamera": {
-      "source": "vendor/libcamera (plasma/package-media.py)",
-      "version": "0.7.0-1ubuntu2+moto1",
+      "source": "packages/libcamera",
       "packages": [
-        "libcamera0.7",
-        "libcamera-dev"
+        "gstreamer1.0-libcamera",
+        "libcamera-dev",
+        "libcamera0.7"
       ]
     },
     "qtmultimedia": {
-      "source": "vendor/qtmultimedia (plasma/package-media.py)",
-      "version": "6.10.2-2+moto1",
+      "source": "packages/qt6-multimedia",
       "packages": [
         "libqt6multimedia6",
+        "libqt6multimediawidgets6",
+        "libqt6spatialaudio6",
+        "qml6-module-qtmultimedia",
+        "qml6-module-qtquick3d-spatialaudio",
         "qt6-multimedia-dev"
       ]
     },
     "plasma-camera": {
-      "source": "vendor/plasma-camera (plasma/package-media.py)",
-      "version": "2.1.1-2build1+moto1",
+      "source": "packages/plasma-camera",
       "packages": [
         "plasma-camera"
       ]

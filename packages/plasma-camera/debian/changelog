@@ -1,0 +1,42 @@
+plasma-camera (2.1.1-2build1+rungic1) resolute; urgency=medium
+
+  * Patch queue (docs/71, docs/73): built whole from the pinned Ubuntu source
+    (it used to be Ubuntu's binary with ours swapped in): the recording
+    frame timestamps as a DEP-3 patch in debian/patches/rungic.
+
+ -- range-dev <noreply@localhost>  Sun, 27 Sep 2026 09:30:00 +0000
+
+plasma-camera (2.1.1-2build1) resolute; urgency=medium
+
+  * No-change rebuild for libcamera0.7
+
+ -- Rik Mills <rikmills@kde.org>  Mon, 02 Mar 2026 10:14:45 +0000
+
+plasma-camera (2.1.1-2) unstable; urgency=medium
+
+  * Team upload.
+  * Bump Standards-Version to 4.7.3, no change required.
+  * Update project homepage.
+  * Add missing runtime dependencies on gstreamer1.0-libcamera and
+    gstreamer1.0-pipewire.
+
+ -- Aurélien COUDERC <coucouf@debian.org>  Sat, 24 Jan 2026 09:59:48 +0100
+
+plasma-camera (2.1.1-1) unstable; urgency=medium
+
+  [ Marco Mattiolo ]
+  * New upstream release (2.1.1).
+
+  [ Aurélien COUDERC ]
+  * Update build-deps and deps with the info from cmake.
+
+ -- Marco Mattiolo <marco.mattiolo@hotmail.it>  Fri, 12 Dec 2025 20:12:36 +0100
+
+plasma-camera (2.1.0-1) unstable; urgency=medium
+
+  * Team upload.
+
+  [ Marco Mattiolo ]
+  * Initial release. (Closes: #1111821)
+
+ -- Aurélien COUDERC <coucouf@debian.org>  Sat, 08 Nov 2025 20:37:19 +0100

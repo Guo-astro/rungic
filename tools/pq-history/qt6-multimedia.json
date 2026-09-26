@@ -1,0 +1,26 @@
+{
+ "package": "qt6-multimedia",
+ "vendor": "vendor/qtmultimedia",
+ "version": "6.10.2-2",
+ "dsc": "qt6-multimedia_6.10.2-2.dsc",
+ "base": "dffc717e",
+ "reference_lacks_distribution_patches": true,
+ "steps": [
+  {
+   "name": "pulseaudio-sink-target-latency",
+   "patch": "plasma/qt-pulse-buffer.patch",
+   "author_name": "kevinzhow",
+   "author_email": "kevinzhow@local",
+   "date": "2026-09-23T21:29:00+08:00",
+   "subject": "PulseAudio sink: the hardware buffer size is the target latency, not the maximum",
+   "description": "startStream() set maxlength to 1024 frames and left tlength to the server. A server whose sink\nrenders blocks larger than that (a tunnel sink renders whatever its remote may take) underruns the\nstream on every block: 62 zero samples per 1024 through the Android tunnel. The size is now tlength,\nwith maxlength negotiated. Reproduced and checked with plasma/diagnostics/media-probes/pa-gap.py;\na server-side block limit does not cure it (docs/73).",
+   "dep3": {
+    "Forwarded": "no",
+    "Last-Update": "2026-09-27",
+    "X-Rungic-Status": "Pending [a plain bug; Qt 6.11.2 still sets the same attributes]",
+    "X-Rungic-Tests": "L3:audio.playback (smoke); probe:plasma/diagnostics/media-probes/pa-gap.py",
+    "X-Rungic-Docs": "docs/48 docs/73"
+   }
+  }
+ ]
+}

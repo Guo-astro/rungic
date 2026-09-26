@@ -1,0 +1,60 @@
+# SymbolsHelper-Confirmed: 6.7.2 amd64
+libQt6MultimediaWidgets.so.6 libqt6multimediawidgets6 #MINVER#
+* Build-Depends-Package: qt6-multimedia-dev
+ NonQt@NonQt 6.7.2
+ Qt_6@Qt_6 6.6.1
+ (symver)Qt_6_PRIVATE_API 0
+ _ZN12QVideoWidget11qt_metacallEN11QMetaObject4CallEiPPv@Qt_6 6.6.1
+ _ZN12QVideoWidget11qt_metacastEPKc@Qt_6 6.6.1
+ _ZN12QVideoWidget11resizeEventEP12QResizeEvent@Qt_6 6.6.1
+ _ZN12QVideoWidget13setFullScreenEb@Qt_6 6.6.1
+ _ZN12QVideoWidget16staticMetaObjectE@Qt_6 6.6.1
+ _ZN12QVideoWidget17fullScreenChangedEb@Qt_6 6.6.1
+ _ZN12QVideoWidget18setAspectRatioModeEN2Qt15AspectRatioModeE@Qt_6 6.6.1
+ _ZN12QVideoWidget22aspectRatioModeChangedEN2Qt15AspectRatioModeE@Qt_6 6.6.1
+ _ZN12QVideoWidget5eventEP6QEvent@Qt_6 6.6.1
+ _ZN12QVideoWidget9hideEventEP10QHideEvent@Qt_6 6.6.1
+ _ZN12QVideoWidget9moveEventEP10QMoveEvent@Qt_6 6.6.1
+ _ZN12QVideoWidget9showEventEP10QShowEvent@Qt_6 6.6.1
+ _ZN12QVideoWidgetC1EP7QWidget@Qt_6 6.6.1
+ _ZN12QVideoWidgetC2EP7QWidget@Qt_6 6.6.1
+ _ZN12QVideoWidgetD0Ev@Qt_6 6.6.1
+ _ZN12QVideoWidgetD1Ev@Qt_6 6.6.1
+ _ZN12QVideoWidgetD2Ev@Qt_6 6.6.1
+ _ZN18QGraphicsVideoItem10itemChangeEN13QGraphicsItem18GraphicsItemChangeERK8QVariant@Qt_6 6.6.1
+ _ZN18QGraphicsVideoItem10timerEventEP11QTimerEvent@Qt_6 6.6.1
+ _ZN18QGraphicsVideoItem11qt_metacallEN11QMetaObject4CallEiPPv@Qt_6 6.6.1
+ _ZN18QGraphicsVideoItem11qt_metacastEPKc@Qt_6 6.6.1
+ _ZN18QGraphicsVideoItem16staticMetaObjectE@Qt_6 6.6.1
+ _ZN18QGraphicsVideoItem17nativeSizeChangedERK6QSizeF@Qt_6 6.6.1
+ _ZN18QGraphicsVideoItem18setAspectRatioModeEN2Qt15AspectRatioModeE@Qt_6 6.6.1
+ _ZN18QGraphicsVideoItem5paintEP8QPainterPK24QStyleOptionGraphicsItemP7QWidget@Qt_6 6.6.1
+ _ZN18QGraphicsVideoItem7setSizeERK6QSizeF@Qt_6 6.6.1
+ _ZN18QGraphicsVideoItem9setOffsetERK7QPointF@Qt_6 6.6.1
+ _ZN18QGraphicsVideoItemC1EP13QGraphicsItem@Qt_6 6.6.1
+ _ZN18QGraphicsVideoItemC2EP13QGraphicsItem@Qt_6 6.6.1
+ _ZN18QGraphicsVideoItemD0Ev@Qt_6 6.6.1
+ _ZN18QGraphicsVideoItemD1Ev@Qt_6 6.6.1
+ _ZN18QGraphicsVideoItemD2Ev@Qt_6 6.6.1
+ _ZNK12QVideoWidget10metaObjectEv@Qt_6 6.6.1
+ _ZNK12QVideoWidget15aspectRatioModeEv@Qt_6 6.6.1
+ _ZNK12QVideoWidget8sizeHintEv@Qt_6 6.6.1
+ _ZNK12QVideoWidget9videoSinkEv@Qt_6 6.6.1
+ _ZNK18QGraphicsVideoItem10metaObjectEv@Qt_6 6.6.1
+ _ZNK18QGraphicsVideoItem10nativeSizeEv@Qt_6 6.6.1
+ _ZNK18QGraphicsVideoItem12boundingRectEv@Qt_6 6.6.1
+ _ZNK18QGraphicsVideoItem15aspectRatioModeEv@Qt_6 6.6.1
+ _ZNK18QGraphicsVideoItem4sizeEv@Qt_6 6.6.1
+ _ZNK18QGraphicsVideoItem6offsetEv@Qt_6 6.6.1
+ _ZNK18QGraphicsVideoItem9videoSinkEv@Qt_6 6.6.1
+ _ZTI12QVideoWidget@Qt_6 6.6.1
+ _ZTI18QGraphicsVideoItem@Qt_6 6.6.1
+ _ZTS12QVideoWidget@Qt_6 6.6.1
+ _ZTS18QGraphicsVideoItem@Qt_6 6.6.1
+ _ZTV12QVideoWidget@Qt_6 6.6.1
+ _ZTV18QGraphicsVideoItem@Qt_6 6.6.1
+ (c++)"non-virtual thunk to QGraphicsVideoItem::boundingRect() const@Qt_6" 6.6.1
+ (c++)"non-virtual thunk to QGraphicsVideoItem::itemChange(QGraphicsItem::GraphicsItemChange, QVariant const&)@Qt_6" 6.6.1
+ (c++)"non-virtual thunk to QGraphicsVideoItem::paint(QPainter*, QStyleOptionGraphicsItem const*, QWidget*)@Qt_6" 6.6.1
+ (c++)"non-virtual thunk to QGraphicsVideoItem::~QGraphicsVideoItem()@Qt_6" 6.6.1
+ (c++)"non-virtual thunk to QVideoWidget::~QVideoWidget()@Qt_6" 6.6.1

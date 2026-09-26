@@ -1,1 +1,0 @@
-../../vendor/libcamera/src/libcamera/pipeline/virtual/pipewire_frame_generator.h

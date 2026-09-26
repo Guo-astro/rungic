@@ -1,0 +1,2 @@
+usr/lib/*/libcamera*.so.*
+rungic/virtual.yaml usr/share/libcamera/pipeline/virtual/

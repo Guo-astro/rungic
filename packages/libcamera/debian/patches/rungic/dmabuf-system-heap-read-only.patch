@@ -1,0 +1,31 @@
+From: kevinzhow <kevinzhow@local>
+Date: Wed, 23 Sep 2026 21:29:00 +0800
+Subject: DmaBufAllocator: open the system heap read-only when read-write is
+ refused
+
+The Plasma container gets /dev/dma_heap/system with read access only (LXC device rule), and
+allocation needs no more (DMA_HEAP_IOCTL_ALLOC works on a read-only descriptor). A read-write open
+that fails with EACCES is retried read-only for the system heap.
+
+Forwarded: no
+Last-Update: 2026-09-27
+X-Rungic-Status: Inappropriate [a container that grants the heap read-only]
+X-Rungic-Tests: L3:camera.frames (libcamera path: gap)
+X-Rungic-Docs: docs/48
+---
+ src/libcamera/dma_buf_allocator.cpp | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/libcamera/dma_buf_allocator.cpp b/src/libcamera/dma_buf_allocator.cpp
+index d8c62dd..d4aeb26 100644
+--- a/src/libcamera/dma_buf_allocator.cpp
++++ b/src/libcamera/dma_buf_allocator.cpp
+@@ -101,6 +101,8 @@ DmaBufAllocator::DmaBufAllocator(DmaBufAllocatorFlags type)
+ 			continue;
+ 
+ 		int ret = ::open(info.deviceNodeName, O_RDWR | O_CLOEXEC, 0);
++		if (ret < 0 && errno == EACCES && info.type == DmaBufAllocatorFlag::SystemHeap)
++			ret = ::open(info.deviceNodeName, O_RDONLY | O_CLOEXEC, 0);
+ 		if (ret < 0) {
+ 			ret = errno;
+ 			LOG(DmaBufAllocator, Debug)

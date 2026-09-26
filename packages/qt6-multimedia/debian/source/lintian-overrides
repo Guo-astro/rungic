@@ -1,0 +1,15 @@
+# Lintian gives a false positive for the globbing order.
+# See https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=970274
+qt6-multimedia source: globbing-patterns-out-of-order debian/copyright examples/* *.qdoc examples/multimedia/audiodevices/doc/src/audiodevices.qdoc
+qt6-multimedia source: globbing-patterns-out-of-order debian/copyright examples/* *.qdoc examples/multimedia/audiooutput/doc/src/audiooutput.qdoc
+qt6-multimedia source: globbing-patterns-out-of-order debian/copyright examples/* *.qdoc examples/multimedia/audiorecorder/doc/src/audiorecorder.qdoc
+qt6-multimedia source: globbing-patterns-out-of-order debian/copyright examples/* *.qdoc examples/multimedia/audiosource/doc/src/audiosource.qdoc
+qt6-multimedia source: globbing-patterns-out-of-order debian/copyright examples/* *.qdoc examples/multimedia/declarative-camera/doc/src/declarative-camera.qdoc
+qt6-multimedia source: globbing-patterns-out-of-order debian/copyright examples/* *.qdoc examples/multimedia/spectrum/doc/src/spectrum.qdoc
+qt6-multimedia source: globbing-patterns-out-of-order debian/copyright examples/* *.qdoc examples/multimedia/video/doc/src/qmlvideo.qdoc
+qt6-multimedia source: globbing-patterns-out-of-order debian/copyright examples/* *.qdoc examples/multimedia/video/mediaplayer/doc/src/mediaplayer.qdoc
+qt6-multimedia source: globbing-patterns-out-of-order debian/copyright examples/* *.qdoc examples/multimedia/video/recorder/doc/src/recorder.qdoc
+qt6-multimedia source: globbing-patterns-out-of-order debian/copyright examples/* *.qdoc examples/multimediawidgets/camera/doc/src/camera.qdoc
+qt6-multimedia source: globbing-patterns-out-of-order debian/copyright examples/* *.qdoc examples/multimediawidgets/player/doc/src/player.qdoc
+qt6-multimedia source: globbing-patterns-out-of-order debian/copyright examples/* *.qdoc examples/multimediawidgets/videographicsitem/doc/src/videographicsitem.qdoc
+qt6-multimedia source: globbing-patterns-out-of-order debian/copyright examples/* *.qdoc examples/multimediawidgets/videowidget/doc/src/videowidget.qdoc

@@ -1,0 +1,4 @@
+Version: 5
+
+Source: https://download.qt.io/archive/qt/([\d\.]*)/([\d\.]*)/submodules/
+Matching-Pattern: qtmultimedia-everywhere-src-(.*)\.tar\.xz

@@ -1,0 +1,5 @@
+usr/lib/${DEB_HOST_MULTIARCH}/libQt6Quick3DSpatialAudio.so.6
+usr/lib/${DEB_HOST_MULTIARCH}/libQt6Quick3DSpatialAudio.so.6.*
+usr/lib/${DEB_HOST_MULTIARCH}/qt6/qml/QtQuick3D/SpatialAudio/libquick3dspatialaudioplugin.so
+usr/lib/${DEB_HOST_MULTIARCH}/qt6/qml/QtQuick3D/SpatialAudio/plugins.qmltypes
+usr/lib/${DEB_HOST_MULTIARCH}/qt6/qml/QtQuick3D/SpatialAudio/qmldir

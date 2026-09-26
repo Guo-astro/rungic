@@ -1,0 +1,259 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: plasma-camera
+Upstream-Contact: plasma-devel@kde.org
+Source: https://invent.kde.org/plasma-mobile/plasma-camera
+
+Files: *
+Copyright: 2025, Andrew Wang
+           2022, Devin Lin <devin@kde.org>
+           2018-2020, Jonah Brüchert <jbb@kaidan.im>
+           2019, Nicolas Fella <nicolas.fella@gmx.de>
+           2020, Sebastian Pettke <sebpe@mailbox.org>
+License: GPL-3.0-or-later
+
+Files: po/*
+Copyright: 2023, Adrián Chaves (Gallaecio)
+           2019-2025, Alexander Yavorsky <kekcuha@gmail.com>
+           2019-2020, André Marcelo Alvarenga <alvarenga@kde.org>
+           2024, Antonis Geralis <capoiosct@gmail.com>
+           2021, A S Alam <aalam.yellow@gmail.com>
+           2019-2021, Burkhard Lück <lueck@hube-lueck.de>
+           2020, Dusan Kazik <prescott66@gmail.com>
+           2022-2025, Emir SARI <emir_sari@icloud.com>
+           2019-2025, Eloy Cuadra <ecuadra@eloihr.net>
+           2022, Frederik Schwarzer <schwarzer@kde.org>
+           2019-2025, Freek de Kruijf <freekdekruijf@kde.nl>
+           2025, Geraldo Simiao <geraldosimiao@fedoraproject.org>
+           2022-2025, Guðmundur Erlingsson <gudmundure@gmail.com>
+           2020-2025, Iñigo Salvador Azurmendi <xalba@ni.eus>
+           2024, Johannes Obermayr <johannesobermayr@gmx.de>
+           2025, José Nuno Coelho Pires <zepires@gmail.com>
+           2019, Jung Hee Lee <daemul72@gmail.com>
+           2023-2025, KDE euskaratzeko proiektuaren arduraduna <xalba@ni.eus>
+           2024, Kali
+           2021-2025, Kheyyam Gojayev <xxmn77@gmail.com>
+           2023-2025, Kisaragi Hiu <mail@kisaragi-hiu.com>
+           2020-2024, Kristof Kiszel <ulysses@fsf.hu>
+           2019-2023, Luiz Fernando Ranghetti <elchevive@opensuse.org>
+           2019-2025, Łukasz Wojniłowicz <lukasz.wojnilowicz@gmail.com>
+           2020, Matjaž Jeran <matjaz.jeran@amis.net>
+           2024, Oliver Kellogg <olivermkellogg@gmail.com>
+           2019-2025, Paolo Zamponi <feus73@gmail.com>
+           2025, Rasmus Rosendahl-Kaa <rasmus@rosendahl-kaa.name>
+           2019, Roman Paholik <wizzardsk@gmail.com>
+           2019-2025, Shinjo Park <kde@peremen.name>
+           2019, Simon Depiets <sdepiets@gmail.com>
+           2019-2025, Stefan Asserhäll <stefan.asserhall@gmail.com>
+           2025, Marcus Gama <marcus.gama@gmail.com>
+           2019-2020, Marek Laane <qiilaq69@gmail.com>
+           2022-2024, Mincho Kondarev <mkondarev@yahoo.de>
+           2020-2024, Sergiu Bivol <sergiu@cip.md>
+           2019-2020, Stelios <sstavra@gmail.com>
+           2019-2024, Steve Allewell <steve.allewell@gmail.com>
+           2022-2024, Sveinn í Felli <sv1@fellsnet.is>
+           2019-2025, Tommi Nieminen <translator@legisign.org>
+           2024-2025, Toms Trasuns <toms.trasuns@posteo.net>
+           2019-2021, Vit Pelcak <vit@pelcak.org>
+           2021, Volkan Gezer <volkangezer@gmail.com>
+           2022-2024, Wantoyèk <wantoyek@gmail.com>
+           2020-2025, Xavier Besnard <xavier.besnard@kde.org>
+           2024-2025, Yaron Shahrabani <sh.yaron@gmail.com>
+           2023-2024, Zayed Al-Saidi <zayed.alsaidi@gmail.com>
+           2020-2024, giovanni <g.sora@tiscali.it>
+           2019-2020, pan93412 <pan93412@gmail.com>
+           2020, scootergrisen
+License: GPL-3.0-or-later
+
+Files: src/contents/ui/camera/CameraControls.qml
+       src/contents/ui/camera/CameraPage.qml
+       src/contents/ui/camera/CaptureButton.qml
+       src/contents/ui/camera/CaptureController.qml
+       src/contents/ui/camera/TimerSelectStrip.qml
+       src/contents/ui/camera/Viewfinder.qml
+       src/contents/ui/camera/ViewfinderTimerOverlay.qml
+       src/contents/ui/main.qml
+       src/contents/ui/ZoomControl.qml
+Copyright: 2025, Andrew Wang
+           2025, Devin Lin <devin@kde.org>
+           2013, Digia Plc and/or its subsidiary(-ies)
+           2018, Jonah Brüchert <jbb@kaidan.im>
+License: BSD-3-Clause
+
+Files: logo.png
+       org.kde.plasma.camera.appdata.xml
+       org.kde.plasma.camera.desktop
+       README.md
+       flatpak/python3-modules.json
+       flatpak/README.md
+       src/contents/ui/images/*
+Copyright: None
+License: CC0-1.0
+
+Files: src/contents/ui/camera/CameraExtraControls.qml
+       src/contents/ui/camera/ExposureSelectStrip.qml
+       src/contents/ui/camera/ViewfinderVideoDurationOverlay.qml
+       src/contents/ui/SettingsDialog.qml
+       src/plasmacamera/converter.cpp
+       src/plasmacamera/converter.h
+       src/plasmacamera.cpp
+       src/plasmacamera.h
+       src/plasmacameramanager.cpp
+       src/plasmacameramanager.h
+       src/plasmacamera/settings.cpp
+       src/plasmacamera/settings.h
+       src/plasmacamera/worker.cpp
+       src/plasmacamera/worker.h
+Copyright: 2025, Andrew Wang
+           2025, Devin Lin <devin@kde.org>
+           2019, Google Inc.
+License: GPL-2.0-or-later
+
+Files: src/plasmacamera/image.cpp
+       src/plasmacamera/image.h
+Copyright: 2021, Ideas on Board Oy
+License: LGPL-2.1-or-later
+Comment: Automatically extracted
+
+Files: po/ca/plasma-camera.po
+       po/ca@valencia/plasma-camera.po
+       po/uk/plasma-camera.po
+Copyright: 2019-2020, Antoni Bella Pérez <antonibella5@yahoo.com>
+           2019-2025, Josep M. Ferrer <txemaq@gmail.com>
+           2019-2025, Yuri Chornoivan <yurchor@ukr.net>
+License: LGPL-2.1-or-later
+Comment: Manually collected
+
+Files: src/plasmacamera/path.cpp
+       src/plasmacamera/path.h
+Copyright: 2025, Andrew Wang
+           0, The Qt Company Ltd.
+License: LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+
+License: BSD-3-Clause
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions
+ are met:
+ .
+ 1. Redistributions of source code must retain the above copyright
+    notice, this list of conditions and the following disclaimer.
+ .
+ 2. Redistributions in binary form must reproduce the above copyright
+    notice, this list of conditions and the following disclaimer in
+    the documentation and/or other materials provided with the
+    distribution.
+ .
+ 3. Neither the name of the copyright holder nor the names of its
+    contributors may be used to endorse or promote products derived
+    from this software without specific prior written permission.
+ .
+ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ POSSIBILITY OF SUCH DAMAGE.
+
+License: CC0-1.0
+ To the extent possible under law, the author(s) have dedicated all
+ copyright and related and neighboring rights to this software to the
+ public domain worldwide. This software is distributed without any
+ warranty.
+ .
+ On Debian systems, the complete text of the CC0 Public Domain
+ Dedication can be found in `/usr/share/common-licenses/CC0-1.0’.
+
+License: GPL-2.0-only
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation; version 2.
+ .
+ This program is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ General Public License for more details.
+ .
+ On Debian systems, the complete text of the GNU General Public
+ License version 2 can be found in
+ `/usr/share/common-licenses/GPL-2’.
+
+License: GPL-2.0-or-later
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation; either version 2 of the License, or
+ (at your option) any later version.
+ .
+ This program is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ General Public License for more details.
+ .
+ On Debian systems, the complete text of the GNU General Public
+ License version 2 can be found in
+ `/usr/share/common-licenses/GPL-2’.
+
+License: GPL-3.0-only
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GPL License as published by the Free
+ Software Foundation, version 3.
+ .
+ This package is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ General Public License for more details.
+ .
+ On Debian systems, the complete text of the GNU General Public
+ License version 3 can be found in
+ `/usr/share/common-licenses/GPL-3’.
+
+License: GPL-3.0-or-later
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation, either version 3 of the License, or
+ (at your option) any later version.
+ .
+ This program is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ General Public License for more details.
+ .
+ On Debian systems, the complete text of the GNU General Public
+ License version 3 can be found in
+ `/usr/share/common-licenses/GPL-3’.
+
+License: LGPL-2.1-or-later
+ This library is free software; you can redistribute it and/or modify
+ it under the terms of the GNU Lesser General Public License as
+ published by the Free Software Foundation; either version 2.1 of the
+ License, or (at your option) any later version.
+ .
+ This library is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ Lesser General Public License for more details.
+ .
+ On Debian systems, the complete text of the GNU Lesser General
+ Public License version 2.1 can be found in
+ `/usr/share/common-licenses/LGPL-2.1’.
+
+License: LGPL-3.0-only
+ This package is free software; you can redistribute it and/or
+ modify it under the terms of the GNU Lesser General Public
+ License as published by the Free Software Foundation;
+ version 3 of the License.
+ .
+ This package is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ Lesser General Public License for more details.
+ .
+ You should have received a copy of the GNU General Public License
+ along with this program. If not, see <http://www.gnu.org/licenses/>.
+ .
+ On Debian systems, the complete text of the GNU Lesser General
+ Public License can be found in "/usr/share/common-licenses/LGPL-3".

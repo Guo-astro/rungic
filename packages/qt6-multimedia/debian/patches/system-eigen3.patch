@@ -1,0 +1,28 @@
+diff --git a/src/resonance-audio/CMakeLists.txt b/src/resonance-audio/CMakeLists.txt
+index 7690ae246..f39a0626f 100644
+--- a/src/resonance-audio/CMakeLists.txt
++++ b/src/resonance-audio/CMakeLists.txt
+@@ -211,7 +211,7 @@ qt_internal_add_3rdparty_library(BundledResonanceAudio
+         ${RA_SOURCE_DIR}
+         ${PFFFT_DIR}
+         ${SADIE_HRTFS_DIR}
+-        ../3rdparty/eigen
++        /usr/include/eigen3
+     ATTRIBUTION_FILE_DIR_PATHS
+         ${RA_TOPLEVEL_DIR}
+         ${PFFFT_DIR}
+
+diff --git a/src/spatialaudio/CMakeLists.txt b/src/spatialaudio/CMakeLists.txt
+index b03ec7fb4..72eeedd49 100644
+--- a/src/spatialaudio/CMakeLists.txt
++++ b/src/spatialaudio/CMakeLists.txt
+@@ -20,7 +20,7 @@ qt_internal_add_module(SpatialAudio
+         "../3rdparty/resonance-audio/resonance_audio"
+         "../3rdparty/resonance-audio"
+         "../resonance-audio"
+-        "../3rdparty/eigen"
++        /usr/include/eigen3
+     LIBRARIES
+         Qt::MultimediaPrivate
+         Qt::BundledResonanceAudio
+

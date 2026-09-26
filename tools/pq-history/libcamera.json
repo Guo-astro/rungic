@@ -1,0 +1,42 @@
+{
+ "package": "libcamera",
+ "vendor": "vendor/libcamera",
+ "version": "0.7.0-1ubuntu2",
+ "dsc": "libcamera_0.7.0-1ubuntu2.dsc",
+ "base": "dffc717e",
+ "reference_lacks_distribution_patches": true,
+ "steps": [
+  {
+   "name": "dmabuf-system-heap-read-only",
+   "patch": ".work/pq-history/libcamera-split/dmabuf-system-heap-read-only.patch",
+   "author_name": "kevinzhow",
+   "author_email": "kevinzhow@local",
+   "date": "2026-09-23T21:29:00+08:00",
+   "subject": "DmaBufAllocator: open the system heap read-only when read-write is refused",
+   "description": "The Plasma container gets /dev/dma_heap/system with read access only (LXC device rule), and\nallocation needs no more (DMA_HEAP_IOCTL_ALLOC works on a read-only descriptor). A read-write open\nthat fails with EACCES is retried read-only for the system heap.",
+   "dep3": {
+    "Forwarded": "no",
+    "Last-Update": "2026-09-27",
+    "X-Rungic-Status": "Inappropriate [a container that grants the heap read-only]",
+    "X-Rungic-Tests": "L3:camera.frames (libcamera path: gap)",
+    "X-Rungic-Docs": "docs/48"
+   }
+  },
+  {
+   "name": "virtual-pipewire-frames",
+   "patch": ".work/pq-history/libcamera-split/virtual-pipewire-frames.patch",
+   "author_name": "kevinzhow",
+   "author_email": "kevinzhow@local",
+   "date": "2026-09-23T21:29:00+08:00",
+   "subject": "Virtual pipeline: frames from an existing PipeWire video source",
+   "description": "A virtual camera whose configuration names pipewire_node takes its frames from that PipeWire\nVideo/Source (the Android camera bridge, rungic-camera-source) through pipewiresrc, on demand; the\nsensor timestamp is the frame's time. libcamera applications (Plasma Camera) then use the same\ncamera as PipeWire applications, with no second path to the Android camera.",
+   "dep3": {
+    "Forwarded": "no",
+    "Last-Update": "2026-09-27",
+    "X-Rungic-Status": "Inappropriate [Android camera bridge of this project]",
+    "X-Rungic-Tests": "none (gap: no scenario uses the libcamera path)",
+    "X-Rungic-Docs": "docs/48 docs/research/33"
+   }
+  }
+ ]
+}

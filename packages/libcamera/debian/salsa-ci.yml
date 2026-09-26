@@ -1,0 +1,15 @@
+---
+include:
+  - https://salsa.debian.org/salsa-ci-team/pipeline/raw/master/recipes/debian.yml
+
+variables:
+  SALSA_CI_DISABLE_BUILD_PACKAGE_ARM64: 0
+  SALSA_CI_DISABLE_CROSSBUILD_ARM64: 0
+  SALSA_CI_DISABLE_DEBREBUILD: 1
+  SALSA_CI_DISABLE_REPROTEST: 1
+# libcamera is known not to be reproducible, see:
+# https://gitlab.freedesktop.org/camera/libcamera/-/issues/233
+
+# See https://bugs.debian.org/1088099
+blhc:
+  allow_failure: true

@@ -1,0 +1,16 @@
+Description: Fix detection of system tensorflow-lite by relying on the
+ find_library function as fallback detection mechanism.
+Author: Dylan Aïssi <daissi@debian.org>
+
+--- a/src/ipa/rpi/controller/meson.build
++++ b/src/ipa/rpi/controller/meson.build
+@@ -33,6 +33,9 @@
+ ]
+ 
+ tflite_dep = dependency('tensorflow-lite', required : get_option('rpi-awb-nn'))
++if not tflite_dep.found()
++    tflite_dep = cc.find_library('tensorflow-lite', required: get_option('rpi-awb-nn'))
++endif
+ 
+ if tflite_dep.found()
+     rpi_ipa_controller_sources += files([

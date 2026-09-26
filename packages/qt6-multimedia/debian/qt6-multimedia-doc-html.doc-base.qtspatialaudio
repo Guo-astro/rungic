@@ -1,0 +1,9 @@
+Document: qt6-spatialaudio-manual
+Title: Qt 6 Spatial Audio
+Author: The Qt Company Ltd
+Abstract: This is the HTML documentation for Qt 6 Spatial Audio
+Section: Programming/C++
+
+Format: HTML
+Index: /usr/share/doc/qt6-multimedia-doc-html/html/qtspatialaudio/qtspatialaudio-index.html
+Files: /usr/share/doc/qt6-multimedia-doc-html/html/qtspatialaudio/*.html

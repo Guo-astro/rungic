@@ -1,0 +1,9 @@
+Document: qt6-multimedia-manual
+Title: Qt 6 Multimedia
+Author: The Qt Company Ltd
+Abstract: This is the HTML documentation for Qt 6 Multimedia
+Section: Programming/C++
+
+Format: HTML
+Index: /usr/share/doc/qt6-multimedia-doc-html/html/qtmultimedia/qtmultimedia-index.html
+Files: /usr/share/doc/qt6-multimedia-doc-html/html/qtmultimedia/*.html

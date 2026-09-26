@@ -1,0 +1,6 @@
+skip_failing_tests.patch
+Fix_detection_tensorflow-lite.patch
+add_syncmode_and_tensors.patch
+fix_pisp_cfe_entities.patch
+rungic/dmabuf-system-heap-read-only.patch
+rungic/virtual-pipewire-frames.patch

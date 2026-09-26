@@ -1,0 +1,17 @@
+{
+ "comment": "Pinned upstream of the plasma-camera source package (docs/71, docs/73): Ubuntu's 2.1.1-2build1, built whole (it used to be Ubuntu's binary package with our binary swapped in). packages/plasma-camera/debian replaces its debian/ (Ubuntu's packaging plus our patches under debian/patches/rungic).",
+ "kind": "ubuntu",
+ "source": "plasma-camera",
+ "version": "2.1.1-2build1",
+ "series": "resolute",
+ "git_ubuntu_tag": "import/2.1.1-2build1",
+ "upstream": "https://invent.kde.org/plasma-mobile/plasma-camera",
+ "licenses": "GPL-2.0-or-later, LGPL-2.1-or-later; see LICENSES",
+ "files": {
+  "plasma-camera_2.1.1-2build1.dsc": "f01d0273c34969f401cf2423e682fea26bd0b3af390d028487df7964e97f6867",
+  "plasma-camera_2.1.1.orig.tar.xz": "1be3dcfa8a226a84d3eb1cc8e3cc2e5d00707f8c1e7a98bd72f376dbaa95dd40",
+  "plasma-camera_2.1.1.orig.tar.xz.asc": "a4193bed6122f2ffd482b92712d4d4958401e3163980c392a3f482f5eb914704",
+  "plasma-camera_2.1.1-2build1.debian.tar.xz": "8e4db3b2772926ce84dcde0acbb2ce27b94301f6b0bd35a1873ab30ccffebec4"
+ },
+ "fetch": "https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/plasma-camera/2.1.1-2build1/{file}"
+}

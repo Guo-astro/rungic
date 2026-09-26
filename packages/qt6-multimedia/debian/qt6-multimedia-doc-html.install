@@ -1,0 +1,12 @@
+usr/share/qt6/doc/qtmultimedia/*.html
+usr/share/qt6/doc/qtmultimedia/examples-manifest.xml
+usr/share/qt6/doc/qtmultimedia/images/*
+usr/share/qt6/doc/qtmultimedia/qtmultimedia.index
+usr/share/qt6/doc/qtmultimedia/qtmultimedia.qhp
+usr/share/qt6/doc/qtmultimedia/style/*
+usr/share/qt6/doc/qtspatialaudio/*.html
+usr/share/qt6/doc/qtspatialaudio/examples-manifest.xml
+usr/share/qt6/doc/qtspatialaudio/images/*
+usr/share/qt6/doc/qtspatialaudio/qtspatialaudio.index
+usr/share/qt6/doc/qtspatialaudio/qtspatialaudio.qhp
+usr/share/qt6/doc/qtspatialaudio/style/*

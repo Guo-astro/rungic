@@ -1,0 +1,38 @@
+From: kevinzhow <kevinzhow@local>
+Date: Wed, 23 Sep 2026 21:29:00 +0800
+Subject: PulseAudio sink: the hardware buffer size is the target latency,
+ not the maximum
+
+startStream() set maxlength to 1024 frames and left tlength to the server. A server whose sink
+renders blocks larger than that (a tunnel sink renders whatever its remote may take) underruns the
+stream on every block: 62 zero samples per 1024 through the Android tunnel. The size is now tlength,
+with maxlength negotiated. Reproduced and checked with plasma/diagnostics/media-probes/pa-gap.py;
+a server-side block limit does not cure it (docs/73).
+
+Forwarded: no
+Last-Update: 2026-09-27
+X-Rungic-Status: Pending [a plain bug; Qt 6.11.2 still sets the same attributes]
+X-Rungic-Tests: L3:audio.playback (smoke); probe:plasma/diagnostics/media-probes/pa-gap.py
+X-Rungic-Docs: docs/48 docs/73
+---
+ src/multimedia/pulseaudio/qpulseaudiosink.cpp | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/src/multimedia/pulseaudio/qpulseaudiosink.cpp b/src/multimedia/pulseaudio/qpulseaudiosink.cpp
+index 4acf554..3ee92a5 100644
+--- a/src/multimedia/pulseaudio/qpulseaudiosink.cpp
++++ b/src/multimedia/pulseaudio/qpulseaudiosink.cpp
+@@ -244,8 +244,11 @@ void QPulseAudioSinkStream::uninstallCallbacks()
+ bool QPulseAudioSinkStream::startStream(StreamType streamType)
+ {
+     pa_buffer_attr attr{
+-        .maxlength = uint32_t(m_format.bytesForFrames(m_hardwareBufferFrames.value_or(1024))),
+-        .tlength = uint32_t(-1),
++        // Negotiate a target latency, not a hard maximum below the server's
++        // render quantum. A tunnel may consume a block larger than 1024 frames;
++        // capping maxlength at 1024 inserts silence after every such block.
++        .maxlength = uint32_t(-1),
++        .tlength = uint32_t(m_format.bytesForFrames(m_hardwareBufferFrames.value_or(1024))),
+         .prebuf = uint32_t(-1),
+         .minreq = uint32_t(-1),
+         .fragsize = uint32_t(-1),
