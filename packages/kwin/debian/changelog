@@ -1,3 +1,10 @@
+kwin (4:6.6.6-0ubuntu0.1+moto20) resolute; urgency=medium
+
+  * Built from the patch queue in packages/kwin (docs/71): the changes are
+    DEP-3 patches in debian/patches/rungic; no source change since +moto19.
+
+ -- range-dev <noreply@localhost>  Sat, 26 Sep 2026 06:25:22 +0000
+
 kwin (4:6.6.6-0ubuntu0.1+moto19) resolute; urgency=medium
 
   * Rebuilt with line tables (-g1) and a -dbgsym package for symbolized crash reports

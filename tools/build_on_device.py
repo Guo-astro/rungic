@@ -38,8 +38,13 @@ DEBUG_FLAGS = 'DEB_CFLAGS_MAINT_APPEND=-g1 DEB_CXXFLAGS_MAINT_APPEND=-g1'
 
 
 def stage(component):
-    source = subprocess.run(['python3', str(WORKSPACE / 'tools/stage_vendor.py'), component],
-                            check=True, capture_output=True, text=True).stdout.strip()
+    if (WORKSPACE / 'packages' / component / 'recipe.json').exists():
+        # A patch-queue component (docs/71): pinned upstream + packages/<name>/debian, patches applied.
+        import pq
+        source = str(pq.source(component))
+    else:
+        source = subprocess.run(['python3', str(WORKSPACE / 'tools/stage_vendor.py'), component],
+                                check=True, capture_output=True, text=True).stdout.strip()
     archive = WORKSPACE / f'.work/cache/{component}-stage.tar'
     with tarfile.open(archive, 'w') as tar:
         tar.add(source, arcname='src')
