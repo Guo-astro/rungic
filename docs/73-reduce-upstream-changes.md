@@ -69,7 +69,9 @@
 
 ### 第一阶段（2026-09-27）
 
-**1.1 录屏快捷设置插件化：完成（部署验收见下）。** 录屏快捷设置成为独立插件`com.rungic.quicksetting.record`：QML模块（`recordutil`、`screenstream`，URI同名）与快捷设置包由`rungic-plasma-recording`构建（该包改为arm64、在手机上构建），通知用自己的`rungic-screen-recording.notifyrc`。plasma-mobile删除`recording-quicksetting`补丁与overlay，重建为`+rungic2`，其自带的录屏磁贴原样编译。kconf_update脚本`rungic-recording-quicksetting.sh`把新磁贴放到原录屏磁贴的位置（用户原来禁用了录屏的，新磁贴也放进禁用列表），并把plasma-mobile的磁贴移入禁用列表；无配置、在启用列表中、在禁用列表中、两者都有、都没有五种情况已在容器中核对。
+**1.1 录屏快捷设置插件化：完成，发布`20260927.8`。** 录屏快捷设置成为独立插件`com.rungic.quicksetting.record`：QML模块（`recordutil`、`screenstream`，URI同名）与快捷设置包由`rungic-plasma-recording`构建（该包改为arm64、在手机上构建），通知用自己的`rungic-screen-recording.notifyrc`。plasma-mobile删除`recording-quicksetting`补丁与overlay，重建为`+rungic2`，其自带的录屏磁贴原样编译。kconf_update脚本`rungic-recording-quicksetting.sh`把新磁贴放到原录屏磁贴的位置（用户原来禁用了录屏的，新磁贴也放进禁用列表），并把plasma-mobile的磁贴移入禁用列表；无配置、在启用列表中、在禁用列表中、两者都有、都没有五种情况已在容器中核对。
+
+部署验收：kconf_update迁移已执行（新磁贴在原位置，plasma-mobile的在禁用列表）；录屏快捷设置验收连续2次通过；冒烟验收中`audio.playback`一次偶发失败（流未进入默认输出），单独重跑通过。
 
 回滚限制：回滚到这之前的发布时，用户配置中plasma-mobile的录屏磁贴仍在禁用列表中，需要在快捷设置编辑里重新启用。
 
