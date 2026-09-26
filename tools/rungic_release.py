@@ -668,6 +668,14 @@ def deploy(version=None, restart='auto', acceptance='smoke', record_label=None, 
         rebrand = rebrand_down() if meta_of(version) == FORMER_META else None
         if rebrand:
             step('rebrand-down', **rebrand)
+        elif previous and meta_of(previous) == FORMER_META and meta_of(version) == META:
+            # Across the rename the other way (docs/70): the desktop stops before its moto-* packages go.
+            # A running shell drops the favourites whose desktop files the removal deletes, before the
+            # next session's rungic-rebrand-user could rename them.
+            run('systemctl stop moto-plasma-session.service; systemctl stop user@1000.service', 'container',
+                timeout=180, check=False)
+            rebrand = {'ok': True, 'output': 'desktop stopped for the rename'}
+            step('rebrand-up', **rebrand)
         # 3 sync and install
         ensure_apt_source()
         step('sync', **sync_repo())
