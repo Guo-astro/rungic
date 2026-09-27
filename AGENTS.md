@@ -1,5 +1,9 @@
 # 用户要求与工程约定
 
+## 项目镜像制作 Skill
+
+用户于 2026-09-28 要求将三段式制作经验固化为项目通用 skill。接入新机型/固件、制作 GKI、RungicOS rootfs 或完整刷机包，以及排查整包首启时，使用 `.agents/skills/rungic-three-stage-image/SKILL.md`（可显式调用 `$rungic-three-stage-image`）。按需读取其中的新机型接入、工具地图和首启指南；设备差异进入 spec/适配器，不能将现有 G100 刷写假设直接用于其他手机。该目录随仓库维护，产物与缓存仍放 `.work/`。
+
 ## 适配前先调研（用户于 2026-09-23 明确要求）
 
 每一项 Android / Linux / Plasma 适配开始实现之前，先广泛调查上游、类似项目和同类设备的已有工作，寻找最适合本机的可复用方案。
@@ -28,6 +32,7 @@
 - G100 rootfs 首装时 Android toybox `dd --help` 虽列出 `conv=sparse`，实际会报 `bad conv=sparse`；对 16 GiB 稀疏镜像使用已验证的 ARM64 稀疏写入器并核对整镜像 SHA，避免占满 `/data`。LXC 的早期初始化日志目录须在镜像内预建；toybox loop 的 autoclear 会在容器退出后留下失效的 dm 映射，重启前须由 `rootfs-image attach` 检查并重建映射。相关实机结果记录在 79 篇。
 - 2026-09-27 G100 的整包试刷中，第一个原厂 `super.img_sparsechunk.0` 已写入，第二个分片的 fastboot USB 传输没有返回，主机复位后手机出现 USB `error -71` 且暂不能枚举；停止重试并先恢复设备连接。旧机型的 super 分片刷入经验不能当作本机已通过的路径。过程、后续恢复和验收边界见 79 篇。
 - 新遇到的失败、修复和实机证据及时写入对应 `docs/`，并在下一次相关操作前重新查阅；研究结论、离线校验和实机验收必须分别标注。
+- 本轮 G100 完整镜像的经验汇总见 `docs/80-g100-image-installation-retrospective.md`，逐次证据见 79 篇。`.5` 清数据刷入后用户已确认正常进入 Plasma；后续先复用安全阶段初始化、真实 loading 和账户准备门槛，不能将旧候选的失败或待验收状态当作最终状态，也不能把本机结果推广到其他机型。
 - 将普通 APK 改为 product/app 预装时，须同时核验其原生库安装方式：ZIP 中压缩的 ARM64 JNI 库要放入对应应用的 `lib/arm64`，不能仅复制 APK。12 篇已有相关经验；79 篇的 G100 Rungic 因遗漏 `libc++_shared.so` 在启动时崩溃。`pm path` 和默认权限通过不足以验收应用，必须实际启动；用 `pm install -r` 临时修好也不能代替只读镜像预装验收。
 
 ## 优先修复共享系统能力，避免逐个应用重复适配

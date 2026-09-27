@@ -9,6 +9,7 @@
 ```text
 moto/
 ├── README.md / AGENTS.md       项目入口与工程约定
+├── .agents/skills/            项目共享 Skill 与执行参考，随 Git 同步
 ├── docs/                      设备、ROM、容器、Plasma实施文档
 │   └── research/              可复用的硬件接口与早期研究结论
 ├── plasma/                    KDE适配、Android APK、配置、构建脚本

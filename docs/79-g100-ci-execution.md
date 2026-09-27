@@ -4,6 +4,8 @@
 
 ## 操作前对照的已有经验
 
+最新结果（2026-09-28）：`portov-20260928.5` 完整刷写并清数据后，用户确认重新安装正常进入 Plasma。问题与最佳解决路径的集中总结见 [80 篇实施复盘](80-g100-image-installation-retrospective.md)；以下按时间保留各候选当时的状态。
+
 - [11 篇](11-stock-install.md)：Motorola bootloader 曾拒绝重封装 `super.img`；更新逻辑 `product` 应走 fastbootd，`oem fb_mode_set` 后转换前清标志。
 - [12 篇](12-offline-magisk.md)、[13 篇](13-offline-magisk-user-app.md)：只给 `init_boot` 打补丁不能保证清数据后离线拥有完整 Magisk 运行环境；Magisk APK 不能放成系统应用，已验证方案是只读分区中的完整 APK 种子和 Magisk 自身的首启安装时序。
 - [17 篇](17-lxc-installation.md)、[61 篇](61-delivery-diagnostics-plan.md)：原厂模块信任证书、真正的 `pivot_root`、rootfs ext4 与 loop/device-mapper 快照均有实机经验；不能用单独 namespace 探针代替 LXC 生命周期测试。
@@ -154,3 +156,9 @@ APK 2.6 在 surface 初始化与账号查询前等待 ready，未就绪持续轮
 用户指出原厂 fastbootd 手机上没有进度，容易误以为卡死。核查发现电脑工具另有一个缺口：`subprocess.run(capture_output=True)` 把整条大分区命令的输出积到结束才显示。已改为流式转发发送/写入确认，增加八个阶段、分片编号、无输出期间的等待说明，并保留超时中止。隔离假设备测试验证命令结束前日志已可见、超时和设备拒绝均停止、Motorola 分段 bootloader 信息仍可解析。此变化只影响主机工具，设备镜像不变；不能写成已解决手机屏幕进度。
 
 手机端源码调研：AOSP `system/core` android16-release 的 `fastboot/device/{commands,fastboot_device}.cpp` 将 INFO/OKAY/FAIL 写回 USB；`bootable/recovery` main 的 `fastboot/fastboot.cpp` 显示菜单，`recovery_ui/ui.h` 已提供 Print/SetProgress，`recovery_main.cpp` 的现有 recovery socket 只接 r/f 模式切换。本地源码副本位于 `.work/refs/fastboot-progress-20260928/`，许可证 Apache-2.0。结论是可复用 RecoveryUI 做手机日志/进度，但要连接 fastbootd 的真实传输/刷写事件；原厂 Motorola 的对应接口、二进制兼容和恢复镜像适配尚未核实，不能宣称已有可直接启用的手机日志开关，也不能把普通 INFO 输出当作屏幕输出。本轮 recovery 仍使用已核验原厂镜像。
+
+### 最终用户反馈（2026-09-28）
+
+用户确认：“重新安装之后，已经正常进入 Plasma 的界面了，我觉得效果挺好。”据此将 `.5` 的末端结果更新为**完整刷写及清数据后，用户确认正常进入 Plasma**。此反馈替代上面的“等待首次配置结果”；不将 `.3` 的设备探针报告算作 `.5` 的新报告，也不补写未单独记录的账户 UID 或其他硬件验收。手机端刷写进度、独立发行归档及部署后的缓存清理仍按各自状态跟踪。
+
+应用户要求，问题、修复依据和后续可复用路径集中整理在 [80 篇](80-g100-image-installation-retrospective.md)。

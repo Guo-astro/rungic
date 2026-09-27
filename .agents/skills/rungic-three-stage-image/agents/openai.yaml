@@ -1,0 +1,4 @@
+interface:
+  display_name: "Rungic 三段式镜像制作"
+  short_description: "按机型 spec 制作 GKI、RungicOS 和完整刷机包，覆盖首启与验收"
+  default_prompt: "使用 $rungic-three-stage-image 为指定机型核验 spec，并按三段流程制作、验证和交付完整 Rungic 镜像包。"
