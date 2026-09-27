@@ -60,4 +60,14 @@ kbuildsycoca6 --noincremental
 # imports its environment too, but a unit (re)started earlier would run without them.
 systemctl --user import-environment MESA_LOADER_DRIVER_OVERRIDE FD_KGSL_ENABLE_DMABUF VK_DRIVER_FILES \
     QSG_RHI_BACKEND GSK_RENDERER QT_QUICK_BACKEND KWIN_COMPOSE 2>/dev/null || true
+# A restart of this unit stops its main process, but the previous session's startplasma-wayland
+# lives on in its logind scope for a moment. When it quits it puts the user manager's environment
+# back as it was before that session (plasma-workspace cleanupPlasmaEnvironment); quitting after
+# this session had set its own, it removed PLASMA_DEFAULT_SHELL and plasmashell came up as the
+# desktop shell (2026-09-28, the Android host restarting for an APK update). Let it finish first.
+for _ in $(seq 100); do
+    pgrep -u "$(id -u)" -f '^(/usr/bin/)?startplasma-wayland' >/dev/null || break
+    sleep 0.1
+done
+pkill -KILL -u "$(id -u)" -f '^(/usr/bin/)?startplasma-wayland' 2>/dev/null || true
 exec /usr/bin/startplasmamobile

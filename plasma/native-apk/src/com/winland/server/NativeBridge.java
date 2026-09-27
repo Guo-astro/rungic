@@ -35,6 +35,10 @@ public final class NativeBridge {
     public static native void releaseCastSurface();
     /** The assistant's screen (docs/65): the second output exists while enabled, with or without a TV. */
     public static native void setAgentScreen(boolean enabled, int width, int height, int refreshMhz);
+    /** The assistant's screen is fullscreen above the phone's own picture: the phone gets frames at a low rate (docs/65). */
+    public static native void setPhoneCovered(boolean covered);
+    /** Whether the assistant's floating window shows its picture; tucked away, that screen gets frames at a low rate (docs/65). */
+    public static native void setAgentScreenWatched(boolean watched);
     /** Phone as the TV's touchpad: 0 enable, 1 motion, 2 button, 3 scroll, 4 scroll stop (docs/58). */
     public static native void castPointer(int op, float x, float y);
     /** Whether a Wayland client (KWin, for an idle-inhibiting window) inhibits idle (docs/72). */

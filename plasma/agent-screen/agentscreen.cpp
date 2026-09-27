@@ -164,7 +164,23 @@ void AgentScreen::poll()
         QCoreApplication::quit();
         return;
     }
+    // The host forgets it when it restarts or the screen is turned on again.
+    if (state.contains(QStringLiteral("watched")) && state.value(QStringLiteral("watched")).toBool() != m_watched)
+        reportWatched();
     update();
+}
+
+void AgentScreen::setWatched(bool watched)
+{
+    if (m_watched == watched)
+        return;
+    m_watched = watched;
+    reportWatched();
+}
+
+void AgentScreen::reportWatched()
+{
+    bridge({{QStringLiteral("op"), QStringLiteral("agent-screen")}, {QStringLiteral("watched"), m_watched}});
 }
 
 void AgentScreen::update()

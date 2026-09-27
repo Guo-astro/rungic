@@ -83,6 +83,85 @@ KWin CAST-1 ─────┤
 - `desktop_goal`（“打开下载文件夹，告诉我里面有哪些文件”，app 为 Dolphin）在助理屏上完成，回答正确。本次 OCR 用了 6.9 s，因为 APK 升级后 GPU 程序要重新编译一次。
 - **未验收**：浮窗与电视之间的实际互转。电视当时不可用（`available:false`）。代码路径已就绪：电视绑定时不重建输出，断开时保留输出，浮窗随状态隐藏和恢复。
 
+## 没人看的输出降速（2026-09-28，APK 2.7、KWin +rungic4、plasma-mobile +rungic3）
+
+用户要求：助理屏全屏时，被遮住的手机画面要降低刷新；浮窗收到边缘时，助理屏也要降低刷新；先评估降速能省多少，省得不多再考虑别的方案。
+
+### 评估
+
+- **测法**：`.work/diag/fullscreen-pause/`（`sample.py`、`run.py`、`results.md`）。每组采样 10 s，统计各进程的单核 CPU 占用、`gpu_busy_percentage` 0.5 s 采样的平均值和宿主帧计数。用 gst `videotestsrc pattern=ball` 模拟不同帧率的应用：
+  - GPU 出图的 `glimagesink` 由帧回调驱动，接近普通 Qt/GTK/Firefox 应用；
+  - 共享内存的 `waylandsink` 按自己的时钟出帧，而且让 KWin 每帧都在 CPU 上传纹理，会夸大 KWin 的开销。
+- **降速的收益**（浮窗收边，GPU 客户端）：
+
+  | 帧率 | KWin | GPU |
+  |---|---|---|
+  | 60 | 55% | 51% |
+  | 5 | 7% | 5.5% |
+  | 1 | 2% | 4.5% |
+  | 静止 | 0.7% | 3.5% |
+
+  降到 5 fps 已去掉 KWin 和 GPU 多出开销的约 90–95%，降到 1 fps 约 98%。所以采用降速：和停止相比省不了多少，还能让 Agent 在自己的屏上照常截图、操作。
+- **更大的浪费：两块屏互相拖着重画。**
+  1. **宿主**：主循环只看全局提交计数，任何一块屏的提交都会触发 `render_all`，把整张手机画面重新送一遍给 SurfaceFlinger。收边时助理屏 60 fps，宿主每秒多呈现约 105 次手机画面；这时 SurfaceFlinger 加 APK 约占 70% 单核，全是这个原因。
+  2. **KWin**：见下文“KWin：缩放补边越界”。
+
+### 实现
+
+- **宿主按屏渲染**（`native/plasma`）：
+  - 提交按来源分开计数：助理屏或电视窗口的提交记为 cast，其余记为手机（`engine_timing::note_commit`）。
+  - `render` 分成两部分：`render_cast` 在 cast 窗口有新提交时取帧、发帧回调；`render_phone` 只在手机侧有提交、会影响手机的命令或强制刷新时才重新呈现手机画面。
+  - 查询、`CastPointer` 这类命令不算手机活动。只有手机侧的活动才让主循环跟随手机的 vsync；cast 帧在到达时处理，与后台投屏时相同。
+- **按可见性限速**（`OutputPacing`，`engine_timing`）：
+
+  | 状态 | 输出 | 最小帧间隔 |
+  |---|---|---|
+  | 助理屏全屏（`NativeBridge.setPhoneCovered`，APK 绑定 `fullscreen` 显示端时设置） | 手机 | 1000 ms |
+  | 没有电视或全屏显示端，且浮窗收边（`setAgentScreenWatched(false)`）或手机画面不在（后台、熄屏） | 助理屏 | 200 ms |
+
+  - 帧回调和呈现反馈都按这个间隔放行。被推迟的输出记下到期时间，驻留的主循环到时醒来补发。全屏解除时强制重画一次手机。
+- **被顶替帧的反馈要攒着**（smithay `PresentationFeedbackCachedState.hold_superseded`）：
+  - KWin 的 Wayland 输出最多允许 2 帧待呈现（VRR 时 1 帧），靠呈现反馈腾出名额；一帧收到 `discarded` 也算不再待呈现（`OutputFrame` 析构调用 `notifyFrameDropped`）。
+  - smithay 按协议，在新提交顶替旧提交时立即回 `discarded`。所以宿主只推迟反馈时，KWin 的 CAST-1 仍按 60 Hz 出帧，每一帧都被丢弃。手机输出开着 VRR，只允许 1 帧待呈现，不会被顶替，所以原型里手机能停下来。
+  - 现在限速期间，被顶替的反馈先攒起来，到这块屏的下一轮再回 `discarded`；协议没有要求立即回。结果 KWin 每轮最多出 2 帧。
+- **KWin：缩放补边越界**（`packages/kwin/.../clip-scaled-damage-to-surface.patch`）：
+  - 手机 WL-0（0,0 360×800，缩放 3）和 CAST-1（从 x=360 开始，缩放 1.75）共用一条边。
+  - 表面缓冲区的缩放和输出不同时，`SurfaceItem::addDamage` 会把损坏区域向四周各扩 1 个逻辑像素，照顾缩放采样的边缘，但扩出的部分没有裁回表面自身。
+  - 结果：贴在助理屏左边缘的窗口，每出一帧都会安排手机输出重画；实测助理屏上 60 fps 的窗口让 KWin 每秒重画约 70 次静止的手机输出。反过来，手机上的动画也让 KWin 重画助理屏。
+  - 定位过程：
+    - 两块屏之间留 1 像素间隙，这种耦合就消失；换成整数缩放 2 仍然存在。
+    - 调试版 KWin 在 `OutputLayer::scheduleRepaint` 上记录调用栈，泄漏来自 `SurfaceItem::addDamage → Item::scheduleRepaintInternal`。
+    - 最初猜是 `paintedDeviceArea` 的取整问题，改完实测无效，那个补丁已放弃。
+  - 修复：补边后的损坏区域裁回表面自身的矩形；表面外本来就没有它的像素。电视输出同样受益。
+- **每轮循环结束时 flush**：`pump()` 只在渲染前 flush。一轮放行产生的帧回调和呈现反馈，原本要等下一轮循环才真正发出；循环在驻留时最多要等 1 秒，所以收边时实际只有约 1 fps。现在每轮循环结束、进入等待之前再 flush 一次。
+- **浮窗**（`plasma/agent-screen`）：`mode` 变化时经平台桥发 `{"op":"agent-screen","watched":bool}`。每次轮询时如果宿主记录的状态不一致（APK 重启过，或助理屏重新开启），就重新上报。收边时录制流不停，展开时不用重连。
+
+### 顺带修复：宿主重启后 plasmashell 变成桌面版 shell
+
+- **现象**：2026-09-28 为测试重装 APK 后，手机出现桌面版任务栏，移动版的状态栏和导航栏都没了。
+- **原因**：
+  - `rungic-plasma-session.service` 重启时，systemd 只结束了它的主进程；上一个会话的 `startplasma-wayland` 仍在 logind 的 scope 里，过约 1.5 s 才退出。
+  - 它退出时调用 `cleanupPlasmaEnvironment`，用 `UnsetAndSetEnvironment` 把 systemd 用户环境恢复成那次会话开始前的样子。
+  - 这次恢复发生在新会话导入 `PLASMA_DEFAULT_SHELL` 之后，把这个变量清掉了，plasmashell 就按默认的桌面版 shell 启动。
+- **修复**：`plasma/session` 在启动新会话前，先等上一个会话的 `startplasma-wayland` 退出（最多 10 s，超时就 `KILL`）。
+
+### 实机验收（2026-09-28，APK 2.7、KWin +rungic4、plasma-mobile +rungic3）
+
+- **测试应用**：GTK4 帧时钟动画（`.work/diag/fullscreen-pause/anim.py`，每个 tick 移动一个方块，自己统计每秒绘制的帧数），放在助理屏上。另用 gst 共享内存动画模拟手机上的动画。CAST-1 与手机相邻（x=360）。
+- **结果**（单核 CPU）：
+
+  | 状态 | 动画 fps | KWin | SF | APK | GPU | 手机重画/s |
+  |---|---|---|---|---|---|---|
+  | 有人看（浮窗展开） | 72–87 | 47% | 3–4% | 13% | 25% | 0 |
+  | 收边 | 10 | 7% | 3% | 4% | 6% | 0 |
+  | 展开恢复 | 72–80 | 47% | 3% | 13% | 27% | 0 |
+  | 全屏，手机上另有 60 fps 动画 | 57–76（助理屏呈现 72 fps） | 42% | 21% | 20% | 16% | 1.0 |
+  | 退出全屏 | — | 98% | 27% | 33% | 24% | 61 |
+
+  - 改动前，收边状态下助理屏 60 fps：KWin 37–55%，SurfaceFlinger 27–33%，APK 34–37%，GPU 41–51%，手机每秒被多呈现约 100 次。
+  - 不开助理屏时，手机上 60 fps 的动画每秒渲染 60.2 次，和内容帧率一致；空闲时为 0。
+- **说明**：没有显示端但有人看的时候，助理屏现在约 80 fps，超过名义上的 60 Hz（以前约 42 fps，因为反馈要等到下一轮才发出）。宿主在没有显示端时收到帧就立即回“已呈现”，KWin 于是尽快画下一帧。浮窗以手机 120 Hz 显示，画面更流畅，但比以前多耗电；是否把这种状态限到 60 Hz，待定。
+
 ## 待办
 - 电视互转实测；输出重叠后 plasmashell 的重绘问题；是否启用 KWin blur 做真正的毛玻璃。
 - 小窗约 52 fps（录制 → Qt）；是否经 dmabuf 尚未确认。

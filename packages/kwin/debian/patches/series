@@ -13,3 +13,4 @@ rungic/ftrace-fd-markers.patch
 rungic/host-scroll-source-stop-scale.patch
 rungic/skip-unchanged-configure.patch
 rungic/android-backend.patch
+rungic/clip-scaled-damage-to-surface.patch

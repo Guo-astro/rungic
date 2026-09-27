@@ -26,6 +26,8 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     /** The assistant's screen: a 1920x1080 desktop output, on the TV or in a Linux floating window. */
     static final int[] AGENT_SCREEN_SIZE = {1920, 1080};
     private boolean agentScreen;
+    /** The floating window's last report of showing the assistant's screen (docs/65). */
+    private boolean agentScreenWatched = true;
     private AgentFullscreen agentFullscreen;
     private String presenterOwner;
     private CastControls castControls;
@@ -403,12 +405,16 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     }
     /**
      * The assistant's screen (docs/65): {"enabled": bool} turns it on or off, {"fullscreen": bool} shows
-     * it over the whole phone; the reply says whether it is on, its size, and whether a TV ("tv") or
-     * the phone ("fullscreen") presents it, else the Linux floating window shows it.
+     * it over the whole phone, {"watched": bool} is the floating window's report of showing its picture
+     * (false: tucked into the edge; the screen then gets frames at a low rate). The reply says whether
+     * it is on, its size, whether a TV ("tv") or the phone ("fullscreen") presents it, else the Linux
+     * floating window shows it, and the watched state last reported.
      */
     org.json.JSONObject agentScreen(org.json.JSONObject request) throws Exception {
         if (request.has("enabled")) {
             agentScreen = request.getBoolean("enabled");
+            // A floating window starts showing its picture; a new one reports otherwise.
+            setAgentScreenWatched(true);
             if (!agentScreen) agentFullscreen.hide();
             getPreferences(MODE_PRIVATE).edit().putBoolean("agent_screen", agentScreen).apply();
             if (initialized) NativeBridge.setAgentScreen(agentScreen, AGENT_SCREEN_SIZE[0], AGENT_SCREEN_SIZE[1], 60000);
@@ -419,9 +425,15 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
             else if (castControls.available()) throw new IllegalStateException("a TV shows the assistant's screen");
             else agentFullscreen.show();
         }
+        if (request.has("watched")) setAgentScreenWatched(request.getBoolean("watched"));
         return new org.json.JSONObject().put("enabled", agentScreen)
             .put("width", AGENT_SCREEN_SIZE[0]).put("height", AGENT_SCREEN_SIZE[1])
-            .put("tv", castControls.available()).put("fullscreen", agentFullscreen.shown());
+            .put("tv", castControls.available()).put("fullscreen", agentFullscreen.shown())
+            .put("watched", agentScreenWatched);
+    }
+    private void setAgentScreenWatched(boolean watched) {
+        agentScreenWatched = watched;
+        NativeBridge.setAgentScreenWatched(watched);
     }
 
     /**
@@ -432,11 +444,14 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     void bindPresenter(String owner, android.view.Surface surface, int width, int height, int refreshMhz, int rotation) {
         NativeBridge.bindCastSurface(surface, width, height, refreshMhz, rotation);
         presenterOwner = owner;
+        // Fullscreen covers the phone's own picture: the host paces it down (docs/65).
+        NativeBridge.setPhoneCovered("fullscreen".equals(owner));
     }
     void releasePresenter(String owner) {
         if (!owner.equals(presenterOwner)) return;
         NativeBridge.releaseCastSurface();
         presenterOwner = null;
+        NativeBridge.setPhoneCovered(false);
     }
     org.json.JSONObject castControls(org.json.JSONObject request) throws Exception {
         if (request.has("mode")) castControls.setMode(CastControls.Mode.valueOf(request.getString("mode").toUpperCase()));

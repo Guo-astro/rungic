@@ -45,6 +45,9 @@ public:
     Q_INVOKABLE void fullscreen();
     // Turn the assistant's screen off and quit.
     Q_INVOKABLE void close();
+    // Whether the window shows the picture (false: tucked into the edge). The host renders the
+    // screen at a low rate while nobody looks at it (docs/65).
+    Q_INVOKABLE void setWatched(bool watched);
 
 Q_SIGNALS:
     void statusChanged();
@@ -58,6 +61,7 @@ private:
     void setStatus(const QString &status);
     QScreen *agentOutput() const;
     void keepApart();
+    void reportWatched();
 
     std::unique_ptr<Screencasting> m_screencasting;
     std::unique_ptr<FakeInput> m_input;
@@ -71,4 +75,5 @@ private:
     bool m_fullscreen = false;
     bool m_authenticated = false;
     bool m_pointerPlaced = false;
+    bool m_watched = true;
 };

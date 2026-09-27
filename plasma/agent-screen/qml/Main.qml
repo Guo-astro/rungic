@@ -29,6 +29,8 @@ Window {
     color: "transparent"
 
     property string mode: "window"      // window | tab
+    // Tucked away, nobody sees the screen: the host renders it at a low rate (docs/65).
+    onModeChanged: agent.setWatched(mode === "window")
     property string edge: "right"
     property real px: 12
     property real py: 110

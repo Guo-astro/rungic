@@ -1,0 +1,39 @@
+From: clawd20130 <clawd20130@gmail.com>
+Date: Mon, 28 Sep 2026 02:50:04 +0900
+Subject: Scene: surface damage padded for scaling stays within the surface
+
+SurfaceItem::addDamage pads the damage by a logical pixel when the buffer scale differs from the
+view's, for the sampling at the edges of scaled content. The padding was not clipped to the
+surface: a window at the left edge of the assistant's screen (x=360, buffer at scale 1 on an
+output at 1.75) reached x=359, inside the phone output next to it, and every frame of the
+window repainted the phone output too; windows on the phone repainted the assistant's screen
+the same way. Measured on the phone: a 60 fps window on the assistant's screen made KWin render
+the static phone output ~70 times a second (RenderLoop traces: SurfaceItem::addDamage ->
+Item::scheduleRepaintInternal on the phone's view); a one-pixel gap between the outputs stopped
+it. The padded damage is now clipped to the surface's rect: there is nothing of the surface
+outside it to repaint.
+
+Forwarded: not-needed
+Last-Update: 2026-09-28
+X-Rungic-Status: Pending [generic: outputs meeting at an edge, surface scale differing from output scale]
+X-Rungic-Tests: manual (docs/65: per-output KWin commit rates in native-stats pacing)
+X-Rungic-Docs: docs/65
+---
+ src/scene/surfaceitem.cpp | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/src/scene/surfaceitem.cpp b/src/scene/surfaceitem.cpp
+index 9e2ec59..74b937c 100644
+--- a/src/scene/surfaceitem.cpp
++++ b/src/scene/surfaceitem.cpp
+@@ -156,7 +156,9 @@ void SurfaceItem::addDamage(const Region &region)
+             // Simplified version of ceil(ceil(0.5 * output_scale / surface_scale) / output_scale)
+             const int xPadding = std::ceil(0.5 / xScale);
+             const int yPadding = std::ceil(0.5 / yScale);
+-            viewDamage = expandRegion(viewDamage, QMargins(xPadding, yPadding, xPadding, yPadding));
++            // Only within the surface: padding past its edge reached a neighbouring output, and
++            // every frame of the surface then repainted that output too.
++            viewDamage = expandRegion(viewDamage, QMargins(xPadding, yPadding, xPadding, yPadding)) & rect().toAlignedRect();
+         }
+         scheduleRepaint(view, viewDamage);
+     }

@@ -319,7 +319,7 @@ Firefox getDisplayMedia
 | 剪贴板 | 内层Phoc data-control ↔ wl-paste/wl-copy ↔ moto-clipboard ↔ PlatformBridge ↔ ClipboardManager | 绕开不必要的外层selection中转；前台同步、去重、限长、跳过敏感标记；[clipboard.py](../../shared/platform/clipboard.py) |
 | 网络/设备页 | GTK4/libadwaita设备页 → JSON status/settings → ConnectivityManager等真实API/Android设置 | 数据采集与控制分别处理；platform.py（历史材料已移除）。这个页面不能自动替代GNOME的NetworkManager接口 |
 | 挖孔 | WindowInsets/DisplayCutout/RoundedCorner → 原子INI → Phosh文件监视 → 顶栏/exclusive zone/应用可用高度 | android-display.c（历史材料已移除），按当前mode和scale换算；不是为整个画面再叠一条永久黑边 |
-| 刷新 | Choreographer → JNI frameTick → Rust条件变量 → 合成和frame callback；EGL成功提交累计。静止400ms后按需停发vsync：合成线程改为poll Wayland fd与kick eventfd，恢复时经eventfd通知Java主Looper（57篇） | DisplayPacer（历史材料已移除）、frame clock（历史材料已移除）、Rust补丁（历史材料已移除） |
+| 刷新 | Choreographer → JNI frameTick → Rust条件变量 → 合成和frame callback；EGL成功提交累计。静止400ms后按需停发vsync：合成线程改为poll Wayland fd与kick eventfd，恢复时经eventfd通知Java主Looper（57篇）。手机与cast（电视、助理屏）按各自的提交分开渲染；没人看的输出限速：全屏遮住的手机1 s一帧，收边或无人显示的助理屏200 ms一帧；限速期间被顶替帧的presentation feedback攒到下一轮再回discarded，否则KWin照常出帧（65篇） | DisplayPacer（历史材料已移除）、frame clock（历史材料已移除）、Rust补丁（历史材料已移除） |
 | 横竖屏 | 设备页orientation → Android Activity方向 → Surface尺寸/触摸换算/INI → Phoc输出与Phosh布局 | 同步更新坐标、模式、安全区域；旋转修复（历史材料已移除） |
 | 文档共享 | GNOME/portal → 容器私有FUSE → 文档导出；公共文件另经bindfs访问 | init.sh（历史材料已移除）。容器节点10:229/0666，Android原 `/dev/fuse` 仍0600 |
 | 相机/麦克风 | Android普通授权 → 私有capture.sock → 标准PA source / PW Video/Source → GNOME/Firefox | [media-bridge.py](../../shared/media/media-bridge.py)、[camera-source.cpp](../../shared/media/camera-source.cpp)。session-apps自动启动，flock防重复；后台释放设备 |
