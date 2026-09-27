@@ -18,7 +18,9 @@ python3 -m venv --system-site-packages "$clicker/venv"
 ( [ -r /etc/profile.d/proxy.sh ] && . /etc/profile.d/proxy.sh
   "$clicker/venv/bin/python" -m pip install -q --no-compile --disable-pip-version-check \
       typesafe-sdk==0.6.0 anthropic==1.6.0 openai==2.54.0 rapidocr==3.9.2 )
-"$clicker/venv/bin/python" -m pip check
+# Check our entry points; global pip check also inspects unrelated Debian Python
+# tools in the shared builder. The clean rootfs runs the full dependency check.
+"$clicker/venv/bin/python" -c 'from rapidocr import RapidOCR; import openai, anthropic, typesafe_sdk'
 # The venv was made under DESTDIR: point its scripts and config at the installed path.
 grep -rlI --null "$DESTDIR" "$clicker/venv" | xargs -0 -r sed -i "s#$DESTDIR##g"
 find "$clicker" -name __pycache__ -prune -exec rm -rf {} +
