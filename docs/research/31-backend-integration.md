@@ -507,3 +507,5 @@ Agent可直接调用的设备诊断、崩溃现场、统一追踪（perfetto + K
 | 其他 | `debug.moto.*`，Termux音频目录`moto-plasma-audio`，LXC主机名`moto-plasma` | `debug.rungic.*`，`rungic-plasma-audio`，`rungic` |
 | Docker | `/data/adb/moto-docker`、`moto-docker`，SELinux `moto_docker`、`moto_docker_file`、`moto_docker_image`，链`MOTO_DOCKER_*` | `/data/adb/rungic-docker`、`rungic-docker`，`rungic_docker*`，`RUNGIC_DOCKER_*`（`rungic_cutover.py docker-up`） |
 | 保持不变 | ROM中的Magisk引导脚本随下次刷机 | — |
+
+2026-09-28 首次镜像安装增加独立就绪契约（79 篇）：Magisk 首启脚本 → APK 私有原子状态文件（release/state/phase）→ 原生 loading → root `account-prepare` 的容器/账户前置检查 → 账户表单 → Plasma 启动。只有状态匹配当前 product 且所有准备完成才放行；root 控制器另查完成标记。不能用普通重启或已初始化数据替代空白刷机首启验证。

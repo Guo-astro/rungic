@@ -13,7 +13,7 @@ action=${1:-status}
 # A product seed publishes the controller before the rootfs and shared paths.
 # Account setup must not enter that partially installed environment.
 case "$action" in
-  account-status|account-setup|start|restart-session)
+  account-status|account-prepare|account-setup|start|restart-session)
     if [ -f /product/etc/rungic/seed.env ]; then
       expected_release=$(sed -n 's/^RELEASE_ID=//p' /product/etc/rungic/seed.env | tr -d "\"'")
       installed_release=$(cat /data/adb/rungic-firstboot.complete 2>/dev/null) || installed_release=
@@ -135,6 +135,22 @@ case "$action" in
     else
       echo '{"configured":false,"username":"rungic"}'
     fi
+    ;;
+  account-prepare)
+    exec 9>"$BASE/control.lock"
+    flock 9 9>&9
+    if ! running; then start_container; fi
+    ready=0
+    for attempt in $(seq 1 90); do
+      if attach /bin/sh -c '
+        test -x /usr/libexec/rungic-plasma-account-setup &&
+        getent passwd 1000 >/dev/null && test -d /mnt/android-shared &&
+        state=$(systemctl is-system-running 2>/dev/null); case "$state" in running|degraded) exit 0;; *) exit 1;; esac
+      ' 9>&-; then ready=1; break; fi
+      sleep 2
+    done
+    [ "$ready" = 1 ] || { echo '账户环境仍未就绪，请稍后重试。' >&2; exit 1; }
+    echo 'Account environment ready'
     ;;
   account-setup)
     exec 9>"$BASE/control.lock"

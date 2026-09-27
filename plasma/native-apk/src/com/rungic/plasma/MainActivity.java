@@ -30,6 +30,12 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     private String presenterOwner;
     private CastControls castControls;
     private TextView status;
+    private LinearLayout loading;
+    private ProgressBar loadingSpinner;
+    private final Runnable installPoll=() -> {
+        if(!isDestroyed() && this.started && display.getHolder().getSurface().isValid())
+            surfaceCreated(display.getHolder());
+    };
     private volatile int bufferWidth = 720, bufferHeight = 1600;
     private FrameLayout frame;
     private boolean androidKeyboard;
@@ -71,7 +77,15 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         status = new TextView(this);
         status.setText("正在准备 Plasma Mobile…"); status.setTextSize(18); status.setGravity(Gravity.CENTER);
         status.setOnClickListener(v -> { if(display.getHolder().getSurface().isValid())surfaceCreated(display.getHolder()); });
-        frame.addView(status, new FrameLayout.LayoutParams(-1, -1));
+        loading=new LinearLayout(this);
+        loading.setOrientation(LinearLayout.VERTICAL); loading.setGravity(Gravity.CENTER);
+        loading.setPadding(48,48,48,48);
+        loading.setBackgroundColor(0xff16212b); status.setTextColor(0xffeef3f8);
+        loadingSpinner=new ProgressBar(this); loadingSpinner.setIndeterminate(true);
+        loading.addView(loadingSpinner);
+        LinearLayout.LayoutParams loadingText=new LinearLayout.LayoutParams(-1,-2);
+        loadingText.topMargin=36; loading.addView(status,loadingText);
+        frame.addView(loading, new FrameLayout.LayoutParams(-1, -1));
         setContentView(frame);
         castTest = new CastTest(this, frame);
         castControls = new CastControls(this, frame, this::setAndroidKeyboard);
@@ -121,6 +135,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         if(android.os.Build.VERSION.SDK_INT>=34 && edgeBackCallback!=null)
             getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(edgeBackCallback);
         pacer.stop();
+        display.removeCallbacks(installPoll);
         if (idleInhibitFd != null) {
             android.os.Looper.getMainLooper().getQueue().removeOnFileDescriptorEventListener(idleInhibitFd.getFileDescriptor());
             try { idleInhibitFd.close(); } catch (IOException ignored) {}
@@ -196,9 +211,11 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         started = true;
         if(capture!=null)capture.setVisible(true);
         if(pacer!=null && display.getHolder().getSurface().isValid())pacer.start();
+        if(display!=null && !accountReady)display.post(installPoll);
     }
     @Override public void onStop() {
         started = false;
+        if(display!=null)display.removeCallbacks(installPoll);
         if(pacer!=null)pacer.stop();
         if(capture!=null)capture.setVisible(false);
         super.onStop();
@@ -288,12 +305,26 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         worker.execute(() -> {
             try {
                 if (!holder.getSurface().isValid()) return;
+                FirstBootState install=FirstBootState.read(new File("/product/etc/rungic/seed.env"),
+                    new File(getFilesDir(),"rungic-install.properties"));
+                if(!install.ready) {
+                    runOnUiThread(() -> {
+                        showLoading(install.message);
+                        loadingSpinner.setVisibility(install.failed?View.GONE:View.VISIBLE);
+                        status.setClickable(false);
+                        display.removeCallbacks(installPoll);
+                        if(!install.failed && started)display.postDelayed(installPoll,1000);
+                    });
+                    return;
+                }
                 new File(getFilesDir(), "tmp").mkdirs();
                 if (!accountReady) {
                     if (accountPromptShowing) return;
                     org.json.JSONObject account=new org.json.JSONObject(control("account-status"));
                     accountReady=account.optBoolean("configured",false);
                     if (!accountReady) {
+                        runOnUiThread(() -> showLoading("正在准备账户环境，请稍候…"));
+                        control("account-prepare");
                         accountPromptShowing=true;
                         runOnUiThread(() -> AccountSetup.show(this,worker,
                             payload -> control("account-setup",payload), () -> {
@@ -304,6 +335,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
                         return;
                     }
                 }
+                runOnUiThread(() -> showLoading("正在启动 Plasma Mobile…"));
                 KeyboardAssets.ensure(getApplicationContext());
                 new File(getFilesDir(), "tmp").mkdirs();
                 platform.start();
@@ -335,12 +367,18 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
                 writeDisplayInsets();
                 control(newServer ? "restart-session" : "start");
                 Log.i("RungicWayland", NativeBridge.getWaylandRuntimeStats());
-                runOnUiThread(() -> status.setVisibility(View.GONE));
+                runOnUiThread(() -> loading.setVisibility(View.GONE));
             } catch (Throwable e) {
                 Log.e("RungicWayland", "Start failed", e);
-                runOnUiThread(() -> { status.setVisibility(View.VISIBLE); status.setText("Plasma Mobile启动失败\n" + e.getMessage() + "\n\n点此重试"); });
+                runOnUiThread(() -> { showLoading("Plasma Mobile启动失败\n" + e.getMessage() + "\n\n点此重试");
+                    loadingSpinner.setVisibility(View.GONE); status.setClickable(true); });
             }
         });
+    }
+
+    private void showLoading(String message) {
+        loading.setVisibility(View.VISIBLE); status.setVisibility(View.VISIBLE);
+        loadingSpinner.setVisibility(View.VISIBLE); status.setText(message); status.setClickable(false);
     }
 
     private void resizeDisplay(int l,int t,int r,int b) {
@@ -508,7 +546,8 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         Thread reader = new Thread(() -> { try (InputStream in = p.getInputStream()) {
             byte[] data = new byte[4096]; int n; while ((n = in.read(data)) != -1) if (out.size() < 16384) out.write(data,0,n);
         } catch (IOException ignored) {} }); reader.start();
-        if (!p.waitFor(90, TimeUnit.SECONDS)) { p.destroy(); throw new IOException("启动超时，请检查 Magisk 授权"); }
+        if (!p.waitFor(action.equals("account-prepare")?240:90, TimeUnit.SECONDS)) {
+            p.destroy(); throw new IOException("系统准备超时，请稍后重试并检查安装状态"); }
         reader.join(2000);
         if (p.exitValue() != 0) throw new IOException(out.toString("UTF-8"));
         return out.toString("UTF-8");

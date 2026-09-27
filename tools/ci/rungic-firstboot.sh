@@ -17,18 +17,50 @@ fi
 exec >>/data/adb/rungic-firstboot.log 2>&1
 echo "$(date -Iseconds) starting Rungic seed $RELEASE_ID"
 marker=/data/adb/rungic-firstboot.complete
+uid_of() {
+    uid=$(stat -c %u "/data/user/0/$1") || exit 1
+    case "$uid" in ''|*[!0-9]*) exit 1 ;; esac
+    echo "$uid"
+}
+rungic_uid=$(uid_of com.rungic.plasma)
+rungic_files=/data/user/0/com.rungic.plasma/files
+mkdir -p "$rungic_files"
+chown "$rungic_uid:$rungic_uid" "$rungic_files"
+rungic_label=$(ls -dZ /data/user/0/com.rungic.plasma | cut -d ' ' -f1)
+chcon "$rungic_label" "$rungic_files"
+# App-private, atomic, credential-free status; reading it needs no su prompt.
+# This is a UI signal only. The root controller also checks the release marker.
+publish() {
+    status_tmp=$rungic_files/.rungic-install.properties.tmp
+    printf 'release=%s\nstate=%s\nphase=%s\n' "$RELEASE_ID" "$1" "$2" > "$status_tmp"
+    chmod 0600 "$status_tmp"
+    chown "$rungic_uid:$rungic_uid" "$status_tmp"
+    chcon "$rungic_label" "$status_tmp"
+    mv "$status_tmp" "$rungic_files/rungic-install.properties"
+}
 if [ -f "$marker" ] && [ "$(cat "$marker")" = "$RELEASE_ID" ]; then
+    publish ready complete
     echo 'already installed'
     exit 0
 fi
+phase=verify
+provision_mounted=0
+finished=0
+finish_exit() {
+    code=$?
+    trap - EXIT
+    if [ "$provision_mounted" = 1 ]; then
+        umount "$provision" 2>/dev/null || true
+        /data/adb/rungic-plasma/rootfs-image detach >/dev/null 2>&1 || true
+    fi
+    if [ "$finished" != 1 ]; then publish failed "$phase" || true; fi
+    exit "$code"
+}
+trap finish_exit EXIT
+publish installing "$phase"
 die() { echo "Rungic seed failed: $*" >&2; exit 1; }
 digest() { sha256sum "$1" | cut -d ' ' -f1; }
 check() { [ "$(digest "$1")" = "$2" ] || die "SHA-256 mismatch: $1"; }
-uid_of() {
-    uid=$(stat -c %u "/data/user/0/$1") || die "app data missing: $1"
-    case "$uid" in ''|*[!0-9]*) die "invalid UID: $uid" ;; esac
-    echo "$uid"
-}
 check "$seed/host-seed.tar.gz" "$HOST_SEED_SHA256"
 check "$seed/rootfs.img.gz" "$ROOTFS_GZ_SHA256"
 check "$seed/termux.apk" "$TERMUX_APK_SHA256"
@@ -38,6 +70,7 @@ check "$seed/rungic-sparse-write" "$SPARSE_WRITE_SHA256"
 
 pm path com.termux >/dev/null 2>&1 || die 'Termux system app missing'
 pm path com.rungic.plasma >/dev/null 2>&1 || die 'Rungic system app missing'
+phase=runtime; publish installing "$phase"
 termux_uid=$(uid_of com.termux)
 termux_data=/data/user/0/com.termux/files
 mkdir -p "$termux_data"
@@ -84,6 +117,7 @@ if [ ! -x /data/adb/rungic-lxc/rungic-lxc-enter ] ||
 fi
 
 images=/data/adb/rungic-lxc/images
+phase=rootfs; publish installing "$phase"
 mkdir -p "$images"
 image=$images/rootfs.img
 image_marker=$images/rootfs.seeded
@@ -104,14 +138,11 @@ mv "$image_marker.tmp" "$image_marker"
 
 # Device-local network settings belong to the device spec, not the shared ARM64 rootfs.
 provision=/data/adb/.rungic-rootfs-provision
+phase=configure; publish installing "$phase"
 mkdir -p "$provision"
 root_device=$(/data/adb/rungic-plasma/rootfs-image attach) || die 'rootfs mapper attach'
 mount -t ext4 -o noatime "$root_device" "$provision" || die 'rootfs provision mount'
-cleanup_provision() {
-    umount "$provision" 2>/dev/null || true
-    /data/adb/rungic-plasma/rootfs-image detach >/dev/null 2>&1 || true
-}
-trap cleanup_provision EXIT
+provision_mounted=1
 mkdir -p "$provision/var/log/plasma" "$provision/etc/profile.d"
 if [ -n "$PHONE_HTTP_PROXY" ]; then
     cat > "$provision/etc/profile.d/proxy.sh" <<EOF
@@ -124,18 +155,25 @@ EOF
 fi
 sync
 umount "$provision" || die 'rootfs provision unmount'
+provision_mounted=0
 /data/adb/rungic-plasma/rootfs-image detach || die 'rootfs mapper detach'
-trap - EXIT
 
-rungic_uid=$(uid_of com.rungic.plasma)
-rungic_files=/data/user/0/com.rungic.plasma/files
+phase=storage; publish installing "$phase"
+# Boot-complete precedes unlock/storage readiness on some devices. Wait for the
+# real Android storage instead of creating a hidden folder under an empty mount.
+while [ ! -d /storage/emulated/0/Android ]; do sleep 2; done
 mkdir -p "$rungic_files/tmp" /storage/emulated/0/Plasma
 chown "$rungic_uid:$rungic_uid" "$rungic_files" "$rungic_files/tmp"
 label=$(ls -dZ /data/user/0/com.rungic.plasma | cut -d ' ' -f1)
 chcon "$label" "$rungic_files" "$rungic_files/tmp"
+/data/adb/rungic-plasma/android-audio prepare || die 'audio directory preparation'
+/data/adb/rungic-plasma/rungic-plasma-enter /bin/true || die 'shared mount preflight'
+phase=finish; publish installing "$phase"
 # Fixed Magisk 31.0 schema; INSERT returns no SQL NULL (docs/39, docs/70).
 /debug_ramdisk/magisk --sqlite "INSERT OR REPLACE INTO policies (uid,policy,until,logging,notification) VALUES($rungic_uid,2,0,1,1)" || die 'Magisk policy'
 echo "$RELEASE_ID" > "$marker.tmp"
 mv "$marker.tmp" "$marker"
 sync
+publish ready complete
+finished=1
 echo "$(date -Iseconds) Rungic seed complete"
