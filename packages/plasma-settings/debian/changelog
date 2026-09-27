@@ -1,3 +1,11 @@
+plasma-settings (25.12.0-1+rungic2) resolute; urgency=medium
+
+  * Wi-Fi and network settings open the desktop modules again: the
+    NetworkManager service is backed by Android (docs/73). Cellular,
+    Bluetooth and power still hand over to Android's settings.
+
+ -- range-dev <noreply@localhost>  Sun, 27 Sep 2026 11:00:00 +0000
+
 plasma-settings (25.12.0-1+rungic1) resolute; urgency=medium
 
   * Rungic rename (docs/70): the device panel is /usr/bin/rungic-platform.

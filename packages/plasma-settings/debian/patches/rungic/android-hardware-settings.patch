@@ -1,24 +1,24 @@
 From: kevinzhow <kevinzhow@local>
 Date: Wed, 23 Sep 2026 21:00:53 +0800
-Subject: Android host: network,
+Subject: Android host: cellular,
  Bluetooth and power settings open the Android settings
 
-On the Android host the phone's radios, networks and suspend belong to Android. When the host's
-platform socket exists, the Wi-Fi, network, cellular, Bluetooth and power modules hand over to the
-project's platform helper, which opens the matching Android settings page; other sessions keep the
-desktop modules.
+On the Android host the phone's radios and suspend belong to Android. When the host's platform
+socket exists, the cellular, Bluetooth and power modules hand over to the project's platform helper,
+which opens the matching Android settings page; other sessions keep the desktop modules. Wi-Fi and
+network use the desktop modules: NetworkManager is backed by Android (docs/73).
 
 Forwarded: not-needed
-Last-Update: 2026-09-26
+Last-Update: 2026-09-27
 X-Rungic-Status: Inappropriate [Android host specific: hands the hardware settings to Android]
 X-Rungic-Tests: none (gap: no scenario opens these modules)
-X-Rungic-Docs: docs/42
+X-Rungic-Docs: docs/42 docs/73
 ---
- src/settingsapp.cpp | 23 +++++++++++++++++++++++
- 1 file changed, 23 insertions(+)
+ src/settingsapp.cpp | 25 +++++++++++++++++++++++++
+ 1 file changed, 25 insertions(+)
 
 diff --git a/src/settingsapp.cpp b/src/settingsapp.cpp
-index 2c398ad..ce4e30e 100644
+index 2c398ad..3267927 100644
 --- a/src/settingsapp.cpp
 +++ b/src/settingsapp.cpp
 @@ -9,6 +9,8 @@
@@ -30,7 +30,7 @@ index 2c398ad..ce4e30e 100644
  #include <QQmlContext>
  #include <QQmlEngine>
  
-@@ -257,6 +259,27 @@ void SettingsApp::loadModule(const QModelIndex &activeModule, const QStringList
+@@ -257,6 +259,29 @@ void SettingsApp::loadModule(const QModelIndex &activeModule, const QStringList
          return;
      }
  
@@ -39,7 +39,9 @@ index 2c398ad..ce4e30e 100644
 +    if (QFileInfo::exists(QStringLiteral("/mnt/android-wayland/platform.sock"))) {
 +        const QString id = QFileInfo(mi->id()).baseName();
 +        QString target;
-+        if (id == u"kcm_mobile_wifi"_s || id == u"kcm_networkmanagement"_s || id == u"kcm_cellular_network"_s) {
++        // Wi-Fi and network settings are the desktop modules: the NetworkManager service is backed by
++        // Android (shared/platform/network-manager.py, docs/73).
++        if (id == u"kcm_cellular_network"_s) {
 +            target = u"network"_s;
 +        } else if (id == u"kcm_bluetooth"_s || id == u"kcm_mobile_bluetooth"_s || id == u"kcm_bluetooth_power"_s) {
 +            target = u"bluetooth"_s;

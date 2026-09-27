@@ -60,11 +60,15 @@ final class AndroidNetworkBridge implements Closeable {
             identity=value.toString();
         } catch(Exception e) { identity="{}"; }
     }
-    // Only these constant commands reach Magisk. No caller text enters a shell.
-    private synchronized String wifiCommand(String operation) throws Exception {
-        if(!operation.equals("status") && !operation.equals("set-wifi-enabled enabled") && !operation.equals("set-wifi-enabled disabled"))throw new IllegalArgumentException();
+    private String wifiCommand(String operation) throws Exception { return wifiCommand(operation,2000); }
+    // Only commands built in this class reach Magisk: constants, and the validated, single-quoted
+    // arguments of wifi(). No other caller text enters a shell.
+    private String wifiCommand(String operation,long timeoutMs) throws Exception {
+        return rootShell("/system/bin/cmd wifi "+operation,timeoutMs);
+    }
+    private synchronized String rootShell(String command,long timeoutMs) throws Exception {
         // One private root session avoids a Magisk grant toast/process launch
-        // on every status refresh. The input is exclusively the whitelist above.
+        // on every status refresh.
         try {
             if(rootProcess==null || !rootProcess.isAlive()) {
                 closeRoot();
@@ -82,8 +86,8 @@ final class AndroidNetworkBridge implements Closeable {
                 },"wifi-command-output");reader.setDaemon(true);reader.start();
             }
             String marker="RUNGIC_"+UUID.randomUUID().toString().replace("-","");
-            rootInput.write("/system/bin/cmd wifi "+operation+"; printf '\\n"+marker+":%s\\n' \"$?\"\n");rootInput.flush();
-            long deadline=SystemClock.elapsedRealtime()+2000;
+            rootInput.write(command+"; printf '\\n"+marker+":%s\\n' \"$?\"\n");rootInput.flush();
+            long deadline=SystemClock.elapsedRealtime()+timeoutMs;
             StringBuilder output=new StringBuilder();
             while(SystemClock.elapsedRealtime()<deadline) {
                 String line=rootOutput.poll(Math.max(1,deadline-SystemClock.elapsedRealtime()),TimeUnit.MILLISECONDS);
@@ -105,12 +109,70 @@ final class AndroidNetworkBridge implements Closeable {
     }
     JSONObject setEnabled(boolean enabled) throws Exception {
         // Invoked on the private socket thread, never Android's UI thread.
-        FutureTask<Boolean> focus=new FutureTask<>(() -> activity.hasWindowFocus());
-        activity.runOnUiThread(focus);
-        if(!focus.get(500,TimeUnit.MILLISECONDS))throw new IOException("请先返回 Plasma Mobile");
+        if(!focused())throw new IOException("请先返回 Plasma Mobile");
         wifiCommand(enabled?"set-wifi-enabled enabled":"set-wifi-enabled disabled");
         identity="{}";
         return new JSONObject().put("accepted",true);
+    }
+    private static String quote(String value) { return "'"+value.replace("'","'\\''")+"'"; }
+    private boolean focused() throws Exception {
+        FutureTask<Boolean> focus=new FutureTask<>(() -> activity.hasWindowFocus());
+        activity.runOnUiThread(focus);
+        return focus.get(500,TimeUnit.MILLISECONDS);
+    }
+    /** Wi-Fi for the Linux side's NetworkManager service (docs/73): scan, scan results, saved
+     * networks, connect, forget, through Android's own `cmd wifi`. Changes need the desktop in the
+     * foreground, as the Wi-Fi switch does. Android keeps the credentials; none are stored here. */
+    JSONObject wifi(JSONObject request) throws Exception {
+        String action=request.optString("action");
+        switch(action) {
+            case "scan": wifiCommand("start-scan",3000); return new JSONObject().put("accepted",true);
+            case "scan-results": return new JSONObject().put("text",wifiCommand("list-scan-results",3000));
+            case "saved": return new JSONObject().put("text",wifiCommand("list-networks",3000));
+            case "connect": {
+                String ssid=request.getString("ssid"),security=request.getString("security"),passphrase=request.optString("passphrase","");
+                byte[] raw=ssid.getBytes(StandardCharsets.UTF_8);
+                if(raw.length<1 || raw.length>32 || !ssid.matches("[^\\p{Cntrl}]+"))throw new IllegalArgumentException("Invalid SSID");
+                boolean open=security.equals("open") || security.equals("owe");
+                if(!open && !security.equals("wpa2") && !security.equals("wpa3"))throw new IllegalArgumentException("Unsupported security");
+                if(open ? !passphrase.isEmpty() : !passphrase.matches("[\\x20-\\x7e]{8,63}"))throw new IllegalArgumentException("Invalid passphrase");
+                if(!focused())throw new IOException("请先返回 Plasma Mobile");
+                String reply=wifiCommand("connect-network "+quote(ssid)+" "+security+(open?"":" "+quote(passphrase)),20000);
+                identity="{}";
+                return new JSONObject().put("accepted",true).put("text",reply);
+            }
+            case "activate": {
+                // A saved network by its Android id (cmd wifi has no way to join one without its
+                // passphrase): com.rungic.wifi.RootWifi from this APK, run as root.
+                int id=request.getInt("id");
+                if(id<0)throw new IllegalArgumentException("Invalid network id");
+                if(!focused())throw new IOException("请先返回 Plasma Mobile");
+                String reply=rootWifi("connect "+id);
+                identity="{}";
+                return new JSONObject().put("accepted",true).put("text",reply);
+            }
+            case "disconnect": {
+                if(!focused())throw new IOException("请先返回 Plasma Mobile");
+                String reply=rootWifi("disconnect");
+                identity="{}";
+                return new JSONObject().put("accepted",true).put("text",reply);
+            }
+            case "forget": {
+                int id=request.getInt("id");
+                if(id<0)throw new IllegalArgumentException("Invalid network id");
+                if(!focused())throw new IOException("请先返回 Plasma Mobile");
+                wifiCommand("forget-network "+id,5000);
+                identity="{}";
+                return new JSONObject().put("accepted",true);
+            }
+            default: throw new IllegalArgumentException("Unknown Wi-Fi action");
+        }
+    }
+    private String rootWifi(String arguments) throws Exception {
+        String apk=activity.getApplicationInfo().sourceDir;
+        String reply=rootShell("CLASSPATH="+quote(apk)+" /system/bin/app_process /system/bin com.rungic.wifi.RootWifi "+arguments,20000);
+        if(!reply.trim().endsWith("success"))throw new IOException("Android Wi-Fi: "+reply.trim());
+        return reply;
     }
     JSONObject snapshot() throws Exception {
         Network active=cm.getActiveNetwork();

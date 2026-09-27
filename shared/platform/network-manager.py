@@ -10,6 +10,7 @@ import ipaddress
 import json
 import logging
 import os
+import re
 import signal
 import socket
 import struct
@@ -29,11 +30,12 @@ HOST = 'com.rungic.Android.Network'
 SOCKET = '/mnt/android-wayland/platform.sock'
 LOG = logging.getLogger('android-network')
 V = GLib.Variant
+WIFI_REFRESH = 10
 
 
-def host_request(**request):
+def host_request(timeout=3.5, **request):
     with socket.socket(socket.AF_UNIX) as client:
-        client.settimeout(3.5)
+        client.settimeout(timeout)
         client.connect(SOCKET)
         client.sendall(json.dumps(request).encode() + b'\n')
         data = bytearray()
@@ -121,6 +123,88 @@ def security_flags(security):
             9: (1, 0x200 | 0x88)}.get(security)
 
 
+SCAN_LINE = re.compile(r'^\s*([0-9a-fA-F:]{17})\s+(\d+)\s+(-?\d+)\S*\s+([\d.]+)\s+(.*?)\s*((?:\[[^\]]*\])+)\s*$')
+SAVED_LINE = re.compile(r'^(\d+)\s+(.*\S)\s{2,}(\S+)\s*$')
+
+
+def parse_scan(text):
+    """`cmd wifi list-scan-results`: BSSID, frequency, RSSI, age, SSID (may hold spaces), flags."""
+    rows = {}
+    for line in (text or '').splitlines():
+        m = SCAN_LINE.match(line)
+        if not m or not m[5]:
+            continue                                  # hidden networks are not listed
+        bssid = m[1].lower()
+        rows[bssid] = {'bssid': bssid, 'frequency': int(m[2]), 'rssi': int(m[3]), 'age': float(m[4]),
+                       'ssid': m[5], 'flags': m[6]}
+    return list(rows.values())
+
+
+def parse_saved(text):
+    """`cmd wifi list-networks`: saved networks by Android id; one id may list several security types."""
+    saved = {}
+    for line in (text or '').splitlines():
+        m = SAVED_LINE.match(line.strip())
+        if m:
+            entry = saved.setdefault(int(m[1]), {'id': int(m[1]), 'ssid': m[2], 'security': []})
+            entry['security'].append(m[3].rstrip('^'))
+    return list(saved.values())
+
+
+def scan_security(flags):
+    """Flags of a scan result -> (Android security for connect-network, NM Flags, WpaFlags, RsnFlags).
+    Key management: PSK 0x100, 802.1X 0x200, SAE 0x400, OWE 0x800; ciphers CCMP 0x8 (pair), 0x80 (group)."""
+    wpa = rsn = 0
+    for entry in re.findall(r'\[([^\]]*)\]', flags):
+        mgmt = (0x100 if 'PSK' in entry else 0) | (0x200 if 'EAP' in entry else 0) | \
+               (0x400 if 'SAE' in entry else 0) | (0x800 if 'OWE' in entry else 0)
+        if not mgmt:
+            continue
+        if entry.startswith('WPA-'):
+            wpa |= mgmt | 0x88
+        else:
+            rsn |= mgmt | 0x88
+    keys = wpa | rsn
+    if keys & 0x200 and not keys & 0x500:
+        security = 'eap'                               # enterprise: joined in Android's settings
+    elif keys & 0x100:
+        security = 'wpa2'
+    elif keys & 0x400:
+        security = 'wpa3'
+    elif keys & 0x800:
+        security = 'owe'
+    else:
+        security = 'open'
+    return security, (1 if keys and security != 'owe' else 0), wpa, rsn
+
+
+def strength(rssi):
+    return max(0, min(100, round((rssi + 100) * 100 / 45)))
+
+
+def ap_path(bssid_or_ssid):
+    return BASE + '/AccessPoint/' + ident(bssid_or_ssid)
+
+
+def saved_path(entry):
+    return BASE + '/Settings/saved' + str(entry['id'])
+
+
+def saved_profile(entry):
+    security = entry['security'][0] if entry['security'] else 'open'
+    key_mgmt = {'wpa2-psk': 'wpa-psk', 'wpa-psk': 'wpa-psk', 'wpa3-sae': 'sae', 'sae': 'sae', 'owe': 'owe',
+                'wpa2-enterprise': 'wpa-eap', 'wpa3-enterprise': 'wpa-eap'}.get(security, 'none')
+    uid = str(uuid.uuid5(uuid.NAMESPACE_URL, 'android-wifi-saved:%d:%s' % (entry['id'], entry['ssid'])))
+    settings = {'connection': props(id=('s', entry['ssid']), uuid=('s', uid), type=('s', '802-11-wireless'),
+                                   autoconnect=('b', True)),
+                '802-11-wireless': props(ssid=('ay', list(entry['ssid'].encode())), mode=('s', 'infrastructure')),
+                'ipv4': props(method=('s', 'auto')), 'ipv6': props(method=('s', 'auto'))}
+    if key_mgmt != 'none':
+        settings['802-11-wireless']['security'] = V('s', '802-11-wireless-security')
+        settings['802-11-wireless-security'] = props(**{'key-mgmt': ('s', key_mgmt)})
+    return settings
+
+
 def make_graph(snapshot):
     """Build a complete snapshot before publishing any changes on the bus."""
     available = snapshot is not None
@@ -133,6 +217,24 @@ def make_graph(snapshot):
     state = (70 if default.get('validated') else 50) if default else (20 if available else 0)
     graph, settings = {}, {}
     devices, connections, active = [], [], []
+    # Wi-Fi scan results and Android's saved networks (docs/73), fetched next to the snapshot.
+    scan = snapshot.get('scan', []) if enabled else []
+    saved = snapshot.get('saved', [])
+    saved_by_ssid = {entry['ssid']: entry for entry in saved}
+    for entry in saved:
+        path = saved_path(entry)
+        settings[path] = saved_profile(entry)
+        graph[path] = {NM + '.Settings.Connection': props(Unsaved=('b', False), Flags=('u', 0), Filename=('s', ''))}
+        connections.append(path)
+    aps = {}
+    for r in scan:
+        security, flags, wpa, rsn = scan_security(r['flags'])
+        aps[ap_path(r['bssid'])] = {NM + '.AccessPoint': props(Flags=('u', flags), WpaFlags=('u', wpa), RsnFlags=('u', rsn),
+            Ssid=('ay', list(r['ssid'].encode())), Frequency=('u', r['frequency']), HwAddress=('s', r['bssid'].upper()),
+            Mode=('u', 2), MaxBitrate=('u', 0), Strength=('y', strength(r['rssi'])), LastSeen=('i', -1),
+            Bandwidth=('u', 0))}
+    graph.update(aps)
+    scanned_ssids = {r['ssid'] for r in scan}
     primary = '/'
     primary_type = ''
     # Always retain the real Wi-Fi device when disabled; other objects exist
@@ -151,10 +253,17 @@ def make_graph(snapshot):
         ip4, ip6, ap = '/', '/', '/'
         hw = row.get('mac', '') if row else ''
         dev_connectivity = (4 if row.get('validated') else 2 if row.get('captive') else 3) if row else 1
+        known = saved_by_ssid.get(row.get('ssid')) if (row and is_wifi) else None
+        if known:
+            conn = saved_path(known)                  # the connection is Android's saved network
         if row:
             name, uid, kind, profile_data = profile(row, is_wifi)
-            settings[conn] = profile_data
-            connections.append(conn)
+            if known:
+                profile_data = settings[conn]
+                uid = profile_data['connection']['uuid'].unpack()
+            else:
+                settings[conn] = profile_data
+                connections.append(conn)
             active.append(ac)
             for version in (4, 6):
                 config = ip_config(row, version)
@@ -167,14 +276,15 @@ def make_graph(snapshot):
                         ip6 = path
             sec = security_flags(row.get('security', -1))
             if is_wifi and row.get('ssid') and sec is not None:
-                ap = BASE + '/AccessPoint/' + ident(row.get('bssid') or row['ssid'])
+                ap = ap_path((row.get('bssid') or '').lower() or row['ssid'])
                 rssi = row.get('rssi', -100)
                 strength = max(0, min(100, round((rssi + 100) * 100 / 45)))
                 graph[ap] = {NM + '.AccessPoint': props(Flags=('u', sec[0]), WpaFlags=('u', 0), RsnFlags=('u', sec[1]),
                     Ssid=('ay', list(row['ssid'].encode())), Frequency=('u', max(0, row.get('frequency', 0))),
                     HwAddress=('s', row.get('bssid', '')), Mode=('u', 2), MaxBitrate=('u', max(0, row.get('linkMbps', 0)) * 1000),
                     Strength=('y', strength), LastSeen=('i', int(time.monotonic())))}
-            graph[conn] = {NM + '.Settings.Connection': props(Unsaved=('b', True), Flags=('u', 3), Filename=('s', ''))}
+            if not known:
+                graph[conn] = {NM + '.Settings.Connection': props(Unsaved=('b', True), Flags=('u', 3), Filename=('s', ''))}
             graph[ac] = {NM + '.Connection.Active': props(Connection=('o', conn), SpecificObject=('o', ap), Id=('s', name),
                 Uuid=('s', uid), Type=('s', kind), Devices=('ao', [device]), State=('u', 2),
                 StateFlags=('u', 128 | 4 | (8 if ip4 != '/' else 0) | (16 if ip6 != '/' else 0)),
@@ -189,7 +299,9 @@ def make_graph(snapshot):
             State=('u', dev_state), StateReason=('(uu)', (dev_state, 0)), DeviceType=('u', device_type),
             Managed=('b', available), Autoconnect=('b', False), Real=('b', True), HwAddress=('s', hw),
             Ip4Config=('o', ip4), Ip6Config=('o', ip6), Dhcp4Config=('o', '/'), Dhcp6Config=('o', '/'),
-            ActiveConnection=('o', ac), AvailableConnections=('ao', [conn] if row else []),
+            ActiveConnection=('o', ac),
+            AvailableConnections=('ao', ([conn] if row else []) + ([saved_path(e) for e in saved if e['ssid'] in scanned_ssids
+                                                                     and saved_path(e) != conn] if is_wifi else [])),
             FirmwareMissing=('b', False), NmPluginMissing=('b', False), Mtu=('u', max(0, row.get('mtu', 0)) if row else 0),
             Metered=('u', (1 if row.get('metered') else 2) if row else 0),
             Ip4Connectivity=('u', dev_connectivity if ip4 != '/' else 1), Ip6Connectivity=('u', dev_connectivity if ip6 != '/' else 1))}
@@ -202,7 +314,8 @@ def make_graph(snapshot):
                 caps |= 0x800
             graph[device][NM + '.Device.Wireless'] = props(HwAddress=('s', hw), PermHwAddress=('s', ''), Mode=('u', 2 if row else 0),
                 Bitrate=('u', max(0, row.get('linkMbps', 0)) * 1000 if row else 0), WirelessCapabilities=('u', caps),
-                AccessPoints=('ao', [ap] if ap != '/' else []), ActiveAccessPoint=('o', ap), LastScan=('x', -1))
+                AccessPoints=('ao', list(aps) + ([ap] if ap != '/' and ap not in aps else [])), ActiveAccessPoint=('o', ap),
+                LastScan=('x', snapshot.get('lastScan', -1)))
         elif device_type == 1:
             graph[device][NM + '.Device.Wired'] = props(HwAddress=('s', hw), PermHwAddress=('s', ''), Speed=('u', 0),
                 S390Subchannels=('as', []), Carrier=('b', True))
@@ -216,8 +329,8 @@ def make_graph(snapshot):
         ConnectivityCheckAvailable=('b', False), ConnectivityCheckEnabled=('b', False), ConnectivityCheckUri=('s', ''),
         Metered=('u', (1 if default.get('metered') else 2) if default else 0)),
         HOST: props(BackendAvailable=('b', available), Manager=('s', 'Android'), Version=('s', '1'),
-                    DefaultTransport=('s', default['kind'] if default else ''), ConfigurationReadOnly=('b', True))}
-    graph[BASE + '/Settings'] = {NM + '.Settings': props(Connections=('ao', connections), Hostname=('s', 'android'), CanModify=('b', False))}
+                    DefaultTransport=('s', default['kind'] if default else ''), ConfigurationReadOnly=('b', False))}
+    graph[BASE + '/Settings'] = {NM + '.Settings': props(Connections=('ao', connections), Hostname=('s', 'android'), CanModify=('b', True))}
     graph[BASE + '/AgentManager'] = {NM + '.AgentManager': {}}
     return graph, settings
 
@@ -294,6 +407,10 @@ class Bridge:
         self.alive = True
         self.online = None
         self.agents = set()
+        # Wi-Fi scan results and saved networks: refreshed every WIFI_REFRESH seconds, and at once after a
+        # scan, connect or forget (refresh_wifi).
+        self.wifi = {'scan': [], 'saved': [], 'lastScan': -1}
+        self.wifi_due = 0.0
         bus.register_object(OM_PATH, introspection(OM, {}), self.call, None, None)
         self.publish(None)
 
@@ -373,6 +490,17 @@ class Bridge:
                         raise ValueError('Unsupported host protocol')
                 except (OSError, ValueError):
                     data = None
+                if data is not None and time.monotonic() >= self.wifi_due:
+                    self.wifi_due = time.monotonic() + WIFI_REFRESH
+                    try:
+                        self.wifi['saved'] = parse_saved(host_request(op='wifi', action='saved')['text'])
+                        if data.get('wifiEnabled'):
+                            self.wifi['scan'] = parse_scan(host_request(op='wifi', action='scan-results')['text'])
+                            self.wifi['lastScan'] = int(time.clock_gettime(time.CLOCK_BOOTTIME) * 1000)
+                    except (OSError, ValueError, KeyError):
+                        LOG.warning('Android Wi-Fi lists unavailable')
+                if data is not None:
+                    data.update(self.wifi)
                 def done():
                     self.polling = False
                     if self.alive:
@@ -381,6 +509,88 @@ class Bridge:
                 GLib.idle_add(done)
             self.pool.submit(work)
         return GLib.SOURCE_CONTINUE
+
+    def saved_entry(self, path):
+        return next((e for e in self.wifi['saved'] if saved_path(e) == path), None)
+
+    def refresh_wifi(self):
+        self.wifi_due = 0.0
+        self.poll()
+        return False
+
+    def wifi_action(self, invocation, request, result, timeout=10, later=(2, 6)):
+        """An Android Wi-Fi request off the main loop; the reply (result() -> (signature, *values)) and
+        the refreshed lists follow on it."""
+        def work():
+            try:
+                host_request(timeout=timeout, op='wifi', **request)
+                error = None
+            except (OSError, ValueError) as e:
+                error = str(e)
+            def done():
+                if error:
+                    invocation.return_dbus_error(NM + '.Failed', error)
+                else:
+                    sig, *values = result()
+                    invocation.return_value(V('(' + sig + ')', tuple(values)))
+                for seconds in later:
+                    GLib.timeout_add_seconds(seconds, self.refresh_wifi)
+                self.refresh_wifi()
+                return False
+            GLib.idle_add(done)
+        self.pool.submit(work)
+
+    def add_and_activate(self, invocation, method, args):
+        """A new network from the Wi-Fi settings: SSID from the settings or the access point, the key
+        management and passphrase from 802-11-wireless-security. Android saves it (connect-network)."""
+        settings, device, specific = args[0], args[1], args[2]
+        wireless = settings.get('802-11-wireless', {})
+        ssid = bytes(wireless.get('ssid', b'')).decode(errors='replace')
+        ap = self.graph.get(specific, {}).get(NM + '.AccessPoint')
+        if not ssid and ap:
+            ssid = bytes(ap['Ssid'].unpack()).decode(errors='replace')
+        security_settings = settings.get('802-11-wireless-security', {})
+        key_mgmt = security_settings.get('key-mgmt', 'none')
+        passphrase = security_settings.get('psk', '')
+        if key_mgmt == 'wpa-psk':
+            # An access point offering only SAE is WPA3.
+            only_sae = ap and not (ap['RsnFlags'].unpack() | ap['WpaFlags'].unpack()) & 0x100 and ap['RsnFlags'].unpack() & 0x400
+            security = 'wpa3' if only_sae else 'wpa2'
+        else:
+            security = {'sae': 'wpa3', 'owe': 'owe', 'none': 'open'}.get(key_mgmt)
+        if not ssid or security is None:
+            invocation.return_dbus_error(NM + '.NotSupported', 'Only personal (PSK/SAE), OWE and open Wi-Fi networks '
+                                         'are joined here; use Android settings for others.')
+            return
+        if security in ('wpa2', 'wpa3') and not passphrase:
+            invocation.return_dbus_error(NM + '.NoSecrets', 'A password is required')
+            return
+
+        def result():
+            entry = next((e for e in self.wifi['saved'] if e['ssid'] == ssid), None)
+            conn = saved_path(entry) if entry else BASE + '/Settings/wifi'
+            values = (conn, BASE + '/ActiveConnection/wifi')
+            return ('ooa{sv}', *values, {}) if method == 'AddAndActivateConnection2' else ('oo', *values)
+
+        def work():
+            try:
+                host_request(timeout=25, op='wifi', action='connect', ssid=ssid, security=security, passphrase=passphrase)
+                self.wifi['saved'] = parse_saved(host_request(op='wifi', action='saved')['text'])
+                error = None
+            except (OSError, ValueError, KeyError) as e:
+                error = str(e)
+            def done():
+                if error:
+                    invocation.return_dbus_error(NM + '.Failed', error)
+                else:
+                    sig, *values = result()
+                    invocation.return_value(V('(' + sig + ')', tuple(values)))
+                for seconds in (2, 6):
+                    GLib.timeout_add_seconds(seconds, self.refresh_wifi)
+                self.refresh_wifi()
+                return False
+            GLib.idle_add(done)
+        self.pool.submit(work)
 
     def get(self, bus, sender, path, interface, name):
         return self.graph.get(path, {}).get(interface, {}).get(name)
@@ -428,7 +638,9 @@ class Bridge:
                         'sleep-wake', 'network-control', 'wifi.share.protected', 'wifi.share.open', 'settings.modify.system',
                         'settings.modify.own', 'settings.modify.hostname', 'settings.modify.global-dns', 'reload', 'checkpoint-rollback',
                         'enable-disable-statistics', 'enable-disable-connectivity-check', 'wifi.scan')}
-                    permissions[NM + '.enable-disable-wifi'] = 'yes'
+                    for name in ('enable-disable-wifi', 'network-control', 'wifi.scan', 'settings.modify.own',
+                                 'settings.modify.system'):
+                        permissions[NM + '.' + name] = 'yes'
                     return reply('a{ss}', permissions)
                 if method in ('state', 'CheckConnectivity'):
                     return reply('u', self.graph[BASE][NM]['State' if method == 'state' else 'Connectivity'].unpack())
@@ -441,6 +653,21 @@ class Bridge:
             if interface == NM + '.Device.Wireless':
                 if method in ('GetAccessPoints', 'GetAllAccessPoints'):
                     return reply('ao', self.graph[path][interface]['AccessPoints'].unpack())
+                if method == 'RequestScan':
+                    return self.wifi_action(invocation, {'action': 'scan'}, lambda: ('',), later=(3, 8))
+            if interface == NM and method in ('AddAndActivateConnection', 'AddAndActivateConnection2'):
+                return self.add_and_activate(invocation, method, args.unpack())
+            if interface == NM and method == 'ActivateConnection':
+                conn = args.unpack()[0]
+                entry = self.saved_entry(conn)
+                if entry:
+                    return self.wifi_action(invocation, {'action': 'activate', 'id': entry['id']},
+                                            lambda: ('o', BASE + '/ActiveConnection/wifi'), timeout=25)
+            if (interface == NM and method == 'DeactivateConnection' and args.unpack()[0] == BASE + '/ActiveConnection/wifi') or \
+               (interface == NM + '.Device' and method == 'Disconnect' and path == BASE + '/Devices/wifi'):
+                return self.wifi_action(invocation, {'action': 'disconnect'}, lambda: ('',), timeout=25)
+            if interface == NM + '.Settings.Connection' and method == 'Delete' and self.saved_entry(path):
+                return self.wifi_action(invocation, {'action': 'forget', 'id': self.saved_entry(path)['id']}, lambda: ('',))
             if interface == NM + '.Settings':
                 if method == 'ListConnections':
                     return reply('ao', list(self.settings))
