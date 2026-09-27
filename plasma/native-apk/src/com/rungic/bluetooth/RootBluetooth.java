@@ -101,7 +101,7 @@ public final class RootBluetooth {
         return result.put("devices", devices);
     }
 
-    static JSONObject device(BluetoothDevice d) throws Exception {
+    public static JSONObject device(BluetoothDevice d) throws Exception {
         BluetoothClass type = d.getBluetoothClass();
         JSONArray uuids = new JSONArray();
         ParcelUuid[] list = d.getUuids();
