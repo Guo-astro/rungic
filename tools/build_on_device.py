@@ -147,7 +147,7 @@ def collect(component):
     from pathlib import Path
     version = out(f"dpkg-parsechangelog -l {BASE}/{component}/src/debian/changelog -S Version | sed 's/^[0-9]*://'",
                   'container').strip()
-    names = out(f"cd {BASE}/{component} && ls *_{version}_*.deb *_{version}_*.ddeb 2>/dev/null", 'container').split()
+    names = out(f"cd {BASE}/{component} && ls *_{version}_*.deb *_{version}_*.ddeb 2>/dev/null || true", 'container').split()
     incoming = WORKSPACE / '.work/apt/incoming'
     incoming.mkdir(parents=True, exist_ok=True)
     for name in names:
