@@ -24,8 +24,7 @@
     "pkgconf",
     "g++"
   ],
-  "description": "Plasma Mobile on Android: Android bridges\nThe Android device panel, clipboard, Wi-Fi and network for NetworkManager clients,\nBluetooth for BlueZ clients (bluedevil), the mobile network
-for ModemManager clients, the\nmicrophone and camera bridge (PipeWire camera sources from Android frames) and the\naudio route switch.",
+  "description": "Plasma Mobile on Android: Android bridges\nThe Android device panel, clipboard, Wi-Fi and network for NetworkManager clients,\nBluetooth for BlueZ clients (bluedevil), the mobile network\nfor ModemManager clients, the\nmicrophone and camera bridge (PipeWire camera sources from Android frames) and the\naudio route switch.",
   "units": {
     "system": [
       "rungic-plasma-network.service",
