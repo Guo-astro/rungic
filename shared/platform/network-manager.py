@@ -205,6 +205,22 @@ def saved_profile(entry):
     return settings
 
 
+MODEM_PATH = '/org/freedesktop/ModemManager1/Modem/0'   # shared/platform/modem-manager.py
+MOBILE = BASE + '/Settings/modem'
+STARTED = int(time.time())
+
+
+def mobile_profile(telephony):
+    """Android's mobile data as one gsm connection: autoconnect is Android's data switch, home-only its
+    data roaming switch. The APN stays Android's."""
+    operator = telephony.get('simOperator', '')
+    return {'connection': props(id=('s', telephony.get('simOperatorName') or 'Mobile data'), type=('s', 'gsm'),
+                                uuid=('s', str(uuid.uuid5(uuid.NAMESPACE_URL, 'android-mobile:' + operator))),
+                                autoconnect=('b', bool(telephony.get('dataEnabled'))), timestamp=('t', STARTED)),
+            'gsm': props(apn=('s', ''), **{'home-only': ('b', not telephony.get('dataRoaming'))}),
+            'ipv4': props(method=('s', 'auto')), 'ipv6': props(method=('s', 'auto'))}
+
+
 def make_graph(snapshot):
     """Build a complete snapshot before publishing any changes on the bus."""
     available = snapshot is not None
@@ -235,19 +251,35 @@ def make_graph(snapshot):
             Bandwidth=('u', 0))}
     graph.update(aps)
     scanned_ssids = {r['ssid'] for r in scan}
+    # Android's data subscription as a modem device (docs/73) while Android reports a modem.
+    telephony = snapshot.get('telephony') or {}
+    modem = bool(telephony.get('modem'))
+    sim_ready = modem and telephony.get('sim') == 'ready'
+    registered = sim_ready and telephony.get('service') == 0
+    if sim_ready:
+        settings[MOBILE] = mobile_profile(telephony)
+        graph[MOBILE] = {NM + '.Settings.Connection': props(Unsaved=('b', False), Flags=('u', 0), Filename=('s', ''))}
+        connections.append(MOBILE)
     primary = '/'
     primary_type = ''
     # Always retain the real Wi-Fi device when disabled; other objects exist
     # only while Android reports those actual networks. No synthetic Ethernet.
     inputs = [('wifi', wifi)]
-    inputs += [(ident(r['interface']), r) for r in rows if r['kind'] != 'wifi']
+    cellular = next((r for r in rows if r['kind'] == 'cellular'), None) if modem else None
+    if modem:
+        inputs.append(('modem', cellular))
+    inputs += [(ident(r['interface']), r) for r in rows if r['kind'] != 'wifi' and r is not cellular]
     for token, row in inputs:
         is_wifi = token == 'wifi'
+        is_modem = token == 'modem'
         device = BASE + '/Devices/' + token
         devices.append(device)
         iface = row['interface'] if row else 'wlan0'
         dev_state = 100 if row else (30 if enabled and available else 20)
-        device_type = 2 if is_wifi else 1 if row['kind'] == 'ethernet' else 14
+        if is_modem:
+            iface = 'android-modem'
+            dev_state = 100 if row else 30 if registered else 20
+        device_type = 2 if is_wifi else 8 if is_modem else 1 if row['kind'] == 'ethernet' else 14
         ac = BASE + '/ActiveConnection/' + token if row else '/'
         conn = BASE + '/Settings/' + token if row else '/'
         ip4, ip6, ap = '/', '/', '/'
@@ -256,9 +288,14 @@ def make_graph(snapshot):
         known = saved_by_ssid.get(row.get('ssid')) if (row and is_wifi) else None
         if known:
             conn = saved_path(known)                  # the connection is Android's saved network
+        if is_modem and sim_ready:
+            conn = MOBILE                             # the connection is Android's mobile data
         if row:
             name, uid, kind, profile_data = profile(row, is_wifi)
-            if known:
+            if is_modem and sim_ready:
+                profile_data = settings[conn]
+                name, uid, kind = profile_data['connection']['id'].unpack(), profile_data['connection']['uuid'].unpack(), 'gsm'
+            elif known:
                 profile_data = settings[conn]
                 uid = profile_data['connection']['uuid'].unpack()
             else:
@@ -283,7 +320,7 @@ def make_graph(snapshot):
                     Ssid=('ay', list(row['ssid'].encode())), Frequency=('u', max(0, row.get('frequency', 0))),
                     HwAddress=('s', row.get('bssid', '')), Mode=('u', 2), MaxBitrate=('u', max(0, row.get('linkMbps', 0)) * 1000),
                     Strength=('y', strength), LastSeen=('i', int(time.monotonic())))}
-            if not known:
+            if not known and conn not in graph:
                 graph[conn] = {NM + '.Settings.Connection': props(Unsaved=('b', True), Flags=('u', 3), Filename=('s', ''))}
             graph[ac] = {NM + '.Connection.Active': props(Connection=('o', conn), SpecificObject=('o', ap), Id=('s', name),
                 Uuid=('s', uid), Type=('s', kind), Devices=('ao', [device]), State=('u', 2),
@@ -305,7 +342,17 @@ def make_graph(snapshot):
             FirmwareMissing=('b', False), NmPluginMissing=('b', False), Mtu=('u', max(0, row.get('mtu', 0)) if row else 0),
             Metered=('u', (1 if row.get('metered') else 2) if row else 0),
             Ip4Connectivity=('u', dev_connectivity if ip4 != '/' else 1), Ip6Connectivity=('u', dev_connectivity if ip6 != '/' else 1))}
-        if is_wifi:
+        if is_modem:
+            # NMDeviceStateReason: 29 SIM not inserted, 30 PIN required, 31 PUK required.
+            reason = {'absent': 29, 'pin': 30, 'puk': 31}.get(telephony.get('sim'), 0)
+            graph[device][NM + '.Device'].update(props(Udi=('s', MODEM_PATH), IpInterface=('s', row['interface'] if row else ''),
+                StateReason=('(uu)', (dev_state, reason)), Autoconnect=('b', bool(telephony.get('dataEnabled'))),
+                AvailableConnections=('ao', [MOBILE] if sim_ready else [])))
+            # NMDeviceModemCapabilities: GSM/UMTS, LTE, 5GNR.
+            graph[device][NM + '.Device.Modem'] = props(ModemCapabilities=('u', 0x4 | 0x8 | 0x40),
+                CurrentCapabilities=('u', 0x4 | 0x8 | 0x40), DeviceId=('s', ''), Apn=('s', ''),
+                OperatorCode=('s', telephony.get('operator', '') if registered else ''))
+        elif is_wifi:
             # Encryption and known frequency bands; deliberately no AP/hotspot capability.
             caps = 0x28 | 0x100 | 0x200
             if snapshot.get('wifi5GHz'):
@@ -325,7 +372,8 @@ def make_graph(snapshot):
         PrimaryConnection=('o', primary), PrimaryConnectionType=('s', primary_type), ActivatingConnection=('o', '/'),
         State=('u', state), Startup=('b', False), Version=('s', '1.54.0-android-bridge.1'), Capabilities=('au', []),
         NetworkingEnabled=('b', available), WirelessEnabled=('b', enabled), WirelessHardwareEnabled=('b', available),
-        WwanEnabled=('b', False), WwanHardwareEnabled=('b', False), Connectivity=('u', connectivity),
+        WwanEnabled=('b', modem and telephony.get('service') != 3), WwanHardwareEnabled=('b', modem),
+        Connectivity=('u', connectivity),
         ConnectivityCheckAvailable=('b', False), ConnectivityCheckEnabled=('b', False), ConnectivityCheckUri=('s', ''),
         Metered=('u', (1 if default.get('metered') else 2) if default else 0)),
         HOST: props(BackendAvailable=('b', available), Manager=('s', 'Android'), Version=('s', '1'),
@@ -381,7 +429,8 @@ def signature_parts(signature):
 def introspection(interface, properties):
     xml = '<node><interface name="' + interface + '">'
     for key, value in properties.items():
-        access = 'readwrite' if interface == NM and key == 'WirelessEnabled' else 'read'
+        writable = (interface == NM and key in ('WirelessEnabled', 'WwanEnabled')) or (interface == NM + '.Device' and key == 'Autoconnect')
+        access = 'readwrite' if writable else 'read'
         xml += '<property name="%s" type="%s" access="%s"/>' % (key, escape(value.get_type_string()), access)
     for method, (ins, outs) in METHODS.get(interface, {}).items():
         xml += '<method name="' + method + '">'
@@ -501,6 +550,10 @@ class Bridge:
                         LOG.warning('Android Wi-Fi lists unavailable')
                 if data is not None:
                     data.update(self.wifi)
+                    try:
+                        data['telephony'] = host_request(op='telephony', action='state')
+                    except (OSError, ValueError):
+                        data['telephony'] = None
                 def done():
                     self.polling = False
                     if self.alive:
@@ -592,10 +645,39 @@ class Bridge:
             GLib.idle_add(done)
         self.pool.submit(work)
 
+    def mobile_data(self, invocation, on, result=lambda: ('',)):
+        """Android's mobile data switch (svc data) off the main loop; invocation may be None."""
+        def work():
+            try:
+                host_request(timeout=15, op='telephony', action='data', on=on)
+                error = None
+            except (OSError, ValueError) as e:
+                error = str(e)
+            def done():
+                if invocation and error:
+                    invocation.return_dbus_error(NM + '.Failed', error)
+                elif invocation:
+                    sig, *values = result()
+                    invocation.return_value(V('(' + sig + ')', tuple(values)))
+                for seconds in (2, 6):
+                    GLib.timeout_add_seconds(seconds, lambda: (self.poll(), False)[1])
+                self.poll()
+                return False
+            GLib.idle_add(done)
+        self.pool.submit(work)
+
     def get(self, bus, sender, path, interface, name):
         return self.graph.get(path, {}).get(interface, {}).get(name)
 
     def set(self, bus, sender, path, interface, name, value):
+        if path == BASE + '/Devices/modem' and interface == NM + '.Device' and name == 'Autoconnect':
+            # Plasma Mobile's mobile data switch: autoconnect off turns Android's mobile data off; on is
+            # followed by activating the mobile data connection.
+            if not value.unpack():
+                self.mobile_data(None, False)
+            return True
+        if path == BASE and interface == NM and name == 'WwanEnabled':
+            return bool(value.unpack())               # the radio stays on; airplane mode is Android's
         if path != BASE or interface != NM or name != 'WirelessEnabled':
             return False
         try:
@@ -638,7 +720,7 @@ class Bridge:
                         'sleep-wake', 'network-control', 'wifi.share.protected', 'wifi.share.open', 'settings.modify.system',
                         'settings.modify.own', 'settings.modify.hostname', 'settings.modify.global-dns', 'reload', 'checkpoint-rollback',
                         'enable-disable-statistics', 'enable-disable-connectivity-check', 'wifi.scan')}
-                    for name in ('enable-disable-wifi', 'network-control', 'wifi.scan', 'settings.modify.own',
+                    for name in ('enable-disable-wifi', 'enable-disable-wwan', 'network-control', 'wifi.scan', 'settings.modify.own',
                                  'settings.modify.system'):
                         permissions[NM + '.' + name] = 'yes'
                     return reply('a{ss}', permissions)
@@ -663,6 +745,25 @@ class Bridge:
                 if entry:
                     return self.wifi_action(invocation, {'action': 'activate', 'id': entry['id']},
                                             lambda: ('o', BASE + '/ActiveConnection/wifi'), timeout=25)
+            if interface == NM and method == 'ActivateConnection' and args.unpack()[0] == MOBILE and MOBILE in self.settings:
+                return self.mobile_data(invocation, True, lambda: ('o', BASE + '/ActiveConnection/modem'))
+            if (interface == NM and method == 'DeactivateConnection' and args.unpack()[0] == BASE + '/ActiveConnection/modem') or \
+               (interface == NM + '.Device' and method == 'Disconnect' and path == BASE + '/Devices/modem'):
+                return self.mobile_data(invocation, False)
+            if interface == NM + '.Settings.Connection' and path == MOBILE and MOBILE in self.settings and \
+               method in ('Update', 'UpdateUnsaved', 'Update2'):
+                new = args.unpack()[0]
+                current = self.settings[MOBILE]
+                # Update replaces the settings: absent keys take NetworkManager's defaults.
+                home_only = new.get('gsm', {}).get('home-only', False)
+                if home_only != current['gsm']['home-only'].unpack():
+                    return invocation.return_dbus_error(NM + '.Settings.Connection.NotSupported', 'Data roaming is set in Android settings')
+                autoconnect = new.get('connection', {}).get('autoconnect', True)
+                done = (lambda: ('a{sv}', {})) if method == 'Update2' else (lambda: ('',))
+                if autoconnect == current['connection']['autoconnect'].unpack():
+                    sig, *values = done()
+                    return invocation.return_value(V('(' + sig + ')', tuple(values)))
+                return self.mobile_data(invocation, autoconnect, done)
             if (interface == NM and method == 'DeactivateConnection' and args.unpack()[0] == BASE + '/ActiveConnection/wifi') or \
                (interface == NM + '.Device' and method == 'Disconnect' and path == BASE + '/Devices/wifi'):
                 return self.wifi_action(invocation, {'action': 'disconnect'}, lambda: ('',), timeout=25)
@@ -698,12 +799,13 @@ class Bridge:
 def main():
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
     bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
+    # Objects first: a client enumerating as soon as the name appears finds them.
+    bridge = Bridge(bus)
     # Never replace a real NetworkManager or another bridge instance.
     result = bus.call_sync('org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus', 'RequestName',
                           V('(su)', (NM, 4)), V('(u)', (0,)).get_type(), Gio.DBusCallFlags.NONE, 3000, None)
     if result.unpack()[0] != 1:
         raise SystemExit('NetworkManager bus name is already owned')
-    bridge = Bridge(bus)
     loop = GLib.MainLoop()
     def stop():
         bridge.alive = False

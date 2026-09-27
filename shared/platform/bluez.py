@@ -328,12 +328,13 @@ class Bridge:
 def main():
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
     bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
+    # Objects first: a client enumerating as soon as the name appears finds them.
+    bridge = Bridge(bus)
     # Never replace a real bluetoothd or another bridge instance.
     result = bus.call_sync('org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus', 'RequestName',
                            V('(su)', (BLUEZ, 4)), V('(u)', (0,)).get_type(), Gio.DBusCallFlags.NONE, 3000, None)
     if result.unpack()[0] != 1:
         raise SystemExit('org.bluez is already owned')
-    bridge = Bridge(bus)
     loop = GLib.MainLoop()
 
     def stop():

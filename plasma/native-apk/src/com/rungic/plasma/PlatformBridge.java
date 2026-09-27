@@ -33,7 +33,8 @@ final class PlatformBridge implements Closeable {
     private final CaptureBridge capture;
     private final OcrBridge ocr;
     private final AndroidBluetoothBridge bluetooth;
-    PlatformBridge(Activity activity,CaptureBridge capture) { this.activity=activity;this.capture=capture;path=new File(activity.getFilesDir(),"tmp/platform.sock");network=new AndroidNetworkBridge(activity);bluetooth=new AndroidBluetoothBridge(activity,network);ocr=new OcrBridge(activity); }
+    private final AndroidTelephonyBridge telephony;
+    PlatformBridge(Activity activity,CaptureBridge capture) { this.activity=activity;this.capture=capture;path=new File(activity.getFilesDir(),"tmp/platform.sock");network=new AndroidNetworkBridge(activity);bluetooth=new AndroidBluetoothBridge(activity,network);telephony=new AndroidTelephonyBridge(activity,network);ocr=new OcrBridge(activity); }
     void start() throws IOException {
         if(running)return;
         path.delete();
@@ -82,6 +83,13 @@ final class PlatformBridge implements Closeable {
                         JSONObject result;
                         try { result=bluetooth.handle(request); }
                         catch(Exception e) { result=new JSONObject().put("error",e.getMessage()==null?"Bluetooth request failed":e.getMessage()); }
+                        client.getOutputStream().write((result.toString()+"\n").getBytes(StandardCharsets.UTF_8));
+                        continue;
+                    }
+                    if(request.optString("op").equals("telephony")) {
+                        JSONObject result;
+                        try { result=telephony.handle(request); }
+                        catch(Exception e) { result=new JSONObject().put("error",e.getMessage()==null?"Telephony request failed":e.getMessage()); }
                         client.getOutputStream().write((result.toString()+"\n").getBytes(StandardCharsets.UTF_8));
                         continue;
                     }

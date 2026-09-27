@@ -1,4 +1,4 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.rungic.plasma" android:versionCode="50" android:versionName="2.2">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.rungic.plasma" android:versionCode="51" android:versionName="2.3">
   <uses-sdk android:minSdkVersion="30" android:targetSdkVersion="35" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
@@ -9,6 +9,8 @@
   <!-- Bluetooth discovery for the Linux side (docs/73); bonded devices come from a root helper. -->
   <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
   <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+  <!-- SIM, operator and signal for the Linux side's ModemManager service (docs/73). -->
+  <uses-permission android:name="android.permission.READ_PHONE_STATE" />
   <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
   <uses-permission android:name="android.permission.VIBRATE" />
   <!-- Cast display: an overlay window above the vendor taskbar that never takes focus (docs/58). -->

@@ -7,6 +7,7 @@ install -Dm644 "$SRC/plasma/mozilla.pref" "$DESTDIR/etc/apt/preferences.d/mozill
 install -Dm644 "$SRC/plasma/wireplumber-android.conf" "$DESTDIR/etc/wireplumber/wireplumber.conf.d/60-rungic-android.conf"
 install -Dm644 "$SRC/plasma/network-manager.conf" "$DESTDIR/etc/dbus-1/system.d/rungic-android-network.conf"
 install -Dm644 "$SRC/plasma/bluetooth.conf" "$DESTDIR/etc/dbus-1/system.d/rungic-android-bluetooth.conf"
+install -Dm644 "$SRC/plasma/modem-manager.conf" "$DESTDIR/etc/dbus-1/system.d/rungic-android-modem.conf"
 install -Dm644 "$SRC/plasma/gpu-env" "$DESTDIR/etc/plasma/gpu-env"
 install -Dm644 "$SRC/plasma/pulse.pa" "$DESTDIR/etc/plasma/pulse.pa"
 install -Dm755 "$SRC/plasma/policy-rc.d" "$DESTDIR/usr/sbin/policy-rc.d"

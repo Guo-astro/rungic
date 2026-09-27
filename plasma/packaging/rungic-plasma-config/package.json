@@ -11,6 +11,7 @@
     "plasma/wireplumber-android.conf",
     "plasma/network-manager.conf",
     "plasma/bluetooth.conf",
+    "plasma/modem-manager.conf",
     "plasma/gpu-env",
     "plasma/pulse.pa",
     "plasma/policy-rc.d"

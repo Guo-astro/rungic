@@ -1,0 +1,12 @@
+[Unit]
+Description=Android mobile network for the Plasma desktop (ModemManager D-Bus subset, docs/73)
+After=dbus.service
+Requires=dbus.service
+
+[Service]
+ExecStart=/usr/libexec/rungic-android-modem
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

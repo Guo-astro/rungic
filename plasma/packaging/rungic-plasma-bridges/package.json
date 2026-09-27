@@ -12,6 +12,7 @@
     "shared/media/camera-source.cpp",
     "plasma/rungic-plasma-network.service",
     "plasma/rungic-plasma-bluetooth.service",
+    "plasma/rungic-plasma-modem.service",
     "plasma/rungic-plasma-media.service",
     "plasma/rungic-plasma-clipboard.service"
   ],
@@ -23,11 +24,13 @@
     "pkgconf",
     "g++"
   ],
-  "description": "Plasma Mobile on Android: Android bridges\nThe Android device panel, clipboard, Wi-Fi and network for NetworkManager clients,\nBluetooth for BlueZ clients (bluedevil), the\nmicrophone and camera bridge (PipeWire camera sources from Android frames) and the\naudio route switch.",
+  "description": "Plasma Mobile on Android: Android bridges\nThe Android device panel, clipboard, Wi-Fi and network for NetworkManager clients,\nBluetooth for BlueZ clients (bluedevil), the mobile network
+for ModemManager clients, the\nmicrophone and camera bridge (PipeWire camera sources from Android frames) and the\naudio route switch.",
   "units": {
     "system": [
       "rungic-plasma-network.service",
-      "rungic-plasma-bluetooth.service"
+      "rungic-plasma-bluetooth.service",
+      "rungic-plasma-modem.service"
     ],
     "user": [
       "rungic-plasma-media.service",
