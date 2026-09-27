@@ -1,0 +1,73 @@
+From: kevinzhow <kevinzhow@local>
+Date: Sun, 27 Sep 2026 19:40:00 +0900
+Subject: Rfkill: without /dev/rfkill, Bluetooth is unblocked, not unknown
+
+Without an rfkill interface nothing can block Bluetooth, yet the state stayed Unknown, which
+bluedevil reads as "no Bluetooth hardware": its settings page said "No Bluetooth adapters found"
+and hid the switch while BlueZ published a powered adapter. That is the case of a controller owned
+by another system behind a BlueZ D-Bus service (the Android host, docs/73; the container has no
+/dev/rfkill, and Android's bt_power rfkill does not follow its Bluetooth switch). When /dev/rfkill
+does not exist the state is Unblocked and block/unblock do nothing; clients power the adapters
+themselves (bluedevil does both). Other open failures keep the old behaviour.
+
+Forwarded: no
+Last-Update: 2026-09-27
+X-Rungic-Status: Inappropriate [platform choice: a system without rfkill; upstream assumes a kernel-managed controller]
+X-Rungic-Tests: L3:bluetooth settings page (manual)
+X-Rungic-Docs: docs/73
+---
+ src/rfkill.cpp | 14 ++++++++++++++
+ src/rfkill_p.h |  1 +
+ 2 files changed, 15 insertions(+)
+
+diff --git a/src/rfkill.cpp b/src/rfkill.cpp
+index 2a050fe..1b10b35 100644
+--- a/src/rfkill.cpp
++++ b/src/rfkill.cpp
+@@ -12,6 +12,7 @@
+ #include "debug.h"
+ 
+ #ifdef Q_OS_LINUX
++#include <errno.h>
+ #include <fcntl.h>
+ #include <stdint.h>
+ #include <string.h>
+@@ -172,6 +173,16 @@ void Rfkill::init()
+ #ifdef Q_OS_LINUX
+     d->m_readFd = ::open("/dev/rfkill", O_RDONLY | O_CLOEXEC);
+ 
++    if (d->m_readFd == -1 && errno == ENOENT) {
++        // No rfkill interface at all: no kill switch can block Bluetooth. Reporting Unknown instead
++        // reads as "no Bluetooth hardware" to clients (bluedevil), although adapters may be there,
++        // e.g. a controller that another system owns behind a BlueZ D-Bus service.
++        qCDebug(BLUEZQT) << "No /dev/rfkill: Bluetooth is not blocked by any switch";
++        d->m_noDevice = true;
++        d->m_state = Unblocked;
++        return;
++    }
++
+     if (d->m_readFd == -1) {
+         qCWarning(BLUEZQT) << "Cannot open /dev/rfkill for reading!";
+         return;
+@@ -258,6 +269,9 @@ void Rfkill::setSoftBlock(quint8 soft)
+ #ifndef Q_OS_LINUX
+     Q_UNUSED(soft)
+ #else
++    if (d->m_noDevice) {
++        return; // nothing to switch; clients power the adapters themselves
++    }
+     if (!d->m_thread) {
+         d->m_thread = new RfkillThread(this);
+     }
+diff --git a/src/rfkill_p.h b/src/rfkill_p.h
+index 861ddef..fb97c46 100644
+--- a/src/rfkill_p.h
++++ b/src/rfkill_p.h
+@@ -47,6 +47,7 @@ struct RfkillPrivate {
+     Rfkill::State m_state = Rfkill::State::Unknown;
+     QHash<quint32, Rfkill::State> m_devices;
+     RfkillThread *m_thread = nullptr;
++    bool m_noDevice = false; // no /dev/rfkill: nothing blocks Bluetooth
+ };
+ 
+ } // namespace BluezQt

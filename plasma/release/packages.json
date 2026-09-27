@@ -68,6 +68,15 @@
         "plasma-settings"
       ]
     },
+    "kf6-bluez-qt": {
+      "source": "packages/kf6-bluez-qt",
+      "packages": [
+        "libkf6bluezqt6",
+        "libkf6bluezqt-data",
+        "libkf6bluezqt-dev",
+        "qml6-module-org-kde-bluezqt"
+      ]
+    },
     "kwayland": {
       "source": "packages/kwayland",
       "packages": [
@@ -145,6 +154,7 @@
     "libplasmaquick7"
   ],
   "session_restart": [
+    "libkf6bluezqt6",
     "libkwaylandclient6",
     "kwin-*",
     "libkwin6",

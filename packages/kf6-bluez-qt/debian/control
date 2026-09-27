@@ -1,0 +1,93 @@
+Source: kf6-bluez-qt
+Section: libs
+Priority: optional
+Maintainer: Kubuntu Developers <kubuntu-devel@lists.ubuntu.com>
+XSBC-Original-Maintainer: Debian Qt/KDE Maintainers <debian-qt-kde@lists.debian.org>
+Uploaders: Aurélien COUDERC <coucouf@debian.org>,
+           Patrick Franz <deltaone@debian.org>,
+Build-Depends: cmake (>= 3.16~),
+               dbus-x11 <!nocheck>,
+               debhelper-compat (= 13),
+               dh-sequence-kf6,
+               dh-sequence-pkgkde-symbolshelper,
+               dh-sequence-qmldeps,
+               doxygen,
+               extra-cmake-modules (>= 6.24.0~),
+               libxkbcommon-dev,
+               pkgconf,
+               qml6-module-qtqml-workerscript <!nocheck>,
+               qml6-module-qtquick-window <!nocheck>,
+               qml6-module-qttest <!nocheck>,
+               qt6-base-dev (>= 6.8.0+dfsg~),
+               qt6-declarative-dev (>= 6.8.0+dfsg~),
+               qt6-tools-dev (>= 6.8.0~),
+               systemd-dev,
+               xauth <!nocheck>,
+               xvfb <!nocheck>,
+Standards-Version: 4.7.0
+Homepage: https://invent.kde.org/frameworks/bluez-qt
+Vcs-Git: https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-bluez-qt
+Vcs-Browser: https://code.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-bluez-qt
+Rules-Requires-Root: no
+
+Package: libkf6bluezqt-data
+Architecture: all
+Multi-Arch: foreign
+Depends: ${misc:Depends},
+Description: data files for bluez-qt
+ bluez-qt is a Qt-style library for accessing the bluez Bluetooth stack.
+ .
+ It is used by the KDE Bluetooth stack, BlueDevil.
+ .
+ This package contains the data files.
+
+Package: libkf6bluezqt-dev
+Section: libdevel
+Architecture: linux-any
+Depends: libkf6bluezqt6 (= ${binary:Version}),
+         qml6-module-org-kde-bluezqt (= ${binary:Version}),
+         qt6-base-dev (>= 6.8.0+dfsg~),
+         ${misc:Depends},
+Recommends: libkf6bluezqt-doc (= ${source:Version}),
+Description: development files for bluez-qt
+ This package provides all the necessary development headers for building
+ software that uses the bluez-qt library.
+ .
+ This package contains the development files.
+
+Package: libkf6bluezqt-doc
+Section: doc
+Architecture: all
+Multi-Arch: foreign
+Depends: ${misc:Depends},
+Description: documentation files for bluez-qt
+ bluez-qt is a Qt-style library for accessing the bluez Bluetooth stack.
+ .
+ It is used by the KDE Bluetooth stack, BlueDevil.
+ .
+ This package contains the qch documentation files.
+
+Package: libkf6bluezqt6
+Architecture: linux-any
+Multi-Arch: same
+Pre-Depends: ${misc:Pre-Depends},
+Depends: libkf6bluezqt-data (= ${source:Version}),
+         ${misc:Depends},
+         ${shlibs:Depends},
+Description: Qt wrapper for bluez
+ bluez-qt is a Qt-style library for accessing the bluez Bluetooth stack.
+ .
+ It is used by the KDE Bluetooth stack, BlueDevil.
+
+Package: qml6-module-org-kde-bluezqt
+Architecture: linux-any
+Multi-Arch: same
+Depends: ${misc:Depends},
+         ${qml6:Depends},
+         ${shlibs:Depends},
+Description: QML wrapper for bluez
+ bluez-qt is a Qt-style library for accessing the bluez Bluetooth stack.
+ .
+ It is used by the KDE Bluetooth stack, BlueDevil.
+ .
+ This package contains the QML module for bluez-qt.

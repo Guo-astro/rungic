@@ -1,0 +1,4 @@
+usr/include/KF6/BluezQt/
+usr/lib/*/cmake/KF6BluezQt/
+usr/lib/*/libKF6BluezQt.so
+usr/lib/*/pkgconfig/KF6BluezQt.pc

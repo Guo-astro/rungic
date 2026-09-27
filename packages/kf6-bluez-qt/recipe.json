@@ -1,0 +1,15 @@
+{
+ "comment": "Pinned upstream of the kf6-bluez-qt source package (docs/71, docs/73): Ubuntu's 6.24.0-0ubuntu1; packages/kf6-bluez-qt/debian replaces its debian/ (Ubuntu's packaging plus our patches under debian/patches/rungic).",
+ "kind": "ubuntu",
+ "source": "kf6-bluez-qt",
+ "version": "6.24.0-0ubuntu1",
+ "series": "resolute",
+ "upstream": "https://invent.kde.org/frameworks/bluez-qt",
+ "licenses": "see LICENSES",
+ "files": {
+  "kf6-bluez-qt_6.24.0-0ubuntu1.dsc": "b6ecb3b53b2e36a330c2c7bf93f0d988d2d40bc911ef90203d23ee195d8e508d",
+  "kf6-bluez-qt_6.24.0.orig.tar.xz": "907cf77ca2bf0417dad49ac3ebfe51300102029b93520dce5cfa5c35e25e5ab3",
+  "kf6-bluez-qt_6.24.0-0ubuntu1.debian.tar.xz": "7251d8c5e4d75f7e23724bea374e961b3927b43917ffd95dcb8c8c0b1a593fdb"
+ },
+ "fetch": "https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/kf6-bluez-qt/6.24.0-0ubuntu1/{file}"
+}
