@@ -147,6 +147,7 @@ KWin CAST-1 ─────┤
 
 ### 实机验收（2026-09-28，APK 2.7、KWin +rungic4、plasma-mobile +rungic3）
 
+- **版本说明**：实测所用 APK 的宿主代码与 2.7 相同，但在合并远端首次启动改动（同样编为 2.6 的另一版）之前构建，当时编号为 2.6；2.7 只做了构建检查。
 - **测试应用**：GTK4 帧时钟动画（`.work/diag/fullscreen-pause/anim.py`，每个 tick 移动一个方块，自己统计每秒绘制的帧数），放在助理屏上。另用 gst 共享内存动画模拟手机上的动画。CAST-1 与手机相邻（x=360）。
 - **结果**（单核 CPU）：
 
@@ -160,6 +161,8 @@ KWin CAST-1 ─────┤
 
   - 改动前，收边状态下助理屏 60 fps：KWin 37–55%，SurfaceFlinger 27–33%，APK 34–37%，GPU 41–51%，手机每秒被多呈现约 100 次。
   - 不开助理屏时，手机上 60 fps 的动画每秒渲染 60.2 次，和内容帧率一致；空闲时为 0。
+- **浮窗上报**（rungic-agent-screen 0.283）：用滑动把浮窗甩到边缘后，平台桥显示 `watched:false`，宿主自动切到 `cast=200ms`；点标签展开后变回 `watched:true`，立即恢复全速，画面正常。
+- **会话修复**（rungic-plasma-session 0.283）：连续两次重装 APK 让宿主重启，plasmashell 都是移动版。日志顺序为旧会话的 `startplasma-wayland: Shutting down` 在前，新会话的 `plasma-mobile-envmanager` 在后；修复前正好相反。其间多次重启会话，助理屏始终只有一个桌面面板（plasma-mobile +rungic3 的防重复修复）。
 - **说明**：没有显示端但有人看的时候，助理屏现在约 80 fps，超过名义上的 60 Hz（以前约 42 fps，因为反馈要等到下一轮才发出）。宿主在没有显示端时收到帧就立即回“已呈现”，KWin 于是尽快画下一帧。浮窗以手机 120 Hz 显示，画面更流畅，但比以前多耗电；是否把这种状态限到 60 Hz，待定。
 
 ## 待办
