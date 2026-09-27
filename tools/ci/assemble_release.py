@@ -154,6 +154,8 @@ def main():
     files = {str(path.relative_to(output)): {"sha256": sha256(path), "bytes": path.stat().st_size}
              for path in sorted(output.rglob("*")) if path.is_file()}
     manifest = {"schema_version": 1, "release_id": args.release_id,
+                "composer_commit": subprocess.check_output(
+                    ["git", "rev-parse", "HEAD"], cwd=Path(__file__).resolve().parents[2], text=True).strip(),
                 "target_serial": args.serial, "device_spec_sha256": sha256(args.spec),
                 "device_spec_id": spec["id"], "product_partition_bytes": partition_bytes,
                 "fastboot_bootloader_value": args.fastboot_bootloader_value,
