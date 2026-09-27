@@ -88,6 +88,8 @@ GENERATED = [
     '/etc/ssh/sshd_config', '/etc/ssh/sshd_config.d/*cloudimg*', '/etc/sysctl.d/*cloudimg*',
     '/etc/systemd/*.conf.d/*cloudimg*', '/usr/sbin/grub-probe', '/usr/share/fonts/X11/*/fonts.*',
     '/usr/share/fonts/X11/*/encodings.dir', '/usr/bin/wechat',
+    # The installed release's exact pins, written by each deploy (tools/rungic_release.py, docs/61).
+    '/etc/apt/preferences.d/rungic-release',
     # screen's postinst (the file says so).
     '/usr/lib/systemd/system/screen-cleanup.service', '/etc/tmpfiles.d/screen-cleanup.conf',
 ]
