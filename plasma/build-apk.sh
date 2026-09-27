@@ -17,22 +17,28 @@ mkdir -p "$task_build/classes" "$task_build/dex"
 task_ocr=$task_build/ocr
 rm -rf "$task_ocr" "$task_build/assets"
 cp -r "$task_root/plasma/native-apk/assets" "$task_build/assets"
-# On-device OCR (docs/64) is optional and off by default (docs/73): its LiteRT runtime and models are
-# most of the APK's size, and the Linux side reads text on the CPU (RapidOCR) when the APK has none.
-# RUNGIC_APK_OCR=1 builds it in: LiteRT and PP-OCRv6 pinned in provenance/ocr-20260925, and
-# librungicocr.so built with the NDK (RUNGIC_ANDROID_NDK, else the newest under $task_sdk/ndk).
-if [ "${RUNGIC_APK_OCR:-0}" = 1 ]; then
+# On-device OCR (docs/64, docs/73), RUNGIC_APK_OCR:
+#   runtime (default)  LiteRT and librungicocr.so in the APK; the APK downloads the PP-OCRv6 models
+#                      (~77 MB, pinned in provenance/ocr-20260925) on first use
+#   bundle             the models in the APK as well (~86 MB)
+#   none               no OCR: the Linux side reads text on the CPU (RapidOCR)
+# librungicocr.so is built with the NDK (RUNGIC_ANDROID_NDK, else the newest under $task_sdk/ndk).
+task_apk_ocr=${RUNGIC_APK_OCR:-runtime}
+case $task_apk_ocr in runtime|bundle|none) ;; *) echo "RUNGIC_APK_OCR: runtime, bundle or none" >&2; exit 2 ;; esac
+if [ "$task_apk_ocr" != none ]; then
     task_ndk=${RUNGIC_ANDROID_NDK:-$(ls -d "$task_sdk"/ndk/* 2>/dev/null | sort -V | tail -1)}
-    python3 "$task_root/tools/fetch_ocr_assets.py" "$task_ocr"
+    task_clang=$task_ndk/toolchains/llvm/prebuilt/linux-x86_64/bin
+    python3 "$task_root/tools/fetch_ocr_assets.py" "$task_ocr" $([ "$task_apk_ocr" = bundle ] && echo --models)
     mkdir -p "$task_ocr/include/litert/build_common"
     # LiteRT's C API headers from its pinned source (packages/litert, docs/71).
     task_litert=$task_build/litert
     python3 "$task_root/tools/pq.py" source litert --output "$task_litert" >/dev/null
     cp "$task_litert/litert/build_common/config/build_config_gpu.h" "$task_ocr/include/litert/build_common/build_config.h"
-    "$task_ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android30-clang++" -std=c++17 -O2 -fPIC -shared \
+    "$task_clang/aarch64-linux-android30-clang++" -std=c++17 -O2 -fPIC -shared \
         -Wall -Wextra -Wno-unused-parameter -I"$task_ocr/include" -I"$task_litert" \
         -o "$task_ocr/lib/arm64-v8a/librungicocr.so" "$task_root"/plasma/native-apk/jni/ocr/{ppocr,jni}.cc \
         -L"$task_ocr/lib/arm64-v8a" -lLiteRt -llog -static-libstdc++ -Wl,--no-undefined
+    "$task_clang/llvm-strip" --strip-unneeded "$task_ocr/lib/arm64-v8a/librungicocr.so"
     cp -r "$task_ocr/assets/ocr" "$task_build/assets/ocr"
 fi
 cd "$task_root/plasma/native-apk"

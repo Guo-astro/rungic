@@ -6,7 +6,8 @@ phone screen. PP-OCRv5 mobile on the Linux CPU (RapidOCR on onnxruntime, about 2
 when the bridge cannot answer.
 
 Request (platform.sock): one JSON line {"op": "ocr", "width", "height", "format": "rgb", "bytes",
-"det_scale"} followed by the raw RGB pixels, row by row. Reply: one JSON line {"lines": [{"text",
+"det_scale", "proxy"} followed by the raw RGB pixels, row by row. While the APK is still downloading its
+models (first use, docs/73) it answers with an error at once, and the CPU reads the text. Reply: one JSON line {"lines": [{"text",
 "score", "box": [x1, y1, x2, y2]}], "ms": {...}} in the image's own pixels, or {"error": ...}.
 The detector reads text best at about 1.5 image pixels per screen point, hence det_scale.
 """
@@ -43,7 +44,9 @@ def recognize(image: Image.Image, scale: float = 1.0) -> list[Line]:
 def android(image: Image.Image, det_scale: float) -> list[Line]:
     rgb = image.convert("RGB")
     data = rgb.tobytes()
-    header = {"op": "ocr", "width": rgb.width, "height": rgb.height, "format": "rgb", "bytes": len(data),
+    # The APK downloads its models on first use (docs/73) through this side's proxy, if there is one.
+    proxy = os.environ.get("https_proxy") or os.environ.get("HTTPS_PROXY") or ""
+    header = {"op": "ocr", "width": rgb.width, "height": rgb.height, "format": "rgb", "bytes": len(data), "proxy": proxy,
               "det_scale": round(det_scale, 4)}
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
         conn.settimeout(TIMEOUT)

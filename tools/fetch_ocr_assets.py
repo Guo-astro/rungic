@@ -2,10 +2,12 @@
 """Fetch the APK's OCR runtime and models (docs/64) into .work/cache/ocr and stage them.
 
 Downloads the files pinned in provenance/ocr-20260925/sources.json (verifying SHA-256), then
-writes OUT/lib/arm64-v8a/libLiteRt*.so and OUT/assets/ocr/{det,rec_*}.tflite, classes.txt.
-Uses $https_proxy if set; retries through http://192.168.5.45:6152 otherwise.
+writes OUT/lib/arm64-v8a/libLiteRt*.so and OUT/assets/ocr/sources.json (the models' pinned URLs,
+for the APK to download them on first use, docs/73); with --models also the models themselves,
+OUT/assets/ocr/{det,rec_*}.tflite, classes.txt and LICENSE. Uses $https_proxy if set; retries
+through http://192.168.5.45:6152 otherwise.
 
-  tools/fetch_ocr_assets.py OUT
+  tools/fetch_ocr_assets.py OUT [--models]
 """
 import hashlib
 import json
@@ -34,10 +36,12 @@ def download(url: str, path: Path) -> None:
     raise SystemExit(f"could not download {url}")
 
 
-def fetch() -> dict[str, Path]:
+def fetch(names) -> dict[str, Path]:
     CACHE.mkdir(parents=True, exist_ok=True)
     out = {}
     for name, entry in json.loads(SOURCES.read_text())["files"].items():
+        if name not in names:
+            continue
         path = CACHE / name
         if not path.exists() or hashlib.sha256(path.read_bytes()).hexdigest() != entry["sha256"]:
             download(entry["url"], path)
@@ -48,9 +52,14 @@ def fetch() -> dict[str, Path]:
     return out
 
 
+MODELS = ("det.tflite", "rec_320.tflite", "rec_640.tflite", "rec_960.tflite", "characters.json",
+          "LICENSE-PP-OCRv6-Small-LiteRT")
+
+
 def main() -> None:
     out = Path(sys.argv[1])
-    files = fetch()
+    bundle = "--models" in sys.argv[2:]
+    files = fetch(("litert-2.2.0.aar",) + (MODELS if bundle else ()))
     lib = out / "lib/arm64-v8a"
     assets = out / "assets/ocr"
     lib.mkdir(parents=True, exist_ok=True)
@@ -58,12 +67,17 @@ def main() -> None:
     with zipfile.ZipFile(files["litert-2.2.0.aar"]) as aar:
         for so in ("libLiteRt.so", "libLiteRtClGlAccelerator.so"):
             (lib / so).write_bytes(aar.read(f"jni/arm64-v8a/{so}"))
-    for name in ("det.tflite", "rec_320.tflite", "rec_640.tflite", "rec_960.tflite"):
-        shutil.copyfile(files[name], assets / name)
-    classes = json.loads(files["characters.json"].read_text(encoding="utf-8"))
-    assert all("\n" not in c for c in classes)
-    (assets / "classes.txt").write_text("\n".join(classes) + "\n", encoding="utf-8")
-    shutil.copyfile(files["LICENSE-PP-OCRv6-Small-LiteRT"], assets / "LICENSE")
+    pinned = json.loads(SOURCES.read_text())["files"]
+    # The APK downloads these on first use (OcrBridge), checked by SHA-256.
+    (assets / "sources.json").write_text(json.dumps(
+        {"files": {name: {k: pinned[name][k] for k in ("url", "sha256")} for name in MODELS}}, indent=1) + "\n")
+    if bundle:
+        for name in ("det.tflite", "rec_320.tflite", "rec_640.tflite", "rec_960.tflite"):
+            shutil.copyfile(files[name], assets / name)
+        classes = json.loads(files["characters.json"].read_text(encoding="utf-8"))
+        assert all("\n" not in c for c in classes)
+        (assets / "classes.txt").write_text("\n".join(classes) + "\n", encoding="utf-8")
+        shutil.copyfile(files["LICENSE-PP-OCRv6-Small-LiteRT"], assets / "LICENSE")
     print(f"staged {lib} and {assets}")
 
 
