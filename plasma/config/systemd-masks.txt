@@ -27,6 +27,8 @@ system tpm-udev.path
 system tpm-udev.service
 system wpa_supplicant.service
 user plasma-powerdevil.service
+# bluez-obexd (pulled in by bluedevil): no Bluetooth controller in the container (docs/73).
+user obex.service
 # X11-only helpers; the session has no X server.
 user plasma-xembedsniproxy.service
 user plasma-gmenudbusmenuproxy.service

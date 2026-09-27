@@ -10,6 +10,7 @@
     "plasma/mozilla.pref",
     "plasma/wireplumber-android.conf",
     "plasma/network-manager.conf",
+    "plasma/bluetooth.conf",
     "plasma/gpu-env",
     "plasma/pulse.pa",
     "plasma/policy-rc.d"

@@ -66,7 +66,8 @@ final class AndroidNetworkBridge implements Closeable {
     private String wifiCommand(String operation,long timeoutMs) throws Exception {
         return rootShell("/system/bin/cmd wifi "+operation,timeoutMs);
     }
-    private synchronized String rootShell(String command,long timeoutMs) throws Exception {
+    // The app's one root session, also used by AndroidBluetoothBridge.
+    synchronized String rootShell(String command,long timeoutMs) throws Exception {
         // One private root session avoids a Magisk grant toast/process launch
         // on every status refresh.
         try {

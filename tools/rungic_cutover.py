@@ -180,7 +180,8 @@ cp {prefs_from} {data}/shared_prefs/MainActivity.xml
 chown {uid}:{uid} {data}/shared_prefs {data}/shared_prefs/MainActivity.xml
 chmod 771 {data}/shared_prefs; chmod 660 {data}/shared_prefs/MainActivity.xml
 chcon "$label" {data}/shared_prefs {data}/shared_prefs/MainActivity.xml''')
-    for permission in ('android.permission.CAMERA', 'android.permission.RECORD_AUDIO'):
+    for permission in ('android.permission.CAMERA', 'android.permission.RECORD_AUDIO',
+                       'android.permission.BLUETOOTH_SCAN', 'android.permission.BLUETOOTH_CONNECT'):
         root(f'pm grant {NEW_APK} {permission}')
     root(f'appops set {NEW_APK} SYSTEM_ALERT_WINDOW allow')
     root(f'magisk --sqlite "INSERT OR REPLACE INTO policies (uid,policy,until,logging,notification) '

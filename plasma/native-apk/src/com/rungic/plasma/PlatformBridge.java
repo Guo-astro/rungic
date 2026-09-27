@@ -32,7 +32,8 @@ final class PlatformBridge implements Closeable {
     private final AndroidNetworkBridge network;
     private final CaptureBridge capture;
     private final OcrBridge ocr;
-    PlatformBridge(Activity activity,CaptureBridge capture) { this.activity=activity;this.capture=capture;path=new File(activity.getFilesDir(),"tmp/platform.sock");network=new AndroidNetworkBridge(activity);ocr=new OcrBridge(activity); }
+    private final AndroidBluetoothBridge bluetooth;
+    PlatformBridge(Activity activity,CaptureBridge capture) { this.activity=activity;this.capture=capture;path=new File(activity.getFilesDir(),"tmp/platform.sock");network=new AndroidNetworkBridge(activity);bluetooth=new AndroidBluetoothBridge(activity,network);ocr=new OcrBridge(activity); }
     void start() throws IOException {
         if(running)return;
         path.delete();
@@ -75,6 +76,13 @@ final class PlatformBridge implements Closeable {
                         // The pixels follow the request line; recognition runs on the OCR thread (docs/64).
                         LocalSocket owned=client;client=null;
                         ocr.answer(owned,request);
+                        continue;
+                    }
+                    if(request.optString("op").equals("bluetooth")) {
+                        JSONObject result;
+                        try { result=bluetooth.handle(request); }
+                        catch(Exception e) { result=new JSONObject().put("error",e.getMessage()==null?"Bluetooth request failed":e.getMessage()); }
+                        client.getOutputStream().write((result.toString()+"\n").getBytes(StandardCharsets.UTF_8));
                         continue;
                     }
                     if(request.optString("op").equals("screen-timeout")) {

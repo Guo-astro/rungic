@@ -1,0 +1,12 @@
+[Unit]
+Description=Android Bluetooth for the Plasma desktop (BlueZ D-Bus subset, docs/73)
+After=dbus.service
+Requires=dbus.service
+
+[Service]
+ExecStart=/usr/libexec/rungic-android-bluetooth
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

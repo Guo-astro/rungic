@@ -11,10 +11,11 @@
     "shared/media/audio-route.py",
     "shared/media/camera-source.cpp",
     "plasma/rungic-plasma-network.service",
+    "plasma/rungic-plasma-bluetooth.service",
     "plasma/rungic-plasma-media.service",
     "plasma/rungic-plasma-clipboard.service"
   ],
-  "depends": "rungic-plasma-config, python3, python3-gi, python3-dbus, gir1.2-adw-1, pulseaudio-utils, pipewire",
+  "depends": "rungic-plasma-config, python3, python3-gi, python3-dbus, gir1.2-adw-1, pulseaudio-utils, pipewire, bluedevil",
   "build_depends": [
     "libpipewire-0.3-dev",
     "libjson-glib-dev",
@@ -22,10 +23,11 @@
     "pkgconf",
     "g++"
   ],
-  "description": "Plasma Mobile on Android: Android bridges\nThe Android device panel, clipboard, network state for NetworkManager clients, the\nmicrophone and camera bridge (PipeWire camera sources from Android frames) and the\naudio route switch.",
+  "description": "Plasma Mobile on Android: Android bridges\nThe Android device panel, clipboard, Wi-Fi and network for NetworkManager clients,\nBluetooth for BlueZ clients (bluedevil), the\nmicrophone and camera bridge (PipeWire camera sources from Android frames) and the\naudio route switch.",
   "units": {
     "system": [
-      "rungic-plasma-network.service"
+      "rungic-plasma-network.service",
+      "rungic-plasma-bluetooth.service"
     ],
     "user": [
       "rungic-plasma-media.service",
