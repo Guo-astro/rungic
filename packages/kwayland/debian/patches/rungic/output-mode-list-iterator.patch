@@ -1,0 +1,59 @@
+From: kevinzhow <kevinzhow@local>
+Date: Sun, 27 Sep 2026 18:10:23 +0900
+Subject: Output: update the mode list without a dangling iterator
+
+A wl_output "current" mode event that repeats a known size and refresh rate removes the older
+entry while an iterator to the new, last entry is kept. Since Qt 6 QList is an array: the erase
+invalidates that iterator, the loop no longer stops at it and walks past the end. Compositors send
+exactly that when an output's refresh rate or mode changes; plasmashell crashed in
+Output::Mode::operator= (2026-09-27, display.mode/display.refresh acceptance, quick settings).
+The list is walked by index up to the new last entry. Upstream master (2026-09-24) still has the
+loop; 9affe9f only replaced the stored current-mode iterator.
+
+Forwarded: no
+Last-Update: 2026-09-27
+X-Rungic-Status: Pending [a plain bug; not fixed upstream as of 2026-09-24]
+X-Rungic-Tests: L3:display.refresh L3:recording.quicksetting
+X-Rungic-Docs: docs/73
+---
+ src/client/output.cpp | 16 +++++++++-------
+ 1 file changed, 9 insertions(+), 7 deletions(-)
+
+diff --git a/src/client/output.cpp b/src/client/output.cpp
+index 79a2684..ebf7ee4 100644
+--- a/src/client/output.cpp
++++ b/src/client/output.cpp
+@@ -213,24 +213,26 @@ void Output::Private::addMode(uint32_t flags, int32_t width, int32_t height, int
+     if (flags & WL_OUTPUT_MODE_PREFERRED) {
+         mode.flags |= Mode::Flag::Preferred;
+     }
+-    auto currentIt = modes.insert(modes.end(), mode);
++    modes.append(mode);
+     bool existing = false;
+     if (flags & WL_OUTPUT_MODE_CURRENT) {
+-        auto it = modes.begin();
+-        while (it != currentIt) {
+-            auto &m = (*it);
++        // By index: erasing from a Qt 6 QList invalidates the iterators after the erased element,
++        // so an iterator to the new (last) mode would be left dangling and the loop would run past
++        // the end. The new mode stays last.
++        for (qsizetype i = 0; i < modes.size() - 1;) {
++            auto &m = modes[i];
+             if (m.flags.testFlag(Mode::Flag::Current)) {
+                 m.flags &= ~Mode::Flags(Mode::Flag::Current);
+                 Q_EMIT q->modeChanged(m);
+             }
+             if (m.refreshRate == mode.refreshRate && m.size == mode.size) {
+-                it = modes.erase(it);
++                modes.removeAt(i);
+                 existing = true;
+             } else {
+-                it++;
++                i++;
+             }
+         }
+-        currentMode = *currentIt;
++        currentMode = modes.last();
+     }
+     if (existing) {
+         Q_EMIT q->modeChanged(mode);

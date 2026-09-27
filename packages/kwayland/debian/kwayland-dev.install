@@ -1,0 +1,4 @@
+usr/include/KWayland/
+usr/lib/*/cmake/KWayland/
+usr/lib/*/libKWaylandClient.so
+usr/lib/*/pkgconfig/KWaylandClient.pc

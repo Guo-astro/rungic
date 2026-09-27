@@ -1,0 +1,71 @@
+Source: kwayland
+Section: libs
+Priority: optional
+Maintainer: Kubuntu Developers <kubuntu-devel@lists.ubuntu.com>
+XSBC-Original-Maintainer: Debian Qt/KDE Maintainers <debian-qt-kde@lists.debian.org>
+Uploaders: Aurélien COUDERC <coucouf@debian.org>,
+           Patrick Franz <deltaone@debian.org>,
+Build-Depends: cmake (>= 3.16~),
+               debhelper-compat (= 13),
+               dh-sequence-kf6,
+               dh-sequence-pkgkde-symbolshelper,
+               doxygen (>= 1.8.13~),
+               extra-cmake-modules (>= 6.22.0~),
+               libegl-dev,
+               libwayland-dev (>= 1.15~),
+               pkgconf,
+               plasma-wayland-protocols (>= 1.19.0~),
+               qt6-base-dev (>= 6.10.0~),
+               qt6-base-private-dev (>= 6.10.0~),
+               qt6-tools-dev (>= 6.10.0~),
+               qt6-wayland-dev (>= 6.10.0~),
+               qt6-wayland-private-dev (>= 6.10.0~),
+               wayland-protocols (>= 1.15~),
+Standards-Version: 4.7.0
+Homepage: https://invent.kde.org/frameworks/kwayland
+Vcs-Browser: https://code.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kwayland
+Vcs-Git: https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kwayland
+Rules-Requires-Root: no
+
+Package: kwayland6-data
+Architecture: all
+Multi-Arch: foreign
+Depends: ${misc:Depends},
+Description: Qt library wrapper for Wayland libraries - data files
+ KWayland provides a Qt-style Server library wrapper for
+ the Wayland libraries.
+
+Package: kwayland-dev
+Section: libdevel
+Architecture: any
+Depends: libkwaylandclient6 (= ${binary:Version}),
+         libwayland-dev (>= 1.13~),
+         qt6-base-dev (>= 6.10.0~),
+         ${misc:Depends},
+Recommends: kwayland-doc (= ${source:Version}),
+Description: development files for kwayland
+ KWayland provides a Qt-style Client and Server library wrapper for
+ the Wayland libraries.
+ .
+ Contains development files for kwayland.
+
+Package: kwayland-doc
+Architecture: all
+Multi-Arch: foreign
+Depends: ${misc:Depends},
+Description: Qt library wrapper for Wayland libraries (documentation)
+ KWayland provides a Qt-style Client and Server library wrapper for
+ the Wayland libraries.
+ .
+ This package contains the qch documentation files.
+Section: doc
+
+Package: libkwaylandclient6
+Architecture: any
+Multi-Arch: same
+Depends: kwayland6-data (= ${source:Version}),
+         ${misc:Depends},
+         ${shlibs:Depends},
+Description: Qt library wrapper for Wayland libraries
+ KWayland provides a Qt-style Client library wrapper for
+ the Wayland libraries.

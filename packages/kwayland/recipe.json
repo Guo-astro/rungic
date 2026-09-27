@@ -1,0 +1,15 @@
+{
+ "comment": "Pinned upstream of the kwayland source package (docs/71, docs/73): Ubuntu's 4:6.6.4-0ubuntu1; packages/kwayland/debian replaces its debian/ (Ubuntu's packaging plus our patches under debian/patches/rungic).",
+ "kind": "ubuntu",
+ "source": "kwayland",
+ "version": "4:6.6.4-0ubuntu1",
+ "series": "resolute",
+ "upstream": "https://invent.kde.org/plasma/kwayland",
+ "licenses": "see LICENSES",
+ "files": {
+  "kwayland_6.6.4-0ubuntu1.dsc": "9222caa3a15bb728e77233d58ee52a20319a6e16369ded8ea4bf2b8d44550c37",
+  "kwayland_6.6.4.orig.tar.xz": "75c4ad6743647b4a9737fddae2eddb7b0857afbef362e6b96465ccfb17c85f87",
+  "kwayland_6.6.4-0ubuntu1.debian.tar.xz": "9980483971340e70f4d012a9cee617b8e7cdfce8ca4c32454c794d9fb86d6f1c"
+ },
+ "fetch": "https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/kwayland/4:6.6.4-0ubuntu1/{file}"
+}

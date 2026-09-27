@@ -68,6 +68,14 @@
         "plasma-settings"
       ]
     },
+    "kwayland": {
+      "source": "packages/kwayland",
+      "packages": [
+        "libkwaylandclient6",
+        "kwayland6-data",
+        "kwayland-dev"
+      ]
+    },
     "plasma-keyboard": {
       "source": "packages/plasma-keyboard",
       "packages": [
@@ -137,6 +145,7 @@
     "libplasmaquick7"
   ],
   "session_restart": [
+    "libkwaylandclient6",
     "kwin-*",
     "libkwin6",
     "mesa-*",
