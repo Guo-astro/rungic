@@ -10,12 +10,15 @@ cc -O2 -g1 -Wall -o "$DESTDIR/usr/libexec/rungic-screenshot" "$C/screenshot/rung
     $(pkg-config --cflags --libs gio-unix-2.0)
 install -Dm644 "$C/screenshot/rungic-screenshot.desktop" "$DESTDIR/usr/share/applications/com.rungic.screenshot.desktop"
 # rungic-clicker: typesafe-computer-use in its own venv; the system site packages supply gi,
-# Pillow and onnxruntime. The pins are what was validated on the phone (docs/64).
+# Pillow and onnxruntime. Dependencies satisfied by the builder's system Python
+# must also appear in package.json (clean G100 rootfs, docs/79).
+# The pins are what was validated on the phone (docs/64).
 clicker=$DESTDIR/usr/lib/rungic-clicker
 python3 -m venv --system-site-packages "$clicker/venv"
 ( [ -r /etc/profile.d/proxy.sh ] && . /etc/profile.d/proxy.sh
   "$clicker/venv/bin/python" -m pip install -q --no-compile --disable-pip-version-check \
       typesafe-sdk==0.6.0 anthropic==1.6.0 openai==2.54.0 rapidocr==3.9.2 )
+"$clicker/venv/bin/python" -m pip check
 # The venv was made under DESTDIR: point its scripts and config at the installed path.
 grep -rlI --null "$DESTDIR" "$clicker/venv" | xargs -0 -r sed -i "s#$DESTDIR##g"
 find "$clicker" -name __pycache__ -prune -exec rm -rf {} +
