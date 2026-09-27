@@ -164,6 +164,6 @@ plasma-keyboard、xdg-desktop-portal-kde、wl-clipboard、arc-cua、LiteRT、lib
 
 用户决定ARM64打包改在Mac mini上进行（`macmini.wire.net`，Apple M4 10核、16 GB，OrbStack Docker，K8以SSH密钥登录）。`tools/build_on_device.py --host macmini`、`tools/build_mesa.py --host macmini`与`tools/rungic_package.py build --host macmini`在一个长期运行的Ubuntu 26.04 ARM64容器中构建（`tools/pq/arm64-host.Dockerfile`，镜像按Dockerfile与ddebs源文件的哈希打标签，构建树在Docker卷`rungic-build`里），产物同样收进本机的发布仓库；默认构建机是Mac mini（`$RUNGIC_BUILD_HOST`可改），手机路径保留作后备。镜像的Ubuntu源用USTC镜像（从Mac mini约6.7 MB/s，官方ports约0.5 MB/s）。
 
-核对（与手机上的完整构建逐文件比较，ELF去掉build-id与debuglink）：plasma-settings主包83个文件、调试包3个文件完全一致；libcamera的gstreamer1.0-libcamera、libcamera-dev一致；两边的构建依赖版本（`.buildinfo`）除运行时Mesa外相同。xdg-desktop-portal-kde的主程序只有动态符号表中符号的顺序不同（大小、段结构相同）。手机上的KWin `+rungic3`是增量构建，不能作比较。KWin含LTO的完整构建在Mac mini上约6分钟，手机上一小时以上。
+核对（与手机上的完整构建逐文件比较，ELF去掉build-id与debuglink）：plasma-settings主包83个文件、调试包3个文件完全一致；libcamera的gstreamer1.0-libcamera、libcamera-dev一致；两边的构建依赖版本（`.buildinfo`）除运行时Mesa外相同。xdg-desktop-portal-kde的主程序多出/缺少两个QML预编译符号（`QQmlPrivate::AOTCompiledContext::getValueLookup`等），编译任务数改为与手机相同的4个后依旧：qmlcachegen按构建环境里**已安装**的QML模块解析类型，手机容器装着整个桌面，能预编译的绑定更多；Mac mini的容器只有声明的构建依赖。两者运行时都正确（未预编译的部分由解释器执行），Mac mini的结果只取决于声明的构建依赖，更可复现。libcamera的13个包中，`libcamera-ipa`的6个`*.so.sign`与`libcamera.so`中256字节的一段不同：IPA模块用每次构建随机生成的密钥签名、公钥嵌入库中，任何两次构建都会不同；其余文件一致。手机上的KWin `+rungic3`是增量构建，不能作比较。KWin含LTO的完整构建在Mac mini上约6分钟，手机上一小时以上。
 
 传输问题：`docker exec cat`经ssh传大文件时曾以成功状态提前结束（13.7 MB的包只收到12.9 MB），现在上传与下载都核对大小与SHA-256，不一致重试。
