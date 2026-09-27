@@ -178,7 +178,7 @@ def scan_security(flags):
     return security, (1 if keys and security != 'owe' else 0), wpa, rsn
 
 
-def strength(rssi):
+def rssi_strength(rssi):
     return max(0, min(100, round((rssi + 100) * 100 / 45)))
 
 
@@ -231,7 +231,7 @@ def make_graph(snapshot):
         security, flags, wpa, rsn = scan_security(r['flags'])
         aps[ap_path(r['bssid'])] = {NM + '.AccessPoint': props(Flags=('u', flags), WpaFlags=('u', wpa), RsnFlags=('u', rsn),
             Ssid=('ay', list(r['ssid'].encode())), Frequency=('u', r['frequency']), HwAddress=('s', r['bssid'].upper()),
-            Mode=('u', 2), MaxBitrate=('u', 0), Strength=('y', strength(r['rssi'])), LastSeen=('i', -1),
+            Mode=('u', 2), MaxBitrate=('u', 0), Strength=('y', rssi_strength(r['rssi'])), LastSeen=('i', -1),
             Bandwidth=('u', 0))}
     graph.update(aps)
     scanned_ssids = {r['ssid'] for r in scan}
