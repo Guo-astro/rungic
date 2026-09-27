@@ -301,7 +301,8 @@ def build(version=None, allow_dirty=False, note=''):
         raise SystemExit(f'release {version} exists already')
     info = {'version': version, 'commit': commit, 'dirty': dirty, 'built': datetime.datetime.now().isoformat(
         timespec='seconds'), 'note': note, 'packages': deps, 'coupled': sorted(coupled),
-        'android': android_manifest(s), 'session_restart': s.get('session_restart', [])}
+        'android': android_manifest(s), 'session_restart': s.get('session_restart', []),
+        'service_restart': s.get('service_restart', {})}
     meta = build_meta(version, deps, info)
     index()
     RELEASES.mkdir(parents=True, exist_ok=True)
@@ -727,6 +728,16 @@ def deploy(version=None, restart='auto', acceptance='smoke', record_label=None, 
         if released:
             run('apt-mark unhold ' + ' '.join(released), 'container')
         step('holds', released=released)
+        # System services of changed packages: maintainer scripts only enable them (policy-rc.d keeps
+        # them from starting), so new ones would wait for the next container start and running ones
+        # would keep the old code. Enabled units are restarted; disabled ones stay as they are.
+        units = [u for pkg, names in info.get('service_restart', {}).items() if before.get(pkg) != after.get(pkg)
+                 for u in names]
+        if units:
+            result = run('for u in ' + ' '.join(units) + '; do systemctl is-enabled -q "$u" && '
+                         '{ systemctl restart "$u" && echo "$u restarted" || echo "$u FAILED"; }; done; true',
+                         'container', timeout=180, check=False)
+            step('services', output=result.stdout.strip())
         # 4 migrations run in maintainer scripts (system) and kded's kconf_update (user, next session).
         # 5 restart
         hit, changed = needs_restart(before, after, info.get('session_restart', []))

@@ -1,5 +1,5 @@
 {
-  "comment": "What a release of the Plasma container consists of (docs/61). tools/rungic_release.py builds rungic-release with an exact dependency on every package listed here; the .debs themselves are build output in .work/apt/pool. 'rebuilt' are Ubuntu packages rebuilt from their patch queues in packages/ (+rungicN, the version from the changelog), or with source \"ubuntu\" Ubuntu's own build at the version given (kscreen since docs/73: taking it back from our rebuild needs the exact version); 'project' are this repository's own packages (plasma/packaging, built by tools/rungic_package.py; their versions come from .work/apt/project-builds.json and must be current for the commit); 'coupled' are Ubuntu packages pinned to the version installed when the release is built, because files of theirs are diverted or their private ABI is used by code that is not rebuilt with them yet. 'android' are files outside the container that a release installs (backed up by deploy for rollback); the APK is versioned separately.",
+  "comment": "What a release of the Plasma container consists of (docs/61). tools/rungic_release.py builds rungic-release with an exact dependency on every package listed here; the .debs themselves are build output in .work/apt/pool. 'rebuilt' are Ubuntu packages rebuilt from their patch queues in packages/ (+rungicN, the version from the changelog), or with source \"ubuntu\" Ubuntu's own build at the version given (kscreen since docs/73: taking it back from our rebuild needs the exact version); 'project' are this repository's own packages (plasma/packaging, built by tools/rungic_package.py; their versions come from .work/apt/project-builds.json and must be current for the commit); 'coupled' are Ubuntu packages pinned to the version installed when the release is built, because files of theirs are diverted or their private ABI is used by code that is not rebuilt with them yet. 'android' are files outside the container that a release installs (backed up by deploy for rollback); the APK is versioned separately. 'service_restart' are system services deploy restarts (when enabled) after their package changed: maintainer scripts only enable them.",
   "rebuilt": {
     "kwin": {
       "source": "packages/kwin",
@@ -156,6 +156,13 @@
     "rungic-plasma-input",
     "rungic-plasma-config"
   ],
+  "service_restart": {
+    "rungic-plasma-bridges": [
+      "rungic-plasma-network.service",
+      "rungic-plasma-bluetooth.service",
+      "rungic-plasma-modem.service"
+    ]
+  },
   "android": [
     {
       "source": "plasma/rungic-plasma",
