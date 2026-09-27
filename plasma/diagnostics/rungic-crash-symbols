@@ -16,6 +16,11 @@ ddebs archive, which is configured only for this tool
 The backtrace is then regenerated, the signature recomputed (the previous one
 is kept as signature_unsymbolized) and the report marked symbolized.
 Run as root in the container.
+
+Normally not on the phone: gdb with a desktop process's debug information takes gigabytes, and the
+container has no memory limit, so Android's low-memory killer took the VPN and the Plasma APK
+(2026-09-27). tools/rungic_crash_symbolize.py does the same on the build host. --on-phone runs it
+here anyway, capped at 1 GiB (it may then fail on large cores).
 """
 import argparse
 import compression.zstd as zstd
@@ -165,9 +170,18 @@ def main():
     parser.add_argument('--recent', type=int)
     parser.add_argument('--no-install', action='store_true')
     parser.add_argument('--debuginfod', action='store_true')
+    parser.add_argument('--on-phone', action='store_true', help='run here despite the memory cost (capped)')
     args = parser.parse_args()
     if os.geteuid() != 0:
         sys.exit('rungic-crash-symbols: run as root in the container')
+    if not args.on_phone:
+        sys.exit('rungic-crash-symbols: symbolize on the build host (tools/rungic_crash_symbolize.py); '
+                 '--on-phone runs here, memory-capped')
+    if not os.environ.get('RUNGIC_SYMBOLS_CAPPED'):
+        # Re-run in a transient unit with a memory ceiling: Android must keep its memory.
+        os.execvp('systemd-run', ['systemd-run', '--quiet', '--wait', '--pipe', '--collect', '-p', 'MemoryMax=1G',
+                                  '-p', 'MemorySwapMax=0', '--setenv=RUNGIC_SYMBOLS_CAPPED=1', sys.executable,
+                                  os.path.abspath(__file__), *sys.argv[1:]])
     reports = [STORE / r for r in args.reports]
     if args.recent:
         reports += sorted((p.parent for p in STORE.glob('*/core.zst')), reverse=True)[:args.recent]

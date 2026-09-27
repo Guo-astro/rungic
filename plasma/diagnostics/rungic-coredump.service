@@ -7,3 +7,6 @@ ExecStart=/usr/libexec/rungic-coredump-collect
 Nice=10
 IOSchedulingClass=idle
 TimeoutStartSec=15min
+# gdb on a large core must not take Android's memory (docs/61): past the cap the backtrace fails, not the phone.
+MemoryMax=768M
+MemorySwapMax=0

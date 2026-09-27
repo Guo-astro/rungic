@@ -195,7 +195,10 @@ def journal_send(fields):
 
 def backtrace(core, exe):
     """Header, crashing-thread bt and all threads, from one gdb run."""
-    text = gdb('-ex', 'info sharedlibrary', '-ex', 'echo @@BT\\n', '-ex', 'bt 60', '-ex', 'echo @@ALL\\n',
+    # Every frame with its address: with debug symbols gdb omits it for inlined frames, and the
+    # signature would then place them in the next frame's module.
+    text = gdb('-ex', 'set print frame-info location-and-address',
+               '-ex', 'info sharedlibrary', '-ex', 'echo @@BT\\n', '-ex', 'bt 60', '-ex', 'echo @@ALL\\n',
                '-ex', 'thread apply all bt 30', *([exe] if exe else []), str(core))
     crashing = text.split('@@BT\n', 1)[-1].split('@@ALL\n', 1)[0]
     return text.replace('@@BT\n', '').replace('@@ALL\n', ''), crashing

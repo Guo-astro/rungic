@@ -322,15 +322,16 @@ PY
 
 
 def crash_symbolize(report_ids=(), recent=0):
-    """Install debug symbols for crash reports and redo their backtraces (rungic-crash-symbols).
-    Installs -dbgsym packages in the container; can take minutes the first time."""
+    """Install debug symbols for crash reports and redo their backtraces, on the build host
+    (tools/rungic_crash_symbolize.py): gdb with debug information on the phone starved Android.
+    Can take minutes the first time."""
     ids = [r for r in report_ids if re.fullmatch(r'\d{8}-\d{6}-[^/\s]+-\d+', r)]
     if len(ids) != len(report_ids):
         raise ValueError('report ids look like YYYYmmdd-HHMMSS-comm-pid')
-    args = ' '.join(ids) + (f' --recent {int(recent)}' if recent else '')
-    text = run('for p in /usr/bin/rungic-crash-symbols /usr/bin/moto-crash-symbols; do '
-               f'[ -x $p ] && exec $p {args}; done; echo null', 'container', timeout=1800, check=False)
-    return json.loads(text.stdout) if text.stdout.strip() not in ('', 'null') else text.stderr
+    result = subprocess.run([sys.executable, str(Path(__file__).with_name('rungic_crash_symbolize.py')), *ids,
+                             *(['--recent', str(int(recent))] if recent else [])],
+                            capture_output=True, text=True, timeout=3600)
+    return json.loads(result.stdout) if result.returncode == 0 else result.stderr[-3000:]
 
 
 def crash_get(crash_id, lines=160):
