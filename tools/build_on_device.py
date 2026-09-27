@@ -186,8 +186,8 @@ def main():
                         '(much faster link; do not use for performance measurements)')
     args = parser.parse_args()
     if args.action in ('full', 'incremental', 'targets'):
-        if args.action == 'targets' and not args.target:
-            parser.error('targets mode needs --target')
+        if args.action == 'targets' and not args.target and not component_uses_meson(args.component):
+            parser.error('targets mode needs --target (a meson tree builds everything without one)')
         sync(args.component)
         if args.action == 'full':
             print(build_deps(args.component))
