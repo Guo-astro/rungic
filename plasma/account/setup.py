@@ -5,6 +5,7 @@ Uses Ubuntu shadow/PAM tools. Never accepts passwords in argv or logs them.
 The UID stays stable so existing shared files survive; the home follows the chosen login
 (/home/<name>, docs/70), moved with its contents and the paths in the user's settings.
 """
+import fcntl
 import json
 import grp
 import os
@@ -127,14 +128,28 @@ def configure(data):
 def main():
     if os.geteuid() != 0:
         raise SetupError('需要安装程序的管理员权限')
-    raw = sys.stdin.buffer.read(4097)
-    if len(raw) > 4096:
-        raise SetupError('账户信息过长')
-    try:
-        data = json.loads(raw)
-    except (ValueError, UnicodeError):
-        raise SetupError('无效的账户信息') from None
-    print(json.dumps(configure(data), ensure_ascii=False))
+    # Survives a disconnected/timed-out Android caller: the transaction owns
+    # its lock, not just the shell that launched it. A fresh form must query it.
+    STATE.parent.mkdir(parents=True, exist_ok=True)
+    with (STATE.parent / 'account.lock').open('a') as lock:
+        if sys.argv[1:] == ['--status']:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                print(json.dumps({'configured': False, 'pending': True}))
+                return
+            marker = STATE if STATE.exists() else LEGACY_STATE
+            print(marker.read_text() if marker.exists() else json.dumps({'configured': False}))
+            return
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        raw = sys.stdin.buffer.read(4097)
+        if len(raw) > 4096:
+            raise SetupError('账户信息过长')
+        try:
+            data = json.loads(raw)
+        except (ValueError, UnicodeError):
+            raise SetupError('无效的账户信息') from None
+        print(json.dumps(configure(data), ensure_ascii=False))
 
 if __name__ == '__main__':
     try:

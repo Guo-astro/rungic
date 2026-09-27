@@ -8,6 +8,7 @@ install -Dm755 "$P/desktop-action.py" "$DESTDIR/usr/libexec/rungic-plasma-deskto
 install -Dm755 "$P/display.py" "$DESTDIR/usr/libexec/rungic-plasma-display"
 install -Dm755 "$P/brightness.py" "$DESTDIR/usr/libexec/rungic-plasma-brightness"
 install -Dm644 "$P/power-policy.py" "$DESTDIR/usr/libexec/rungic-power-policy.py"
+install -Dm644 "$P/account/protocol" "$DESTDIR/usr/share/rungic/account-protocol"
 install -Dm755 "$P/account/setup.py" "$DESTDIR/usr/libexec/rungic-plasma-account-setup"
 install -Dm644 "$P/account/rungic-account.desktop" "$DESTDIR/usr/share/applications/rungic-account.desktop"
 install -Dm755 "$P/user-exec" "$DESTDIR/usr/bin/rungic-plasma-user-exec"

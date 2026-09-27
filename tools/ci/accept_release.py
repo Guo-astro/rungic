@@ -92,8 +92,12 @@ def main():
             checks[-1]["observed"] = [s.strip() for s in checks[-1]["observed"].splitlines()
                                       if "User 0:" in s and "installed=" in s]
     control = "/data/adb/rungic-plasma/rungic-plasma"
+    if rootfs_report.get("account_status_protocol") == 2:
+        check("account.protocol", lambda: command(control +
+              " exec cat /usr/share/rungic/account-protocol", True), "2")
     check("account.configured", lambda: json.loads(command(control + " account-status", True)),
-          predicate=lambda s: s.get("configured") is True and s.get("uid") == 1000)
+          predicate=lambda s: s.get("configured") is True and s.get("uid") == 1000
+          and s.get("pending") is not True)
     check("container.systemd", lambda: command(control + " exec systemctl is-system-running", True), "running")
     check("packages.audit", lambda: command(control + " exec dpkg --audit", True), "")
     check("python.dependencies", lambda: command(control +

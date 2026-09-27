@@ -32,7 +32,7 @@ chcon "$rungic_label" "$rungic_files"
 # This is a UI signal only. The root controller also checks the release marker.
 publish() {
     status_tmp=$rungic_files/.rungic-install.properties.tmp
-    printf 'release=%s\nstate=%s\nphase=%s\n' "$RELEASE_ID" "$1" "$2" > "$status_tmp"
+    printf 'schema=2\nrelease=%s\nstate=%s\nphase=%s\nupdated=%s\nerror=%s\n' "$RELEASE_ID" "$1" "$2" "$(date +%s)" "${failure_code:-none}" > "$status_tmp"
     chmod 0600 "$status_tmp"
     chown "$rungic_uid:$rungic_uid" "$status_tmp"
     chcon "$rungic_label" "$status_tmp"
@@ -43,6 +43,7 @@ if [ -f "$marker" ] && [ "$(cat "$marker")" = "$RELEASE_ID" ]; then
     echo 'already installed'
     exit 0
 fi
+failure_code=unknown
 phase=verify
 provision_mounted=0
 finished=0
@@ -60,7 +61,7 @@ trap finish_exit EXIT
 publish installing "$phase"
 die() { echo "Rungic seed failed: $*" >&2; exit 1; }
 digest() { sha256sum "$1" | cut -d ' ' -f1; }
-check() { [ "$(digest "$1")" = "$2" ] || die "SHA-256 mismatch: $1"; }
+check() { [ "$(digest "$1")" = "$2" ] || { failure_code=checksum; die "SHA-256 mismatch: $1"; }; }
 check "$seed/host-seed.tar.gz" "$HOST_SEED_SHA256"
 check "$seed/rootfs.img.gz" "$ROOTFS_GZ_SHA256"
 check "$seed/termux.apk" "$TERMUX_APK_SHA256"
@@ -126,6 +127,10 @@ if [ -e "$image" ]; then
         check "$image" "$ROOTFS_SHA256"
     fi
 else
+    # Conservative reservation for a complete image; no reliance on sparse support.
+    free_kib=$(df -k "$images" | tail -n 1 | awk '{print $4}')
+    case "$free_kib" in ''|*[!0-9]*) die 'free space check unavailable' ;; esac
+    [ "$free_kib" -ge "$((ROOTFS_BYTES / 1024 + 524288))" ] || { failure_code=space; die 'insufficient image reserve'; }
     rm -f "$image.part"
     gzip -dc "$seed/rootfs.img.gz" |
         "$seed/rungic-sparse-write" "$image.part" "$ROOTFS_BYTES" || die 'rootfs decompression'
@@ -161,7 +166,14 @@ provision_mounted=0
 phase=storage; publish installing "$phase"
 # Boot-complete precedes unlock/storage readiness on some devices. Wait for the
 # real Android storage instead of creating a hidden folder under an empty mount.
-while [ ! -d /storage/emulated/0/Android ]; do sleep 2; done
+storage_attempt=0
+while [ ! -d /storage/emulated/0/Android ]; do
+    publish waiting "$phase"
+    storage_attempt=$((storage_attempt + 1))
+    [ "$storage_attempt" -lt 300 ] || { failure_code=storage; die 'shared storage wait expired'; }
+    sleep 2
+done
+publish installing "$phase"
 mkdir -p "$rungic_files/tmp" /storage/emulated/0/Plasma
 chown "$rungic_uid:$rungic_uid" "$rungic_files" "$rungic_files/tmp"
 label=$(ls -dZ /data/user/0/com.rungic.plasma | cut -d ' ' -f1)

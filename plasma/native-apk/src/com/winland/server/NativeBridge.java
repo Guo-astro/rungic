@@ -26,6 +26,10 @@ public final class NativeBridge {
     public static native void setRefreshRate(float rate);
     public static native void frameTick(long frameTimeNanos);
     public static native long getPresentedFrames();
+    /** Arm after the session is ready; only a subsequent phone presentation confirms it. */
+    public static native long requestPhoneFrame();
+    public static native boolean isPhoneFrameReady(long ticket);
+    public static native void cancelPhoneFrame(long ticket);
     /** False while the compositor is parked on a static desktop (on-demand vsync). */
     public static native boolean wantsVsync();
     /** eventfd that becomes readable when the compositor wants vsync again. */

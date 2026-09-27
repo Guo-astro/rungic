@@ -130,7 +130,9 @@ start_container() {
 }
 case "$action" in
   account-status)
-    if [ -f "$HOST_STATE/account.json" ]; then
+    if running; then
+      attach /usr/libexec/rungic-plasma-account-setup --status
+    elif [ -f "$HOST_STATE/account.json" ]; then
       cat "$HOST_STATE/account.json"
     else
       echo '{"configured":false,"username":"rungic"}'

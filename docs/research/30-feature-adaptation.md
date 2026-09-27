@@ -150,3 +150,5 @@ Docker的 `moto-nginx` 仍healthy，原Alpine LXC仍RUNNING；不停止这两个
 2026-09-23桌面启动补修：发现Firefox发行版desktop三个Exec直接调用原程序，绕过编解码包装入口；之前只测命令行漏检了此路径。新增`phosh/install-firefox-launcher.py`生成同ID用户desktop覆盖，普通启动/新窗口/隐私窗口均走包装脚本。恢复步骤、原始问题证据与桌面启动复测见修复记录（历史材料已移除）。
 
 2026-09-23输入补修：35篇自动化测试留下日常profile测试焦点设置，触发Firefox154已知IME空指针。清理后真实屏幕键盘英文、中文候选、退出后重开输入网址均通过；当前codec测试脚本增加独立profile前置检查。根因、上游补丁状态与证据见[36篇](../36-firefox-input-fix.md)。这次没有改变发行版；后续Debian/Ubuntu评估见[37篇](../37-linux-distribution-evaluation.md)。
+
+2026-09-28 首启 UX 第一批：安装阶段与异常恢复页、账户事务状态和显示确认门槛已实现，来源、契约和测试见 [82 篇](../82-first-run-ux-refactor.md)。G100 候选 APK 保留账户启动进入 Plasma 欢迎页，测试后恢复息屏；新账户组件仅完成离线测试，完整清数据首启尚未验证，不扩大此前 `.5` 镜像的验收范围。

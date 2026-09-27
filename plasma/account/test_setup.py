@@ -1,4 +1,5 @@
 import importlib.util
+import json
 from pathlib import Path
 from types import SimpleNamespace
 import tempfile
@@ -55,5 +56,29 @@ class Tests(unittest.TestCase):
   with patch.object(m,'shadow_entry',return_value='$y$existing'),patch.object(m,'call') as c:
    with self.assertRaises(m.SetupError):m.configure({'username':'alice','password':'test-only-pass'})
    c.assert_not_called()
+
+ def test_status_does_not_create_account(self):
+  import io
+  from contextlib import redirect_stdout
+  output=io.StringIO()
+  with patch.object(m.os,'geteuid',return_value=0),patch.object(m.sys,'argv',['setup.py','--status']),patch.object(m,'call') as call,redirect_stdout(output):
+   m.main()
+  self.assertEqual(json.loads(output.getvalue()),{'configured':False})
+  call.assert_not_called()
+  self.assertFalse(self.state.exists())
+ def test_status_reports_inflight_before_committed_marker(self):
+  import io, fcntl
+  from contextlib import redirect_stdout
+  self.state.write_text('{"configured":true,"username":"alice"}')
+  with (self.state.parent/'account.lock').open('a') as held:
+   fcntl.flock(held,fcntl.LOCK_EX|fcntl.LOCK_NB)
+   output=io.StringIO()
+   with patch.object(m.os,'geteuid',return_value=0),patch.object(m.sys,'argv',['setup.py','--status']),redirect_stdout(output):
+    m.main()
+   self.assertEqual(json.loads(output.getvalue()),{'configured':False,'pending':True})
+  output=io.StringIO()
+  with patch.object(m.os,'geteuid',return_value=0),patch.object(m.sys,'argv',['setup.py','--status']),redirect_stdout(output):
+   m.main()
+  self.assertTrue(json.loads(output.getvalue())['configured'])
 
 unittest.main()

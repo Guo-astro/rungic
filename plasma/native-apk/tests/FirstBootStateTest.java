@@ -28,6 +28,18 @@ public final class FirstBootStateTest {
         require(!FirstBootState.read(seed.toFile(),status.toFile()).ready);
         write(status,"release=release-new\nstate=\\uNOPE\n");
         require(!FirstBootState.read(seed.toFile(),status.toFile()).ready);
-        System.out.println("PASS first-install readiness, release mismatch, stages, failure, truncated and malformed status");
+        write(status,"schema=2\nrelease=release-new\nstate=failed\nerror=checksum\nphase=verify\n");
+        FirstBootState corrupt=FirstBootState.read(seed.toFile(),status.toFile());
+        require(corrupt.failed && corrupt.message.contains("重启不会修复") && !corrupt.ready);
+        write(status,"schema=2\nrelease=release-new\nstate=waiting\nphase=storage\n");
+        require(FirstBootState.read(seed.toFile(),status.toFile()).attention);
+        write(status,"schema=2\nrelease=release-new\nstate=installing\nphase=rootfs\n");
+        require(FirstBootState.read(seed.toFile(),status.toFile(),status.toFile().lastModified()+181000).attention);
+        require(!FirstBootState.read(seed.toFile(),status.toFile(),status.toFile().lastModified()).attention);
+        write(status,"schema=999\nrelease=release-new\nstate=ready\n");
+        require(!FirstBootState.read(seed.toFile(),status.toFile()).ready);
+        write(status,"schema=2\nrelease=release-new\nstate=ready\nphase=complete\n");
+        require(FirstBootState.read(seed.toFile(),status.toFile()).ready);
+        System.out.println("PASS readiness, v1/v2, unknown schema, stale state, user action, checksum failure and malformed input");
     }
 }

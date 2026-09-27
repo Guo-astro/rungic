@@ -31,12 +31,27 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     private AgentFullscreen agentFullscreen;
     private String presenterOwner;
     private CastControls castControls;
-    private TextView status;
-    private LinearLayout loading;
-    private ProgressBar loadingSpinner;
+    private StartupScreen loading;
+    private final java.util.concurrent.atomic.AtomicBoolean startupBusy=new java.util.concurrent.atomic.AtomicBoolean();
+    private volatile int surfaceGeneration;
+    private boolean awaitingFrame;
+    private long frameTicket, frameDeadline;
+    private int frameGeneration;
+    private String notificationState="";
     private final Runnable installPoll=() -> {
         if(!isDestroyed() && this.started && display.getHolder().getSurface().isValid())
             surfaceCreated(display.getHolder());
+    };
+    private final Runnable framePoll=new Runnable() {
+        @Override public void run() {
+            if(isDestroyed() || !started || frameGeneration!=surfaceGeneration) { awaitingFrame=false; return; }
+            if(NativeBridge.isPhoneFrameReady(frameTicket)) {
+                awaitingFrame=false; loading.setVisibility(View.GONE); notifyState("Rungic 正在运行");
+            } else if(android.os.SystemClock.uptimeMillis()>frameDeadline) {
+                awaitingFrame=false; NativeBridge.cancelPhoneFrame(frameTicket);
+                showProblem("桌面正在运行，但尚未确认显示画面。请重新检查显示状态。", "显示确认超时；未使用旧帧或投屏帧放行。", true);
+            } else display.postDelayed(this,100);
+        }
     };
     private volatile int bufferWidth = 720, bufferHeight = 1600;
     private FrameLayout frame;
@@ -76,18 +91,12 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         platform = new PlatformBridge(this,capture);
         display.getHolder().addCallback(this);
         frame.addView(display, new FrameLayout.LayoutParams(-1, -1));
-        status = new TextView(this);
-        status.setText("正在准备 Plasma Mobile…"); status.setTextSize(18); status.setGravity(Gravity.CENTER);
-        status.setOnClickListener(v -> { if(display.getHolder().getSurface().isValid())surfaceCreated(display.getHolder()); });
-        loading=new LinearLayout(this);
-        loading.setOrientation(LinearLayout.VERTICAL); loading.setGravity(Gravity.CENTER);
-        loading.setPadding(48,48,48,48);
-        loading.setBackgroundColor(0xff16212b); status.setTextColor(0xffeef3f8);
-        loadingSpinner=new ProgressBar(this); loadingSpinner.setIndeterminate(true);
-        loading.addView(loadingSpinner);
-        LinearLayout.LayoutParams loadingText=new LinearLayout.LayoutParams(-1,-2);
-        loadingText.topMargin=36; loading.addView(status,loadingText);
-        frame.addView(loading, new FrameLayout.LayoutParams(-1, -1));
+        loading=new StartupScreen(this,() -> {
+            display.removeCallbacks(installPoll);
+            if(display.getHolder().getSurface().isValid())surfaceCreated(display.getHolder());
+        },() -> moveTaskToBack(true));
+        loading.show("正在准备 Rungic","请稍候…",true,false,"");
+        frame.addView(loading,new FrameLayout.LayoutParams(-1,-1));
         setContentView(frame);
         castTest = new CastTest(this, frame);
         castControls = new CastControls(this, frame, this::setAndroidKeyboard);
@@ -129,7 +138,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
             { resizeDisplay(l,t,r,b); captureDisplayInsets(display.getRootWindowInsets()); });
         display.requestApplyInsets();
         display.requestFocus();
-        startForegroundService(new Intent(this, DesktopService.class));
+        notifyState("正在准备 Rungic");
     }
 
     @Override public void onDestroy() {
@@ -138,6 +147,9 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
             getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(edgeBackCallback);
         pacer.stop();
         display.removeCallbacks(installPoll);
+        display.removeCallbacks(framePoll);
+        if(frameTicket!=0)NativeBridge.cancelPhoneFrame(frameTicket);
+        surfaceGeneration++;
         if (idleInhibitFd != null) {
             android.os.Looper.getMainLooper().getQueue().removeOnFileDescriptorEventListener(idleInhibitFd.getFileDescriptor());
             try { idleInhibitFd.close(); } catch (IOException ignored) {}
@@ -213,11 +225,14 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         started = true;
         if(capture!=null)capture.setVisible(true);
         if(pacer!=null && display.getHolder().getSurface().isValid())pacer.start();
-        if(display!=null && !accountReady)display.post(installPoll);
+        if(display!=null) {
+            if(awaitingFrame)display.post(framePoll);
+            else if(!accountReady)display.post(installPoll);
+        }
     }
     @Override public void onStop() {
         started = false;
-        if(display!=null)display.removeCallbacks(installPoll);
+        if(display!=null) { display.removeCallbacks(installPoll); display.removeCallbacks(framePoll); }
         if(pacer!=null)pacer.stop();
         if(capture!=null)capture.setVisible(false);
         super.onStop();
@@ -304,18 +319,21 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
 
     @Override public void surfaceCreated(SurfaceHolder holder) {
         pacer.start();
+        if(awaitingFrame || !startupBusy.compareAndSet(false,true))return;
+        final int generation=surfaceGeneration;
         worker.execute(() -> {
             try {
-                if (!holder.getSurface().isValid()) return;
+                if (isDestroyed() || generation!=surfaceGeneration || !holder.getSurface().isValid()) return;
                 FirstBootState install=FirstBootState.read(new File("/product/etc/rungic/seed.env"),
                     new File(getFilesDir(),"rungic-install.properties"));
                 if(!install.ready) {
                     runOnUiThread(() -> {
-                        showLoading(install.message);
-                        loadingSpinner.setVisibility(install.failed?View.GONE:View.VISIBLE);
-                        status.setClickable(false);
+                        if(isDestroyed() || generation!=surfaceGeneration)return;
+                        loading.show(install.failed?"系统准备需要处理":"正在准备 Rungic",install.message,
+                            !install.failed && !install.attention,true,install.details);
+                        notifyState(install.failed?"Rungic 准备需要处理":"正在准备 Rungic");
                         display.removeCallbacks(installPoll);
-                        if(!install.failed && started)display.postDelayed(installPoll,1000);
+                        if(started)display.postDelayed(installPoll,2000);
                     });
                     return;
                 }
@@ -323,21 +341,41 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
                 if (!accountReady) {
                     if (accountPromptShowing) return;
                     org.json.JSONObject account=new org.json.JSONObject(control("account-status"));
+                    if(account.optBoolean("pending",false)) {
+                        runOnUiThread(()->{
+                            if(isDestroyed() || generation!=surfaceGeneration)return;
+                            showLoading("账户仍在设置中，请稍候，无需重复提交。");
+                            display.removeCallbacks(installPoll);
+                            if(started)display.postDelayed(installPoll,2000);
+                        }); return;
+                    }
                     accountReady=account.optBoolean("configured",false);
                     if (!accountReady) {
                         runOnUiThread(() -> showLoading("正在准备账户环境，请稍候…"));
                         control("account-prepare");
                         accountPromptShowing=true;
-                        runOnUiThread(() -> AccountSetup.show(this,worker,
-                            payload -> control("account-setup",payload), () -> {
-                                accountReady=true;
+                        runOnUiThread(() -> {
+                            if(isDestroyed() || generation!=surfaceGeneration) { accountPromptShowing=false; return; }
+                            notifyState("Rungic 等待设置账户");
+                            AccountSetup.show(this,worker,payload -> {
+                                try { control("account-setup",payload); }
+                                catch(Exception failure) {
+                                    // A timeout may have happened after the transaction committed.
+                                    // A serialized status read must finish before another form is offered.
+                                    if(!new org.json.JSONObject(control("account-status")).optBoolean("configured",false))throw failure;
+                                }
+                            },() -> {
+                                accountReady=true; accountPromptShowing=false;
+                                display.post(installPoll);
+                            },failure -> {
                                 accountPromptShowing=false;
-                                if(display.getHolder().getSurface().isValid()) surfaceCreated(display.getHolder());
-                            }));
+                                showProblem("账户设置尚未完成。请先重新检查环境与账户状态，再继续设置。", "账户操作未完成；不会自动重复提交密码。", true);
+                            });
+                        });
                         return;
                     }
                 }
-                runOnUiThread(() -> showLoading("正在启动 Plasma Mobile…"));
+                runOnUiThread(() -> showLoading("正在启动桌面…"));
                 KeyboardAssets.ensure(getApplicationContext());
                 new File(getFilesDir(), "tmp").mkdirs();
                 platform.start();
@@ -369,18 +407,41 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
                 writeDisplayInsets();
                 control(newServer ? "restart-session" : "start");
                 Log.i("RungicWayland", NativeBridge.getWaylandRuntimeStats());
-                runOnUiThread(() -> loading.setVisibility(View.GONE));
+                long ticket=NativeBridge.requestPhoneFrame();
+                if(ticket==0)throw new IOException("无法请求显示状态");
+                runOnUiThread(() -> {
+                    if(isDestroyed() || generation!=surfaceGeneration) {
+                        NativeBridge.cancelPhoneFrame(ticket); return;
+                    }
+                    showLoading("正在等待桌面画面…");
+                    frameTicket=ticket; frameGeneration=generation;
+                    frameDeadline=android.os.SystemClock.uptimeMillis()+60000;
+                    awaitingFrame=true;
+                    if(started)display.post(framePoll);
+                });
             } catch (Throwable e) {
                 Log.e("RungicWayland", "Start failed", e);
-                runOnUiThread(() -> { showLoading("Plasma Mobile启动失败\n" + e.getMessage() + "\n\n点此重试");
-                    loadingSpinner.setVisibility(View.GONE); status.setClickable(true); });
+                runOnUiThread(() -> {
+                    if(!isDestroyed() && generation==surfaceGeneration)
+                        showProblem("暂时无法进入 Rungic。请重新检查系统准备状态。", "启动或挂载检查未完成。诊断日志包含具体原因。", true);
+                });
+            } finally {
+                startupBusy.set(false);
+                if(generation!=surfaceGeneration && !isDestroyed())runOnUiThread(()->{ if(started)display.post(installPoll); });
             }
         });
     }
 
+    private void notifyState(String message) {
+        if(!message.equals(notificationState)) { notificationState=message; DesktopService.update(this,message); }
+    }
     private void showLoading(String message) {
-        loading.setVisibility(View.VISIBLE); status.setVisibility(View.VISIBLE);
-        loadingSpinner.setVisibility(View.VISIBLE); status.setText(message); status.setClickable(false);
+        if(isDestroyed())return;
+        loading.show("正在准备 Rungic",message,true,false,""); notifyState("正在准备 Rungic");
+    }
+    private void showProblem(String message,String details,boolean retry) {
+        if(isDestroyed())return;
+        loading.show("需要处理",message,false,retry,details); notifyState("Rungic 需要处理");
     }
 
     private void resizeDisplay(int l,int t,int r,int b) {
@@ -543,7 +604,11 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         }
     }
     @Override public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) { worker.execute(this::updateSize); }
-    @Override public void surfaceDestroyed(SurfaceHolder holder) { pacer.stop(); worker.execute(() -> { if (initialized) NativeBridge.suspendRendering(); }); }
+    @Override public void surfaceDestroyed(SurfaceHolder holder) {
+        surfaceGeneration++; awaitingFrame=false; display.removeCallbacks(framePoll);
+        if(frameTicket!=0)NativeBridge.cancelPhoneFrame(frameTicket);
+        pacer.stop(); worker.execute(() -> { if(initialized)NativeBridge.suspendRendering(); });
+    }
 
     private static String control(String action) throws Exception {
         return control(action,null);
@@ -626,7 +691,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     }
 
     private void showDesktopMenu() {
-        new AlertDialog.Builder(this).setTitle("Plasma Mobile").setItems(new String[]{"继续使用", "返回 Linux 桌面", "Android 键盘", "返回 Android", "麦克风与相机权限", "停止 Plasma Mobile", "显示流畅度"}, (d, i) -> {
+        new AlertDialog.Builder(this).setTitle("Rungic").setItems(new String[]{"继续使用", "回到 Rungic 桌面", "Android 键盘", "切换到 Android（会话继续运行）", "麦克风与相机权限", "关闭 Rungic 会话", "显示流畅度"}, (d, i) -> {
             if (i == 1 && initialized) worker.execute(() -> {
                 try { control("home"); }
                 catch (Exception e) { runOnUiThread(() -> Toast.makeText(this, e.getMessage(), Toast.LENGTH_LONG).show()); }
@@ -634,9 +699,11 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
             if (i == 2) setAndroidKeyboard(true);
             if (i == 3) moveTaskToBack(true);
             if (i == 4) capture.requestPermissionsFromUser();
-            if (i == 5) worker.execute(() -> { try { control("stop"); NativeBridge.releaseWaylandConnection(); initialized=false;
+            if (i == 5) new AlertDialog.Builder(this).setTitle("关闭 Rungic 会话？")
+                .setMessage("这会结束正在运行的 Linux 应用，请先保存文件。切换到 Android 可以让会话继续运行。")
+                .setNegativeButton("取消",null).setPositiveButton("关闭会话",(dialog,which)->worker.execute(() -> { try { control("stop"); NativeBridge.releaseWaylandConnection(); initialized=false;
                 runOnUiThread(() -> { stopService(new Intent(this, DesktopService.class)); finish(); });
-            } catch(Exception e) { runOnUiThread(() -> Toast.makeText(this, e.getMessage(), Toast.LENGTH_LONG).show()); } });
+            } catch(Exception e) { runOnUiThread(() -> Toast.makeText(this, "暂时无法关闭会话，请稍后重试", Toast.LENGTH_LONG).show()); } })).show();
             if(i==6) {
                 org.json.JSONArray rates=pacer.supportedRates();
                 String[] labels=new String[rates.length()+1];labels[0]="自动";

@@ -44,6 +44,8 @@ def main():
     if rootfs_report["rootfs_sha256"] != product_report["rootfs_sha256"] or \
             rootfs_report["compressed_sha256"] != product_report["payload_sha256"]["etc/rungic/rootfs.img.gz"]:
         raise ValueError("product rootfs differs from CI2 report")
+    if rootfs_report.get("account_status_protocol") != 2:
+        raise ValueError("rootfs report lacks the current account transaction protocol")
     if rootfs_report["filesystem_check"] != 0 or rootfs_report["arch"] != "arm64":
         raise ValueError("CI2 filesystem or architecture check did not pass")
     if rootfs_report["package_lock_sha256"] != sha256(args.package_lock):

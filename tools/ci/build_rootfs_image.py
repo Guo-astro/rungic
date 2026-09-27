@@ -71,6 +71,9 @@ def main():
                   if installed.get(name, (None,))[0] != version}
     if mismatched:
         raise ValueError(f"release package mismatch: {mismatched}")
+    protocol_path = root / "usr/share/rungic/account-protocol"
+    if not protocol_path.is_file() or protocol_path.read_text().strip() != "2":
+        raise ValueError("rootfs needs account protocol 2; rebuild rungic-plasma-session before composing the new launcher")
     account = next((line.split(":") for line in (root / "etc/passwd").read_text().splitlines()
                     if line.split(":")[2] == "1000"), None)
     if account is None or not account[5].startswith("/home/"):
@@ -113,7 +116,7 @@ def main():
     compressed = output.with_suffix(".img.gz")
     with compressed.open("wb") as destination:
         subprocess.run(["gzip", "-1", "-n", "-c", str(output)], stdout=destination, check=True)
-    report = {"schema_version": 1, "release_version": manifest["version"],
+    report = {"schema_version": 1, "account_status_protocol": 2, "release_version": manifest["version"],
               "release_sha256": sha256(release), "arch": "arm64",
               "package_count": len(installed), "package_lock_sha256": sha256(output.parent / "packages.lock.tsv"),
               "rootfs_bytes": output.stat().st_size, "rootfs_sha256": sha256(output),

@@ -1,0 +1,68 @@
+# 首启 UX 重构：第一批实施
+
+日期：2026-09-28。对应 [81 篇全流程审计](81-end-to-end-user-experience.md) 的安装、账户、桌面进入与通知问题。沿用 [80 篇](80-g100-image-installation-retrospective.md) 已验证的安全初始化顺序，不改变 Magisk 的部署触发时机。
+
+## 用户路径
+
+1. 打开 Rungic，显示当前实际准备阶段。安装状态缺失、版本不匹配或内容损坏时继续等待，不能打开账户表单。
+2. 原子安装状态匹配本次 release 后，由 root 控制器核验安装完成标记、共享挂载与容器账户环境。
+3. 环境准备通过才显示创建账户表单，说明这是 Linux 账户密码，与 Android 锁屏不同；提供明确标签、密码可见开关与键盘下一项操作。只保存非敏感的用户名草稿，密码提交后清空。
+4. 创建操作由账户助手持有独立事务锁。查询会报告创建进行中；调用方超时后先查询真实状态，不能直接诱导重复提交。
+5. 启动会话后等待手机显示链路确认，再移除 loading。旧帧、投屏输出和人工合成的超时反馈不能满足门槛。
+6. 准备中、等待账户、运行中及需要处理的通知与界面保持一致。返回 Android 保留会话；关闭会话另行说明会结束 Linux 应用并要求确认。
+
+loading 页面可滚动；等待期间可以返回 Android，稍后继续。错误详情与面向用户的操作提示分开。状态停留超过三分钟只提示“较长时间没有阶段更新”，不将它认定为安装失败。
+
+## 实现与契约
+
+| 层 | 实现 | 契约 |
+|---|---|---|
+| 首启生产者 | `tools/ci/rungic-firstboot.sh` | 原子 `schema=2`，含 release、state、phase、updated、error；区分校验、空间、共享存储错误；存储等待有界，空间预检保守预留整镜像与 512 MiB |
+| Android 入口 | APK 2.8 / versionCode 56，`StartupScreen`、`FirstBootState`、`MainActivity` | 兼容 schema 1/2，拒绝未知未来 schema；按状态放行；检查按钮只重新读取/核验，不盲目重做安装 |
+| 账户 | `plasma/account/setup.py` 与 `plasma/rungic-plasma` | 助手自身持有 `account.lock`；`--status` 返回 `pending`；保持原账户校验、stdin 传密码与失败回滚 |
+| 包与镜像 | `rungic-plasma-session` | `/usr/share/rungic/account-protocol` 为 2；rootfs 报告记录 `account_status_protocol=2`，组包拒绝旧账户组件，安装验收检查实机标记 |
+| 手机画面 | `presentation_gate.rs`、Presenter、GLES backend、JNI | 请求在渲染线程设置屏障；当前请求之后的手机帧才能确认；Surface 销毁与取消使旧请求失效 |
+
+APK 与 native `.so` 必须一起构建。账户助手、宿主控制器和包含协议标记的新 rootfs 必须一起发布；不能用仅更新 APK 的结果代替新版镜像账户流程验收。
+
+### 显示确认的定义
+
+优先复用现有 SurfaceControl Presenter 的真实 transaction completion：有效 fence 时间或 latch 反馈，且手机 Presenter 可见。渲染反馈的超时合成值不放行。GLES 路径使用 `EGL_ANDROID_get_frame_timestamps` 的 `EGL_DISPLAY_PRESENT_TIME_ANDROID` 正时间值；不以 `eglSwapBuffers` 返回或提交帧计数当作显示证明。
+
+这确认了手机图形输出链路。画面可能是 Plasma 启动画面或欢迎页，**不代表桌面全部服务与应用已经可交互**。若某设备不支持这些反馈，将显示可恢复的显示确认超时，不假定其他机型与 G100 等价。60 秒是显示检查的超时边界，不是强行放行的等待时间。
+
+## 复用调查与取舍
+
+实施前核对了 79/80 篇、research/31、现有 Android 入口、账户助手和 native Presenter 源码，并查阅以下一手接口说明：
+
+- [Android SurfaceControl.Transaction](https://developer.android.com/reference/android/view/SurfaceControl.Transaction)：复用本项目已有 NDK 事务完成通道，核对它与提交计数的区别。
+- [Khronos EGL_ANDROID_get_frame_timestamps](https://registry.khronos.org/EGL/extensions/ANDROID/EGL_ANDROID_get_frame_timestamps.txt)：核对 pending/invalid、frame ID、display present time 和启用方式；常量、签名另对照本地 NDK r26 的 `EGL/eglext.h`。选择实际显示时间；放弃以 swap 返回假定画面可见。
+- [Android 原生 View 可访问性](https://developer.android.com/guide/topics/ui/accessibility/views/apps-views)：复用 TextView、ProgressBar、ScrollView 与表单 labelFor/live region，无需新增 UI 框架。
+- [KDE 状态变化指导](https://develop.kde.org/hig/status_changes/)：采用持续状态与可理解的后续动作，避免把底层失败直接作为要求用户重新输密码的理由。
+
+本轮没有复制新上游实现或引入第三方依赖，平台 API 与扩展按接口调用；现有 native 外来树及其许可证来源仍按 `vendor/manifest.json` 和既有来源记录维护，不以本轮修改重新授权。
+
+## 验证记录与边界
+
+已完成：
+
+- Android Java 编译、ARM64 native 编译、APK 打包和签名校验。
+- 安装状态测试：schema 1/2、未知版本、release 不匹配、损坏/截断、阶段陈旧、存储等待和校验失败。
+- 账户助手 6 项测试：校验、成功提交、失败回滚、已有密码保护、只读状态、事务锁期间 pending 优先于完成标记。
+- 显示门槛 3 项测试：旧帧与新请求隔离、取消后排队请求不能复活、屏障前的提交不放行。
+- 首启/控制器 shell 语法及 CI Python 编译检查。
+- G100 保留现有账户的候选 APK 启动检查：显示确认后 loading 移除、通知为“Rungic 正在运行”，屏幕进入 Plasma Mobile 欢迎页；测试后恢复息屏。此结果不代表完成欢迎向导或创建了新账户。
+
+产物、日志、截图与更新前 APK 备份保存在 `.work/ux/`；构建日志为 `.work/ux-native-build.log`、`.work/ux-apk-build.log`。
+
+尚未验证：**包含新账户包、新控制器及新首启脚本的完整清数据刷入**。本轮不重刷、不清除账户，也不进行摄像头验收。实机 Shell 的 root 授权未开放；不能把 Rungic 应用自己的 root 授权当作 Shell 已获授权。
+
+## 后续整包必须覆盖的场景
+
+1. 清数据首启，安装中进入/退出 Rungic、锁屏解锁后恢复阶段显示。
+2. 准备全部通过后才出现表单；非法输入仍在表单修正，环境故障返回准备状态。
+3. 提交账户时切后台/超时/重进，不创建第二个账户，不丢失已成功提交的状态。
+4. 当前手机输出确认前保持 loading；Surface 重建、息屏恢复及显示超时有明确结果。
+5. 系统预装 APK（含 JNI 库）与新账户包共同验收，不能依赖 `pm install -r` 覆盖来证明镜像可用。
+
+审计中的左右返回一致性、助手/投屏引导、刷机主机与手机的进度衔接、Plasma 欢迎向导整合仍需后续批次处理。本轮状态文件提供阶段更新，不提供解压字节百分比或持续工作心跳。缓存只按已验证产物的明确路径清理，保留本轮回退与证据材料，不执行全局 prune。
