@@ -20,11 +20,11 @@ RungicOS 的 ARM64 rootfs 尽量以相同包仓库快照复用；GPU 驱动、�
 
 ## 首个设备 spec：G100 基线和机器现状
 
-目标仅为 **XT2533-4 / `portov_cn` / RETCN / `W1VT36H.1-51-8`**，指纹 `motorola/portov_cn/portov:16/W1VT36H.1-51-8/e9ec8-e96731:user/release-keys`；原机是 Android 16、ARM64、4K、`6.6.87-android15-8`（KMI 8）、解锁的 bootloader。原厂包 SHA-256、六个动态分区和 AVB 的主机侧核验见 [73 篇](73-g100-firmware-inventory.md)；尚未刷入。`boot`、`init_boot`、`vendor_boot` 均为 header v4；`boot` 的 ramdisk 长度为 0，`init_boot` 含约 2.46 MB ramdisk，`vendor_boot` 含设备 DTB 和 vendor ramdisk。G100 S `mumba_cn` 的内核、模块、固件哈希及刷写脚本均不可挪用。
+目标仅为 **XT2533-4 / `portov_cn` / RETCN / `W1VT36H.1-51-8`**，指纹 `motorola/portov_cn/portov:16/W1VT36H.1-51-8/e9ec8-e96731:user/release-keys`；原机是 Android 16、ARM64、4K、`6.6.87-android15-8`（KMI 8）、解锁的 bootloader。原厂包 SHA-256、六个动态分区和 AVB 的主机侧核验见 [78 篇](78-g100-firmware-inventory.md)；尚未刷入。`boot`、`init_boot`、`vendor_boot` 均为 header v4；`boot` 的 ramdisk 长度为 0，`init_boot` 含约 2.46 MB ramdisk，`vendor_boot` 含设备 DTB 和 vendor ramdisk。G100 S `mumba_cn` 的内核、模块、固件哈希及刷写脚本均不可挪用。
 
 仓库没有 `.github/workflows` 或其他成型 CI。`tools/prepare_g100_stock.py`、`verify_g100_stock.py` 只完成 G100 原厂包提取及离线校验；`tools/build_clean_product.py`、`assemble_clean_rom.py`、`oneclick_flash.py` 的固定路径、固件、哈希和 `mumba` 检查属于旧 G100 S。`tools/rungic_release.py` 已能从正在运行的系统发布 APT 包，`plasma/rootfs-image` 管理现有 ext4 镜像；从空白 Ubuntu 构造 RungicOS rootfs 和清数据后自动安装仍未实现。[75 篇](75-image-build-separation.md)规定三层分离和单设备最终组包。
 
-Mac mini 是 Apple M4 ARM64、16 GB 物理内存；OrbStack Docker 为 Linux/ARM64、10 CPU、约 **8 GB VM 内存**。当前仅有一个运行中的 `rungic-build` 容器，镜像 `rungic-arm64-host:4bde4b381f5d`，供 Ubuntu 26.04 ARM64 上游软件包和调试符号构建；没有 GKI、rootfs 或固件组装镜像。容器只有 `mkfs.ext4`、Python、Git 等通用工具，未找到 `repo`、`bazel`、`mmdebstrap`、`avbtool`、`lpmake`、`simg2img`、Clang。宿主可用约 37 GiB，Docker VM 内约 36 GiB；现有 Docker 卷约 4 GiB。G100 原厂 ZIP 约 9.5 GB，验证后展开目录约 31 GB，`super.raw.img` 单文件 18,924,699,648 字节。因此当前 Mac mini 容量连同时保留展开固件和实用构建空间都不足。
+Mac mini 是 Apple M4 ARM64、16 GB 物理内存；OrbStack Docker 为 Linux/ARM64、10 CPU、约 **8 GB VM 内存**。当前仅有一个运行中的 `rungic-build` 容器，镜像 `rungic-arm64-host:4bde4b381f5d`（`tools/pq/arm64-host.Dockerfile`，按Dockerfile、ddebs源与包清单的哈希打标签），供 Ubuntu 26.04 ARM64 上游软件包、项目软件包构建和崩溃符号化；没有 GKI、rootfs 或固件组装镜像。2026-09-27 起镜像除工具链、Mesa构建依赖、gdb与Ubuntu调试符号源外，还按 `tools/pq/arm64-host-packages.txt` 装有手机的整套 Plasma Mobile 与桌面环境（约2700个包，与手机容器的已装QML模块一致，见71篇“构建机”）；仍没有 `repo`、`bazel`、`mmdebstrap`、`avbtool`、`lpmake`、`simg2img`、Clang。Mac mini 上的任务按AGENTS.md读取并使用macOS系统代理（Surge，容器内经 `host.docker.internal`）。宿主可用约 37 GiB，Docker VM 内约 36 GiB；现有 Docker 卷约 4 GiB。G100 原厂 ZIP 约 9.5 GB，验证后展开目录约 31 GB，`super.raw.img` 单文件 18,924,699,648 字节。因此当前 Mac mini 容量连同时保留展开固件和实用构建空间都不足。
 
 当前 Fedora Linux 工作站是 x86_64、16 个逻辑 CPU、30 GiB RAM（检查时可用约 26 GiB）、`/home` 可用约 392 GiB；有 Podman、`repo`、Clang、ADB/fastboot，既有 ACK 树内有 `tools/bazel` 与 `avbtool`、`lpmake`、`simg2img`。目前缺 `mmdebstrap`、EROFS 工具和 ARM64 用户空间执行环境；可以放到固定 OCI 镜像中补齐。目标 G100 `ZY32M9MRVP` 正通过 USB 连接此机，另有一台 `mumba_cn` 同时在线，所有实机命令必须强制精确序列号。故 CI1、CI3 的主机构建及 G100 硬件验收可在本机落地；CI2 **也可**在本机构建完整 ARM64 rootfs，只需先建立并验收 QEMU/binfmt 的 ARM64 安装环境。原生编译 Plasma/Mesa 等 ARM64 软件包仍更适合 Mac mini；这两类工作不必放在同一个 runner。
 
@@ -38,7 +38,7 @@ Mac mini 是 Apple M4 ARM64、16 GB 物理内存；OrbStack Docker 为 Linux/ARM
 | `rungic-image`（首版输出 `arm64` 变体） | 同一工作站的独立 x86_64 OCI builder；QEMU 用户态/binfmt 执行 ARM64 安装脚本 | 锁定的 Ubuntu 26.04 仓库快照、Mac mini 发布的**已构建 ARM64 `.deb` 仓库快照及摘要**、Plasma Mobile 6.6.5 或更新稳定配套版本、APK/桥协议、显式用户空间变体 | 从零构造 ARM64 rootfs，输出可安装载荷、ext4 镜像及文件/包清单和压缩后大小；验证 `e2fsck`、包/架构、依赖与离线启动前置条件。rootfs 不携带自己的内核；同一变体可被多个设备 spec 按摘要引用。Mac mini 的运行容器不能作为 rootfs 输入。 |
 | `firmware`（G100 的运行参数为 `portov_cn/W1VT36H.1-51-8`） | 同一工作站的独立 x86_64 OCI builder；USB 刷写验收在本机宿主的专用受控步骤 | 精确原厂包、前两条 CI 的不可变 SHA-256 产物、通用纯净化规则与 spec 例外、设备 spec、Android 宿主 APK/首启组件 | 按 spec 修改必要的 Android 分区、组装专属 `boot`/`init_boot` 与 AVB/fastboot 计划，输出单入口刷机包及追溯清单。先做完整离线恢复校验，再在对应专用测试机**清数据、从 bootloader 刷入、首启安装并验收**；未通过不标记为一键可用。 |
 
-三条都是当前工作站的逻辑 CI，分别使用固定版本的 OCI 镜像和相互隔离的 `.work/ci/runs/<run-id>/` 工作空间；Mac mini 原有 `rungic-build` 只充当**上游软件包生产者**，不承担镜像 CI 或刷机。可用 GitHub Actions 或等效控制面按提交 SHA 编排一个 x86_64 自托管 runner，同一个工作流通过 `device_spec` 参数选择目标，重型任务在该 runner 上串行，避免同时占用大量磁盘。测试机序列号是受控部署参数而非 spec 内容；本轮刷机步骤只允许精确 USB 序列号 `ZY32M9MRVP` 和现场识别出的 `portov_cn`。不把 ZIP、构建缓存、设备私有材料或密钥推入 Git。Mac mini 检查密码不进入 CI，正式包交接用专用 SSH 密钥或受控只读产物库。各任务在 spec、固件 SHA、KMI、包仓库快照或产物摘要不一致时拒绝组合。
+三条都是当前工作站的逻辑 CI，分别使用固定版本的 OCI 镜像和相互隔离的 `.work/ci/runs/<run-id>/` 工作空间；Mac mini 原有 `rungic-build` 只充当**上游软件包生产者**，不承担镜像 CI 或刷机。可用 GitHub Actions 或等效控制面按提交 SHA 编排一个 x86_64 自托管 runner，同一个工作流通过 `device_spec` 参数选择目标，重型任务在该 runner 上串行，避免同时占用大量磁盘。测试机序列号是受控部署参数而非 spec 内容；本轮刷机步骤只允许精确 USB 序列号 `ZY32M9MRVP` 和现场识别出的 `portov_cn`。不把 ZIP、构建缓存、设备私有材料或密钥推入 Git。Mac mini 的账号密码不进入 CI：工作站以 SSH 密钥登录（2026-09-27 起）；开发手机容器另有一把受限密钥，只能从手机地址调用构建容器里的 `tools/pq/rungic-transfer`，在 `/root/rungic-build` 下收发文件（71篇）。正式包交接沿用专用受限密钥或受控只读产物库，不复用这些开发密钥。各任务在 spec、固件 SHA、KMI、包仓库快照或产物摘要不一致时拒绝组合。
 
 ### 产物交接与触发顺序
 
@@ -53,7 +53,7 @@ Mac mini：ARM64 软件包构建与 APT 仓库快照 ──┐
                             正式发布 → 本次构建缓存清理 → 容量核对
 ```
 
-一次发布固定 `source_commit`、`resolved_spec_sha256`、OEM ZIP SHA-256、Mac mini 包仓库 `snapshot_id`、CI1/CI2 产物摘要和 Android 宿主 APK/桥协议版本，形成不可变 `release-inputs.json`。Mac mini 先把 `.deb`、`Packages`/`Release` 索引、包版本表和 SHA-256 清单发布到受控暂存区；CI2 在本机**先验证清单，后消费包**。CI1 与 CI2 的源码/清单检查可并行，但在当前工作站的重型编译/镜像阶段串行；CI3 只读取两者经校验的产物，不从工作目录“取最新文件”。发布包内保留 `manifest.json`、逐文件 SHA-256、已解析 spec、能力报告和验收记录。CI1/CI2 的候选成功只说明各自产物有效；整个流程的发布状态只能由 CI3 的实机验收授予。
+一次发布固定 `source_commit`、`resolved_spec_sha256`、OEM ZIP SHA-256、Mac mini 包仓库 `snapshot_id`、CI1/CI2 产物摘要和 Android 宿主 APK/桥协议版本，形成不可变 `release-inputs.json`。Mac mini 先把 `.deb`、`Packages`/`Release` 索引、包版本表和 SHA-256 清单发布到受控暂存区（**目标流程**；现状是Mac mini构建后由工作站的 `build_on_device.py collect` 取回，逐文件核对大小与SHA-256，再收进工作站 `.work/apt` 的发布仓库，由 `rungic_release.py` 出版本。改为Mac mini发布不可变快照属待办）；CI2 在本机**先验证清单，后消费包**。CI1 与 CI2 的源码/清单检查可并行，但在当前工作站的重型编译/镜像阶段串行；CI3 只读取两者经校验的产物，不从工作目录“取最新文件”。发布包内保留 `manifest.json`、逐文件 SHA-256、已解析 spec、能力报告和验收记录。CI1/CI2 的候选成功只说明各自产物有效；整个流程的发布状态只能由 CI3 的实机验收授予。
 
 ### 容量门槛与部署成功后的缓存清理
 
