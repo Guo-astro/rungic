@@ -297,3 +297,12 @@ rootfs从目录迁入ext4镜像，升级前自动建立dm-snapshot；btrfs按第
 | 20260926.8–.9 | 验收通过；.9期间迁入镜像rootfs |
 | 20260926.10–.11 | 快照部署；验收失败（首次输入大小写、plasmashell未就绪、抽屉空白），3次自动回到快照 |
 | 20260926.12 | moto-integrity增加`user_overrides`；快照部署，完整性clean，冒烟验收8项一次通过（无flaky）；镜像模式下完整验收15项全部通过（录屏34.1秒正常收尾，paint p95 3.802 ms、呈现间隔p95 16.706 ms、后置21.9 fps、编码1.84秒/解码0.65秒），随后`commit`丢弃快照，rootfs回到linear |
+
+### Linux内存上限（2026-09-27，发布20260927.14）
+
+容器原先没有内存上限，Linux侧的内存用量会让Android的低内存查杀去杀VPN与Plasma APK。Android的内存控制器是cgroup v1（`/dev/memcg`），容器进程原先记在Android的`apps`组里。现在`rungic-plasma`启动脚本在启动容器前建立`/dev/memcg/rungic-plasma`、写入上限并把自己放进去，`lxc-start`与整个容器随之继承；超限时由内核在容器内回收或结束进程。
+
+- 档位：最低2 GB、3 GB、4 GB（默认）、5 GB、6 GB、无上限；选择保存在`/data/adb/rungic-plasma/memory-limit`。`rungic-plasma memory-limit <档位>`即时生效，并把已在运行、尚未入组的容器进程连同其内存计费一起迁入（`memory.move_charge_at_immigrate=3`）；`memory-status`只读取状态（JSON）。
+- 设置入口：Rungic设备面板“内存”分组，显示Linux已用内存、上限与峰值，下拉选择档位（APK 2.5的`container-memory`操作以root调用启动脚本）。
+- Android的`sh`（mksh）只有32位整数：上限用`M`后缀写入，字节换算交给`awk`；遍历进程只用shell内建命令（每个进程调用一次grep要一分钟）。
+- 验证：面板改为5 GB后内核上限为5368709120；容器重启后`lxc-start`与plasmashell都在`/memory:/rungic-plasma`，上限保持4 GB，Linux用量约1.1–2 GB。
