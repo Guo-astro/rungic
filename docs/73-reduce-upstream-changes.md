@@ -132,3 +132,12 @@ plasma-settings `+rungic3`删除`android-hardware-settings`补丁：蜂窝、蓝
 - **plasmashell在显示模式或刷新率变化时崩溃**：KWayland客户端`Output::addMode`在Qt 6下使用失效的迭代器（上游未修复），新增`packages/kwayland`补丁。
 - **手机失联（VPN与Plasma APK被杀）**：崩溃采集与符号化在手机上用gdb加载大量调试信息，内存耗尽。符号化移到构建机，采集限内存，手机上的调试包已卸载（docs/61）。
 - 蓝牙服务每次轮询都启动一个root `app_process`：APK 2.4改为进程内读取，root只做特权操作与定期校准。
+
+### 第四阶段的设置页验收（2026-09-27，发布20260927.13）
+
+在手机上逐页打开设置（从命令行启动时要带会话的`PLASMA_PLATFORM=phone:handset`，否则只适用于手机的模块会被当作桌面过滤掉）：
+
+- **蓝牙**：原先显示“没有找到蓝牙适配器”。BluezQt在没有`/dev/rfkill`时把射频开关状态记为Unknown，bluedevil据此判断没有蓝牙硬件。容器没有rfkill，Android的`bt_power` rfkill也不跟随其蓝牙开关（打开蓝牙后仍是soft block），不能直接交给容器。新增`packages/kf6-bluez-qt`补丁：没有`/dev/rfkill`时状态为Unblocked，block/unblock不做事（bluedevil同时直接给适配器上电）。修复后显示“没有已配对的设备”，配对向导能扫描并列出附近设备。
+- **移动网络**：无SIM时显示“尚未插入SIM卡”，SIM卡页提示卡槽为空，调制解调器详情为motorola XT2537-4、状态Failed、原因“SIM is required but missing”。
+- **电源**：原先显示“调暗屏幕”“关闭屏幕”“挂起设备”三项，调暗与挂起在这里都不会发生。新增`packages/powerdevil`补丁：挂起只在系统能挂起时显示，调暗只在有屏幕亮度服务时显示。现在只剩“关闭屏幕”，与Android的`screen_off_timeout`一致（1分钟）。
+- **Wi‑Fi**：列出已保存的当前网络与附近网络（首次打开需等一次刷新），点未保存的加密网络弹出密码框。未实际连接新网络：离开当前Wi‑Fi会断开adb。设置页启动时NetworkManagerQt曾短暂看到一次临时连接`Settings/wifi`，之后一分钟采样始终稳定指向已保存网络，暂记为待查。
