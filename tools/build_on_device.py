@@ -3,7 +3,7 @@
 """Build a patch-queue component (packages/<name>, docs/71) natively on Ubuntu 26.04 ARM64: in the
 phone's container (--host phone) or in a Docker container on the Mac mini build host (--host
 macmini: Apple M4, tools/pq/arm64-host.Dockerfile; faster and keeps the phone cool). The default
-host is $RUNGIC_BUILD_HOST, else phone.
+host is $RUNGIC_BUILD_HOST, else macmini (the phone is the fallback).
 
 The source tree (tools/pq.py source: upstream + debian/ with the patches applied) is copied into a persistent
 /root/rungic-build/<component>/src with `rsync --checksum`, so unchanged files
@@ -346,8 +346,8 @@ def main():
     parser.add_argument('--target', action='append', default=[], help='CMake target (targets mode)')
     parser.add_argument('--file', action='append', default=[], help='BUILT=INSTALLED (divert mode)')
     parser.add_argument('--cmake-arg', action='append', default=[], help='extra configure argument (targets mode)')
-    parser.add_argument('--host', choices=sorted(HOSTS), default=os.environ.get('RUNGIC_BUILD_HOST', 'phone'),
-                        help='where to build (default $RUNGIC_BUILD_HOST, else phone)')
+    parser.add_argument('--host', choices=sorted(HOSTS), default=os.environ.get('RUNGIC_BUILD_HOST', 'macmini'),
+                        help='where to build (default $RUNGIC_BUILD_HOST, else macmini)')
     parser.add_argument('--jobs', type=int, help='compile jobs (phone 4: 8 cores, ~7 GiB RAM, and builds push it to '
                         'thermal throttling, so more jobs gain little; macmini 10)')
     parser.add_argument('--no-lto', action='store_true', help='development build: skip Ubuntu\'s default LTO '

@@ -8,7 +8,7 @@
                            packages with plasma/package-mesa.py, collect them into the release pool
 
 The version is the first entry of packages/mesa/debian/changelog. The build runs where
-build_on_device.py builds (--host, default $RUNGIC_BUILD_HOST, else phone); its log is build.log.
+build_on_device.py builds (--host, default $RUNGIC_BUILD_HOST, else macmini); its log is build.log.
 """
 import argparse
 import os
@@ -32,7 +32,7 @@ def step(host, *argv, timeout):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--host', choices=sorted(build_on_device.HOSTS), default=os.environ.get('RUNGIC_BUILD_HOST', 'phone'))
+    parser.add_argument('--host', choices=sorted(build_on_device.HOSTS), default=os.environ.get('RUNGIC_BUILD_HOST', 'macmini'))
     name = parser.parse_args().host
     host = build_on_device.use(name)
     changelog = (WORKSPACE / 'packages/mesa/debian/changelog').read_text()

@@ -21,7 +21,7 @@ Each package directory holds:
 Host packages are built here (reproducibly: SOURCE_DATE_EPOCH is the commit time); device
 packages are built on Ubuntu 26.04 ARM64 where tools/build_on_device.py builds (--host phone: the
 phone's container, in a transient unit; --host macmini: the Mac mini build host; default
-$RUNGIC_BUILD_HOST, else phone), with dpkg-shlibdeps adding library dependencies. Versions are 0.<commit count>, with +bN when a rebuild of the same
+$RUNGIC_BUILD_HOST, else macmini), with dpkg-shlibdeps adding library dependencies. Versions are 0.<commit count>, with +bN when a rebuild of the same
 commit differs. Built packages go to the release pool (.work/apt/repo) and are recorded in
 .work/apt/project-builds.json with the git tree hash of their paths, so an unchanged
 package is not rebuilt.
@@ -473,8 +473,8 @@ def main():
     sub.add_parser('list')
     p = sub.add_parser('build'); p.add_argument('names', nargs='*'); p.add_argument('--all', action='store_true')
     p.add_argument('--force', action='store_true'); p.add_argument('--jobs', type=int)
-    p.add_argument('--host', choices=sorted(build_on_device.HOSTS), default=os.environ.get('RUNGIC_BUILD_HOST', 'phone'),
-                   help='where device packages build (default $RUNGIC_BUILD_HOST, else phone)')
+    p.add_argument('--host', choices=sorted(build_on_device.HOSTS), default=os.environ.get('RUNGIC_BUILD_HOST', 'macmini'),
+                   help='where device packages build (default $RUNGIC_BUILD_HOST, else macmini)')
     a = parser.parse_args()
     if a.cmd == 'list':
         result = listing()
