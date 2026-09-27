@@ -36,6 +36,8 @@ Vendor适配应放在哪一层、哪些可以抽离到共享后端，见[54篇�
 
 系统交付、验收与诊断见[61篇](docs/61-delivery-diagnostics-plan.md)：容器rootfs上本项目的文件都来自包（`plasma/packaging`、补丁队列与vendor重建包），经本地APT仓库与发布元包部署（`tools/rungic_release.py deploy|rollback|status`），部署后自动验收（`tools/rungic_acceptance.py`），`rungic-integrity`检查漂移。rootfs是ext4镜像（`plasma/rootfs-image`），部署前自动建dm-snapshot，验收失败即回到快照；`/home`、崩溃报告与本地仓库不随之回滚。
 
+跨手机的 Android 系统镜像、RungicOS rootfs 和内核构建拆分方案，以及设备能力探测与发布门槛，见[75篇](docs/75-image-build-separation.md)。
+
 ## 文档索引
 
 01–21包含设备/ROM/容器历史；早期Phosh专属安装文档已移除。28–35保留共享接口研究，38以后记录Plasma适配。历史“当时已验证”的状态不代表当前所有功能已经验收。
@@ -108,3 +110,4 @@ Vendor适配应放在哪一层、哪些可以抽离到共享后端，见[54篇�
 | [71-upstream-patch-queue.md](docs/71-upstream-patch-queue.md) | 上游组件改为补丁队列：业界做法、目录与补丁规范、工具与测试分层、KWin试点 |
 | [72-kwin-android-host-isolation.md](docs/72-kwin-android-host-isolation.md) | KWin的Android宿主适配：协议化与独立后端（调研、目标结构、试点） |
 | [73-reduce-upstream-changes.md](docs/73-reduce-upstream-changes.md) | 减少对上游源码的修改：补丁队列收尾、扩展点与共享系统服务替代（总方案与进度） |
+| [75-image-build-separation.md](docs/75-image-build-separation.md) | Android 固件、RungicOS rootfs、内核构建拆分与跨设备兼容契约 |
