@@ -110,6 +110,17 @@
       "packages": [
         "wl-clipboard"
       ]
+    },
+    "gst-plugins-base1.0": {
+      "source": "packages/gst-plugins-base1.0",
+      "packages": [
+        "libgstreamer-plugins-base1.0-0",
+        "gstreamer1.0-plugins-base",
+        "gstreamer1.0-gl",
+        "libgstreamer-gl1.0-0",
+        "gir1.2-gst-plugins-base-1.0",
+        "libgstreamer-plugins-base1.0-dev"
+      ]
     }
   },
   "project": {

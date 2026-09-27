@@ -1,0 +1,52 @@
+From: kevinzhow <kevinzhow@local>
+Date: Sun, 27 Sep 2026 23:27:04 +0900
+Subject: audiobasesrc: do not advance the ring buffer by a negative segment
+ difference
+
+With the default skew slave method the first buffer (and one that fell more than the ring buffer
+behind) resyncs the ring buffer to running time: it advances it by running_time_segment -
+last_written_segment. When the device has already written one segment past running time, that
+difference is -1; it is kept in a guint64 and gst_audio_ring_buffer_advance() takes a guint, so the
+ring buffer advanced by 2^32 - 1 segments. Every later buffer was then timestamped about 11930
+hours ahead (2^32 segments of 10 ms). An aggregator (audiomixer) holds such buffers as future data:
+its input queue filled, the source blocked pushing, and a later EOS waited for that push forever.
+The screen recorder (pulsesrc of a PulseAudio monitor, not the clock provider, into audiomixer) lost
+its audio and failed to finish about half of its recordings (2026-09-27; GStreamer debug log in
+docs/73). The difference is signed and a non-positive one advances nothing: the read position is
+then the last written segment, at most a segment ahead of running time. Upstream main
+(2026-09-27) still has the unsigned difference.
+
+Forwarded: no
+Last-Update: 2026-09-27
+X-Rungic-Status: Pending [a plain bug; not fixed upstream as of 2026-09-27]
+X-Rungic-Tests: L3:recording.quicksetting
+X-Rungic-Docs: docs/73
+---
+ gst-libs/gst/audio/gstaudiobasesrc.c | 9 ++++++---
+ 1 file changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/gst-libs/gst/audio/gstaudiobasesrc.c b/gst-libs/gst/audio/gstaudiobasesrc.c
+index 4e4d68f..71ed342 100644
+--- a/gst-libs/gst/audio/gstaudiobasesrc.c
++++ b/gst-libs/gst/audio/gstaudiobasesrc.c
+@@ -953,14 +953,17 @@ gst_audio_base_src_create (GstBaseSrc * bsrc, guint64 offset, guint length,
+         if ((segment_skew >= ringbuffer->spec.segtotal) ||
+             (last_read_segment == 0) || first_sample) {
+           guint64 new_read_segment;
+-          guint64 segment_diff;
++          gint64 segment_diff;
+           guint64 new_sample;
+ 
+           /* the difference between running_time and the last written segment */
+           segment_diff = running_time_segment - last_written_segment;
+ 
+-          /* advance the ringbuffer */
+-          gst_audio_ring_buffer_advance (ringbuffer, segment_diff);
++          /* advance the ringbuffer; when the device has already written past
++           * running_time there is nothing to skip (a negative difference taken
++           * as unsigned advanced it by 2^32 - 1 segments) */
++          if (segment_diff > 0)
++            gst_audio_ring_buffer_advance (ringbuffer, segment_diff);
+ 
+           /* we move the  new read segment to the last known written segment */
+           new_read_segment = gst_audio_ring_buffer_get_segdone (src->ringbuffer)

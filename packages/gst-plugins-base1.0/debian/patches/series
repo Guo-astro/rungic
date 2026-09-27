@@ -1,0 +1,4 @@
+0001-skip-failing-tests.patch
+0003_failing-test-gstglcolorconvert.patch
+CVE-2026-18297.patch
+rungic/audiobasesrc-negative-resync.patch
