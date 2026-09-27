@@ -80,3 +80,41 @@
 **1.3 相机时钟：不可行，保留Snapshot的补丁。** 用`plasma/diagnostics/media-probes/camerabin-record.py`按Snapshot的方式（camerabin、pipewiresrc相机、默认音频源、MP4 H.264/AAC）录8秒对照：不带补丁（管线用PipeWire时钟）4次视频都被截短（5.3/5.3/1.9/5.3秒）；带补丁（`provide-clock=false`、`do-timestamp=true`）2次正常（8.07/8.03秒）。尝试在相机源中照V4L2源的做法由驱动节点每帧更新图时钟（`SPA_IO_Clock`，纳秒计、`NO_RATE`），结果大多数录制在停止后无法收尾，已撤销。补丁保留。
 
 另外发现（已有问题，不属本方案）：带补丁时camerabin录像也有一半次数视频被截短（5.3/0.03秒），与Snapshot早期记录的“EOS等待/零字节文件”一致，另行处理。
+
+### 第二阶段（2026-09-27）：完成
+
+其余9个组件迁为补丁队列，均由`tools/pq_import_history.py`从vendor历史生成，准备出的源码树与迁移前的vendor树逐字节一致（`debian/`、`.pc`、空目录除外），随后删除vendor目录：
+
+| 组件 | 上游来源 | 我们的补丁 |
+|---|---|---|
+| plasma-keyboard | Ubuntu 6.6.6 | 2条：输入上下文变更排队、语言菜单生命周期 |
+| xdg-desktop-portal-kde | Ubuntu 6.6.6 | 1条：移动端对话框宽度 |
+| wl-clipboard | 2.3.0发布包 | 无 |
+| arc-cua、LiteRT | 固定git提交（`git`类型） | 无；arc-cua由`rungic-cua`构建，LiteRT只取C API头文件 |
+| libcamera | Ubuntu 0.7.0-1ubuntu2 | 2条：dma-heap只读映射、PipeWire帧源；虚拟摄像头配置由overlay放入并随`libcamera0.7`安装 |
+| qt6-multimedia | Ubuntu 6.10.2-2 | 1条：PulseAudio目标延迟；只构建架构相关包，关闭未使用的GStreamer后端 |
+| plasma-camera | Ubuntu 2.1.1 | 1条：录像帧时间戳 |
+| Mesa | KGSL分支固定提交`98f3d62` | 1条：KGSL dmabuf导入UBWC开关；`tools/build_mesa.py`在手机上构建打包 |
+
+`plasma/package-media.py`与`plasma/build-mesa.sh`删除；`tools/stage_vendor.py`、`tools/vendor_debian.py`与读vendor的旧构建脚本删除，`vendor/`只剩两棵直接跟踪外来树的清单。已构建并进入发布仓库：wl-clipboard、plasma-keyboard、portal、libcamera、plasma-camera、qt6-multimedia。
+
+### 第三阶段（2026-09-27）：完成，待部署验收
+
+KWin Android后端（`packages/kwin`，`+rungic3`）：手机输出声明VRR能力，`vrrPolicy`对应Android的`refreshPolicy`（0为自动）；KScreen选“自动”时后端请求Android自动刷新，选固定刷新率时请求该刷新率并把策略置为Never。kscreen补丁删除，`plasma/release/packages.json`中kscreen改为Ubuntu原包`4:6.6.5-0ubuntu0.1`。新增验收项`display.refresh`（`display_refresh_policy`）：旧版本上固定刷新率通过、自动刷新失败，作为基线。
+
+### 第四阶段（2026-09-27）：完成，待部署验收
+
+四项都在共享层接入标准服务，APK通过平台套接字提供Android侧操作，特权操作用root执行（`app_process`从APK文件运行的辅助类，或`cmd`/`svc`/`settings`）：
+
+| 项 | Linux侧标准接口 | Android侧 | 手机上已验证 |
+|---|---|---|---|
+| Wi‑Fi | NetworkManager模拟服务：接入点、已保存网络、扫描、连接（开放/OWE/WPA2/WPA3个人）、断开、忘记 | `wifi`：`cmd wifi`与`RootWifi`（IWifiManager） | 16个接入点、扫描、激活当前已保存网络、删除测试网络 |
+| 电源 | `org.kde.Solid.PowerManagement`的设置对象：移动电源页的息屏时间 | `screen-timeout`：`settings put system screen_off_timeout` | 双向同步 |
+| 移动数据 | ModemManager模拟服务（新，`rungic-android-modem`）＋NetworkManager的调制解调器设备与移动数据连接 | `telephony`：TelephonyManager读状态，`svc data`开关数据 | 无SIM状态：状态栏信号图标、快捷设置“No SIM inserted”、nmcli设备`unavailable` |
+| 蓝牙 | BlueZ模拟服务（新，`rungic-android-bluetooth`）：适配器、开关、按客户端的搜索会话、已配对与搜到的设备、配对/取消配对/连接/断开 | `bluetooth`：`RootBluetooth`（uid 0的BluetoothAdapter）、`cmd bluetooth_manager`、APK自身的搜索 | bluetoothctl与bluedevil：开关、搜索（Android约12秒结束一次，会话期间自动续开）、客户端退出后停止搜索 |
+
+接口参照：ModemManager属性集参照ModemManager 1.24与Droidian的ofono2mm（BSD-3-Clause，同样把oFono桥接到ModemManager API）；plasma-mobile的`SignalIndicator`与plasma-nm的`kcm_cellular_network`按源码核对了用到的属性与调用。ModemManagerQt 6.23只在进程启动时服务已存在才订阅`InterfacesAdded`（`manager.cpp`），服务后出现时只枚举一次，所以模拟服务先发布对象、后占用总线名；蓝牙与网络服务同样改为先注册对象。
+
+plasma-settings `+rungic3`删除`android-hardware-settings`补丁：蜂窝、蓝牙、电源页都是桌面模块。APK 2.3新增`READ_PHONE_STATE`、`BLUETOOTH_SCAN`、`BLUETOOTH_CONNECT`，缺权限时由root授予。
+
+未覆盖：SIM PIN输入、选网、APN编辑与数据漫游开关留在Android设置（模拟服务明确返回不支持）；配对需要在Android弹窗确认，未用实际设备配对；手机无SIM，移动数据开关只验证了无SIM路径。
