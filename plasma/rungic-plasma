@@ -10,6 +10,20 @@ IMAGES=/data/adb/rungic-lxc/images
 [ "$(id -u)" = 0 ] || { echo 'Magisk root required' >&2; exit 1; }
 action=${1:-status}
 [ "$#" = 0 ] || shift
+# A product seed publishes the controller before the rootfs and shared paths.
+# Account setup must not enter that partially installed environment.
+case "$action" in
+  account-status|account-setup|start|restart-session)
+    if [ -f /product/etc/rungic/seed.env ]; then
+      expected_release=$(sed -n 's/^RELEASE_ID=//p' /product/etc/rungic/seed.env | tr -d "\"'")
+      installed_release=$(cat /data/adb/rungic-firstboot.complete 2>/dev/null) || installed_release=
+      if [ -z "$expected_release" ] || [ "$installed_release" != "$expected_release" ]; then
+        echo 'Rungic 正在完成首次安装，请稍候再打开；若持续未完成，请检查首次安装日志。' >&2
+        exit 1
+      fi
+    fi
+    ;;
+esac
 running() { [ "$("$ENTER" /usr/bin/lxc-info -n plasma -sH 2>/dev/null)" = RUNNING ]; }
 attach() { "$ENTER" /usr/bin/lxc-attach -n plasma -- "$@"; }
 device_rule() (
@@ -76,6 +90,12 @@ memory_status() {
         "$(memory_choice)" "$MEMORY_DEFAULT" "$MEMORY_PRESETS" "$limit_mib" "$(mib "$usage")" "$(mib "$peak")" $((total / 1024))
 }
 start_container() {
+    # Recreate the shared folder after storage becomes available (including an
+    # Android storage remount). Never create it below an unavailable mount.
+    [ -d /storage/emulated/0/Android ] || {
+      echo 'Android 共享存储尚未就绪，请解锁手机后重试。' >&2; exit 1;
+    }
+    mkdir -p /storage/emulated/0/Plasma
     # Account setup also starts the container, before normal desktop/audio start.
     # Its enter helper needs the audio bind source even when no server is needed.
     "$BASE/android-audio" prepare

@@ -112,3 +112,19 @@ v5 同时纳入 Termux 空目录处理、APK ARM64 JNI 预装、账户启动音�
 补齐系统依赖后再次运行 smoke（报告 `.work/acceptance/portov-v4-diagnostic-deps/20260928-013731/report.json`），8 项通过，camera.frames 按用户要求显式 SKIP，failed_ids 为空。该报告仅证明修订依赖在当前安装上工作，不替代新包清数据验收。最终待刷候选版本更新为 `portov-20260928.3`，rootfs=20260928.1（1450 个包，16 GiB ext4，fsck=0；SHA-256 `43d565d8c48f4368fff3eb4f9287b0588ae0579ccab4abac4237ee0aa7823633`）。`init_boot` 延迟初始化版本 SHA-256 为 `0d6df906961a66c2f9ede6f4d2a47b78a175eaddfb6f4a4cb37bc815738fdfcc`。
 
 `tools/ci/test_magisk_bootstrap.py` 隔离验证：空白数据早期不创建任何 /data 文件，未完成启动的 late 调用拒绝执行，late 准备种子后仅发出一次重启请求，重复调用不重复请求，已有升级文件保持原内容而缺失文件得到补齐。测试不代替 Android SELinux 或真实冷启动验证。`tools/ci/accept_release.py` 增加刷后只读检查，包括各分区实际内容哈希、首启完成与种子摘要、Magisk 官方 env_check/普通应用/完整 APK、预装应用直接位于 product、纯净化状态、账户和容器依赖。
+
+## portov-20260928.3 完整刷写开始
+
+新 product 为 6,938,972,160 字节（分区余量 506,818,560 字节），SHA-256 `43cf711aeef866d27504d3af71180c81c5e51fecceb19c47b97b3adc630d0f3d`。EROFS fsck、原厂元数据保持、所有输入报告交叉核验及发行目录 55 个文件的 SHA 校验通过。发行组装源码提交 `bf2f52383f9274b0bdb4fd24c5c750edb442b58f`；目录为 `.work/ci/runs/portov-20260927-86c6642d/release/portov-20260928.3/`。
+
+再次核对 USB 序列号、XT2533-4、电量 100% 后停止 LXC，同步数据并自动重启到 bootloader。使用发行包自身 `flash.py --serial ZY32M9MRVP --yes-wipe` 开始完整刷写；fastbootd 转换成功，正在顺序写入原厂分片。此段只记录刷写已开始，首启/安装/桌面验收尚未完成。日志为 `release-v6-flash-console.log` 和发行目录 `flash.log`；状态 `device/v6-release-status.json` 仍禁止清理缓存。
+
+### 清数据首启结果及首次账户重试
+
+`portov-20260928.3` 发行包自身刷写器完成全部分片、product 和启动分区写入及 userdata/metadata 擦除，退出码 0。实机日志显示 01:55:54 完成延迟 Magisk 种子准备，随后自动重启；01:57:01 开始 Rungic 种子，01:58:56 完成。用户确认 Android 启动和 Magisk 正常；`device/v6-firstboot-diagnostics.txt` 保存启动日志。此次确实通过清数据首启，未人工替换 init_boot 或修复 Magisk，但不据此断言前版失败的具体加密调用。
+
+用户首次提交账户时报告 `bind shared ... no such file`。源码将该错误定位到 `/storage/emulated/0/Plasma` → 控制环境 `/mnt/plasma-shared` 的挂载；检查时两端均存在，同一 `--mount-master` 入口已经能启动 LXC，并对空 JSON 返回预期用户名校验错误。随后用户重试成功，configured=true、UID=1000。未捕获首次报错的时间或目录状态，因此“首次部署未结束”和“共享存储挂载可用时序”仍是可能原因，不能记为已证明。没有重设密码或手工创建账户。安装检查 `device/v6-install-acceptance-configured.json` 全部通过：三个实机分区摘要、种子、完整普通 Magisk APK/环境、直接 product 预装、纯净化、账户、systemd、dpkg/pip。
+
+补强公共控制入口：当 product 存在种子时，账户查询/创建和桌面启动要求完成标记与本次 release 一致；未完成时显示安装状态提示。容器启动检查 Android 共享存储已可用，再幂等准备 Plasma 共享目录。隔离执行实际控制脚本覆盖无 product 种子的旧部署、未完成、旧版本标记和完成四种状态；shell 语法检查通过。该改动进入后续 `.4` 候选，不能把 `.3` 的分区摘要写成新候选摘要。
+
+首次 smoke 的 `input.text` 未通过：原工具固定从 y=2000 滑动，在本机当前桌面布局落入底部导航区域。实际从桌面内部 y=1700 滑动后，AT-SPI 已能取得 Search 输入框；修改主机验收工具按 Android 屏幕尺寸从 70% 高度滑向 25%，保留原有抽屉稳定/实际文字输入/OCR 检查。其余会话、显示、声音项目通过，摄像头依用户要求 SKIP；完整报告保留在 `.work/acceptance/portov-20260928.3/20260928-020410/`，修订后的复测另行记录。
