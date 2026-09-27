@@ -27,7 +27,54 @@ final class AndroidNetworkBridge implements Closeable {
         cm=activity.getSystemService(ConnectivityManager.class);
         wm=activity.getApplicationContext().getSystemService(WifiManager.class);
     }
-    void start() { worker.scheduleWithFixedDelay(this::refreshIdentity,0,5,TimeUnit.SECONDS); }
+    // Android's own callbacks tell the Linux side (HostEvents) and refresh the Wi-Fi identity (a root
+    // `cmd wifi status`) when something changed; the slow schedule only catches what they miss.
+    // Every 5 s it cost a root command and a wakeup on both sides at idle.
+    private final ConnectivityManager.NetworkCallback changes=new ConnectivityManager.NetworkCallback() {
+        @Override public void onAvailable(Network n) { changed(true); }
+        @Override public void onLost(Network n) { synchronized(seen) { seen.remove(n); } changed(true); }
+        // Capabilities carry the Wi-Fi signal and change every few seconds: only what the Linux side
+        // shows counts (the kind, validation, captive portal, metering, the signal's bars).
+        @Override public void onCapabilitiesChanged(Network n,NetworkCapabilities c) {
+            String summary=summary(c);
+            String before;
+            synchronized(seen) { before=seen.put(n,summary); }
+            if(!summary.equals(before))changed(false);
+        }
+        @Override public void onLinkPropertiesChanged(Network n,LinkProperties p) { changed(true); }
+    };
+    private final java.util.Map<Network,String> seen=new java.util.HashMap<>();
+    private String summary(NetworkCapabilities c) {
+        StringBuilder b=new StringBuilder();
+        for(int t:new int[]{NetworkCapabilities.TRANSPORT_WIFI,NetworkCapabilities.TRANSPORT_CELLULAR,NetworkCapabilities.TRANSPORT_ETHERNET,
+                NetworkCapabilities.TRANSPORT_VPN,NetworkCapabilities.TRANSPORT_BLUETOOTH,NetworkCapabilities.TRANSPORT_USB})
+            b.append(c.hasTransport(t)?'1':'0');
+        b.append(c.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)).append(c.hasCapability(NetworkCapabilities.NET_CAPABILITY_CAPTIVE_PORTAL))
+            .append(c.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED));
+        if(c.getTransportInfo() instanceof WifiInfo)b.append(wm.calculateSignalLevel(((WifiInfo)c.getTransportInfo()).getRssi()));
+        return b.toString();
+    }
+    private final android.content.BroadcastReceiver wifiState=new android.content.BroadcastReceiver() {
+        @Override public void onReceive(android.content.Context context,android.content.Intent intent) { changed(true); }
+    };
+    private ScheduledFuture<?> pendingRefresh;
+    private boolean watching;
+    void start() {
+        worker.scheduleWithFixedDelay(this::refreshIdentity,0,60,TimeUnit.SECONDS);
+        if(watching)return;
+        watching=true;
+        cm.registerNetworkCallback(new NetworkRequest.Builder().clearCapabilities().build(),changes);
+        activity.getApplicationContext().registerReceiver(wifiState,new android.content.IntentFilter(WifiManager.WIFI_STATE_CHANGED_ACTION),
+            android.content.Context.RECEIVER_NOT_EXPORTED);
+    }
+    /** `identity`: the Wi-Fi network may be another one, so its SSID is read again. */
+    private synchronized void changed(boolean identity) {
+        HostEvents.bump(HostEvents.NETWORK);
+        if(!identity)return;
+        // One refresh for a burst of callbacks (a new network brings several at once).
+        if(pendingRefresh!=null)pendingRefresh.cancel(false);
+        pendingRefresh=worker.schedule(this::refreshIdentity,500,TimeUnit.MILLISECONDS);
+    }
     private Network wifiNetwork() {
         for(Network n:cm.getAllNetworks()) {
             NetworkCapabilities c=cm.getNetworkCapabilities(n);
@@ -40,6 +87,13 @@ final class AndroidNetworkBridge implements Closeable {
         return match.find()?match.group(1):"";
     }
     private void refreshIdentity() {
+        String before=identity;
+        updateIdentity();
+        // Its time field changes with every refresh; only the network's identity matters.
+        if(!before.replaceAll("\"time\":\\d+","").equals(identity.replaceAll("\"time\":\\d+","")))
+            HostEvents.bump(HostEvents.NETWORK);
+    }
+    private void updateIdentity() {
         try {
             Network before=wifiNetwork();
             if(before==null) { identity="{}";return; }
@@ -228,7 +282,8 @@ final class AndroidNetworkBridge implements Closeable {
             if(wifi) {
                 WifiInfo info=caps.getTransportInfo() instanceof WifiInfo?(WifiInfo)caps.getTransportInfo():wm.getConnectionInfo();
                 if(info!=null)row.put("rssi",info.getRssi()).put("frequency",info.getFrequency()).put("linkMbps",info.getLinkSpeed()).put("security",info.getCurrentSecurityType());
-                if(cached.optLong("handle",-1)==network.getNetworkHandle() && SystemClock.elapsedRealtime()-cached.optLong("time",0)<15000) {
+                // Read again whenever the Wi-Fi network changes (changed(true)); the handle ties it to this one.
+                if(cached.optLong("handle",-1)==network.getNetworkHandle()) {
                     for(String key:new String[]{"ssid","bssid","mac"})if(cached.has(key))row.put(key,cached.getString(key));
                 }
             }
@@ -237,5 +292,12 @@ final class AndroidNetworkBridge implements Closeable {
         return new JSONObject().put("version",1).put("wifiEnabled",wm.isWifiEnabled()).put("wifi5GHz",wm.is5GHzBandSupported())
             .put("wifi6GHz",wm.is6GHzBandSupported()).put("networks",networks);
     }
-    @Override public void close() { worker.shutdownNow();closeRoot(); }
+    @Override public void close() {
+        if(watching) {
+            try { cm.unregisterNetworkCallback(changes); } catch(IllegalArgumentException ignored) {}
+            try { activity.getApplicationContext().unregisterReceiver(wifiState); } catch(IllegalArgumentException ignored) {}
+            watching=false;
+        }
+        worker.shutdownNow();closeRoot();
+    }
 }

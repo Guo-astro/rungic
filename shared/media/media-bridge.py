@@ -21,6 +21,8 @@ import threading
 import time
 from pathlib import Path
 
+import rungic_host_watch
+
 RUNTIME = Path(os.environ['XDG_RUNTIME_DIR'])
 FIFO = RUNTIME / 'rungic-microphone.pcm'
 SOURCE = 'android_microphone'
@@ -37,7 +39,10 @@ PHONE_HEADER = {'ok': True, 'rate': 48000, 'channels': 2, 'format': 's16le'}
 F_SETPIPE_SZ = 1031
 LOG = logging.getLogger('android-media')
 STOP = threading.Event()
-CHANGED = threading.Event()
+CHANGED = threading.Event()      # the audio server reported a device or stream change
+HOST_CHANGED = threading.Event()  # the app reported a change of what it shows or permits (capture)
+WAKE = threading.Event()
+RECHECK = 30   # seconds between checks of the audio server without an event
 
 
 def pactl(*args):
@@ -329,9 +334,14 @@ def ensure_linux_devices():
 
 
 def watch_pulse():
+    """Wake the main loop on the audio server's device and stream events. The C locale: the
+    session's zh_CN made pactl print "事件…于 source", and no event ever matched."""
     while not STOP.is_set():
         try:
-            process = subprocess.Popen(['pactl', 'subscribe'], stdout=subprocess.PIPE, text=True)
+            process = subprocess.Popen(['pactl', 'subscribe'], stdout=subprocess.PIPE, text=True,
+                                       env={**os.environ, 'LC_ALL': 'C'})
+            CHANGED.set()   # (re)connected: the server may have restarted without our modules
+            WAKE.set()
             while not STOP.is_set() and process.poll() is None:
                 if select.select([process.stdout], [], [], 1)[0]:
                     line = process.stdout.readline()
@@ -339,6 +349,7 @@ def watch_pulse():
                         break
                     if ' on source' in line or ' on sink ' in line or ' on server ' in line:
                         CHANGED.set()
+                        WAKE.set()
             process.terminate()
             process.wait(timeout=3)
         except (OSError, subprocess.SubprocessError):
@@ -348,7 +359,12 @@ def watch_pulse():
 
 def stop(*_):
     STOP.set()
-    CHANGED.set()
+    WAKE.set()
+
+
+def host_changed():
+    HOST_CHANGED.set()
+    WAKE.set()
 
 
 def main():
@@ -362,48 +378,58 @@ def main():
     signal.signal(signal.SIGINT, stop)
     microphone, cameras, phone = Microphone(), Cameras(), PhoneOutput()
     threading.Thread(target=watch_pulse, daemon=True).start()
-    last_info = 0
+    # The app's capture state (in front, permissions, cameras) when it changes, not every second.
+    rungic_host_watch.watch(('capture',), host_changed, legacy=1, name='capture-watch')
     info = {}
     linux_devices_error = None
+    # The audio server is asked (each pactl is a client, and a burst of events for every
+    # listener) only after one of its device or stream events, and every RECHECK seconds
+    # in case one was missed. Polling it twice a second cost ~15 % of a core at idle.
+    recheck_at = 0
+    recording = False       # a stream records from the Android microphone
+    phone_state = 'SUSPENDED'
     try:
         while not STOP.is_set():
             now = time.monotonic()
-            if now - last_info >= 1:
+            if HOST_CHANGED.is_set():
+                HOST_CHANGED.clear()
                 try:
                     info = host_info()
                 except (OSError, ValueError):
                     info = {}
-                last_info = now
-                cameras.update(info)
-            try:
-                source = ensure_source()
+            cameras.update(info)   # also restarts a camera source that exited
+            if CHANGED.is_set() or now >= recheck_at:
+                CHANGED.clear()
+                recheck_at = now + RECHECK
                 try:
-                    ensure_linux_devices()
-                except (OSError, subprocess.SubprocessError) as error:
-                    # The virtual devices are optional: never stop the microphone
-                    # and phone output over them.
-                    if linux_devices_error != str(error):
-                        LOG.warning('Linux speaker/microphone not available: %s', error)
-                    linux_devices_error = str(error)
-                # PA 17's JSON exporter rejects UTF-8 application names. Only
-                # numeric Source and yes/no Corked fields are needed here.
-                outputs = pactl('list', 'source-outputs').split('Source Output #')[1:]
-                wanted = False
-                for block in outputs:
-                    fields = dict(line.strip().split(': ', 1) for line in block.splitlines() if ': ' in line)
-                    if fields.get('Source') == str(source) and fields.get('Corked') == 'no':
-                        wanted = True
-                permission = not (info.get('microphoneDenied') and not info.get('microphonePermission'))
-                microphone.set_wanted(bool(wanted and info.get('visible') and permission))
-                phone.set_wanted(ensure_phone_sink() != 'SUSPENDED')
-            except (OSError, ValueError, subprocess.SubprocessError) as error:
-                microphone.set_wanted(False)
-                phone.set_wanted(False)
-                LOG.warning('audio server unavailable: %s', error)
-                STOP.wait(3)
-            CHANGED.wait(0.5)
-            CHANGED.clear()
-            STOP.wait(0.1)
+                    source = ensure_source()
+                    try:
+                        ensure_linux_devices()
+                    except (OSError, subprocess.SubprocessError) as error:
+                        # The virtual devices are optional: never stop the microphone
+                        # and phone output over them.
+                        if linux_devices_error != str(error):
+                            LOG.warning('Linux speaker/microphone not available: %s', error)
+                        linux_devices_error = str(error)
+                    # PA 17's JSON exporter rejects UTF-8 application names. Only
+                    # numeric Source and yes/no Corked fields are needed here.
+                    outputs = pactl('list', 'source-outputs').split('Source Output #')[1:]
+                    recording = False
+                    for block in outputs:
+                        fields = dict(line.strip().split(': ', 1) for line in block.splitlines() if ': ' in line)
+                        if fields.get('Source') == str(source) and fields.get('Corked') == 'no':
+                            recording = True
+                    phone_state = ensure_phone_sink()
+                except (OSError, ValueError, subprocess.SubprocessError) as error:
+                    recording, phone_state = False, 'SUSPENDED'
+                    LOG.warning('audio server unavailable: %s', error)
+                    recheck_at = now + 3
+            permission = not (info.get('microphoneDenied') and not info.get('microphonePermission'))
+            microphone.set_wanted(bool(recording and info.get('visible') and permission))
+            phone.set_wanted(phone_state != 'SUSPENDED')
+            # Cameras and the microphone retry a failed start after a few seconds.
+            WAKE.wait(max(0.05, min(2, recheck_at - time.monotonic())))
+            WAKE.clear()
     finally:
         microphone.stop()
         phone.stop()

@@ -73,6 +73,9 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
             finish();
             return;
         }
+        // A change of Android's clipboard: the Linux side reads it now (HostEvents), not every second.
+        getSystemService(android.content.ClipboardManager.class)
+            .addPrimaryClipChangedListener(() -> HostEvents.bump(HostEvents.CLIPBOARD));
         getWindow().setDecorFitsSystemWindows(false);
         getWindow().setNavigationBarColor(android.graphics.Color.TRANSPARENT);
         getWindow().setStatusBarColor(android.graphics.Color.TRANSPARENT);
@@ -224,6 +227,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         super.onStart();
         started = true;
         if(capture!=null)capture.setVisible(true);
+        if(platform!=null)platform.desktopBoost(true);
         if(pacer!=null && display.getHolder().getSurface().isValid())pacer.start();
         if(display!=null) {
             if(awaitingFrame)display.post(framePoll);
@@ -235,6 +239,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         if(display!=null) { display.removeCallbacks(installPoll); display.removeCallbacks(framePoll); }
         if(pacer!=null)pacer.stop();
         if(capture!=null)capture.setVisible(false);
+        if(platform!=null)platform.desktopBoost(false);
         super.onStop();
     }
     @Override public void onRequestPermissionsResult(int code,String[] permissions,int[] grants) {
@@ -252,6 +257,8 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     @Override public void onWindowFocusChanged(boolean focus) {
         super.onWindowFocusChanged(focus);
         if(focus) { immersive(); if(display!=null)display.requestApplyInsets(); }
+        // Android lets only the focused app read the clipboard: the Linux side reads it again now.
+        HostEvents.bump(HostEvents.CLIPBOARD);
     }
 
     // Use SurfaceView coordinates, then convert to the actual Wayland buffer.

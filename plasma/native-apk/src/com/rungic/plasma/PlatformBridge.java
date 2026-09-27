@@ -29,6 +29,15 @@ final class PlatformBridge implements Closeable {
     private final Handler awakeHandler = new Handler(Looper.getMainLooper());
     private final Runnable expireAwake = this::clearAwake;
     private void clearAwake() { ((MainActivity)activity).setKeepAwake(MainActivity.AWAKE_LINUX,false); }
+    private final java.util.concurrent.ExecutorService boostWorker=java.util.concurrent.Executors.newSingleThreadExecutor();
+    /** The desktop in front of the other apps or not (docs/49): its session runs on the big cores in
+     * front (rungic-plasma boost), through the app's root session, in order. */
+    void desktopBoost(boolean front) {
+        boostWorker.execute(() -> {
+            try { network.rootShell("/data/adb/rungic-plasma/rungic-plasma boost "+(front?"on":"off"),10000); }
+            catch(Exception e) { Log.w("RungicPlatform","desktop boost: "+e.getMessage()); }
+        });
+    }
     private final AndroidNetworkBridge network;
     private final CaptureBridge capture;
     private final OcrBridge ocr;
@@ -71,6 +80,13 @@ final class PlatformBridge implements Closeable {
                         // Connecting to a TV takes seconds to a minute: answer on its own thread.
                         LocalSocket owned=client;client=null;
                         Thread cast=new Thread(() -> answerCast(owned,request),"rungic-cast");cast.setDaemon(true);cast.start();
+                        continue;
+                    }
+                    if(request.optString("op").equals("watch")) {
+                        // Waits for a change of the Android state the caller follows (HostEvents): on its
+                        // own thread, for up to a minute.
+                        LocalSocket owned=client;client=null;
+                        Thread watch=new Thread(() -> answerWatch(owned,request),"rungic-watch");watch.setDaemon(true);watch.start();
                         continue;
                     }
                     if(request.optString("op").equals("ocr")) {
@@ -157,6 +173,15 @@ final class PlatformBridge implements Closeable {
             } catch(Exception e) { result=new JSONObject().put("error",e.getMessage()==null?"投屏请求失败":e.getMessage()); }
             c.getOutputStream().write((result.toString()+"\n").getBytes(StandardCharsets.UTF_8));
         } catch(Exception e) { Log.w("RungicPlatform","Cast request failed: "+e.getClass().getSimpleName()); }
+    }
+    private void answerWatch(LocalSocket c,JSONObject request) {
+        try(LocalSocket client=c) {
+            long timeout=Math.max(1,Math.min(60000,request.optLong("timeout",30000)));
+            JSONObject result;
+            try { result=HostEvents.await(request,timeout); }
+            catch(Exception e) { result=new JSONObject().put("error",e.getMessage()==null?"watch failed":e.getMessage()); }
+            client.getOutputStream().write((result.toString()+"\n").getBytes(StandardCharsets.UTF_8));
+        } catch(Exception e) { Log.w("RungicPlatform","Watch request failed: "+e.getClass().getSimpleName()); }
     }
     private JSONObject handle(JSONObject request) throws Exception {
         String op=request.optString("op");
@@ -292,5 +317,11 @@ final class PlatformBridge implements Closeable {
             .put("temperature",battery.getIntExtra(BatteryManager.EXTRA_TEMPERATURE,0)/10.0).put("status",battery.getIntExtra(BatteryManager.EXTRA_STATUS,1)).put("plugged",battery.getIntExtra(BatteryManager.EXTRA_PLUGGED,0)));
         return out;
     }
-    @Override public void close() throws IOException { running=false;network.close();if(server!=null)server.close();if(bound!=null)bound.close();path.delete(); }
+    @Override public void close() throws IOException {
+        running=false;
+        // A queued "boost off" still needs the root session.
+        boostWorker.shutdown();
+        try { boostWorker.awaitTermination(3,TimeUnit.SECONDS); } catch(InterruptedException ignored) {}
+        network.close();if(server!=null)server.close();if(bound!=null)bound.close();path.delete();
+    }
 }

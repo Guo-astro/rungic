@@ -2,6 +2,7 @@
 install -Dm755 "$SRC/plasma/device-panel.py" "$DESTDIR/usr/bin/rungic-platform"
 install -Dm644 "$SRC/plasma/com.rungic.Platform.desktop" "$DESTDIR/usr/share/applications/com.rungic.Platform.desktop"
 install -Dm755 "$SRC/shared/platform/clipboard.py" "$DESTDIR/usr/bin/rungic-clipboard"
+install -Dm644 "$SRC/shared/platform/host_watch.py" "$DESTDIR/usr/lib/python3/dist-packages/rungic_host_watch.py"
 install -Dm755 "$SRC/shared/platform/network-manager.py" "$DESTDIR/usr/libexec/rungic-android-network"
 install -Dm755 "$SRC/shared/platform/bluez.py" "$DESTDIR/usr/libexec/rungic-android-bluetooth"
 install -Dm755 "$SRC/shared/platform/modem-manager.py" "$DESTDIR/usr/libexec/rungic-android-modem"

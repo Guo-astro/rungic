@@ -148,6 +148,18 @@ Window {
         function onDataChanged() { Qt.callLater(win.refreshTurn) }
     }
 
+    // A hold whose lift never came kept the microphone open and the overlay up (2026-09-28: a
+    // touch lost while the desktop went to the background, docs/49). Past a minute it is taken as
+    // lost and cancelled; what was said is not sent.
+    Timer {
+        interval: 60000
+        running: win.holding
+        onTriggered: {
+            win.holding = false
+            win.dismiss()   // cancels the listening
+        }
+    }
+
     Connections {
         target: Overlay
         function onHoldRequested(pressed, screen) {

@@ -3,6 +3,8 @@
 No clipboard history or content logs. Android access is limited to foreground.
 """
 import json, os, signal, socket, subprocess, sys, threading, time
+
+import rungic_host_watch
 from pathlib import Path
 
 LIMIT=262144
@@ -46,8 +48,11 @@ try:
 except Exception:pass
 watch=subprocess.Popen(['wl-paste','--type','text','--watch',sys.argv[0],'--event'],stdout=subprocess.PIPE,text=True)
 
+changed=threading.Event()
+
 def stop(*_):
     stopped.set()
+    changed.set()
     watch.terminate()
     signal.signal(signal.SIGTERM,signal.SIG_DFL)
 
@@ -65,8 +70,11 @@ def from_linux():
             except Exception:continue
             last=value
     stopped.set()
+    changed.set()
 
 threading.Thread(target=from_linux,daemon=True).start()
+# Android's clipboard is read when the app reports a change or the focus it needs (docs/49), not every second.
+rungic_host_watch.watch(('clipboard',),changed.set,legacy=1,name='clipboard-watch')
 while not stopped.is_set():
     try:
         with lock:
@@ -80,5 +88,6 @@ while not stopped.is_set():
                 last=value
     except Exception:
         pass # Android may be paused, locked, or replacing its socket on restart.
-    stopped.wait(0.75)
+    changed.wait()
+    changed.clear()
 stop()

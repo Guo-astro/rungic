@@ -21,6 +21,8 @@ from xml.sax.saxutils import escape
 
 from gi.repository import Gio, GLib
 
+import rungic_host_watch
+
 NM = 'org.freedesktop.NetworkManager'
 BASE = '/org/freedesktop/NetworkManager'
 PROPS = 'org.freedesktop.DBus.Properties'
@@ -814,7 +816,9 @@ def main():
     GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, stop)
     GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, stop)
     bridge.poll()
-    GLib.timeout_add_seconds(2, bridge.poll)
+    # Asked again when Android reports a network or mobile change, not every 2 s (docs/49).
+    rungic_host_watch.watch(('network', 'telephony'), lambda: GLib.idle_add(lambda: bridge.poll() and False),
+                            legacy=2, name='network-watch')
     try:
         loop.run()
     finally:

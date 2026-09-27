@@ -44,15 +44,17 @@ final class CaptureBridge implements Closeable {
         cameras=activity.getSystemService(CameraManager.class);
     }
     void setVisible(boolean value) {
+        if(visible!=value)HostEvents.bump(HostEvents.CAPTURE);   // the media bridge follows it (HostEvents)
         visible=value;
         if(!value) {
             for(LocalSocket socket:sockets)try { socket.close(); } catch(IOException ignored) {}
             CountDownLatch latch=permissionResult;if(latch!=null)latch.countDown();
         }
     }
-    void permissionResult() { CountDownLatch latch=permissionResult;if(latch!=null)latch.countDown(); }
+    void permissionResult() { HostEvents.bump(HostEvents.CAPTURE);CountDownLatch latch=permissionResult;if(latch!=null)latch.countDown(); }
     void requestPermissionsFromUser() {
         activity.getPreferences(Activity.MODE_PRIVATE).edit().remove("denied-camera").remove("denied-microphone").apply();
+        HostEvents.bump(HostEvents.CAPTURE);
         ArrayList<String> required=new ArrayList<>();
         for(String permission:new String[]{Manifest.permission.CAMERA,Manifest.permission.RECORD_AUDIO})
             if(activity.checkSelfPermission(permission)!=PackageManager.PERMISSION_GRANTED)required.add(permission);
@@ -71,6 +73,7 @@ final class CaptureBridge implements Closeable {
             if(!visible)throw new IOException("采集已暂停，请返回 Plasma Mobile");
             if(activity.checkSelfPermission(permission)!=PackageManager.PERMISSION_GRANTED) {
                 activity.getPreferences(Activity.MODE_PRIVATE).edit().putBoolean(key,true).apply();
+                HostEvents.bump(HostEvents.CAPTURE);
                 throw new SecurityException("采集权限未授予");
             }
         }
@@ -86,7 +89,17 @@ final class CaptureBridge implements Closeable {
             return null;
         });activity.runOnUiThread(change);change.get(2,TimeUnit.SECONDS);
     }
+    private JSONArray cameraList;
     JSONObject info() throws Exception {
+        // The phone's cameras do not change: listed once, not on every request (the media bridge
+        // asked every second, a camera service round trip per camera each time).
+        if(cameraList==null)cameraList=listCameras();
+        return new JSONObject().put("version",1).put("visible",visible).put("microphonePermission",activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED)
+            .put("cameraPermission",activity.checkSelfPermission(Manifest.permission.CAMERA)==PackageManager.PERMISSION_GRANTED)
+            .put("cameraDenied",activity.getPreferences(Activity.MODE_PRIVATE).getBoolean("denied-camera",false))
+            .put("microphoneDenied",activity.getPreferences(Activity.MODE_PRIVATE).getBoolean("denied-microphone",false)).put("cameras",cameraList);
+    }
+    private JSONArray listCameras() throws Exception {
         JSONArray list=new JSONArray();
         for(String id:cameras.getCameraIdList()) {
             CameraCharacteristics c=cameras.getCameraCharacteristics(id);
@@ -103,10 +116,7 @@ final class CaptureBridge implements Closeable {
             list.put(new JSONObject().put("id",id).put("facing",name).put("width",size.getWidth()).put("height",size.getHeight())
                 .put("rotation",orientation==null?0:orientation).put("fps",30));
         }
-        return new JSONObject().put("version",1).put("visible",visible).put("microphonePermission",activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED)
-            .put("cameraPermission",activity.checkSelfPermission(Manifest.permission.CAMERA)==PackageManager.PERMISSION_GRANTED)
-            .put("cameraDenied",activity.getPreferences(Activity.MODE_PRIVATE).getBoolean("denied-camera",false))
-            .put("microphoneDenied",activity.getPreferences(Activity.MODE_PRIVATE).getBoolean("denied-microphone",false)).put("cameras",list);
+        return list;
     }
     private static Size chooseSize(Size[] sizes) {
         if(sizes==null)return null;

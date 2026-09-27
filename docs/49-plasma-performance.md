@@ -48,3 +48,70 @@ APK1.7/versionCode8新增菜单“显示流畅度”：默认流畅优先，在�
 帧率请求仍服从Android显示调度；例如相机启动期间观察到短时实际60Hz、请求120Hz。流畅优先增加显示功耗，不绕过温控；可在左侧边缘菜单→显示流畅度切换自动。
 
 后续APK1.8已改为原生1080×2400输出。本篇APK1.7的720×1600结果不能直接用于原生分辨率的性能判断；新的多轮GLES/Zink和原生Vulkan对照见[51篇](51-plasma-vulkan-benchmark.md)。
+
+## 大核调度与空闲开销（2026-09-28，APK 2.9）
+
+用户要求检查我们的系统是否始终在大核上运行，以及 CPU 开销是否足够低。测量方法、原始追踪和脚本在 `.work/diag/cpu-placement/`（`analyze.py`、`ours.py`、`experiment.py`、`results.md`）；追踪用 `tools/rungic_trace.py` 抓取，含 sched_switch 和 cpu_frequency。
+
+### 现状
+
+- SM6435：cpu0–3 为 Cortex-A55（1.8 GHz，容量 405），cpu4–7 为 Cortex-A78（2.4 GHz，容量 1024）。
+- APK 在前台时属于 top-app（0–7），在后台时属于 foreground（0–6）；SurfaceFlinger 固定在 4–6 号核，uclamp.min 10。
+- KWin、plasmashell 和整个容器都在 cpu/cpuset 的根组里，允许 0–7，uclamp 为 0。放置完全交给 EAS，所以它们几乎只在小核上运行：滑动开关应用抽屉时，plasmashell 96%、KWin 92% 的时间在小核上。
+
+### 放到大核的对照（每种两轮，8 次滑动，统计超过 12 ms 的帧间隔）
+
+| 设置 | 掉帧比例 | plasmashell / KWin CPU |
+|---|---|---|
+| 现状 | 10–14% | 21% / 12% |
+| taskset 固定到 4–7 | 7–8% | 13% / 9% |
+| uclamp.min 512 | 8–9% | 12% / 7% |
+
+放到大核后掉帧大约减半，而且因为大核更快，CPU 时间反而更少。uclamp.min 512 高于小核容量 405，EAS 会把任务放到大核上。
+
+### 采用的做法：前台提升，不常驻大核
+
+- 如果始终放在大核，空闲和后台时的轮询也会跑到大核上，耗电更多。所以改为照 Android 对 top-app 的处理：只在 Plasma 位于前台时提升。
+- `rungic-plasma boost on|off`：把桌面会话（uid 1000 的 systemd 用户管理器，以及它派生的全部进程）收进 Android v1 的 `/dev/cpuctl/rungic-desktop` 组。前台时 `cpu.uclamp.min` 50%、`cpu.shares` 5120；后台时恢复 0 和 1024。
+  - 新进程继承父进程的组，所以只在用户管理器是新进程时扫描一次 /proc。
+  - 容器里的系统服务和编译任务不收进这个组（沿用本篇前面定下的边界）。
+- APK 在 `onStart`/`onStop` 时，经已有的常驻 root shell 调用它（`PlatformBridge.desktopBoost`），不会每次新开 `su`，也就没有 Magisk 的授权提示。
+- 验收：前台时 KWin 和 plasmashell 的有效 uclamp.min 为 512，约 100% 的时间在大核上；回到 Android 桌面后为 0。滑动两轮掉帧比例为 7.2% 和 5.1%。
+
+### 空闲开销：从约 30% 降到 2.6%（前台）和 4.0%（后台）
+
+改动前，Plasma 在前台和后台空闲时，我们的进程合计都约占 30% 单核：
+
+| 来源 | 占用 | 原因与改法 |
+|---|---|---|
+| `rungic-media-bridge` | 约 17%（含每秒约 7 个短命 `pactl`、PulseAudio 和媒体桥本身） | 主循环每 0.6 秒执行 5 次 `pactl`。它的 `pactl subscribe` 在中文环境下输出“事件…于 source”，英文匹配从未生效。改为 `LC_ALL=C` 订阅，只在 source/sink/server 事件时查询，另每 30 秒兜底一次 |
+| 由上一项带动 | plasmashell 和 kded6 各被唤醒约 37 次/秒 | 每个 `pactl` 客户端的连接和断开，都会通知所有 PulseAudio 订阅者；修好上一项后 plasmashell 降到约 4 次/秒 |
+| 助理屏磁贴 | 1.4% | 每 4 秒启动一次 Python。改为控制中心打开时每 2 秒、助理屏开着时每 15 秒各执行一次，屏幕数量变化时也立即执行 |
+| 平台桥上的轮询 | 合计约 5% | 网络状态每 2 秒、蓝牙和蜂窝每 5 秒、剪贴板每 1 秒、媒体桥 `capture-info` 每 1 秒（每次都要列举相机），APK 每 5 秒执行一次 root `cmd wifi status`，网络服务每 10 秒执行一次 `cmd wifi` 列表。改为平台桥上的长轮询 `watch`（见下） |
+
+平台桥新增 `{"op":"watch","topics":[…],"epoch":…,"seen":{…},"timeout":ms}`：
+- APK 的 `HostEvents` 为 network、telephony、bluetooth、capture、clipboard 五个主题各维护一个版本号，由 Android 自己的回调递增：
+  - network：`NetworkCallback`（能力变化只在类型、验证、门户、计费或信号格数变化时计入）和 Wi-Fi 开关广播；
+  - telephony：`TelephonyCallback`（服务、信号格数、数据连接、移动数据开关）；
+  - bluetooth：适配器、连接、配对和扫描广播；
+  - capture：前台状态和权限；
+  - clipboard：剪贴板变化，以及重新获得焦点（Android 只允许有焦点的应用读剪贴板）。
+- 请求在独立线程上等待，直到版本变化或超时（最长 60 秒）才返回；epoch 随 APK 每次启动改变。
+- 容器一侧的共享模块 `rungic_host_watch`（`shared/platform/host_watch.py`）供网络、蓝牙、蜂窝、剪贴板服务和媒体桥使用：收到变化才取完整状态，每 60 秒兜底一次。遇到不支持 `watch` 的旧 APK，就退回各自原来的轮询间隔。
+- 相应地，Wi-Fi 的 SSID 在网络出现、消失或链路属性变化时读取，另外每 60 秒兜底一次；不再要求 15 秒内刷新过，只要网络句柄一致就沿用。相机列表只列举一次。
+
+验收：
+- 功能：
+  - 录音时接上 Android 麦克风，停止后断开；
+  - 播放到手机扬声器时接上，挂起后断开；
+  - Plasma 回到前台后相机源立即恢复；
+  - Android 蓝牙开关后，容器里的 BlueZ 在约 2–6 秒内跟上（改动前是 5 秒一次的轮询）；
+  - Android 剪贴板变化后约 200 ms 同步到 Linux；
+  - 网络状态中的 SSID 和信号正常。
+- 开销（本项目进程的单核占比）：前台空闲从 30.0% 降到 2.6%（其中约 0.7% 是 Docker）；后台稳态从 29.9% 降到 4.0%。小核负载从 17–20% 降到 9%。
+
+### 同时修复
+
+- **宿主暂停渲染时的触摸取消**：暂停时 `clear_input_state()` 只清空了宿主自己记录的触摸点，没有给客户端发 `wl_touch.cancel`，之后到达的抬起事件又因为渲染已暂停被丢弃。于是按着的触摸点在 KWin 里一直处于按下状态。现在暂停前，先给还未抬起的触摸点发取消。
+- **语音助手按住 Home 的上限**：测量开始时，语音助手收到“按住 Home”（05:00:49）后再也没收到松开，于是持续录音、覆盖层持续动画；那段时间 KWin 占 50%、SurfaceFlinger 占 44%，语音相关进程约 48%。当时的宿主日志级别不够，无法确认具体丢在哪一步。现在按住超过 60 秒就当作松开事件丢失，关闭覆盖层并取消录音。
+- **系统设置最小化后空转**：一度每秒被唤醒约 112 次，全是定时器唤醒（多半是最小化时没停的动画）；把它切到前台再最小化后消失，无法复现，没有针对它修改代码。

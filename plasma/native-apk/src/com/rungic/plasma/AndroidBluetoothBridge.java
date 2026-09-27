@@ -36,12 +36,13 @@ final class AndroidBluetoothBridge {
 
     private final BroadcastReceiver links=new BroadcastReceiver() {
         @Override public void onReceive(Context context,Intent intent) {
+            HostEvents.bump(HostEvents.BLUETOOTH);   // the Linux side asks for the state now (HostEvents)
             BluetoothDevice device=intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE,BluetoothDevice.class);
             synchronized(connected) {
                 if(BluetoothAdapter.ACTION_STATE_CHANGED.equals(intent.getAction())) connected.clear();
                 else if(device==null) return;
                 else if(BluetoothDevice.ACTION_ACL_CONNECTED.equals(intent.getAction())) connected.add(device.getAddress());
-                else connected.remove(device.getAddress());
+                else if(BluetoothDevice.ACTION_ACL_DISCONNECTED.equals(intent.getAction())) connected.remove(device.getAddress());
             }
         }
     };
@@ -54,6 +55,9 @@ final class AndroidBluetoothBridge {
             IntentFilter filter=new IntentFilter(BluetoothDevice.ACTION_ACL_CONNECTED);
             filter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED);
             filter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
+            filter.addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED);
+            filter.addAction(BluetoothAdapter.ACTION_DISCOVERY_STARTED);
+            filter.addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED);
             activity.getApplicationContext().registerReceiver(links,filter,Context.RECEIVER_EXPORTED);
             watching=true;
         }
@@ -97,6 +101,7 @@ final class AndroidBluetoothBridge {
         @Override public void onReceive(Context context,Intent intent) {
             BluetoothDevice device=intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE,BluetoothDevice.class);
             if(device==null)return;
+            HostEvents.bump(HostEvents.BLUETOOTH);
             try {
                 BluetoothClass type=intent.getParcelableExtra(BluetoothDevice.EXTRA_CLASS,BluetoothClass.class);
                 String name=intent.getStringExtra(BluetoothDevice.EXTRA_NAME);

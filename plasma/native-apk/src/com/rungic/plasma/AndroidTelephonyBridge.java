@@ -7,6 +7,7 @@ import android.os.Build;
 import android.telephony.ServiceState;
 import android.telephony.SignalStrength;
 import android.telephony.SubscriptionManager;
+import android.telephony.TelephonyCallback;
 import android.telephony.TelephonyManager;
 import org.json.JSONObject;
 
@@ -18,6 +19,33 @@ final class AndroidTelephonyBridge {
     private final Activity activity;
     private final AndroidNetworkBridge root;
     AndroidTelephonyBridge(Activity activity,AndroidNetworkBridge root) { this.activity=activity;this.root=root; }
+
+    /** Tells the Linux side (HostEvents) when the service, the signal level or mobile data changed, so
+     * it asks for the state then rather than every few seconds. Registered once the permission is there. */
+    private final class Changes extends TelephonyCallback implements TelephonyCallback.ServiceStateListener,
+            TelephonyCallback.SignalStrengthsListener, TelephonyCallback.DataConnectionStateListener,
+            TelephonyCallback.UserMobileDataStateListener {
+        private int level=-1;
+        @Override public void onServiceStateChanged(ServiceState state) { HostEvents.bump(HostEvents.TELEPHONY); }
+        @Override public void onSignalStrengthsChanged(SignalStrength signal) {
+            if(signal.getLevel()!=level) { level=signal.getLevel();HostEvents.bump(HostEvents.TELEPHONY); }
+        }
+        @Override public void onDataConnectionStateChanged(int state,int type) { HostEvents.bump(HostEvents.TELEPHONY); }
+        @Override public void onUserMobileDataStateChanged(boolean enabled) { HostEvents.bump(HostEvents.TELEPHONY); }
+    }
+    private TelephonyManager watched;
+    private int watchedSubscription=Integer.MIN_VALUE;
+    private void watch(TelephonyManager tm) {
+        // telephony() makes a new manager each time; one registration per data subscription.
+        int subscription=SubscriptionManager.getDefaultDataSubscriptionId();
+        if(tm==null || subscription==watchedSubscription)return;
+        try {
+            if(watched!=null)watched.unregisterTelephonyCallback(changes);
+            tm.registerTelephonyCallback(activity.getMainExecutor(),changes);
+            watched=tm;watchedSubscription=subscription;
+        } catch(SecurityException e) { watched=null;watchedSubscription=Integer.MIN_VALUE; }
+    }
+    private final Changes changes=new Changes();
 
     private TelephonyManager telephony() {
         TelephonyManager tm=activity.getSystemService(TelephonyManager.class);
@@ -49,6 +77,7 @@ final class AndroidTelephonyBridge {
         if(activity.checkSelfPermission(Manifest.permission.READ_PHONE_STATE)!=PackageManager.PERMISSION_GRANTED)
             root.rootShell("/system/bin/pm grant "+activity.getPackageName()+" "+Manifest.permission.READ_PHONE_STATE,10000);
         TelephonyManager tm=telephony();
+        watch(tm);
         boolean modem=tm!=null && tm.getPhoneType()!=TelephonyManager.PHONE_TYPE_NONE
                 && activity.getPackageManager().hasSystemFeature(PackageManager.FEATURE_TELEPHONY_RADIO_ACCESS);
         JSONObject result=new JSONObject().put("modem",modem).put("manufacturer",Build.MANUFACTURER).put("model",Build.MODEL);

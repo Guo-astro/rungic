@@ -89,6 +89,38 @@ memory_status() {
     printf '{"choice":"%s","default":%s,"presets":"%s","limit_mib":%s,"usage_mib":%s,"peak_mib":%s,"total_mib":%s}\n' \
         "$(memory_choice)" "$MEMORY_DEFAULT" "$MEMORY_PRESETS" "$limit_mib" "$(mib "$usage")" "$(mib "$peak")" $((total / 1024))
 }
+# The desktop in front gets what Android gives its top app (docs/49): the desktop session runs on
+# the big cores (uclamp.min 50 %, above the little cores' capacity of 405/1024) with top-app's CPU
+# share; behind the other apps or with the screen off, the defaults again. Measured: on the little
+# cores, where the scheduler kept KWin and plasmashell, 10-14 % of the frames of a swipe came late;
+# on the big cores 7-8 %, in less CPU time. Only the session of the desktop account (its user
+# manager and everything it starts): never the container's system services or its builds.
+CPUCTL=/dev/cpuctl/rungic-desktop
+DESKTOP_SESSION=lxc.payload.plasma/user.slice/user-1000.slice/user@1000.service
+adopt_desktop() {
+    # New processes inherit the group of the one that starts them: the session needs adopting only
+    # when its user manager is new (the container or the account's session started again).
+    manager=$(pgrep -u 1000 -f '^/usr/lib/systemd/systemd --user' | head -n 1) || manager=
+    [ -n "$manager" ] || return 0
+    case "$(cat "/proc/$manager/cgroup" 2>/dev/null)" in *cpu:/rungic-desktop*) return 0 ;; esac
+    # Shell built-ins only, as adopt_container.
+    for proc in /proc/[0-9]*; do
+        { while read -r line; do
+            case "$line" in
+              *"$DESKTOP_SESSION"*) echo "${proc#/proc/}" > "$CPUCTL/cgroup.procs" 2>/dev/null || true; break ;;
+            esac
+          done < "$proc/cgroup"; } 2>/dev/null || continue
+    done
+    return 0
+}
+desktop_boost() {
+    [ -d /dev/cpuctl ] || return 0
+    mkdir -p "$CPUCTL"
+    adopt_desktop
+    if [ "$1" = on ]; then min=50 shares=5120; else min=0 shares=1024; fi
+    echo "$min" > "$CPUCTL/cpu.uclamp.min"
+    echo "$shares" > "$CPUCTL/cpu.shares"
+}
 start_container() {
     # Recreate the shared folder after storage becomes available (including an
     # Android storage remount). Never create it below an unavailable mount.
@@ -211,6 +243,10 @@ case "$action" in
     ;;
   status) exec "$ENTER" /usr/bin/lxc-info -n plasma ;;
   memory-status) memory_status ;;
+  boost)
+    # boost on|off: the desktop in front or not (the APK, onStart/onStop).
+    case "${1:-}" in on|off) desktop_boost "$1" ;; *) echo 'Usage: boost on|off' >&2; exit 2 ;; esac
+    ;;
   memory-limit)
     # memory-limit [2048|3072|4096|5120|6144|unlimited]: set (MiB) and/or show the Linux RAM ceiling as JSON.
     if [ "$#" -gt 0 ]; then

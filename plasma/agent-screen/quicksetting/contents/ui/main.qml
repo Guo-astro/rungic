@@ -6,6 +6,7 @@ import QtQuick
 
 import org.kde.plasma.plasma5support as P5Support
 import org.kde.plasma.private.mobileshell.quicksettingsplugin as QS
+import org.kde.plasma.private.mobileshell.state as MobileShellState
 
 QS.QuickSetting {
     id: root
@@ -38,12 +39,18 @@ QS.QuickSetting {
     }
 
     Component.onCompleted: run("ensure")
-    // The screen is also turned on by the assistant and off from its window: keep the tile current,
-    // and bring its floating window back if it went away while the screen stayed on.
+    // The screen is also turned on by the assistant and off from its window, and its output comes
+    // and goes with it: ask then, often only while the control centre shows the tile, and while the
+    // screen is on now and then to bring its floating window back if it went away. Every 4 s at all
+    // times it started a Python process for nothing (docs/49).
+    readonly property int screens: Qt.application.screens.length
+    readonly property bool shown: MobileShellState.ShellDBusClient.isActionDrawerOpen
+    onScreensChanged: if (!busy) run("ensure")
+    onShownChanged: if (shown && !busy) run("ensure")
     Timer {
-        interval: 4000
+        interval: root.shown ? 2000 : 15000
         repeat: true
-        running: true
+        running: root.shown || root.on
         onTriggered: if (!root.busy) root.run("ensure")
     }
 

@@ -22,6 +22,8 @@ import time
 
 from gi.repository import Gio, GLib
 
+import rungic_host_watch
+
 BLUEZ = 'org.bluez'
 ADAPTER = '/org/bluez/hci0'
 OM = 'org.freedesktop.DBus.ObjectManager'
@@ -344,7 +346,12 @@ def main():
     GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, stop)
     GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, stop)
     bridge.poll()
-    GLib.timeout_add_seconds(1, bridge.poll)
+    # Asked again when Android reports a change, not on a timer (docs/49).
+    def changed():
+        bridge.due = 0
+        bridge.poll()
+        return False
+    rungic_host_watch.watch(('bluetooth',), lambda: GLib.idle_add(changed), legacy=POLL, name='bluetooth-watch')
     try:
         loop.run()
     finally:

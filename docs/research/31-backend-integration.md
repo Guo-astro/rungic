@@ -198,6 +198,7 @@ Linux桌面进程使用 `linux` / UID1000，APK是Android分配的普通应用UI
 | `brightness-get` | 无 | `level`整数2–100、`followAndroid`；跟随时读取Android亮度设定值 |
 | `brightness` | `value`：0.02–1，或-1 | 只修改当前Activity窗口亮度；-1恢复跟随Android |
 | `orientation` | `mode`：`system` / `portrait` / `landscape` | 改Activity方向并保存偏好；system使用FULL_USER，尊重Android用户旋转策略 |
+| `watch` | `topics`：network / telephony / bluetooth / capture / clipboard 的数组；`epoch`、`seen`：上次返回的值；`timeout`：毫秒，最长60000 | 等到某个主题的版本号变化（由Android回调递增，`HostEvents`）、epoch 不同（APK重启过），或超时后返回 `{epoch,versions,changed}`；在独立线程上等待。容器侧用共享模块 `rungic_host_watch`：收到变化再取完整状态，取代定时轮询（49篇） |
 | `settings` | `target`：`network` / `bluetooth` / `display` / `sound` / `datetime` / `location` | 打开对应Android设置Activity或系统面板 |
 | `vibrate` | 无 | Android一次35ms震动；当前仅为测试入口，不是feedbackd后端 |
 | `clipboard-get` | 无 | `available`和`text`；null表示空；无焦点/非文本/敏感标记/超长时不可用 |
