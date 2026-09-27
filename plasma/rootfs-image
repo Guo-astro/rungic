@@ -84,6 +84,12 @@ attach() {
         echo "$path"; return
     fi
     base=$(loop_of "$IMG")
+    # One device-mapper stack per image: a second one (another name, e.g. a test copy of this
+    # script pointed at the system image) mounts the same ext4 twice and corrupts it (2026-09-27).
+    for holder in $(ls "/sys/block/${base##*/}/holders" 2>/dev/null); do
+        name=$(cat "/sys/block/$holder/dm/name" 2>/dev/null) || name=$holder
+        [ "$name" = "$SNAP_DM" ] || die "$IMG is already in use by $name ($holder), not by $ROOT_DM"
+    done
     size=$(blockdev --getsz "$base")
     case "$(state)" in
       none)
