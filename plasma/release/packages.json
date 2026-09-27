@@ -12,8 +12,7 @@
       ]
     },
     "mesa": {
-      "source": "vendor/mesa (plasma/package-mesa.py, built on the phone)",
-      "version": "26.3.0~devel20260824+moto2",
+      "source": "packages/mesa",
       "packages": [
         "libegl-mesa0",
         "libgbm-dev",

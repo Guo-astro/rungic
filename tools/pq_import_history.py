@@ -65,6 +65,8 @@ def tree_at(commit, path, dest):
         target = (Path(path) / link.relative_to(root)).parent / link.readlink()
         resolved = Path(subprocess.run(['realpath', '-m', '--relative-to', '.', str(target)], cwd=WORKSPACE,
                                        capture_output=True, text=True).stdout.strip())
+        if resolved.is_relative_to(path):
+            continue                                # within the component (Mesa's .gitlab-ci/bin): a link upstream too
         content = git('show', f'{commit}:{resolved}')
         link.unlink()
         link.write_bytes(content)

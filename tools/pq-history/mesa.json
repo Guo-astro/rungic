@@ -1,0 +1,24 @@
+{
+ "package": "mesa",
+ "vendor": "vendor/mesa",
+ "version": "26.3.0~devel20260824",
+ "base": "dffc717e",
+ "steps": [
+  {
+   "name": "kgsl-dmabuf-import-ubwc",
+   "author_name": "clawd20130",
+   "author_email": "clawd20130@gmail.com",
+   "date": "2026-09-24T06:11:40+09:00",
+   "subject": "freedreno: opt-in import of gralloc UBWC buffers on the kgsl dma-buf path",
+   "description": "FD_KGSL_DMABUF_UBWC=1 lets the kgsl dma-buf path import (not export) DRM_FORMAT_MOD_QCOM_COMPRESSED\nbuffers allocated by the platform gralloc. fdl6's explicit UBWC layout (metadata plane first, 64x16 tile\nalignment, 256-byte pitch) matches gralloc's RGBA8888_UBWC allocation, and gallium leaves the UBWC mode\nregisters to the kernel's platform configuration, so the GPU, the display and the platform GLES driver\nagree. Modifier queries and exports stay LINEAR, so clients allocate as before.",
+   "dep3": {
+    "Forwarded": "no",
+    "Last-Update": "2026-09-27",
+    "X-Rungic-Status": "Pending [the branch's narrow KGSL dma-buf contract (its PR #85) rejects non-linear imports on purpose; this is an opt-in]",
+    "X-Rungic-Tests": "L3:perf.compositor (KWin exports FD_KGSL_DMABUF_UBWC=1)",
+    "X-Rungic-Docs": "docs/57"
+   },
+   "patch": ".work/pq-history/mesa-ubwc.patch"
+  }
+ ]
+}

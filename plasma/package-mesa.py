@@ -8,9 +8,9 @@ import os
 root = Path(__file__).resolve().parent.parent
 stage = Path(os.environ.get('RUNGIC_MESA_STAGE', root / '.work/stage/mesa'))
 output = Path(os.environ.get('RUNGIC_MESA_PACKAGES', root / '.work/packages/mesa'))
-version = os.environ.get('RUNGIC_MESA_VERSION', '26.3.0~devel20260824+moto1')
+version = os.environ['RUNGIC_MESA_VERSION']   # packages/mesa/debian/changelog (tools/build_mesa.py)
 # The Mesa source the stage was built from (its docs/license.rst) and its commit, for the package docs.
-source = Path(os.environ.get('RUNGIC_MESA_SOURCE', root / 'vendor/mesa'))
+source = Path(os.environ['RUNGIC_MESA_SOURCE'])
 commit = os.environ.get('RUNGIC_MESA_COMMIT', 'unknown')
 packages = ('mesa-libgallium', 'libegl-mesa0', 'libglx-mesa0', 'libgbm1',
             'libgbm-dev', 'libgl1-mesa-dri', 'mesa-vulkan-drivers')
@@ -61,9 +61,9 @@ for name in packages:
     (directory / 'DEBIAN').mkdir(parents=True)
     control = (f'Package: {name}\nVersion: {version}\nArchitecture: arm64\n'
                'Section: libs\nPriority: optional\nMulti-Arch: same\n'
-               'Maintainer: Moto Linux integration <local@localhost>\n'
+               'Maintainer: range-dev <noreply@localhost>\n'
                f'Depends: {deps[name]}\n'
-               'Description: Coherent Mesa KGSL build for the Moto Plasma container\n'
+               'Description: Coherent Mesa KGSL build for the Rungic Plasma container\n'
                ' Built from the pinned Mesa for Android container source archive.\n')
     (directory / 'DEBIAN/control').write_text(control)
     sonames = {'libgbm1': 'libgbm 1', 'libegl-mesa0': 'libEGL_mesa 0',
@@ -116,7 +116,8 @@ for name in packages:
     doc.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source / 'docs/license.rst', doc / 'copyright')
     (doc / 'rungic-build.txt').write_text(
-        f'Built from vendor/mesa of range-dev {commit} (KGSL branch 98f3d6229d61, vendor/manifest.json),\n'
+        f'Built from packages/mesa of range-dev {commit} (the Mesa for Android container branch at its\n'
+        'pinned commit plus our patches, packages/mesa/recipe.json),\n'
         'natively for Ubuntu glibc. GLVND dispatchers remain distribution packages.\n')
     subprocess.run(['dpkg-deb', '--build', '--root-owner-group', str(output / name),
                     str(output / f'{name}_{version}_arm64.deb')], check=True)

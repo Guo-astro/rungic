@@ -1,0 +1,10 @@
+mesa (26.3.0~devel20260824+rungic1) resolute; urgency=medium
+
+  * Patch queue (docs/71, docs/73): the Mesa for Android container branch at
+    its pinned commit plus the opt-in UBWC import on the kgsl dma-buf path, as
+    a DEP-3 patch; built with tools/build_mesa.py instead of vendor/mesa. The
+    packages (mesa-libgallium, libegl-mesa0, libglx-mesa0, libgbm1,
+    libgbm-dev, libgl1-mesa-dri, mesa-vulkan-drivers) are assembled by
+    plasma/package-mesa.py; this entry names their version.
+
+ -- range-dev <noreply@localhost>  Sun, 27 Sep 2026 10:00:00 +0000
