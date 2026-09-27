@@ -793,6 +793,21 @@ def compare(current, previous):
     return rows
 
 
+def bring_to_front(timeout=10):
+    """The scenarios need the desktop in front (the camera, the microphone and text input follow it).
+    A deploy on 2026-09-28 found Android's launcher there, left by an earlier test, and failed on it."""
+    apk = rungic_device.apk()
+    top = lambda: apk in run('dumpsys activity activities | grep -m1 topResumedActivity', 'shell', 30, check=False).stdout
+    was = top()
+    if not was:
+        run(f'am start -n {apk}/.MainActivity', 'shell', 30, check=False)
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline and not top():
+            time.sleep(0.5)
+        time.sleep(2)   # the desktop's own visibility follows (capture, focus)
+    return {'was_in_front': was, 'in_front': top()}
+
+
 def run_scenarios(selected, release=None, out_dir=None, since=None, skips=None):
     skips = skips or {}
     unknown = set(skips) - {s['id'] for s in selected}
@@ -806,6 +821,7 @@ def run_scenarios(selected, release=None, out_dir=None, since=None, skips=None):
     _, base = previous_report(release, {s['id'] for s in selected})
     ctx = {'spec': spec, 'since': since or started, 'release': release, 'out_dir': out_dir,
            'previous_metrics': {s['id']: s.get('metrics', {}) for s in (base or {}).get('scenarios', [])}}
+    ctx['front'] = bring_to_front()
     rows = []
     for scenario in selected:
         fn = CHECKS.get(scenario['check'])
@@ -834,7 +850,7 @@ def run_scenarios(selected, release=None, out_dir=None, since=None, skips=None):
         rows.append(row)
         mark = {True: 'PASS', False: 'FAIL', None: 'SKIP'}[row['passed']]
         print(f"{mark} {scenario['id']} ({row['seconds']} s)", flush=True)
-    report = {'release': release, 'time': stamp, 'scenarios': rows, 'manual': spec.get('manual', []),
+    report = {'release': release, 'time': stamp, 'front': ctx['front'], 'scenarios': rows, 'manual': spec.get('manual', []),
               'passed': bool(rows) and all(r['passed'] is True or
                                           r['details'].get('explicit_scope_exclusion') for r in rows),
               'complete': all(r['passed'] is not None for r in rows),
