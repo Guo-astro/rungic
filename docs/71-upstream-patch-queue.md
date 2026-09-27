@@ -167,3 +167,5 @@ plasma-keyboard、xdg-desktop-portal-kde、wl-clipboard、arc-cua、LiteRT、lib
 核对（与手机上的完整构建逐文件比较，ELF去掉build-id与debuglink）：plasma-settings主包83个文件、调试包3个文件完全一致；libcamera的gstreamer1.0-libcamera、libcamera-dev一致；两边的构建依赖版本（`.buildinfo`）除运行时Mesa外相同。xdg-desktop-portal-kde的主程序多出/缺少两个QML预编译符号（`QQmlPrivate::AOTCompiledContext::getValueLookup`等），编译任务数改为与手机相同的4个后依旧：qmlcachegen按构建环境里**已安装**的QML模块解析类型，手机容器装着整个桌面，能预编译的绑定更多；Mac mini的容器只有声明的构建依赖。两者运行时都正确（未预编译的部分由解释器执行），Mac mini的结果只取决于声明的构建依赖，更可复现。libcamera的13个包中，`libcamera-ipa`的6个`*.so.sign`与`libcamera.so`中256字节的一段不同：IPA模块用每次构建随机生成的密钥签名、公钥嵌入库中，任何两次构建都会不同；其余文件一致。手机上的KWin `+rungic3`是增量构建，不能作比较。KWin含LTO的完整构建在Mac mini上约6分钟，手机上一小时以上。
 
 传输问题：`docker exec cat`经ssh传大文件时曾以成功状态提前结束（13.7 MB的包只收到12.9 MB），现在上传与下载都核对大小与SHA-256，不一致重试。
+
+手机与Mac mini在同一局域网（192.168.5.60与192.168.5.45，也可经wire.net的10.77.0.x互通），大文件由手机直接传给构建机，不经本机与VPN：手机容器的专用密钥`/root/.ssh/id_ed25519_buildhost`在Mac的`authorized_keys`中受限为`restrict`、只接受手机的两个地址、强制命令为构建容器里的`tools/pq/rungic-transfer`（`put DIR`解包到、`get FILE`读取`/root/rungic-build`下的路径，拒绝绝对路径与`..`）。实测6.8 MB/s（经本机转发约1.2 MB/s），其他命令与路径被拒绝。崩溃符号化已改用此路径。
