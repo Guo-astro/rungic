@@ -6,6 +6,10 @@ if [ -f /mnt/android-wayland/android-display.ini ]; then
     width=$(sed -n 's/^width=\([0-9]*\)$/\1/p' /mnt/android-wayland/android-display.ini)
     height=$(sed -n 's/^height=\([0-9]*\)$/\1/p' /mnt/android-wayland/android-display.ini)
 fi
+# The GPU settings (Mesa's KGSL driver) from the file itself, not from the user manager's
+# environment: when the unit starts before the session has imported it, Mesa finds no driver and
+# KWin falls back to software compositing (2026-09-27, a deploy's session restart).
+[ ! -f /etc/plasma/gpu-env ] || . /etc/plasma/gpu-env
 # KWin's output buffers in Adreno UBWC: the host allocates them with gralloc and Mesa imports
 # them (docs/57). Only KWin needs this; clients keep linear buffers. KWin's Android backend
 # (--android-host, docs/72) needs no other settings: it knows the render device, the host's
