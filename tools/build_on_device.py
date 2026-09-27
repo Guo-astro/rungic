@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
-"""Build a patch-queue component (packages/<name>, docs/71) natively in the phone's Ubuntu ARM64 container.
+"""Build a patch-queue component (packages/<name>, docs/71) natively on Ubuntu 26.04 ARM64: in the
+phone's container (--host phone) or in a Docker container on the Mac mini build host (--host
+macmini: Apple M4, tools/pq/arm64-host.Dockerfile; faster and keeps the phone cool). The default
+host is $RUNGIC_BUILD_HOST, else phone.
 
 The source tree (tools/pq.py source: upstream + debian/ with the patches applied) is copied into a persistent
 /root/rungic-build/<component>/src with `rsync --checksum`, so unchanged files
@@ -19,23 +22,181 @@ what changed.
   divert       install built files over distribution ones with dpkg-divert
                (--file BUILT=INSTALLED, repeatable); the original stays as .distrib
 
-Builds run as the transient system unit rungic-build-<component>, so they
-survive adb disconnects; the log is /root/rungic-build/<component>/build.log.
+On the phone builds run as the transient system unit rungic-build-<component>, so they survive adb
+disconnects; on the Mac mini as a detached process of the container. The log is
+/root/rungic-build/<component>/build.log on either host. install and divert change the phone's
+system and exist only there.
 """
 import argparse
+import hashlib
+import io
 import json
+import os
 import subprocess
 import tarfile
 import time
 
 import rungic_device
-from rungic_device import WORKSPACE, out, run
+from rungic_device import WORKSPACE
 
 BASE = '/root/rungic-build'
 # Line tables only (-g1): enough for symbolized backtraces (docs/61) at a fraction of -g2's
 # compile memory; debhelper strips the packages and puts the symbols into -dbgsym packages
 # for the release repository.
 DEBUG_FLAGS = 'DEB_CFLAGS_MAINT_APPEND=-g1 DEB_CXXFLAGS_MAINT_APPEND=-g1'
+
+
+class Phone:
+    """The phone's Plasma container over adb (rungic_device)."""
+    name, jobs = 'phone', 4
+
+    def run(self, script, timeout=120, check=True):
+        return rungic_device.run(script, 'container', timeout, check)
+
+    def out(self, script, timeout=120):
+        return self.run(script, timeout).stdout
+
+    def put_tar(self, archive, directory):
+        rungic_device.extract_in_container(archive, directory)
+
+    def put(self, src, dest, mode):
+        return rungic_device.to_container(src, dest, mode)
+
+    def get(self, path, target):
+        rungic_device.from_container(path, target)
+
+    def background(self, component, steps):
+        work = f'{BASE}/{component}'
+        self.run(f'''set -e
+# RemainAfterExit keeps the last build's result and MemoryPeak readable until the next one.
+systemctl stop rungic-build-{component} 2>/dev/null || true
+systemctl reset-failed rungic-build-{component} 2>/dev/null || true
+systemd-run --unit=rungic-build-{component} --nice=10 --property=IOSchedulingClass=idle --property=MemoryAccounting=yes \\
+  --property=RemainAfterExit=yes \\
+  --setenv=HOME=/root --property=StandardOutput=truncate:{work}/build.log --property=StandardError=inherit \\
+  /bin/sh -c "{steps.replace('$(', '\\$(')}"
+''')
+
+    def unit_state(self, component):
+        return (f'systemctl show -p ActiveState -p SubState -p Result -p ExecMainStartTimestamp -p ExecMainExitTimestamp '
+                f'-p ExecMainStatus -p MemoryPeak -p CPUUsageNSec rungic-build-{component}')
+
+
+class MacMini:
+    """A long-running Ubuntu 26.04 ARM64 container on the Mac mini build host (OrbStack Docker), reached
+    with ssh (key login). The image is tools/pq/arm64-host.Dockerfile, tagged with its hash; build
+    trees live in the rungic-build volume."""
+    name, jobs = 'macmini', 10
+    SSH = ['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', 'choukevin@macmini.wire.net']
+    DOCKER = '/usr/local/bin/docker'
+    CONTAINER = 'rungic-build'
+    ready = False
+
+    def ssh(self, command, timeout, check=True, data=None, stdout=subprocess.PIPE):
+        result = subprocess.run(self.SSH + [command], input=data, stdout=stdout, stderr=subprocess.PIPE,
+                                timeout=timeout)
+        if check and result.returncode:
+            text = (result.stderr or b'').decode(errors='replace').strip()
+            if stdout is subprocess.PIPE:
+                text = text or result.stdout.decode(errors='replace').strip()[-2000:]
+            raise rungic_device.DeviceError(f'Exit {result.returncode}: {text}')
+        return result
+
+    def ensure(self):
+        if self.ready:
+            return
+        # Build context: the Dockerfile and the debug symbol source it copies (the phone's own file).
+        files = {'Dockerfile': WORKSPACE / 'tools/pq/arm64-host.Dockerfile',
+                 'rungic-ddebs.sources': WORKSPACE / 'plasma/config/etc/apt/rungic-ddebs.sources'}
+        digest = hashlib.sha256()
+        for name, path in files.items():
+            digest.update(name.encode() + b'\0' + path.read_bytes())
+        image = 'rungic-arm64-host:' + digest.hexdigest()[:12]
+        current = self.ssh(f"{self.DOCKER} inspect -f '{{{{.Config.Image}}}} {{{{.State.Running}}}}' {self.CONTAINER} "
+                           f"2>/dev/null || true", 60).stdout.decode().split()
+        if current[:1] != [image]:
+            print(f'macmini: preparing {image}', flush=True)
+            context = io.BytesIO()
+            with tarfile.open(fileobj=context, mode='w', format=tarfile.USTAR_FORMAT) as tar:
+                for name, path in files.items():
+                    tar.add(path, arcname=name)
+            self.ssh(f'{self.DOCKER} image inspect {image} >/dev/null 2>&1 || {self.DOCKER} build -q -t {image} -', 7200,
+                     data=context.getvalue())
+            self.ssh(f'{self.DOCKER} rm -f {self.CONTAINER} >/dev/null 2>&1; {self.DOCKER} run -d --name {self.CONTAINER} '
+                     f'--restart unless-stopped -v rungic-build:{BASE} {image} sleep infinity', 300)
+        elif current[1:] != ['true']:
+            self.ssh(f'{self.DOCKER} start {self.CONTAINER}', 120)
+        self.ready = True
+
+    def exec(self, command, interactive=False):
+        return f"{self.DOCKER} exec {'-i ' if interactive else ''}{self.CONTAINER} {command}"
+
+    def run(self, script, timeout=120, check=True):
+        self.ensure()
+        result = self.ssh(self.exec('bash -s', True), timeout, check, script.encode())
+        return subprocess.CompletedProcess(result.args, result.returncode, result.stdout.decode(errors='replace'),
+                                           result.stderr.decode(errors='replace'))
+
+    def out(self, script, timeout=120):
+        return self.run(script, timeout).stdout
+
+    def put_tar(self, archive, directory):
+        self.ensure()
+        with open(archive, 'rb') as data:
+            self.ssh(self.exec(f"sh -c 'mkdir -p {directory} && tar -xf - -C {directory} --no-same-owner'", True),
+                     1800, data=data.read())
+
+    def put(self, src, dest, mode):
+        self.ensure()
+        data = open(src, 'rb').read()
+        self.ssh(self.exec(f"sh -c 'mkdir -p \"$(dirname {dest})\" && cat > {dest} && chmod {mode} {dest}'", True),
+                 600, data=data)
+        if self.out(f'sha256sum < {dest} | cut -d" " -f1').strip() != hashlib.sha256(data).hexdigest():
+            raise rungic_device.DeviceError(f'{dest}: copy to {self.name} incomplete')
+        return dest
+
+    def get(self, path, target):
+        """Copy a file out of the container, checked: `docker exec cat` through ssh has ended large
+        files early with success (a 13.7 MB .deb arrived as 12.9 MB)."""
+        self.ensure()
+        size, digest = self.out(f'stat -c %s {path}; sha256sum < {path} | cut -d" " -f1').split()
+        for attempt in range(3):
+            with open(target, 'wb') as file:
+                self.ssh(self.exec(f'cat {path}', True), 1800, stdout=file, data=b'')
+            data = open(target, 'rb').read()
+            if len(data) == int(size) and hashlib.sha256(data).hexdigest() == digest:
+                return
+        raise rungic_device.DeviceError(f'{path}: copy from {self.name} incomplete ({len(data)} of {size} bytes)')
+
+    def background(self, component, steps):
+        work = f'{BASE}/{component}'
+        # A detached process of the container; build.pid while it runs, build.rc when it ends.
+        self.run(f'''set -e
+if [ -f {work}/build.pid ] && kill -0 "$(cat {work}/build.pid)" 2>/dev/null; then kill -TERM -"$(cat {work}/build.pid)" || true; sleep 2; fi
+rm -f {work}/build.rc
+cat > {work}/build.sh <<'RUNGIC_STEPS'
+export HOME=/root
+{steps}
+RUNGIC_STEPS
+setsid nohup sh -c 'echo $$ > {work}/build.pid; nice -n 10 sh {work}/build.sh > {work}/build.log 2>&1; echo $? > {work}/build.rc; rm -f {work}/build.pid' rungic-build-{component} </dev/null >/dev/null 2>&1 &
+''')
+
+    def unit_state(self, component):
+        work = f'{BASE}/{component}'
+        return (f'if [ -f {work}/build.pid ] && kill -0 "$(cat {work}/build.pid)" 2>/dev/null; then '
+                f'echo ActiveState=active; echo SubState=running; '
+                f'else rc=$(cat {work}/build.rc 2>/dev/null || echo none); echo ActiveState=inactive; echo SubState=exited; '
+                f'echo ExecMainStatus=$rc; [ "$rc" = 0 ] && echo Result=success || echo Result=exit-code; fi')
+
+
+HOSTS = {'phone': Phone, 'macmini': MacMini}
+host = Phone()
+
+
+def use(name):
+    global host
+    host = HOSTS[name]()
+    return host
 
 
 def stage(component):
@@ -56,10 +217,10 @@ def stage(component):
 
 def sync(component):
     work = f'{BASE}/{component}'
-    rungic_device.run(f'rm -rf {work}/incoming', 'container')
-    rungic_device.extract_in_container(stage(component), f'{work}/incoming')
+    host.run(f'rm -rf {work}/incoming')
+    host.put_tar(stage(component), f'{work}/incoming')
     # Keep obj-* (build output) and debhelper state; everything else mirrors the stage.
-    print(out(f'''set -e
+    print(host.out(f'''set -e
 chown -R root:root {work}/incoming
 mkdir -p {work}/src
 rsync -a --checksum --delete --itemize-changes --exclude '/obj-*' --exclude '/debian/.debhelper' \\
@@ -68,7 +229,7 @@ rsync -a --checksum --delete --itemize-changes --exclude '/obj-*' --exclude '/de
 rm -rf {BASE}/cmake-shims && mv {work}/incoming/cmake-shims {BASE}/cmake-shims
 if [ -f {work}/incoming/meson-options ]; then mv {work}/incoming/meson-options {work}/meson-options; fi
 rm -rf {work}/incoming
-''', 'container', timeout=600))
+''', timeout=600))
 
 
 def component_uses_meson(component):
@@ -88,7 +249,7 @@ def start(component, mode, jobs, targets=(), lto=True, cmake_args=()):
     obj = f'{work}/src/obj-aarch64-linux-gnu'
     if mode == 'targets' and component_uses_meson(component):
         build = f'{work}/build'
-        steps = (f"cd {work} && (test -f {build}/build.ninja || meson setup {build} src \\$(cat {work}/meson-options)) && "
+        steps = (f"cd {work} && (test -f {build}/build.ninja || meson setup {build} src $(cat {work}/meson-options)) && "
                  f"ninja -C {build} -j {jobs} {' '.join(targets)}")
     elif mode == 'targets':
         build = f'{work}/build'
@@ -101,73 +262,80 @@ def start(component, mode, jobs, targets=(), lto=True, cmake_args=()):
     else:
         steps = (f"export DEB_BUILD_OPTIONS='nocheck parallel={jobs}' {DEBUG_FLAGS}{maint}; "
                  f"cd {work}/src && test -d {obj} && make -C {obj} -j{jobs} && debian/rules binary")
-    run(f'''set -e
-# RemainAfterExit keeps the last build's result and MemoryPeak readable until the next one.
-systemctl stop rungic-build-{component} 2>/dev/null || true
-systemctl reset-failed rungic-build-{component} 2>/dev/null || true
-systemd-run --unit=rungic-build-{component} --nice=10 --property=IOSchedulingClass=idle --property=MemoryAccounting=yes \\
-  --property=RemainAfterExit=yes \\
-  --setenv=HOME=/root --property=StandardOutput=truncate:{work}/build.log --property=StandardError=inherit \\
-  /bin/sh -c "{steps}"
-''', 'container')
-    print(f'started rungic-build-{component} ({mode}); follow with: build_on_device.py {component} status')
+    host.background(component, steps)
+    print(f'started rungic-build-{component} on {host.name} ({mode}, {jobs} jobs); '
+          f'follow with: build_on_device.py --host {host.name} {component} status')
 
 
 def status(component):
-    return out(f'''systemctl show -p ActiveState -p SubState -p Result -p ExecMainStartTimestamp -p ExecMainExitTimestamp \
-  -p ExecMainStatus -p MemoryPeak -p CPUUsageNSec rungic-build-{component}
+    return host.out(f'''{host.unit_state(component)}
 grep -E '^\\[ *[0-9]+%\\]|^\\[[0-9]+/[0-9]+\\]|error|Error|warning: unused|dpkg-deb: building' {BASE}/{component}/build.log 2>/dev/null | tail -n 8 | cut -c1-200
-ls -1t {BASE}/{component}/*.deb 2>/dev/null | head -12''', 'container')
+ls -1t {BASE}/{component}/*.deb 2>/dev/null | head -12''')
+
+
+def phone_only(action):
+    if host.name != 'phone':
+        raise SystemExit(f'{action} changes the phone\'s system: use --host phone, or deploy a release (rungic_release.py)')
+
+
+def changelog_version(component):
+    return host.out(f"dpkg-parsechangelog -l {BASE}/{component}/src/debian/changelog -S Version | sed 's/^[0-9]*://'").strip()
 
 
 def install(component):
-    version = out(f"dpkg-parsechangelog -l {BASE}/{component}/src/debian/changelog -S Version | sed 's/^[0-9]*://'",
-                  'container').strip()
-    return out(f'''set -e
+    phone_only('install')
+    version = changelog_version(component)
+    return host.out(f'''set -e
 cd {BASE}/{component}
 debs=$(ls *_{version}_*.deb | grep -v -e -dbgsym)
 echo "installing: $debs"
 dpkg -i $debs   # apt holds on these packages stay in place; dpkg ignores them
-''', 'container', timeout=600)
+''', timeout=600)
 
 
 def build_deps(component):
-    """apt-get build-dep for the staged Debian source (full builds)."""
-    return out(f'''set -e
+    """apt-get build-dep for the staged Debian source (full builds). The phone's container reaches the
+    archive through its proxy; the build host's image refreshes its package lists first."""
+    update = 'apt-get -o DPkg::Lock::Timeout=1200 update -qq' if host.name != 'phone' else 'true'
+    return host.out(f'''set -e
 [ -r /etc/profile.d/proxy.sh ] && . /etc/profile.d/proxy.sh
 cd {BASE}/{component}/src
-dpkg-checkbuilddeps {'-B ' if arch_only(component) else ''}2>/dev/null || DEBIAN_FRONTEND=noninteractive apt-get build-dep -y -q {'--arch-only ' if arch_only(component) else ''}. | tail -2
-''', 'container', timeout=3600)
+if ! dpkg-checkbuilddeps {'-B ' if arch_only(component) else ''}2>/dev/null; then
+  {update}
+  # Waits for another apt (a crash symbolization on the build host); a failure stops the build here.
+  DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 build-dep -y -q {'--arch-only ' if arch_only(component) else ''}. > /tmp/build-dep.log 2>&1 || {{ tail -20 /tmp/build-dep.log; exit 1; }}
+  tail -2 /tmp/build-dep.log
+fi
+''', timeout=3600)
 
 
 def collect(component):
     """The last build's .debs (and .ddeb debug symbols, renamed .deb for the index) into the release
     repository pool (docs/61)."""
     import rungic_release
-    from pathlib import Path
-    version = out(f"dpkg-parsechangelog -l {BASE}/{component}/src/debian/changelog -S Version | sed 's/^[0-9]*://'",
-                  'container').strip()
-    names = out(f"cd {BASE}/{component} && ls *_{version}_*.deb *_{version}_*.ddeb 2>/dev/null || true", 'container').split()
+    version = changelog_version(component)
+    names = host.out(f"cd {BASE}/{component} && ls *_{version}_*.deb *_{version}_*.ddeb 2>/dev/null || true").split()
     incoming = WORKSPACE / '.work/apt/incoming'
     incoming.mkdir(parents=True, exist_ok=True)
     for name in names:
         target = incoming / (name[:-5] + '.deb' if name.endswith('.ddeb') else name)
-        rungic_device.from_container(f'{BASE}/{component}/{name}', target)
+        host.get(f'{BASE}/{component}/{name}', target)
     added = rungic_release.import_debs(sorted(incoming.glob('*.deb')))
     for path in incoming.glob('*.deb'):
         path.unlink()
     rungic_release.index()
-    return f'{version}: {len(names)} files, added {added}'
+    return f'{version}: {len(names)} files from {host.name}, added {added}'
 
 
 def divert(component, files):
+    phone_only('divert')
     lines = ['set -e']
     for spec in files:
         built, installed = spec.split('=', 1)
         lines.append(f'''[ -e {installed}.distrib ] || dpkg-divert --local --add --rename --divert {installed}.distrib {installed}
 install -m644 {BASE}/{component}/build/{built} {installed}
 echo "{installed} <- {built}"''')
-    return out('\n'.join(lines), 'container')
+    return host.out('\n'.join(lines))
 
 
 def main():
@@ -178,18 +346,21 @@ def main():
     parser.add_argument('--target', action='append', default=[], help='CMake target (targets mode)')
     parser.add_argument('--file', action='append', default=[], help='BUILT=INSTALLED (divert mode)')
     parser.add_argument('--cmake-arg', action='append', default=[], help='extra configure argument (targets mode)')
-    parser.add_argument('--jobs', type=int, default=4, help='compile jobs; 8 cores, ~7 GiB RAM, and builds push '
-                        'the phone to thermal throttling, so more jobs gain little')
+    parser.add_argument('--host', choices=sorted(HOSTS), default=os.environ.get('RUNGIC_BUILD_HOST', 'phone'),
+                        help='where to build (default $RUNGIC_BUILD_HOST, else phone)')
+    parser.add_argument('--jobs', type=int, help='compile jobs (phone 4: 8 cores, ~7 GiB RAM, and builds push it to '
+                        'thermal throttling, so more jobs gain little; macmini 10)')
     parser.add_argument('--no-lto', action='store_true', help='development build: skip Ubuntu\'s default LTO '
                         '(much faster link; do not use for performance measurements)')
     args = parser.parse_args()
+    use(args.host)
     if args.action in ('full', 'incremental', 'targets'):
         if args.action == 'targets' and not args.target and not component_uses_meson(args.component):
             parser.error('targets mode needs --target (a meson tree builds everything without one)')
         sync(args.component)
         if args.action == 'full':
             print(build_deps(args.component))
-        start(args.component, args.action, args.jobs, args.target, not args.no_lto, args.cmake_arg)
+        start(args.component, args.action, args.jobs or host.jobs, args.target, not args.no_lto, args.cmake_arg)
     elif args.action == 'divert':
         print(divert(args.component, args.file))
     elif args.action == 'status':

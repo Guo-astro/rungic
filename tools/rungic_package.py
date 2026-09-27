@@ -19,8 +19,9 @@ Each package directory holds:
                 postinst removes 'obsolete', reloads systemd and enables 'units' first
 
 Host packages are built here (reproducibly: SOURCE_DATE_EPOCH is the commit time); device
-packages are built in the phone's container, in a transient unit, with dpkg-shlibdeps adding
-library dependencies. Versions are 0.<commit count>, with +bN when a rebuild of the same
+packages are built on Ubuntu 26.04 ARM64 where tools/build_on_device.py builds (--host phone: the
+phone's container, in a transient unit; --host macmini: the Mac mini build host; default
+$RUNGIC_BUILD_HOST, else phone), with dpkg-shlibdeps adding library dependencies. Versions are 0.<commit count>, with +bN when a rebuild of the same
 commit differs. Built packages go to the release pool (.work/apt/repo) and are recorded in
 .work/apt/project-builds.json with the git tree hash of their paths, so an unchanged
 package is not rebuilt.
@@ -41,8 +42,8 @@ import tempfile
 import time
 from pathlib import Path
 
-import rungic_device
-from rungic_device import WORKSPACE, run
+import build_on_device
+from rungic_device import WORKSPACE
 import rungic_release
 
 PACKAGING = WORKSPACE / 'plasma/packaging'
@@ -319,30 +320,33 @@ def stage_sources(pkg):
 
 
 def build_device(pkg, tree, jobs=4):
+    host = build_on_device.host
+    run = lambda script, level='container', timeout=120, check=True: host.run(script, timeout, check)
     name = pkg['name']
     base = f'{DEVICE_BASE}/{name}'
     if pkg.get('build_depends'):
         missing = run('dpkg-query -W -f \'${db:Status-Abbrev} ${Package}\\n\' '
                       + ' '.join(pkg['build_depends']) + ' 2>&1 | grep -v "^ii" || true', 'container').stdout
         if missing.strip():
-            print(f'installing build dependencies of {name}: {" ".join(pkg["build_depends"])}', flush=True)
-            run('DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends '
+            print(f'installing build dependencies of {name} on {host.name}: {" ".join(pkg["build_depends"])}', flush=True)
+            run(('apt-get update -qq; ' if host.name != 'phone' else '') +
+                'DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends '
                 + ' '.join(pkg['build_depends']), 'container', timeout=3600)
     run(f'rm -rf {base}/src {base}/root', 'container', timeout=600)
-    rungic_device.extract_in_container(stage_sources(pkg), f'{base}/src')
+    host.put_tar(stage_sources(pkg), f'{base}/src')
     work = WORKSPACE / f'.work/cache/{name}-device'
     shutil.rmtree(work, ignore_errors=True)
     (work / 'DEBIAN').mkdir(parents=True)
     maintainer_scripts(pkg, work)          # conffiles are listed after the build, on the phone
     for script in (work / 'DEBIAN').iterdir():
         if script.name != 'conffiles':
-            rungic_device.to_container(script, f'{base}/debian-scripts/{script.name}', '755')
+            host.put(script, f'{base}/debian-scripts/{script.name}', '755')
     shutil.rmtree(work)
     run(f'rm -f {base}/unit.list', 'container')
     if unit_list(pkg):
         listing = WORKSPACE / f'.work/cache/{name}-unit.list'
         listing.write_text(unit_list(pkg))
-        rungic_device.to_container(listing, f'{base}/unit.list', '644')
+        host.put(listing, f'{base}/unit.list', '644')
         listing.unlink()
     epoch = git('log', '-1', '--format=%ct')
     unit = f'rungic-package-{name}'
@@ -383,12 +387,16 @@ find "$DESTDIR" -newermt "@$SOURCE_DATE_EPOCH" -exec touch -h -d "@$SOURCE_DATE_
 du -sk --exclude=DEBIAN "$DESTDIR" | cut -f1 > size.txt
 '''
     run(f'mkdir -p {base} && cat > {base}/build-run.sh <<\'RUNGIC_EOF\'\n{script}RUNGIC_EOF', 'container')
-    result = run(f'''systemctl reset-failed {unit} 2>/dev/null || true
-systemd-run --unit={unit} --wait --pipe --collect --quiet -p TimeoutStartSec=14400 --nice=10 \\
-  -p IOSchedulingClass=idle --setenv=HOME=/root sh -eu {base}/build-run.sh > {base}/build.log 2>&1; echo "exit=$?"; tail -30 {base}/build.log''',
+    if host.name == 'phone':
+        command = (f'systemctl reset-failed {unit} 2>/dev/null || true\n'
+                   f'systemd-run --unit={unit} --wait --pipe --collect --quiet -p TimeoutStartSec=14400 --nice=10 '
+                   f'-p IOSchedulingClass=idle --setenv=HOME=/root sh -eu {base}/build-run.sh')
+    else:
+        command = f'HOME=/root nice -n 10 sh -eu {base}/build-run.sh'
+    result = run(f'{command} > {base}/build.log 2>&1; echo "exit=$?"; tail -30 {base}/build.log',
                  'container', timeout=14500, check=False)
     if 'exit=0' not in result.stdout:
-        raise SystemExit(f'{name}: device build failed\n{result.stdout[-4000:]}{result.stderr[-1000:]}')
+        raise SystemExit(f'{name}: build on {host.name} failed\n{result.stdout[-4000:]}{result.stderr[-1000:]}')
     shlibs = run(f'cat {base}/shlibs.txt', 'container').stdout.strip()
     # Control file with the version, built here, then the .deb on the phone.
     version = next_version(name)
@@ -404,7 +412,7 @@ systemd-run --unit={unit} --wait --pipe --collect --quiet -p TimeoutStartSec=144
     ctl.write_text(text)
     shutil.rmtree(fake)
     deb_name = f'{name}_{version}_{pkg["architecture"]}.deb'
-    rungic_device.to_container(ctl, f'{base}/root/DEBIAN/control', '644')
+    host.put(ctl, f'{base}/root/DEBIAN/control', '644')
     run(f'cd {base} && dpkg-deb --root-owner-group -Zxz --build root {deb_name} >/dev/null', 'container',
         timeout=1800)
     ctl.unlink()
@@ -423,7 +431,7 @@ dpkg-deb --root-owner-group -Zxz --build dbgsym {dbg_name} >/dev/null''', 'conta
         debs.append(dbg_name)
     for deb in debs:
         local = WORKSPACE / f'.work/cache/{deb}'
-        rungic_device.from_container(f'{base}/{deb}', local)
+        host.get(f'{base}/{deb}', local)
         shutil.move(local, rungic_release.POOL / deb)
     target = rungic_release.POOL / deb_name
     record(pkg, version, target, tree)
@@ -464,7 +472,9 @@ def main():
     sub = parser.add_subparsers(dest='cmd', required=True)
     sub.add_parser('list')
     p = sub.add_parser('build'); p.add_argument('names', nargs='*'); p.add_argument('--all', action='store_true')
-    p.add_argument('--force', action='store_true'); p.add_argument('--jobs', type=int, default=4)
+    p.add_argument('--force', action='store_true'); p.add_argument('--jobs', type=int)
+    p.add_argument('--host', choices=sorted(build_on_device.HOSTS), default=os.environ.get('RUNGIC_BUILD_HOST', 'phone'),
+                   help='where device packages build (default $RUNGIC_BUILD_HOST, else phone)')
     a = parser.parse_args()
     if a.cmd == 'list':
         result = listing()
@@ -472,7 +482,8 @@ def main():
         names = list(definitions()) if a.all else a.names
         if not names:
             parser.error('name packages or pass --all')
-        result = build(names, a.force, a.jobs)
+        build_on_device.use(a.host)
+        result = build(names, a.force, a.jobs or build_on_device.host.jobs)
     print(json.dumps(result, indent=1, ensure_ascii=False))
 
 
