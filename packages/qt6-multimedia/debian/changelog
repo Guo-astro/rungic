@@ -3,7 +3,9 @@ qt6-multimedia (6.10.2-2+rungic1) resolute; urgency=medium
   * Patch queue (docs/71, docs/73): built whole from the pinned Ubuntu source
     (it used to be Ubuntu's binaries with our library swapped in): the
     PulseAudio sink's target latency as a DEP-3 patch in
-    debian/patches/rungic. Architecture-dependent packages only.
+    debian/patches/rungic. Architecture-dependent packages only; the
+    GStreamer backend is off, as in Ubuntu's build (its buildds lack the
+    GStreamer development files the phone's container has).
 
  -- range-dev <noreply@localhost>  Sun, 27 Sep 2026 09:30:00 +0000
 

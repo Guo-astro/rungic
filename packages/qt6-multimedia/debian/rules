@@ -30,6 +30,7 @@ override_dh_auto_configure:
 	dh_auto_configure -- \
 		--log-level=STATUS \
 		-DCMAKE_LIBRARY_PATH=$(DEB_HOST_MULTIARCH) \
+		-DFEATURE_gstreamer=OFF \
 		$(extra_cmake_args)
 
 override_dh_auto_build-indep:
