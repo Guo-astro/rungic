@@ -110,5 +110,7 @@ Vendor适配应放在哪一层、哪些可以抽离到共享后端，见[54篇�
 | [71-upstream-patch-queue.md](docs/71-upstream-patch-queue.md) | 上游组件改为补丁队列：业界做法、目录与补丁规范、工具与测试分层、KWin试点 |
 | [72-kwin-android-host-isolation.md](docs/72-kwin-android-host-isolation.md) | KWin的Android宿主适配：协议化与独立后端（调研、目标结构、试点） |
 | [73-reduce-upstream-changes.md](docs/73-reduce-upstream-changes.md) | 减少对上游源码的修改：补丁队列收尾、扩展点与共享系统服务替代（总方案与进度） |
+| [73-g100-firmware-inventory.md](docs/73-g100-firmware-inventory.md) | XT2533-4 G100 原厂固件来源、提取与离线校验记录 |
 | [75-image-build-separation.md](docs/75-image-build-separation.md) | Android 固件、RungicOS rootfs、内核构建拆分与跨设备兼容契约 |
 | [76-g100-memory-audit.md](docs/76-g100-memory-audit.md) | XT2533-4 G100 当前 Android 内存占用的实机审计 |
+| [77-g100-three-ci-assessment.md](docs/77-g100-three-ci-assessment.md) | 通用三条镜像 CI、G100 首个设备 spec、runner 分工与缓存清理 |
