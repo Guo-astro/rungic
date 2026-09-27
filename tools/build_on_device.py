@@ -32,6 +32,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import subprocess
 import tarfile
 import time
@@ -85,12 +86,35 @@ systemd-run --unit=rungic-build-{component} --nice=10 --property=IOSchedulingCla
 class MacMini:
     """A long-running Ubuntu 26.04 ARM64 container on the Mac mini build host (OrbStack Docker), reached
     with ssh (key login). The image is tools/pq/arm64-host.Dockerfile, tagged with its hash; build
-    trees live in the rungic-build volume."""
+    trees live in the rungic-build volume. Network use goes through the Mac's system proxy (read
+    with scutil each session; neither ssh commands nor containers pick it up by themselves): every
+    command in the container gets http(s)_proxy, a local proxy reached as host.docker.internal."""
     name, jobs = 'macmini', 10
     SSH = ['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', 'choukevin@macmini.wire.net']
     DOCKER = '/usr/local/bin/docker'
     CONTAINER = 'rungic-build'
     ready = False
+    proxy_env = None
+
+    def proxy(self):
+        """{'http_proxy': ..., 'https_proxy': ...} for the container from the macOS system proxy, or {}."""
+        if self.proxy_env is None:
+            text = self.ssh('scutil --proxy', 30, check=False).stdout.decode(errors='replace')
+            values = dict(re.findall(r'^\s*(\w+) : (\S+)$', text, re.M))
+            env = {}
+            for scheme, key in (('http', 'HTTP'), ('https', 'HTTPS')):
+                if values.get(key + 'Enable') == '1' and values.get(key + 'Proxy') and values.get(key + 'Port'):
+                    host = values[key + 'Proxy']
+                    if host in ('127.0.0.1', 'localhost', '::1'):
+                        host = 'host.docker.internal'
+                    env[scheme + '_proxy'] = f'http://{host}:{values[key + "Port"]}'
+            if env:
+                env['no_proxy'] = 'localhost,127.0.0.1'
+            self.proxy_env = env
+        return self.proxy_env
+
+    def env_flags(self):
+        return ''.join(f'-e {k}={v} ' for k, v in self.proxy().items())
 
     def ssh(self, command, timeout, check=True, data=None, stdout=subprocess.PIPE):
         result = subprocess.run(self.SSH + [command], input=data, stdout=stdout, stderr=subprocess.PIPE,
@@ -121,8 +145,9 @@ class MacMini:
             with tarfile.open(fileobj=context, mode='w', format=tarfile.USTAR_FORMAT) as tar:
                 for name, path in files.items():
                     tar.add(path, arcname=name)
-            self.ssh(f'{self.DOCKER} image inspect {image} >/dev/null 2>&1 || {self.DOCKER} build -q -t {image} -', 7200,
-                     data=context.getvalue())
+            build_args = ''.join(f'--build-arg {k}={v} ' for k, v in self.proxy().items())
+            self.ssh(f'{self.DOCKER} image inspect {image} >/dev/null 2>&1 || '
+                     f'{self.DOCKER} build -q {build_args}-t {image} -', 7200, data=context.getvalue())
             self.ssh(f'{self.DOCKER} rm -f {self.CONTAINER} >/dev/null 2>&1; {self.DOCKER} run -d --name {self.CONTAINER} '
                      f'--restart unless-stopped -v rungic-build:{BASE} {image} sleep infinity', 300)
         elif current[1:] != ['true']:
@@ -130,7 +155,7 @@ class MacMini:
         self.ready = True
 
     def exec(self, command, interactive=False):
-        return f"{self.DOCKER} exec {'-i ' if interactive else ''}{self.CONTAINER} {command}"
+        return f"{self.DOCKER} exec {'-i ' if interactive else ''}{self.env_flags()}{self.CONTAINER} {command}"
 
     def run(self, script, timeout=120, check=True):
         self.ensure()

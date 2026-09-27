@@ -28,7 +28,12 @@
 
 ## 网络
 
-用户指定代理为 `http://192.168.5.45:6152`，用于 HTTP 与 HTTPS；优先于上级目录中的默认代理配置。
+用户于2026-09-27要求：开发环境默认使用所在宿主机的代理，任务先读取宿主机的系统代理再联网，不要假定直连。
+
+- **Mac mini构建机**（`macmini.wire.net`，见docs/71）：用`scutil --proxy`读取macOS系统代理（当前为Surge，HTTP/HTTPS `127.0.0.1:6152`，SOCKS `6153`）。经ssh执行的命令和Docker容器都不会自动使用它：容器内以`host.docker.internal`代替本机地址，每条命令带上`http_proxy`/`https_proxy`，构建镜像时以`--build-arg`传入。`tools/build_on_device.py`的`MacMini`已按此实现，其他在Mac mini上的工具也要这样做。
+- **手机**：下载走用户指定的`http://192.168.5.45:6152`（HTTP与HTTPS），优先于上级目录中的默认代理配置；容器内由`/etc/profile.d/proxy.sh`提供。
+- **本机（K8）**：访问不到`192.168.5.45:6152`，按本机现有网络设置联网。
+- 新增宿主机或工具时，先确认该机器的代理设置并写入本节。
 
 ## 独立 Plasma Mobile 环境的目标版本
 
