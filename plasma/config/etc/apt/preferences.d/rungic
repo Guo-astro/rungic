@@ -1,5 +1,8 @@
-# This project's releases (docs/61): its versions win over the Ubuntu archive,
-# and an older release can be reinstalled (priority above 1000 allows downgrades).
+# This project's releases (docs/61): the installed release pins each of its packages to its exact
+# version (/etc/apt/preferences.d/rungic-release, written by each deploy), above the Ubuntu archive
+# and whatever else the repository keeps for rollbacks. The repository as a whole stays below the
+# archive and the installed versions: an update in Discover must not replace a release package
+# with another build (2026-09-28). A deploy names every version itself, older ones included.
 Package: *
 Pin: release o=rungic,l=rungic
-Pin-Priority: 1001
+Pin-Priority: 100

@@ -243,6 +243,12 @@ btrfs的收益是多快照、廉价克隆的测试容器、send/receive增量备
 **发布、部署与回滚（已验证）**：`tools/rungic_release.py`（仓库、元包、`deploy`/`rollback`/`status`）与`tools/rungic_acceptance.py`。
 - 仓库：`.work/apt/repo`，apt-ftparchive索引，origin `moto`、label `moto-plasma`；设备`/var/lib/moto-apt`，`file:`源`Trusted: yes`（仅root可写），pin 1001。选用`trusted=yes`而非本地签名：AGENTS.md只授权同步APK签名密钥。
 - 元包`moto-plasma-release=<YYYYMMDD.N>`：对`plasma/release/packages.json`中的全部包精确依赖，含`/usr/share/moto/release.json`（git提交）。
+- 保护已安装的发布（2026-09-28）：
+  - 原来只有“仓库整体 pin 1001，加上元包的精确依赖”。仓库为回滚保留了很多历史版本（比如已不属于发布的 kscreen +rungic1），它们在 1001 下同样可能成为候选；Discover 为了完成升级，也可以把元包卸掉，之后精确依赖就不再约束任何东西。那天用户在 Discover 里看到我们定制的包“有更新”，直接原因是测试时绕过发布、用 `dpkg -i` 装了新版本，apt 于是想把它们换回发布版本。
+  - 现在：仓库整体 pin 降到 100；每次部署成功后，写入 `/etc/apt/preferences.d/rungic-release`，把发布里的每个包（包括元包）钉在精确版本上，优先级 1001；元包带 `Protected: yes`，apt 不再允许顺带卸掉它。
+  - 部署和回滚都按 `包名=版本` 显式安装，并带 `--allow-downgrades`，不受这些优先级影响。
+  - 不在发布清单里的 Ubuntu 包，仍然可以在 Discover 里正常更新。
+  - 测试包应当收进发布仓库、随发布部署，不要直接 `dpkg -i` 到日常使用的手机上。
 - 部署：预检、记录dpkg状态与完整性、同步仓库、在transient unit中安装（**每个包都带精确版本**：apt不会为满足依赖自动降级，回滚需要这一点）、安装成功后再同步发布中的Android侧文件（失败时两侧都停在上一版本）、解除被发布取代的hold、按需重启会话、完整性与冒烟验收、记录到`.work/deploy/`。
 - 实测：20260926.1（现有18个重建包原样入库）部署；20260926.2（kwin moto18）部署并重启会话；`rollback`回到.1（实际降级kwin并重启会话）；20260926.3部署结果`ok`。
 

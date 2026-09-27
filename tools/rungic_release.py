@@ -227,6 +227,7 @@ Architecture: all
 Maintainer: range-dev <noreply@localhost>
 Priority: optional
 Section: metapackages
+Protected: yes
 Depends: {depends}
 Conflicts: {FORMER_META}
 Replaces: {FORMER_META}
@@ -424,6 +425,23 @@ cat > /etc/apt/preferences.d/rungic.new <<'EOF'
 {PREFERENCES}EOF
 cmp -s /etc/apt/preferences.d/rungic.new /etc/apt/preferences.d/rungic 2>/dev/null \
   && rm /etc/apt/preferences.d/rungic.new || mv /etc/apt/preferences.d/rungic.new /etc/apt/preferences.d/rungic
+''', 'container')
+
+
+def pin_release(info):
+    """Pin every package of the installed release to its exact version (docs/61): above the Ubuntu
+    archive and the repository's other builds, so neither Discover's updates nor apt upgrades change
+    them. With the release metapackage Protected, apt also refuses to remove it to get around its
+    exact dependencies."""
+    lines = ['# Written by tools/rungic_release.py deploy: the packages of release ' + info['version'] + '.']
+    for name, version in sorted({**info['packages'], meta_of(info['version']): info['version']}.items()):
+        lines += ['', f'Package: {name}', f'Pin: version {version}', 'Pin-Priority: 1001']
+    body = '\n'.join(lines) + '\n'
+    run(f'''set -e
+cat > /etc/apt/preferences.d/rungic-release.new <<'EOF'
+{body}EOF
+mv /etc/apt/preferences.d/rungic-release.new /etc/apt/preferences.d/rungic-release
+apt-get -q update {APT_OURS} >/dev/null 2>&1 || true
 ''', 'container')
 
 
@@ -730,6 +748,9 @@ def deploy(version=None, restart='auto', acceptance='smoke', record_label=None, 
                 step('snapshot-rollback', ok=ok, output=text[-400:], **after)
                 log['result'] = 'install-failed, rolled back to the snapshot' if ok else log['result']
             return log
+        # The installed release's exact versions win from now on; a failed install kept the previous pins.
+        pin_release(info)
+        step('pins', packages=len(info['packages']) + 1)
         # The Android side names paths inside the container: it follows a successful install,
         # so a failed one leaves both sides at the previous release.
         android = [] if keep_android else sync_android(info, record)
