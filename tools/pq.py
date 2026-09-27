@@ -107,7 +107,11 @@ def fetch_git(name, info, cache):
 
 
 def docker(workdir, *argv, env=()):
-    command = ['docker', 'run', '--rm', '-u', f'{os.getuid()}:{os.getgid()}', '-e', 'HOME=/tmp',
+    engine = shutil.which('docker') or shutil.which('podman')
+    if not engine:
+        raise SystemExit('a Docker-compatible container engine is required for the patch queue')
+    podman_options = ['--userns=keep-id', '--security-opt', 'label=disable'] if Path(engine).name == 'podman' else []
+    command = [engine, 'run', '--rm', *podman_options, '-u', f'{os.getuid()}:{os.getgid()}', '-e', 'HOME=/tmp',
                *[a for e in env for a in ('-e', e)], '-v', f'{workdir}:/w', '-w', '/w', IMAGE, *argv]
     result = subprocess.run(command, capture_output=True, text=True)
     if result.returncode:
@@ -176,7 +180,9 @@ def source(name, output=None):
         shutil.rmtree(output / 'debian', ignore_errors=True)
         shutil.copytree(PACKAGES / name / 'debian', output / 'debian', symlinks=True)
     add_overlay(name, output)
-    if (output / 'debian/patches/series').exists():
+    series = output / 'debian/patches/series'
+    if series.exists() and any(line.strip() and not line.lstrip().startswith('#')
+                               for line in series.read_text().splitlines()):
         docker(output, 'quilt', 'push', '-a', '-q', env=('QUILT_PATCHES=debian/patches',))
     return output
 
@@ -198,7 +204,10 @@ def prepare(name):
     """git tree for editing: upstream + debian/ on branch rungic, patches as commits (gbp pq)."""
     work = WORKSPACE / '.work/pq' / name
     tree = source(name, WORKSPACE / f'.work/pq/{name}.src')
-    docker(tree, 'quilt', 'pop', '-a', '-q', env=('QUILT_PATCHES=debian/patches',))
+    series = tree / 'debian/patches/series'
+    if series.exists() and any(line.strip() and not line.lstrip().startswith('#')
+                               for line in series.read_text().splitlines()):
+        docker(tree, 'quilt', 'pop', '-a', '-q', env=('QUILT_PATCHES=debian/patches',))
     shutil.rmtree(tree / '.pc', ignore_errors=True)
     shutil.rmtree(work, ignore_errors=True)
     tree.rename(work)
@@ -218,8 +227,21 @@ def export(name):
     docker(work, 'gbp', 'pq', 'export')
     dest = PACKAGES / name / 'debian/patches'
     shutil.rmtree(dest / TOPIC, ignore_errors=True)
-    shutil.copytree(work / 'debian/patches' / TOPIC, dest / TOPIC)
-    shutil.copy2(work / 'debian/patches/series', dest / 'series')
+    generated = work / 'debian/patches'
+    if (generated / TOPIC).exists():
+        shutil.copytree(generated / TOPIC, dest / TOPIC)
+        shutil.copy2(generated / 'series', dest / 'series')
+    else:
+        # A new source with an empty patch queue has no topic directory yet;
+        # gbp writes its first exported patch at the root of debian/patches.
+        entries = [line.strip() for line in (generated / 'series').read_text().splitlines()
+                   if line.strip() and not line.lstrip().startswith('#')]
+        if not entries or any('/' in entry or not (generated / entry).is_file() for entry in entries):
+            raise SystemExit(f'{name}: unexpected new patch queue layout')
+        (dest / TOPIC).mkdir(parents=True)
+        for entry in entries:
+            shutil.copy2(generated / entry, dest / TOPIC / entry)
+        (dest / 'series').write_text(''.join(f'{TOPIC}/{entry}\n' for entry in entries))
     return sorted(p.name for p in (dest / TOPIC).glob('*.patch'))
 
 

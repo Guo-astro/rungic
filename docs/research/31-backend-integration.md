@@ -18,6 +18,8 @@
 
 ## 阅读入口
 
+2026-09-28 当前 Plasma 首次账户入口补充：APK → Magisk `--mount-master` → `rungic-plasma account-setup` → 公共 `start_container()` → LXC 内账户助手。容器入口绑定的宿主音频目录必须在所有启动路径上提前准备；`android-audio prepare` 复用目录创建和权限逻辑，普通桌面启动再以 `start` 启动音频服务。G100 全新安装曾在真正校验账户之前因目录缺失失败，修复及验收范围见 [79 篇](../79-g100-ci-execution.md)。
+
 | 要回答的问题 | 文档 |
 |---|---|
 | 当时有哪些功能缺失、怎样测出来 | [28：能力审计](28-capability-audit.md) |

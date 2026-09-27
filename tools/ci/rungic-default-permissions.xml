@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<exceptions>
+    <exception package="com.rungic.plasma">
+        <permission name="android.permission.CAMERA" fixed="false" />
+        <permission name="android.permission.RECORD_AUDIO" fixed="false" />
+        <permission name="android.permission.POST_NOTIFICATIONS" fixed="false" />
+        <permission name="android.permission.BLUETOOTH_SCAN" fixed="false" />
+        <permission name="android.permission.BLUETOOTH_CONNECT" fixed="false" />
+        <permission name="android.permission.READ_PHONE_STATE" fixed="false" />
+    </exception>
+</exceptions>

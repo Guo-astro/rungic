@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "id": "motorola/portov_cn/RETCN/W1VT36H.1-51-8",
+  "identity": {
+    "product": "portov",
+    "device": "portov_cn",
+    "sku": "XT2533-4",
+    "fingerprint": "motorola/portov_cn/portov:16/W1VT36H.1-51-8/e9ec8-e96731:user/release-keys",
+    "bootloader": "MBM-3.0-portov_cn-eb7e335ab3e9-260622-VVT35HV-W1-51-ST27.7-e9ec8"
+  },
+  "stock": {
+    "archive_sha256": "9704e1a6d3b312a162caeb293229acd7cf2a9eb83e75bae928f19e8c4946f975",
+    "boot_sha256": "d5b9ce66ffe3ada348f9b7822bae6e79eb5827f09be3066a59eb7193d5df8202",
+    "init_boot_sha256": "3d3281c9905a0b782a903ce83ed8c7c9e17d153c475c91e6b6ca8b78264a4c81",
+    "vbmeta_sha256": "a37178b5abb7e60156d6c1653e4cd465fbdd003a0e09699500b7c6bb1655bbf6",
+    "vbmeta_system_sha256": "cf4e8632507781057de1baf870719537c8cb3def2fe8f7cf858a930b6ed8a57e",
+    "super_sha256": "3c7922e6a500e46dabd968f39ad43d1b5fc116d9604fa1594b004c927e14a6c2",
+    "product_sha256": "bd70d8355111ac73f5036bec9a6c567fba9a303b1dedc624ea6b410fcac8ea1e",
+    "product_partition_bytes": 7445790720,
+    "avb_public_key_sha1": "fd29248b78aa9d6427e8f569eda90be62b9fa0ee"
+  },
+  "kernel": {
+    "manifest_repository": "https://android.googlesource.com/kernel/manifest",
+    "manifest_commit": "523359421e06ee311854a9bef828cde647f56099",
+    "common_repository": "https://android.googlesource.com/kernel/common",
+    "common_commit": "86c6642d582ed37f3132f23728ec152157dc373f",
+    "stock_release": "6.6.87-android15-8-g86c6642d582e-ab14676406-4k",
+    "page_size": 4096,
+    "module_trust_certificate_sha256": "c60d10b8c4a39e05390d5585f639932bba426eecdbc2d0f04ee70ddb0ed28ea2"
+  },
+  "release_requirements": {
+    "arch": "aarch64",
+    "android_api": 36,
+    "rootfs_arch": "arm64",
+    "minimum_battery_percent": 30,
+    "minimum_host_free_gib": 200,
+    "host_reserve_gib": 60
+  },
+  "deployment": {
+    "phone_http_proxy": "http://192.168.5.45:6152"
+  },
+  "purity": {
+    "remove_preinstall": [
+      {"directory": "Amap", "package": "com.autonavi.minimap", "apk_sha256": "9111ed0af15b4cc1b67a98ebc413c0b132be986e35422000353f1676242f197b"},
+      {"directory": "BaiduSearch", "package": "com.baidu.searchbox", "apk_sha256": "f5afb042d830f4546a4f9b9116ddac4912a2b90dcf028a963ae113344aa9fc31"},
+      {"directory": "BestWeather", "package": "com.icoolme.android.weather", "apk_sha256": "2b809d30046bf0a96045f35a84ddeee478e43caf9e61b92bb94daad777068010"},
+      {"directory": "Douyin", "package": "com.ss.android.ugc.aweme", "apk_sha256": "1efc97529e237a79b25612f989d8eb9db00f8f435faa45ba6418df2373210c2f"},
+      {"directory": "FanqieNovel", "package": "com.dragon.read", "apk_sha256": "40d2eb08dde9888026292759be1be409f0347d05f4c872ff8d7ee0e87bae1421"},
+      {"directory": "IQiyi", "package": "com.qiyi.video", "apk_sha256": "2d0a469efdbe1b179c4f965cdefe377eef9f4b35acebe1c8228f03261863c5bd"},
+      {"directory": "KuaishouVideo", "package": "com.smile.gifmaker", "apk_sha256": "6cf31faa41b5d5caf4cc81af89326272b571631e0ddd40750ee70397d1caf4ae"},
+      {"directory": "Meituxiuxiu", "package": "com.mt.mtxx.mtxx", "apk_sha256": "cafb34f58b4a2ade9d9bf4ef22d3c0b40c546bbf86d536fe4887002a9b648795"},
+      {"directory": "NetEaseCloudMusic", "package": "com.netease.cloudmusic", "apk_sha256": "f9a8e9ea6e22b3fdd3a8915bc67fa5033484b203522c66abb8be004c031ccf0c"},
+      {"directory": "NewsArticle", "package": "com.ss.android.article.news", "apk_sha256": "edbf8dec03282ebe309eef75b9bd7a2f6b7be37c712f8d1f6420bc05d7fe37eb"},
+      {"directory": "QQMusic", "package": "com.tencent.qqmusic", "apk_sha256": "45a012842c54ae3ecc328086203dc14504ab35755011f1326f4b47b6e407a294"},
+      {"directory": "RedBook", "package": "com.xingin.xhs", "apk_sha256": "4aeb888fd88b365cd9659c594788c06886ce545ea14d0836ef9b802e4d2722f9"},
+      {"directory": "Weibo", "package": "com.sina.weibo", "apk_sha256": "a8d937606690929cdfcf41d307275e16c35c9ca9f81351a61a660df059872a6e"},
+      {"directory": "Youku", "package": "com.youku.phone", "apk_sha256": "767815096f3d48acecd6ccf69f67f1fe6fbf006127af0839b15a39e32ea10403"},
+      {"directory": "iBiliPlayer", "package": "tv.danmaku.bili", "apk_sha256": "9af7008c15d4a4c902b85352d6dfb0ac048a8539d77e3d8a3dca5a83af88cd9d"}
+    ],
+    "remove_files": [
+      "etc/preinstall/amapconfig.ini",
+      "etc/preinstall/lenovo_aweme_183_pre_install.config",
+      "etc/preinstall/lenovo_bili_channel.txt",
+      "etc/preinstall/motorola.xhs",
+      "etc/preinstall/mtxxchannel",
+      "etc/preinstall/qqmusic_channel.txt",
+      "etc/preinstall/weibo_channel.txt",
+      "etc/preinstall/zm-config.ini"
+    ],
+    "disable_packages": [
+      "com.lenovo.menu_assistant",
+      "com.lenovo.levoice_agent",
+      "com.lenovo.xiaotian.trigger"
+    ]
+  }
+}

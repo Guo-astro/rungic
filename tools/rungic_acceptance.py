@@ -157,8 +157,11 @@ def ocr_screen():
     rungic_device.to_container(shot, '/var/tmp/rungic-acceptance-ocr.png', '644')
     text = user('py=/usr/lib/rungic-clicker/venv/bin/python; [ -x $py ] || py=/usr/lib/moto-clicker/venv/bin/python; '
                 f"$py -c {shlex.quote(OCR)} "
-                '/var/tmp/rungic-acceptance-ocr.png 2>/dev/null; rm -f /var/tmp/rungic-acceptance-ocr.png', timeout=120)
-    return json.loads(text.stdout.strip().splitlines()[-1]), shot
+                '/var/tmp/rungic-acceptance-ocr.png; code=$?; rm -f /var/tmp/rungic-acceptance-ocr.png; exit $code', timeout=120)
+    lines = text.stdout.strip().splitlines()
+    if text.returncode or not lines:
+        raise RuntimeError('OCR failed: ' + (text.stderr or text.stdout)[-1800:])
+    return json.loads(lines[-1]), shot
 
 
 @check
@@ -790,7 +793,11 @@ def compare(current, previous):
     return rows
 
 
-def run_scenarios(selected, release=None, out_dir=None, since=None):
+def run_scenarios(selected, release=None, out_dir=None, since=None, skips=None):
+    skips = skips or {}
+    unknown = set(skips) - {s['id'] for s in selected}
+    if unknown:
+        raise ValueError(f'skip IDs are not selected scenarios: {sorted(unknown)}')
     spec = load()
     started = time.time()
     stamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
@@ -803,7 +810,10 @@ def run_scenarios(selected, release=None, out_dir=None, since=None):
     for scenario in selected:
         fn = CHECKS.get(scenario['check'])
         began = time.monotonic()
-        if fn is None:
+        if scenario['id'] in skips:
+            row = {'passed': None, 'metrics': {}, 'details': {'skipped': skips[scenario['id']],
+                                                           'explicit_scope_exclusion': True}}
+        elif fn is None:
             row = {'passed': None, 'metrics': {}, 'details': {'skipped': 'check not implemented'}}
         else:
             try:
@@ -825,7 +835,10 @@ def run_scenarios(selected, release=None, out_dir=None, since=None):
         mark = {True: 'PASS', False: 'FAIL', None: 'SKIP'}[row['passed']]
         print(f"{mark} {scenario['id']} ({row['seconds']} s)", flush=True)
     report = {'release': release, 'time': stamp, 'scenarios': rows, 'manual': spec.get('manual', []),
-              'passed': all(r['passed'] is not False for r in rows),
+              'passed': bool(rows) and all(r['passed'] is True or
+                                          r['details'].get('explicit_scope_exclusion') for r in rows),
+              'complete': all(r['passed'] is not None for r in rows),
+              'skipped_ids': [r['id'] for r in rows if r['passed'] is None],
               'failed_ids': [r['id'] for r in rows if r['passed'] is False]}
     base_path, base = previous_report(release, {r['id'] for r in rows})
     if base:
@@ -836,9 +849,9 @@ def run_scenarios(selected, release=None, out_dir=None, since=None):
     return report
 
 
-def run_level(level, release=None, out_dir=None, since=None):
+def run_level(level, release=None, out_dir=None, since=None, skips=None):
     levels = {'smoke': {'smoke'}, 'full': {'smoke', 'full'}}[level]
-    return run_scenarios([s for s in load()['scenarios'] if s['level'] in levels], release, out_dir, since)
+    return run_scenarios([s for s in load()['scenarios'] if s['level'] in levels], release, out_dir, since, skips)
 
 
 def main():
@@ -846,6 +859,8 @@ def main():
     sub = parser.add_subparsers(dest='cmd', required=True)
     for name in ('smoke', 'full'):
         p = sub.add_parser(name); p.add_argument('--release')
+        p.add_argument('--skip', action='append', default=[], metavar='ID=REASON',
+                       help='record an explicit scope exclusion; never reported as PASS')
     p = sub.add_parser('run'); p.add_argument('ids', nargs='+'); p.add_argument('--release')
     p = sub.add_parser('compare'); p.add_argument('a'); p.add_argument('b')
     a = parser.parse_args()
@@ -856,7 +871,13 @@ def main():
         chosen = [s for s in load()['scenarios'] if s['id'] in a.ids]
         report = run_scenarios(chosen, a.release)
     else:
-        report = run_level(a.cmd, a.release)
+        skips = {}
+        for entry in a.skip:
+            key, sep, reason = entry.partition('=')
+            if not sep or not reason.strip():
+                parser.error('--skip requires ID=REASON')
+            skips[key] = reason
+        report = run_level(a.cmd, a.release, skips=skips)
     print(json.dumps({k: report[k] for k in ('passed', 'failed_ids', 'path')}, ensure_ascii=False))
     return 0 if report['passed'] else 1
 

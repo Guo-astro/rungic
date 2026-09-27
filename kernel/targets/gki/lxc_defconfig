@@ -1,0 +1,8 @@
+# Shared Rungic container requirements on Android 15 / 6.6 GKI.
+# The device spec supplies the exact ACK commit and OEM module baseline.
+CONFIG_SYSVIPC=y
+CONFIG_POSIX_MQUEUE=y
+CONFIG_IPC_NS=y
+CONFIG_PID_NS=y
+CONFIG_USER_NS=y
+CONFIG_DEVTMPFS=y

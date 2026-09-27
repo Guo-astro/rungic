@@ -440,6 +440,7 @@ dpkg-deb --root-owner-group -Zxz --build dbgsym {dbg_name} >/dev/null''', 'conta
 
 def build(names, force=False, jobs=4):
     defs = definitions()
+    rungic_release.POOL.mkdir(parents=True, exist_ok=True)
     done = []
     for name in names:
         pkg = defs.get(name) or sys.exit(f'no package {name} in {PACKAGING}')

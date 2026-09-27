@@ -1,0 +1,48 @@
+From: Rungic <noreply@rungic.invalid>
+Date: Sun, 27 Sep 2026 21:45:06 +0800
+Subject: Preserve task_struct ABI when enabling SYSVIPC for Rungic
+
+Place the SYSVIPC state in Android KABI reserve slots 6 through 8, so
+existing vendor modules keep their task_struct layout. This adapts the
+previously validated Android 15 GKI compatibility patch to this exact ACK
+commit for Moto G100. The configuration fragment is maintained separately.
+
+Forwarded: not-needed
+Last-Update: 2026-09-27
+X-Rungic-Status: Pending
+X-Rungic-Tests: L1:module-abi; L2:portov-boot (to write)
+X-Rungic-Docs: docs/79-g100-ci-execution.md
+---
+ include/linux/sched.h | 9 +++++----
+ 1 file changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/include/linux/sched.h b/include/linux/sched.h
+index 1299b44..a730c80 100644
+--- a/include/linux/sched.h
++++ b/include/linux/sched.h
+@@ -1071,10 +1071,6 @@ struct task_struct {
+ 
+ 	struct nameidata		*nameidata;
+ 
+-#ifdef CONFIG_SYSVIPC
+-	struct sysv_sem			sysvsem;
+-	struct sysv_shm			sysvshm;
+-#endif
+ #ifdef CONFIG_DETECT_HUNG_TASK
+ 	unsigned long			last_switch_count;
+ 	unsigned long			last_switch_time;
+@@ -1521,9 +1517,14 @@ struct task_struct {
+ 	ANDROID_KABI_RESERVE(3);
+ 	ANDROID_KABI_RESERVE(4);
+ 	ANDROID_KABI_RESERVE(5);
++#ifdef CONFIG_SYSVIPC
++	ANDROID_KABI_USE(6, struct sysv_sem sysvsem);
++	_ANDROID_KABI_REPLACE(ANDROID_KABI_RESERVE(7); ANDROID_KABI_RESERVE(8), struct sysv_shm sysvshm);
++#else
+ 	ANDROID_KABI_RESERVE(6);
+ 	ANDROID_KABI_RESERVE(7);
+ 	ANDROID_KABI_RESERVE(8);
++#endif
+ 
+ #ifdef CONFIG_RV
+ 	/*

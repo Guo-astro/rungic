@@ -53,7 +53,7 @@ loop_of() {   # the loop device attached to $1, attaching it if needed
     dev=$(losetup -j "$1" 2>/dev/null | head -n1 | cut -d: -f1)
     if [ -z "$dev" ]; then
         # The kernel's loop worker may read only files of this type (rootfs.sepolicy.rule).
-        magiskpolicy --live --apply "$POLICY" >/dev/null 2>&1 || die "cannot load $POLICY"
+        /data/adb/magisk/magiskpolicy --live --apply "$POLICY" >/dev/null 2>&1 || die "cannot load $POLICY"
         chcon "$LABEL" "$1"
         dev=$(losetup -sf "$1")
     fi
@@ -78,10 +78,19 @@ dm_delete() {
 attach() {
     [ -f "$IMG" ] || die "no image at $IMG"
     if path=$(dm_path "$ROOT_DM"); then
-        # An origin without its snapshot writes past it: a rollback could not bring those blocks
-        # back (2026-09-27, docs/70). Never go on like that.
-        [ "$(state)" != snapshot ] || dm_path "$SNAP_DM" >/dev/null || die "$ROOT_DM is up without $SNAP_DM"
-        echo "$path"; return
+        # toybox marks loop devices autoclear. After LXC exits the loop can lose its backing
+        # file while the device-mapper entry remains, so a later mount sees a zero-size loop.
+        # Recreate the stack before returning an already-present mapper path.
+        bound=$(losetup -j "$IMG" 2>/dev/null | head -n1 | cut -d: -f1)
+        if [ -n "$bound" ] && [ "$(blockdev --getsz "$bound" 2>/dev/null)" -gt 0 ]; then
+            # An origin without its snapshot writes past it: a rollback could not bring those
+            # blocks back (2026-09-27, docs/70).
+            [ "$(state)" != snapshot ] || dm_path "$SNAP_DM" >/dev/null || die "$ROOT_DM is up without $SNAP_DM"
+            echo "$path"; return
+        fi
+        need_stopped
+        dm_delete "$ROOT_DM"
+        dm_delete "$SNAP_DM"
     fi
     base=$(loop_of "$IMG")
     # One device-mapper stack per image: a second one (another name, e.g. a test copy of this

@@ -76,6 +76,9 @@ memory_status() {
         "$(memory_choice)" "$MEMORY_DEFAULT" "$MEMORY_PRESETS" "$limit_mib" "$(mib "$usage")" "$(mib "$peak")" $((total / 1024))
 }
 start_container() {
+    # Account setup also starts the container, before normal desktop/audio start.
+    # Its enter helper needs the audio bind source even when no server is needed.
+    "$BASE/android-audio" prepare
     # The container starts inside the memory cgroup: lxc-start and everything below inherit it.
     if apply_memory_limit; then echo $$ > "$MEMCG/cgroup.procs" 2>/dev/null || true; fi
     gpu_rule=$(device_rule /dev/kgsl-3d0 rw)

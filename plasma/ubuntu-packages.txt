@@ -37,7 +37,7 @@ rime-essay
 at-spi2-core
 python3-pyatspi
 qml6-module-org-kde-purpose
-qtspeech6-speechd-plugin
+qt6-speech-speechd-plugin
 gir1.2-adw-1
 gir1.2-gtk-4.0
 gir1.2-gst-plugins-base-1.0

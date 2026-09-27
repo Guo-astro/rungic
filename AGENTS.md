@@ -15,6 +15,21 @@
 
 已部署能力与验收范围见 `docs/research/30-feature-adaptation.md`；桌面与 Android 后端的实际连接、启动/挂载、接口契约、研究方法及扩展入口见 `docs/research/31-backend-integration.md`。后续适配先对照当前架构，保留源码/补丁与实机证据，并同步更新这两篇的相应内容。
 
+## 操作前先查项目知识库（用户于 2026-09-27 明确要求）
+
+在安装、刷机、构建、部署或排障之前，先检索 `docs/`、相关工具的注释/测试和已有实机日志，读完与本次设备、固件、组件和操作路径直接相关的记录，再制定命令与回退步骤。不能只看计划文档；要核对历史的失败原因、修正版本、实际验收边界和当前源码实现，避免重复已知错误。旧记录适用于别的机型或版本时，只复用方法，重新核对本机身份、槽位、镜像哈希、接口和运行状态。
+
+- G100 / `portov_cn` 镜像工作先查 `docs/75-image-build-separation.md`、`docs/77-g100-three-ci-assessment.md`、`docs/78-g100-firmware-inventory.md`；Magisk 与刷写另查 `docs/05-magisk-root.md`、`docs/11-stock-install.md`、`docs/12-offline-magisk.md`、`docs/13-offline-magisk-user-app.md`。其中 G100 S / `mumba_cn` 的镜像、哈希和刷机命令不能直接用于 G100。
+- 已知坑：Motorola bootloader 拒绝重新封装的 `super.img` 时，参照 11 篇核验 fastbootd 的分区刷写路径；`oem fb_mode_set` 后进入 fastbootd 前要清除标志。Magisk 仅修补 `init_boot` 后的首次运行可能提示修复环境，完整离线首启机制与“不能把 Magisk 作为系统应用”的教训见 12、13 篇。Magisk 31.0 的 SQL NULL 崩溃见 39 篇。
+- 多个 ADB server 或多台手机同时在线时，先用 `adb devices -l`、端口和设备序列号核对连接归属；后续每条设备命令指定精确序列号。2026-09-27 曾同时运行 5037/5038，USB G100 被 5037 接管，5038 只显示 Wi-Fi G100 S，不能把单一端口未列出设备判定为手机启动失败。
+- G100 首次刷入 Magisk 修补的 `init_boot` 后，管理器可能提示“修复运行环境”并重启；`magiskd` 已在运行不代表 Shell 已获授权。2026-09-27 实测需在 Magisk 的“超级用户”页启用 Shell，之后 `su -c id` 才得到 uid 0。核验时同时检查 Magisk 版本、普通应用身份与 SELinux，不把一次 `su` 拒绝误判为内核启动失败。
+- G100 2026-09-28 清数据首启问题见 79 篇：原厂、简单 Magisk 和仅离线种子引导的 `init_boot` 曾在已有数据状态下启动；完整包清数据后进入 Recovery。将部署触发改为 Magisk `service.d` 的 v4 整包复刷后仍进入 Recovery，故不能把 `sys.boot_completed` 触发器认定为已证实根因或把此改动记为修复成功。G100 S 11 篇的简单 Magisk 方案做过清数据首启，13 篇的离线种子方案保留了其他用户数据，两者验收边界不同。后续应固定其余镜像和数据状态、逐项替换启动组件定位，避免同时改镜像与清数据后作因果判断。
+- ADB 多命令 root 调试不要写成 `adb shell su -c '命令一; 命令二'`：本机 ADB 的 shell 转义可让只有第一条命令以 root 运行。改为 `printf '%s\n' '命令一' '命令二' | adb -P 5037 -s ZY32M9MRVP shell su -c sh`，逐条确认身份与输出。Magisk root 上下文的 `pm install`、`pm grant`、`appops set` 曾出现 Binder `Failed transaction (2147483646)`；需在 Android shell 上下文安装或改为镜像预装。手机 toybox `flock -n 9` 对继承 fd 报 `Bad file descriptor`，首启锁改用 Magisk BusyBox 的 `flock -n 文件 命令`。
+- G100 rootfs 首装时 Android toybox `dd --help` 虽列出 `conv=sparse`，实际会报 `bad conv=sparse`；对 16 GiB 稀疏镜像使用已验证的 ARM64 稀疏写入器并核对整镜像 SHA，避免占满 `/data`。LXC 的早期初始化日志目录须在镜像内预建；toybox loop 的 autoclear 会在容器退出后留下失效的 dm 映射，重启前须由 `rootfs-image attach` 检查并重建映射。相关实机结果记录在 79 篇。
+- 2026-09-27 G100 的整包试刷中，第一个原厂 `super.img_sparsechunk.0` 已写入，第二个分片的 fastboot USB 传输没有返回，主机复位后手机出现 USB `error -71` 且暂不能枚举；停止重试并先恢复设备连接。旧机型的 super 分片刷入经验不能当作本机已通过的路径。过程、后续恢复和验收边界见 79 篇。
+- 新遇到的失败、修复和实机证据及时写入对应 `docs/`，并在下一次相关操作前重新查阅；研究结论、离线校验和实机验收必须分别标注。
+- 将普通 APK 改为 product/app 预装时，须同时核验其原生库安装方式：ZIP 中压缩的 ARM64 JNI 库要放入对应应用的 `lib/arm64`，不能仅复制 APK。12 篇已有相关经验；79 篇的 G100 Rungic 因遗漏 `libc++_shared.so` 在启动时崩溃。`pm path` 和默认权限通过不足以验收应用，必须实际启动；用 `pm install -r` 临时修好也不能代替只读镜像预装验收。
+
 ## 优先修复共享系统能力，避免逐个应用重复适配
 
 用户于2026-09-23明确要求：不要 case by case 地修复各个 App；尽量利用 Linux 与桌面系统已有的标准接口、服务及 Pipeline 扩展机制，在共享层解决问题，避免不同 App 反复遇到同类故障。

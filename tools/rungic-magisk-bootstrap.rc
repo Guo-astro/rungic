@@ -3,4 +3,16 @@ on post-fs-data
     # it at boot-complete if no manager exists. Supply the original full APK.
     rm ${MAGISKTMP}/stub.apk
     symlink /product/etc/magisk/Magisk.apk ${MAGISKTMP}/stub.apk
-    exec u:r:magisk:s0 0 0 -- /system/bin/sh ${MAGISKTMP}/rungic-magisk-bootstrap.sh
+    exec u:r:magisk:s0 0 0 -- /system/bin/sh ${MAGISKTMP}/rungic-magisk-bootstrap.sh early
+
+# On wiped userdata Magisk deliberately leaves /data/adb creation until boot
+# completion. Seed it then and reboot once so its normal early stage can run.
+on property:sys.boot_completed=1
+    start rungic-magisk-seed
+
+service rungic-magisk-seed /system/bin/sh ${MAGISKTMP}/rungic-magisk-bootstrap.sh late
+    user root
+    group root
+    seclabel u:r:magisk:s0
+    disabled
+    oneshot

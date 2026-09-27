@@ -247,12 +247,21 @@ Description: Rungic: release {version}
 def index():
     """Flat repository index: Packages(.gz,.xz) and Release with origin and label rungic (the pin of
     plasma/config/etc/apt/preferences.d/rungic; moto / moto-plasma before the Rungic rename)."""
-    packages = subprocess.run(['apt-ftparchive', 'packages', '.'], cwd=POOL, capture_output=True,
+    POOL.mkdir(parents=True, exist_ok=True)
+    archive = ['apt-ftparchive']
+    if not shutil.which('apt-ftparchive'):
+        engine = shutil.which('podman') or shutil.which('docker')
+        if not engine:
+            raise SystemExit('apt-ftparchive or a container engine is required to index the APT pool')
+        archive = [engine, 'run', '--rm', '--security-opt', 'label=disable',
+                   '-v', f'{POOL.resolve()}:/repo:ro', '-w', '/repo', 'rungic-pq:26.04',
+                   'apt-ftparchive']
+    packages = subprocess.run([*archive, 'packages', '.'], cwd=POOL, capture_output=True,
                               check=True).stdout
     (POOL / 'Packages').write_bytes(packages)
     (POOL / 'Packages.gz').write_bytes(gzip.compress(packages, mtime=0))
     (POOL / 'Packages.xz').write_bytes(lzma.compress(packages))
-    release = subprocess.run(['apt-ftparchive', '-o', 'APT::FTPArchive::Release::Origin=rungic',
+    release = subprocess.run([*archive, '-o', 'APT::FTPArchive::Release::Origin=rungic',
                               '-o', 'APT::FTPArchive::Release::Label=rungic',
                               '-o', 'APT::FTPArchive::Release::Suite=rungic',
                               '-o', 'APT::FTPArchive::Release::Codename=rungic', 'release', '.'],
@@ -260,7 +269,7 @@ def index():
     (POOL / 'Release').write_bytes(release)
 
 
-def build(version=None, allow_dirty=False, note=''):
+def build(version=None, allow_dirty=False, note='', coupled_override=None):
     commit, dirty = git_state()
     if dirty and not allow_dirty:
         raise SystemExit('tracked files have uncommitted changes; commit first (a release records its commit)')
@@ -290,11 +299,16 @@ def build(version=None, allow_dirty=False, note=''):
         raise SystemExit(f'not in the pool: {missing} (build them, or import-installed)')
     coupled = {}
     if s.get('coupled'):
-        text = out('dpkg-query -W -f \'${Package}\\t${Version}\\n\' ' + ' '.join(map(shlex.quote, s['coupled'])),
-                   'container')
-        coupled = {n: v for n, v in (line.split('\t') for line in text.splitlines() if '\t' in line) if v}
+        if coupled_override is None:
+            text = out('dpkg-query -W -f \'${Package}\\t${Version}\\n\' ' + ' '.join(map(shlex.quote, s['coupled'])),
+                       'container')
+            coupled = {n: v for n, v in (line.split('\t') for line in text.splitlines() if '\t' in line) if v}
+        else:
+            coupled = coupled_override
         if set(s['coupled']) - set(coupled):
             raise SystemExit(f"coupled packages not installed: {sorted(set(s['coupled']) - set(coupled))}")
+        if set(coupled) - set(s['coupled']) or any(not isinstance(v, str) or not v for v in coupled.values()):
+            raise SystemExit('coupled package override contains unexpected names or empty versions')
         deps.update(coupled)
     version = version or next_version()
     if (POOL / f'{META}_{version}_all.deb').exists() or (POOL / f'{FORMER_META}_{version}_all.deb').exists():
@@ -861,6 +875,7 @@ def main():
     p = sub.add_parser('import'); p.add_argument('debs', nargs='+')
     p = sub.add_parser('build'); p.add_argument('--version'); p.add_argument('--allow-dirty', action='store_true')
     p.add_argument('--note', default='')
+    p.add_argument('--coupled-json', type=Path, help='exact coupled package versions from a new rootfs; avoids a phone query')
     sub.add_parser('list')
     for name in ('deploy', 'rollback'):
         p = sub.add_parser(name)
@@ -882,7 +897,8 @@ def main():
         result = import_debs(a.debs)
         index()
     elif a.cmd == 'build':
-        result = build(a.version, a.allow_dirty, a.note)
+        result = build(a.version, a.allow_dirty, a.note,
+                       json.loads(a.coupled_json.read_text()) if a.coupled_json else None)
     elif a.cmd == 'list':
         result = [{k: r[k] for k in ('version', 'commit', 'built', 'note')} for r in releases()]
     elif a.cmd == 'deploy':
