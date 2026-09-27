@@ -1,0 +1,19 @@
+#!/bin/sh
+# The only thing the phone may do on the Mac mini build host (docs/71): its SSH key is restricted
+# to this command, run inside the build container as
+#   docker exec -i -e SSH_ORIGINAL_COMMAND rungic-build sh /root/rungic-build/bin/rungic-transfer
+#   put DIR      unpack a tar from stdin into /root/rungic-build/DIR (created)
+#   get FILE     write /root/rungic-build/FILE to stdout
+# Paths stay under /root/rungic-build: no absolute paths, no "..".
+set -euf
+BASE=/root/rungic-build
+set -- ${SSH_ORIGINAL_COMMAND:-}
+[ "$#" = 2 ] || { echo "usage: put DIR | get FILE" >&2; exit 2; }
+case "$2" in
+  /*|*..*|'') echo "path must be relative to $BASE, without .." >&2; exit 2 ;;
+esac
+case "$1" in
+  put) mkdir -p "$BASE/$2" && exec tar -xf - -C "$BASE/$2" --no-same-owner ;;
+  get) exec cat "$BASE/$2" ;;
+  *) echo "usage: put DIR | get FILE" >&2; exit 2 ;;
+esac

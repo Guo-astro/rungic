@@ -93,6 +93,10 @@ class MacMini:
     SSH = ['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', 'choukevin@macmini.wire.net']
     DOCKER = '/usr/local/bin/docker'
     CONTAINER = 'rungic-build'
+    # The phone reaches the build container directly over the LAN with its own restricted key
+    # (tools/pq/rungic-transfer, docs/71): put DIR / get FILE under /root/rungic-build.
+    PHONE_SSH = ('ssh -i /root/.ssh/id_ed25519_buildhost -o BatchMode=yes -o ConnectTimeout=10 '
+                 '-o StrictHostKeyChecking=accept-new choukevin@192.168.5.45')
     ready = False
     proxy_env = None
 

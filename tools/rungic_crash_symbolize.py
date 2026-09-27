@@ -20,8 +20,9 @@ import argparse
 import json
 import re
 import shlex
+import subprocess
 import sys
-import tempfile
+import time
 from pathlib import Path
 
 import build_on_device
@@ -41,8 +42,26 @@ files = {m['file'] for m in info.get('modules', []) if (m.get('file') or '').sta
 if info.get('exe'):
     files.add(info['exe'])
 files = sorted(f for f in files if os.path.exists(f))
+# Debug symbols only for what the crashing thread runs through (its libraries in the collector's
+# backtrace, and the executable): a desktop process maps some 250 libraries, gigabytes of symbols.
+crashing = set(info.get('exe') and [info['exe']] or [])
+try:
+    text = open(f'/var/lib/rungic-cores/{report}/backtrace.txt').read()
+    first = []
+    for line in text.splitlines():
+        if line.startswith('#0 ') and first and any(l.startswith('#1') for l in first):
+            break
+        if line.startswith('#'):
+            first.append(line)
+    import re
+    for line in first:
+        m = re.search(r' (?:from|at) (/[^ :]+\.so[^ :]*)', line)
+        if m:
+            crashing.add(os.path.realpath(m[1]))
+except OSError:
+    crashing = set(files)
 owners = {}
-for path in files:
+for path in [f for f in files if os.path.realpath(f) in crashing or f in crashing]:
     for candidate in (path, path.replace('/usr/lib/', '/lib/', 1), path.replace('/lib/', '/usr/lib/', 1)):
         text = subprocess.run(['dpkg-query', '-S', candidate], capture_output=True, text=True).stdout
         line = next((l for l in text.splitlines() if not l.startswith('diversion')), None)
@@ -96,8 +115,22 @@ print(json.dumps({'report': report, 'signature': sig, 'frames': frames, 'missing
 '''
 
 
+def retrying(action, *args, attempts=4, **kwargs):
+    """The phone over a Wi-Fi VPN: adb drops for seconds now and then; retry those, not real errors."""
+    for attempt in range(attempts):
+        try:
+            return action(*args, **kwargs)
+        except rungic_device.DeviceError as error:
+            transient = any(t in str(error) for t in ('offline', 'not among adb devices', 'Timed out', 'no devices'))
+            if not transient or attempt == attempts - 1:
+                raise
+            time.sleep(15)
+            subprocess.run([rungic_device.adb_path(), 'reconnect', 'offline'], capture_output=True, timeout=30)
+            rungic_device.transport.cache_clear()
+
+
 def phone(script, timeout=300):
-    return rungic_device.run(script, 'container', timeout).stdout
+    return retrying(rungic_device.run, script, 'container', timeout).stdout
 
 
 def recent(count):
@@ -108,20 +141,12 @@ def recent(count):
 def symbolize(host, report):
     manifest = json.loads(phone(f'python3 - {shlex.quote(report)} <<\'RUNGIC_EOF\'\n{MANIFEST}\nRUNGIC_EOF'))
     work = f'{WORK}/{report}'
-    local = WORKSPACE / f'.work/crash/{report}.tar'
-    local.parent.mkdir(parents=True, exist_ok=True)
-    # The exact files of the crash, dereferenced, with the report; tar only on the phone.
-    listing = ' '.join(shlex.quote(f.lstrip('/')) for f in manifest['files'])
-    remote = f'/var/tmp/rungic-symbolize-{report}.tar'
-    phone(f'tar -chf {remote} -C / {listing} {STORE.lstrip("/")}/{report}/core.zst {STORE.lstrip("/")}/{report}/info.json',
-          timeout=900)
-    try:
-        rungic_device.from_container(remote, local)
-    finally:
-        phone(f'rm -f {remote}')
+    # The exact files of the crash, dereferenced, with the report: straight from the phone to the build
+    # host over the LAN (tools/pq/rungic-transfer), not through this computer and the VPN.
     host.run(f'rm -rf {work} && mkdir -p {work}/sysroot {work}/debs')
-    host.put_tar(local, f'{work}/sysroot')
-    local.unlink()
+    listing = ' '.join(shlex.quote(f.lstrip('/')) for f in manifest['files'])
+    phone(f'tar -chf - -C / {listing} {STORE.lstrip("/")}/{report}/core.zst {STORE.lstrip("/")}/{report}/info.json | '
+          f'{build_on_device.MacMini.PHONE_SSH} put crash/{report}/sysroot', timeout=1800)
     # Debug symbols at the phone's exact versions.
     pool = rungic_release.POOL
     ubuntu = []
@@ -154,10 +179,9 @@ for deb in *.deb; do [ -e "$deb" ] && dpkg-deb -x "$deb" {work}/sysroot; done; t
     script.write_text(ANALYSE)
     host.put(script, f'{WORK}/analyse.py', '644')
     result = json.loads(host.out(f'python3 {WORK}/analyse.py {work} {shlex.quote(report)}', timeout=1800).splitlines()[-1])
-    with tempfile.TemporaryDirectory(dir=WORKSPACE / '.work/crash') as tmp:
-        for name in ('backtrace.txt', 'info.json'):
-            host.get(f'{work}/{name}', Path(tmp) / name)
-            rungic_device.to_container(Path(tmp) / name, f'{STORE}/{report}/{name}', '644')
+    for name in ('backtrace.txt', 'info.json'):
+        phone(f'{build_on_device.MacMini.PHONE_SSH} get crash/{report}/{name} > {STORE}/{report}/{name}.new && '
+              f'mv {STORE}/{report}/{name}.new {STORE}/{report}/{name}')
     host.run(f'rm -rf {work}')
     return result
 
