@@ -36,7 +36,7 @@
 | Linux合成器 | 自定义Phoc 0.57 + 静态嵌入wlroots 0.20.2 | 内层Wayland服务、窗口合成、输入焦点、layer-shell、屏幕采集 | 嵌套输出WL-1不等于物理屏幕控制器 |
 | Linux桌面服务 | PulseAudio、D-Bus、PipeWire/WirePlumber、portal、GVfs、Keyring | 标准声音、共享屏幕、文件和凭据接口 | 服务进程存在还需验证实际后端与数据流 |
 | Android显示宿主 | `dev.moto.phosh` APK，Java + JNI/Rust/Smithay | 外层Wayland服务、SurfaceView、厂商EGL、AHardwareBuffer、触摸、vsync | APK本身不包含整个Linux系统 |
-| Android设备接口 | APK的 `PlatformBridge`；独立Termux PulseAudio实例 | Android窗口亮度、设备信息、系统设置入口、剪贴板；AAudio声音输出 | NetworkManager子集桥已在第32篇实现；BlueZ/GeoClue兼容服务未完成 |
+| Android设备接口 | APK的 `PlatformBridge`；独立Termux PulseAudio实例 | Android窗口亮度、设备信息、系统设置入口、剪贴板；AAudio声音输出 | NetworkManager（含Wi‑Fi操作与调制解调器设备）、ModemManager、BlueZ子集模拟服务已接入（docs/73第四阶段）；GeoClue兼容服务未完成 |
 | Android采集接口 | APK `CaptureBridge/CaptureService`；Linux `moto-media-bridge`、`moto-camera-source` | 普通Android权限、AudioRecord PCM→PulseAudio source；Camera2 YUV→PipeWire Video/Source | 可见且有消费者才采集；不代表硬编码、后台录像或完整Camera HAL直通 |
 | 容器和控制入口 | Magisk、`moto-phosh`、`moto-phosh-enter`、LXC | 启停、挂载可见性、Linux文件系统、设备白名单 | 这不是具有独立内核的虚拟机 |
 
@@ -439,8 +439,8 @@ python3 tools/moto_phosh.py user-exec gdbus call --session \
 | 后续目标 | 已有基础 | 尚需研究/实现的连接 |
 |---|---|---|
 | 麦克风/会议音频 | 第33篇已提供标准source、录音/视频/浏览器采集与可见状态控制 | 后续需验证音频焦点、耳机/蓝牙路由、长会议和精确音画同步 |
-| GNOME/Phosh原生网络页 | 第32篇已提供NM对象、原生页面、真实开关和恢复 | 保留Android连接所有权；SIM/APN、VPN完整管理仍缺失 |
-| 蓝牙 | Android掌握连接，已有系统设置入口 | 先定义要显示路由还是管理设备，再评估Android API到桌面接口的映射；不能同时让BlueZ接管同一控制器 |
+| Plasma网络、Wi‑Fi与蜂窝设置页 | NetworkManager模拟服务：接入点、已保存网络、连接/断开/忘记；ModemManager模拟服务：SIM、运营商、信号；移动数据开关对应Android `svc data`（docs/73） | 保留Android连接所有权；SIM PIN、选网、APN、数据漫游与VPN管理仍在Android设置 |
+| 蓝牙 | BlueZ子集模拟服务（`org.bluez`，无bluetoothd、无HCI）：bluedevil/bluetoothctl的开关、搜索、配对、连接由Android蓝牙API完成（docs/73） | 配对在Android弹窗确认；音频路由仍由Android决定；OBEX文件传输未接入 |
 | 摄像头/定位/传感器 | 第33篇已接Camera2→PipeWire→GNOME/GStreamer/Firefox | 摄像头长时间/后台与硬编码仍缺失；定位/传感器需另行比较Location→GeoClue、Sensor→iio-sensor-proxy |
 | 应用震动反馈 | vibrate测试请求已到Android | 研究feedbackd后端与事件/强度/取消语义；不是把测试按钮当成应用通用支持 |
 | 视频硬解/硬编码 | GPU绘制与软件编解码已验收；第34篇验证Android高通AVC/HEVC硬编→硬解，原厂V4L2节点可枚举 | Linux后端未接通；先验证现成V4L2帧流兼容性，再比较MediaCodec桥与gst-droid/droidmedia维护成本，Firefox需独立适配，见[34篇](34-hardware-codec-audit.md) |

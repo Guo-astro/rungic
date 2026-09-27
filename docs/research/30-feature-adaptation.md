@@ -119,7 +119,7 @@ Docker的 `moto-nginx` 仍healthy，原Alpine LXC仍RUNNING；不停止这两个
 后续仍需单独实施和验收：
 
 1. 麦克风授权/指示/输入流已在第33篇部署；音频焦点、耳机和蓝牙路由、长期A/V同步仍未完成。
-2. 原生网络已在第32篇接入并实测；完整会话/polkit、蜂窝ModemManager及VPN协议管理仍未完成。
+2. 原生网络已在第32篇接入并实测；2026-09-27起Wi‑Fi操作、蜂窝（ModemManager）、蓝牙（BlueZ）与息屏时间也接入标准服务（docs/73第四阶段）；完整会话/polkit、SIM PIN/APN与VPN协议管理仍未完成。
 3. MediaCodec已接入（35篇）；通话实时性能、长时间与后台摄像头录制、GeoClue定位/传感器服务、feedbackd震动后端。
 4. Landlock内核能力与LocalSearch内容索引；不会通过关闭提取器隔离掩盖缺失。
 5. 固定Mesa前提下的图形安装/更新；完整SMB/NFS、用户持久凭据及长会议负载。
