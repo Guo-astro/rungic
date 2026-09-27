@@ -4,22 +4,23 @@ Subject: Navigation panel: holding Home summons the voice assistant
 
 Navigation panel buttons can be held (NavigationPanelAction.holdable): past Android's 400 ms
 long-press time a held press emits held() instead of triggered(), and holdReleased() when the
-finger lifts. The task panel sends Home held and lifted, with the screen, to the voice assistant
+finger lifts. A press that moves past the drag distance is a swipe: no hold starts, and one
+already started ends (a slow swipe up from Home held it). The task panel sends Home held and lifted, with the screen, to the voice assistant
 over D-Bus (asynchronous, harmless without it); a Home tap also sends Hide.
 
 Forwarded: not-needed
-Last-Update: 2026-09-26
+Last-Update: 2026-09-28
 X-Rungic-Status: Inappropriate [calls this project's voice assistant; a holdable button alone could go upstream]
 X-Rungic-Tests: none (gap: no scenario holds Home)
 X-Rungic-Docs: docs/67
 ---
- .../qml/navigationpanel/NavigationPanel.qml        |  5 ++-
- .../qml/navigationpanel/NavigationPanelAction.qml  |  6 ++++
- .../qml/navigationpanel/NavigationPanelButton.qml  | 38 +++++++++++++++++++++-
- .../taskpanel/qml/NavigationPanelComponent.qml     |  6 ++++
- containments/taskpanel/taskpanel.cpp               | 20 ++++++++++++
- containments/taskpanel/taskpanel.h                 |  4 +++
- 6 files changed, 77 insertions(+), 2 deletions(-)
+ .../qml/navigationpanel/NavigationPanel.qml        |  5 +-
+ .../qml/navigationpanel/NavigationPanelAction.qml  |  6 +++
+ .../qml/navigationpanel/NavigationPanelButton.qml  | 57 +++++++++++++++++++++-
+ .../taskpanel/qml/NavigationPanelComponent.qml     |  6 +++
+ containments/taskpanel/taskpanel.cpp               | 20 ++++++++
+ containments/taskpanel/taskpanel.h                 |  4 ++
+ 6 files changed, 96 insertions(+), 2 deletions(-)
 
 diff --git a/components/mobileshell/qml/navigationpanel/NavigationPanel.qml b/components/mobileshell/qml/navigationpanel/NavigationPanel.qml
 index d0828a7..d1116b1 100644
@@ -58,10 +59,10 @@ index 097387a..59ff2a0 100644
 +    signal holdReleased()
  }
 diff --git a/components/mobileshell/qml/navigationpanel/NavigationPanelButton.qml b/components/mobileshell/qml/navigationpanel/NavigationPanelButton.qml
-index a24c53a..38aae8a 100644
+index a24c53a..2822053 100644
 --- a/components/mobileshell/qml/navigationpanel/NavigationPanelButton.qml
 +++ b/components/mobileshell/qml/navigationpanel/NavigationPanelButton.qml
-@@ -23,11 +23,47 @@ Controls.AbstractButton {
+@@ -23,11 +23,66 @@ Controls.AbstractButton {
      property int shrinkSize: 0
      property alias iconSource: icon.source
  
@@ -87,13 +88,32 @@ index a24c53a..38aae8a 100644
 +        }
 +    }
 +
++    // A press that moves is a swipe (up from the panel to go back or home), not a hold: past the
++    // drag distance the hold is not started, and one already started ends. A slow swipe up that
++    // started on Home summoned the assistant, which then kept listening (2026-09-28).
++    property point pressStart
 +    onPressed: {
 +        haptics.buttonVibrate();
 +        holdTimer.fired = false;
++        pressStart = Qt.point(pressX, pressY);
 +        if (holdable) {
 +            holdTimer.restart();
 +        }
 +    }
++    function moved() {
++        if (!pressed) {
++            return;
++        }
++        const distance = Math.hypot(pressX - pressStart.x, pressY - pressStart.y);
++        if (holdTimer.running && distance > Qt.styleHints.startDragDistance) {
++            holdTimer.stop();
++        } else if (holdTimer.fired && distance > 4 * Qt.styleHints.startDragDistance) {
++            holdTimer.fired = false;
++            button.holdEnded();
++        }
++    }
++    onPressXChanged: moved()
++    onPressYChanged: moved()
 +    onReleased: {
 +        holdTimer.stop();
 +        if (holdTimer.fired) {

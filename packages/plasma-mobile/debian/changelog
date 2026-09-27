@@ -1,3 +1,12 @@
+plasma-mobile (6.6.5-0ubuntu0.1+rungic4) resolute; urgency=medium
+
+  * home-hold-voice-assistant.patch: a press on a navigation button that
+    moves past the drag distance is a swipe, not a hold. A slow swipe up
+    from Home summoned the voice assistant, which kept listening
+    (docs/67).
+
+ -- range-dev <noreply@localhost>  Mon, 28 Sep 2026 07:20:00 +0000
+
 plasma-mobile (6.6.5-0ubuntu0.1+rungic3) resolute; urgency=medium
 
   * external-screen-desktop-shell.patch: a desktop panel whose view the
