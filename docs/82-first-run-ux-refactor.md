@@ -66,3 +66,11 @@ APK 与 native `.so` 必须一起构建。账户助手、宿主控制器和包�
 5. 系统预装 APK（含 JNI 库）与新账户包共同验收，不能依赖 `pm install -r` 覆盖来证明镜像可用。
 
 审计中的左右返回一致性、助手/投屏引导、刷机主机与手机的进度衔接、Plasma 欢迎向导整合仍需后续批次处理。本轮状态文件提供阶段更新，不提供解压字节百分比或持续工作心跳。缓存只按已验证产物的明确路径清理，保留本轮回退与证据材料，不执行全局 prune。
+
+### 本轮构建完成记录
+
+源码提交 `96a89955`。Mac mini 按系统代理配置构建 `rungic-plasma-session_0.296_arm64.deb` 成功；解包确认协议标记为 2，账户助手与提交源码逐字节一致。该包尚未安装到手机，也未进入新版 rootfs。包位于 `.work/apt/repo/`，其 SHA-256 为 `7188be5b6e60431dc6029063f6ece74859a5c6d7b24202c084ad06f11033f5e1`。
+
+最终 APK SHA-256 为 `9b70c965c4f7f5b41d78190624e29d89340b6444f51fc28691cd4c80cb819fba`，内含当前编译的 native 库；沿用 G100 `.5` 的无 OCR 构建配置。通过流式更新安装后再次进入 Plasma 欢迎页，并检查了切到 Android 后返回。`final-resume.png`、`final-startup.log`、`final-errors.log` 留在 `.work/ux/device/`；错误日志未见本轮 AndroidRuntime / RungicWayland 异常。测试结束 `mWakefulness=Dozing`。此次不经过只读 product 预装路径，不能替代完整镜像验证。
+
+最终 APK 部署回归通过后，确认没有运行中的 cargo/rustc，定向清理本机 native target（933 MiB）、APK staging、Java 测试类与测试可执行文件，合计约 951 MiB。签名 APK、可复用 native 库、Deb 包、回退 APK、日志和截图保留；`.work/ux/` 现约 12 MiB。账户包尚未部署，其远程工作目录未按“部署通过”清理；未执行全局 Docker/Podman prune。
