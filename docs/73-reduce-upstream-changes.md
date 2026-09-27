@@ -150,3 +150,4 @@ plasma-settings `+rungic3`删除`android-hardware-settings`补丁：蜂窝、蓝
 - 是否触发取决于首个缓冲区时设备与running time的先后，所以约一半发生。所有在不提供时钟的管线里用pulsesrc/alsasrc（skew是默认值）的程序都可能遇到，属于共享层问题，不在录屏程序里绕开。先试过在录屏程序里改从混音器输入端发EOS，同样卡在该pad的流锁上，已撤回。
 - **修复**：新增`packages/gst-plugins-base1.0`（Ubuntu `1.28.2-1ubuntu0.1`，补丁`rungic/audiobasesrc-negative-resync.patch`）：差值用有符号数，不为正时不前进，读位置取最后写入的段（至多比running time超前一段）。上游main（2026-09-27）仍未修复。重建`libgstreamer-plugins-base1.0-0`等6个已安装的二进制包，录屏每次新起进程，无需重启会话。
 - 验收期间另一次失败是环境问题：屏幕右下有持续的实体触摸（`chipone-tddi`上报约20秒一次的长按），注入的滑动因此成了多指手势，快捷设置拉不下来，主屏还进了编辑模式。以后验收前先看`dumpsys input`的`touchingPointers`为空。
+- **验收（发布`20260927.15`）**：`recording.quicksetting`连续6次通过（每次都有audio0 EOS并保存，无超时；修复前约一半失败），随后全量验收19项全部通过（报告`.work/acceptance/20260927.15/20260927-234841`）。
