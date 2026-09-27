@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
-"""Build a vendored Debian package natively in the phone's Ubuntu ARM64 container.
+"""Build a patch-queue component (packages/<name>, docs/71) natively in the phone's Ubuntu ARM64 container.
 
-The staged tree (tools/stage_vendor.py) is copied into a persistent
+The source tree (tools/pq.py source: upstream + debian/ with the patches applied) is copied into a persistent
 /root/rungic-build/<component>/src with `rsync --checksum`, so unchanged files
 keep their timestamps and the kept obj-aarch64-linux-gnu tree rebuilds only
 what changed.
@@ -10,7 +10,7 @@ what changed.
   full         dpkg-buildpackage -b (clean configure; first build or packaging change)
   incremental  make in the existing obj dir, then `debian/rules binary` (skips
                configure/build through debhelper's stamp) to produce .debs
-  targets      for vendor trees without Debian packaging: configure once in
+  targets      for trees without Debian packaging (recipe kind upstream/git): configure once in
                <component>/build (Ninja, /usr prefix) and build --target T...;
                a meson tree (Mesa) is configured with plasma/<component>-meson-options
   status       state of the build unit and the log tail
@@ -39,13 +39,11 @@ DEBUG_FLAGS = 'DEB_CFLAGS_MAINT_APPEND=-g1 DEB_CXXFLAGS_MAINT_APPEND=-g1'
 
 
 def stage(component):
-    if (WORKSPACE / 'packages' / component / 'recipe.json').exists():
-        # A patch-queue component (docs/71): pinned upstream + packages/<name>/debian, patches applied.
-        import pq
-        source = str(pq.source(component))
-    else:
-        source = subprocess.run(['python3', str(WORKSPACE / 'tools/stage_vendor.py'), component],
-                                check=True, capture_output=True, text=True).stdout.strip()
+    if not (WORKSPACE / 'packages' / component / 'recipe.json').exists():
+        raise SystemExit(f'{component}: no packages/{component}/recipe.json (docs/71)')
+    # A patch-queue component (docs/71): pinned upstream + packages/<name>/debian, patches applied.
+    import pq
+    source = str(pq.source(component))
     archive = WORKSPACE / f'.work/cache/{component}-stage.tar'
     with tarfile.open(archive, 'w') as tar:
         tar.add(source, arcname='src')

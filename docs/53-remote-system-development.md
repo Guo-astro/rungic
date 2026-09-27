@@ -25,11 +25,11 @@
 
 | 修改内容 | 唯一源码入口 |
 |---|---|
-| KWin合成、Wayland输出、AHB分配、录屏 | `vendor/kwin/` |
-| KGSL/Freedreno、Turnip、Zink | `vendor/mesa/` |
+| KWin合成、Wayland输出、AHB分配、录屏 | `packages/kwin/`（补丁队列，docs/71） |
+| KGSL/Freedreno、Turnip、Zink | `packages/mesa/`（固定KGSL分支提交＋补丁） |
 | Android EGL呈现、帧时钟、DMA-BUF租约 | `native/plasma/src/android/` |
 | Java宿主、Surface、触摸、刷新率、Android硬件服务 | `plasma/native-apk/` |
-| KDE设置、键盘、面板、Portal、Qt及相机标准接口 | `vendor/`内对应组件 |
+| KDE设置、键盘、面板、Portal、Qt及相机标准接口 | `packages/`内对应组件 |
 | 共享硬件桥、服务配置、构建和部署 | `shared/`、`plasma/`、`tools/` |
 
 KWin + Vulkan开发至少同时需要前三行与Android宿主。当前生产KWin仍为GLES，Turnip/Zink及性能工具已经在仓库；原生Vulkan KWin合成器尚未实现，不是代码漏传。量化基准见[51篇](51-plasma-vulkan-benchmark.md)。
@@ -39,19 +39,14 @@ KWin + Vulkan开发至少同时需要前三行与Android宿主。当前生产KWi
 ## 两台机器与其他仓库如何同步
 
 1. 本机和K8都clone同一个私有`range-dev`；普通`git pull --ff-only`即可得到完整源码，不需初始化子模块，也不依赖本机`.work/refs`。
-2. 每项工作开功能分支，直接修改vendor及自有代码。一个功能若同时改变KWin、宿主和共享协议，放在同一组可审阅提交中，避免分别同步导致版本不匹配。
-3. 提交前运行`python3 tools/audit_git_scope.py`，查看`git status`与diff。构建用`tools/stage_vendor.py`生成`.work`副本，产物不提交。
+2. 直接修改自有代码；上游组件用`tools/pq.py prepare/export`修改`packages/<名称>/`的补丁。一个功能若同时改变KWin、宿主和共享协议，放在同一组可审阅提交中，避免分别同步导致版本不匹配。
+3. 提交前运行`python3 tools/audit_git_scope.py`，查看`git status`与diff。构建用`tools/pq.py source`或`tools/build_on_device.py`在`.work`/手机上生成源码树，产物不提交。
 4. commit并push功能分支，另一台机器fetch同一提交。`range-dev`提交SHA是整套源码的版本；不要用scp/rsync覆盖另一台机器的工作代码。
 5. 其他产品仓库需要使用这套实现时，记录消费的`range-dev`提交SHA，修改回到这里合入，再更新引用。当前不建立第二份可独立修改的副本。
 
-上游升级时保留许可证和来源，以独立提交记录新基线及我们的适配，使用Git合并处理冲突。首个纯上游导入提交是`dffc717e57e4db2396b9b137c1e1b7fcb6633f14`，可直接对比：
+上游升级时改配方的版本与哈希，再让补丁队列重新应用（docs/71）。2026-09-27起全部上游组件已迁出`vendor/`（docs/73第二阶段），vendor时期的历史可按`tools/pq-history/`中的提交查阅；首个纯上游导入提交是`dffc717e57e4db2396b9b137c1e1b7fcb6633f14`。
 
-```sh
-git diff dffc717e57e4db2396b9b137c1e1b7fcb6633f14 HEAD -- vendor/kwin
-python3 tools/stage_vendor.py kwin
-```
-
-这采用Git普通目录和提交的工作方式；没有额外引入repo管理器、submodule或多个GitHub fork。[Git官方分支工作流](https://git-scm.com/book/en/v2/Git-Branching-Branching-Workflows)作为协作参考。此前评估过固定补丁队列和submodule，现按用户选择直接vendor。
+没有额外引入repo管理器、submodule或多个GitHub fork。[Git官方分支工作流](https://git-scm.com/book/en/v2/Git-Branching-Branching-Workflows)作为协作参考。
 
 ## 已完成与仍有边界的部分
 

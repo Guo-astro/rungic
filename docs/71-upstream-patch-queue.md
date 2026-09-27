@@ -107,7 +107,7 @@ packages/<源码包名>/
 
 ## 风险与待定
 
-- 迁移期`vendor/`与`packages/`并存，构建工具同时支持两种来源，直到对应组件迁完。
+- 迁移期`vendor/`与`packages/`并存，构建工具同时支持两种来源，直到对应组件迁完。（2026-09-27已全部迁完，`tools/stage_vendor.py`与`tools/vendor_debian.py`已删除，`build_on_device.py`只接受`packages/`。）
 - `gbp pq export`首次会把Ubuntu原有补丁改写为`From/Date/Subject`格式（调研实测），接受这次一次性改动，或只导出`rungic/`主题下的补丁。
 - 主机没有arm64的binfmt（qemu-user-static未安装），L1/L2目前只能在手机上运行；如需在主机上跑arm64容器，另行安装。
 - 主机上的x86测试环境（`tools/pq/build.Dockerfile`，镜像`rungic-build-kwin:26.04`）可以编译并运行KWin的全部157个测试，但这只能验证与平台无关的代码；Android后端和实机行为仍靠手机上的L3验收。经验（2026-09-26）：
@@ -155,3 +155,7 @@ packages/<源码包名>/
 - kscreen `+moto3`（整包构建）：与以前替换插件的`+moto2`相比，文件清单与依赖相同；6个二进制文件现在由我们从源码编译（以前除`kcm_kscreen.so`外都是Ubuntu编译的），另有changelog不同。
 - 项目包（新版本0.196）：FFmpeg的9个文件去掉构建ID与debuglink后完全相同；Snapshot唯一的二进制文件，字符串差异全部是构建路径`src/vendor/snapshot`→`src/upstream/snapshot`（Rust把源码路径写进panic信息）；clicker中的`typesafe_computer_use`目录完全相同。比较时要用能识别aarch64的`llvm-objcopy`：主机的`objcopy`不认识aarch64，出错时输出为空，两边的哈希会“相同”。
 
+
+## 第三批：其余组件（2026-09-27，docs/73第二阶段）
+
+plasma-keyboard、xdg-desktop-portal-kde、wl-clipboard、arc-cua、LiteRT、libcamera、qt6-multimedia、plasma-camera、Mesa全部迁为补丁队列，并与迁移前的vendor树逐字节核对一致；`vendor/`只剩`manifest.json`（`native/plasma/`、`plasma/firefox-mobile/`两棵直接跟踪的外来树）与空的审计豁免。工具随之扩展：配方`build_arch_only`（只构建架构相关包，`dpkg-buildpackage -B`）、`pq.py source`允许只有`debian/patches`的上游、历史导入可声明参照树未含发行版补丁。Mesa用`tools/build_mesa.py`在手机上以meson构建并由`plasma/package-mesa.py`打包，版本取自`packages/mesa/debian/changelog`。详情与构建核对见docs/73。

@@ -52,11 +52,9 @@
 - 用户于2026-09-23明确要求同步开发用APK签名密钥：`signing/development/launcher-signing.p12`是上述规则的指定例外，随私有仓库跟踪，构建脚本默认使用它。此授权不包含其他密钥或`.work/`内容。
 - 目录说明见`docs/52-git-repository-scope.md`。不要恢复旧refs目录，也不要为了旧脚本重新引入Phosh；修复当前共享接口和路径。
 
-## Vendor源码与多机协作
+## 上游源码与多机协作
 
-- 用户于2026-09-23选择直接Vendor。本仓库`vendor/`保存固定上游组件及已应用的正式修改；原生后端`native/plasma/`、Android宿主和共享代码仍在各自目录。版本、来源和许可证入口见`vendor/manifest.json`，协作与核对结果见`docs/53-remote-system-development.md`。
-- 直接修改这些跟踪的源码；历史patch是导入证据，不能重复应用到vendor，也不能与源码各自维护。`plasma/qt-video-duration.patch`是未验收实验，未进入正式Qt源码。
-- 用`tools/stage_vendor.py`生成`.work`构建副本；不要把唯一修改留在忽略目录。保留符号链接所指的共享文件，避免同一桥接代码出现多份。
-- 上游导入和本机修改分别提交，升级时更新基线和许可证记录。跨组件协议变更在同一组Git提交中同步；本机和K8用功能分支及提交SHA协作。
-- Vendor中原始测试素材、发布包自带Cargo依赖及必要quilt状态属于源码；本机生成的产物仍只能进入`.work`。审计仅按精确哈希豁免已核对的上游公开文件，不豁免整个vendor目录。
-- 2026-09-26起逐步改为业界通行的“固定上游＋补丁队列”（docs/71）：已迁移的组件（KWin、kscreen、plasma-mobile、plasma-settings、FFmpeg、Snapshot、typesafe-computer-use）只在`packages/<名称>/`维护，用`tools/pq.py prepare/export`修改补丁，不再有vendor目录；共享文件用配方的`overlay`放入源码树，不复制进补丁。其余组件迁移前仍按上面的vendor规则。
+- 2026-09-27起所有修改过的Linux上游组件都按“固定上游＋补丁队列”维护（docs/71、docs/73）：只在`packages/<名称>/`（`recipe.json`固定来源与许可证，`debian/patches/rungic/`为DEP-3补丁），用`tools/pq.py prepare/export`修改补丁，`tools/build_on_device.py`在手机上构建；共享文件用配方的`overlay`放入源码树，不复制进补丁。不要恢复`vendor/`源码目录或`stage_vendor.py`。
+- `vendor/manifest.json`只记录仍直接跟踪的外来树（`native/plasma/`、`plasma/firefox-mobile/`），直接修改它们；Android宿主和共享代码仍在各自目录。`plasma/qt-video-duration.patch`是未验收实验，未进入Qt补丁队列。
+- 上游升级先核对新版本是否已包含我们的修复，已包含的删除；升级时更新配方版本、哈希和许可证记录。跨组件协议变更在同一组Git提交中同步；本机和K8用提交SHA协作，协作与核对结果见`docs/53-remote-system-development.md`。
+- 本机生成的源码树、构建产物只能进入`.work`；审计仅按精确哈希豁免已核对的上游公开文件（`vendor/audit-exceptions.json`）。
