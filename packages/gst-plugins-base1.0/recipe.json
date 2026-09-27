@@ -1,0 +1,15 @@
+{
+ "comment": "Pinned upstream of the gst-plugins-base1.0 source package (docs/71, docs/73): Ubuntu's 1.28.2-1ubuntu0.1 (resolute-updates/security); packages/gst-plugins-base1.0/debian replaces its debian/ (Ubuntu's packaging plus our patches under debian/patches/rungic).",
+ "kind": "ubuntu",
+ "source": "gst-plugins-base1.0",
+ "version": "1.28.2-1ubuntu0.1",
+ "series": "resolute",
+ "upstream": "https://gitlab.freedesktop.org/gstreamer/gstreamer/-/tree/main/subprojects/gst-plugins-base",
+ "licenses": "LGPL-2.1-or-later (see COPYING and debian/copyright)",
+ "files": {
+  "gst-plugins-base1.0_1.28.2-1ubuntu0.1.dsc": "0070e60b479224f04b0146b344329c3fe3ffdbd2c8aabd8fc9b551ef6e792e1d",
+  "gst-plugins-base1.0_1.28.2.orig.tar.xz": "4db76b3619280037a4047de7d9dbb38613a4272dcc40efb333257124635a888d",
+  "gst-plugins-base1.0_1.28.2-1ubuntu0.1.debian.tar.xz": "5b9b37a65575b66ff6350765750133deedcb504a2dc1334bee34e106d74594d0"
+ },
+ "fetch": "https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/gst-plugins-base1.0/1.28.2-1ubuntu0.1/{file}"
+}

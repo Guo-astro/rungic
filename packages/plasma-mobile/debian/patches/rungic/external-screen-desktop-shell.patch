@@ -6,11 +6,13 @@ Subject: External screens get a desktop shell;
 Upstream puts a second Folio home screen and no panels on external screens (desktop panels there
 are only in the unmerged draft !548). An idempotent shell script (contents/external-desktop.js), run
 by KScreenOSDUtil when a screen is added, gives every screen after the phone a Folder View desktop
-and a Plasma Desktop panel. Applets of desktop panels and desktops use Plasma Desktop's AppletPopup
+and a Plasma Desktop panel. A panel counts for the screen of its saved lastScreen until the shell
+has made its view, so a slow desktop does not get another panel each time the screen comes back.
+Applets of desktop panels and desktops use Plasma Desktop's AppletPopup
 next to the panel instead of the mobile full-screen overlay.
 
 Forwarded: not-needed
-Last-Update: 2026-09-26
+Last-Update: 2026-09-28
 X-Rungic-Status: Inappropriate [interim until upstream desktop panels on external screens (!548)]
 X-Rungic-Tests: L3:cast.agent_screen (output appears); desktop shell on the TV: manual
 X-Rungic-Docs: docs/58
@@ -20,8 +22,8 @@ X-Rungic-Docs: docs/58
  shell/contents/applet/CompactApplet.qml            | 138 ++------
  shell/contents/applet/CompactAppletDesktop.qml     | 390 +++++++++++++++++++++
  .../{CompactApplet.qml => CompactAppletMobile.qml} |   0
- shell/contents/external-desktop.js                 |  67 ++++
- 6 files changed, 510 insertions(+), 117 deletions(-)
+ shell/contents/external-desktop.js                 |  75 ++++
+ 6 files changed, 518 insertions(+), 117 deletions(-)
  create mode 100644 shell/contents/applet/CompactAppletDesktop.qml
  copy shell/contents/applet/{CompactApplet.qml => CompactAppletMobile.qml} (100%)
  create mode 100644 shell/contents/external-desktop.js
@@ -659,10 +661,10 @@ copy from shell/contents/applet/CompactApplet.qml
 copy to shell/contents/applet/CompactAppletMobile.qml
 diff --git a/shell/contents/external-desktop.js b/shell/contents/external-desktop.js
 new file mode 100644
-index 0000000..a551544
+index 0000000..3b62fa8
 --- /dev/null
 +++ b/shell/contents/external-desktop.js
-@@ -0,0 +1,67 @@
+@@ -0,0 +1,75 @@
 +// Plasma shell script (org.kde.PlasmaShell.evaluateScript): a desktop-style shell
 +// on every external screen while the phone keeps the mobile shell (docs/58).
 +// Idempotent. Upstream Plasma Mobile puts a second mobile homescreen and no
@@ -675,7 +677,15 @@ index 0000000..a551544
 +function hasDesktopPanel(screen) {
 +    var ps = panels();
 +    for (var i = 0; i < ps.length; i++) {
-+        if (ps[i].type === "org.kde.panel" && ps[i].screen === screen) {
++        if (ps[i].type !== "org.kde.panel") {
++            continue;
++        }
++        // A panel's screen stays -1 until the shell has made its view, which waits
++        // for the screen's desktop to be ready; the saved lastScreen says where it
++        // goes. Without this a slow desktop made a new panel on every connection.
++        ps[i].currentConfigGroup = [];
++        var onScreen = ps[i].screen >= 0 ? ps[i].screen : Number(ps[i].readConfig("lastScreen", -1));
++        if (onScreen === screen) {
 +            return true;
 +        }
 +    }

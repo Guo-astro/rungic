@@ -141,3 +141,13 @@ plasma-settings `+rungic3`删除`android-hardware-settings`补丁：蜂窝、蓝
 - **移动网络**：无SIM时显示“尚未插入SIM卡”，SIM卡页提示卡槽为空，调制解调器详情为motorola XT2537-4、状态Failed、原因“SIM is required but missing”。
 - **电源**：原先显示“调暗屏幕”“关闭屏幕”“挂起设备”三项，调暗与挂起在这里都不会发生。新增`packages/powerdevil`补丁：挂起只在系统能挂起时显示，调暗只在有屏幕亮度服务时显示。现在只剩“关闭屏幕”，与Android的`screen_off_timeout`一致（1分钟）。
 - **Wi‑Fi**：列出已保存的当前网络与附近网络（首次打开需等一次刷新），点未保存的加密网络弹出密码框。未实际连接新网络：离开当前Wi‑Fi会断开adb。设置页启动时NetworkManagerQt曾短暂看到一次临时连接`Settings/wifi`，之后一分钟采样始终稳定指向已保存网络，暂记为待查。
+
+### 发布20260927.14的全量验收与录屏卡死（2026-09-27）
+
+全量验收19项中18项通过，`recording.quicksetting`失败：停止录屏后12秒超时（`Timed out finalizing recording`），只看到视频EOS。单独重跑约一半失败。
+
+- **不是录屏程序本身的问题**：GStreamer调试日志（`GST_DEBUG=audiobasesrc:5,aggregator:5,...`）与超时时的Python线程栈（证据存`.work/logs/recorder-hang-20260927.txt`）显示，pulsesrc（PulseAudio monitor，不提供时钟）第一个缓冲区就被标为`11930:27:52.99`（2³²个10 ms段）。GStreamer 1.28.2 `gstaudiobasesrc.c`在默认skew从属方式下，首个缓冲区把环形缓冲区对齐到running time：`segment_diff = running_time_segment - last_written_segment`存在`guint64`里，设备已比running time多写一段时它是−1，经`gst_audio_ring_buffer_advance(guint)`变成前进2³²−1段。audiomixer把这些“未来”缓冲区留着不消费，输入队列0.6秒内满，pulsesrc推送阻塞；停止时EOS要等这个推送，永远等不到。失败的那些录像实际只有静音，真实声音一直没进混音器。
+- 是否触发取决于首个缓冲区时设备与running time的先后，所以约一半发生。所有在不提供时钟的管线里用pulsesrc/alsasrc（skew是默认值）的程序都可能遇到，属于共享层问题，不在录屏程序里绕开。先试过在录屏程序里改从混音器输入端发EOS，同样卡在该pad的流锁上，已撤回。
+- **修复**：新增`packages/gst-plugins-base1.0`（Ubuntu `1.28.2-1ubuntu0.1`，补丁`rungic/audiobasesrc-negative-resync.patch`）：差值用有符号数，不为正时不前进，读位置取最后写入的段（至多比running time超前一段）。上游main（2026-09-27）仍未修复。重建`libgstreamer-plugins-base1.0-0`等6个已安装的二进制包，录屏每次新起进程，无需重启会话。
+- 验收期间另一次失败是环境问题：屏幕右下有持续的实体触摸（`chipone-tddi`上报约20秒一次的长按），注入的滑动因此成了多指手势，快捷设置拉不下来，主屏还进了编辑模式。以后验收前先看`dumpsys input`的`touchingPointers`为空。
+- **验收（发布`20260927.15`）**：`recording.quicksetting`连续6次通过（每次都有audio0 EOS并保存，无超时；修复前约一半失败），随后全量验收19项全部通过（报告`.work/acceptance/20260927.15/20260927-234841`）。

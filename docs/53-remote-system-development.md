@@ -1,6 +1,6 @@
 # 远程系统开发：源码核对与Vendor同步
 
-2026-09-23。范围为Android宿主、原生Wayland/GPU、Plasma及Linux系统能力，不包含ROM。用户要求核对实际修改，随后选择直接vendor到本地。当前采用**一个私有集成仓库保存完整开发源码**：`kevinzhow/range-dev`。
+2026-09-23。范围为Android宿主、原生Wayland/GPU、Plasma及Linux系统能力，不包含ROM。用户要求核对实际修改，随后选择直接vendor到本地。当前采用**一个私有集成仓库保存完整开发源码**：`kevinzhow/RungicCore`（原名`kevinzhow/range-dev`，2026-09-28改名）。
 
 ## 本次核对的结果
 

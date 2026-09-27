@@ -21,7 +21,7 @@ Rungic是运行在Android手机上的AgentOS：Ubuntu容器中的Plasma Mobile�
 | `signing/development/` | 按用户要求同步的开发APK签名身份 |
 | `.work/` | 不同步的下载、依赖、缓存、日志、媒体、安装包和其他密钥 |
 
-完整边界与迁移说明见[目录与Git范围](docs/52-git-repository-scope.md)。远程为私有仓库[kevinzhow/range-dev](https://github.com/kevinzhow/range-dev)，默认分支为`main`。文档包含本机身份和网络配置，未作为公开发行材料脱敏。
+完整边界与迁移说明见[目录与Git范围](docs/52-git-repository-scope.md)。远程为私有仓库[kevinzhow/RungicCore](https://github.com/kevinzhow/RungicCore)（2026-09-28由`kevinzhow/range-dev`改名），默认分支为`main`。文档包含本机身份和网络配置，未作为公开发行材料脱敏。
 
 ## 当前状态与入口
 

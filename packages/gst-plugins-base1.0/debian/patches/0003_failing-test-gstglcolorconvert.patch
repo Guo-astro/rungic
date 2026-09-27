@@ -1,0 +1,13 @@
+Index: gst-plugins-base1.0/tests/check/meson.build
+===================================================================
+--- gst-plugins-base1.0.orig/tests/check/meson.build
++++ gst-plugins-base1.0/tests/check/meson.build
+@@ -91,7 +91,7 @@ endif
+ if build_gstgl and host_machine.system() != 'windows'
+   base_tests += [
+     [ 'libs/gstglapi.c', not build_gstgl, [gstgl_dep]],
+-    [ 'libs/gstglcolorconvert.c', not build_gstgl, [gstgl_dep, gstglproto_dep]],
++    [ 'libs/gstglcolorconvert.c', true, [gstgl_dep, gstglproto_dep]],
+     [ 'libs/gstglcontext.c', not build_gstgl, [gstgl_dep, gstglproto_dep]],
+     [ 'libs/gstglfeature.c', not build_gstgl, [gstgl_dep, gstglproto_dep]],
+     [ 'libs/gstglformat.c', not build_gstgl, [gstgl_dep, gstglproto_dep]],
