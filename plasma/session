@@ -22,6 +22,15 @@ export PULSE_COOKIE=/var/lib/rungic-host/audio-cookie
 unset DISPLAY WAYLAND_DISPLAY
 while [ ! -S /mnt/android-wayland/wayland-0 ]; do sleep 1; done
 mkdir -p "$HOME/.config"
+# plasmashell turns one failed OpenGL start into a permanent software renderer for every Qt Quick
+# program (plasma-workspace shell/main.cpp: SceneGraphBackend=software in kdeglobals). Here such a
+# failure is transient, the Android display host restarting (an APK update), so it must not outlive
+# the session: with the GPU present every session starts on it again. On 2026-09-27 a stale entry
+# kept plasmashell software-rendered, and its app drawer (an OpacityMask shader) empty.
+if [ -c /dev/kgsl-3d0 ] && [ -n "${QSG_RHI_BACKEND:-}" ] &&
+   [ "$(kreadconfig6 --file kdeglobals --group QtQuickRendererSettings --key SceneGraphBackend 2>/dev/null)" = software ]; then
+    kwriteconfig6 --file kdeglobals --group QtQuickRendererSettings --key SceneGraphBackend --delete || true
+fi
 # Downloads, Music, Pictures, Videos, Templates and Public are links to Android
 # shared storage (~/Videos -> Shared/Videos); Documents and Desktop are local
 # directories, since application data kept there needs Linux file semantics
