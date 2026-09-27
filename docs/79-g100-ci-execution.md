@@ -144,3 +144,13 @@ v5 同时纳入 Termux 空目录处理、APK ARM64 JNI 预装、账户启动音�
 APK 2.6 在 surface 初始化与账号查询前等待 ready，未就绪持续轮询，退出/重新打开可恢复；显式失败显示安装未完成提示，不进入账户表单。首次 ready 后调用公共 `account-prepare`，提前启动容器并等待 systemd/账户工具/UID 1000/共享目录就绪，才显示用户名密码表单；创建完成后显示桌面启动 loading，桌面可用才移除遮罩。首启服务等待真实 Android 存储就绪，不在未挂载目录下创建共享文件。
 
 边界检查覆盖旧部署、状态缺失、旧 release ready、六个安装阶段、失败、截断和格式错误，均不提前放行。当前设备上的受控状态测试显示“正在展开系统镜像，首次安装需要几分钟…”并阻止账号界面；发布 ready 后自动继续进入 Plasma 欢迎界面。此为已有数据的 UI 验证，图片 `device/v8-install-loading.png`、`v8-loading-to-desktop.png`；新包的清数据流程尚待刷入。
+
+`.5` product 已生成：6,938,972,160 字节，SHA-256 `42d540c7d0f406eb6b5f88017a35c82154968816c483f307885e63cdd60bc3a1`；host seed SHA-256 `cf69c6b3e5de7e15443f23cfd366ca57ed959ef37475ee1cc0b7e2ebf3d83ee8`，APK 2.6/54。GKI、init_boot、共同 rootfs 与 `.3` 相同。本地组装提交 `e1f862aa`，目录 `release/portov-20260928.5`；当前账户/家目录另备份到 `.work/secrets/g100-before-loading-release/`，gzip 检查通过，备份不进入发行包。于 02:22 开始用 `.5` 自带 flash.py 再次执行完整刷入及清数据，尚未报告通过。日志 `release-v8-flash-console.log`。
+
+### 刷写进度与手机端显示的边界
+
+`.5` 完整刷写（32 个原厂 super 分片、定制 product、GKI/init_boot、userdata/metadata 擦除）在 02:31 完成，进程退出 0；正在等待新系统首次配置结果，不据此宣布整个流程成功。
+
+用户指出原厂 fastbootd 手机上没有进度，容易误以为卡死。核查发现电脑工具另有一个缺口：`subprocess.run(capture_output=True)` 把整条大分区命令的输出积到结束才显示。已改为流式转发发送/写入确认，增加八个阶段、分片编号、无输出期间的等待说明，并保留超时中止。隔离假设备测试验证命令结束前日志已可见、超时和设备拒绝均停止、Motorola 分段 bootloader 信息仍可解析。此变化只影响主机工具，设备镜像不变；不能写成已解决手机屏幕进度。
+
+手机端源码调研：AOSP `system/core` android16-release 的 `fastboot/device/{commands,fastboot_device}.cpp` 将 INFO/OKAY/FAIL 写回 USB；`bootable/recovery` main 的 `fastboot/fastboot.cpp` 显示菜单，`recovery_ui/ui.h` 已提供 Print/SetProgress，`recovery_main.cpp` 的现有 recovery socket 只接 r/f 模式切换。本地源码副本位于 `.work/refs/fastboot-progress-20260928/`，许可证 Apache-2.0。结论是可复用 RecoveryUI 做手机日志/进度，但要连接 fastbootd 的真实传输/刷写事件；原厂 Motorola 的对应接口、二进制兼容和恢复镜像适配尚未核实，不能宣称已有可直接启用的手机日志开关，也不能把普通 INFO 输出当作屏幕输出。本轮 recovery 仍使用已核验原厂镜像。

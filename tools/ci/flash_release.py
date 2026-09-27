@@ -2,12 +2,16 @@
 """Verify and flash an exact-device, full-wipe Rungic release from bootloader fastboot."""
 
 import argparse
+import codecs
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
+import selectors
 import subprocess
 import sys
+import time
 
 
 def sha256(path):
@@ -31,18 +35,59 @@ class Device:
         self.fastboot = root / "bin/fastboot"
         self.log = (root / "flash.log").open("w")
 
+    def phase(self, number, message):
+        line = f"\n[{number}/8] {message}\n"
+        print(line, end="", flush=True)
+        self.log.write(line)
+        self.log.flush()
+
     def run(self, *args, timeout=180):
         command = [str(self.fastboot), "-s", self.serial, *(str(arg) for arg in args)]
         print("$ fastboot " + " ".join(str(a) for a in args), flush=True)
         self.log.write("$ " + " ".join(command) + "\n")
         self.log.flush()
-        result = subprocess.run(command, capture_output=True, text=True, timeout=timeout)
-        output = result.stdout + result.stderr
-        print(output, end="", flush=True)
-        self.log.write(output)
-        self.log.flush()
-        require(result.returncode == 0, f"fastboot failed: {args[0]}; see {self.log.name}")
-        return output
+        started = last_output = time.monotonic()
+        output = []
+        decoder = codecs.getincrementaldecoder("utf-8")("replace")
+        # Stream transfer/write acknowledgements immediately. capture_output
+        # hides all progress until a multi-gigabyte flash finishes.
+        with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT) as process:
+            with selectors.DefaultSelector() as selector:
+                selector.register(process.stdout, selectors.EVENT_READ)
+                while selector.get_map():
+                    now = time.monotonic()
+                    if now - started >= timeout:
+                        process.kill()
+                        process.wait()
+                        raise subprocess.TimeoutExpired(command, timeout)
+                    for key, _ in selector.select(min(1, timeout - (now - started))):
+                        block = os.read(key.fd, 65536)
+                        if not block:
+                            selector.unregister(key.fileobj)
+                            continue
+                        text = decoder.decode(block)
+                        output.append(text)
+                        print(text, end="", flush=True)
+                        self.log.write(text)
+                        self.log.flush()
+                        last_output = time.monotonic()
+                    if time.monotonic() - last_output >= 10:
+                        message = (f"\n等待设备返回进度，已用 {int(time.monotonic() - started)} 秒。"
+                                   "请保持 USB 连接；手机可能暂时没有进度显示。\n")
+                        print(message, end="", flush=True)
+                        self.log.write(message)
+                        self.log.flush()
+                        last_output = time.monotonic()
+            output.append(decoder.decode(b"", final=True))
+            remaining = timeout - (time.monotonic() - started)
+            try:
+                code = process.wait(timeout=max(0, remaining))
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+                raise
+        require(code == 0, f"fastboot failed: {args[0]}; see {self.log.name}")
+        return "".join(output)
 
     def var(self, name):
         output = self.run("getvar", name)
@@ -96,7 +141,7 @@ def main():
     spec = json.loads((root / "device-spec.json").read_text())
     serial = args.serial or manifest["target_serial"]
     require(serial == manifest["target_serial"], "this release is bound to a different device serial")
-    print(f"Verifying {manifest['release_id']} for {serial}...", flush=True)
+    print(f"[1/8] 校验完整安装包 {manifest['release_id']}，目标设备 {serial}…", flush=True)
     verify(root, manifest, spec)
     print("All release files and the device spec are verified.", flush=True)
     if args.verify_only:
@@ -105,12 +150,14 @@ def main():
         require(input("This will erase all phone data. Type WIPE to continue: ").strip() == "WIPE",
                 "wipe was cancelled")
     device = Device(root, serial, spec, manifest["fastboot_bootloader_value"])
+    device.phase(2, "检查手机型号、固件和解锁状态")
     device.bootloader()
     require(device.var("battery-voltage").isdigit() and int(device.var("battery-voltage")) >= 3700,
             "battery voltage is too low")
     device.run("oem", "fb_mode_clear")
     device.run("set_active", "a")
     require(device.var("current-slot") == "a", "slot a was not selected")
+    device.phase(3, "写入启动辅助分区")
     for name in ("vbmeta", "vbmeta_system"):
         device.run("flash", name + "_a", root / "images" / (name + ".img"), timeout=600)
     for name in ("vendor_boot", "dtbo", "recovery", "pvmfw"):
@@ -118,28 +165,34 @@ def main():
     # Motorola's bootloader accepted the first OEM sparse chunk, then stopped responding on
     # the second (G100, docs/79). Its recovery fastbootd has flashed both chunks successfully.
     device.run("oem", "fb_mode_clear")
+    device.phase(4, "切换到系统刷写模式（fastbootd），本机通常需要约一分钟；无需操作手机")
     device.run("reboot", "fastboot", timeout=180)
     require(device.var("is-userspace") == "yes", "failed to enter fastbootd")
     require(device.var("unlocked") == "yes", "fastbootd reports locked device")
     require(device.var("current-slot") == "a", "fastbootd slot changed")
     for index in range(manifest["super_chunk_count"]):
+        device.phase(5, f"恢复 Android 系统，分片 {index + 1}/{manifest['super_chunk_count']}")
         device.run("flash", "super", root / "stock" / f"super.img_sparsechunk.{index}", timeout=900)
     for name, expected in manifest["logical_partition_bytes"].items():
         require(int(device.var("partition-size:" + name), 16) == expected,
                 f"restored {name} size differs from OEM verification")
     size = manifest["product_partition_bytes"]
+    device.phase(6, "写入 Rungic 系统；下方实时显示每个传输分段的发送和写入结果")
     device.run("-S", "256M", "flash", "product_a", root / "images/product-fastboot.img", timeout=1800)
     require(int(device.var("partition-size:product_a"), 16) == size, "product_a size changed")
+    device.phase(7, "返回启动刷写模式并安装内核和引导镜像；无需操作手机")
     device.run("reboot", "bootloader", timeout=180)
     device.bootloader()
     require(device.var("current-slot") == "a", "bootloader slot changed")
     device.run("flash", "boot_a", root / "images/boot.img", timeout=600)
     device.run("flash", "init_boot_a", root / "images/init_boot.img", timeout=600)
+    device.phase(8, "清除用户数据并启动系统")
     device.run("erase", "userdata", timeout=900)
     device.run("erase", "metadata", timeout=600)
     device.run("oem", "fb_mode_clear")
     device.run("reboot")
-    print("Flash completed. Android first boot will seed RungicOS from product.", flush=True)
+    print("刷写完成。首次启动会自动初始化并重启一次。完成 Android 引导后打开 Rungic，"
+          "等待安装界面自动转到账户设置，再创建账户并进入 Plasma Mobile。", flush=True)
 
 
 if __name__ == "__main__":

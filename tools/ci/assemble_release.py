@@ -105,6 +105,8 @@ def main():
         "手机须已解锁且处于 bootloader fastboot。\n\n"
         "离线校验：`./flash.sh --verify-only`。刷入：`./flash.sh`，按提示输入 WIPE；"
         "无人值守测试用 `./flash.sh --yes-wipe`。刷入会清除全部用户数据。\n\n"
+        "刷写期间手机会自动切换 bootloader/fastbootd，原厂手机界面可能不显示进度。"
+        "请查看电脑端的八个阶段及实时发送/写入结果，并保持 USB 连接。\n\n"
         "首次启动先初始化 Android，再自动重启一次准备 Magisk；随后自动展开 RungicOS。"
         "完成 Android 初始设置后打开 Rungic。首次安装期间显示阶段和等待动画；"
         "镜像、权限、共享目录和账户环境准备完成后才会自动显示账户表单。"
@@ -155,9 +157,10 @@ def main():
         raise ValueError("sparse product is larger than the logical partition")
     files = {str(path.relative_to(output)): {"sha256": sha256(path), "bytes": path.stat().st_size}
              for path in sorted(output.rglob("*")) if path.is_file()}
+    source_commit = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=Path(__file__).resolve().parents[2], text=True).strip()
     manifest = {"schema_version": 1, "release_id": args.release_id,
-                "composer_commit": subprocess.check_output(
-                    ["git", "rev-parse", "HEAD"], cwd=Path(__file__).resolve().parents[2], text=True).strip(),
+                "composer_commit": source_commit, "installer_commit": source_commit,
                 "target_serial": args.serial, "device_spec_sha256": sha256(args.spec),
                 "device_spec_id": spec["id"], "product_partition_bytes": partition_bytes,
                 "fastboot_bootloader_value": args.fastboot_bootloader_value,
