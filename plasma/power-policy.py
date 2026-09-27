@@ -5,6 +5,7 @@ Android owns suspend and physical locking. These leases prevent foreground
 screen timeout only; they never create a background CPU wake lock.
 """
 import concurrent.futures
+import subprocess
 import dbus
 import dbus.service
 from gi.repository import GLib
@@ -12,6 +13,63 @@ from gi.repository import GLib
 POLICY = 'org.kde.Solid.PowerManagement.PolicyAgent'
 PROPS = 'org.freedesktop.DBus.Properties'
 LEGACY = 'org.freedesktop.PowerManagement.Inhibit'
+
+
+PM = 'org.kde.Solid.PowerManagement'
+PROFILES = ('AC', 'Battery', 'LowBattery')
+# The screen-off choices of powerdevil's mobile power settings (kcm_mobile_power), in seconds.
+SCREEN_OFF_CHOICES = (30, 60, 120, 300, 600, 900, 1800)
+
+
+def _kread(profile, key, default):
+    return subprocess.run(['kreadconfig6', '--file', 'powerdevilrc', '--group', profile, '--group', 'Display',
+                           '--key', key, '--default', default], capture_output=True, text=True).stdout.strip()
+
+
+def _kwrite(profile, key, value):
+    subprocess.run(['kwriteconfig6', '--file', 'powerdevilrc', '--group', profile, '--group', 'Display',
+                    '--key', key, value], check=True)
+
+
+class PowerSettings(dbus.service.Object):
+    """The mobile power settings for Android's screen-off timeout (docs/73). kcm_mobile_power writes
+    powerdevilrc and calls refreshStatus; the turn-off time goes to Android, which owns the screen.
+    At start Android's value is written back, so the settings show it. Dimming and suspend stay with
+    Android."""
+    def __init__(self, bus, host):
+        super().__init__(bus, '/org/kde/Solid/PowerManagement')
+        self.host = host
+        self.pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        self.pool.submit(self.pull)
+
+    def pull(self):
+        try:
+            ms = int(self.host(op='screen-timeout')['ms'])
+        except (OSError, ValueError, KeyError):
+            return
+        seconds = 0 if ms == 0 else min(SCREEN_OFF_CHOICES, key=lambda choice: abs(choice * 1000 - ms))
+        for profile in PROFILES:
+            wanted = {'TurnOffDisplayWhenIdle': 'true' if seconds else 'false',
+                      'TurnOffDisplayIdleTimeoutSec': str(seconds or 300)}
+            for key, value in wanted.items():
+                if _kread(profile, key, '') != value:
+                    _kwrite(profile, key, value)
+
+    def push(self):
+        off = _kread('AC', 'TurnOffDisplayWhenIdle', 'true') != 'false'
+        seconds = int(float(_kread('AC', 'TurnOffDisplayIdleTimeoutSec', '300') or 300))
+        try:
+            self.host(op='screen-timeout', ms=seconds * 1000 if off else 0)
+        except (OSError, ValueError):
+            pass
+
+    @dbus.service.method(PM)
+    def refreshStatus(self):
+        self.pool.submit(self.push)
+
+    @dbus.service.method(PM)
+    def reparseConfiguration(self):
+        self.pool.submit(self.push)
 
 
 class Policy(dbus.service.Object):
@@ -26,6 +84,7 @@ class Policy(dbus.service.Object):
         self.pending = False
         self.pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
         self.legacy = Legacy(bus, self)
+        self.settings = PowerSettings(bus, host)
         self.screensavers = [ScreenSaver(bus, self, path) for path in
                             ('/ScreenSaver', '/org/freedesktop/ScreenSaver')]
         bus.add_signal_receiver(self.owner_changed, signal_name='NameOwnerChanged',

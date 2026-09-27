@@ -77,6 +77,13 @@ final class PlatformBridge implements Closeable {
                         ocr.answer(owned,request);
                         continue;
                     }
+                    if(request.optString("op").equals("screen-timeout")) {
+                        JSONObject result;
+                        try { result=network.screenTimeout(request); }
+                        catch(Exception e) { result=new JSONObject().put("error",e.getMessage()==null?"screen timeout request failed":e.getMessage()); }
+                        client.getOutputStream().write((result.toString()+"\n").getBytes(StandardCharsets.UTF_8));
+                        continue;
+                    }
                     if(request.optString("op").equals("wifi")) {
                         // Root commands with timeouts: on this socket thread, not the UI thread.
                         JSONObject result;

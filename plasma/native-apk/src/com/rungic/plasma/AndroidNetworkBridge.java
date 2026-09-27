@@ -174,6 +174,18 @@ final class AndroidNetworkBridge implements Closeable {
         if(!reply.trim().endsWith("success"))throw new IOException("Android Wi-Fi: "+reply.trim());
         return reply;
     }
+    /** Android's screen-off timeout for the Linux power settings (docs/73): read it, or set it (root:
+     * `settings put`, as WRITE_SETTINGS is not this app's). ms 0 is "never". */
+    JSONObject screenTimeout(JSONObject request) throws Exception {
+        if(request.has("ms")) {
+            long ms=request.getLong("ms");
+            if(ms<0 || ms>Integer.MAX_VALUE)throw new IllegalArgumentException("Invalid timeout");
+            rootShell("/system/bin/settings put system screen_off_timeout "+(ms==0?Integer.MAX_VALUE:ms),3000);
+        }
+        long current=android.provider.Settings.System.getLong(activity.getContentResolver(),
+            android.provider.Settings.System.SCREEN_OFF_TIMEOUT,60000);
+        return new JSONObject().put("ms",current>=Integer.MAX_VALUE?0:current);
+    }
     JSONObject snapshot() throws Exception {
         Network active=cm.getActiveNetwork();
         JSONArray networks=new JSONArray();
