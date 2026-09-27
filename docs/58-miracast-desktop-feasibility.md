@@ -272,6 +272,7 @@ KWin(moto12) 嵌套后端：Pointer::motion → 输出CAST-n上的绝对位置�
       - 桌面文件夹：本机XDG桌面目录被设为`$HOME`，改为显示`~/Desktop`。
       - 底部面板`org.kde.panel`：kickoff、icontasks（只显示本屏任务）、系统托盘、时钟、显示桌面。
       - 结果保存在shell配置中，拔出后保留（screen=-1），插回自动恢复。
+      - 判断屏上是否已有面板时，不能只看`screen`（2026-09-28修复）。面板视图要等该屏桌面就绪、再过250 ms定时器才建立（plasma-workspace 6.6.6 `createWaitingPanels`），在此之前`screen`为-1。实测接屏后约0.4–0.45 s内都是这样，桌面加载慢时会超过脚本运行的1 s，于是每次接屏都可能多建一个面板。助理屏上曾累积到4个，底部出现叠影。现在`screen`为-1时，改读面板配置里的`lastScreen`。这台手机上多出的3个面板已手动删除；脚本不做去重，其他设备上已累积的面板需要另行清理。
     - **自动触发**：`KScreenOSDUtil`在输出数大于1或新增屏幕1秒后，异步调用plasmashell自身的`evaluateScript`执行该脚本。已验证：删除面板后插拔一次屏幕，面板自动重建。
     - **小部件弹窗**：移动shell的`CompactApplet.qml`把弹窗做成全屏遮罩窗口，新窗口默认出现在主屏（手机）上，开始菜单因此弹到手机上并占满手机屏。
       - 现在按容器分流：桌面面板和folder桌面里的小部件用Plasma Desktop的`CompactApplet`（`AppletPopup`贴面板弹出，复制自plasma-desktop 6.6.6）；手机上的移动面板保留原实现。
