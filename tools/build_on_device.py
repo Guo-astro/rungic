@@ -107,7 +107,8 @@ class MacMini:
             return
         # Build context: the Dockerfile and the debug symbol source it copies (the phone's own file).
         files = {'Dockerfile': WORKSPACE / 'tools/pq/arm64-host.Dockerfile',
-                 'rungic-ddebs.sources': WORKSPACE / 'plasma/config/etc/apt/rungic-ddebs.sources'}
+                 'rungic-ddebs.sources': WORKSPACE / 'plasma/config/etc/apt/rungic-ddebs.sources',
+                 'arm64-host-packages.txt': WORKSPACE / 'tools/pq/arm64-host-packages.txt'}
         digest = hashlib.sha256()
         for name, path in files.items():
             digest.update(name.encode() + b'\0' + path.read_bytes())

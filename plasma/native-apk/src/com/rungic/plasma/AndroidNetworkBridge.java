@@ -187,6 +187,20 @@ final class AndroidNetworkBridge implements Closeable {
             android.provider.Settings.System.SCREEN_OFF_TIMEOUT,60000);
         return new JSONObject().put("ms",current>=Integer.MAX_VALUE?0:current);
     }
+    /** The Linux container's RAM ceiling (docs/61): "limit" one of the launcher's presets (MiB or
+     * "unlimited") sets it; the reply is the launcher's status (choice, limit, use, peak, total). A
+     * memory cgroup of Android's, so only root (the launcher's memory-limit action) can change it. */
+    JSONObject containerMemory(JSONObject request) throws Exception {
+        String limit=request.optString("limit","");
+        if(!limit.isEmpty() && !limit.matches("2048|3072|4096|5120|6144|unlimited"))throw new IllegalArgumentException("Invalid memory limit");
+        String reply=rootShell("/data/adb/rungic-plasma/rungic-plasma "+(limit.isEmpty()?"memory-status":"memory-limit "+limit)+" 2>&1",30000).trim();
+        String[] lines=reply.split("\n");
+        String last=lines[lines.length-1];
+        if(!last.startsWith("{"))throw new java.io.IOException(reply.isEmpty()?"No reply from the launcher":reply);
+        JSONObject result=new JSONObject(last);
+        if(lines.length>1)result.put("warning",lines[0]);
+        return result;
+    }
     JSONObject snapshot() throws Exception {
         Network active=cm.getActiveNetwork();
         JSONArray networks=new JSONArray();

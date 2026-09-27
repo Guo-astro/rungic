@@ -93,6 +93,13 @@ final class PlatformBridge implements Closeable {
                         client.getOutputStream().write((result.toString()+"\n").getBytes(StandardCharsets.UTF_8));
                         continue;
                     }
+                    if(request.optString("op").equals("container-memory")) {
+                        JSONObject result;
+                        try { result=network.containerMemory(request); }
+                        catch(Exception e) { result=new JSONObject().put("error",e.getMessage()==null?"memory limit request failed":e.getMessage()); }
+                        client.getOutputStream().write((result.toString()+"\n").getBytes(StandardCharsets.UTF_8));
+                        continue;
+                    }
                     if(request.optString("op").equals("screen-timeout")) {
                         JSONObject result;
                         try { result=network.screenTimeout(request); }

@@ -6,9 +6,12 @@
 # tools/rungic_crash_symbolize.py (crash cores are analysed here, not on the phone: docs/61).
 # Ubuntu's packages come from the USTC mirror of ports.ubuntu.com: from the Mac mini it is about ten
 # times faster than ports.ubuntu.com (6.7 vs 0.5 MB/s, 2026-09-27); debug symbols have no mirror.
+# The whole Plasma Mobile and desktop environment of the phone is installed too
+# (arm64-host-packages.txt), so a build sees what the phone's container has.
 # Built and started by build_on_device.py itself.
 FROM ubuntu@sha256:da6fc2be547864451aa253836dd926da33623312df4a9a243e35dc877c378a78
 COPY rungic-ddebs.sources /etc/apt/rungic-ddebs.sources
+COPY arm64-host-packages.txt /usr/share/rungic/arm64-host-packages.txt
 RUN sed -i -e 's/^Types: deb$/Types: deb deb-src/' -e 's|http://ports.ubuntu.com/ubuntu-ports/\?|http://mirrors.ustc.edu.cn/ubuntu-ports/|' \
       /etc/apt/sources.list.d/ubuntu.sources \
  && apt-get update \
@@ -16,4 +19,5 @@ RUN sed -i -e 's/^Types: deb$/Types: deb deb-src/' -e 's|http://ports.ubuntu.com
       build-essential devscripts equivs dpkg-dev fakeroot rsync git quilt ca-certificates procps \
       cmake ninja-build meson pkgconf python3 xz-utils zstd gdb elfutils ubuntu-dbgsym-keyring \
  && DEBIAN_FRONTEND=noninteractive apt-get build-dep -y mesa \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y $(grep -v '^#' /usr/share/rungic/arm64-host-packages.txt) \
  && rm -rf /var/lib/apt/lists/*

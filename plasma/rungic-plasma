@@ -22,7 +22,62 @@ device_rule() (
     esac
     printf 'lxc.cgroup2.devices.allow=c %d:%d %s\n' "0x$major_hex" "0x$minor_hex" "$2"
 )
+# The Linux side's RAM ceiling (docs/61): a memory cgroup of Android's (v1, /dev/memcg), so that
+# memory-hungry Linux programs are reclaimed or killed inside the container instead of Android's
+# low-memory killer taking the VPN and the desktop APK (2026-09-27). The choice, in MiB or
+# "unlimited", is kept in $MEMORY_CHOICE and set from the Rungic device panel.
+MEMCG=/dev/memcg/rungic-plasma
+MEMORY_CHOICE=$BASE/memory-limit
+MEMORY_PRESETS="2048 3072 4096 5120 6144 unlimited"
+MEMORY_DEFAULT=4096
+memory_choice() {
+    choice=$(cat "$MEMORY_CHOICE" 2>/dev/null) || choice=
+    case " $MEMORY_PRESETS " in *" $choice "*) echo "$choice" ;; *) echo "$MEMORY_DEFAULT" ;; esac
+}
+apply_memory_limit() {
+    [ -d /dev/memcg ] || return 0
+    mkdir -p "$MEMCG" || return 1
+    # Pages of adopted processes move with them (cgroup v1; ignored where the kernel dropped it).
+    echo 3 > "$MEMCG/memory.move_charge_at_immigrate" 2>/dev/null || true
+    choice=$(memory_choice)
+    # Android's sh has 32-bit arithmetic: the kernel takes the unit suffix instead.
+    if [ "$choice" = unlimited ]; then limit=-1; else limit=${choice}M; fi
+    # Lowering below the current use makes the kernel reclaim first; it refuses (EBUSY) what it cannot free.
+    echo "$limit" > "$MEMCG/memory.limit_in_bytes"
+}
+adopt_container() {
+    # Processes of a container started before the cgroup existed (or by an older launcher).
+    [ -d "$MEMCG" ] || return 0
+    # Shell built-ins only: Android runs over a thousand processes, a grep per process took a minute.
+    for proc in /proc/[0-9]*; do
+        container=0 adopted=0
+        [ -r "$proc/cgroup" ] || continue
+        # A process may exit meanwhile: its cgroup file then cannot be read (set -e must not end us).
+        { while read -r line; do
+            case "$line" in
+              *:memory:/rungic-plasma) adopted=1 ;;
+              *lxc.payload.plasma*|*lxc.monitor.plasma*) container=1 ;;
+            esac
+          done < "$proc/cgroup"; } 2>/dev/null || continue
+        if [ "$container" = 1 ] && [ "$adopted" = 0 ]; then
+            echo "${proc#/proc/}" > "$MEMCG/cgroup.procs" 2>/dev/null || true
+        fi
+    done
+    return 0
+}
+memory_status() {
+    limit=$(cat "$MEMCG/memory.limit_in_bytes" 2>/dev/null) || limit=
+    usage=$(cat "$MEMCG/memory.usage_in_bytes" 2>/dev/null) || usage=0
+    peak=$(cat "$MEMCG/memory.max_usage_in_bytes" 2>/dev/null) || peak=0
+    total=$(sed -n 's/^MemTotal: *\([0-9]*\) kB/\1/p' /proc/meminfo)
+    mib() { awk -v b="$1" 'BEGIN { printf "%d", b / 1048576 }'; }   # sh arithmetic is 32-bit here
+    case "$limit" in ''|9223372036854*) limit_mib=null ;; *) limit_mib=$(mib "$limit") ;; esac
+    printf '{"choice":"%s","default":%s,"presets":"%s","limit_mib":%s,"usage_mib":%s,"peak_mib":%s,"total_mib":%s}\n' \
+        "$(memory_choice)" "$MEMORY_DEFAULT" "$MEMORY_PRESETS" "$limit_mib" "$(mib "$usage")" "$(mib "$peak")" $((total / 1024))
+}
 start_container() {
+    # The container starts inside the memory cgroup: lxc-start and everything below inherit it.
+    if apply_memory_limit; then echo $$ > "$MEMCG/cgroup.procs" 2>/dev/null || true; fi
     gpu_rule=$(device_rule /dev/kgsl-3d0 rw)
     heap_rule=$(device_rule /dev/dma_heap/system r)
     label=$(ls -dZ /data/user/0/com.rungic.plasma/files | cut -d ' ' -f 1)
@@ -114,6 +169,17 @@ case "$action" in
     echo 'Plasma Mobile ready (native Wayland)'
     ;;
   status) exec "$ENTER" /usr/bin/lxc-info -n plasma ;;
+  memory-status) memory_status ;;
+  memory-limit)
+    # memory-limit [2048|3072|4096|5120|6144|unlimited]: set (MiB) and/or show the Linux RAM ceiling as JSON.
+    if [ "$#" -gt 0 ]; then
+      case " $MEMORY_PRESETS " in *" $1 "*) ;; *) echo "Unknown memory limit: $1 (one of $MEMORY_PRESETS)" >&2; exit 2 ;; esac
+      echo "$1" > "$MEMORY_CHOICE"
+    fi
+    apply_memory_limit || { echo 'Cannot apply the memory limit (more in use than the new limit allows?)' >&2; memory_status; exit 1; }
+    adopt_container
+    memory_status
+    ;;
   rootfs)
     # status | snapshot | rollback | commit | migrate (plasma/rootfs-image); the container must be stopped
     # for all but status.

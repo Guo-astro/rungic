@@ -80,6 +80,13 @@ class DeviceApp(Adw.Application):
         g = self.group('电池')
         self.row(g, 'battery', '电量与温度')
         self.row(g, 'charging', '充电状态')
+        g = self.group('内存', '限制 Linux 桌面可用的内存。超出时由 Linux 自己回收或关闭程序，不会挤掉 Android 的 VPN 和其他应用；上限太低时大型程序可能被关闭。')
+        self.row(g, 'memory', 'Linux 已用内存')
+        self.memory_presets = ['2048', '3072', '4096', '5120', '6144', 'unlimited']
+        self.memory = Adw.ComboRow(title='内存上限', model=Gtk.StringList.new(
+            ['最低 · 2 GB', '3 GB', '4 GB（默认）', '5 GB', '6 GB', '无上限']))
+        self.memory.connect('notify::selected', self.memory_changed)
+        g.add(self.memory)
         g = self.group('系统设置')
         for title, target in [('声音与输出设备','sound'),('蓝牙设备','bluetooth'),('日期与时区','datetime'),('定位设置','location')]:
             self.button(g, title, target)
@@ -129,6 +136,10 @@ class DeviceApp(Adw.Application):
         if not self.changing:
             self.send({'op':'orientation','mode':['system','portrait','landscape'][self.orientation.get_selected()]})
 
+    def memory_changed(self, *_):
+        if not self.changing:
+            self.send({'op':'container-memory','limit':self.memory_presets[self.memory.get_selected()]})
+
     def follow_changed(self, *_):
         if self.changing:return
         follow=self.follow.get_active()
@@ -156,6 +167,8 @@ class DeviceApp(Adw.Application):
             for net in detail.get('networks',[]):
                 if net.get('interface') == current.get('interface'):
                     current.update({k:net[k] for k in ('ssid','rssi','frequency','linkMbps') if k in net})
+            try: data['memory']=request({'op':'container-memory'})
+            except Exception: data['memory']=None
             return data
         future=self.pool.submit(read)
         def done(f):
@@ -197,6 +210,15 @@ class DeviceApp(Adw.Application):
         if c.has_section('refresh'):
             v=c['refresh'];r['refresh'].set_subtitle(f"{float(v.get('minimum-hz',0)):.0f}–{float(v.get('maximum-hz',0)):.0f} Hz")
             r['frames'].set_subtitle(f"Android 报告 {float(v.get('android-reported-hz',0)):.0f} Hz\n桌面提交 {float(v.get('submitted-fps',0)):.1f} 帧/秒")
+        memory=data.get('memory')
+        if memory:
+            limit=f"{memory['limit_mib']} MB" if memory.get('limit_mib') else '无上限'
+            r['memory'].set_subtitle(f"{memory['usage_mib']} MB · 上限 {limit} · 峰值 {memory['peak_mib']} MB（共 {memory['total_mib']} MB）")
+            if memory.get('choice') in self.memory_presets:
+                self.changing=True
+                self.memory.set_selected(self.memory_presets.index(memory['choice']))
+                self.changing=False
+        else:r['memory'].set_subtitle('需要更新 Android 端（Rungic APK 2.5）')
         self.changing=True
         value=data.get('windowBrightness',-1)
         self.follow.set_active(value<0);self.scale.set_sensitive(value>=0)
