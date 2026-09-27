@@ -42,7 +42,16 @@ final class OcrBridge {
         thread.start();
     }
 
+    /** Whether this APK has OCR built in (plasma/build-apk.sh RUNGIC_APK_OCR=1): its models are assets. */
+    private boolean available() {
+        try { context.getAssets().open("ocr/"+MODEL_FILES[0]).close(); return true; }
+        catch(IOException e) { return false; }
+    }
+
     private JSONObject handle(InputStream in,JSONObject request) throws Exception {
+        // Without OCR the Linux side reads text on its CPU (plasma/cua/typesafe/linux_ocr.py, docs/73).
+        if(!available())return new JSONObject().put("available",false)
+            .put("error","OCR is not built into this APK (plasma/build-apk.sh RUNGIC_APK_OCR=1)");
         boolean fp32=request.optBoolean("fp32",false);
         if(request.optBoolean("info",false))
             return new JSONObject().put("engine",onEngine(() -> nativeDescribe(engine(fp32))));

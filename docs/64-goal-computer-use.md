@@ -1,5 +1,7 @@
 # 目标级电脑操作：typesafe-computer-use + 手机 GPU OCR
 
+> 2026-09-27：APK内的OCR（LiteRT与PP-OCRv6模型，约占APK的95%）改为可选编译，默认不包含（`RUNGIC_APK_OCR=1 plasma/build-apk.sh`才包含），APK从86MB降到4.3MB。未包含时`ocr`请求立即返回`available: false`的错误，Linux侧`linux_ocr.py`照常改用CPU上的RapidOCR（约2秒）。见[73篇](73-reduce-upstream-changes.md)。
+
 > 改名说明（2026-09-26）：Rungic改名B阶段之后，容器内的`moto-*`包、程序、单元、路径，`MOTO_*`变量和`dev.moto.*`名称改为`rungic-*`、`RUNGIC_*`、`com.rungic.*`；Android侧的名称在C阶段（2026-09-27）改为APK `com.rungic.plasma`、`/data/adb/rungic-*`（镜像在`/data/adb/rungic-lxc/images/`）、容器中的`/var/lib/rungic-{host,cores,apt}`、`rungic-gpu-alloc`、`rungic-cast`、`debug.rungic.*`、dm `rungic-root`与SELinux `rungic_image`。对照与边界见[70篇](70-rungic-rebrand.md)。下文按时间记录的内容保留当时的名称。
 
 > 2026-09-25 起，本篇描述的是方案二（不是默认方案）。默认的电脑操作方案一见 [68 篇](68-luna-computer-use.md)（GPT-6 Luna 看画面操作）；切换方法：`moto-cua plan atspi`。
