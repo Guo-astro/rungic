@@ -118,3 +118,7 @@ KWin Android后端（`packages/kwin`，`+rungic3`）：手机输出声明VRR能�
 plasma-settings `+rungic3`删除`android-hardware-settings`补丁：蜂窝、蓝牙、电源页都是桌面模块。APK 2.3新增`READ_PHONE_STATE`、`BLUETOOTH_SCAN`、`BLUETOOTH_CONNECT`，缺权限时由root授予。
 
 未覆盖：SIM PIN输入、选网、APN编辑与数据漫游开关留在Android设置（模拟服务明确返回不支持）；配对需要在Android弹窗确认，未用实际设备配对；手机无SIM，移动数据开关只验证了无SIM路径。
+
+### 第五阶段（2026-09-27）：不可行，维持现状
+
+详见[74篇](research/74-vaapi-feasibility.md)（只读源码调研）。VA-API驱动本身做得出来（同类设备已有先例），但替换不了目标中的三项：Firefox在glxtest能力探测处就因KGSL的软件EGL设备而强制关闭VA-API硬解，`force-enabled`盖不过；Firefox 156在Linux上没有VA-API编码路径，WebCodecs/WebRTC硬编仍依赖私有FFmpeg；RDD沙箱不放行`codec.sock`与`/dev/dma_heap`，预连仍然需要。唯一可替换的Snapshot补丁（17行）需要上千行驱动并把msm_drm显示节点映射进容器，不划算。FFmpeg的2条补丁、Snapshot补丁与Firefox的`LD_PRELOAD`保留。VA-API驱动若要做，应作为给mpv、FFmpeg命令行、GStreamer va、Chromium的新增能力单独立项，并与驱动直接调用原厂V4L2的做法比较。
