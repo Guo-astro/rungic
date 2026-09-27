@@ -1,5 +1,6 @@
 #!/bin/sh
 set -eu
+mkdir -p /var/log/plasma
 exec >>/var/log/plasma/init.log 2>&1
 # These mounts are in LXC's private mount namespace.
 mount -o remount,bind,suid,nodev / /
