@@ -148,7 +148,7 @@ for spec in {wanted}; do
   for deb in "${{name}}_${{version}}_"*.ddeb; do [ -e "$deb" ] && dpkg-deb -x "$deb" {work}/sysroot; done
 done
 cd {work}/debs
-for deb in *.deb; do [ -e "$deb" ] && dpkg-deb -x "$deb" {work}/sysroot; done; true''', timeout=3600)
+for deb in *.deb; do [ -e "$deb" ] && dpkg-deb -x "$deb" {work}/sysroot; done; true''', timeout=3 * 3600)
     host.put(WORKSPACE / 'plasma/diagnostics/rungic-coredump-collect', f'{WORK}/rungic-coredump-collect', '644')
     script = WORKSPACE / f'.work/crash/analyse.py'
     script.write_text(ANALYSE)
