@@ -40,16 +40,16 @@ Origin: vendor
  src/backends/android/CMakeLists.txt           |   8 +
  src/backends/android/android-display-client.h |  89 ++++++++
  src/backends/android/android_allocator.h      | 143 ++++++++++++
- src/backends/android/android_backend.cpp      | 303 ++++++++++++++++++++++++++
+ src/backends/android/android_backend.cpp      | 315 ++++++++++++++++++++++++++
  src/backends/android/android_backend.h        |  84 +++++++
- src/backends/android/android_output.cpp       | 116 ++++++++++
- src/backends/android/android_output.h         |  49 +++++
+ src/backends/android/android_output.cpp       | 127 +++++++++++
+ src/backends/android/android_output.h         |  49 ++++
  src/backends/android/host_output.cpp          | 106 +++++++++
  src/backends/android/host_output.h            |  64 ++++++
  src/backends/android/host_text_input.cpp      |  59 +++++
- src/backends/android/host_text_input.h        |  37 ++++
+ src/backends/android/host_text_input.h        |  37 +++
  src/main_wayland.cpp                          |  24 +-
- 13 files changed, 1081 insertions(+), 2 deletions(-)
+ 13 files changed, 1104 insertions(+), 2 deletions(-)
  create mode 100644 src/backends/android/CMakeLists.txt
  create mode 100644 src/backends/android/android-display-client.h
  create mode 100644 src/backends/android/android_allocator.h
@@ -331,10 +331,10 @@ index 0000000..88fe7ef
 +}
 diff --git a/src/backends/android/android_backend.cpp b/src/backends/android/android_backend.cpp
 new file mode 100644
-index 0000000..0f0d9f2
+index 0000000..a167b15
 --- /dev/null
 +++ b/src/backends/android/android_backend.cpp
-@@ -0,0 +1,303 @@
+@@ -0,0 +1,315 @@
 +/*
 +    SPDX-FileCopyrightText: 2026 Rungic
 +
@@ -621,10 +621,22 @@ index 0000000..0f0d9f2
 +                return OutputConfigurationError::Unknown;
 +            }
 +            const auto mode = props->mode ? props->mode->lock() : nullptr;
-+            if (!mode || (mode->size() == output->modeSize() && mode->refreshRate() == output->refreshRate())) continue;
-+            QJsonObject request{{"width", mode->size().width()}, {"height", mode->size().height()}};
-+            if (mode->refreshRate() != output->refreshRate()) {
-+                request.insert(QStringLiteral("refreshPolicy"), int(std::round(mode->refreshRate() / 1000.0)));
++            const bool sizeChanged = mode && mode->size() != output->modeSize();
++            const bool rateChanged = mode && mode->refreshRate() != output->refreshRate();
++            // The refresh policy (docs/73): the adaptive refresh (VRR) policy Automatic or Always is
++            // Android's automatic rate (0), Never or a rate chosen on its own is that fixed rate.
++            std::optional<int> policy;
++            const uint32_t rate = mode ? mode->refreshRate() : output->refreshRate();
++            if (props->vrrPolicy && *props->vrrPolicy != output->vrrPolicy()) {
++                policy = *props->vrrPolicy == VrrPolicy::Never ? int(std::round(rate / 1000.0)) : 0;
++            } else if (rateChanged) {
++                policy = int(std::round(rate / 1000.0));
++            }
++            if (!sizeChanged && !policy) continue;
++            const QSize size = mode ? mode->size() : output->modeSize();
++            QJsonObject request{{"width", size.width()}, {"height", size.height()}};
++            if (policy) {
++                request.insert(QStringLiteral("refreshPolicy"), *policy);
 +            }
 +            const auto reply = RungicDisplay::request(request);
 +            if (reply.contains(QStringLiteral("error"))) {
@@ -730,10 +742,10 @@ index 0000000..380c88c
 +} // namespace KWin
 diff --git a/src/backends/android/android_output.cpp b/src/backends/android/android_output.cpp
 new file mode 100644
-index 0000000..feb1413
+index 0000000..aeaa905
 --- /dev/null
 +++ b/src/backends/android/android_output.cpp
-@@ -0,0 +1,116 @@
+@@ -0,0 +1,127 @@
 +/*
 +    SPDX-FileCopyrightText: 2026 Rungic
 +
@@ -761,6 +773,10 @@ index 0000000..feb1413
 +        const QJsonObject info = RungicDisplay::info();
 +        information.physicalSize = QSize(info.value("physicalWidthMM").toInt(-1), info.value("physicalHeightMM").toInt(-1));
 +        information.internal = true;
++        // Android's refresh policy is offered as the adaptive refresh (VRR) policy of the output:
++        // Automatic (or Always) lets Android choose the rate, Never keeps the mode's fixed rate.
++        information.capabilities |= Capability::Vrr;
++        m_state.vrrPolicy = info.value(QStringLiteral("refreshPolicy")).toInt() == 0 ? VrrPolicy::Automatic : VrrPolicy::Never;
 +    } else {
 +        information.manufacturer = hostOutput->manufacturer();
 +        information.model = hostOutput->model();
@@ -842,9 +858,16 @@ index 0000000..feb1413
 +    // refresh or the host preference.
 +    if (source == OutputConfiguration::Source::User && props.mode) {
 +        if (const auto mode = props.mode->lock()) {
++            // A rate chosen on its own is a fixed rate (AndroidBackend::applyOutputChanges).
++            if (m_phone && !props.vrrPolicy && mode->refreshRate() != refreshRate()) {
++                next.vrrPolicy = VrrPolicy::Never;
++            }
 +            next.currentMode = mode;
 +            setRefreshRate(mode->refreshRate());
 +        }
++    }
++    if (m_phone && source == OutputConfiguration::Source::User && props.vrrPolicy) {
++        next.vrrPolicy = *props.vrrPolicy;
 +    }
 +}
 +

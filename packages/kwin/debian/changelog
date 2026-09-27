@@ -1,3 +1,13 @@
+kwin (4:6.6.6-0ubuntu0.1+rungic3) resolute; urgency=medium
+
+  * Android backend (docs/73): the phone output offers Android's refresh
+    policy as the standard adaptive refresh (VRR) policy, so the stock KScreen
+    display settings choose it: Automatic or Always is Android's automatic
+    rate, Never or a rate chosen on its own is that fixed rate. kscreen is
+    Ubuntu's own build again.
+
+ -- range-dev <noreply@localhost>  Sun, 27 Sep 2026 10:30:00 +0000
+
 kwin (4:6.6.6-0ubuntu0.1+rungic2) resolute; urgency=medium
 
   * Rungic rename phase C (docs/70): the host's buffer allocator socket is

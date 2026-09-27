@@ -107,6 +107,12 @@
       "title": "KScreen applies and reverts a scale change on the phone output"
     },
     {
+      "id": "display.refresh",
+      "level": "full",
+      "check": "display_refresh_policy",
+      "title": "KScreen's adaptive refresh policy and a fixed-rate mode set Android's refresh policy, then restore it"
+    },
+    {
       "id": "camera.back",
       "level": "full",
       "check": "camera_frames",

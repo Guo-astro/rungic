@@ -440,6 +440,42 @@ def display_scale_roundtrip(ctx, other=2.75):
                   applied=bool(applied), restored=bool(restored))
 
 
+def _host_display():
+    try:
+        return json.loads(user('cat /mnt/android-wayland/android-display.json').stdout)
+    except ValueError:
+        return {}
+
+
+@check
+def display_refresh_policy(ctx, fixed=60):
+    """The refresh policy through the stock display settings path (docs/73): KScreen's adaptive
+    refresh (VRR) policy Never with a mode of a fixed rate makes Android's refresh policy that rate,
+    Automatic makes it Android's automatic rate (0); the original policy is restored."""
+    output = _phone_output()
+    if not output:
+        return result(False, error='phone output not found in kscreen-doctor')
+    name = output['name']
+    before = _host_display()
+    original = before.get('refreshPolicy')
+    mode = next(m for m in output['modes'] if m['id'] == output['currentModeId'])
+    size = f"{mode['size']['width']}x{mode['size']['height']}"
+    vrr = 'capabilities' in output and output.get('vrrPolicy') is not None
+
+    def policy_is(value):
+        return wait_for(lambda: _host_display().get('refreshPolicy') == value, timeout=10)
+    user(f'kscreen-doctor output.{name}.vrrpolicy.never output.{name}.mode.{size}@{fixed}')
+    set_fixed = policy_is(fixed)
+    user(f'kscreen-doctor output.{name}.vrrpolicy.automatic')
+    set_auto = policy_is(0)
+    if original:
+        user(f'kscreen-doctor output.{name}.vrrpolicy.never output.{name}.mode.{size}@{original}')
+    restored = policy_is(original)
+    return result(bool(set_fixed) and bool(set_auto) and bool(restored),
+                  output=name, original=original, fixed=bool(set_fixed), automatic=bool(set_auto),
+                  restored=bool(restored), vrr_in_kscreen=vrr)
+
+
 # Names that stay "moto" in phase B of the Rungic rename (docs/70): the Android side creates or reads
 # them (bind mounts, the Magisk launcher's directory), or they belong to no package (manual leftovers).
 RESIDUE_ALLOWED = re.compile(r'^/(var/lib/moto-(host|cores|apt)|opt/moto-)')
