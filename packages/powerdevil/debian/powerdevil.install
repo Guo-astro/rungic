@@ -1,0 +1,15 @@
+etc/xdg/autostart/powerdevil.desktop
+usr/lib/*/libexec/
+usr/lib/*/qt6/plugins/
+usr/lib/*/qt6/qml/org/kde/plasma/private/
+usr/lib/kf6/kauth/libexec/backlighthelper
+usr/lib/kf6/kauth/libexec/chargethresholdhelper
+usr/lib/kf6/kauth/libexec/discretegpuhelper
+usr/lib/kf6/kauth/libexec/wakeupsourcehelper
+usr/lib/systemd/user/
+usr/share/applications/
+usr/share/dbus-1/
+usr/share/polkit-1/actions/org.kde.powerdevil.backlighthelper.policy
+usr/share/polkit-1/actions/org.kde.powerdevil.chargethresholdhelper.policy
+usr/share/polkit-1/actions/org.kde.powerdevil.discretegpuhelper.policy
+usr/share/polkit-1/actions/org.kde.powerdevil.wakeupsourcehelper.policy

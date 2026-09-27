@@ -1,0 +1,105 @@
+From: kevinzhow <kevinzhow@local>
+Date: Sun, 27 Sep 2026 19:41:57 +0900
+Subject: Mobile power settings: offer only the idle actions that can happen
+
+The mobile power page always offered "Dim screen after" and "Suspend device after". Where the
+system cannot suspend (logind says no, or cannot answer) the suspend delay does nothing, and without
+the screen brightness service (org.kde.ScreenBrightness) nothing dims the screen. On the Android
+host both belong to Android and only the screen-off time is passed on (docs/73); the page showed two
+settings without effect, dimming after 5 minutes while the screen turned off after 1. Each is now
+shown only when it can take effect.
+
+Forwarded: no
+Last-Update: 2026-09-27
+X-Rungic-Status: Pending [general: hide idle actions the system cannot perform]
+X-Rungic-Tests: L3:power settings page (manual)
+X-Rungic-Docs: docs/73
+---
+ kcm_mobile/mobilepower.cpp | 8 ++++++++
+ kcm_mobile/mobilepower.h   | 6 ++++++
+ kcm_mobile/ui/main.qml     | 6 ++++--
+ 3 files changed, 18 insertions(+), 2 deletions(-)
+
+diff --git a/kcm_mobile/mobilepower.cpp b/kcm_mobile/mobilepower.cpp
+index 34c68d1..58eb761 100644
+--- a/kcm_mobile/mobilepower.cpp
++++ b/kcm_mobile/mobilepower.cpp
+@@ -1,6 +1,8 @@
+ // SPDX-License-Identifier: GPL-2.0-only OR GPL-3.0-only OR LicenseRef-KDE-Accepted-GPL
+ // SPDX-FileCopyrightText: 2020 Tomaz Canabrava <tcanabrava@kde.org>
+ 
++#include <QDBusConnection>
++#include <QDBusConnectionInterface>
+ #include "mobilepower.h"
+ #include "statisticsprovider.h"
+ 
+@@ -68,6 +70,12 @@ MobilePower::MobilePower(QObject *parent, const KPluginMetaData &metaData)
+     bool isMobile = Kirigami::Platform::TabletModeWatcher::self()->isTabletMode();
+     bool isVM = PowerDevil::PowerManagement::instance()->isVirtualMachine();
+     bool canSuspend = PowerDevil::PowerManagement::instance()->canSuspend();
++    m_canSuspend = canSuspend;
++    // Dimming is done through the screen brightness service (powerdevil's): without it, where
++    // another system owns the screen, the setting would do nothing.
++    const QString brightness = QStringLiteral("org.kde.ScreenBrightness");
++    auto *bus = QDBusConnection::sessionBus().interface();
++    m_canDim = bus && (bus->isServiceRegistered(brightness).value() || bus->activatableServiceNames().value().contains(brightness));
+ 
+     m_settingsAC = new PowerDevil::ProfileSettings(QStringLiteral("AC"), isMobile, isVM, canSuspend, this);
+     m_settingsBattery = new PowerDevil::ProfileSettings(QStringLiteral("Battery"), isMobile, isVM, canSuspend, this);
+diff --git a/kcm_mobile/mobilepower.h b/kcm_mobile/mobilepower.h
+index e58e84b..452e830 100644
+--- a/kcm_mobile/mobilepower.h
++++ b/kcm_mobile/mobilepower.h
+@@ -18,6 +18,10 @@ class MobilePower : public KQuickConfigModule
+     Q_PROPERTY(int dimScreenIdx READ dimScreenIdx WRITE setDimScreenIdx NOTIFY dimScreenIdxChanged)
+     Q_PROPERTY(int screenOffIdx READ screenOffIdx WRITE setScreenOffIdx NOTIFY screenOffIdxChanged)
+     Q_PROPERTY(int suspendSessionIdx READ suspendSessionIdx WRITE setSuspendSessionIdx NOTIFY suspendSessionIdxChanged)
++    // Whether the idle actions besides turning the screen off can happen here: suspend needs the
++    // system to be able to suspend, dimming needs a screen brightness service.
++    Q_PROPERTY(bool canSuspend MEMBER m_canSuspend CONSTANT)
++    Q_PROPERTY(bool canDim MEMBER m_canDim CONSTANT)
+ 
+ public:
+     MobilePower(QObject *parent, const KPluginMetaData &metaData);
+@@ -44,6 +48,8 @@ public:
+ 
+ private:
+     BatteryModel *m_batteries;
++    bool m_canSuspend = true;
++    bool m_canDim = true;
+ 
+     PowerDevil::ProfileSettings *m_settingsAC;
+     PowerDevil::ProfileSettings *m_settingsBattery;
+diff --git a/kcm_mobile/ui/main.qml b/kcm_mobile/ui/main.qml
+index e10fc60..e419e57 100644
+--- a/kcm_mobile/ui/main.qml
++++ b/kcm_mobile/ui/main.qml
+@@ -118,13 +118,14 @@ SimpleKCM {
+         FormCard.FormCard {
+             FormCard.FormComboBoxDelegate {
+                 id: dimScreenCombo
++                visible: kcm.canDim
+                 text: i18nc("Part of a sentence like 'Dim screen after 5 minutes'", "Dim screen after")
+                 model: kcm.timeOptions()
+                 currentIndex: kcm.dimScreenIdx
+                 onCurrentIndexChanged: kcm.dimScreenIdx = currentIndex
+             }
+ 
+-            FormCard.FormDelegateSeparator { above: dimScreenCombo; below: screenOffCombo }
++            FormCard.FormDelegateSeparator { above: dimScreenCombo; below: screenOffCombo; visible: kcm.canDim }
+ 
+             FormCard.FormComboBoxDelegate {
+                 id: screenOffCombo
+@@ -134,10 +135,11 @@ SimpleKCM {
+                 onCurrentIndexChanged: kcm.screenOffIdx = currentIndex
+             }
+ 
+-            FormCard.FormDelegateSeparator { above: screenOffCombo; below: suspendCombo }
++            FormCard.FormDelegateSeparator { above: screenOffCombo; below: suspendCombo; visible: kcm.canSuspend }
+ 
+             FormCard.FormComboBoxDelegate {
+                 id: suspendCombo
++                visible: kcm.canSuspend
+                 text: i18nc("Part of a sentence like 'Suspend device after 5 minutes'", "Suspend device after")
+                 model: kcm.timeOptions()
+                 currentIndex: kcm.suspendSessionIdx

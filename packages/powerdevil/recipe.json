@@ -1,0 +1,15 @@
+{
+ "comment": "Pinned upstream of the powerdevil source package (docs/71, docs/73): Ubuntu's 4:6.6.6-0ubuntu0.1; packages/powerdevil/debian replaces its debian/ (Ubuntu's packaging plus our patches under debian/patches/rungic).",
+ "kind": "ubuntu",
+ "source": "powerdevil",
+ "version": "4:6.6.6-0ubuntu0.1",
+ "series": "resolute-updates",
+ "upstream": "https://invent.kde.org/plasma/powerdevil",
+ "licenses": "see LICENSES",
+ "files": {
+  "powerdevil_6.6.6-0ubuntu0.1.dsc": "0b4b7f8bfa7489a014965ae31c18ae30d9f0b336bce32289932097aa596e543b",
+  "powerdevil_6.6.6.orig.tar.xz": "18f2e1aa3b49848d9ba3ad38f1097090424edb3b17a474d2da3b81fb2e083e17",
+  "powerdevil_6.6.6-0ubuntu0.1.debian.tar.xz": "57157473407714090114e46ffd84bc431c5dee72cbb563999280e38b61c114b7"
+ },
+ "fetch": "https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/powerdevil/4:6.6.6-0ubuntu0.1/{file}"
+}

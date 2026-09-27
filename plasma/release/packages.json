@@ -77,6 +77,14 @@
         "qml6-module-org-kde-bluezqt"
       ]
     },
+    "powerdevil": {
+      "source": "packages/powerdevil",
+      "packages": [
+        "powerdevil",
+        "powerdevil-data",
+        "libpowerdevilcore2"
+      ]
+    },
     "kwayland": {
       "source": "packages/kwayland",
       "packages": [

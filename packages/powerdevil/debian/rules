@@ -1,0 +1,16 @@
+#!/usr/bin/make -f
+
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
+
+%:
+	dh $@
+
+override_dh_installdeb:
+	sed 's/#DEB_HOST_MULTIARCH#/$(DEB_HOST_MULTIARCH)/' \
+	    debian/powerdevil.postinst.in > debian/powerdevil.postinst
+	dh_installdeb
+
+override_dh_auto_test:
+	:

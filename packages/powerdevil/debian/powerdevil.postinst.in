@@ -1,0 +1,18 @@
+#!/bin/sh
+
+set -e
+
+if [ "$1" = configure ]; then
+    # Set the capabilities
+    if command -v setcap > /dev/null && \
+       setcap "CAP_WAKE_ALARM=+ep" \
+            "/usr/lib/#DEB_HOST_MULTIARCH#/libexec/org_kde_powerdevil"; then
+        echo "Sucessfully set capabilities for powerdevil"
+    else
+        echo "Failed to set capabilities for powerdevil" >&2
+    fi
+fi
+
+#DEBHELPER#
+
+exit 0

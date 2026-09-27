@@ -1,0 +1,567 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: powerdevil
+Source: https://invent.kde.org/plasma/powerdevil
+Upstream-Contact: plasma-devel@kde.org
+
+Files: *
+Copyright: 2009, Aurélien Gâteau <agateau@kde.org>
+           2024, Bohdan Onofriichuk <bogdan.onofriuchuk@gmail.com>
+           2009, Christian Esken <christian.esken@arcor.de>
+           2009, Dario Andres Rodriguez <andresbajotierra@gmail.com>
+           2008-2010, Dario Freddi <drf@kde.org>
+           2008, Dario Freddi <drf@kdemod.ath.cx>
+           2008, David Zeuthen <davidz@redhat.com>
+           2024, Fabian Arndt <fabian.arndt@root-core.net>
+           2010, Felix Geyer <debfx-kde@fobos.de>
+           2023-2024, Fushan Wen <qydwhotmail@gmail.com>
+           2022, ivan tkachenko <me@ratijas.tk>
+           2023-0, Jakob Petsovits <jpetso@petsovits.com>
+           2024, Jakob Petsovits <jpetso@petsovits.org>
+           2015-2016, Kai Uwe Broulik <kde@privat.broulik.de>
+           2008, Kevin Ottens <ervin@kde.org>
+           2012, Lukáš Tinkl <ltinkl@redhat.com>
+           2012, Michael Zanetti <mzanetti@kde.org>
+           2023-2024, Natalie Clarius <natalie.clarius@kde.org>
+           2023, Natalie Clarius <natalie_clarius@yahoo.de>
+           2014, Nikita Skovoroda <chalkerx@gmail.com>
+           2008, Sebastian Kügler <sebas@kde.org>
+           2020, Tobias Fella <fella@posteo.de>
+           2021, Tomaz Canabrava <tcanabrava@kde.org>
+           2019, Vlad Zahorodnii <vlad.zahorodnii@kde.org>
+License: GPL-2.0-or-later
+
+Files: po/*
+Copyright: 2023-2024, A S Alam <aalam@punlinux.org>
+           2007-2024, A S Alam <aalam@users.sf.net>
+           2023-2024, Adrián Chaves (Gallaecio)
+           2019-2024, Alexander Yavorsky <kekcuha@gmail.com>
+           2008-2024, Amanpreet Singh <aalam@users.sf.net>
+           2023-2024, Antoni Bella Pérez <antonibella5@yahoo.com>
+           2012-2024, Antonis Geralis <capoiosct@gmail.com>
+           2010-2011, Cristina Yenyxe González García <the.blue.valkyrie@gmail.com>
+           2009-2024, Eloy Cuadra <ecuadra@eloihr.net>
+           2022-2024, Emir SARI <emir_sari@icloud.com>
+           2023-2024, Enol P. <enolp@softastur.org>
+           2024, Flori G <Renner03@protonmail.com>
+           2024, Frank Steinmetzger <dev-kde@felsenfleischer.de>
+           2009-2023, Freek de Kruijf <f.de.kruijf@hetnet.nl>
+           2014-2024, Freek de Kruijf <freekdekruijf@kde.nl>
+           2010-2024, g.sora <g.sora@tiscali.it>
+           2023-2024, Geraldo Simiao <geraldosimiao@fedoraproject.org>
+           2023-2024, giovanni <g.sora@tiscali.it>
+           2024, Gummi <gudmundure@gmail.com>
+           2022-2024, Guðmundur Erlingsson <gudmundure@gmail.com>
+           2011-2024, Iñigo Salvador Azurmendi <xalba@ni.eus>
+           2007-2008, Jaime Robles <jaime@kde.org>
+           2012, Javier Vinal <fjvinal@gmail.com>
+           2009-2024, Johannes Obermayr <johannesobermayr@gmx.de>
+           2007-2024, Josep M. Ferrer <txemaq@gmail.com>
+           2007-2024, Jure Repinc <jlp@holodeck1.com>
+           2024, kali <shreekantkalwar@gmail.com>
+           2024, kali <skkalwar999@gmail.com>
+           2023-2024, KDE euskaratzeko proiektuko arduraduna <xalba@ni.eus>
+           2024, Kheyyam Godjayev <xxmn77@gmail.com>
+           2024, Kimmo Kujansuu <mrkujansuu@gmail.com>
+           2022-2024, Kisaragi Hiu <mail@kisaragi-hiu.com>
+           2021-2024, Kishore G <kishore96@gmail.com>
+           2021-2024, Kristof Kiszel <kiszel.kristof@gmail.com>
+           2021-2024, Kristof Kiszel <ulysses@fsf.hu>
+           2010-2024, Lasse Liehu <lasse.liehu@gmail.com>
+           2022-2024, Linerly <linerly@protonmail.com>
+           2019-2024, Matej Mrenica <matejm98mthw@gmail.com>
+           2020-2024, Matjaž Jeran <matjaz.jeran@amis.net>
+           2022-2024, Mincho Kondarev <mkondarev@yahoo.de>
+           2024, Olesya Gerasimenko <translation-team@basealt.ru>
+           2024, rasmus rosendahl-kaa <rasmus@rosendahl-kaa.name>
+           2023, Roman Paholík <wizzardsk@gmail.com>
+           2022-2024, Ryuichi Yamada <ryuichi_ya220@outlook.jp>
+           2007, Santiago Fernández Sancho <santi@kde-es.org>
+           2007-2024, Shinjo Park <kde@peremen.name>
+           2010-2024, Stefan Asserhall <stefan.asserhall@gmail.com>
+           2008-2024, Stefan Asserhäll <stefan.asserhall@gmail.com>
+           2014-2024, Steve Allewell <steve.allewell@gmail.com>
+           2009-2024, Tommi Nieminen <translator@legisign.org>
+           2024, Toms Trasuns <toms.trasuns@posteo.net>
+           2008-2024, Vincenzo Reale <smart2128vr@gmail.com>
+           2021-2024, Vit Pelcak <vit@pelcak.org>
+           2010-2024, Vít Pelčák <vit@pelcak.org>
+           2017-2024, Wantoyo <wantoyek@gmail.com>
+           2022-2024, Wantoyèk <wantoyek@gmail.com>
+           2024, X əyyam
+           2013-2025, Xavier Besnard <xavier.besnard@kde.org>
+           2023-2024, Yaron Shahrabani <sh.yaron@gmail.com>
+           2008-2024, zayed <zayed.alsaidi@gmail.com>
+           2021-2024, Zayed Al-Saidi <zayed.alsaidi@gmail.com>
+           2024, Zmicier Turok <zmicerturok@gmail.com>
+           2014-2024, Łukasz Wojniłowicz <lukasz.wojnilowicz@gmail.com>
+License: GPL-2.0-or-later
+
+Files: applets/CMakeLists.txt
+       autotests/applets/CMakeLists.txt
+       daemon/chargethresholdhelper_openbsd.cpp
+       runners/CMakeLists.txt
+       runners/powerdevil/CMakeLists.txt
+Copyright: 2023, Alexander Lohnau <alexander.lohnau@gmx.de>
+           2024, Fushan Wen <qydwhotmail@gmail.com>
+           2024, Rafael Sadowski <rafael@rsadowski.de>
+License: BSD-2-Clause
+
+Files: applets/batterymonitor/plugin/CMakeLists.txt
+       applets/brightness/plugin/CMakeLists.txt
+       cmake/FindDDCUtil.cmake
+       cmake/FindLibcap.cmake
+Copyright: 2024, Bohdan Onofriichuk <bogdan.onofriuchuk@gmail.com>
+           2017, Dorian Vogel <dorianvogel@gmail.com>
+           2014, Hrvoje Senjan <hrvoje.senjan@gmail.com>
+           2024, Natalie Clarius <natalie.clarius@kde.org>
+License: BSD-3-Clause
+
+Files: daemon/dbus/org.freedesktop.UPower.xml
+       .git-blame-ignore-refs
+       .gitlab-ci.yml
+       .kde-ci.yml
+       PowerDevilActivitySettings.kcfg
+       PowerDevilActivitySettings.kcfgc
+       PowerDevilGlobalSettings.kcfgc
+       PowerDevilProfileSettings.kcfg
+       PowerDevilProfileSettings.kcfgc
+Copyright: 2008, David Zeuthen <davidz@redhat.com>
+           None
+           none
+           2008, Richard Hughes <richard@hughsie.com>
+License: CC0-1.0
+
+Files: daemon/actions/bundled/powerprofile.cpp
+       daemon/actions/bundled/powerprofile.h
+       daemon/chargethresholdhelper.h
+       daemon/chargethresholdhelper_linux.cpp
+       kcm/ui/GlobalConfig.qml
+       kcm/ui/main.qml
+       kcm/ui/ProfileConfig.qml
+       kcm/ui/RunScriptEdit.qml
+Copyright: 2021, David Redondo <kde@david-redondo.de>
+           2023, Fabian Arndt <fabian.arndt@root-core.net>
+           2022-2023, Jakob Petsovits <jpetso@petsovits.com>
+           2020, Kai Uwe Broulik <kde@broulik.de>
+           2020, Nicolas Fella <nicolas.fella@gmx.de>
+License: GPL-2.0-only OR GPL-3.0-only OR LicenseRef-KDE-Accepted-GPL
+
+Files: autotests/applets/NetHadessPowerProfiles.py
+Copyright: 2020, Bastien Nocera <hadess@hadess.net>
+           2024, Fushan Wen <qydwhotmail@gmail.com>
+License: GPL-3.0-or-later
+
+Files: daemon/controllers/backlightbrightness.cpp
+       daemon/controllers/backlightbrightness.h
+       daemon/controllers/backlighthelper_freebsd.cpp
+       daemon/controllers/backlighthelper_freebsd.h
+       daemon/controllers/backlighthelper_linux.cpp
+       daemon/controllers/backlighthelper_linux.h
+       daemon/controllers/batterycontroller.cpp
+       daemon/controllers/batterycontroller.h
+       daemon/controllers/ddcutildetector.cpp
+       daemon/controllers/ddcutildetector.h
+       daemon/controllers/ddcutildisplay.cpp
+       daemon/controllers/ddcutildisplay.h
+       daemon/controllers/keyboardbrightnesscontroller.cpp
+       daemon/controllers/keyboardbrightnesscontroller.h
+       daemon/controllers/lidcontroller.cpp
+       daemon/controllers/lidcontroller.h
+       daemon/controllers/screenbrightnesscontroller.cpp
+       daemon/controllers/screenbrightnesscontroller.h
+       daemon/controllers/suspendcontroller.cpp
+       daemon/controllers/suspendcontroller.h
+       daemon/discretegpuhelper.cpp
+       daemon/discretegpuhelper.h
+       kcm/ui/MostUsedItem.qml
+Copyright: 2012, Alberto Villa <avilla@FreeBSD.org>
+           2010, Alejandro Fiestas <alex@eyeos.org>
+           2008-2010, Dario Freddi <drf@kde.org>
+           2017, Dorian Vogel <dorianvogel@gmail.com>
+           2023-2024, Jakob Petsovits <jpetso@petsovits.com>
+           2016, Jan Grulich <jgrulich@redhat.com>
+           2015, Kai Uwe Broulik <kde@privat.broulik.de>
+           2006, Kevin Ottens <ervin@kde.org>
+           2010-2011, Lukas Tinkl <ltinkl@redhat.com>
+           2010-2013, Lukáš Tinkl <ltinkl@redhat.com>
+           2017, Marco Martin <mart@kde.org>
+           2022, Nate Graham <nate@kde.org>
+           2023, Nicolas Fella <nicolas.fella@gmx.de>
+           2023, Quang Ngô <ngoquang2708@gmail.com>
+           2023, Serenity Cyber Security LLC <license@futurecrew.ru>
+           2024, Xaver Hugl <xaver.hugl@gmail.com>
+License: LGPL-2.0-only
+
+Files: applets/batterymonitor/package/contents/ui/BatteryItem.qml
+       applets/batterymonitor/package/contents/ui/CompactRepresentation.qml
+       applets/batterymonitor/package/contents/ui/InhibitionHint.qml
+       applets/batterymonitor/package/contents/ui/InhibitionItem.qml
+       applets/batterymonitor/package/contents/ui/main.qml
+       applets/batterymonitor/package/contents/ui/PopupDialog.qml
+       applets/batterymonitor/package/contents/ui/PowerProfileItem.qml
+       applets/brightness/package/contents/ui/BrightnessItem.qml
+       applets/brightness/package/contents/ui/CompactRepresentation.qml
+       applets/brightness/package/contents/ui/main.qml
+       applets/brightness/package/contents/ui/PopupDialog.qml
+       daemon/controllers/displaybrightness.cpp
+       daemon/controllers/displaybrightness.h
+       daemon/controllers/displaymatch.h
+       daemon/controllers/externalbrightnesscontrol.cpp
+       daemon/controllers/externalbrightnesscontrol.h
+       daemon/controllers/kwinbrightness.cpp
+       daemon/controllers/kwinbrightness.h
+Copyright: 2012-2013, Daniel Nicoletti <dantti12@gmail.com>
+           2021, David Redondo <kde@david-redondo.de>
+           2021-2022, ivan tkachenko <me@ratijas.tk>
+           2023-2024, Jakob Petsovits <jpetso@petsovits.com>
+           2021, Kai Uwe Broulik <kde@broulik.de>
+           2013-2016, Kai Uwe Broulik <kde@privat.broulik.de>
+           2024, Natalie Clarius <natalie.clarius@kde.org
+           2023-2024, Natalie Clarius <natalie.clarius@kde.org>
+           2011, Sebastian Kügler <sebas@kde.org>
+           2011, Viranch Mehta <viranch.mehta@gmail.com>
+           2024, Xaver Hugl <xaver.hugl@gmail.com>
+License: LGPL-2.0-or-later
+
+Files: daemon/controllers/udevqtclient.cpp
+       daemon/controllers/udevqtclient.h
+       daemon/controllers/udevqtdevice.cpp
+       daemon/controllers/udevqtdevice.h
+       daemon/controllers/udevqt_p.h
+       daemon/powerdevilpowermanagement.cpp
+       daemon/powerdevilpowermanagement.h
+       kcm/PowerButtonActionModel.cpp
+       kcm/PowerButtonActionModel.h
+       kcm/PowerProfileModel.cpp
+       kcm/PowerProfileModel.h
+       kcm/SleepModeModel.cpp
+       kcm/SleepModeModel.h
+Copyright: 2009, Benjamin K. Stuhl <bks24@cornell.edu>
+           2023, Jakob Petsovits <jpetso@petsovits.com>
+           2016, Martin Gräßlin <mgraesslin@kde.org>
+           2021, Tomaz Canabrava <tcanabrava@kde.org>
+License: LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL
+
+Files: po/ca/*
+       po/ca@valencia/*
+       po/uk/*
+Copyright: 2013-2024, Antoni Bella Pérez <antonibella5@yahoo.com>
+           2008-2024, Josep M. Ferrer <txemaq@gmail.com>
+           2008-2024, Yuri Chornoivan <yurchor@ukr.net>
+License: LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL
+Comment: Manually collected
+
+Files: daemon/upowerdevice.cpp
+       daemon/upowerdevice.h
+       kcm/ui/ComboBoxWithCustomValue.qml
+       kcm/ui/DurationPromptDialog.qml
+       kcm/ui/TimeDurationComboBox.qml
+Copyright: 2024, Jakob Petsovits <jpetso@petsovits.com>
+           2024, Kristen McWilliam <kmcwilliampublic@gmail.com>
+           2023, Stefan Brüns <stefan.bruens@rwth-aachen.de>
+License: LGPL-2.1-or-later
+
+Files: autotests/applets/batterymonitortest.py
+       autotests/applets/brightnesstest.py
+Copyright: 2023-2024, Fushan Wen <qydwhotmail@gmail.com>
+           2022, Harald Sitter <sitter@kde.org>
+License: MIT
+
+Files: debian/*
+Copyright: 2024-2025, Debian Qt/KDE Maintainers <debian-qt-kde@lists.debian.org>
+           2014, Scarlett Clark <scarlett@scarlettgatelyclark.com>
+           2022, Patrick Franz <deltaone@debian.org>
+License: GPL-2.0-or-later
+
+License: BSD-2-Clause
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions
+ are met:
+ .
+ 1. Redistributions of source code must retain the above copyright
+    notice, this list of conditions and the following disclaimer.
+ .
+ 2. Redistributions in binary form must reproduce the above copyright
+    notice, this list of conditions and the following disclaimer in
+    the documentation and/or other materials provided with the
+    distribution.
+ .
+ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ POSSIBILITY OF SUCH DAMAGE.
+
+License: BSD-3-Clause
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions
+ are met:
+ .
+ 1. Redistributions of source code must retain the above copyright
+    notice, this list of conditions and the following disclaimer.
+ .
+ 2. Redistributions in binary form must reproduce the above copyright
+    notice, this list of conditions and the following disclaimer in
+    the documentation and/or other materials provided with the
+    distribution.
+ .
+ 3. Neither the name of the copyright holder nor the names of its
+    contributors may be used to endorse or promote products derived
+    from this software without specific prior written permission.
+ .
+ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ POSSIBILITY OF SUCH DAMAGE.
+
+License: CC0-1.0
+ To the extent possible under law, the author(s) have dedicated all
+ copyright and related and neighboring rights to this software to the
+ public domain worldwide. This software is distributed without any
+ warranty.
+ .
+ You should have received a copy of the CC0 Public Domain Dedication
+ along with this software. If not, see
+ <https://creativecommons.org/publicdomain/zero/1.0/>.
+ .
+ On Debian systems, the complete text of the CC0 Public Domain
+ Dedication can be found in `/usr/share/common-licenses/CC0-1.0’.
+
+License: GPL-2.0-only
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation; version 2.
+ .
+ This program is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ General Public License for more details.
+ .
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+ 02110-1301, USA. Also add information on how to contact you by
+ electronic and paper mail.
+ .
+ On Debian systems, the complete text of the GNU General Public
+ License version 2 can be found in
+ `/usr/share/common-licenses/GPL-2’.
+
+License: GPL-2.0-or-later
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation; either version 2 of the License, or
+ (at your option) any later version.
+ .
+ This program is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ General Public License for more details.
+ .
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+ 02110-1301, USA. Also add information on how to contact you by
+ electronic and paper mail.
+ .
+ On Debian systems, the complete text of the GNU General Public
+ License version 2 can be found in
+ `/usr/share/common-licenses/GPL-2’.
+
+License: GPL-3.0-only
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GPL License as published by the Free
+ Software Foundation, version 3.
+ .
+ This package is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ General Public License for more details.
+ .
+ You should have received a copy of the GNU General Public License
+ along with this program. If not, see <http://www.gnu.org/licenses/>.
+ .
+ On Debian systems, the complete text of the GNU General Public
+ License version 3 can be found in
+ `/usr/share/common-licenses/GPL-3’.
+
+License: GPL-3.0-or-later
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation, either version 3 of the License, or
+ (at your option) any later version.
+ .
+ This program is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ General Public License for more details.
+ .
+ You should have received a copy of the GNU General Public License
+ along with this program.  If not, see
+ <http://www.gnu.org/licenses/>.
+ .
+ On Debian systems, the complete text of the GNU General Public
+ License version 3 can be found in
+ `/usr/share/common-licenses/GPL-3’.
+
+License: LGPL-2.0-only
+ This library is free software; you can redistribute it and/or modify
+ it under the terms of the GNU Library General Public License version
+ 2 as published by the Free Software Foundation.
+ .
+ This library is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ Library General Public License for more details.
+ .
+ You should have received a copy of the GNU Library General Public
+ License along with this library; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
+ 02110-1301, USA.
+ .
+ On Debian systems, the complete text of the GNU Library General
+ Public License version 2 can be found in
+ `/usr/share/common-licenses/LGPL-2’.
+
+License: LGPL-2.0-or-later
+ This library is free software; you can redistribute it and/or modify
+ it under the terms of the GNU Library General Public License as
+ published by the Free Software Foundation; either version 2 of the
+ License, or (at your option)  any later version.
+ .
+ This library is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ Library General Public License for more details.
+ .
+ You should have received a copy of the GNU Library General Public
+ License along with this library; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
+ 02110-1301, USA.
+ .
+ On Debian systems, the complete text of the GNU Library General
+ Public License version 2 can be found in
+ `/usr/share/common-licenses/LGPL-2’.
+
+License: LGPL-2.1-only
+ This library is free software; you can redistribute it and/or modify
+ it under the terms of the GNU Lesser General Public License version
+ 2.1 as published by the Free Software Foundation.
+ .
+ This library is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ Lesser General Public License for more details.
+ .
+ You should have received a copy of the GNU Lesser General Public
+ License along with this library; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+ 02110-1301  USA Also add information on how to contact you by
+ electronic and paper mail.
+ .
+ On Debian systems, the complete text of the GNU Lesser General
+ Public License version 2.1 can be found in
+ `/usr/share/common-licenses/LGPL-2.1’.
+
+License: LGPL-2.1-or-later
+ This library is free software; you can redistribute it and/or modify
+ it under the terms of the GNU Lesser General Public License as
+ published by the Free Software Foundation; either version 2.1 of the
+ License, or (at your option) any later version.
+ .
+ This library is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ Lesser General Public License for more details.
+ .
+ You should have received a copy of the GNU Lesser General Public
+ License along with this library; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+ 02110-1301  USA Also add information on how to contact you by
+ electronic and paper mail.
+ .
+ On Debian systems, the complete text of the GNU Lesser General
+ Public License version 2.1 can be found in
+ `/usr/share/common-licenses/LGPL-2.1’.
+
+License: LGPL-3.0-only
+ This library is free software; you can redistribute it and/or modify
+ it under the terms of the GNU Lesser General Public License version
+ 3 as published by the Free Software Foundation.
+ .
+ This library is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ Lesser General Public License for more details.
+ .
+ You should have received a copy of the GNU Lesser General Public
+ License along with this library.  If not, see
+ <http://www.gnu.org/licenses/>.
+ .
+ On Debian systems, the complete text of the GNU Lesser General
+ Public License version 3 can be found in
+ `/usr/share/common-licenses/LGPL-3’.
+
+License: LicenseRef-KDE-Accepted-GPL
+ This library is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation; either version 3 of the license or (at
+ your option) at any later version that is accepted by the membership
+ of KDE e.V. (or its successor approved by the membership of KDE
+ e.V.), which shall act as a proxy as defined in Section 14 of
+ version 3 of the license.
+ .
+ This program is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ General Public License for more details.
+
+License: LicenseRef-KDE-Accepted-LGPL
+ This library is free software; you can redistribute it and/or modify
+ it under the terms of the GNU Lesser General Public License as
+ published by the Free Software Foundation; either version 3 of the
+ license or (at your option) any later version that is accepted by
+ the membership of KDE e.V. (or its successor approved by the
+ membership of KDE e.V.), which shall act as a proxy as defined in
+ Section 6 of version 3 of the license.
+ .
+ This program is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ General Public License for more details.
+
+License: MIT
+ Permission is hereby granted, free of charge, to any person
+ obtaining a copy of this software and associated documentation files
+ (the "Software"), to deal in the Software without restriction,
+ including without limitation the rights to use, copy, modify, merge,
+ publish, distribute, sublicense, and/or sell copies of the Software,
+ and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
+ .
+ The above copyright notice and this permission notice shall be
+ included in all copies or substantial portions of the Software.
+ .
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+ BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+ ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ SOFTWARE.

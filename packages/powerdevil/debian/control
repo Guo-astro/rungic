@@ -1,0 +1,138 @@
+Source: powerdevil
+Section: kde
+Priority: optional
+Maintainer: Kubuntu Developers <kubuntu-devel@lists.ubuntu.com>
+XSBC-Original-Maintainer: Debian Qt/KDE Maintainers <debian-qt-kde@lists.debian.org>
+Uploaders: Aurélien COUDERC <coucouf@debian.org>,
+           Patrick Franz <deltaone@debian.org>,
+           Scarlett Moore <sgmoore@kde.org>,
+Build-Depends: cmake (>= 3.16~),
+               debhelper-compat (= 13),
+               dh-sequence-kf6,
+               dh-sequence-pkgkde-symbolshelper,
+               extra-cmake-modules (>= 6.22.0~),
+               gettext,
+               libcap-dev,
+               libcap2-bin,
+               libddcutil-dev,
+               libkf6auth-dev (>= 6.22.0~),
+               libkf6config-dev (>= 6.22.0~),
+               libkf6crash-dev (>= 6.22.0~),
+               libkf6dbusaddons-dev (>= 6.22.0~),
+               libkf6doctools-dev (>= 6.22.0~),
+               libkf6globalaccel-dev (>= 6.22.0~),
+               libkf6i18n-dev (>= 6.22.0~),
+               libkf6idletime-dev (>= 6.22.0~),
+               libkf6itemmodels-dev (>= 6.22.0~),
+               libkf6kcmutils-dev (>= 6.22.0~),
+               libkf6kio-dev (>= 6.22.0~),
+               libkf6notifications-dev (>= 6.22.0~),
+               libkf6runner-dev (>= 6.22.0~),
+               libkf6solid-dev (>= 6.22.0~),
+               libkf6windowsystem-dev (>= 6.22.0~),
+               libkf6xmlgui-dev (>= 6.22.0~),
+               libkirigami-dev (>= 6.22.0~),
+               libkscreen-dev (>= 4:6.6.4~),
+               liblayershellqtinterface-dev (>= 6.6.4~),
+               libplasma-dev (>= 6.6.6~),
+               libplasmaactivities-dev (>= 6.6.4~),
+               libudev-dev,
+               libwayland-dev,
+               libx11-dev,
+               libx11-xcb-dev,
+               libxcb-dpms0-dev,
+               libxcb-randr0-dev,
+               libxcb1-dev,
+               libxrandr-dev,
+               pkgconf,
+               plasma-wayland-protocols (>= 1.19.0~),
+               plasma-workspace-dev (>= 4:6.6.6~),
+               qcoro-qt6-dev,
+               qt6-base-dev (>= 6.10.0~),
+Standards-Version: 4.7.0
+Homepage: https://invent.kde.org/plasma/powerdevil
+Vcs-Browser: https://code.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/powerdevil
+Vcs-Git: https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/powerdevil
+Rules-Requires-Root: no
+
+Package: libpowerdevilcore2
+Section: libs
+Architecture: any
+Depends: ${misc:Depends}, ${shlibs:Depends},
+Multi-Arch: same
+Description: shared library for the KDE power management features in Plasma
+ PowerDevil is the internal name of the KDE power management service
+ for Plasma. It is responsible for some (but not all) interactions
+ with hardware functionality.
+ .
+ This package contains the shared library providing the core features
+ of PowerDevil.
+
+Package: powerdevil
+Architecture: any
+Depends: libcap2-bin [linux-any],
+         powerdevil-data (= ${source:Version}),
+         ${misc:Depends},
+         ${shlibs:Depends},
+Recommends: power-profiles-daemon, systemsettings,
+Breaks: plasma-workspace (<< 4:6.2.0~),
+Replaces: plasma-workspace (<< 4:6.2.0~),
+Description: KDE power management service for Plasma
+ PowerDevil is the internal name of the KDE power management service
+ for Plasma. It is responsible for some (but not all) interactions
+ with hardware functionality.
+ .
+ The service will:
+ .
+ - Suspend or shut down sessions under certain conditions such as
+ user inactivity, closing the laptop lid or pressing the power button.
+ .
+ - Adjust the brightness level of displays and keyboards, or turn
+ display backlights off/on altogether.
+ .
+ - Change settings according to the current power state (plugged in,
+ battery, low battery), which can be customized in System Settings.
+ .
+ - Monitor the current battery charge, and set charge thresholds for
+ battery-powered devices that support it.
+ .
+ - Keep track of system state - e.g. suspend/idle/etc. inhibitors,
+ activities, screen locking - to adjust power management behaviors
+ accordingly.
+ .
+ - Communicate with underlying services such as UPower,
+ power-profiles-daemon, ddcutil, and/or systemd to implement some of
+ the above.
+ .
+ - Provide a D-Bus interface for other Plasma components such as the
+ Power Management applet or the Brightness and Color applet.
+ .
+ This package contains the daemon started alongside the Plasma
+ session.
+
+Package: powerdevil-data
+Architecture: all
+Depends: ${misc:Depends},
+Breaks: plasma-workspace-data (<< 4:6.2.0~),
+Replaces: plasma-workspace-data (<< 4:6.2.0~),
+Multi-Arch: foreign
+Description: data files for the KDE power management service for Plasma
+ PowerDevil is the internal name of the KDE power management service
+ for Plasma. It is responsible for some (but not all) interactions
+ with hardware functionality.
+ .
+ This package contains the data files for PowerDevil.
+
+Package: powerdevil-dev
+Section: devel
+Architecture: any
+Depends: libpowerdevilcore2 (= ${binary:Version}),
+         powerdevil (= ${binary:Version}),
+         ${misc:Depends},
+Multi-Arch: no
+Description: development files for the KDE power management service for Plasma
+ PowerDevil is the internal name of the KDE power management service
+ for Plasma. It is responsible for some (but not all) interactions
+ with hardware functionality.
+ .
+ This package contains the development files for PowerDevil.
