@@ -71,6 +71,7 @@ Vendor适配应放在哪一层、哪些可以抽离到共享后端，见[54篇�
 | [33-capture-integration.md](docs/research/33-capture-integration.md) | 麦克风、相机、拍照和录像接入 |
 | [34-hardware-codec-audit.md](docs/research/34-hardware-codec-audit.md) | 硬件视频编码、解码：实机核验与接入候选 |
 | [35-hardware-codec-integration.md](docs/research/35-hardware-codec-integration.md) | Linux 应用和 Firefox 接入 Android 硬件编解码 |
+| [74-vaapi-feasibility.md](docs/research/74-vaapi-feasibility.md) | 编解码桥做成 VA-API 驱动的可行性（结论：不能替换现有补丁） |
 | [36-firefox-input-fix.md](docs/36-firefox-input-fix.md) | Firefox 地址栏输入崩溃修复 |
 | [37-linux-distribution-evaluation.md](docs/37-linux-distribution-evaluation.md) | Alpine、Debian、Ubuntu 的取舍与迁移边界 |
 | [38-plasma-mobile.md](docs/38-plasma-mobile.md) | 独立 Plasma Mobile 环境：版本目标、发行版选择与部署状态 |
