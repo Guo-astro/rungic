@@ -237,6 +237,7 @@ btrfs的收益是多快照、廉价克隆的测试容器、send/receive增量备
 - 每条报告同时以systemd-coredump格式写入journal：`coredumpctl list/info/debug`直接读取`/var/lib/moto-cores/*/core.zst`（kalk与sleep的可控SIGSEGV实测）。
 - core每个签名最多保留2个：kaccess的abort循环（两天188次）曾挤掉其他崩溃的全部core。
 - `moto-crash-symbols`按精确版本安装报告需要的`-dbgsym`（ddebs经单独的源文件，日常`apt update`不取其索引；libc6回退到`-dbg`），重做回溯与签名。kaccess报告从`libc+0x8e0fc/libQt6Core+0xe3f5c`变为`init_platform < createPlatformIntegration`。
+- 2026-09-27修订：符号化移出手机。在容器里用gdb加载桌面程序的调试信息要数GB，而容器没有内存上限：两次手机上的符号化，以及之后崩溃时自动采集的gdb加载了这些装在手机上的1.7 GB调试包，都让Android的低内存查杀杀掉了VPN与Plasma APK。现在由`tools/rungic_crash_symbolize.py`只从手机取报告和崩溃时映射的那些文件（手机上只做`dpkg-query`与`tar`），在构建机（Mac mini，`build_on_device.py --host macmini`的容器）上组成sysroot，解开精确版本的`-dbgsym`（本项目的取发布仓库，Ubuntu的取ddebs并缓存在构建机的卷里），用手机自己的`rungic-coredump-collect`跑gdb，只把`backtrace.txt`与`info.json`写回手机。手机上的`rungic-crash-symbols`默认拒绝运行（`--on-phone`时限1 GiB），崩溃时的采集服务限768 MiB，手机上不再保留调试包。gdb改为每帧都打印地址（`set print frame-info location-and-address`），有符号时内联帧才能归到正确的模块。
 - 安装systemd-coredump时先屏蔽其`50-coredump.conf`；实测`core_pattern`未变。MCP：`crash_groups`（次数、首末时间、所属发布、`new_in_release`）、`crash_symbolize`。
 
 **发布、部署与回滚（已验证）**：`tools/rungic_release.py`（仓库、元包、`deploy`/`rollback`/`status`）与`tools/rungic_acceptance.py`。

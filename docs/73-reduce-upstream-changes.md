@@ -122,3 +122,13 @@ plasma-settings `+rungic3`删除`android-hardware-settings`补丁：蜂窝、蓝
 ### 第五阶段（2026-09-27）：不可行，维持现状
 
 详见[74篇](research/74-vaapi-feasibility.md)（只读源码调研）。VA-API驱动本身做得出来（同类设备已有先例），但替换不了目标中的三项：Firefox在glxtest能力探测处就因KGSL的软件EGL设备而强制关闭VA-API硬解，`force-enabled`盖不过；Firefox 156在Linux上没有VA-API编码路径，WebCodecs/WebRTC硬编仍依赖私有FFmpeg；RDD沙箱不放行`codec.sock`与`/dev/dma_heap`，预连仍然需要。唯一可替换的Snapshot补丁（17行）需要上千行驱动并把msm_drm显示节点映射进容器，不划算。FFmpeg的2条补丁、Snapshot补丁与Firefox的`LD_PRELOAD`保留。VA-API驱动若要做，应作为给mpv、FFmpeg命令行、GStreamer va、Chromium的新增能力单独立项，并与驱动直接调用原厂V4L2的做法比较。
+
+### 发布20260927.9的部署验收（2026-09-27）
+
+发布含KWin `+rungic3`、Mesa补丁队列构建、kscreen回到Ubuntu原包、plasma-settings `+rungic3`与第四阶段的服务。部署本身成功，全量验收发现以下问题，均已找到原因：
+
+- **系统服务未启动**：维护脚本只启用单元（容器的policy-rc.d不让启动），新蓝牙、调制解调器服务要等下次容器启动，网络服务仍跑旧代码。部署增加`service_restart`：包变化后重启其声明的已启用服务。
+- **应用抽屉空白**：与本发布无关。APK 2.3更新时Android显示宿主重启，客户端EGL短暂不可用，plasmashell因此在`kdeglobals`写入`SceneGraphBackend=software`（plasma-workspace `shell/main.cpp`），此后所有Qt Quick程序软件渲染，抽屉网格依赖的OpacityMask着色器不绘制。会话启动时若KGSL GPU存在则清除这一残留。
+- **plasmashell在显示模式或刷新率变化时崩溃**：KWayland客户端`Output::addMode`在Qt 6下使用失效的迭代器（上游未修复），新增`packages/kwayland`补丁。
+- **手机失联（VPN与Plasma APK被杀）**：崩溃采集与符号化在手机上用gdb加载大量调试信息，内存耗尽。符号化移到构建机，采集限内存，手机上的调试包已卸载（docs/61）。
+- 蓝牙服务每次轮询都启动一个root `app_process`：APK 2.4改为进程内读取，root只做特权操作与定期校准。
