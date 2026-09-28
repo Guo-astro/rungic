@@ -518,3 +518,6 @@ Agent可直接调用的设备诊断、崩溃现场、统一追踪（perfetto + K
 
 
 2026-09-28 显示大小公共接口：`KScreen → libkscreen → Wayland 输出管理 → KWin AndroidOutput → Android 宿主`。共享策略在 `shared/display-policy/`，Android 内屏以标准 manufacturer/model=Rungic/Handset 识别，KWin 保存可选 logicalDpi 并补偿 mode/scale；外屏独立。状态栏也以 Qt 同一身份匹配内屏，不使用输出顺序。默认/用户配置/宿主实际模式与刷新策略的职责、失败补偿及验收边界见 [85 篇](../85-phone-display-size-policy.md)。
+
+
+2026-09-28 显示策略第二轮：APK 2.10 在原子 android-display.json 中新增成对 densityDpi/densityWidthPixels/densityHeightPixels；Android 14+ 来自同一最大窗口指标快照。共享策略只读这些字段，KWin 与 KScreen 用同一算法，保存的用户偏好不随 Android density 改变。 具体接口、回退、测试及边界见 [85 篇](../85-phone-display-size-policy.md)。

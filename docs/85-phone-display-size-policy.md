@@ -1,6 +1,6 @@
 # 手机显示大小策略与实现
 
-2026-09-28。用户在分析后授权重构。下文保留实施前核查与设计依据；末节记录最终代码、包版本和实机验收。源码研究、当前账户升级、无显示配置测试和整包清数据首装分别记录。
+2026-09-28。用户在分析后授权重构。当前最新策略是末节的 Android density 优先方案；下文保留前一版物理密度策略的研究和验收记录。源码研究、当前账户升级、无显示配置测试和整包清数据首装分别记录。
 
 ## 实施前核实的现状
 
@@ -122,3 +122,44 @@ Android Surface 尺寸改变与 Linux 配置提交跨进程，不能仅因两项
 - 助理输出 CAST-1 1920×1080、scale=1 在线时调整手机 300↔350%，外屏 scale 保持 1；将 CAST-1 临时设为主屏，手机 panel 高度配置保持不变，Qt 正确标识手机内屏。最后关闭本轮临时输出。见 `display-external-test.json`。这是宿主第二输出验收，不是物理电视连接验收。
 - 独立 GTK4 探针与 Qt 均报告手机逻辑 361×794；GTK 的整数缓冲 scale_factor=4 不等同于输出的 3.5 倍，逻辑坐标一致。通过真实 Android 触摸注入点击 GTK 按钮，再触摸输入框并输入 `display-test`，Gtk.Entry 实际内容回读正确；见 `display-gtk-result.json`、`display-gtk-touch-keyboard-350.png`。Qt 则通过实际 KScreen 设置应用和 GUI 点击交叉覆盖。没有把测试探针称为所有 GTK 应用或键盘完整布局验收。
 - 最后恢复用户原来的 300% 和 automatic，重开会话再次读回 scale=3、policy=2，dpkg audit 为空；辅助无障碍恢复关闭。见 `display-final-state.json`、`display-final-restored-300.png`。
+
+
+## 第二轮：Android density 优先的首次默认值（2026-09-28）
+
+用户认可方案比较后授权实施。APK 2.10 / versionCode 58 在既有 `android-display.json` version 1 中添加 `densityDpi`、`densityWidthPixels`、`densityHeightPixels`。Android 14+ 从同一个 `WindowManager.getMaximumWindowMetrics()` 快照取 density 和参考像素范围；API 30–33 回退既有 `Display.getRealMetrics()`。参考值描述显示区域，不取 720 Surface 的缓冲宽度，不乘 fontScale；`physicalWidth/Height` 和毫米字段保留兼容。
+
+共享 `AndroidReference` 校验有限、合理范围；缺字段、旧 APK 或异常值回退前一版物理尺寸计算。KWin 和 KScreen 都通过共享 Qt helper 只读同一原子元数据文件，设置请求仍走 libkscreen/Wayland 输出管理，没有新增 Android 私有控制器。
+
+计算先落到原生渲染模式，再映射到当前渲染分辨率：
+
+```
+候选倍率 = densityDpi / 160 × 原生渲染短边 / density参考短边 × AndroidSizeMultiplier
+默认上限 = 原生渲染短边 / MinimumDefaultLogicalEdge
+```
+
+默认 `AndroidSizeMultiplier=1.25`、`MinimumDefaultLogicalEdge=360`。原生推荐按 5% 步进选择，上限向下取整；映射当前模式后按 1/120 量化，并重新核对推荐值不能跨过 360 的约束。1.25 是待跨设备校准的产品参数；1080@390 的 300% 已触及布局上限，不能据此独立拟合 k。原 `MinimumLogicalEdge=320` 只用于用户主动选择的较大档位，不代表默认布局保证或所有应用已经验收。
+
+这是**首次默认值及显式“标准”选择**的策略，不新增持续跟随 Android 的自动模式。已有输出配置及未取整 logicalDpi 保持，Android density 改变不会重算用户选择。Android 有效元数据下，紧凑档以未乘 k 的 Android 倍率为参考；外屏仍按独立输出处理。
+
+来源与选择：
+
+- Android 官方 [Display.getRealMetrics](https://developer.android.com/reference/android/view/Display#getRealMetrics(android.util.DisplayMetrics)) 明确说明 API 31 已废弃，也明确区分真实显示区域、窗口区域、折叠屏分区和 `wm size` 模拟尺寸；因此新 Android 采用 WindowMetrics 快照，并保留旧 API 兼容路径。
+- Android [WindowMetrics](https://developer.android.com/reference/android/view/WindowMetrics)、[DisplayMetrics.density](https://developer.android.com/reference/android/util/DisplayMetrics#density)、[Configuration.densityDpi](https://developer.android.com/reference/android/content/res/Configuration#densityDpi) 核对逻辑密度与字体缩放的区别。沿用公开框架接口；未引入第三方实现或许可证依赖。
+- KWin 6.6.6 上游 `chooseScale()` 的手机自动配置使用 minSize=360。这是默认选值依据，不推断为所有 Plasma Mobile 应用的硬性最低宽度。现有补丁队列和标准输出管理链继续复用；无需重写显示 KCM。
+
+离线测试在生产 C++ 头文件上覆盖 1080@390、1264@480、1440@560、1440@480、720@320、1600@320 的计算，另测不一致的面板 PPI、Android 系统分辨率参考、无效元数据、1281 种宽度的取整约束及原有 48,100 次偏好往返。样例结果不能写成对应实机验收。
+
+实机固定 ADB 5038 / ZY22MHZKFT：
+
+- 更新 APK 和 Linux 包后，已有 scale=3、automatic 保留；APK 实际发布 density=480、参考 1264×2780。
+- 先等待旧 KWin 真正退出，再临时移开输出配置：480 密度首次推荐 3.5；改变 Android density 为 320 后已有 3.5 保留；再移开配置得到 2.5，KScreen 的“标准”档也匹配 2.5。
+- 在 Android density=320、720 渲染下，倍率为 1.425；再次移开显示配置仍生成 1.425，证明不会把 Surface 短边重复当作 density 参考。最后恢复 Android density（无 override）、原生渲染和原显示配置（3 倍、automatic）。
+- 首次测试只等待外层 session service 停止，旧 KWin 的 logind scope 尚未结束便移除了配置，得到旧值；短时间多次重启另触发 StartLimit。恢复桌面后修订**测试脚本**，等待 KWin 进程完全退出并清理测试触发的 start-limit 后重测；未用固定延时改产品默认算法。
+
+版本：KWin rungic8、KScreen rungic5、配置 0.319、会话保持 0.314，APT release `20260928.7`。APK native 源码未变，三份 ARM64 库从已验证 2.9 APK 复用并逐一 SHA-256 核对；2.10 APK SHA-256 `e30f3e802b5047ab77c54c072f56cd9cf4d10ab357c5982641be255e6b749fc5`。二进制构建通过；与此前相同的缺少源包 `.dsc` 打包 lintian 钩子仍未验收。
+
+本轮证据目录 `.work/ci/runs/vantage-20260928-density/`，核心为 `device/after-install.json`、`device/density-default-test.json`、`device/density320-standard250.png`，原始失败日志单独保留。新账号/整包清数据首装、第二台真实设备以及 API 30–33 回退路径仍需独立实机验收。
+
+补充回归：新版本设置页的超时撤回和 Keep 保存通过；原生↔720 三轮保持 3.5↔1.9916666667，未取整 logicalDpi 不变，6 倍请求被拒绝。测试最初缓存了自动刷新率变化前的 mode ID；按实时分辨率和刷新率重新解析后通过，保留首轮失败日志。KScreen 的 VRR 枚举检查不能代替宿主策略检查：测试结束时枚举为 automatic，但宿主曾保留 90；显式切换 Never→Automatic 后回读宿主 refreshPolicy=0。未将此项称为所有刷新策略同步路径均通过，后续需单独定位客户端重复提交相同策略的边界。
+
+最终 `device/final-state.json` 同时核对 Android density=480（无 override）、1264×2780、scale=3、KScreen vrrPolicy=2、宿主 refreshPolicy=0、无障碍关闭和 dpkg audit 为空。GUI 与往返日志分别为 `device/display-gui-test.log`、`device/display-roundtrip.log`；未清数据。
