@@ -16,7 +16,7 @@
 | ARM64 rootfs 安装环境 | `tools/ci/arm64_chroot.py`、`tools/ci/rootfs.Dockerfile` | QEMU/真 chroot，检查所在 runner 的 namespaces、binfmt 和容量 |
 | rootfs 镜像 | `tools/ci/build_rootfs_image.py` | 接收已准备的 root 树和 release，生成 ext4/压缩种子、包锁及报告；自身不是完整包下载器 |
 | APK | `plasma/build-apk.sh`、`tools/ci/apk-builder.Dockerfile` | Android 入口构建；保持指定开发签名身份，不混入其他凭据 |
-| 宿主种子 | `tools/ci/build_host_seed.py` | 输入 runtime、rootfs-tree、repo 与 lxc/plasma enter 二进制 |
+| 宿主种子 | `tools/ci/build_host_seed.py` | 输入 runtime、rootfs-tree、repo、lxc/plasma enter 二进制与 `--cast-jar`（`shared/android/rungic-cast/build.sh` 产物）；投屏组件为可选能力，首启安装失败只记日志 |
 | 纯净 product | `tools/ci/clean_product.py` | EROFS + product/preinstall 的命名、xattr 和 SKU 策略假设 |
 | 完整 product | `tools/ci/assemble_product.py` | 加入 APK/JNI、种子、首启及权限；输入必须与 spec/容量匹配 |
 | Magisk 引导 | `tools/ci/inject_magisk_seed.py` | 在已正确修补的 init_boot 中注入 bootstrap，不负责通用 root 修补 |
@@ -76,6 +76,7 @@ python3 tools/ci/accept_release.py "$release_dir" \
 ## 按修改范围选择检查
 
 - 引导变更：`tools/ci/test_magisk_bootstrap.py`，加对应 shell 语法检查。
+- 宿主种子/首启投屏安装变更：`tools/ci/test_firstboot_cast.py`。
 - 刷写器变更：`tools/ci/test_flash_progress.py` 的隔离假设备检查；新布局还需自己的计划与失败场景验证。
 - APK/首启状态变更：检查 `FirstBootState.java` 与实际共享控制入口，验证缺失/旧 release/失败不放行、ready 后准备账户。
 - 镜像产物：对应文件系统校验、包检查、manifest 回读和用户范围内的清数据实机流程。

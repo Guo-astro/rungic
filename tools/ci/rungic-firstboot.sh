@@ -117,6 +117,37 @@ if [ ! -x /data/adb/rungic-lxc/rungic-lxc-enter ] ||
     restorecon -RF /data/adb/rungic-lxc /data/adb/rungic-plasma >/dev/null 2>&1 || true
 fi
 
+# Casting (docs/58) is optional (docs/75): a failure is logged and does not stop
+# the desktop install. Its boot scripts also start now, for this boot.
+install_cast() {
+    stage=/data/adb/.rungic-wfd-stage
+    [ ! -e "$stage" ] || rm -rf "$stage"
+    mkdir "$stage"
+    tar -xzf "$seed/host-seed.tar.gz" -C "$stage" rungic-wfd || return 1
+    [ -x "$stage/rungic-wfd/rungic-cast" ] && [ -f "$stage/rungic-wfd/rungic-cast.jar" ] || return 1
+    mkdir -p /data/adb/service.d
+    for script in rungic-wfd-sepolicy.sh rungic-cast-watch.sh; do
+        mv "$stage/rungic-wfd/service.d/$script" "/data/adb/service.d/$script" || return 1
+        chcon u:object_r:adb_data_file:s0 "/data/adb/service.d/$script" || return 1
+    done
+    rmdir "$stage/rungic-wfd/service.d"
+    # Keep state a partial earlier install left (last-sink, run/).
+    mkdir -p /data/adb/rungic-wfd
+    cp -a "$stage/rungic-wfd/." /data/adb/rungic-wfd/ || return 1
+    rm -rf "$stage"
+    restorecon -RF /data/adb/rungic-wfd >/dev/null 2>&1 || true
+    # The rule names Qualcomm WFD domains (verified on SM6435); another vendor
+    # policy may lack them, which leaves the rest of casting in place.
+    /system/bin/sh /data/adb/service.d/rungic-wfd-sepolicy.sh || echo 'WFD policy not applied'
+    # Close the install lock (BusyBox flock's descriptor) in the long-lived watcher.
+    /data/adb/magisk/busybox setsid /system/bin/sh -c \
+        'exec 3>&- 4>&- 5>&- 6>&- 7>&- 8>&- 9>&-; exec /system/bin/sh /data/adb/service.d/rungic-cast-watch.sh' \
+        </dev/null >/dev/null 2>&1 &
+}
+if [ ! -x /data/adb/rungic-wfd/rungic-cast ]; then
+    if install_cast; then echo 'casting installed'; else echo 'casting install failed (optional)'; fi
+fi
+
 images=/data/adb/rungic-lxc/images
 phase=rootfs; publish installing "$phase"
 mkdir -p "$images"

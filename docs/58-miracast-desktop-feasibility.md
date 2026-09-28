@@ -468,7 +468,7 @@ G100 S（XT2537-4，SM6435 `_parrot_v3`），接收端TCL 85Q6H。电视这次�
 
 - 已验证：手动运行开机脚本（含已有挂载时先卸载再生成）；自动生成配置下连接电视进入PLAYING。
 - 未验证：真实重启后的开机时序（ADB经无线调试，本轮未重启）。
-- 整包首启种子（`tools/ci/build_host_seed.py`）不含`rungic-cast`、WFD SELinux规则与本脚本，只有`tools/rungic_cutover.py`安装它们；清数据刷入的机器投屏会失败，需补入。
+- 整包：原先首启种子只含`rungic-lxc`、`rungic-plasma`，投屏组件只由`tools/rungic_cutover.py`安装，清数据刷入的机器投屏会失败。现`build_host_seed.py`（新参数`--cast-jar`）把`rungic-cast`、jar、watch、SELinux规则和两个service.d脚本放入种子的`rungic-wfd/`；`rungic-firstboot.sh`在`/data/adb/rungic-wfd/rungic-cast`不存在时安装（保留已有`last-sink`等状态），把脚本放入`/data/adb/service.d`并在本次开机启动（`setsid`并关闭安装锁描述符）。投屏按75篇属可选能力：安装失败只记日志，不阻止桌面安装；SELinux规则加载失败（其他厂商策略可能没有这些Qualcomm域）不影响其余组件。已通过`tools/ci/test_firstboot_cast.py`沙箱测试（清数据、半安装保留状态、种子不完整、已安装不覆盖）及手机mksh语法检查；尚未构建新整包，也未做清数据刷入验收。G100（SM7435，同为parrot平台）的WFD组件、SELinux域与编码器能力未实机核对。
 - 约45秒断开：两次会话在PLAYING约45秒后因P2P链路丢失结束（电视为组主，5240MHz，手机侧`disconnect rssi=-87`，`locally_generated=1`）；用户调整手机位置后会话稳定。18:30的会话在PLAYING后约48秒同样出现`disconnect rssi=-87`，但约3秒后重新关联，会话未中断。断开反复出现在约45–48秒，不像单纯的信号偶然波动；当时家庭Wi-Fi在5GHz另一信道，多信道并发、电视侧节能等原因均未排除。
 - 编码器失败后`rungic-cast-watch`按“电视端断开”反复重连且错误为空；快捷开关只显示“没有连上电视”，真实原因只在`console.warn`。两者待改。
 
