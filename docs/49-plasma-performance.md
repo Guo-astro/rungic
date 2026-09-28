@@ -115,3 +115,58 @@ APK1.7/versionCode8新增菜单“显示流畅度”：默认流畅优先，在�
 - **宿主暂停渲染时的触摸取消**：暂停时 `clear_input_state()` 只清空了宿主自己记录的触摸点，没有给客户端发 `wl_touch.cancel`，之后到达的抬起事件又因为渲染已暂停被丢弃。于是按着的触摸点在 KWin 里一直处于按下状态。现在暂停前，先给还未抬起的触摸点发取消。
 - **语音助手按住 Home 的上限**：测量开始时，语音助手收到“按住 Home”（05:00:49）后再也没收到松开，于是持续录音、覆盖层持续动画；那段时间 KWin 占 50%、SurfaceFlinger 占 44%，语音相关进程约 48%。当时的宿主日志级别不够，无法确认具体丢在哪一步。现在按住超过 60 秒就当作松开事件丢失，关闭覆盖层并取消录音。
 - **系统设置最小化后空转**：一度每秒被唤醒约 112 次，全是定时器唤醒（多半是最小化时没停的动画）；把它切到前台再最小化后消失，无法复现，没有针对它修改代码。
+
+## Flatpak 应用的 GPU（2026-09-28，rungic-flatpak-gl）
+
+用户反馈 Telegram（Flatpak `org.telegram.desktop`，Qt 6，GNOME 50 运行时，即 Freedesktop 25.08）滑动时掉帧明显。
+
+### 原因：Flatpak 里没有 KGSL 驱动，应用在 CPU 上渲染
+
+- Flatpak 应用不使用系统的 Mesa，而是使用运行时的 GL 扩展 `org.freedesktop.Platform.GL.default`。那份 Mesa 没有 KGSL 后端，于是退回 llvmpipe，用 CPU 渲染。Telegram 日志里的 RHI 探测结果就是 llvmpipe。
+- 滑动时 Telegram 占约 196% 的 CPU（两个大核），超过 12 ms 的帧间隔约 42%，10 秒只出 377 帧。
+- 不能直接把系统 Mesa 挂进沙箱：系统 Mesa 链接 Ubuntu 26.04 的 glibc 2.43，而运行时只有 glibc 2.42。
+
+### 做法：本项目的 Mesa 作为运行时的 GL 扩展
+
+[Flatpak 的 GL 扩展机制](https://docs.flatpak.org/en/latest/extension.html)规定：运行时的 `[Extension org.freedesktop.Platform.GL]` 声明了 `directory=lib/aarch64-linux-gnu/GL`、`subdirectories=true` 和 `enable-if=active-gl-driver`。`FLATPAK_GL_DRIVERS` 里列出的名字就是启用的子目录。扩展可以不经 OSTree，直接放在 `/var/lib/flatpak/extension/<id>/<arch>/<branch>/`（即 unmaintained 扩展，已在 flatpak 1.16.6 上核对）。
+
+同一做法的先例：
+- [mponcet/org.freedesktop.Platform.GL](https://github.com/mponcet/org.freedesktop.Platform.GL) 用于其他 GPU 的自建扩展；
+- 本项目 Mesa 的上游 [lfdevs/mesa-for-android-container](https://github.com/lfdevs/mesa-for-android-container) 提供 KGSL 后端。
+
+实现：
+- 包 `rungic-flatpak-gl`（`plasma/packaging/rungic-flatpak-gl/`）：
+  - 用系统 Mesa 的同一份补丁源码（`packages/mesa`）和同一组 meson 选项（`plasma/mesa-meson-options`），另外加上 softpipe。
+  - 在 Freedesktop SDK 的容器镜像 [`freedesktopsdk/sdk:25.08-aarch64`](https://hub.docker.com/r/freedesktopsdk/sdk) 里构建，因为扩展必须链接运行时的库。这个镜像由 Mac mini 上的 Docker 运行：`rungic_package.py` 的 `image` 字段让 `build.sh` 在构建容器旁边的另一个镜像里运行，两者共用构建卷。
+  - 安装到 `/var/lib/flatpak/extension/org.freedesktop.Platform.GL.rungic/aarch64/25.08/`：
+    - EGL 供应商文件 `glvnd/egl_vendor.d/10_rungic.json` 和 Vulkan ICD 都写成扩展内的绝对路径；
+    - 运行时的 `merge-dirs` 会把它们合并进 glvnd 和 Vulkan loader 的搜索目录。
+- `/etc/plasma/gpu-env`：只有这个扩展存在时才设置 `FLATPAK_GL_DRIVERS=rungic`。会话把它导入用户 systemd 管理器，并写进 `rungic-session.env`，所以从 Plasma 启动的 Flatpak 应用都会用上它。
+- 软件兜底：设置 `FLATPAK_GL_DRIVERS=rungic` 后只挂载这一个 GL 扩展。拿不到 `/dev/kgsl-3d0` 的应用会退到扩展里的 softpipe，不至于没有 GL。
+  - 只有带 `--device=all` 权限的应用能拿到 KGSL。flatpak 1.16.6 的 `--device=dri` 设备列表（`common/flatpak-run.c` 的 `dri_devices`）里没有 `/dev/kgsl-3d0`。
+  - 这类应用原来用 GL.default 的 llvmpipe，现在只有更慢的 softpipe。目前装的 Telegram 和 VS Code 都是 `devices=all`。
+  - 若以后出现只有 `--device=dri` 的应用，应当在 flatpak 的设备列表里加入 KGSL，而不是逐个应用放宽权限。
+
+### 验收
+
+用试构建包 `rungic-flatpak-gl` 0.302 的文件验证（尚未进入发布）：
+- Telegram（GNOME 50 运行时）日志：`RHI: Probe backend=OpenGL device=freedreno FD710 4.6 (Core Profile) Mesa 26.3.0-devel`。
+- 以 `--nodevice=all --device=dri` 启动，也就是拿不到 KGSL 时：`device=Mesa softpipe 3.3`。兜底有效。
+- VS Code（`org.freedesktop.Sdk` 25.08 运行时，Electron）：GPU 进程映射了扩展中的 `libEGL_mesa`、`libgallium`、`libgbm`，并持有 3 个 `/dev/kgsl-3d0` 描述符，窗口正常绘制。
+
+同一聊天列表滑动 8 次、采样 10 秒，Telegram 在前台：
+
+| | Telegram CPU | 超过 12 ms 的帧间隔 | 帧数 |
+|---|---|---|---|
+| GL.default（llvmpipe） | 约 196% | 42% | 377 |
+| rungic（FD710） | 34–59% | 26–39%（多轮） | 约 300–550 |
+
+剩余的开销主要在 Telegram 主线程，占大核 24–42%。Telegram 的界面用 Qt Widgets 在 CPU 上光栅化，再交给 GL 合成。它的动画节拍是 8 ms（lib_ui `universalDuration: 120`），并不限制在 60 Hz。这部分属于应用自身，没有再改。
+
+### Qt Flatpak 应用始终开着无障碍（未修改）
+
+- Telegram 顶部一直显示 “Telegram is working in Screen Reader”。
+- 原因：flatpak 给沙箱设置 `AT_SPI_BUS_ADDRESS=unix:path=/run/flatpak/at-spi-bus`。Qt 只要看到这个变量，就无条件开启 AT-SPI 桥（qtbase `QAtSpiDBusConnection` 构造函数），不看 `org.a11y.Status IsEnabled` 的值（本机为 false）。Telegram 用 `QAccessible::isActive()` 判断读屏器，所以一直提示。上游认为这是预期行为：[tdesktop#30511](https://github.com/telegramdesktop/tdesktop/issues/30511)。
+- 用 `flatpak run --no-a11y-bus` 启动 Telegram 后提示消失。滑动测量中 CPU 为 48% 和 34%，开着无障碍时为 48%，帧间隔没有明显差别。它不是掉帧的主因。
+- 若要在共享层去掉，可以让 flatpak 在 `IsEnabled` 和 `ScreenReaderEnabled` 都为 false 时不接无障碍总线。代价是：这些应用在无障碍关闭时启动，之后 rungic-cua 打开无障碍也无法自动化它们。尚未决定。
+- 单个应用可在 Telegram 设置 → 高级里关闭读屏模式。

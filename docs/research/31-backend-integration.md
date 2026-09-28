@@ -449,6 +449,7 @@ python3 tools/moto_phosh.py user-exec gdbus call --session \
 | 视频硬解/硬编码 | GPU绘制与软件编解码已验收；第34篇验证Android高通AVC/HEVC硬编→硬解，原厂V4L2节点可枚举 | Linux后端未接通；先验证现成V4L2帧流兼容性，再比较MediaCodec桥与gst-droid/droidmedia维护成本，Firefox需独立适配，见[34篇](34-hardware-codec-audit.md) |
 | 内容索引 | LocalSearch应用存在 | 核对并补Landlock内核能力、ABI和原厂模块兼容；保留提取器隔离 |
 | 图形应用更新 | Alpine包管理与固定Mesa清单 | 更新事务、版本约束、失败恢复与KGSL运行时一致性；不是直接套用未验证的Flatpak图形栈 |
+| Flatpak 应用 GPU | 运行时 GL 扩展 `org.freedesktop.Platform.GL.rungic`（rungic-flatpak-gl，本项目 Mesa 按 Freedesktop 25.08 构建），`FLATPAK_GL_DRIVERS=rungic`；Telegram 为 FD710（2026-09-28） | 其他运行时分支（24.08 等）尚无扩展；`--device=dri` 应用拿不到 `/dev/kgsl-3d0`，只能用 softpipe，见 49 篇 |
 
 新功能的本地记录至少应包含：用户动作/验收目标、当前缺失层、候选与固定源码、许可证、本机差异、选用与放弃原因、两端接口契约、权限和数据所有权、启动/停止/重连、补丁/构建/部署位置、真实应用证据、回退方法与未验收边界。实现前继续广泛核对，而不是把29篇的一次检索当成所有后续功能已经完成研究。
 

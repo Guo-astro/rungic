@@ -6,7 +6,7 @@
 
 使用现成[Discover](https://apps.kde.org/discover/)6.6.6 + PackageKit1.3.4的APT后端，与系统Qt/KDE、Mesa KGSL及媒体桥共享依赖。已安装`plasma-discover`、`apt-config-icons-hidpi`，APT下载完整AppStream/DEP11与图标元数据，实际Discover能显示应用介绍、版本及安装按钮。
 
-比较[Plasma Mobile官方推荐应用](https://plasma-mobile.org/apps/)和本机ARM64仓库：所列应用去重后12个均有包。Flatpak不是本轮默认来源，因为其独立图形运行时还需按[GL扩展机制](https://docs.flatpak.org/en/latest/extension.html)接入本机KGSL驱动，不能假定现有系统Mesa桥自动适用于所有沙箱运行时。没有因此断言Flatpak无法支持。
+比较[Plasma Mobile官方推荐应用](https://plasma-mobile.org/apps/)和本机ARM64仓库：所列应用去重后12个均有包。Flatpak不是本轮默认来源，因为其独立图形运行时还需按[GL扩展机制](https://docs.flatpak.org/en/latest/extension.html)接入本机KGSL驱动，不能假定现有系统Mesa桥自动适用于所有沙箱运行时。没有因此断言Flatpak无法支持。（2026-09-28起，Freedesktop 25.08运行时的应用经GL扩展`org.freedesktop.Platform.GL.rungic`使用KGSL，见49篇。）
 
 ## 应用清单
 

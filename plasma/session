@@ -47,7 +47,7 @@ fi
 # Android owns device locking: /etc/xdg/kscreenlockerrc (rungic-plasma-config) fixes
 # Autolock and LockOnResume off for every user (docs/61).
 umask 077
-env | python3 -c 'import sys,shlex; print("".join("export "+k+"="+shlex.quote(v)+"\n" for k,v in (line.rstrip("\n").split("=",1) for line in sys.stdin) if k in ("HOME","XDG_RUNTIME_DIR","DBUS_SESSION_BUS_ADDRESS","XDG_SESSION_TYPE","XDG_CURRENT_DESKTOP","XDG_SESSION_DESKTOP","XDG_MENU_PREFIX","LANG","QT_QPA_PLATFORM","QT_QUICK_BACKEND","GDK_BACKEND","MOZ_ENABLE_WAYLAND","MESA_LOADER_DRIVER_OVERRIDE","FD_KGSL_ENABLE_DMABUF","VK_DRIVER_FILES","QSG_RHI_BACKEND","GSK_RENDERER","PULSE_SERVER","PULSE_COOKIE","http_proxy","https_proxy","HTTP_PROXY","HTTPS_PROXY","no_proxy")))' > "$XDG_RUNTIME_DIR/rungic-session.env"
+env | python3 -c 'import sys,shlex; print("".join("export "+k+"="+shlex.quote(v)+"\n" for k,v in (line.rstrip("\n").split("=",1) for line in sys.stdin) if k in ("HOME","XDG_RUNTIME_DIR","DBUS_SESSION_BUS_ADDRESS","XDG_SESSION_TYPE","XDG_CURRENT_DESKTOP","XDG_SESSION_DESKTOP","XDG_MENU_PREFIX","LANG","QT_QPA_PLATFORM","QT_QUICK_BACKEND","GDK_BACKEND","MOZ_ENABLE_WAYLAND","MESA_LOADER_DRIVER_OVERRIDE","FD_KGSL_ENABLE_DMABUF","VK_DRIVER_FILES","FLATPAK_GL_DRIVERS","QSG_RHI_BACKEND","GSK_RENDERER","PULSE_SERVER","PULSE_COOKIE","http_proxy","https_proxy","HTTP_PROXY","HTTPS_PROXY","no_proxy")))' > "$XDG_RUNTIME_DIR/rungic-session.env"
 printf '%s\n' 'export WAYLAND_DISPLAY=wayland-0' >> "$XDG_RUNTIME_DIR/rungic-session.env"
 # The user's settings across the Rungic rename (docs/70), then the project's one-time user
 # migrations (rungic-plasma-config, rungic.upd) before KWin reads its configuration; kded
@@ -59,7 +59,7 @@ kbuildsycoca6 --noincremental
 # The GPU settings into the user manager before any unit of the session starts: startplasma
 # imports its environment too, but a unit (re)started earlier would run without them.
 systemctl --user import-environment MESA_LOADER_DRIVER_OVERRIDE FD_KGSL_ENABLE_DMABUF VK_DRIVER_FILES \
-    QSG_RHI_BACKEND GSK_RENDERER QT_QUICK_BACKEND KWIN_COMPOSE 2>/dev/null || true
+    QSG_RHI_BACKEND GSK_RENDERER QT_QUICK_BACKEND KWIN_COMPOSE FLATPAK_GL_DRIVERS 2>/dev/null || true
 # A restart of this unit stops its main process, but the previous session's startplasma-wayland
 # lives on in its logind scope for a moment. When it quits it puts the user manager's environment
 # back as it was before that session (plasma-workspace cleanupPlasmaEnvironment); quitting after
