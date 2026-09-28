@@ -9,119 +9,17 @@ X-Rungic-Status: Inappropriate [Rungic handset policy and Android rendering mode
 X-Rungic-Tests: tools/test_display_policy.py; manual deployment checks in docs/85
 X-Rungic-Docs: docs/85-phone-display-size-policy.md
 ---
- .../fix-drm-open-fallback-to-logind-fd.patch       | 38 +++++++++-------
- .../patches/relax-plasma-internal-build-deps.patch | 18 ++++++--
- debian/patches/series                              |  1 +
- src/backends/android/android_backend.cpp           | 25 ++++++++--
- src/backends/android/android_output.cpp            | 53 ++++++++++++++++++++++
- src/backends/android/android_output.h              |  4 ++
- src/core/backendoutput.cpp                         |  4 ++
- src/core/backendoutput.h                           |  3 ++
- src/core/outputconfiguration.h                     |  1 +
- src/outputconfigurationstore.cpp                   | 15 ++++++
- src/outputconfigurationstore.h                     |  1 +
- src/workspace.cpp                                  |  3 ++
- 12 files changed, 139 insertions(+), 27 deletions(-)
+ src/backends/android/android_backend.cpp | 25 ++++++++++++---
+ src/backends/android/android_output.cpp  | 53 ++++++++++++++++++++++++++++++++
+ src/backends/android/android_output.h    |  4 +++
+ src/core/backendoutput.cpp               |  4 +++
+ src/core/backendoutput.h                 |  3 ++
+ src/core/outputconfiguration.h           |  1 +
+ src/outputconfigurationstore.cpp         | 15 +++++++++
+ src/outputconfigurationstore.h           |  1 +
+ src/workspace.cpp                        |  3 ++
+ 9 files changed, 104 insertions(+), 5 deletions(-)
 
-diff --git a/debian/patches/fix-drm-open-fallback-to-logind-fd.patch b/debian/patches/fix-drm-open-fallback-to-logind-fd.patch
-index f78147e..2073341 100644
---- a/debian/patches/fix-drm-open-fallback-to-logind-fd.patch
-+++ b/debian/patches/fix-drm-open-fallback-to-logind-fd.patch
-@@ -1,26 +1,30 @@
--Description: Fall back to logind file descriptor when direct DRM node open fails
-- When running as the SDDM greeter compositor, kwin_wayland opens DRM
-- devices via logind TakeDevice (which succeeds), then tries to open the
-- same device directly with ::open(). After a session switch, the greeter
-- user (sddm) may lack filesystem-level permissions on /dev/dri/card*
-- because logind ACLs have not yet been updated, causing the direct open
-- to fail and the greeter compositor to abort.
-- .
-- This patch makes openWithAuthentication() fall back to duplicating the
-- already-valid logind file descriptor when the direct open fails,
-- allowing the greeter compositor to start reliably after logout.
--Author: Erich Eickmeyer <eeickmeyer@kfocus.org>
-+From: Erich Eickmeyer <eeickmeyer@kfocus.org>
-+Date: Mon, 28 Sep 2026 07:54:13 +0000
-+Subject: Fall back to logind file descriptor when direct DRM node open fails
-+
- Forwarded: not-yet
- Last-Update: 2026-04-03
-+
-+When running as the SDDM greeter compositor, kwin_wayland opens DRM
-+devices via logind TakeDevice (which succeeds), then tries to open the
-+same device directly with ::open(). After a session switch, the greeter
-+user (sddm) may lack filesystem-level permissions on /dev/dri/card*
-+because logind ACLs have not yet been updated, causing the direct open
-+to fail and the greeter compositor to abort.
-+
-+This patch makes openWithAuthentication() fall back to duplicating the
-+already-valid logind file descriptor when the direct open fails,
-+allowing the greeter compositor to start reliably after logout.
-+Last-Update: 2026-04-03
- ---
-- src/core/drmdevice.cpp |   27 ++++++++++++++++++---------
-+ src/core/drmdevice.cpp | 27 ++++++++++++++++++---------
-  1 file changed, 18 insertions(+), 9 deletions(-)
- 
--Index: b/src/core/drmdevice.cpp
--===================================================================
-+diff --git a/src/core/drmdevice.cpp b/src/core/drmdevice.cpp
-+index 236d9c3..d4b3849 100644
- --- a/src/core/drmdevice.cpp
- +++ b/src/core/drmdevice.cpp
--@@ -92,15 +92,19 @@ std::unique_ptr<DrmDevice> DrmDevice::op
-+@@ -92,15 +92,19 @@ std::unique_ptr<DrmDevice> DrmDevice::openWithAuthentication(const QString &path
-  {
-      FileDescriptor fd(::open(path.toLocal8Bit(), O_RDWR | O_CLOEXEC));
-      if (!fd.isValid()) {
-@@ -49,7 +53,7 @@ Index: b/src/core/drmdevice.cpp
-          drm_magic_t magic;
-          if (drmGetMagic(fd.get(), &magic) < 0) {
-              qCDebug(KWIN_CORE) << "Failed to get the drm magic token for" << path;
--@@ -109,6 +113,11 @@ std::unique_ptr<DrmDevice> DrmDevice::op
-+@@ -109,6 +113,11 @@ std::unique_ptr<DrmDevice> DrmDevice::openWithAuthentication(const QString &path
-              qCWarning(KWIN_CORE) << "Failed to authenticate the drm magic token. path:" << path << "error:" << strerror(errno);
-          }
-      }
-diff --git a/debian/patches/relax-plasma-internal-build-deps.patch b/debian/patches/relax-plasma-internal-build-deps.patch
-index a1326a6..7774895 100644
---- a/debian/patches/relax-plasma-internal-build-deps.patch
-+++ b/debian/patches/relax-plasma-internal-build-deps.patch
-@@ -1,12 +1,20 @@
--Description: Relax required internal build depends  for Plasma
-- This avoids needing to build all Plasma sources at the new version
-- where many do not have any code changes apart from a version bump.
-+From: Rik Mills <rikmills@kde.org>
-+Date: Mon, 28 Sep 2026 07:54:13 +0000
-+Subject: Relax required internal build depends  for Plasma
-+
- Forwarded: not-needed
--Author: Rik Mills <rikmills@kde.org>
- 
-+This avoids needing to build all Plasma sources at the new version
-+where many do not have any code changes apart from a version bump.
-+---
-+ CMakeLists.txt | 2 +-
-+ 1 file changed, 1 insertion(+), 1 deletion(-)
-+
-+diff --git a/CMakeLists.txt b/CMakeLists.txt
-+index 1f322a3..99d992b 100644
- --- a/CMakeLists.txt
- +++ b/CMakeLists.txt
--@@ -7,7 +7,7 @@
-+@@ -7,7 +7,7 @@ set(CMAKE_C_STANDARD 99)
-  set(CMAKE_CXX_STANDARD 23)
-  set(CMAKE_CXX_STANDARD_REQUIRED ON)
-  
-diff --git a/debian/patches/series b/debian/patches/series
-index 50d82ab..77ab451 100644
---- a/debian/patches/series
-+++ b/debian/patches/series
-@@ -14,3 +14,4 @@ rungic/host-scroll-source-stop-scale.patch
- rungic/skip-unchanged-configure.patch
- rungic/android-backend.patch
- rungic/clip-scaled-damage-to-surface.patch
-+rungic/handset-display-size.patch
 diff --git a/src/backends/android/android_backend.cpp b/src/backends/android/android_backend.cpp
 index a167b15..afcb7fe 100644
 --- a/src/backends/android/android_backend.cpp

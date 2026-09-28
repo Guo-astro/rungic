@@ -1,6 +1,8 @@
 # rungic-plasma-config: files under plasma/config mirror the target paths.
 cp -a "$SRC/plasma/config/etc" "$SRC/plasma/config/usr" "$DESTDIR/"
-chmod 755 "$DESTDIR"/usr/share/kconf_update/*.py "$DESTDIR"/usr/share/kconf_update/*.sh
+for script in "$DESTDIR"/usr/share/kconf_update/*.py "$DESTDIR"/usr/share/kconf_update/*.sh; do
+    [ ! -f "$script" ] || chmod 755 "$script"
+done
 install -Dm644 "$SRC/plasma/dpkg-locales.conf" "$DESTDIR/etc/dpkg/dpkg.cfg.d/zz-rungic-locales"
 install -Dm644 "$SRC/plasma/mozilla.sources" "$DESTDIR/etc/apt/sources.list.d/mozilla.sources"
 install -Dm644 "$SRC/plasma/mozilla.pref" "$DESTDIR/etc/apt/preferences.d/mozilla"
