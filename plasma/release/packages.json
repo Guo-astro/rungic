@@ -163,6 +163,9 @@
     "rungic-codec": {
       "source": "plasma/packaging/rungic-codec"
     },
+    "rungic-docker": {
+      "source": "plasma/packaging/rungic-docker"
+    },
     "rungic-firefox": {
       "source": "plasma/packaging/rungic-firefox"
     },

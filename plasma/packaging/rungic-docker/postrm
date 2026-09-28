@@ -1,0 +1,4 @@
+#!/bin/sh
+if [ "$1" = remove ]; then
+    for tool in iptables ip6tables; do update-alternatives --auto "$tool" >/dev/null 2>&1 || true; done
+fi

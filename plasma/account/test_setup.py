@@ -14,7 +14,9 @@ class Tests(unittest.TestCase):
  def setUp(self):
   self.tmp=tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup)
   self.state=Path(self.tmp.name)/'account.json'
-  for p in [patch.object(m,'STATE',self.state),patch.object(m.pwd,'getpwuid',return_value=current),
+  self.sub=(Path(self.tmp.name)/'subuid',Path(self.tmp.name)/'subgid')
+  for f in self.sub:f.write_text('rungic:100000:65536\nother:165536:65536\n')
+  for p in [patch.object(m,'STATE',self.state),patch.object(m,'SUBORDINATE',self.sub),patch.object(m.pwd,'getpwuid',return_value=current),
             patch.object(m.pwd,'getpwnam',side_effect=KeyError),patch.object(m,'shadow_entry',return_value='!'),
             patch.object(m.os,'getgrouplist',return_value=[1000,29]),
             patch.object(m.grp,'getgrgid',return_value=SimpleNamespace(gr_name='audio'))]:
@@ -40,6 +42,14 @@ class Tests(unittest.TestCase):
    self.assertTrue(any(a==['chpasswd'] and b==b'alice:test-only-pass\n' for a,b in calls))
    self.assertFalse(any('test-only-pass' in ' '.join(a) for a,_ in calls))
    with self.assertRaises(m.SetupError):m.configure({'username':'alice','password':'another-test-pass'})
+ def test_rename_moves_subordinate_ids(self):
+  def call(argv,payload=None,check=True):return 1 if argv[0]=='pgrep' else 0
+  with patch.object(m,'call',side_effect=call):m.configure({'username':'alice','password':'test-only-pass'})
+  for f in self.sub:self.assertEqual(f.read_text(),'alice:100000:65536\nother:165536:65536\n')
+ def test_subordinate_ids_kept_when_new_name_has_them(self):
+  for f in self.sub:f.write_text('rungic:100000:65536\nalice:231072:65536\n')
+  m.rename_subordinate('rungic','alice')
+  for f in self.sub:self.assertEqual(f.read_text(),'rungic:100000:65536\nalice:231072:65536\n')
  def test_failure_rolls_back(self):
   calls=[]
   def call(argv,payload=None,check=True):

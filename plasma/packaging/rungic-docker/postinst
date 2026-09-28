@@ -1,0 +1,8 @@
+#!/bin/sh
+# The kernel has no nftables; Ubuntu's iptables defaults to its nft backend (docs/85).
+if [ "$1" = configure ]; then
+    for tool in iptables ip6tables; do
+        if [ -x "/usr/sbin/$tool-legacy" ]; then update-alternatives --set "$tool" "/usr/sbin/$tool-legacy" >/dev/null || true; fi
+    done
+    if [ -d /run/systemd/system ]; then systemctl restart rungic-docker-prepare.service || true; fi
+fi

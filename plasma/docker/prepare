@@ -1,0 +1,28 @@
+#!/bin/sh
+# Rootless Docker's system side (docs/85), at boot and when the package is installed.
+set -u
+# RootlessKit's user-mode network (slirp4netns) needs TUN; the container config allows c 10:200.
+# A TUN interface in Android's network would still need net_admin, which the container lacks.
+if [ ! -c /dev/net/tun ]; then
+    mkdir -p /dev/net
+    mknod -m 0666 /dev/net/tun c 10 200 2>/dev/null ||
+        echo "rungic-docker: no /dev/net/tun (the container config does not allow c 10:200)" >&2
+fi
+if [ -c /dev/net/tun ]; then chmod 0666 /dev/net/tun; fi
+install -d -m 0755 /var/lib/rungic-docker
+# Each login account (UID 1000-59999): subordinate ID ranges (useradd adds them for new accounts;
+# older ones may lack them) and a data directory on the root filesystem, named by UID.
+getent passwd | while IFS=: read -r name _ uid gid _ _ shell; do
+    [ "$uid" -ge 1000 ] && [ "$uid" -lt 60000 ] || continue
+    case $shell in */nologin|*/false) continue ;; esac
+    for kind in uid gid; do
+        file=/etc/sub$kind
+        if grep -q "^$name:" "$file" 2>/dev/null; then continue; fi
+        start=$(awk -F: 'BEGIN { end = 165536 } { if ($2 + $3 > end) end = $2 + $3 } END { print end }' "$file" 2>/dev/null)
+        usermod "--add-sub${kind}s" "$start-$((start + 65535))" "$name" ||
+            echo "rungic-docker: no subordinate ${kind}s for $name" >&2
+    done
+    dir=/var/lib/rungic-docker/$uid
+    if [ ! -d "$dir" ]; then install -d -m 0700 -o "$uid" -g "$gid" "$dir"; fi
+done
+exit 0

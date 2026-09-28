@@ -20,6 +20,8 @@ import time
 STATE = Path('/var/lib/rungic-host/account.json')
 LEGACY_STATE = Path('/etc/moto-plasma/account.json')
 OWNER_UID = 1000
+# Subordinate ID ranges (user namespaces: rootless Docker, docs/85) are listed by login name.
+SUBORDINATE = (Path('/etc/subuid'), Path('/etc/subgid'))
 
 class SetupError(Exception):
     pass
@@ -53,6 +55,22 @@ def call(argv, payload=None, check=True):
     if check and result.returncode:
         raise SetupError('账户配置失败，请重试；现有文件不会被删除')
     return result.returncode
+
+def rename_subordinate(old, new):
+    """Move the subordinate ID ranges of a renamed login, which usermod --login leaves behind."""
+    for path in SUBORDINATE:
+        if not path.exists():
+            continue
+        lines = path.read_text().splitlines(keepends=True)
+        if any(line.split(':', 1)[0] == new for line in lines):
+            continue
+        moved = [new + line[len(old):] if line.split(':', 1)[0] == old else line for line in lines]
+        if moved == lines:
+            continue
+        temporary = path.with_name(path.name + '.rungic-tmp')
+        temporary.write_text(''.join(moved))
+        os.chmod(temporary, path.stat().st_mode & 0o7777)
+        os.replace(temporary, path)
 
 def shadow_entry(name):
     for line in Path('/etc/shadow').read_text().splitlines():
@@ -114,6 +132,8 @@ def configure(data):
     old_linger = Path('/var/lib/systemd/linger') / current.pw_name
     if renamed and old_linger.exists():
         old_linger.rename(old_linger.with_name(name))
+    if renamed:
+        rename_subordinate(current.pw_name, name)
     if renamed and home_of(name) != current.pw_dir:
         # Paths into the old home in the user's settings; /home/linux, the link kept since the
         # Rungic rename (rungic-rebrand-system), follows the home.

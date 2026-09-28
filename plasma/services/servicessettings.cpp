@@ -138,7 +138,12 @@ public:
             const bool disabledKind = group.value(u"default"_s).toString() == u"disabled";
             const auto start = strings(group.value(u"start"_s));
             int masked = 0, total = 0, active = 0, enabled = 0, missing = 0;
-            QStringList units;
+            QStringList units, userRun;
+            for (const auto &unit : strings(group.value(u"user"_s))) {
+                if (start.isEmpty() || start.contains(unit)) {
+                    userRun << unit;
+                }
+            }
             for (const auto &scope : {u"system"_s, u"user"_s}) {
                 for (const auto &unit : strings(group.value(scope))) {
                     const auto state = scope == u"system" ? systemState.value(unit) : userState.value(unit);
@@ -180,6 +185,8 @@ public:
                 {u"evidence"_s, group.value(u"evidence"_s).toString()},
                 {u"kind"_s, disabledKind ? u"optional"_s : u"masked"_s},
                 {u"units"_s, units},
+                // An optional group's user services start or stop with the switch, in this session too.
+                {u"userRun"_s, disabledKind ? userRun : QStringList()},
                 {u"on"_s, on},
                 {u"status"_s, status},
             };
@@ -222,6 +229,7 @@ public:
     Q_INVOKABLE void setEnabled(const QString &group, bool enabled)
     {
         bool user = false;
+        QStringList userRun;
         for (const auto &value : std::as_const(m_groups)) {
             const auto map = value.toMap();
             if (map.value(u"id"_s) == group) {
@@ -229,9 +237,14 @@ public:
                 user = std::any_of(units.cbegin(), units.cend(), [](const QString &unit) {
                     return unit.endsWith(u"（用户）"_s);
                 });
+                userRun = map.value(u"userRun"_s).toStringList();
             }
         }
-        execute(u"com.rungic.services.set"_s, {{u"group"_s, group}, {u"enabled"_s, enabled}}, user);
+        QStringList after;
+        if (!userRun.isEmpty()) {
+            after = QStringList{u"--user"_s, u"--no-block"_s, enabled ? u"start"_s : u"stop"_s, u"--"_s} + userRun;
+        }
+        execute(u"com.rungic.services.set"_s, {{u"group"_s, group}, {u"enabled"_s, enabled}}, user, after);
     }
 
     Q_INVOKABLE void unmask(const QString &unit, const QString &scope)
@@ -251,7 +264,7 @@ private:
         Q_EMIT errorChanged();
     }
 
-    void execute(const QString &name, const QVariantMap &args, bool userUnits)
+    void execute(const QString &name, const QVariantMap &args, bool userUnits, const QStringList &after = {})
     {
         KAuth::Action action(name);
         action.setHelperId(u"com.rungic.services"_s);
@@ -260,13 +273,18 @@ private:
         m_busy = true;
         Q_EMIT busyChanged();
         setError({});
-        connect(job, &KJob::result, this, [this, job, userUnits] {
-            if (job->error() && job->error() != KAuth::ActionReply::UserCancelledError) {
+        connect(job, &KJob::result, this, [this, job, userUnits, after] {
+            const bool failed = job->error() && job->error() != KAuth::ActionReply::UserCancelledError;
+            if (failed) {
                 setError(job->errorText().isEmpty() ? job->errorString() : job->errorText());
             }
             if (userUnits) {
                 // The helper changed /etc/systemd/user; this user's manager loads it again.
                 run(u"systemctl"_s, {u"--user"_s, u"daemon-reload"_s});
+            }
+            if (!job->error() && !after.isEmpty()) {
+                // Enabling a user service globally only takes effect at the next login.
+                run(u"systemctl"_s, after);
             }
             m_busy = false;
             Q_EMIT busyChanged();

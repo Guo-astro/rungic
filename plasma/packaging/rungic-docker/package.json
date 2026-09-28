@@ -1,0 +1,9 @@
+{
+  "name": "rungic-docker",
+  "architecture": "all",
+  "build": "host",
+  "paths": ["plasma/docker"],
+  "depends": "docker.io, docker-compose-v2, rootlesskit, slirp4netns, uidmap, iptables, util-linux, procps, rungic-plasma-config",
+  "units": {"system": ["rungic-docker-prepare.service"]},
+  "description": "Plasma Mobile on Android: rootless Docker\nDocker runs per user in rootless mode inside the container, which shares Android's network\nwithout net_admin; Settings -> Services turns it on. Needs the container config's TUN device\nand nesting mounts (plasma.config). See docs/85-lxc-rootless-docker.md."
+}
