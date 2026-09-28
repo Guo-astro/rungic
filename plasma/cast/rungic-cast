@@ -5,7 +5,7 @@ host app's root tool rungic-cast through the platform bridge.
   rungic-cast status              connected TV, known TVs, automatic reconnect
   rungic-cast capabilities        backend support and selected firmware adapter
   rungic-cast settings            Android's receiver selection page
-  rungic-cast scan                look for TVs (about 8 s)
+  rungic-cast scan [seconds]      look for TVs (default 8 s); lists them as "receivers"
   rungic-cast connect [TV]        the TV used last, or one by name/address
   rungic-cast disconnect          stop casting (no automatic reconnect follows)
 
@@ -30,7 +30,7 @@ def request(args: list[str]) -> dict:
 
 def main() -> int:
     args = sys.argv[1:] or ['status']
-    if args[0] not in COMMANDS or len(args) > (2 if args[0] == 'connect' else 1):
+    if args[0] not in COMMANDS or len(args) > (2 if args[0] in ('connect', 'scan') else 1):
         print(__doc__.strip(), file=sys.stderr)
         return 2
     try:

@@ -150,7 +150,7 @@ final class PlatformBridge implements Closeable {
         },"rungic-platform");thread.setDaemon(true);thread.start();
     }
     /**
-     * TV casting through the root tool rungic-cast (docs/58): {"op":"cast","args":["status"|"scan"|
+     * TV casting through the root tool rungic-cast (docs/58): {"op":"cast","args":["status"|"scan"[,"<seconds>"]|
      * "connect"[,"<name|address>"]|"disconnect"]}. The tool prints one JSON object.
      */
     private static void answerCast(LocalSocket client,JSONObject request) {
@@ -162,7 +162,8 @@ final class PlatformBridge implements Closeable {
                 if(!command.matches("status|capabilities|settings|scan|connect|disconnect"))throw new IllegalArgumentException("Unsupported cast command");
                 StringBuilder line=new StringBuilder("if [ ! -x /data/adb/rungic-wfd/rungic-cast ] || [ ! -s /data/adb/rungic-wfd/rungic-cast.jar ]; then echo '{\"error\":\"Casting component is not installed\",\"code\":\"component-missing\"}'; exit 2; fi; /data/adb/rungic-wfd/rungic-cast ").append(command);
                 if(args!=null && args.length()>1) {
-                    if(!command.equals("connect"))throw new IllegalArgumentException("Only connect takes a TV");
+                    if(command.equals("scan")) { if(!args.getString(1).matches("[0-9]{1,2}"))throw new IllegalArgumentException("scan takes seconds"); }
+                    else if(!command.equals("connect"))throw new IllegalArgumentException("Only connect takes a TV");
                     line.append(" '").append(args.getString(1).replace("'","'\\''")).append("'");
                 }
                 java.lang.Process process=new ProcessBuilder("su","-c",line.toString()).redirectErrorStream(true).start();

@@ -22,8 +22,13 @@ import java.util.concurrent.Executor;
  *
  *   rungic-cast status
  *   rungic-cast scan [seconds]
- *   rungic-cast connect [address|name|last] [seconds]   default: the TV used last
+ *   rungic-cast connect [address|name|last] [seconds]   default: the TV used last; another
+ *                                            TV while casting switches to it
  *   rungic-cast disconnect [seconds]
+ *
+ * status (and scan) list "receivers": one entry per TV, however many Wi-Fi Display
+ * entries it offers (a TCL TV advertises "NAME[R1]" and "NAME[R2]"), with the TVs a
+ * scan saw in the last ten minutes, since Android cannot scan while it casts.
  *   rungic-cast decor <display-id> [on|off]   system decorations (vendor taskbar,
  *                                            secondary launcher) on a display
  *   rungic-cast wfd-config <vendor.xml> <out.xml>   the vendor WFD video offer, limited
@@ -38,6 +43,9 @@ public final class Main {
     private static final File LAST_SINK = new File(DIR, "last-sink");
     /** PID of rungic-cast-watch while it reconnects after the TV dropped the session. */
     private static final File RECONNECTING = new File(DIR, "run/reconnecting");
+    /** Sinks the last scans saw: address, name, epoch milliseconds per line. */
+    private static final File SEEN = new File(DIR, "run/seen");
+    private static final long SEEN_FOR = 10 * 60 * 1000L;
     private static final boolean DEBUG = System.getenv("RUNGIC_CAST_DEBUG") != null;
 
     private static void debug(String message) {
@@ -215,6 +223,7 @@ public final class Main {
         call(dmg, "startWifiDisplayScan");
         try {
             Thread.sleep(secs * 1000L);
+            remember();
             return status();
         } finally {
             call(dmg, "stopWifiDisplayScan");
@@ -229,9 +238,20 @@ public final class Main {
      */
     private static String connect(String target, int secs) throws Exception {
         ensureEnabled();
+        String address = target.contains(":") && target.length() == 17 ? target : null;
+        // Casting to another TV: Android neither scans nor connects elsewhere while a
+        // sink is connected, so end that session first (the TV goes blank for a while).
+        Object current = call(wfdStatus(), "getActiveDisplay");
+        if (current != null && !matches(current, target)) {
+            debug("switching from " + call(current, "getDeviceName"));
+            call(dmg, "disconnectWifiDisplay");
+            long until = SystemClock.elapsedRealtime() + 10000;
+            while (SystemClock.elapsedRealtime() < until && (int) call(wfdStatus(), "getActiveDisplayState") != 0) {
+                Thread.sleep(250);
+            }
+        }
         connecting = true;
         CastAdapter.claim();
-        String address = target.contains(":") && target.length() == 17 ? target : null;
         long deadline = SystemClock.elapsedRealtime() + secs * 1000L;
         registerListener();
         call(dmg, "startWifiDisplayScan");
@@ -241,14 +261,14 @@ public final class Main {
                 Object s = wfdStatus();
                 Object active = call(s, "getActiveDisplay");
                 if ((int) call(s, "getActiveDisplayState") == CONNECTED && active != null
-                        && (target.equalsIgnoreCase((String) call(active, "getDeviceAddress"))
-                            || target.equals(call(active, "getDeviceName"))
+                        && (matches(active, target)
                             || (address != null && address.equalsIgnoreCase((String) call(active, "getDeviceAddress"))))) {
                     Files.write(LAST_SINK.toPath(), (call(active, "getDeviceAddress") + "\n"
                             + call(active, "getDeviceName") + "\n").getBytes(StandardCharsets.UTF_8));
                     return status();
                 }
                 String found = findAvailable(address != null ? address : target);
+                if (found == null && address != null) found = findAvailable(sibling(address));
                 debug("state=" + call(s, "getActiveDisplayState") + " scan=" + call(s, "getScanState") + " found=" + found);
                 long now = SystemClock.elapsedRealtime();
                 if ((int) call(s, "getActiveDisplayState") == 0 && found != null && now - lastRequest > 3000) {
@@ -338,19 +358,44 @@ public final class Main {
         return "{\"display\":" + displayId + ",\"system_decors\":" + call(wm, "shouldShowSystemDecors", displayId) + "}";
     }
 
-    /** Address of an available sink matching an address or a (prefix of a) name. */
+    /**
+     * Address of an available sink matching an address, a name, a receiver (the name
+     * without its "[R1]" suffix) or a name prefix; a sink with a free session first.
+     */
     private static String findAvailable(String key) throws Exception {
+        if (key == null) return null;
         Object displays = call(wfdStatus(), "getDisplays");
+        String busy = null;
         for (int i = 0; i < Array.getLength(displays); i++) {
             Object d = Array.get(displays, i);
             if (!(boolean) call(d, "isAvailable")) continue;
             String address = (String) call(d, "getDeviceAddress");
             String device = (String) call(d, "getDeviceName");
             String alias = (String) call(d, "getDeviceAlias");
-            if (key.equalsIgnoreCase(address) || key.equals(device) || key.equals(alias)
-                    || (device != null && device.startsWith(key))) {
-                return address;
+            if (matches(d, key) || key.equals(alias) || (device != null && device.startsWith(key))) {
+                if ((boolean) call(d, "canConnect")) return address;
+                if (busy == null) busy = address;
             }
+        }
+        return busy;
+    }
+
+    /** A sink is named by its address, its name or its receiver name. */
+    private static boolean matches(Object d, String key) throws Exception {
+        String device = (String) call(d, "getDeviceName");
+        return key.equalsIgnoreCase((String) call(d, "getDeviceAddress")) || key.equals(device)
+                || key.equals(receiverName(device));
+    }
+
+    /** "TCL 85Q6H-9E92[R2]" -> "TCL 85Q6H-9E92": the entries one TV offers share it. */
+    static String receiverName(String device) {
+        return device == null ? "" : device.replaceFirst("\\s*\\[[^\\]]*\\]$", "");
+    }
+
+    /** The receiver name of a known sink address, for another entry of the same TV. */
+    private static String sibling(String address) throws Exception {
+        for (String[] sink : knownSinks()) {
+            if (sink[0].equalsIgnoreCase(address)) return receiverName(sink[1]);
         }
         return null;
     }
@@ -368,6 +413,7 @@ public final class Main {
         out.append(",\"active\":").append(active == null ? "null" : display(active));
         out.append(",\"android_display_id\":").append(activeDisplayId(active));
         out.append(",\"reconnecting\":").append(reconnecting());
+        out.append(",\"receivers\":").append(receivers(s, active));
         out.append(",\"displays\":[");
         Object displays = call(s, "getDisplays");
         for (int i = 0; i < Array.getLength(displays); i++) {
@@ -392,7 +438,121 @@ public final class Main {
         return "{\"name\":" + quote((String) call(d, "getDeviceName"))
                 + ",\"address\":" + quote((String) call(d, "getDeviceAddress"))
                 + ",\"available\":" + call(d, "isAvailable")
+                + ",\"can_connect\":" + call(d, "canConnect")
                 + ",\"remembered\":" + call(d, "isRemembered") + "}";
+    }
+
+    /** One TV: its Wi-Fi Display entries merged under the receiver name. */
+    private static final class Receiver {
+        final String name;
+        String address;
+        boolean active, available, free, remembered, last, addressFree;
+        long seen;
+        Receiver(String name) { this.name = name; }
+
+        /** The entry to connect to: the one used last, else one with a free session. */
+        void offer(String candidate, boolean isFree, boolean isLast) {
+            if (address == null || isLast || (isFree && !addressFree)) {
+                address = candidate;
+                addressFree = isFree;
+            }
+        }
+
+        int rank() { return active ? 0 : last ? 1 : available && free ? 2 : available ? 3 : 4; }
+
+        String json() {
+            return "{\"name\":" + quote(name) + ",\"address\":" + quote(address)
+                    + ",\"active\":" + active + ",\"available\":" + available
+                    + ",\"can_connect\":" + free + ",\"remembered\":" + remembered
+                    + ",\"last\":" + last + ",\"seen_ms_ago\":"
+                    + (seen > 0 ? Long.toString(Math.max(0, System.currentTimeMillis() - seen)) : "null") + "}";
+        }
+    }
+
+    /**
+     * The TVs to offer: the connected one, those available now, those a scan saw in
+     * the last ten minutes, those Android remembers and the one connected last.
+     */
+    private static String receivers(Object s, Object active) throws Exception {
+        java.util.Map<String, Receiver> byName = new java.util.LinkedHashMap<>();
+        String[] lastSink = lastSinkEntry();
+        String lastAddress = lastSink == null ? null : lastSink[0];
+        String lastName = lastSink == null ? null : receiverName(lastSink[1]);
+        Object displays = call(s, "getDisplays");
+        for (int i = 0; i < Array.getLength(displays); i++) {
+            Object d = Array.get(displays, i);
+            String address = (String) call(d, "getDeviceAddress");
+            Receiver r = byName.computeIfAbsent(receiverName((String) call(d, "getDeviceName")), Receiver::new);
+            boolean available = (boolean) call(d, "isAvailable");
+            boolean free = available && (boolean) call(d, "canConnect");
+            r.available |= available;
+            r.free |= free;
+            r.remembered |= (boolean) call(d, "isRemembered");
+            r.offer(address, free, address.equalsIgnoreCase(lastAddress));
+        }
+        for (String[] sink : knownSinks()) {
+            long at = Long.parseLong(sink[2]);
+            Receiver r = byName.computeIfAbsent(receiverName(sink[1]), Receiver::new);
+            r.seen = Math.max(r.seen, at);
+            r.offer(sink[0], false, sink[0].equalsIgnoreCase(lastAddress));
+        }
+        if (lastSink != null) byName.computeIfAbsent(lastName, Receiver::new).offer(lastAddress, false, true);
+        if (active != null) {
+            Receiver r = byName.computeIfAbsent(receiverName((String) call(active, "getDeviceName")), Receiver::new);
+            r.active = true;
+            r.address = (String) call(active, "getDeviceAddress");
+        }
+        java.util.List<Receiver> list = new java.util.ArrayList<>(byName.values());
+        for (Receiver r : list) r.last = r.name.equals(lastName);
+        list.sort((a, b) -> a.rank() != b.rank() ? a.rank() - b.rank() : a.name.compareToIgnoreCase(b.name));
+        StringBuilder out = new StringBuilder("[");
+        for (Receiver r : list) {
+            if (out.length() > 1) out.append(',');
+            out.append(r.json());
+        }
+        return out.append(']').toString();
+    }
+
+    /** Address and name of the sink connected last, or null. */
+    private static String[] lastSinkEntry() {
+        try {
+            String[] lines = new String(Files.readAllBytes(LAST_SINK.toPath()), StandardCharsets.UTF_8).split("\n");
+            return lines.length >= 2 && !lines[0].trim().isEmpty() ? new String[] {lines[0].trim(), lines[1].trim()} : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** Sinks seen by scans in the last ten minutes: address, name, epoch ms. */
+    private static java.util.List<String[]> knownSinks() {
+        java.util.List<String[]> out = new java.util.ArrayList<>();
+        try {
+            long now = System.currentTimeMillis();
+            for (String line : new String(Files.readAllBytes(SEEN.toPath()), StandardCharsets.UTF_8).split("\n")) {
+                String[] f = line.split("\t");
+                if (f.length == 3 && now - Long.parseLong(f[2]) < SEEN_FOR) out.add(f);
+            }
+        } catch (Exception e) {
+            // None seen yet.
+        }
+        return out;
+    }
+
+    /** Adds the sinks available now to the seen list. */
+    private static void remember() throws Exception {
+        java.util.Map<String, String> lines = new java.util.LinkedHashMap<>();
+        for (String[] sink : knownSinks()) lines.put(sink[0].toLowerCase(Locale.ROOT), String.join("\t", sink));
+        long now = System.currentTimeMillis();
+        Object displays = call(wfdStatus(), "getDisplays");
+        for (int i = 0; i < Array.getLength(displays); i++) {
+            Object d = Array.get(displays, i);
+            if (!(boolean) call(d, "isAvailable")) continue;
+            String address = (String) call(d, "getDeviceAddress");
+            String name = ((String) call(d, "getDeviceName")).replace('\t', ' ').replace('\n', ' ');
+            lines.put(address.toLowerCase(Locale.ROOT), address + "\t" + name + "\t" + now);
+        }
+        SEEN.getParentFile().mkdirs();
+        Files.write(SEEN.toPath(), (String.join("\n", lines.values()) + "\n").getBytes(StandardCharsets.UTF_8));
     }
 
     private static String quote(String s) {
