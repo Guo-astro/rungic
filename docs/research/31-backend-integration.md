@@ -521,3 +521,5 @@ Agent可直接调用的设备诊断、崩溃现场、统一追踪（perfetto + K
 
 
 2026-09-28 显示策略第二轮：APK 2.10 在原子 android-display.json 中新增成对 densityDpi/densityWidthPixels/densityHeightPixels；Android 14+ 来自同一最大窗口指标快照。共享策略只读这些字段，KWin 与 KScreen 用同一算法，保存的用户偏好不随 Android density 改变。 具体接口、回退、测试及边界见 [85 篇](../85-phone-display-size-policy.md)。
+
+2026-09-28 Miracast 通用化评估：Plasma UI → 平台桥/root 控制端 → Android WFD/P2P/厂商编码；KWin 外屏 → 宿主 CastDesktop Surface → 电视，音频继续共享 Android 后端。用户要求支持更多机型：公共层按能力探测并提供稳定状态/错误契约，Qualcomm XML、实际 codec 映射、SELinux 和具体副屏冲突放在 firmware/spec 适配器；无原生 WFD 时明确报告边界。这是后续设计，未宣称已实现；X70 只读证据、版本区分及验收见 [86 篇](../86-x70-miracast-assessment.md)。
