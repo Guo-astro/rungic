@@ -7,10 +7,6 @@
                                       /data/adb/rungic-* (the rootfs image to /data/adb/rungic-lxc/images),
                                       new launcher, enter programs, cast tool and boot scripts
   rungic_cutover.py down              back to the moto layout and APK (files kept by `up`)
-  rungic_cutover.py docker-up         /data/adb/moto-docker -> /data/adb/rungic-docker, SELinux types
-                                      moto_docker* -> rungic_docker* (runtime tree and data image
-                                      relabelled), the workloads' names (compose project, volume, tag)
-  rungic_cutover.py docker-down       the reverse
 
 The container release is not touched: the new launcher also mounts the state under the old names
 (/var/lib/moto-*) and the APK links moto-gpu-alloc to its socket, so releases from before the rename
@@ -267,153 +263,6 @@ def down():
     return ok
 
 
-# Docker (docs/19, docs/70): its own runtime, independent of the APK. Besides the directory, its
-# SELinux types change: the runtime tree on f2fs and every file inside the ext4 data image carry
-# moto_docker_file, the image itself moto_docker_image; the domain moto_docker is a process label.
-DOCKER_OLD, DOCKER_NEW = '/data/adb/moto-docker', '/data/adb/rungic-docker'
-DOCKER_TYPES = [('moto_docker_file', 'rungic_docker_file'), ('moto_docker_image', 'rungic_docker_image')]
-DOCKER_RETIRED = [f'{DOCKER_NEW}/moto-docker', f'{DOCKER_NEW}/moto-docker-enter', f'{DOCKER_NEW}/moto-docker-enter-test',
-                  '/data/adb/service.d/moto-docker.sh']
-TERMUX_DOCKER = ['/data/data/com.termux/files/usr/bin/docker', '/data/data/com.termux/files/usr/bin/docker-service']
-DOCKER_INSTALL = [
-    ('docker/rungic-docker', f'{DOCKER_NEW}/rungic-docker', '755'),
-    (BUILD / 'android/rungic-docker-enter', f'{DOCKER_NEW}/rungic-docker-enter', '755'),
-    ('docker/network.sh', f'{DOCKER_NEW}/network.sh', '755'),
-    ('docker/sepolicy.rule', f'{DOCKER_NEW}/sepolicy.rule', '644'),
-    ('docker/boot-service.sh', '/data/adb/service.d/rungic-docker.sh', '755'),
-    ('docker/compose.yaml', f'{DOCKER_NEW}/runtime/root/stacks/web/compose.yaml', '644'),
-]
-BUSYBOX = '/data/adb/magisk/busybox'
-# The workloads' names: the compose project of the web stack (its volume's data is copied), a
-# standalone bind volume, the example project on shared storage and an image tag. The old volumes
-# and tag stay until phase D (docker-down uses them).
-SHARED_DOCKER = '/sdcard/Docker'
-WEB_STACK = '/root/stacks/web/compose.yaml'
-
-
-def docker_stop(base, name, recorder):
-    result = root(f'[ ! -x {base}/{name} ] || {base}/{name} stop', timeout=240, check=False)
-    # The network watcher leaves within 15 s once `running` is gone; the data image's loop device goes too.
-    root(f'pkill -f "{name} watch-network"\n'
-         'for f in /sys/block/loop*/loop/backing_file; do\n'
-         '  case "$(cat $f 2>/dev/null)" in */docker-data.ext4) d=${f#/sys/block/}; losetup -d /dev/block/${d%%/*} ;; esac\n'
-         'done; true', check=False)
-    # (bindfs also serves the Plasma container's shared folder: Docker's own ends at /storage/emulated/0.)
-    left = root('pidof dockerd containerd; pgrep -f "bindfs .* /storage/emulated/0$"; '
-                'losetup -a | grep docker-data; true', check=False).stdout.strip()
-    recorder.step('docker-stopped', ok=result.returncode == 0, output=(result.stdout + result.stderr)[-300:])
-    if result.returncode or left:
-        raise SystemExit(f'Docker did not stop: {result.stdout}{result.stderr} {left}')
-
-
-def docker_relabel(base, pairs, recorder):
-    """Every file of the runtime tree and of the data image with an old type gets the new one."""
-    counts = {}
-    for old, new in pairs:
-        text = root(f'{BUSYBOX} find {base} -xdev -context u:object_r:{old}:s0 -exec chcon -h u:object_r:{new}:s0 {{}} + ; '
-                    f'{BUSYBOX} find {base} -xdev -context u:object_r:{new}:s0 | wc -l', timeout=600).stdout
-        counts[f'runtime:{new}'] = int(text.split()[-1])
-    old, new = pairs[0]
-    lib = f'{base}/runtime/var/lib/docker'
-    # The image is mounted in a private namespace at its usual place; its root is the image's own inode.
-    inner = (f'{BUSYBOX} mount --make-rprivate / && mount -t ext4 -o noatime $loop {lib} && '
-             f'{BUSYBOX} find {lib} -xdev -context u:object_r:{old}:s0 -exec chcon -h u:object_r:{new}:s0 {{}} + ; '
-             f'echo left \\$({BUSYBOX} find {lib} -xdev -context u:object_r:{old}:s0 | wc -l) '
-             f'new \\$({BUSYBOX} find {lib} -xdev -context u:object_r:{new}:s0 | wc -l); umount {lib}')
-    text = root(f'set -e\nloop=$(losetup -sf {base}/docker-data.ext4)\n'
-                f'unshare -m sh -c "{inner}"\n# toybox attaches with autoclear: the umount usually released it already.\nlosetup -d $loop 2>/dev/null || true', timeout=1800).stdout.split()
-    counts['image:left'], counts[f'image:{new}'] = int(text[1]), int(text[3])
-    recorder.step('docker-relabeled', **counts)
-    if counts['image:left']:
-        raise SystemExit(f'files in the data image still labelled {old}: {counts["image:left"]}')
-    return counts
-
-
-def docker_cli(base, name, args, timeout=300, check=True):
-    return root(f'{base}/{name} cli {args}', timeout=timeout, check=check)
-
-
-def docker_up():
-    if root(f'[ -d {DOCKER_OLD} ] && [ ! -e {DOCKER_NEW} ] && echo ok', check=False).stdout.strip() != 'ok':
-        raise SystemExit(f'expected {DOCKER_OLD} and no {DOCKER_NEW}')
-    missing = [str(src) for src, _, _ in DOCKER_INSTALL if not (WORKSPACE / src).exists()]
-    if missing:
-        raise SystemExit(f'build these first: {missing}')
-    recorder = Record('docker-up')
-    old = f'{DOCKER_OLD}/moto-docker'
-    recorder.save('before.txt', root(f'{old} status; {old} cli ps -a; {old} cli volume ls; {old} cli images',
-                                     check=False).stdout)
-    docker_stop(DOCKER_OLD, 'moto-docker', recorder)
-    root(f'mv {DOCKER_OLD} {DOCKER_NEW}')
-    recorder.step('moved', moves=[(DOCKER_OLD, DOCKER_NEW)])
-    keep(DOCKER_RETIRED + [path for _, path, _ in DOCKER_INSTALL] + TERMUX_DOCKER, recorder)
-    root('rm -f ' + ' '.join(DOCKER_RETIRED))
-    for src, path, mode in DOCKER_INSTALL:
-        remote = push(WORKSPACE / src, 'rungic-cutover-file')
-        root(f'install -m {mode} {remote} {path}.new && mv {path}.new {path} && rm -f {remote}')
-    remote = push(WORKSPACE / 'docker/termux-docker', 'rungic-cutover-file')
-    root(' ; '.join(f'[ ! -f {t} ] || cat {remote} > {t}' for t in TERMUX_DOCKER) + f'; rm -f {remote}')
-    recorder.step('installed', files=[path for _, path, _ in DOCKER_INSTALL] + TERMUX_DOCKER)
-    # The new types exist once the rule is loaded; the old ones stay in the live policy until a reboot.
-    root(f'magiskpolicy --live --apply {DOCKER_NEW}/sepolicy.rule')
-    docker_relabel(DOCKER_NEW, DOCKER_TYPES, recorder)
-    started = root(f'{DOCKER_NEW}/rungic-docker start', timeout=240, check=False)
-    recorder.step('docker-started', ok=started.returncode == 0, output=(started.stdout + started.stderr)[-400:])
-    if started.returncode:
-        raise SystemExit('Docker did not start: ' + started.stdout + started.stderr)
-    # The workloads under their new names.
-    cli = lambda args, **kw: docker_cli(DOCKER_NEW, 'rungic-docker', args, **kw)
-    cli('compose -p moto-server down')
-    cli(f'compose -f {WEB_STACK} create')
-    cli("run --rm -v moto-server_webdata:/from:ro -v rungic-server_webdata:/to alpine:3.22 sh -c 'cp -a /from/. /to/'")
-    cli(f'compose -f {WEB_STACK} up -d')
-    cli('volume create --driver local -o type=none -o o=bind -o device=/sdcard/Docker/shared/named-example '
-        'rungic-shared-example')
-    cli('tag moto-alpine:3.22.6 rungic-alpine:3.22.6')
-    remote = push(WORKSPACE / 'docker/shared-storage-readme.txt', 'rungic-cutover-file')
-    root(f'cp {SHARED_DOCKER}/compose-example.yaml {KEEP}/compose-example.yaml\n'
-         f"sed -i 's/^name: moto-storage-demo$/name: rungic-storage-demo/' {SHARED_DOCKER}/compose-example.yaml\n"
-         f'cp {SHARED_DOCKER}/README.txt {KEEP}/README.txt; cat {remote} > {SHARED_DOCKER}/README.txt; rm -f {remote}')
-    recorder.step('workloads', project='rungic-server', volume='rungic-shared-example', image='rungic-alpine:3.22.6')
-    health = ''
-    for _ in range(40):
-        health = cli("inspect -f '{{.State.Health.Status}}' rungic-nginx", check=False).stdout.strip()
-        if health == 'healthy':
-            break
-        time.sleep(3)
-    new = f'{DOCKER_NEW}/rungic-docker'
-    recorder.save('after.txt', root(f'{new} status; {new} cli volume ls; {new} cli images', check=False).stdout)
-    recorder.step('done', ok=health == 'healthy', health=health, record=str(recorder.dir))
-    return health == 'healthy'
-
-
-def docker_down():
-    if root(f'[ -d {DOCKER_NEW} ] && [ ! -e {DOCKER_OLD} ] && echo ok', check=False).stdout.strip() != 'ok':
-        raise SystemExit(f'expected {DOCKER_NEW} and no {DOCKER_OLD}')
-    recorder = Record('docker-down')
-    docker_cli(DOCKER_NEW, 'rungic-docker', 'compose -p rungic-server down', check=False)
-    docker_stop(DOCKER_NEW, 'rungic-docker', recorder)
-    for _, path, _ in DOCKER_INSTALL:
-        root(f'if [ -e {KEEP}{path} ]; then cp -a {KEEP}{path} {path}.old && mv {path}.old {path}; else rm -f {path}; fi')
-    for path in DOCKER_RETIRED:
-        root(f'[ ! -e {KEEP}{path} ] || cp -a {KEEP}{path} {path}')
-    for path in TERMUX_DOCKER:
-        root(f'[ ! -f {KEEP}{path} ] || cat {KEEP}{path} > {path}')
-    root(f'[ ! -f {KEEP}/compose-example.yaml ] || cp {KEEP}/compose-example.yaml {SHARED_DOCKER}/compose-example.yaml; '
-         f'[ ! -f {KEEP}/README.txt ] || cp {KEEP}/README.txt {SHARED_DOCKER}/README.txt')
-    recorder.step('restored')
-    # The old rule, restored above; its types are still in the live policy ("already exists").
-    root(f'magiskpolicy --live --apply {DOCKER_NEW}/sepolicy.rule', check=False)
-    docker_relabel(DOCKER_NEW, [(new, old) for old, new in DOCKER_TYPES], recorder)
-    root(f'mv {DOCKER_NEW} {DOCKER_OLD}')
-    started = root(f'{DOCKER_OLD}/moto-docker start', timeout=240, check=False)
-    recorder.step('docker-started', ok=started.returncode == 0, output=(started.stdout + started.stderr)[-400:])
-    # The old project again (its compose file restored above, its volume kept).
-    docker_cli(DOCKER_OLD, 'moto-docker', f'compose -f {WEB_STACK} up -d', check=False)
-    recorder.step('done', ok=started.returncode == 0, record=str(recorder.dir))
-    return started.returncode == 0
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest='action', required=True)
@@ -421,13 +270,11 @@ def main():
     p = sub.add_parser('up')
     p.add_argument('--apk', default=str(DEFAULT_APK))
     sub.add_parser('down')
-    sub.add_parser('docker-up')
-    sub.add_parser('docker-down')
     args = parser.parse_args()
     if args.action == 'status':
         print(json.dumps(status(), indent=1, ensure_ascii=False))
         return 0
-    actions = {'up': lambda: up(args.apk), 'down': down, 'docker-up': docker_up, 'docker-down': docker_down}
+    actions = {'up': lambda: up(args.apk), 'down': down}
     return 0 if actions[args.action]() else 1
 
 

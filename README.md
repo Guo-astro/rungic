@@ -14,7 +14,7 @@ Rungic是运行在Android手机上的AgentOS：Ubuntu容器中的Plasma Mobile�
 | `vendor/` | 尚未迁移的上游组件（Mesa、Qt、libcamera等）的完整源码，已包含本机适配 |
 | `shared/` | Linux媒体、网络、剪贴板与GPU公共接口 |
 | `tools/` | 管理、ROM、构建辅助和诊断工具 |
-| `kernel/`、`lxc/`、`docker/`、`cutout/` | 内核、容器与设备相关配置 |
+| `kernel/`、`lxc/`、`cutout/` | 内核、容器与设备相关配置 |
 | `docs/` | 实施文档；`research/`保留可复用历史结论 |
 | `benchmarks/` | 已选定的性能原始数据与分析 |
 | `provenance/` | 上游来源、版本和校验记录 |
@@ -62,7 +62,7 @@ Vendor适配应放在哪一层、哪些可以抽离到共享后端，见[54篇�
 | [16-lxc-prerequisites.md](docs/16-lxc-prerequisites.md) | LXC 运行条件实测（2026-09-22） |
 | [17-lxc-installation.md](docs/17-lxc-installation.md) | LXC 实机部署与验证（2026-09-22） |
 | [18-termux-lxc.md](docs/18-termux-lxc.md) | 用 Termux 管理 LXC（2026-09-22） |
-| [19-docker-installation.md](docs/19-docker-installation.md) | 原厂 Android 16 上运行 Docker（2026-09-22） |
+| [19-docker-installation.md](docs/19-docker-installation.md) | 原厂 Android 16 上运行 Docker（2026-09-22；已由 85 篇的容器内 rootless Docker 取代并移除） |
 | [20-docker-storage.md](docs/20-docker-storage.md) | Docker 卷与手机共享存储（2026-09-22） |
 | [21-memory-audit.md](docs/21-memory-audit.md) | 原厂系统 RAM 占用实测（2026-09-22） |
 | [28-capability-audit.md](docs/research/28-capability-audit.md) | Phosh 日常使用能力与 Android 硬件接口审计 |

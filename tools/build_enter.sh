@@ -1,11 +1,11 @@
 #!/bin/sh
 # Build a root "enter" program (tools/rungic_*_enter.c) as a static Android executable with the NDK:
-#   tools/build_enter.sh plasma|lxc|docker    -> .work/build/android/rungic-NAME-enter
+#   tools/build_enter.sh plasma|lxc    -> .work/build/android/rungic-NAME-enter
 # The program pivots into a Linux runtime before it execs, so its own C library does not matter;
 # RUNGIC_ANDROID_NDK overrides the newest NDK under $ANDROID_HOME.
 set -eu
 task_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-name=${1:?usage: build_enter.sh plasma|lxc|docker}
+name=${1:?usage: build_enter.sh plasma|lxc}
 task_clang=${RUNGIC_ANDROID_CLANG:-}
 task_sysroot=${RUNGIC_ANDROID_SYSROOT:-}
 if [ -z "$task_clang" ] || [ -z "$task_sysroot" ]; then
