@@ -81,3 +81,27 @@ GNOME 源码包 SHA-256：`1ece4a1bc822c7ebf725e8847b8ce8998b47d1ec1715a4b4ddb9d
 - **阶段 4，新整包：** 清数据安装到新账户后，直接从 Plasma 发现并投屏；无需手工拷贝脚本、appops 或残留 last-sink。现有 `.3` 的离线校验不能替代新包与这项验收。
 
 实施前保存现有 APK/组件版本、appops、无线设置、配置挂载和精确组件启用状态；回退只还原本次改变的项目，不停用整组 Motorola 包。需要刷写的阶段沿用三段式 skill 的机型核验与授权范围。本次仅保存只读证据，没有执行上述部署或验收动作。
+
+
+## 部署实验与实现（2026-09-28，后续更新）
+
+用户随后授权部署实验，并要求继续复用动态编码配置生成。证据目录 `.work/experiments/x70-cast-20260928/`；没有刷机、清数据或改写 rootfs 镜像。已部署 APK 2.12/60，原生三份库复用已验的 2.10 并记录逐文件哈希。
+
+**实际根因与对照：** 补装 root helper、开启无线显示后，原厂 WFD 已连接 TCL 85Q6H R2，1920×1080@60；overlay 自动授权且 KWin 建立 CAST-1，但用户仍看到 Moto 界面。WindowManager/SF 截图证实 `MotoDesktopSplash`（2938）和 `MotoTaskBar` 在 `PlasmaCastDesktop` 上方。标准 `setShouldShowSystemDecors(false)` 仍返回 true，与 58 篇记录的显示标志覆盖一致，实验后恢复原值。关闭 splash 只能暂时露出桌面，停止 UI 进程后进程又被系统重启，不能当作持久方案。
+
+修复在已匹配固件的适配器中，于 Rungic connect 前保存两个 UI 包 `com.motorola.mobiledesktop`、`com.motorola.systemui.desk` 的 enabled state，投屏期间设为 disabled-user，断开后恢复精确原状态。`.core`、高通服务及主屏 launcher 保留。APK 在框架产生外屏后也请求 claim，覆盖从系统设置连接的路径；这种事后接管可能有短暂窗口，本轮无闪屏证据来自 Rungic 发起连接。租约在修改前原子写入，文件锁串行化，部分执行可重试；resident watcher 在异常断开后恢复，连接建立阶段有 65 秒保护。用 boot ID/单调时钟区别重启和正在连接；安装升级不覆盖租约与接收端记录。此例外仍暂停了整个 Smart Connect UI 包，期间该包的其他界面不可用，不能描述为只关闭一个窗口；更细粒度入口尚未找到稳定接口。
+
+**通用层：** `profiles/cast-adapters.json` 通过 device/build-id/SDK 精确选择例外，未知设备为 `android-native`，不修改厂商包或加载旧规则。G100 S 的旧 SELinux/副屏启动器/重连处理保留在其已记录固件适配器；本轮只读复核其身份 W1WAA36.48-23-10、SDK 36、mumba，没有向 G100 S 部署或重做连接验收。X70 没有加载额外 SELinux allow，全程 Enforcing。动态 `wfd-config` 仍是发现厂商配置时的公共检查，不按机型写分辨率；本机输出 `changed:false`，生成/原厂 SHA-256 同为 `7ae2803bc882a0a7f386aa9565a38889aecacbc290cec04b4f278b46107900b4`，因此没有 bind 修改。profile/实际厂商 codec 对应的算法边界仍是前文列出的后续问题，不能将此次 unchanged 当作 4K 端到端验收。
+
+helper 增加 capabilities/settings、明确错误码、按主动 scan/connect 启用 WFD、单调时钟超时和超时取消；status/开机不自行开启无线显示。UI 显示原因、长按进入系统接收端选择，首次无历史电视也进入该页，连接中再次点击可取消，过期请求不覆盖新状态。CastDesktop 响应外屏尺寸变化；刷新率变更的完整 renegotiation 尚未单独验证。
+
+**交付：** `tools/cast_payload.py` 统一镜像与开发部署的载荷清单，`install.sh` 校验 SHA 后逐文件原子替换，最后发布清单；这是可恢复的文件级更新，不是整目录事务切换。首启检查载荷完整性与 service.d 副本；`tools/deploy_cast.py --serial ... --port ... --jar ... --output ...` 备份旧组件/开机脚本，独立更新当前账户并启动服务。首启的整 release 完成标记仍会跳过后续安装逻辑，因此已有完成状态设备的更新应使用独立部署器，不重跑整套首启。新镜像尚未构建/清数据验收。
+
+**目前验证：** 用户确认电视正常；Linux 平台桥三轮断开/重连全部成功，耗时约 6.15/6.02/6.33 秒，均有 Plasma overlay、没有 Moto splash/taskbar，断开后两个 UI 包恢复。第一轮从 WFD 关闭状态自动启用并连接。手机原生分辨率与已保存 300% 保持；编码配置原样，未出现旧机型的 level 设置失败。5 项首启测试（含缺 jar/service 修复、保留 last-sink）＋11 项隔离测试通过。后台测试的实际时钟/动画画面持续更新；手机进入 Dozing 后，Android 在电视显示锁屏时钟，不能把这次结果记为息屏继续显示 Linux 通过，也不是以两张相同截图就判定编码冻结。唤醒后恢复桌面。声音已有 proxy 路由和 Linux paplay 成功，电视实际发声仍待用户确认；手机触控板/中文输入与长时媒体稳定性尚不能从画面正常推定通过。
+
+
+### 锁屏分析与用户介入的验收边界
+
+用户说明测试中手动解锁了手机，因此自动脚本的唤醒/恢复不能单独作为无人介入验收。20:50 的系统日志记录 `MotoKeyguardPresentation: 7` 覆盖电视、`wm_set_keyguard_shown` 同时作用于手机和电视，用户解锁后该窗口移除；WFD 全程 active_state=2。X70 当前 `secure=false`、`locksettings get-disabled=false`，即没有密码类安全锁但仍有锁屏。
+
+核对 AOSP `android-16.0.0_r1` 的 [KeyguardDisplayManager.java](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-16.0.0_r1/packages/SystemUI/src/com/android/keyguard/KeyguardDisplayManager.java)：普通非默认显示会得到 KeyguardPresentation，PRIVATE/ALWAYS_UNLOCKED 等条件才排除。X70 的 WFD 显示没有这些排除标志。该路径与 Moto splash/taskbar 的适配器是不同职责，不能通过停用 SystemUI 或改写整机锁屏去假装修好。当前结论是后台更新已验、锁屏遮挡已定位、用户解锁后桌面恢复；没有证明锁屏期间底层 Linux 新帧是否持续生成。以后如需“手机黑屏而电视继续工作”，应单独设计投屏息屏入口，与真正锁定设备区分；本轮未实现。G100 S 旧记录只证明当次息屏场景，不能据此断言它在相同 keyguard 状态下一定不同。

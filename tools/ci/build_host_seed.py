@@ -12,6 +12,8 @@ import sys
 from build_rootfs_image import check_home_layout, check_fresh_account
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "tools"))
+import cast_payload
 ANDROID_FILES = (
     ("plasma/rungic-plasma", "rungic-plasma/rungic-plasma", 0o755),
     ("plasma/android-audio", "rungic-plasma/android-audio", 0o755),
@@ -22,11 +24,7 @@ ANDROID_FILES = (
     ("plasma/plasma.config", "rungic-lxc/runtime/var/lib/lxc/plasma/config", 0o644),
     ("lxc/rungic-lxc", "rungic-lxc/rungic-lxc", 0o755),
     # Casting (docs/58); firstboot moves service.d/ into /data/adb/service.d.
-    ("shared/android/rungic-cast/rungic-cast", "rungic-wfd/rungic-cast", 0o755),
-    ("shared/android/rungic-cast/rungic-cast-watch", "rungic-wfd/rungic-cast-watch", 0o755),
-    ("shared/android/wfd.sepolicy.rule", "rungic-wfd/wfd.sepolicy.rule", 0o644),
-    ("shared/android/rungic-wfd-sepolicy.sh", "rungic-wfd/service.d/rungic-wfd-sepolicy.sh", 0o755),
-    ("shared/android/rungic-cast-watch.sh", "rungic-wfd/service.d/rungic-cast-watch.sh", 0o755),
+    *((source, "rungic-wfd/" + dest, mode) for source, dest, mode in cast_payload.FILES),
 )
 
 
@@ -101,6 +99,7 @@ def main():
         target = stage / dest
         target.write_bytes(paths[source].read_bytes())
         target.chmod(mode)
+    cast_payload.manifest(stage / "rungic-wfd")
     paths["output"].parent.mkdir(parents=True, exist_ok=True)
     run("tar", "-C", str(stage), "--numeric-owner", "-czf", str(paths["output"]),
         "rungic-lxc", "rungic-plasma", "rungic-wfd")

@@ -4,6 +4,7 @@ package com.rungic.cast;
 import android.hardware.display.DisplayManager;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import java.io.File;
 import java.lang.reflect.Array;
 import java.lang.reflect.Method;
@@ -31,6 +32,7 @@ import java.util.concurrent.Executor;
 public final class Main {
     private static final int CONNECTED = 2; // WifiDisplayStatus.DISPLAY_STATE_CONNECTED
     private static Object dmg;
+    private static boolean connecting;
     private static final File DIR = new File("/data/adb/rungic-wfd");
     /** Address and name of the sink connected last, for "connect" without a target. */
     private static final File LAST_SINK = new File(DIR, "last-sink");
@@ -48,13 +50,21 @@ public final class Main {
 
     public static void main(String[] args) throws Exception {
         Looper.prepareMainLooper();
-        dmg = Class.forName("android.hardware.display.DisplayManagerGlobal").getMethod("getInstance").invoke(null);
         String cmd = args.length > 0 ? args[0] : "status";
         try {
+            dmg = Class.forName("android.hardware.display.DisplayManagerGlobal").getMethod("getInstance").invoke(null);
             run(cmd, args);
         } catch (Throwable e) {
+            if (connecting) {
+                try { call(dmg, "disconnectWifiDisplay"); CastAdapter.release(true); }
+                catch (Exception cleanup) { System.err.println("cast cleanup: " + cleanup); }
+            }
             Throwable cause = e instanceof java.lang.reflect.InvocationTargetException ? e.getCause() : e;
-            fail(cause.getClass().getSimpleName() + ": " + cause.getMessage());
+            String code = cause instanceof CastFailure ? ((CastFailure) cause).code
+                    : cause instanceof SecurityException ? "permission-required"
+                    : cause instanceof ReflectiveOperationException ? "backend-incompatible" : "operation-failed";
+            System.out.println("{\"error\":" + quote(cause.getMessage()) + ",\"code\":" + quote(code) + "}");
+            System.exit(2);
         }
         System.exit(0);
     }
@@ -62,7 +72,26 @@ public final class Main {
     private static void run(String cmd, String[] args) throws Exception {
         switch (cmd) {
             case "status":
+            case "capabilities":
                 System.out.println(status());
+                break;
+            case "settings":
+                command("am", "start", "--user", "current", "-a", "android.settings.CAST_SETTINGS");
+                System.out.println("{\"opened\":true}");
+                break;
+            case "claim":
+                if ((int) call(wfdStatus(), "getActiveDisplayState") != 0) CastAdapter.claim();
+                System.out.println("{\"adapter\":" + quote(CastAdapter.selected().getString("id")) + "}");
+                break;
+            case "adapter":
+                System.out.println(CastAdapter.selected());
+                break;
+            case "release":
+                if ((int) call(wfdStatus(), "getActiveDisplayState") == 0) CastAdapter.release(true);
+                System.out.println("{\"released\":true}");
+                break;
+            case "watch":
+                watch();
                 break;
             case "scan":
                 System.out.println(scan(seconds(args, 1, 8)));
@@ -126,12 +155,45 @@ public final class Main {
     }
 
     private static int seconds(String[] args, int index, int fallback) {
-        return args.length > index ? Integer.parseInt(args[index]) : fallback;
+        int value = args.length > index ? Integer.parseInt(args[index]) : fallback;
+        if (value < 1 || value > 45) throw new CastFailure("invalid-argument", "Duration must be 1..45 seconds");
+        return value;
+    }
+
+    private static final class CastFailure extends RuntimeException {
+        final String code;
+        CastFailure(String code, String message) { super(message); this.code = code; }
     }
 
     private static void fail(String message) {
-        System.out.println("{\"error\":" + quote(message) + "}");
-        System.exit(2);
+        throw new CastFailure("operation-failed", message);
+    }
+
+    static void command(String... args) throws Exception {
+        Process process = new ProcessBuilder(args).redirectErrorStream(true).start();
+        if (!process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)) {
+            process.destroyForcibly();
+            throw new CastFailure("timeout", "Android command timed out");
+        }
+        String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        if (process.exitValue() != 0 || output.contains("Error:") || output.contains("Exception")) {
+            throw new CastFailure("permission-required", output.trim());
+        }
+    }
+
+    /** Only an explicit scan/connect enables wireless display. Status and boot never do. */
+    private static void ensureEnabled() throws Exception {
+        int feature = (int) call(wfdStatus(), "getFeatureState");
+        if (feature == 0) throw new CastFailure("unsupported", "This Android system has no Wi-Fi Display backend");
+        if (feature == 1) throw new CastFailure("wifi-unavailable", "Enable Wi-Fi before casting");
+        if (feature == 3) return;
+        command("settings", "put", "global", "wifi_display_on", "1");
+        long deadline = SystemClock.elapsedRealtime() + 5000;
+        while (SystemClock.elapsedRealtime() < deadline) {
+            if ((int) call(wfdStatus(), "getFeatureState") == 3) return;
+            Thread.sleep(100);
+        }
+        throw new CastFailure("disabled", "Enable wireless display in Android cast settings");
     }
 
     private static Object call(Object target, String name, Object... args) throws Exception {
@@ -148,6 +210,7 @@ public final class Main {
     }
 
     private static String scan(int secs) throws Exception {
+        ensureEnabled();
         registerListener();
         call(dmg, "startWifiDisplayScan");
         try {
@@ -165,13 +228,16 @@ public final class Main {
      * during the scan and repeated until the controller starts connecting.
      */
     private static String connect(String target, int secs) throws Exception {
+        ensureEnabled();
+        connecting = true;
+        CastAdapter.claim();
         String address = target.contains(":") && target.length() == 17 ? target : null;
-        long deadline = System.currentTimeMillis() + secs * 1000L;
+        long deadline = SystemClock.elapsedRealtime() + secs * 1000L;
         registerListener();
         call(dmg, "startWifiDisplayScan");
         try {
             long lastRequest = 0;
-            while (System.currentTimeMillis() < deadline) {
+            while (SystemClock.elapsedRealtime() < deadline) {
                 Object s = wfdStatus();
                 Object active = call(s, "getActiveDisplay");
                 if ((int) call(s, "getActiveDisplayState") == CONNECTED && active != null
@@ -184,7 +250,7 @@ public final class Main {
                 }
                 String found = findAvailable(address != null ? address : target);
                 debug("state=" + call(s, "getActiveDisplayState") + " scan=" + call(s, "getScanState") + " found=" + found);
-                long now = System.currentTimeMillis();
+                long now = SystemClock.elapsedRealtime();
                 if ((int) call(s, "getActiveDisplayState") == 0 && found != null && now - lastRequest > 3000) {
                     address = found;
                     debug("connectWifiDisplay " + address);
@@ -196,8 +262,10 @@ public final class Main {
         } finally {
             call(dmg, "stopWifiDisplayScan");
         }
-        fail("timed out connecting to " + (address != null ? address : target));
-        return null;
+        call(dmg, "disconnectWifiDisplay"); // Do not leave an orphan connection after timeout.
+        CastAdapter.release(true);
+        throw new CastFailure("timeout", "Keep the TV on its Miracast waiting page; timed out connecting to "
+                + (address != null ? address : target));
     }
 
     /**
@@ -214,10 +282,10 @@ public final class Main {
         for (int i = 0; i < Array.getLength(displays); i++) {
             Object d = Array.get(displays, i);
             if (!(boolean) call(d, "isRemembered")) continue;
-            if (found != null) fail("several TVs are known; name one (rungic-cast scan lists them)");
+            if (found != null) throw new CastFailure("receiver-required", "Choose a TV in cast settings");
             found = (String) call(d, "getDeviceAddress");
         }
-        if (found == null) fail("no TV used before; name one (rungic-cast scan lists them)");
+        if (found == null) throw new CastFailure("receiver-required", "Choose your first TV in cast settings");
         return found;
     }
 
@@ -232,11 +300,35 @@ public final class Main {
 
     private static String disconnect(int secs) throws Exception {
         call(dmg, "disconnectWifiDisplay");
-        long deadline = System.currentTimeMillis() + secs * 1000L;
-        while (System.currentTimeMillis() < deadline && (int) call(wfdStatus(), "getActiveDisplayState") != 0) {
+        long deadline = SystemClock.elapsedRealtime() + secs * 1000L;
+        while (SystemClock.elapsedRealtime() < deadline && (int) call(wfdStatus(), "getActiveDisplayState") != 0) {
             Thread.sleep(250);
         }
+        if ((int) call(wfdStatus(), "getActiveDisplayState") != 0)
+            throw new CastFailure("timeout", "Timed out disconnecting Wi-Fi Display");
+        CastAdapter.release(true);
         return status();
+    }
+
+    /** One inexpensive resident process restores vendor UI after disconnect/crash, also after reboot. */
+    private static void watch() throws Exception {
+        DIR.mkdirs();
+        try (java.io.RandomAccessFile file = new java.io.RandomAccessFile(new File(DIR, "watch.lock"), "rw");
+                java.nio.channels.FileLock lock = file.getChannel().tryLock()) {
+            if (lock == null) return;
+            Files.write(new File(DIR, "watch.pid").toPath(),
+                    Integer.toString(android.os.Process.myPid()).getBytes(StandardCharsets.UTF_8));
+            Handler handler = new Handler(Looper.getMainLooper());
+            handler.post(new Runnable() {
+                @Override public void run() {
+                    try {
+                        if ((int) call(wfdStatus(), "getActiveDisplayState") == 0) CastAdapter.release(false);
+                    } catch (Exception e) { System.err.println("cast cleanup: " + e); }
+                    handler.postDelayed(this, 2000);
+                }
+            });
+            Looper.loop();
+        }
     }
 
     /** IWindowManager.setShouldShowSystemDecors: root passes its INTERNAL_SYSTEM_WINDOW check. */
@@ -267,6 +359,9 @@ public final class Main {
         Object s = wfdStatus();
         StringBuilder out = new StringBuilder("{");
         out.append("\"feature_state\":").append(call(s, "getFeatureState"));
+        out.append(",\"backend\":\"android-wfd\",\"supported\":")
+                .append((int) call(s, "getFeatureState") != 0);
+        out.append(",\"adapter\":").append(quote(CastAdapter.selected().getString("id")));
         out.append(",\"scan_state\":").append(call(s, "getScanState"));
         out.append(",\"active_state\":").append(call(s, "getActiveDisplayState"));
         Object active = call(s, "getActiveDisplay");

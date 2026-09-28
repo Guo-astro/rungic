@@ -18,11 +18,12 @@ QS.QuickSetting {
     property bool reconnecting: false // the TV dropped the session; rungic-cast-watch is reconnecting
     property string tvName: ""
     property string error: ""
+    property int requestSerial: 0
 
     text: "投屏"
     icon: "video-television"
     enabled: casting || busy === "connect" || reconnecting
-    settingsCommand: "plasma-open-settings kcm_kscreen"
+    settingsCommand: "rungic-cast settings"
     // Short: a tile shows one line.
     status: {
         if (busy === "connect") return "正在连接…";
@@ -34,10 +35,11 @@ QS.QuickSetting {
     }
 
     function run(command) {
-        executable.connectSource("/usr/bin/rungic-cast " + command);
+        executable.connectSource("/usr/bin/rungic-cast " + command + " # " + (++requestSerial));
     }
 
     function toggle() {
+        if (busy === "connect") { busy = "disconnect"; run(busy); return; }
         if (busy) return;
         error = "";
         busy = casting || reconnecting ? "disconnect" : "connect";
@@ -45,7 +47,7 @@ QS.QuickSetting {
     }
 
     function apply(result) {
-        casting = !!result.active;
+        casting = result.active_state === 2;
         tvName = result.active ? result.active.name.replace(/\[.*\]$/, "") : tvName;
         reconnecting = !!result.reconnecting;
         if (reconnecting) {
@@ -75,6 +77,7 @@ QS.QuickSetting {
         engine: "executable"
         onNewData: (source, data) => {
             disconnectSource(source);
+            if (Number(source.split(" # ")[1]) !== root.requestSerial) return;
             const command = source.split(" ")[1];
             let result = {};
             try {
@@ -85,9 +88,21 @@ QS.QuickSetting {
             if (command === root.busy) root.busy = "";
             if (result.error) {
                 console.warn("rungic-cast " + command + ": " + result.error);
-                root.error = command === "connect" ? "没有连上电视" : "操作失败";
+                const messages = {
+                    "component-missing": "投屏组件未就绪",
+                    "unsupported": "系统不支持无线投屏",
+                    "backend-incompatible": "请使用系统投屏设置",
+                    "wifi-unavailable": "请先开启 Wi-Fi",
+                    "disabled": "请开启无线显示",
+                    "permission-required": "请允许投屏权限",
+                    "receiver-required": "请选择电视",
+                    "timeout": "连接超时，请打开电视投屏页"
+                };
+                root.error = messages[result.code] || "投屏失败，长按打开设置";
+                if (result.code === "receiver-required") root.run("settings");
             } else {
-                root.apply(result);
+                root.error = "";
+                if (result.active_state !== undefined) root.apply(result);
             }
         }
     }

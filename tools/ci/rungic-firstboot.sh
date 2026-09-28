@@ -124,18 +124,8 @@ install_cast() {
     [ ! -e "$stage" ] || rm -rf "$stage"
     mkdir "$stage"
     tar -xzf "$seed/host-seed.tar.gz" -C "$stage" rungic-wfd || return 1
-    [ -x "$stage/rungic-wfd/rungic-cast" ] && [ -f "$stage/rungic-wfd/rungic-cast.jar" ] || return 1
-    mkdir -p /data/adb/service.d
-    for script in rungic-wfd-sepolicy.sh rungic-cast-watch.sh; do
-        mv "$stage/rungic-wfd/service.d/$script" "/data/adb/service.d/$script" || return 1
-        chcon u:object_r:adb_data_file:s0 "/data/adb/service.d/$script" || return 1
-    done
-    rmdir "$stage/rungic-wfd/service.d"
-    # Keep state a partial earlier install left (last-sink, run/).
-    mkdir -p /data/adb/rungic-wfd
-    cp -a "$stage/rungic-wfd/." /data/adb/rungic-wfd/ || return 1
+    /system/bin/sh "$stage/rungic-wfd/install.sh" "$stage/rungic-wfd" || return 1
     rm -rf "$stage"
-    restorecon -RF /data/adb/rungic-wfd >/dev/null 2>&1 || true
     # The rule names Qualcomm WFD domains (verified on SM6435); another vendor
     # policy may lack them, which leaves the rest of casting in place.
     /system/bin/sh /data/adb/service.d/rungic-wfd-sepolicy.sh || echo 'WFD policy not applied'
@@ -144,7 +134,7 @@ install_cast() {
         'exec 3>&- 4>&- 5>&- 6>&- 7>&- 8>&- 9>&-; exec /system/bin/sh /data/adb/service.d/rungic-cast-watch.sh' \
         </dev/null >/dev/null 2>&1 &
 }
-if [ ! -x /data/adb/rungic-wfd/rungic-cast ]; then
+if ! /system/bin/sh /data/adb/rungic-wfd/install.sh --check >/dev/null 2>&1; then
     if install_cast; then echo 'casting installed'; else echo 'casting install failed (optional)'; fi
 fi
 

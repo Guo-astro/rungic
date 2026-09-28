@@ -8,10 +8,22 @@ VENDOR_CONFIG=/vendor/etc/wfdconfig.xml
 CONFIG=/data/adb/rungic-wfd/wfdconfig.xml
 NS="/data/adb/magisk/busybox nsenter -t 1 -m --"
 until [ "$(getprop sys.boot_completed)" = 1 ]; do sleep 5; done
+# Recovery is shared; codec/SELinux/launcher workarounds require a verified adapter.
+nohup /data/adb/rungic-wfd/rungic-cast watch </dev/null >>/data/adb/rungic-wfd/recovery.log 2>&1 &
 # The WFD stack reads the file for every session; bind the generated copy in init's
 # mount namespace so the vendor services see it (undo: umount /vendor/etc/wfdconfig.xml).
 if [ -f "$VENDOR_CONFIG" ]; then
-    grep -q " $VENDOR_CONFIG " /proc/1/mountinfo && $NS umount "$VENDOR_CONFIG"
+    # Replace only our own bind; an unrelated module may own the same mount point.
+    if grep -q " $VENDOR_CONFIG " /proc/1/mountinfo; then
+        source_inode=$($NS stat -c '%d:%i' "$CONFIG" 2>/dev/null)
+        target_inode=$($NS stat -c '%d:%i' "$VENDOR_CONFIG" 2>/dev/null)
+        if [ -n "$source_inode" ] && [ "$source_inode" = "$target_inode" ]; then
+            $NS umount "$VENDOR_CONFIG" || exit 1
+        else
+            echo 'WFD configuration mount is owned by another component; left unchanged' > /data/adb/rungic-wfd/wfd-config.log
+            exit 0
+        fi
+    fi
     result=$(/data/adb/rungic-wfd/rungic-cast wfd-config "$VENDOR_CONFIG" "$CONFIG")
     case "$result" in
     *'"changed":true'*)
@@ -20,6 +32,10 @@ if [ -f "$VENDOR_CONFIG" ]; then
     esac
     echo "$(date '+%m-%d %H:%M:%S') $result" > /data/adb/rungic-wfd/wfd-config.log
 fi
+case "$(/data/adb/rungic-wfd/rungic-cast adapter)" in
+    *'"legacy_qualcomm":true'*) ;;
+    *) exit 0 ;;
+esac
 if cmd package query-activities --brief -a android.intent.action.MAIN -c android.intent.category.SECONDARY_HOME \
         | grep -q "$LAUNCHER"; then
     pm disable --user 0 "$LAUNCHER" > /dev/null

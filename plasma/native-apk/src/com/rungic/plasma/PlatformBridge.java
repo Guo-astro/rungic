@@ -159,8 +159,8 @@ final class PlatformBridge implements Closeable {
             try {
                 JSONArray args=request.optJSONArray("args");
                 String command=args==null||args.length()==0?"status":args.getString(0);
-                if(!command.matches("status|scan|connect|disconnect"))throw new IllegalArgumentException("Unsupported cast command");
-                StringBuilder line=new StringBuilder("/data/adb/rungic-wfd/rungic-cast ").append(command);
+                if(!command.matches("status|capabilities|settings|scan|connect|disconnect"))throw new IllegalArgumentException("Unsupported cast command");
+                StringBuilder line=new StringBuilder("if [ ! -x /data/adb/rungic-wfd/rungic-cast ] || [ ! -s /data/adb/rungic-wfd/rungic-cast.jar ]; then echo '{\"error\":\"Casting component is not installed\",\"code\":\"component-missing\"}'; exit 2; fi; /data/adb/rungic-wfd/rungic-cast ").append(command);
                 if(args!=null && args.length()>1) {
                     if(!command.equals("connect"))throw new IllegalArgumentException("Only connect takes a TV");
                     line.append(" '").append(args.getString(1).replace("'","'\\''")).append("'");
