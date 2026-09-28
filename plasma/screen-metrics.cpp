@@ -11,6 +11,7 @@ int main(int argc, char **argv) {
     QJsonArray screens;
     for (auto screen : app.screens()) {
         screens.append(QJsonObject{{"name", screen->name()},
+            {"manufacturer", screen->manufacturer()}, {"model", screen->model()},
             {"width", screen->geometry().width()}, {"height", screen->geometry().height()},
             {"scale", screen->devicePixelRatio()}});
     }
