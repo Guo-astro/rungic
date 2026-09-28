@@ -9,13 +9,13 @@ X-Rungic-Status: Inappropriate [Rungic handset policy and Android rendering mode
 X-Rungic-Tests: tools/test_display_policy.py; manual deployment checks in docs/85
 X-Rungic-Docs: docs/85-phone-display-size-policy.md
 ---
- kcm/output_model.cpp   | 36 ++++++++++++++++++++++++++++++++++--
+ kcm/output_model.cpp   | 44 +++++++++++++++++++++++++++++++++++++++++---
  kcm/output_model.h     |  3 +++
  kcm/ui/OutputPanel.qml | 50 +++++++++++++++++++++++++++++++++++++++++++++++++-
- 3 files changed, 86 insertions(+), 3 deletions(-)
+ 3 files changed, 93 insertions(+), 4 deletions(-)
 
 diff --git a/kcm/output_model.cpp b/kcm/output_model.cpp
-index b097396..329f5e6 100644
+index b097396..11a3794 100644
 --- a/kcm/output_model.cpp
 +++ b/kcm/output_model.cpp
 @@ -4,6 +4,7 @@
@@ -103,6 +103,22 @@ index b097396..329f5e6 100644
      Q_EMIT sizeChanged();
      return true;
  }
+@@ -649,8 +681,14 @@ bool OutputModel::setRefreshRate(int outputIndex, int refIndex)
+         return false;
+     }
+     output.ptr->setCurrentModeId((*modeIt)->id());
++    // An explicit handset rate selection also selects Android's fixed-rate policy.
++    // This distinguishes it from a stale current Hz submitted with a size change.
++    if (Rungic::Display::isHandset(output.ptr->vendor(), output.ptr->model())) {
++        output.ptr->setVrrPolicy(KScreen::Output::VrrPolicy::Never);
++        m_config->setVrrPolicy(output.ptr, KScreen::Output::VrrPolicy::Never);
++    }
+     QModelIndex index = createIndex(outputIndex, 0);
+-    Q_EMIT dataChanged(index, index, {RefreshRateIndexRole});
++    Q_EMIT dataChanged(index, index, {RefreshRateIndexRole, VrrPolicyRole});
+     return true;
+ }
+ 
 diff --git a/kcm/output_model.h b/kcm/output_model.h
 index fcfbd1a..4267d20 100644
 --- a/kcm/output_model.h

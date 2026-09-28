@@ -1,3 +1,9 @@
+kscreen (4:6.6.5-0ubuntu0.1+rungic4) resolute; urgency=medium
+
+  * Mark explicit handset refresh-rate choices as fixed policy.
+
+ -- Rungic <noreply@rungic.invalid>  Mon, 28 Sep 2026 08:30:00 +0000
+
 kscreen (4:6.6.5-0ubuntu0.1+rungic3) resolute; urgency=medium
 
   * Anchor display-size presets to native resolution in every rendering mode.
