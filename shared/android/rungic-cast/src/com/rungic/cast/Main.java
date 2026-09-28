@@ -25,6 +25,8 @@ import java.util.concurrent.Executor;
  *   rungic-cast disconnect [seconds]
  *   rungic-cast decor <display-id> [on|off]   system decorations (vendor taskbar,
  *                                            secondary launcher) on a display
+ *   rungic-cast wfd-config <vendor.xml> <out.xml>   the vendor WFD video offer, limited
+ *                                            to this phone's hardware encoder (WfdConfig)
  */
 public final class Main {
     private static final int CONNECTED = 2; // WifiDisplayStatus.DISPLAY_STATE_CONNECTED
@@ -78,6 +80,10 @@ public final class Main {
             case "decor":
                 if (args.length < 2) fail("decor needs a display id");
                 System.out.println(decor(Integer.parseInt(args[1]), args.length > 2 ? args[2] : null));
+                break;
+            case "wfd-config":
+                if (args.length < 3) fail("wfd-config needs <vendor wfdconfig.xml> <output>");
+                System.out.println(WfdConfig.generate(new File(args[1]), new File(args[2])));
                 break;
             default:
                 fail("unknown command " + cmd);
