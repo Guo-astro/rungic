@@ -472,6 +472,16 @@ G100 S（XT2537-4，SM6435 `_parrot_v3`），接收端TCL 85Q6H。电视这次�
 - 约45秒断开：两次会话在PLAYING约45秒后因P2P链路丢失结束（电视为组主，5240MHz，手机侧`disconnect rssi=-87`，`locally_generated=1`）；用户调整手机位置后会话稳定。18:30的会话在PLAYING后约48秒同样出现`disconnect rssi=-87`，但约3秒后重新关联，会话未中断。断开反复出现在约45–48秒，不像单纯的信号偶然波动；当时家庭Wi-Fi在5GHz另一信道，多信道并发、电视侧节能等原因均未排除。
 - 编码器失败后`rungic-cast-watch`按“电视端断开”反复重连且错误为空；快捷开关只显示“没有连上电视”，真实原因只在`console.warn`。两者待改。
 
+### 扫描发现不了电视（2026-09-28）
+
+- 现象：连续数分钟（18:54–19:02）扫描不到电视，日志反复出现`P2P: Reject scan trigger since one is already pending`。
+- 该行不是原因：打开`cmd wifi set-verbose-logging enabled`后，wpa_supplicant的P2P查找一直正常循环（社交信道2412/2437/2462与全5GHz扫描交替，约每秒一轮，其间监听），框架每10秒重复下发的`discoverPeers`在上一轮未结束时被拒。
+- 原因：电视进入屏保后，Miracast等待界面停止P2P监听，期间既不回应探测也不发组信标；用户19:02让电视退出屏保，手机立即发现电视，之后每2–10秒都能再次发现。电视监听信道为6（2437MHz），`group_capab=0x0`（等待时不是组主）。
+- 屏保期间电视仍在家庭局域网（192.168.5.21，Android 13），mDNS广播`_airplay`、`_raop`、`_leboremote`（乐播SDK），SSDP有DLNA `MediaRenderer`；无`_googlecast`与MICE的`_display._tcp`。
+- Ready For对照（同日）：停用`com.motorola.mobiledesktop`与`.core`后18:44连接成功（进入PLAYING，Linux桌面接管电视，仅多出`Failed to connect to hce service`）；之后两次失败分别为电视30秒未回应邀请和60秒未发现电视，推断与电视停止监听有关。19:37再次停用后连接成功，用户确认电视画面正常且稳定；19:38–19:40断开15秒后重连4轮，4/4成功，每轮6–7秒进入PLAYING，无编码器或运行时错误，其间Ready For进程数为0。
+- Moto框架的钩子（`services.jar`反汇编）：连接后`WifiDisplayController`把接收端的`hce ip/port`经`com.motorola.mobiledesktop.wfd.hce`交给Ready For，高通`WfdSession`也尝试绑定该服务；Ready For不在时两者都只记日志，会话照常。
+- 用户决定（2026-09-28）：Moto机型保留Ready For，不为它做专门处理；投屏只要求经Android无线显示框架＋高通WFD组件正常连接，Ready For启用或停用都可以。高通组件可以使用，不要求自研发送端（84篇原型暂缓）。
+
 ## 初版方案：Android Presentation承载外屏输出（无root假设）
 
 ```
