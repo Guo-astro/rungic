@@ -10,3 +10,42 @@ fi
 if [ "$1" = configure ] && [ -f /etc/apt/apt.conf.d/80moto-proxy ] && [ ! -e /etc/apt/apt.conf.d/80rungic-proxy ]; then
     cp -p /etc/apt/apt.conf.d/80moto-proxy /etc/apt/apt.conf.d/80rungic-proxy
 fi
+# Services kept off by default (docs/83). Each unit's default from service-policy.json is applied
+# once and recorded; a unit already recorded is left as it is, so what the user turned on or off in
+# Settings -> Services survives upgrades. Up to 0.305 this package owned the masks itself: the
+# upgrade has just removed them, and the first run here puts them back as local state.
+if [ "$1" = configure ]; then
+    state=/var/lib/rungic/service-defaults
+    mkdir -p /var/lib/rungic /etc/systemd/system /etc/systemd/user
+    touch "$state"
+    changed=
+    for entry in $(python3 -c '
+import json
+for g in json.load(open("/usr/share/rungic/service-policy.json"))["groups"]:
+    for scope in ("system", "user"):
+        for unit in g.get(scope, []):
+            print(scope + "/" + unit + "/" + g["default"])'); do
+        scope=${entry%%/*}; rest=${entry#*/}; unit=${rest%/*}; default=${rest#*/}
+        grep -qxF "$scope $unit" "$state" && continue
+        case $default in
+            masked)
+                if [ ! -e "/etc/systemd/$scope/$unit" ] && [ ! -L "/etc/systemd/$scope/$unit" ]; then
+                    ln -s /dev/null "/etc/systemd/$scope/$unit"
+                fi ;;
+            disabled)
+                # Ubuntu's openssh-server enables ssh.socket; deb-systemd-helper records the
+                # disable, so that package's own upgrades keep it off.
+                if [ "$scope" = system ]; then deb-systemd-helper disable "$unit" >/dev/null 2>&1 || true; fi ;;
+        esac
+        echo "$scope $unit" >> "$state"
+        changed=1
+    done
+    if [ -n "$changed" ] && [ -d /run/systemd/system ]; then
+        systemctl daemon-reload || true
+        for dir in /run/user/*; do
+            uid=${dir##*/}; [ -S "$dir/systemd/private" ] || continue
+            name=$(getent passwd "$uid" | cut -d: -f1); [ -n "$name" ] || continue
+            runuser -u "$name" -- env XDG_RUNTIME_DIR="$dir" systemctl --user daemon-reload || true
+        done
+    fi
+fi

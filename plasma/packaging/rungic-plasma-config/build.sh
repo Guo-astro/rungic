@@ -14,9 +14,6 @@ install -Dm755 "$SRC/plasma/policy-rc.d" "$DESTDIR/usr/sbin/policy-rc.d"
 # systemd-coredump (for coredumpctl) must never set Android's global core_pattern.
 mkdir -p "$DESTDIR/etc/sysctl.d"
 ln -s /dev/null "$DESTDIR/etc/sysctl.d/50-coredump.conf"
-grep -v '^#' "$SRC/plasma/config/systemd-masks.txt" | while read -r scope unit; do
-    [ -n "$unit" ] || continue
-    mkdir -p "$DESTDIR/etc/systemd/$scope"
-    ln -s /dev/null "$DESTDIR/etc/systemd/$scope/$unit"
-done
-rm -f "$DESTDIR/etc/systemd-masks.txt"
+# Services kept off by default (docs/83): postinst applies each unit's default once, so the
+# package does not own the masks and a change made in Settings survives upgrades.
+install -Dm644 "$SRC/plasma/services/policy.json" "$DESTDIR/usr/share/rungic/service-policy.json"

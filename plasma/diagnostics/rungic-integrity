@@ -19,6 +19,8 @@ metapackage and the local-configuration manifest say it should be:
              owned by a non-root user
   local      declared machine-local configuration: presence and permissions
   units      units the project's packages enable (/usr/share/rungic/units) are enabled
+  services   services kept off by default (service-policy.json, docs/83): their masks are
+             expected; units the user turned on or off in Settings are listed, not drift
   crash      the crash chain's preconditions: no DrKonqi without
              KCRASH_DUMP_ONLY (it would take over KDE crashes and leave no
              core), systemd-coredump's core_pattern sysctl masked
@@ -41,6 +43,7 @@ import subprocess
 import sys
 
 LOCAL_MANIFEST = '/usr/share/rungic/local-config.json'
+SERVICE_POLICY = '/usr/share/rungic/service-policy.json'
 RELEASE = '/usr/share/rungic/release.json'
 DESKTOP_UID = 1000
 
@@ -258,7 +261,17 @@ def declared_local(manifest):
     return paths
 
 
-def check_unowned(owned, local):
+def service_policy():
+    """{(scope, unit): default} from service-policy.json (docs/83)."""
+    try:
+        with open(SERVICE_POLICY) as f:
+            groups = json.load(f)['groups']
+    except (OSError, ValueError, KeyError):
+        return {}
+    return {(scope, unit): g['default'] for g in groups for scope in ('system', 'user') for unit in g.get(scope, [])}
+
+
+def check_unowned(owned, local, policy):
     found = {'/usr': [], '/etc': []}
     masks = []
     for top in found:
@@ -272,8 +285,9 @@ def check_unowned(owned, local):
                 if os.path.islink(path) and os.readlink(path).startswith('/etc/alternatives/'):
                     continue   # update-alternatives
                 if os.path.islink(path) and dirpath in ('/etc/systemd/system', '/etc/systemd/user'):
-                    if os.readlink(path) == '/dev/null':
-                        masks.append(path)
+                    scope = 'system' if dirpath.endswith('/system') else 'user'
+                    if os.readlink(path) == '/dev/null' and policy.get((scope, name)) != 'masked':
+                        masks.append(path)   # service-policy.json masks are the package's defaults
                     continue   # enable aliases are generated; masks are listed apart
                 if any(fnmatch.fnmatchcase(path, g) for g in GENERATED):
                     continue
@@ -354,6 +368,22 @@ def check_units():
     return problems
 
 
+def check_services(policy):
+    """Units of service-policy.json whose state differs from their default: changes made in
+    Settings -> Services (docs/83), reported for information."""
+    changed = []
+    for (scope, unit), default in sorted(policy.items()):
+        masked = os.path.realpath(f'/etc/systemd/{scope}/{unit}') == '/dev/null'
+        if default == 'masked' and not masked:
+            changed.append({'unit': unit, 'scope': scope, 'default': default, 'state': 'unmasked'})
+        elif default == 'disabled':
+            flag = [] if scope == 'system' else ['--global']
+            state = run('systemctl', *flag, 'is-enabled', unit).strip()
+            if state in ('enabled', 'enabled-runtime'):
+                changed.append({'unit': unit, 'scope': scope, 'default': default, 'state': state})
+    return changed
+
+
 def check_user_overrides():
     """User settings that silently take the desktop off the GPU. On 2026-09-26 a kdeglobals
     [QtQuickRendererSettings] SceneGraphBackend=software (writer not found) left the app drawer grid
@@ -417,17 +447,19 @@ def main():
     deps = release_dependencies()
     local = check_local(manifest)
     declared = declared_local(manifest)
+    policy = service_policy()
     report = {
         'packages': check_packages(rules),
         'diversions': check_diversions(),
         'rebuilt': check_rebuilt(packages, deps),
         'release': check_release(packages, deps),
-        'unowned': check_unowned(owned_paths(), declared),
+        'unowned': check_unowned(owned_paths(), declared, policy),
         'ownership': check_ownership(declared),
         'local': local,
         'crash': check_crash(),
         'units': check_units(),
         'user_overrides': check_user_overrides(),
+        'services': check_services(policy),
     }
     drift = {
         'changed_files': len(report['packages']['changed']),
@@ -492,6 +524,8 @@ def main():
             print(f'override {p}')
         for u in report['units']:
             print(f"unit     {u['unit']} ({u['scope']}, {u['package']}) is {u['state']}")
+        for u in report['services']:
+            print(f"service  {u['unit']} ({u['scope']}) is {u['state']}, default {u['default']} (changed in Settings)")
         for e in local:
             if not e['present']:
                 print(f"local    {e['path']} absent{' (required)' if e['required'] else ''}")

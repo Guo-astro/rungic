@@ -127,6 +127,9 @@
     "rungic-plasma-config": {
       "source": "plasma/packaging/rungic-plasma-config"
     },
+    "rungic-plasma-services": {
+      "source": "plasma/packaging/rungic-plasma-services"
+    },
     "rungic-plasma-session": {
       "source": "plasma/packaging/rungic-plasma-session"
     },

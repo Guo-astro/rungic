@@ -1,0 +1,170 @@
+{
+ "comment": "Services the container keeps off by default, and why (docs/83). rungic-plasma-config installs this as /usr/share/rungic/service-policy.json and applies each unit's default once (masked: a /dev/null link in /etc/systemd/<scope>; disabled: not enabled), recording it in /var/lib/rungic/service-defaults, so a change made later in Settings -> Services survives upgrades. The Services page (rungic-plasma-services) lists the groups and changes them through its KAuth helper, which only acts on units named here. evidence: recorded = the reason is documented (see the doc named in summary); inferred = the reason is our reading, not verified on the phone; unknown = not recorded. risk: remote (reachable from the network), android (can take a function over from Android), unknown, none (has no use here). start: for a 'disabled' group, the units enabling turns on.",
+ "groups": [
+  {
+   "id": "ssh",
+   "name": "SSH 远程登录",
+   "default": "disabled",
+   "risk": "remote",
+   "evidence": "recorded",
+   "summary": "开启后，同一局域网内的设备可以用本机 Linux 账户的密码或 SSH 密钥登录（手机的 IP 地址，端口 22）。",
+   "warning": "开启后，局域网内的任何人都可以尝试用账户密码登录。请确认账户密码足够强，只在可信的网络中开启。",
+   "system": ["ssh.socket", "ssh.service"],
+   "start": ["ssh.socket"]
+  },
+  {
+   "id": "networkmanager",
+   "name": "NetworkManager",
+   "default": "masked",
+   "risk": "android",
+   "evidence": "recorded",
+   "summary": "网络由 Android 管理。Rungic 的网络兼容服务占用 org.freedesktop.NetworkManager 这个 D-Bus 名称，向 Linux 应用提供 Android 的网络状态（docs/research/32）。",
+   "warning": "容器与 Android 共用网卡。真正的 NetworkManager 可能接管 Wi-Fi，导致手机断网、无线调试断开，也会和 Rungic 的网络兼容服务冲突。",
+   "system": ["NetworkManager.service", "NetworkManager-wait-online.service"]
+  },
+  {
+   "id": "networkd",
+   "name": "systemd-networkd 与 netplan",
+   "default": "masked",
+   "risk": "android",
+   "evidence": "inferred",
+   "summary": "Ubuntu 的网卡配置服务。网卡、地址和路由由 Android 管理。",
+   "warning": "容器与 Android 共用网卡。它们可能改动网卡地址和路由，导致手机断网、无线调试断开。",
+   "system": ["systemd-networkd.service", "systemd-networkd.socket", "systemd-networkd-wait-online.service", "netplan-configure.service"]
+  },
+  {
+   "id": "resolved",
+   "name": "systemd-resolved",
+   "default": "masked",
+   "risk": "android",
+   "evidence": "inferred",
+   "summary": "域名解析由 Android 负责。",
+   "warning": "它可能接管 DNS 设置，导致 Linux 应用无法解析域名。",
+   "system": ["systemd-resolved.service"]
+  },
+  {
+   "id": "wpa_supplicant",
+   "name": "wpa_supplicant",
+   "default": "masked",
+   "risk": "android",
+   "evidence": "inferred",
+   "summary": "Wi-Fi 连接由 Android 自己的 wpa_supplicant 管理。",
+   "warning": "容器里再运行一个 wpa_supplicant 会争用同一块 Wi-Fi 网卡，可能导致手机断网、无线调试断开。",
+   "system": ["wpa_supplicant.service"]
+  },
+  {
+   "id": "modemmanager",
+   "name": "ModemManager",
+   "default": "masked",
+   "risk": "android",
+   "evidence": "recorded",
+   "summary": "调制解调器由 Android 的 RIL 管理。Rungic 的移动网络兼容服务占用 org.freedesktop.ModemManager1（docs/73）。",
+   "warning": "会和 Rungic 的移动网络兼容服务争用同一个 D-Bus 名称，Linux 设置里可能看不到 SIM 卡和信号。",
+   "system": ["ModemManager.service"]
+  },
+  {
+   "id": "bluetooth",
+   "name": "BlueZ 蓝牙服务",
+   "default": "masked",
+   "risk": "android",
+   "evidence": "recorded",
+   "summary": "蓝牙由 Android 管理，容器里没有蓝牙控制器。Rungic 的蓝牙兼容服务占用 org.bluez（docs/73）。",
+   "warning": "会和 Rungic 的蓝牙兼容服务争用 org.bluez，Linux 侧的蓝牙设置可能失效。",
+   "system": ["bluetooth.service"]
+  },
+  {
+   "id": "chrony",
+   "name": "chrony 时间同步",
+   "default": "masked",
+   "risk": "android",
+   "evidence": "inferred",
+   "summary": "系统时间由 Android 同步。容器与 Android 共用同一个内核时钟。",
+   "warning": "chrony 调整时间会改变整台手机的时间，可能与 Android 的时间同步冲突。",
+   "system": ["chrony.service"]
+  },
+  {
+   "id": "power-profiles",
+   "name": "power-profiles-daemon",
+   "default": "masked",
+   "risk": "android",
+   "evidence": "inferred",
+   "summary": "性能与省电策略由 Android 管理。",
+   "warning": "它无法真正切换手机的性能模式，设置里可能出现无效的电源模式。",
+   "system": ["power-profiles-daemon.service"]
+  },
+  {
+   "id": "powerdevil",
+   "name": "PowerDevil（用户服务）",
+   "default": "masked",
+   "risk": "unknown",
+   "evidence": "unknown",
+   "summary": "屏蔽原因没有单独记录。屏幕与电源由 Android 管理。",
+   "warning": "屏蔽原因没有记录，开启后的影响未知。",
+   "user": ["plasma-powerdevil.service"]
+  },
+  {
+   "id": "ksmserver",
+   "name": "KDE 会话管理（ksmserver）",
+   "default": "masked",
+   "risk": "unknown",
+   "evidence": "unknown",
+   "summary": "2026-09-26 之前为第一个用户手动屏蔽，原因没有记录；之后所有用户保持一致（docs/61）。",
+   "warning": "屏蔽原因没有记录，开启后的影响未知。",
+   "user": ["plasma-ksmserver.service"]
+  },
+  {
+   "id": "x11-helpers",
+   "name": "X11 托盘与菜单代理",
+   "default": "masked",
+   "risk": "none",
+   "evidence": "recorded",
+   "summary": "只为 X11 程序服务，会话没有 X 服务器。",
+   "user": ["plasma-xembedsniproxy.service", "plasma-gmenudbusmenuproxy.service"]
+  },
+  {
+   "id": "obex",
+   "name": "蓝牙文件传输（obexd）",
+   "default": "masked",
+   "risk": "none",
+   "evidence": "recorded",
+   "summary": "容器里没有蓝牙控制器（docs/73）。",
+   "user": ["obex.service"]
+  },
+  {
+   "id": "cloud-init",
+   "name": "cloud-init",
+   "default": "masked",
+   "risk": "none",
+   "evidence": "inferred",
+   "summary": "Ubuntu 云镜像的首次开机配置。本机不是云主机。",
+   "system": ["cloud-init-local.service", "cloud-init-network.service", "cloud-config.service", "cloud-final.service", "cloud-init.target"]
+  },
+  {
+   "id": "snapd",
+   "name": "Snap 软件包服务",
+   "default": "masked",
+   "risk": "none",
+   "evidence": "inferred",
+   "summary": "软件通过 apt 和 Flatpak 安装。Snap 在容器里未经验证。",
+   "system": ["snapd.service", "snapd.socket", "snapd.seeded.service"]
+  },
+  {
+   "id": "getty",
+   "name": "控制台登录终端",
+   "default": "masked",
+   "risk": "none",
+   "evidence": "inferred",
+   "summary": "容器没有物理控制台。",
+   "system": ["console-getty.service", "getty@tty1.service"]
+  },
+  {
+   "id": "tpm",
+   "name": "TPM 设备规则",
+   "default": "masked",
+   "risk": "none",
+   "evidence": "inferred",
+   "summary": "手机没有 TPM 安全芯片。",
+   "system": ["tpm-udev.path", "tpm-udev.service"]
+  }
+ ]
+}
