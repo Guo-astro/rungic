@@ -563,6 +563,28 @@ G100 S（XT2537-4，SM6435 `_parrot_v3`），接收端TCL 85Q6H。电视这次�
 - Android层的胶囊始终画在Linux画面之上，Plasma面板打开时小胶囊仍会压在面板边缘。
 - 胶囊收起后，原来展开区域的点击会落到桌面。
 
+## 断开电视后通知在手机上重复弹出（2026-09-29）
+
+- 现象（用户报告，实机复现）：连过电视再断开后，每条通知在手机上出现两个弹窗。一个是手机壳层的居中卡片，另一个是桌面样式的弹窗，在左上角，带倒计时条和✕。复现方法：电视已断开时在容器中执行`notify-send -t 20000 …`。
+- 两套弹窗来源：
+  - 手机：Plasma Mobile的`NotificationPopupProvider`（壳层单例，`PopupProviderLoader.load()`）。
+  - 电视：`external-desktop.js`给外屏建的桌面面板带系统托盘，托盘里有桌面通知小程序`org.kde.plasma.notifications`，它的弹窗由plasma-workspace的`applets/notifications/global/Globals.qml`管理。
+- 原因：
+  - 屏幕移除后面板容器仍保留并加载。`evaluateScript`列出面板25（`org.kde.panel`）为`screen=-1 last=1`，其中的`systemtray`（29）仍在。
+  - `Globals.qml`（v6.6.6）在`ratePlasmoids()`里只按位置、是否展开、是否在屏幕0打分，不排除没有屏幕的小程序。
+  - 所以断开电视后，桌面通知小程序照常为每条通知建弹窗，这些弹窗落到仅剩的手机屏上，与手机壳层的弹窗叠在一起。
+- 电视连着时，手机和电视各弹一次，属于各屏各自显示，不是本问题。
+- 考虑过的修复：给plasma-workspace打补丁，让`Globals.qml`跳过没有屏幕的小程序。这需要把plasma-workspace纳入补丁队列并重新构建。用户选了更简单的做法：只停用电视面板里的通知，手机自己的通知照常。
+- 修复（plasma-mobile `+rungic5`，`external-screen-desktop-shell.patch`）：`external-desktop.js`对每个桌面面板（`org.kde.panel`）的系统托盘，从`General/extraItems`里去掉`org.kde.plasma.notifications`，并保证它在`knownItems`中，免得托盘把它加回来。新建和已有的面板都处理。电视上从此不弹桌面样式的通知。
+- 触发条件（实测）：通知小程序的界面只有在电视面板真正显示过之后才会加载。plasmashell启动时如果电视不在，即使配置里有它也不弹窗（测试5只有一个弹窗）。只有本次会话里接过电视、再断开，才会重复。
+- 生效时机：
+  - 小程序一旦加载，它的弹窗组件在plasmashell里会一直工作，运行中移除也照样弹窗。
+  - 接上电视时，面板和小程序先加载，脚本约1秒后才移除它。所以升级后第一次接电视的那次会话里，断开后仍会重复一次；从plasmashell下次启动起不再出现。
+- 实测（G100 S，plasma-mobile `+rungic5`，TCL 85Q6H，均为实机验证）：
+  1. 把通知小程序加回电视面板托盘（模拟升级前的配置），重启plasmashell。电视不在时发通知，只有手机的一个弹窗。
+  2. 接上电视：`screenCount`为2，脚本已从配置中移除该小程序。断开后发通知仍是两个弹窗，左上角是桌面样式的那个，因为本次会话里小程序已加载过。
+  3. 重启plasmashell，再接上、断开电视后发通知，只剩手机的弹窗。
+
 ## 初版方案：Android Presentation承载外屏输出（无root假设）
 
 ```

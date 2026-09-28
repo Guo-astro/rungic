@@ -9,10 +9,12 @@ by KScreenOSDUtil when a screen is added, gives every screen after the phone a F
 and a Plasma Desktop panel. A panel counts for the screen of its saved lastScreen until the shell
 has made its view, so a slow desktop does not get another panel each time the screen comes back.
 Applets of desktop panels and desktops use Plasma Desktop's AppletPopup
-next to the panel instead of the mobile full-screen overlay.
+next to the panel instead of the mobile full-screen overlay. Desktop panel trays leave out the
+notifications applet: the phone's shell shows the popups, and the tray's popups, which keep running
+once loaded, landed on the phone as duplicates after the TV disconnected (from the next shell start).
 
 Forwarded: not-needed
-Last-Update: 2026-09-28
+Last-Update: 2026-09-29
 X-Rungic-Status: Inappropriate [interim until upstream desktop panels on external screens (!548)]
 X-Rungic-Tests: L3:cast.agent_screen (output appears); desktop shell on the TV: manual
 X-Rungic-Docs: docs/58
@@ -22,8 +24,8 @@ X-Rungic-Docs: docs/58
  shell/contents/applet/CompactApplet.qml            | 138 ++------
  shell/contents/applet/CompactAppletDesktop.qml     | 390 +++++++++++++++++++++
  .../{CompactApplet.qml => CompactAppletMobile.qml} |   0
- shell/contents/external-desktop.js                 |  75 ++++
- 6 files changed, 518 insertions(+), 117 deletions(-)
+ shell/contents/external-desktop.js                 | 104 ++++++
+ 6 files changed, 547 insertions(+), 117 deletions(-)
  create mode 100644 shell/contents/applet/CompactAppletDesktop.qml
  copy shell/contents/applet/{CompactApplet.qml => CompactAppletMobile.qml} (100%)
  create mode 100644 shell/contents/external-desktop.js
@@ -661,10 +663,10 @@ copy from shell/contents/applet/CompactApplet.qml
 copy to shell/contents/applet/CompactAppletMobile.qml
 diff --git a/shell/contents/external-desktop.js b/shell/contents/external-desktop.js
 new file mode 100644
-index 0000000..3b62fa8
+index 0000000..616ad04
 --- /dev/null
 +++ b/shell/contents/external-desktop.js
-@@ -0,0 +1,75 @@
+@@ -0,0 +1,104 @@
 +// Plasma shell script (org.kde.PlasmaShell.evaluateScript): a desktop-style shell
 +// on every external screen while the phone keeps the mobile shell (docs/58).
 +// Idempotent. Upstream Plasma Mobile puts a second mobile homescreen and no
@@ -690,6 +692,28 @@ index 0000000..3b62fa8
 +        }
 +    }
 +    return false;
++}
++
++// The phone's shell shows notification popups; a desktop panel's tray would show
++// them too, and once its screen is gone (the TV disconnected) its popups land on
++// the phone next to the phone's own. Desktop trays leave notifications out: their
++// popups keep running in plasmashell once loaded, so this holds from the next
++// start of the shell. knownItems keeps the tray from adding them back.
++function trayWithoutNotifications(panel) {
++    var id = "org.kde.plasma.notifications";
++    var trays = panel.widgets("org.kde.plasma.systemtray");
++    for (var t = 0; t < trays.length; t++) {
++        trays[t].currentConfigGroup = ["General"];
++        var extra = trays[t].readConfig("extraItems", []);
++        var known = trays[t].readConfig("knownItems", []);
++        if (extra.indexOf(id) >= 0) {
++            trays[t].writeConfig("extraItems", extra.filter(function (item) { return item !== id; }));
++            log.push("panel " + panel.id + ": tray without notifications");
++        }
++        if (known.indexOf(id) < 0) {
++            trays[t].writeConfig("knownItems", known.concat([id]));
++        }
++    }
 +}
 +
 +for (var screen = 1; screen < screenCount; screen++) {
@@ -736,6 +760,13 @@ index 0000000..3b62fa8
 +        panel.addWidget("org.kde.plasma.digitalclock");
 +        panel.addWidget("org.kde.plasma.showdesktop");
 +        log.push("screen " + screen + ": panel " + panel.id);
++    }
++}
++
++var allPanels = panels();
++for (var p = 0; p < allPanels.length; p++) {
++    if (allPanels[p].type === "org.kde.panel") {
++        trayWithoutNotifications(allPanels[p]);
 +    }
 +}
 +

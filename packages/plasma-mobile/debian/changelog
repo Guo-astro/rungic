@@ -1,3 +1,12 @@
+plasma-mobile (6.6.5-0ubuntu0.1+rungic5) resolute; urgency=medium
+
+  * external-screen-desktop-shell.patch: desktop panel trays leave out the
+    notifications applet. After the TV disconnected, the tray of its panel
+    kept showing popups, which landed on the phone next to the phone
+    shell's own (docs/58).
+
+ -- range-dev <noreply@localhost>  Tue, 29 Sep 2026 08:40:00 +0000
+
 plasma-mobile (6.6.5-0ubuntu0.1+rungic4) resolute; urgency=medium
 
   * home-hold-voice-assistant.patch: a press on a navigation button that
