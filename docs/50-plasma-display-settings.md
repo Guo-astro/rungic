@@ -42,3 +42,24 @@ APK1.8/versionCode9、KWin+moto5、KScreen+moto1已部署。实际渲染1080×24
 KScreen+moto2拆分刷新率选项、已选策略和实时显示信息的变更信号，避免每秒更新实际刷新率时重建选项模型。退出旧设置进程、重新启动后，GUI选择自动并应用，实际refreshPolicy=0；证据为moto2-gui-auto.json和moto2-auto-dialog-later.png。此时的固定120Hz切回检查遇到前台被安卓相机/文件选择器替换，已停止自动点击；moto2-gui-fixed120.json仍为0，不能视为切回成功。完整应用/还原及缩放/方向回归仍待完成。
 
 六个当前显示组件安装包已收集至refs/plasma-display-settings-20260923/packages/，附SHA256SUMS；包含KWin+moto5五包及KScreen+moto2，未重新封装整套ROM。安装后dpkg --audit无输出，apt-get check通过。
+
+## 2026-09-28 X70 Air Pro 的 300% 上限核查
+
+用户反馈 300% 仍偏小。本轮只读核查，未修改用户缩放或重启桌面。精确设备 ZY22MHZKFT（ADB 5038）的 KScreen 实际输出为 WL-0、1264×2780、scale=3，逻辑工作区 422×927；Android display.ini 同样报告 1264×2780。证据：`.work/ci/runs/vantage-20260928-onboarding/device/display-scale-investigation.log`。
+
+上限有两层：KDE KScreen Plasma/6.6 的 [OutputPanel.qml](https://github.com/KDE/kscreen/blob/Plasma/6.6/kcm/ui/OutputPanel.qml) 中 Slider `to: 300`、SpinBox `to: 3.0 * factor`（GPL-2.0-or-later）；项目当前 `packages/kwin/debian/patches/rungic/android-backend.patch` 的 `AndroidBackend::applyOutputChanges` 也拒绝用户请求 `scale > 3.0`。旧的一次性迁移脚本仍使用 `SCALE = 3.0`。本篇原来的默认值依据是 1080 像素短边配 360 逻辑像素，并非 X70 Air Pro 的硬件上限。
+
+按本机原生尺寸计算，350% 约为 361×794 逻辑像素，400% 为 316×695；这只是布局尺寸计算，尚未验收这些档位。提高可选范围须同时核对设置界面和 KWin 后端，沿用标准输出缩放与应用/还原机制；不能仅改 UI 或只放大字体便宣称解决。后续实现前核对固定上游版本和协议校验，验证缩放读回、触摸、旋转、挖孔、键盘及设置还原，默认策略须区分机型且保留用户已选值。
+
+### 密度与手机显示大小策略的进一步核查
+
+本机 `wm density` 报告基础逻辑密度 480（无 override），`dumpsys display` 报告 xdpi=445.9111、ydpi=449.75797，即面板报告的物理尺寸约 72×157 mm；这些是设备报告值，未用尺实测。证据：同目录 `display-density-investigation.txt`。Android 的逻辑密度并非面板 PPI，480/160=3 是 Android dp 到像素的倍率，不能据此保证 Plasma 控件与 Android 控件等大；两者的字体、布局和触摸区域设计不同。参考 [Android 密度说明](https://developer.android.com/training/multiscreen/screendensities)。
+
+进一步查 KDE Plasma/6.6 [OutputConfigurationStore::chooseScale](https://github.com/KDE/kwin/blob/Plasma/6.6/src/outputconfigurationstore.cpp)：手机内屏使用目标逻辑密度 150、最小逻辑尺寸 360，自动缩放另有限幅 3.0，并以 5% 取整。因此前述沿用旧机默认值不是 300% 的唯一来源；上游自动策略按本机报告值计算也接近 3。项目启动包装器已有短边/360 的初值，但最终输出还受 KWin 保存配置、自动生成和迁移影响，不能仅据启动参数认定默认值实际生效。
+
+后续策略建议（尚未实现）：以实际可读性和触摸尺寸校准默认值，使用 `逻辑尺寸=渲染像素尺寸/倍率`，并以 `控件毫米数=逻辑尺寸×倍率/渲染像素密度×25.4` 核验。以 48 逻辑像素的假设点击区域作计算示例，本机原生模式 100%/300%/350% 分别约为 2.7/8.2/9.6 mm；这不是声称所有 Plasma 按钮均为 48。约 360 的手机逻辑短边可作为本机候选，1264/360≈3.51，取 350% 后需验证布局。不能将所有尺寸的平板、折叠屏、外屏统一为 360。
+
+普通用户设置宜提供相对本机推荐值的显示大小档位，必要时在高级设置展示真实倍率，避免将像素一比一的 100% 当作手机推荐值。可选边界按文字/触摸下限及最小可用布局确定，不按固定百分比截断；400% 的逻辑宽仅 316，需验证窄屏布局。切换到 720 短边渲染时，为维持约 360 逻辑短边，倍率应同步约为 2；旋转不改变用户显示大小，外屏使用独立策略。这些为研究建议，未修改当前设备。
+
+
+2026-09-28：手机显示大小公共策略已重构，KWin 默认/保存/渲染分辨率补偿和 KScreen 五档 UI 共用 `shared/display-policy/`，移除固定 300% 上限与旧迁移。X70 Air Pro 默认 350%，已有设置保留；最新版本、GUI 恢复与实机边界见 [85 篇](85-phone-display-size-policy.md)。

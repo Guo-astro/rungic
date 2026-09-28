@@ -2,6 +2,7 @@
 """Compare a GKI Module.symvers with every OEM module's version references."""
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import struct
@@ -24,6 +25,9 @@ def sections(data):
             raise ValueError("invalid ELF section name")
         name = names[header[0]:name_end].decode("ascii")
         start, length = header[4:6]
+        if header[1] == 8:  # SHT_NOBITS (.bss) has no file payload.
+            yield name, b""
+            continue
         if start + length > len(data):
             raise ValueError(f"invalid {name} section bounds")
         yield name, data[start:start + length]
@@ -31,6 +35,24 @@ def sections(data):
 
 def module_versions(path):
     entries = dict(sections(path.read_bytes()))
+    # ACK android16-6.12 kernel/module/version.c uses paired u32 CRCs and
+    # NUL-terminated names for CONFIG_EXTENDED_MODVERSIONS (including Rust).
+    if "__version_ext_crcs" in entries or "__version_ext_names" in entries:
+        crcs = entries.get("__version_ext_crcs")
+        names = entries.get("__version_ext_names")
+        if crcs is None or names is None or not crcs or len(crcs) % 4 or not names.endswith(b"\0"):
+            raise ValueError(f"{path}: invalid extended symbol versions")
+        count = len(crcs) // 4
+        # modpost emits concatenated "symbol\\0" string literals, so C adds
+        # one final implicit terminator after the last explicit terminator.
+        fields = names.split(b"\0", count)
+        symbols = fields[:count]
+        if len(fields) != count + 1 or fields[-1] not in (b"", b"\0") or any(not name for name in symbols):
+            raise ValueError(f"{path}: extended CRC/name count mismatch")
+        decoded = [name.decode("ascii") for name in symbols]
+        if len(set(decoded)) != len(decoded):
+            raise ValueError(f"{path}: duplicate extended symbol version")
+        return dict(zip(decoded, struct.unpack(f"<{len(decoded)}I", crcs)))
     version_data = entries.get("__versions")
     if version_data is None:
         raise ValueError(f"{path}: missing __versions")
@@ -70,12 +92,15 @@ def main():
                     for name, crc in versions.items()
                     if name in expected and crc != expected[name]}
         reports.append({"module": str(module.relative_to(args.modules)),
+                        "sha256": hashlib.sha256(module.read_bytes()).hexdigest(),
                         "references": len(versions),
                         "matched": sum(name in expected and crc == expected[name]
                                        for name, crc in versions.items()),
                         "unresolved_by_gki": sorted(set(versions) - set(expected)),
                         "mismatch": mismatch})
-    report = {"schema_version": 1, "module_count": len(reports),
+    report = {"schema_version": 1,
+              "symvers_sha256": hashlib.sha256(args.symvers.read_bytes()).hexdigest(),
+              "module_count": len(reports),
               "references": sum(item["references"] for item in reports),
               "matched": sum(item["matched"] for item in reports),
               "mismatch_count": sum(len(item["mismatch"]) for item in reports),

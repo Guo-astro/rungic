@@ -151,3 +151,6 @@ plasma-settings `+rungic3`删除`android-hardware-settings`补丁：蜂窝、蓝
 - **修复**：新增`packages/gst-plugins-base1.0`（Ubuntu `1.28.2-1ubuntu0.1`，补丁`rungic/audiobasesrc-negative-resync.patch`）：差值用有符号数，不为正时不前进，读位置取最后写入的段（至多比running time超前一段）。上游main（2026-09-27）仍未修复。重建`libgstreamer-plugins-base1.0-0`等6个已安装的二进制包，录屏每次新起进程，无需重启会话。
 - 验收期间另一次失败是环境问题：屏幕右下有持续的实体触摸（`chipone-tddi`上报约20秒一次的长按），注入的滑动因此成了多指手势，快捷设置拉不下来，主屏还进了编辑模式。以后验收前先看`dumpsys input`的`touchingPointers`为空。
 - **验收（发布`20260927.15`）**：`recording.quicksetting`连续6次通过（每次都有audio0 EOS并保存，无超时；修复前约一半失败），随后全量验收19项全部通过（报告`.work/acceptance/20260927.15/20260927-234841`）。
+
+
+2026-09-28 显示大小需求更新：KScreen 因手机五档大小与分辨率预览补偿重新采用固定来源＋小型补丁队列（`packages/kscreen`），仍走 libkscreen/KWin 标准接口，不恢复旧 Android 私有控制补丁。KWin 负责默认和持久化；两组件共用策略头文件。见 [85 篇](85-phone-display-size-policy.md)。

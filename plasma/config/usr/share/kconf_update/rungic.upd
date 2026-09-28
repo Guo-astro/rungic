@@ -2,9 +2,8 @@ Version=6
 # One-time per-user migrations of this project (docs/61). kded runs them at
 # session start and records them in ~/.config/kconf_updaterc.
 
-# The legacy nested output's inconsistent scale (plasma/migrate-display.py).
-Id=rungic-native-display-v1
-Script=rungic-migrate-display.py,python3
+# The legacy fixed-3x display migration is retired. KWin owns default generation and
+# preserves existing user choices, including 3x. Never guess whether 3x was user-selected.
 
 # Quick setting tiles of cast and the assistant's screen, next to their
 # neighbours (formerly done by the cast and agent-screen install scripts).

@@ -2,6 +2,7 @@
 P=$SRC/plasma
 install -Dm755 "$P/init" "$DESTDIR/usr/sbin/rungic-plasma-init"
 install -Dm755 "$P/session" "$DESTDIR/usr/libexec/rungic-plasma-session"
+install -Dm755 "$P/user-dirs" "$DESTDIR/usr/libexec/rungic-user-dirs"
 install -Dm755 "$P/shared-storage" "$DESTDIR/usr/libexec/rungic-plasma-shared"
 install -Dm755 "$P/kwin" "$DESTDIR/usr/libexec/rungic-plasma-kwin"
 install -Dm755 "$P/desktop-action.py" "$DESTDIR/usr/libexec/rungic-plasma-desktop-action"

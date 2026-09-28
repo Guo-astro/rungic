@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Check live fastboot output and timeouts without touching a device."""
 import importlib.util
+import copy
 from pathlib import Path
 import subprocess
 import tempfile
@@ -62,6 +63,37 @@ else:
 
     def test_segmented_identity_remains_parseable(self):
         self.assertEqual(self.device.var("version-bootloader"), "abcdef")
+
+
+class FastbootMappingTest(unittest.TestCase):
+    def setUp(self):
+        self.spec = {"id": "vantage/test", "identity": {"bootloader": "firmware-abcd"}}
+        self.adapter = {"schema_version": 1, "device_spec_id": "vantage/test",
+                        "device_spec_sha256": "sha", "android_bootloader": "firmware-abcd",
+                        "fastboot_bootloader": "firmware-ab", "securestate": "flashing_unlocked:SDP",
+                        "target_slot": "a", "super_mode": "userspace", "mode_probe_verified": True}
+
+    def test_existing_default_stays_strict(self):
+        self.assertEqual(flash.fastboot_settings(self.spec, "sha", "firmware-abc"),
+                         "flashing_unlocked")
+        with self.assertRaises(RuntimeError):
+            flash.fastboot_settings(self.spec, "sha", "firmware-ab")
+
+    def test_explicit_observed_mapping(self):
+        self.assertEqual(flash.fastboot_settings(self.spec, "sha", "firmware-ab", self.adapter),
+                         "flashing_unlocked:SDP")
+
+    def test_wrong_firmware_spec_or_unverified_plan_is_rejected(self):
+        mutations = {"device_spec_id": "other", "device_spec_sha256": "other",
+                     "android_bootloader": "other", "fastboot_bootloader": "other",
+                     "securestate": "locked", "target_slot": "b", "super_mode": "bootloader",
+                     "mode_probe_verified": False}
+        for key, value in mutations.items():
+            with self.subTest(key=key):
+                adapter = copy.deepcopy(self.adapter)
+                adapter[key] = value
+                with self.assertRaises(RuntimeError):
+                    flash.fastboot_settings(self.spec, "sha", "firmware-ab", adapter)
 
 
 if __name__ == "__main__":

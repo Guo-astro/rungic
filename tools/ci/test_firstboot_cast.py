@@ -56,9 +56,12 @@ class FirstbootCastTest(unittest.TestCase):
             target = tree / dest
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes((build_host_seed.ROOT / source).read_bytes())
+            if dest.endswith("/install.sh"):
+                target.write_text(target.read_text().replace("/data/adb/", f"{self.root}/data/adb/"))
             target.chmod(mode)
         if with_jar:
             (tree / "rungic-wfd/rungic-cast.jar").write_bytes(b"dex")
+            build_host_seed.cast_payload.manifest(tree / "rungic-wfd")
         archive = self.root / "product/etc/rungic/host-seed.tar.gz"
         archive.parent.mkdir(parents=True, exist_ok=True)
         with tarfile.open(archive, "w:gz") as tar:
@@ -79,7 +82,7 @@ class FirstbootCastTest(unittest.TestCase):
         self.assertTrue(os.access(wfd / "rungic-cast-watch", os.X_OK))
         self.assertTrue((wfd / "rungic-cast.jar").is_file())
         self.assertTrue((wfd / "wfd.sepolicy.rule").is_file())
-        self.assertFalse((wfd / "service.d").exists())
+        self.assertTrue((wfd / "service.d").is_dir())
         for script in ("rungic-wfd-sepolicy.sh", "rungic-cast-watch.sh"):
             self.assertTrue(os.access(self.root / "data/adb/service.d" / script, os.X_OK))
         self.assertFalse((self.root / "data/adb/.rungic-wfd-stage").exists())
@@ -102,17 +105,30 @@ class FirstbootCastTest(unittest.TestCase):
         self.assertFalse((self.root / "data/adb/rungic-wfd").exists())
         self.assertFalse(self.starts.exists())
 
-    def test_installed_is_left_alone(self):
+    def test_healthy_install_is_left_alone(self):
         seed = self.seed()
         self.assertEqual(self.run_section(seed).returncode, 0)
         self.starts.unlink()
         watch = self.root / "data/adb/rungic-wfd/rungic-cast-watch"
-        watch.write_text("local change\n")
+        original = watch.read_text()
         result = self.run_section(seed)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertNotIn("casting", result.stdout)
-        self.assertEqual(watch.read_text(), "local change\n")
+        self.assertEqual(watch.read_text(), original)
         self.assertFalse(self.starts.exists())
+
+    def test_damaged_jar_and_missing_service_are_repaired(self):
+        seed = self.seed()
+        self.assertEqual(self.run_section(seed).returncode, 0)
+        wfd = self.root / "data/adb/rungic-wfd"
+        (wfd / "rungic-cast.jar").write_bytes(b"broken")
+        (wfd / "last-sink").write_text("remembered TV\n")
+        (self.root / "data/adb/service.d/rungic-cast-watch.sh").unlink()
+        result = self.run_section(seed)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((wfd / "rungic-cast.jar").read_bytes(), b"dex")
+        self.assertEqual((wfd / "last-sink").read_text(), "remembered TV\n")
+        self.assertTrue((self.root / "data/adb/service.d/rungic-cast-watch.sh").exists())
 
 
 if __name__ == "__main__":

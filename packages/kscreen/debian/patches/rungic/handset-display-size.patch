@@ -1,0 +1,217 @@
+From: Rungic <noreply@rungic.invalid>
+Date: Mon, 28 Sep 2026 16:01:16 +0800
+Subject: Handset display size: physical defaults,
+ bounded UI and resolution-independent preferences
+
+Forwarded: not-needed
+Last-Update: 2026-09-28
+X-Rungic-Status: Inappropriate [Rungic handset policy and Android rendering modes]
+X-Rungic-Tests: tools/test_display_policy.py; manual deployment checks in docs/85
+X-Rungic-Docs: docs/85-phone-display-size-policy.md
+---
+ kcm/output_model.cpp   | 44 +++++++++++++++++++++++++++++++++++++++++---
+ kcm/output_model.h     |  3 +++
+ kcm/ui/OutputPanel.qml | 50 +++++++++++++++++++++++++++++++++++++++++++++++++-
+ 3 files changed, 93 insertions(+), 4 deletions(-)
+
+diff --git a/kcm/output_model.cpp b/kcm/output_model.cpp
+index b097396..3735c2f 100644
+--- a/kcm/output_model.cpp
++++ b/kcm/output_model.cpp
+@@ -4,6 +4,7 @@
+     SPDX-License-Identifier: GPL-2.0-or-later
+ */
+ #include "output_model.h"
++#include "handset-scale-qt.h"
+ 
+ #include <cstdint>
+ 
+@@ -67,6 +68,24 @@ QVariant OutputModel::data(const QModelIndex &index, int role) const
+         return output->rotation();
+     case ScaleRole:
+         return output->scale();
++    case HandsetPolicyRole: {
++        const bool handset = Rungic::Display::isHandset(output->vendor(), output->model());
++        const QSize pixels = resolution(output);
++        const double edge = Rungic::Display::shortEdge(pixels.width(), pixels.height());
++        double nativeEdge = edge;
++        for (const auto &mode : output->modes()) {
++            nativeEdge = std::max(nativeEdge, Rungic::Display::shortEdge(mode->size().width(), mode->size().height()));
++        }
++        QVariantList choices;
++        if (edge > 0) {
++            const auto policy = Rungic::Display::policy();
++            for (double scale : Rungic::Display::presets(edge, Rungic::Display::dpi(pixels, output->sizeMm(), policy), nativeEdge, policy, Rungic::Display::androidReference())) {
++                choices.append(scale);
++            }
++        }
++        return QVariantMap{{QStringLiteral("enabled"), handset && choices.size() == 5},
++                           {QStringLiteral("presets"), choices}};
++    }
+     case ResolutionIndexRole:
+         return resolutionIndex(output);
+     case ResolutionsRole:
+@@ -246,6 +265,10 @@ bool OutputModel::setData(const QModelIndex &index, const QVariant &value, int r
+         if (ok && !qFuzzyCompare(output.ptr->scale(), scale)) {
+             const auto oldSize = output.ptr->explicitLogicalSizeInt();
+ 
++            if (Rungic::Display::isHandset(output.ptr->vendor(), output.ptr->model())) {
++                if (!Rungic::Display::validScale(scale)) return false;
++                output.logicalDpi = Rungic::Display::dpi(resolution(output.ptr), output.ptr->sizeMm()) / scale;
++            }
+             output.ptr->setScale(scale);
+ 
+             const auto newSize = m_config->config()->logicalSizeForOutputInt(*output.ptr);
+@@ -374,6 +397,7 @@ QHash<int, QByteArray> OutputModel::roleNames() const
+     roles[AutoRotateRole] = "autoRotate";
+     roles[RotationRole] = "rotation";
+     roles[ScaleRole] = "scale";
++    roles[HandsetPolicyRole] = "handsetPolicy";
+     roles[ResolutionIndexRole] = "resolutionIndex";
+     roles[ResolutionsRole] = "resolutions";
+     roles[ResolutionRole] = "resolution";
+@@ -573,7 +597,7 @@ inline bool refreshRateCompare(float rate1, float rate2)
+ 
+ bool OutputModel::setResolution(int outputIndex, int resIndex)
+ {
+-    const Output &output = m_outputs[outputIndex];
++    Output &output = m_outputs[outputIndex];
+     const auto resolutionList = resolutions(output.ptr);
+     if (resIndex < 0 || resIndex >= resolutionList.size()) {
+         return false;
+@@ -609,6 +633,14 @@ bool OutputModel::setResolution(int outputIndex, int resIndex)
+         return false;
+     }
+     const auto oldSize = output.ptr->explicitLogicalSizeInt();
++    if (Rungic::Display::isHandset(output.ptr->vendor(), output.ptr->model())) {
++        if (!output.logicalDpi) {
++            output.logicalDpi = Rungic::Display::dpi(resolution(output.ptr), output.ptr->sizeMm()) / output.ptr->scale();
++        }
++        const double scale = Rungic::Display::effectiveScale(Rungic::Display::dpi(size, output.ptr->sizeMm()), *output.logicalDpi);
++        if (!Rungic::Display::validScale(scale)) return false;
++        output.ptr->setScale(scale);
++    }
+     output.ptr->setCurrentModeId(id);
+     output.ptr->setSize(output.ptr->currentMode()->size());
+ 
+@@ -620,7 +652,7 @@ bool OutputModel::setResolution(int outputIndex, int resIndex)
+     QModelIndex index = createIndex(outputIndex, 0);
+     // Calling this directly ignores possible optimization when the
+     // refresh rate hasn't changed in fact. But that's ok.
+-    Q_EMIT dataChanged(index, index, {ResolutionIndexRole, ResolutionRole, SizeRole, RefreshRatesRole, RefreshRateIndexRole});
++    Q_EMIT dataChanged(index, index, {ResolutionIndexRole, ResolutionRole, SizeRole, RefreshRatesRole, RefreshRateIndexRole, ScaleRole, HandsetPolicyRole});
+     Q_EMIT sizeChanged();
+     return true;
+ }
+@@ -649,8 +681,14 @@ bool OutputModel::setRefreshRate(int outputIndex, int refIndex)
+         return false;
+     }
+     output.ptr->setCurrentModeId((*modeIt)->id());
++    // An explicit handset rate selection also selects Android's fixed-rate policy.
++    // This distinguishes it from a stale current Hz submitted with a size change.
++    if (Rungic::Display::isHandset(output.ptr->vendor(), output.ptr->model())) {
++        output.ptr->setVrrPolicy(KScreen::Output::VrrPolicy::Never);
++        m_config->setVrrPolicy(output.ptr, KScreen::Output::VrrPolicy::Never);
++    }
+     QModelIndex index = createIndex(outputIndex, 0);
+-    Q_EMIT dataChanged(index, index, {RefreshRateIndexRole});
++    Q_EMIT dataChanged(index, index, {RefreshRateIndexRole, VrrPolicyRole});
+     return true;
+ }
+ 
+diff --git a/kcm/output_model.h b/kcm/output_model.h
+index fcfbd1a..4267d20 100644
+--- a/kcm/output_model.h
++++ b/kcm/output_model.h
+@@ -30,6 +30,7 @@ public:
+         AutoRotateRole,
+         RotationRole,
+         ScaleRole,
++        HandsetPolicyRole,
+         ResolutionIndexRole,
+         ResolutionsRole,
+         ResolutionRole,
+@@ -119,6 +120,7 @@ private:
+             ptr = output.ptr;
+             pos = output.pos;
+             posReset = output.posReset;
++            logicalDpi = output.logicalDpi;
+             return *this;
+         }
+         Output &operator=(Output &&) noexcept = default;
+@@ -130,6 +132,7 @@ private:
+         // Same for the y and shifting down.
+         std::optional<QPoint> posReset = std::nullopt;
+         bool moving = false;
++        std::optional<double> logicalDpi;
+     };
+ 
+     void rolesChanged(int outputId, const QList<int> &roles);
+diff --git a/kcm/ui/OutputPanel.qml b/kcm/ui/OutputPanel.qml
+index 3f83621..070567e 100644
+--- a/kcm/ui/OutputPanel.qml
++++ b/kcm/ui/OutputPanel.qml
+@@ -86,7 +86,7 @@ Kirigami.FormLayout {
+         // Set the same limit as the device ComboBox
+         Layout.maximumWidth: Kirigami.Units.gridUnit * 14
+ 
+-        visible: kcm.perOutputScaling && element.replicationSourceIndex == 0
++        visible: kcm.perOutputScaling && element.replicationSourceIndex == 0 && !element.handsetPolicy.enabled
+         Kirigami.FormData.label: i18n("Scale:")
+         Kirigami.FormData.buddyFor: scaleSlider
+ 
+@@ -132,6 +132,54 @@ Kirigami.FormLayout {
+         }
+     }
+ 
++    ColumnLayout {
++        visible: kcm.perOutputScaling && element.replicationSourceIndex == 0 && element.handsetPolicy.enabled
++        Kirigami.FormData.label: i18n("Display size:")
++        Kirigami.FormData.buddyFor: handsetSize
++        QQC2.ComboBox {
++            id: handsetSize
++            Layout.fillWidth: true
++            textRole: "label"
++            valueRole: "scale"
++            model: {
++                const p = element.handsetPolicy;
++                const values = p.presets;
++                const labels = [i18n("Smallest"), i18n("Small"), i18n("Standard (recommended)"), i18n("Large"), i18n("Largest")];
++                const choices = [];
++                for (let i = 0; i < values.length; ++i) {
++                    const scale = values[i];
++                    const existing = choices.findIndex(choice => Math.abs(choice.scale - scale) < 0.001);
++                    if (existing === -1) choices.push({label: labels[i], scale: scale});
++                    else if (i === 2) choices[existing].label = labels[i];
++                }
++                if (!choices.some(choice => Math.abs(choice.scale - element.scale) < 1 / 240)) {
++                    choices.push({label: i18n("Custom (%1%)", Math.round(element.scale * 1000) / 10), scale: element.scale});
++                }
++                return choices;
++            }
++            currentIndex: model.findIndex(choice => Math.abs(choice.scale - element.scale) < 1 / 240)
++            onActivated: element.scale = currentValue
++        }
++        QQC2.Label {
++            text: i18n("Scale: %1%", Math.round(element.scale * 1000) / 10)
++        }
++        QQC2.CheckBox {
++            id: handsetCustom
++            text: i18n("Custom scale")
++        }
++        QQC2.SpinBox {
++            visible: handsetCustom.checked
++            from: 60
++            to: 600
++            stepSize: 6
++            editable: true
++            value: Math.round(element.scale * 120)
++            textFromValue: (value, locale) => i18n("%1%", Math.round(value / 120 * 1000) / 10)
++            valueFromText: (text, locale) => Math.round(Number.fromLocaleString(locale, text.replace("%", "")) / 100 * 120)
++            onValueModified: element.scale = value / 120
++        }
++    }
++
+     Orientation {}
+ 
+     RowLayout {

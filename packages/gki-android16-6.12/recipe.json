@@ -1,0 +1,11 @@
+{
+  "kind": "git",
+  "source": "android common kernel",
+  "version": "6.12.38-android16-5-g7aecc84c5b34",
+  "git": "https://android.googlesource.com/kernel/common",
+  "commit": "7aecc84c5b34a3f9659e24d74a8080e1dc19b6fd",
+  "tree": "310bd3cca9341a49f573c3195ae21e95215cf28a",
+  "upstream": "https://android.googlesource.com/kernel/common",
+  "licenses": "GPL-2.0-only; see COPYING and per-file SPDX identifiers",
+  "files": {}
+}

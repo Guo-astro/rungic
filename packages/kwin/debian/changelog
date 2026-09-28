@@ -1,3 +1,27 @@
+kwin (4:6.6.6-0ubuntu0.1+rungic8) resolute; urgency=medium
+
+  * Share Android-density defaults with a 360-pixel logical layout guard.
+
+ -- Rungic <noreply@rungic.invalid>  Mon, 28 Sep 2026 09:30:00 +0000
+
+kwin (4:6.6.6-0ubuntu0.1+rungic7) resolute; urgency=medium
+
+  * Preserve automatic refresh during display-size changes and honor explicit policy.
+
+ -- Rungic <noreply@rungic.invalid>  Mon, 28 Sep 2026 08:30:00 +0000
+
+kwin (4:6.6.6-0ubuntu0.1+rungic6) resolute; urgency=medium
+
+  * Preserve automatic refresh policy when changing rendering resolution.
+
+ -- Rungic <noreply@rungic.invalid>  Mon, 28 Sep 2026 08:20:00 +0000
+
+kwin (4:6.6.6-0ubuntu0.1+rungic5) resolute; urgency=medium
+
+  * Handset display-size policy, resolution compensation and persistent user size.
+
+ -- Rungic <noreply@rungic.invalid>  Mon, 28 Sep 2026 08:00:00 +0000
+
 kwin (4:6.6.6-0ubuntu0.1+rungic4) resolute; urgency=medium
 
   * clip-scaled-damage-to-surface.patch: surface damage padded for scaling

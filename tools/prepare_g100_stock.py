@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify and unpack the exact XT2533-4 Android 16 factory archive.
+"""Verify and unpack a pinned Motorola factory archive (G100 by default).
 
 This only creates host-side files. It never connects to or flashes a phone.
 """
@@ -71,7 +71,25 @@ def main() -> None:
     parser.add_argument("output", type=Path)
     parser.add_argument("--simg2img", type=Path, required=True)
     parser.add_argument("--resume", action="store_true", help="Recheck files in an existing .partial directory")
+    parser.add_argument("--identity", type=Path,
+                        help="Audited JSON: model, device, build, fingerprint, info_name, super_count")
     args = parser.parse_args()
+
+    identity = {"model": "XT2533-4", "device": MODEL, "build": BUILD,
+                "fingerprint": FINGERPRINT, "info_name": INFO_NAME, "super_count": SUPER_COUNT}
+    if args.identity:
+        identity = json.loads(args.identity.read_text())
+    for key in ("model", "device", "build", "fingerprint", "info_name"):
+        if not isinstance(identity.get(key), str) or not identity[key].strip():
+            raise ValueError(f"Missing pinned identity field: {key}")
+    count = identity.get("super_count")
+    if type(count) is not int or count < 1:
+        raise ValueError("super_count must be a positive integer")
+    fingerprint = identity["fingerprint"]
+    match = re.fullmatch(r"motorola/([^/]+)/([^:]+):([^/]+)/([^/]+)/([^:]+):user/release-keys", fingerprint)
+    if not match or match[1] != identity["device"] or match[4] != identity["build"]:
+        raise ValueError("Pinned fingerprint does not match device/build")
+    software_prefix = f"{identity['device']}-user {match[3]} {identity['build']} {match[5]} release-keys"
 
     archive = args.archive.resolve(strict=True)
     output = args.output.resolve()
@@ -87,28 +105,33 @@ def main() -> None:
             name in ("", ".", "..") or "/" in name or "\\" in name for name in names
         ):
             raise ValueError("Archive contains duplicate or unsafe entry names")
-        if INFO_NAME not in names or "flashfile.xml" not in names or "servicefile.xml" not in names:
+        if identity["info_name"] not in names or "flashfile.xml" not in names or "servicefile.xml" not in names:
             raise ValueError("Missing required firmware metadata")
-        info = zipped.read(INFO_NAME).decode("utf-8")
-        if FINGERPRINT not in info or "Model Number: XT2533-4" not in info:
-            raise ValueError("Firmware info does not match the audited G100 build")
+        info = zipped.read(identity["info_name"]).decode("utf-8")
+        if (f"Build Fingerprint: {fingerprint}" not in info.splitlines() or
+                f"Model Number: {identity['model']}" not in info.splitlines()):
+            raise ValueError("Firmware info does not match the pinned identity")
         flash_model, flash_software, flash_md5 = xml_metadata(zipped.read("flashfile.xml"))
         service_model, service_software, service_md5 = xml_metadata(zipped.read("servicefile.xml"))
         for model, software in ((flash_model, flash_software), (service_model, service_software)):
-            if model != MODEL or not software.startswith(f"{MODEL}-user 16 {BUILD} "):
-                raise ValueError("XML firmware identity does not match the audited G100 build")
+            if model != identity["device"] or not (software == software_prefix or software.startswith(software_prefix + " ")):
+                raise ValueError("XML firmware identity does not match the pinned identity")
         if flash_md5 != service_md5 or not set(flash_md5).issubset(names):
             raise ValueError("Flash/service file lists or archive members differ")
-        for index in range(SUPER_COUNT):
+        expected_chunks = {f"super.img_sparsechunk.{i}" for i in range(count)}
+        if {n for n in names if n.startswith("super.img_sparsechunk.")} != expected_chunks:
+            raise ValueError("Super chunk set differs from pinned count")
+        for index in range(count):
             if f"super.img_sparsechunk.{index}" not in flash_md5:
                 raise ValueError(f"Missing super chunk {index}")
 
         staging.mkdir(parents=True, exist_ok=args.resume)
         manifest = {
-            "model": "XT2533-4",
-            "device": MODEL,
-            "build": BUILD,
-            "fingerprint": FINGERPRINT,
+            "model": identity["model"],
+            "device": identity["device"],
+            "build": identity["build"],
+            "fingerprint": fingerprint,
+            "archive_identity": identity,
             "source_archive": str(archive),
             "archive_bytes": archive.stat().st_size,
             "files": {},
@@ -147,7 +170,7 @@ def main() -> None:
             print(f"[{position}/{len(names)}] verified {name}", flush=True)
 
     manifest["archive_sha256"] = digest(archive)
-    chunks = [staging / f"super.img_sparsechunk.{index}" for index in range(SUPER_COUNT)]
+    chunks = [staging / f"super.img_sparsechunk.{index}" for index in range(count)]
     super_sizes = {sparse_size(chunk) for chunk in chunks}
     if len(super_sizes) != 1:
         raise ValueError("Super chunks declare different logical partition sizes")

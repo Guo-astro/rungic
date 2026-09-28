@@ -173,3 +173,8 @@ flowchart TD
 | 通用范围 | 框架面向多机型；当前包绑定这台 G100，未证明适用于其他手机或其他宿主平台 |
 
 后续执行入口：[通用设计](75-image-build-separation.md)、[三段 CI 分工与清理规则](77-g100-three-ci-assessment.md)、[G100 固件清单](78-g100-firmware-inventory.md)、[本轮实施证据](79-g100-ci-execution.md)、[共享后端与接口契约](research/31-backend-integration.md)。
+
+
+## 2026-09-28 补充：按用户要求清理过时 product
+
+已删除本 run 的 `product/assembled-v3` 至 `assembled-v8` 和原始 `product/root`；clean 镜像/verified-root、发行包及恢复输入保留。报告和元数据改存 `.work/audits/product-cleanup-20260928/build-metadata/portov-20260927-86c6642d/product/`。原 v8 被 X70 复用的三个载荷已校验并迁往 `.work/deps/product-seed-20260928/`；本轮仅完成明确范围的 product 清理，不追认 rootfs/内核清理或独立分发归档完成。跨机清理范围和实际空间收益见 83 篇末及 audit JSON。

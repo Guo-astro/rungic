@@ -513,3 +513,17 @@ Agent可直接调用的设备诊断、崩溃现场、统一追踪（perfetto + K
 2026-09-28 首次镜像安装增加独立就绪契约（79 篇）：Magisk 首启脚本 → APK 私有原子状态文件（release/state/phase）→ 原生 loading → root `account-prepare` 的容器/账户前置检查 → 账户表单 → Plasma 启动。只有状态匹配当前 product 且所有准备完成才放行；root 控制器另查完成标记。不能用普通重启或已初始化数据替代空白刷机首启验证。
 
 2026-09-28 UX 第一批重构（[82 篇](../82-first-run-ux-refactor.md)）：安装原子状态升级 schema 2（兼容 1）；账户助手持有事务锁并提供 `--status`/`pending`，rootfs 标记 `account-protocol=2`，组包与安装验收检查该契约。APK 2.8 与 native JNI 一起更新，通过渲染线程请求屏障和当前手机输出的真实完成反馈撤除 loading；旧帧、投屏帧、合成超时反馈不能满足门槛。显示确认不等于桌面全部服务就绪。现阶段实机证据是已有账户启动进入 Plasma 欢迎页，新组件完整清数据首启另验。
+
+2026-09-28 X70 全新账户目录链补齐：Koko/Qt 与 GLib 应用 → XDG user-dirs → `plasma/user-dirs` → `~/Pictures` 等到 `~/Shared` 的链接 → bindfs → Android `Plasma/` 共享目录。会话在共享挂载真实就绪后幂等创建标准目录并调用 xdg-user-dirs-update，不依赖历史用户目录；Documents/Desktop 继续本地化。实现、上游 0.19 核验与测试见 docs/69，X70 实机证据见 docs/83。
+
+
+2026-09-28 显示大小公共接口：`KScreen → libkscreen → Wayland 输出管理 → KWin AndroidOutput → Android 宿主`。共享策略在 `shared/display-policy/`，Android 内屏以标准 manufacturer/model=Rungic/Handset 识别，KWin 保存可选 logicalDpi 并补偿 mode/scale；外屏独立。状态栏也以 Qt 同一身份匹配内屏，不使用输出顺序。默认/用户配置/宿主实际模式与刷新策略的职责、失败补偿及验收边界见 [85 篇](../85-phone-display-size-policy.md)。
+
+
+2026-09-28 显示策略第二轮：APK 2.10 在原子 android-display.json 中新增成对 densityDpi/densityWidthPixels/densityHeightPixels；Android 14+ 来自同一最大窗口指标快照。共享策略只读这些字段，KWin 与 KScreen 用同一算法，保存的用户偏好不随 Android density 改变。 具体接口、回退、测试及边界见 [85 篇](../85-phone-display-size-policy.md)。
+
+2026-09-28 Miracast 通用化评估：Plasma UI → 平台桥/root 控制端 → Android WFD/P2P/厂商编码；KWin 外屏 → 宿主 CastDesktop Surface → 电视，音频继续共享 Android 后端。用户要求支持更多机型：公共层按能力探测并提供稳定状态/错误契约，Qualcomm XML、实际 codec 映射、SELinux 和具体副屏冲突放在 firmware/spec 适配器；无原生 WFD 时明确报告边界。这是后续设计，未宣称已实现；X70 只读证据、版本区分及验收见 [86 篇](../86-x70-miracast-assessment.md)。
+
+2026-09-28 Miracast 实现：公共 WFD 控制增加显式能力/错误、主动启用与系统选择页；固件数据选择 UI 租约及旧设备例外。动态 codec 生成仍为公共检查，仅 changed 时挂载且不覆盖外来挂载。独立部署器与 host seed 共用载荷/摘要，保留账户、接收端和租约。X70 的窗口层级证据、运行恢复与限制见 [86 篇](../86-x70-miracast-assessment.md)。
+
+2026-09-28 收尾补测：容器快捷开关已更新至 rungic-cast 0.331。直接关闭系统 WFD 后 watcher 恢复 UI 包/释放租约通过，但随后的两次重连超时，目标接收端最终报告 unavailable；此异常恢复边界尚未解决，详见 86 篇，不能将前三轮正常重连推广到此场景。锁屏测试由用户手动解锁，自动恢复未验收。

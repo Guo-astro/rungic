@@ -6,14 +6,14 @@
 
 | 阶段 | 当前入口 | 使用边界 |
 | --- | --- | --- |
-| 原厂提取/验证 | `tools/prepare_g100_stock.py`、`tools/verify_g100_stock.py` | 内含 portov 固件、格式及分片假设；新机型先适配 |
+| 原厂提取/验证 | `tools/prepare_g100_stock.py`、`tools/verify_g100_stock.py` | 默认 portov；新设备用已审核 `--identity`、`--expected-fingerprint`、`--logical-partitions`，仍须核对格式 |
 | 设备/输入预检 | `tools/ci/preflight.py` | v1 spec、已核验 OEM manifest/verification；要求已授权 ADB 和匹配的原机状态，不是纯 bootloader 安装前提 |
 | 上游配方 | `packages/*/recipe.json`、`tools/pq.py` | prepare/export 补丁队列；遵循当前 CLI |
-| GKI 构建依据 | `packages/gki-android15-6.6/recipe.json`、`kernel/targets/gki/lxc_defconfig`、`kernel/README.md` | 固定版本配方与历史记录；尚无覆盖所有机型的一条 GKI 构建命令 |
-| ABI | `tools/ci/module_abi.py` | 比较 symvers 与 OEM 模块，保留未覆盖引用的范围 |
+| GKI 构建依据 | `packages/gki-android15-6.6/recipe.json`、`packages/gki-android16-6.12/recipe.json`、`kernel/targets/gki/`、`kernel/README.md` | 按目标选固定来源、manifest、fragment 与符号表；不能跨内核代际直接复用补丁结论 |
+| ABI | `tools/ci/module_abi.py` | 支持 legacy/extended modversions；比较 symvers 与 OEM 模块，保留未覆盖引用的范围 |
 | 模块信任 | `tools/ci/restore_module_trust.py` | 核验基线与证书、输出报告；证书恢复方法不对任意 Image 自动成立 |
 | ARM64 包 | `tools/build_on_device.py`、`tools/rungic_release.py` | 固定配方构建、collect 和版本化包集合；仓库快照成熟度见 77 篇 |
-| ARM64 rootfs 安装环境 | `tools/ci/arm64_chroot.py`、`tools/ci/rootfs.Dockerfile` | QEMU/真 chroot，检查所在 runner 的 namespaces、binfmt 和容量 |
+| ARM64 rootfs 安装环境 | `tools/ci/arm64_chroot.py`、`tools/ci/rootfs.Dockerfile` | QEMU/真 chroot、宿主 Python 环境隔离；检查 runner 的 namespaces、binfmt 和容量 |
 | rootfs 镜像 | `tools/ci/build_rootfs_image.py` | 接收已准备的 root 树和 release，生成 ext4/压缩种子、包锁及报告；自身不是完整包下载器 |
 | APK | `plasma/build-apk.sh`、`tools/ci/apk-builder.Dockerfile` | Android 入口构建；保持指定开发签名身份，不混入其他凭据 |
 | 宿主种子 | `tools/ci/build_host_seed.py` | 输入 runtime、rootfs-tree、repo、lxc/plasma enter 二进制与 `--cast-jar`（`shared/android/rungic-cast/build.sh` 产物）；投屏组件为可选能力，首启安装失败只记日志 |
@@ -35,7 +35,7 @@
 - bootloader 电压阈值为代码常量 3700 mV，独立于 preflight 中按 spec 核对的电量百分比。
 - Linux x86_64 主机、Python 3、随包 fastboot；Magisk 修补 init_boot 及现有首启机制。
 
-新设备在上述任一项不适用时，先扩展配置/适配器与校验；不能仅修改 JSON 身份后运行旧刷写器。32 个分片是 G100 输入事实；组包器虽动态枚举分片，其他 OEM 提取工具仍可能固定数量。
+新设备在上述任一项不适用时，先扩展配置/适配器与校验；不能仅修改 JSON 身份后运行旧刷写器。32 个分片是 G100 输入事实，X70 是 41 个；显式 identity 负责提取器的预期数量，组包器从已验证输入枚举。`--fastboot-adapter` 已支持精确 bootloader/securestate 差异及已验证模式，但当前安装器仍执行槽 a，不能把该接口称为任意刷写计划引擎。
 
 ## 参数化使用示例
 
@@ -80,5 +80,6 @@ python3 tools/ci/accept_release.py "$release_dir" \
 - 刷写器变更：`tools/ci/test_flash_progress.py` 的隔离假设备检查；新布局还需自己的计划与失败场景验证。
 - APK/首启状态变更：检查 `FirstBootState.java` 与实际共享控制入口，验证缺失/旧 release/失败不放行、ready 后准备账户。
 - 镜像产物：对应文件系统校验、包检查、manifest 回读和用户范围内的清数据实机流程。
+- 构建环境/模板：`tools/ci/test_rootfs_isolation.py`、rootfs/host 构建器的 home 和未配置账户检查；目录准备使用 `tools/test_user_dirs.py`。检查入口详见 [构建隔离](build-isolation.md)。
 
 隔离测试和受控 UI 状态都不能替代整包首启证据。不要为了文档或 skill 变更执行手机测试或重刷。

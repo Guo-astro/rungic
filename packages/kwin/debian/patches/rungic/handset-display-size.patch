@@ -1,0 +1,376 @@
+From: Rungic <noreply@rungic.invalid>
+Date: Mon, 28 Sep 2026 16:01:15 +0800
+Subject: Handset display size: physical defaults,
+ bounded UI and resolution-independent preferences
+
+Forwarded: not-needed
+Last-Update: 2026-09-28
+X-Rungic-Status: Inappropriate [Rungic handset policy and Android rendering modes]
+X-Rungic-Tests: tools/test_display_policy.py; manual deployment checks in docs/85
+X-Rungic-Docs: docs/85-phone-display-size-policy.md
+---
+ src/backends/android/android_backend.cpp | 30 ++++++++++----
+ src/backends/android/android_output.cpp  | 69 +++++++++++++++++++++++++++++++-
+ src/backends/android/android_output.h    |  5 +++
+ src/core/backendoutput.cpp               |  4 ++
+ src/core/backendoutput.h                 |  3 ++
+ src/core/outputconfiguration.h           |  1 +
+ src/outputconfigurationstore.cpp         | 15 +++++++
+ src/outputconfigurationstore.h           |  1 +
+ src/workspace.cpp                        |  3 ++
+ 9 files changed, 122 insertions(+), 9 deletions(-)
+
+diff --git a/src/backends/android/android_backend.cpp b/src/backends/android/android_backend.cpp
+index a167b15..eb6d40b 100644
+--- a/src/backends/android/android_backend.cpp
++++ b/src/backends/android/android_backend.cpp
+@@ -7,6 +7,7 @@
+ #include "android-display-client.h"
+ #include "android_allocator.h"
+ #include "android_output.h"
++#include "handset-scale-qt.h"
+ #include "host_output.h"
+ #include "host_text_input.h"
+ #include "core/drmdevice.h"
+@@ -275,24 +276,28 @@ std::unique_ptr<GraphicsBufferAllocator> AndroidBackend::createShmAllocator() co
+ 
+ OutputConfigurationError AndroidBackend::applyOutputChanges(const OutputConfiguration &config)
+ {
++    for (Wayland::WaylandOutput *output : waylandOutputs()) {
++        if (!static_cast<AndroidOutput *>(output)->isPhone()) continue;
++        const auto props = config.constChangeSet(output);
++        if (props && ((props->scaleSetting && !Rungic::Display::validScale(*props->scaleSetting))
++                      || (props->scale && !Rungic::Display::validScale(*props->scale)))) {
++            return OutputConfigurationError::Unknown;
++        }
++    }
+     if (config.source == OutputConfiguration::Source::User) {
+         for (Wayland::WaylandOutput *output : waylandOutputs()) {
+             const auto props = config.constChangeSet(output);
+             // A cast output (TV) has the host's size: nothing to ask Android for.
+             if (!props || !static_cast<AndroidOutput *>(output)->isPhone()) continue;
+-            if (props->scale && (!std::isfinite(*props->scale) || *props->scale < 0.5 || *props->scale > 3.0)) {
+-                return OutputConfigurationError::Unknown;
+-            }
+             const auto mode = props->mode ? props->mode->lock() : nullptr;
+             const bool sizeChanged = mode && mode->size() != output->modeSize();
+-            const bool rateChanged = mode && mode->refreshRate() != output->refreshRate();
+             // The refresh policy (docs/73): the adaptive refresh (VRR) policy Automatic or Always is
+             // Android's automatic rate (0), Never or a rate chosen on its own is that fixed rate.
+             std::optional<int> policy;
+             const uint32_t rate = mode ? mode->refreshRate() : output->refreshRate();
+-            if (props->vrrPolicy && *props->vrrPolicy != output->vrrPolicy()) {
++            if (props->vrrPolicy) {
+                 policy = *props->vrrPolicy == VrrPolicy::Never ? int(std::round(rate / 1000.0)) : 0;
+-            } else if (rateChanged) {
++            } else if (static_cast<AndroidOutput *>(output)->requestsFixedRefresh(*props)) {
+                 policy = int(std::round(rate / 1000.0));
+             }
+             if (!sizeChanged && !policy) continue;
+@@ -301,9 +306,18 @@ OutputConfigurationError AndroidBackend::applyOutputChanges(const OutputConfigur
+             if (policy) {
+                 request.insert(QStringLiteral("refreshPolicy"), *policy);
+             }
++            const QJsonObject previous = RungicDisplay::info();
+             const auto reply = RungicDisplay::request(request);
+-            if (reply.contains(QStringLiteral("error"))) {
+-                qCWarning(KWIN_WAYLAND_BACKEND) << "Android display rejected configuration:" << reply;
++            const bool wrongSize = sizeChanged && (reply.value(QStringLiteral("renderWidth")).toInt() != size.width()
++                                                  || reply.value(QStringLiteral("renderHeight")).toInt() != size.height());
++            if (reply.contains(QStringLiteral("error")) || wrongSize) {
++                // A lost reply may follow a successful host mutation. Compensate before reporting
++                // failure; no KWin settings are committed. Host death is reported, never success.
++                QJsonObject restore{{"width", output->modeSize().width()}, {"height", output->modeSize().height()}};
++                restore.insert(QStringLiteral("refreshPolicy"), previous.value(QStringLiteral("refreshPolicy")).toInt(
++                    output->vrrPolicy() == VrrPolicy::Never ? int(std::round(output->refreshRate() / 1000.0)) : 0));
++                const auto restored = RungicDisplay::request(restore);
++                qCWarning(KWIN_WAYLAND_BACKEND) << "Android display configuration failed:" << reply << "restore:" << restored;
+                 return OutputConfigurationError::Unknown;
+             }
+         }
+diff --git a/src/backends/android/android_output.cpp b/src/backends/android/android_output.cpp
+index aeaa905..ac5a13e 100644
+--- a/src/backends/android/android_output.cpp
++++ b/src/backends/android/android_output.cpp
+@@ -6,6 +6,7 @@
+ #include "android_output.h"
+ #include "host_output.h"
+ #include "android-display-client.h"
++#include "handset-scale-qt.h"
+ #include "core/outputconfiguration.h"
+ #include "core/renderloop.h"
+ 
+@@ -25,6 +26,9 @@ AndroidOutput::AndroidOutput(const QString &name, Wayland::WaylandBackend *backe
+         const QJsonObject info = RungicDisplay::info();
+         information.physicalSize = QSize(info.value("physicalWidthMM").toInt(-1), info.value("physicalHeightMM").toInt(-1));
+         information.internal = true;
++        // Standard output metadata identifies the handset to KScreen; no connector-name guessing.
++        information.manufacturer = QStringLiteral("Rungic");
++        information.model = QStringLiteral("Handset");
+         // Android's refresh policy is offered as the adaptive refresh (VRR) policy of the output:
+         // Automatic (or Always) lets Android choose the rate, Never keeps the mode's fixed rate.
+         information.capabilities |= Capability::Vrr;
+@@ -40,6 +44,68 @@ AndroidOutput::AndroidOutput(const QString &name, Wayland::WaylandBackend *backe
+     setInformation(information);
+ }
+ 
++std::optional<double> AndroidOutput::recommendedScale(const QSize &size) const
++{
++    if (!m_phone) return std::nullopt;
++    using namespace Rungic::Display;
++    double nativeEdge = shortEdge(size.width(), size.height());
++    for (const auto &mode : modes()) nativeEdge = std::max(nativeEdge, shortEdge(mode->size().width(), mode->size().height()));
++    const auto p = policy();
++    return presets(shortEdge(size.width(), size.height()), dpi(size, physicalSize(), p), nativeEdge, p, androidReference())[2];
++}
++
++std::optional<double> AndroidOutput::logicalDpi() const { return m_logicalDpi; }
++
++void AndroidOutput::prepareDisplaySize(OutputChangeSet &change, bool userRequest) const
++{
++    if (!m_phone || !currentMode()) return;
++    using namespace Rungic::Display;
++    const auto requestedMode = change.mode ? change.mode->lock() : nullptr;
++    const QSize oldSize = modeSize();
++    // System replay must follow the Android host, not force an old rendering mode/rotation.
++    const QSize target = userRequest && requestedMode ? requestedMode->size() : oldSize;
++    const double newDpi = dpi(target, physicalSize());
++    double density = 0;
++    if (userRequest) {
++        const double requested = change.scaleSetting.value_or(scaleSetting());
++        if (!validScale(requested)) return; // applyOutputChanges returns a failure, not a clamp
++        density = requestedDensity(dpi(oldSize, physicalSize()), newDpi, scaleSetting(), requested,
++                                   m_logicalDpi.value_or(0), shortEdge(oldSize.width(), oldSize.height()) != shortEdge(target.width(), target.height()));
++    } else {
++        const QSize reference = change.desiredModeSize.value_or(requestedMode ? requestedMode->size() : oldSize);
++        const double savedScale = change.scaleSetting.value_or(scaleSetting());
++        density = change.logicalDpi.value_or(m_logicalDpi.value_or(dpi(reference, physicalSize()) / savedScale));
++    }
++    if (!validDensity(density)) return;
++    double effective = effectiveScale(newDpi, density);
++    if (!userRequest && !validScale(effective)) {
++        // A host mode change can make an old custom preference unrepresentable. Keep the
++        // session usable within the persistent format's limits; explicit requests still fail.
++        effective = std::clamp(effective, minimumScale, maximumScale);
++        density = newDpi / effective;
++    }
++    change.logicalDpi = density;
++    change.scaleSetting = effective;
++    change.scale = effective;
++    // Save the scale together with the actual render mode for old readers and migration.
++    change.desiredModeSize = target;
++    if (!userRequest) {
++        change.mode = currentMode();
++        change.desiredModeRefreshRate = refreshRate();
++        change.desiredModeFlags = currentMode()->flags();
++    }
++}
++
++bool AndroidOutput::requestsFixedRefresh(const OutputChangeSet &change) const
++{
++    const auto mode = change.mode ? change.mode->lock() : nullptr;
++    // Standard clients may submit a stale current Hz together with another change while
++    // Android varies its automatic rate. Only a rate-only request implies a fixed policy.
++    return m_phone && !change.vrrPolicy && mode && mode->size() == modeSize()
++        && mode->refreshRate() != refreshRate()
++        && Rungic::Display::sameScale(change.scale.value_or(scale()), scale());
++}
++
+ bool AndroidOutput::isPhone() const
+ {
+     return m_phone;
+@@ -103,6 +169,7 @@ QList<std::shared_ptr<OutputMode>> AndroidOutput::modesFor(const QSize &size, ui
+ 
+ void AndroidOutput::applyExtraChanges(State &next, const OutputChangeSet &props, OutputConfiguration::Source source)
+ {
++    if (m_phone && props.logicalDpi) m_logicalDpi = props.logicalDpi;
+     next.scale = props.scale.value_or(m_state.scale);
+     next.scaleSetting = props.scaleSetting.value_or(m_state.scaleSetting);
+     // The Android host owns the buffer size and physical refresh. Only explicit user changes
+@@ -111,7 +178,7 @@ void AndroidOutput::applyExtraChanges(State &next, const OutputChangeSet &props,
+     if (source == OutputConfiguration::Source::User && props.mode) {
+         if (const auto mode = props.mode->lock()) {
+             // A rate chosen on its own is a fixed rate (AndroidBackend::applyOutputChanges).
+-            if (m_phone && !props.vrrPolicy && mode->refreshRate() != refreshRate()) {
++            if (requestsFixedRefresh(props)) {
+                 next.vrrPolicy = VrrPolicy::Never;
+             }
+             next.currentMode = mode;
+diff --git a/src/backends/android/android_output.h b/src/backends/android/android_output.h
+index 283804a..1c4ad15 100644
+--- a/src/backends/android/android_output.h
++++ b/src/backends/android/android_output.h
+@@ -29,6 +29,10 @@ public:
+     AndroidOutput(const QString &name, Wayland::WaylandBackend *backend, HostOutput *hostOutput);
+ 
+     bool isPhone() const;
++    bool requestsFixedRefresh(const OutputChangeSet &change) const;
++    std::optional<double> recommendedScale(const QSize &size) const override;
++    std::optional<double> logicalDpi() const override;
++    void prepareDisplaySize(OutputChangeSet &change, bool userRequest) const override;
+ 
+     /// The host shows KWin's buffer pixel for pixel; KWin decides the scale; the primary layer
+     /// draws into the output surface, which the host presents (SurfaceControl) without copies.
+@@ -43,6 +47,7 @@ protected:
+ 
+ private:
+     const bool m_phone;
++    std::optional<double> m_logicalDpi;
+ };
+ 
+ } // namespace Android
+diff --git a/src/core/backendoutput.cpp b/src/core/backendoutput.cpp
+index ade12a2..c78b77b 100644
+--- a/src/core/backendoutput.cpp
++++ b/src/core/backendoutput.cpp
+@@ -751,6 +751,10 @@ uint32_t BackendOutput::priority() const
+     return m_state.priority;
+ }
+ 
++std::optional<double> BackendOutput::recommendedScale(const QSize &) const { return std::nullopt; }
++std::optional<double> BackendOutput::logicalDpi() const { return std::nullopt; }
++void BackendOutput::prepareDisplaySize(OutputChangeSet &, bool) const {}
++
+ double BackendOutput::scaleSetting() const
+ {
+     return m_state.scaleSetting;
+diff --git a/src/core/backendoutput.h b/src/core/backendoutput.h
+index bb44c6a..27fae8c 100644
+--- a/src/core/backendoutput.h
++++ b/src/core/backendoutput.h
+@@ -326,6 +326,9 @@ public:
+      * if the screen is mirrored
+      */
+     double scaleSetting() const;
++    virtual std::optional<double> recommendedScale(const QSize &size) const;
++    virtual std::optional<double> logicalDpi() const;
++    virtual void prepareDisplaySize(OutputChangeSet &change, bool userRequest) const;
+ 
+     /**
+      * The offset at which the screen contents should be rendered,
+diff --git a/src/core/outputconfiguration.h b/src/core/outputconfiguration.h
+index edd289b..3526e8e 100644
+--- a/src/core/outputconfiguration.h
++++ b/src/core/outputconfiguration.h
+@@ -32,6 +32,7 @@ public:
+     std::optional<QPoint> pos;
+     std::optional<double> scale;
+     std::optional<double> scaleSetting;
++    std::optional<double> logicalDpi; // Physical UI size, independent of render resolution; optional for backends.
+     std::optional<OutputTransform> transform;
+     std::optional<OutputTransform> manualTransform;
+     std::optional<uint32_t> overscan;
+diff --git a/src/outputconfigurationstore.cpp b/src/outputconfigurationstore.cpp
+index e18e17b..f3dfeaa 100644
+--- a/src/outputconfigurationstore.cpp
++++ b/src/outputconfigurationstore.cpp
+@@ -23,6 +23,7 @@
+ #include <QJsonDocument>
+ #include <QJsonObject>
+ #include <ranges>
++#include <cmath>
+ 
+ namespace KWin
+ {
+@@ -57,12 +58,14 @@ std::optional<std::pair<OutputConfiguration, OutputConfigurationStore::ConfigTyp
+     if (const auto opt = findSetup(relevantOutputs, isLidClosed)) {
+         const auto &[setup, outputStates] = *opt;
+         auto config = setupToConfig(setup, outputStates);
++        for (auto *output : relevantOutputs) output->prepareDisplaySize(*config.changeSet(output), false);
+         applyOrientationReading(config, relevantOutputs, orientation, isTabletMode);
+         applyMirroring(config, relevantOutputs);
+         storeConfig(relevantOutputs, isLidClosed, config);
+         return std::make_tuple(config, ConfigType::Preexisting);
+     }
+     auto config = generateConfig(relevantOutputs, isLidClosed);
++    for (auto *output : relevantOutputs) output->prepareDisplaySize(*config.changeSet(output), false);
+     applyOrientationReading(config, relevantOutputs, orientation, isTabletMode);
+     applyMirroring(config, relevantOutputs);
+     storeConfig(relevantOutputs, isLidClosed, config);
+@@ -349,6 +352,7 @@ void OutputConfigurationStore::storeConfig(const QList<BackendOutput *> &allOutp
+                     .flags = flags,
+                 },
+                 .scaleSetting = changeSet->scaleSetting.value_or(output->scaleSetting()),
++                .logicalDpi = changeSet->logicalDpi ? changeSet->logicalDpi : output->logicalDpi(),
+                 .transform = changeSet->transform.value_or(output->transform()),
+                 .manualTransform = changeSet->manualTransform.value_or(output->manualTransform()),
+                 .overscan = changeSet->overscan.value_or(output->overscan()),
+@@ -408,6 +412,7 @@ void OutputConfigurationStore::storeConfig(const QList<BackendOutput *> &allOutp
+                     .flags = flags,
+                 },
+                 .scaleSetting = output->scaleSetting(),
++                .logicalDpi = output->logicalDpi(),
+                 .transform = output->transform(),
+                 .manualTransform = output->manualTransform(),
+                 .overscan = output->overscan(),
+@@ -480,6 +485,7 @@ OutputConfiguration OutputConfigurationStore::setupToConfig(Setup *setup, const
+             .pos = setupState.position,
+             .scale = state.scaleSetting,
+             .scaleSetting = state.scaleSetting,
++            .logicalDpi = state.logicalDpi,
+             .transform = state.transform,
+             .manualTransform = state.manualTransform,
+             .overscan = state.overscan,
+@@ -683,6 +689,7 @@ OutputConfiguration OutputConfigurationStore::generateConfig(const QList<Backend
+             // kscreen scale is unreliable because it gets overwritten with the value 1 on Xorg,
+             // and we don't know if it's from Xorg or the 5.27 Wayland session... so just ignore it
+             .scaleSetting = existingData.scaleSetting.value_or(chooseScale(output, mode.get())),
++            .logicalDpi = existingData.logicalDpi,
+             .transform = existingData.transform.value_or(kscreenChangeSet.transform.value_or(output->panelOrientation())),
+             .manualTransform = existingData.manualTransform.value_or(kscreenChangeSet.transform.value_or(output->panelOrientation())),
+             .overscan = existingData.overscan.value_or(kscreenChangeSet.overscan.value_or(0)),
+@@ -800,6 +807,9 @@ std::shared_ptr<OutputMode> OutputConfigurationStore::chooseMode(BackendOutput *
+ 
+ double OutputConfigurationStore::chooseScale(BackendOutput *output, OutputMode *mode) const
+ {
++    if (const auto scale = output->recommendedScale(mode->size())) {
++        return *scale;
++    }
+     if (output->physicalSize().height() < 3 || output->physicalSize().width() < 3) {
+         // A screen less than 3mm wide or tall doesn't make any sense; these are
+         // all caused by the screen mis-reporting its size.
+@@ -994,6 +1004,10 @@ void OutputConfigurationStore::load()
+                 state.scaleSetting = scale;
+             }
+         }
++        if (const auto it = data.find("logicalDpi"); it != data.end()) {
++            const double density = it->toDouble(0);
++            if (std::isfinite(density) && density > 0 && density < 10000) state.logicalDpi = density;
++        }
+         if (const auto it = data.find("transform"); it != data.end()) {
+             const auto str = it->toString();
+             if (str == "Normal") {
+@@ -1329,6 +1343,7 @@ void OutputConfigurationStore::save()
+             }
+             o["mode"] = mode;
+         }
++        if (output.logicalDpi) o["logicalDpi"] = *output.logicalDpi;
+         if (output.scaleSetting) {
+             o["scale"] = *output.scaleSetting;
+         }
+diff --git a/src/outputconfigurationstore.h b/src/outputconfigurationstore.h
+index 5e1d013..255a237 100644
+--- a/src/outputconfigurationstore.h
++++ b/src/outputconfigurationstore.h
+@@ -71,6 +71,7 @@ private:
+         // actual state
+         std::optional<ModeData> mode;
+         std::optional<double> scaleSetting;
++        std::optional<double> logicalDpi;
+         std::optional<OutputTransform> transform;
+         std::optional<OutputTransform> manualTransform;
+         std::optional<uint32_t> overscan;
+diff --git a/src/workspace.cpp b/src/workspace.cpp
+index 1940695..e8260e2 100644
+--- a/src/workspace.cpp
++++ b/src/workspace.cpp
+@@ -526,6 +526,9 @@ OutputConfigurationError Workspace::applyOutputConfiguration(OutputConfiguration
+         }
+     }
+ 
++    for (auto *output : backendOutputs) {
++        output->prepareDisplaySize(*config.changeSet(output), config.source == OutputConfiguration::Source::User);
++    }
+     m_outputConfigStore->applyMirroring(config, backendOutputs);
+     for (BackendOutput *output : backendOutputs) {
+         if (m_dpms == DpmsState::Off || m_dpms == DpmsState::TurningOff) {

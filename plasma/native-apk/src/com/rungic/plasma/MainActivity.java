@@ -546,6 +546,14 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         Display.Mode physical=d.getMode();
         android.util.DisplayMetrics metrics=new android.util.DisplayMetrics();
         d.getRealMetrics(metrics);
+        int densityDpi=metrics.densityDpi,densityWidth=metrics.widthPixels,densityHeight=metrics.heightPixels;
+        if(android.os.Build.VERSION.SDK_INT>=34) {
+            // Maximum bounds describe the display reference, not the current Surface or a
+            // split-screen window. Get density from that same immutable metrics snapshot.
+            android.view.WindowMetrics reference=getWindowManager().getMaximumWindowMetrics();
+            densityDpi=Math.round(reference.getDensity()*160);
+            densityWidth=reference.getBounds().width();densityHeight=reference.getBounds().height();
+        }
         int width=Math.max(1,display.getWidth()),height=Math.max(1,display.getHeight());
         int nativeEdge=Math.min(physical.getPhysicalWidth(),physical.getPhysicalHeight());
         org.json.JSONArray sizes=new org.json.JSONArray();
@@ -556,6 +564,10 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
             sizes.put(new org.json.JSONObject().put("width",w).put("height",h));
         }
         return new org.json.JSONObject().put("version",1).put("model",android.os.Build.MODEL)
+            // Keep density and its pixel reference from one Android display snapshot. The
+            // Surface buffer can be 720p while Android still uses the full display density.
+            .put("densityDpi",densityDpi)
+            .put("densityWidthPixels",densityWidth).put("densityHeightPixels",densityHeight)
             .put("physicalWidth",physical.getPhysicalWidth()).put("physicalHeight",physical.getPhysicalHeight())
             .put("physicalWidthMM",Math.round(physical.getPhysicalWidth()*25.4f/metrics.xdpi))
             .put("physicalHeightMM",Math.round(physical.getPhysicalHeight()*25.4f/metrics.ydpi))

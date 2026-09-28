@@ -1,0 +1,45 @@
+From: Rungic <noreply@rungic.invalid>
+Date: Mon, 28 Sep 2026 12:23:25 +0800
+Subject: Preserve Rust Binder exports across namespace configuration
+
+Keep the from_kuid helper available for stock modules, forwarding to the namespace-aware implementation. Do not generate new Default impls for the two SysV state types, which have no Default impl in stock bindings and are unused by Rust. This preserves existing exported impl disambiguators instead of rewriting module CRCs.
+Forwarded: not-needed
+Last-Update: 2026-09-28
+X-Rungic-Status: Pending
+X-Rungic-Tests: L1:vantage-kernel-build,module-abi; L2:vantage-boot (to write)
+X-Rungic-Docs: docs/83-x70-air-pro-onboarding.md
+---
+ rust/bindgen_parameters | 5 +++++
+ rust/helpers/task.c     | 2 --
+ 2 files changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/rust/bindgen_parameters b/rust/bindgen_parameters
+index 0f96af8..4eb80f8 100644
+--- a/rust/bindgen_parameters
++++ b/rust/bindgen_parameters
+@@ -34,3 +34,8 @@
+ # We use const helpers to aid bindgen, to avoid conflicts when constants are
+ # recognized, block generation of the non-helper constants.
+ --blocklist-item ARCH_SLAB_MINALIGN
++
++# Stock SYSVIPC-disabled empty types have no Default implementations.
++# Preserve downstream Rust impl disambiguators when enabling SYSVIPC.
++--no-default sysv_sem
++--no-default sysv_shm
+diff --git a/rust/helpers/task.c b/rust/helpers/task.c
+index 5874032..69c3829 100644
+--- a/rust/helpers/task.c
++++ b/rust/helpers/task.c
+@@ -28,12 +28,10 @@ kuid_t rust_helper_task_euid(struct task_struct *task)
+ 	return task_euid(task);
+ }
+ 
+-#ifndef CONFIG_USER_NS
+ uid_t rust_helper_from_kuid(struct user_namespace *to, kuid_t uid)
+ {
+ 	return from_kuid(to, uid);
+ }
+-#endif /* CONFIG_USER_NS */
+ 
+ bool rust_helper_uid_eq(kuid_t left, kuid_t right)
+ {

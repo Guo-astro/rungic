@@ -93,3 +93,11 @@
 
 - **下载的AppImage无法直接运行**：需要应用或用户把它放到本地目录，或者去掉两层noexec并允许执行位（Android FUSE存不下执行位）。
 - **`nofile`硬上限、`vm.max_map_count`、inotify上限**：是否在Android一侧调高。其中`vm.max_map_count`和inotify是内核全局设置，会影响Android。
+
+## X70 清数据安装补齐 XDG 目录（2026-09-28）
+
+X70 完成账户改名后，用户打开照片（Koko）报 `/home/kevinzhow/Pictures` 不存在。实机 shared.service 正常、Shared 已由 bindfs 挂载；缺的是新账户目录和 user-dirs.dirs。旧 session 仅为已有目录写映射，干净模板未包含媒体目录，因此首次登录不会创建它们。
+
+核对上游 xdg-user-dirs 0.19 的 `xdg-user-dirs-update.c`（[官方发布包](https://user-dirs.freedesktop.org/releases/xdg-user-dirs-0.19.tar.xz)，COPYING 为 GPL v2）：显式 `--set` 分支直接更新配置，不受普通自动更新 enabled=False 影响。保留标准工具，不修改 Koko。新增 `plasma/user-dirs` 在实际 Shared mount 就绪后创建公共位置：Pictures/Videos/Music/Downloads/Templates/Public 缺失时链接到 Shared，同名本地目录、文件和自定义链接不覆盖；Documents/Desktop 首次创建为本地目录。随后通过 xdg-user-dirs-update --set 注册全部八个位置。缺失挂载时失败且不制造假目录。session 在启动 Plasma 前调用该共用入口；软件包显式依赖 xdg-user-dirs。
+
+四项测试覆盖全新账户及幂等重复、保留已有下载文件/自定义链接、挂载缺失时无副作用、同名文件冲突不删除。实机以桌面用户执行后 Pictures 链接与目标存在，XDG、Qt QStandardPaths（qtpaths6）和 GLib 三个入口均返回 `/home/kevinzhow/Pictures`；Documents 为本地目录。照片应用的实际重开结果另存 X70 83 篇，未进行摄像头或媒体采集验收。

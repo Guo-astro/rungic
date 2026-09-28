@@ -1,0 +1,28 @@
+#!/bin/sh
+# Initialize the standard locations only after Android storage is really mounted.
+# Run as the desktop user; preserve existing local directories and custom links.
+set -eu
+[ -n "${HOME:-}" ] && [ "$HOME" != / ] || exit 1
+shared=$HOME/Shared
+if ! mountpoint -q "$shared"; then
+    echo 'Rungic user directories: Android shared storage is not mounted' >&2
+    exit 1
+fi
+mkdir -p "$HOME/.config" "$HOME/Desktop" "$HOME/Documents"
+for name in Downloads Music Pictures Videos Templates Public; do
+    mkdir -p "$shared/$name"
+    if [ ! -e "$HOME/$name" ] && [ ! -L "$HOME/$name" ]; then
+        ln -s "Shared/$name" "$HOME/$name"
+    fi
+    if [ ! -d "$HOME/$name" ]; then
+        echo "Rungic user directories: existing $name is not an accessible directory" >&2
+        exit 1
+    fi
+done
+# Disable automatic reset-to-HOME when Android temporarily unmounts storage;
+# explicit --set still writes the standard XDG mapping.
+printf 'enabled=False\n' > "$HOME/.config/user-dirs.conf"
+for entry in DESKTOP:Desktop DOWNLOAD:Downloads TEMPLATES:Templates PUBLICSHARE:Public \
+             DOCUMENTS:Documents MUSIC:Music PICTURES:Pictures VIDEOS:Videos; do
+    xdg-user-dirs-update --set "${entry%%:*}" "$HOME/${entry#*:}"
+done

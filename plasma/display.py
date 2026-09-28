@@ -59,7 +59,10 @@ while True:
                 raise ValueError('Unsupported display protocol')
             screens = json.loads(subprocess.check_output(['rungic-plasma-screen-metrics'], timeout=10))
             outputs = json.loads(subprocess.check_output(['kscreen-doctor', '-j'], timeout=10))['outputs']
-            screen = screens[0]
+            # Qt exposes the same output identity as KScreen. Never apply the handset
+            # cutout to an external screen merely because it is first or primary.
+            screen = next(s for s in screens if s.get('manufacturer') == 'Rungic'
+                          and s.get('model') == 'Handset')
             output = next(o for o in outputs if o['name'] == screen['name'])
             values = panel_values(info, screen, output)
             for key, value in values.items():

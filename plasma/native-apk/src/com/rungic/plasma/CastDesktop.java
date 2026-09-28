@@ -35,6 +35,8 @@ final class CastDesktop implements DisplayManager.DisplayListener, SurfaceHolder
     private int displayId = -1;
     private int boundWidth, boundHeight;
     private boolean overlayRequested;
+    private int preparedDisplay = -1;
+    private int preparingDisplay = -1;
 
     private final java.util.function.Supplier<int[]> fixedSize;
 
@@ -87,6 +89,10 @@ final class CastDesktop implements DisplayManager.DisplayListener, SurfaceHolder
             unbind();
         }
         if (display == null || view != null) return;
+        if (preparedDisplay != display.getDisplayId()) {
+            prepareDisplay(display.getDisplayId());
+            return;
+        }
         if (!android.provider.Settings.canDrawOverlays(activity)) {
             requestOverlay();
             return;
@@ -184,5 +190,30 @@ final class CastDesktop implements DisplayManager.DisplayListener, SurfaceHolder
 
     @Override public void onDisplayAdded(int id) { update(); }
     @Override public void onDisplayRemoved(int id) { update(); }
-    @Override public void onDisplayChanged(int id) {}
+    @Override public void onDisplayChanged(int id) {
+        if (id != displayId || view == null || fixedSize.get() != null) return;
+        Display display = displays.getDisplay(id);
+        if (display != null) {
+            Display.Mode mode = display.getMode();
+            view.getHolder().setFixedSize(mode.getPhysicalWidth(), mode.getPhysicalHeight());
+        }
+    }
+
+    private void prepareDisplay(int id) {
+        if (preparingDisplay == id) return;
+        preparingDisplay = id;
+        new Thread(() -> {
+            try {
+                Process process = new ProcessBuilder("su", "-c", "/data/adb/rungic-wfd/rungic-cast claim")
+                        .redirectErrorStream(true).start();
+                if (!process.waitFor(15, java.util.concurrent.TimeUnit.SECONDS)) process.destroyForcibly();
+                else if (process.exitValue() != 0) Log.w("RungicCast", "cast adapter did not prepare display " + id);
+            } catch (Exception e) { Log.w("RungicCast", "cast adapter: " + e.getMessage()); }
+            activity.runOnUiThread(() -> {
+                preparedDisplay = id;
+                if (preparingDisplay == id) preparingDisplay = -1;
+                update();
+            });
+        }, "rungic-cast-prepare").start();
+    }
 }

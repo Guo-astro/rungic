@@ -254,10 +254,12 @@ def sync(component):
     host.run(f'rm -rf {work}/incoming')
     host.put_tar(stage(component), f'{work}/incoming')
     # Keep obj-* (build output) and debhelper state; everything else mirrors the stage.
+    # Quilt gives applied headers a fresh mtime on every extraction. Do not copy that mtime
+    # onto byte-identical destination files: it would force a full rebuild on every sync.
     print(host.out(f'''set -e
 chown -R root:root {work}/incoming
 mkdir -p {work}/src
-rsync -a --checksum --delete --itemize-changes --exclude '/obj-*' --exclude '/debian/.debhelper' \\
+rsync -a --checksum --no-times --delete --itemize-changes --exclude '/obj-*' --exclude '/debian/.debhelper' \\
   --exclude '/debian/*-build-stamp' --exclude '/debian/files' --exclude '/debian/*.substvars' \\
   --exclude '/debian/tmp' {work}/incoming/src/ {work}/src/ | grep -v '^\\.' | head -40
 rm -rf {BASE}/cmake-shims && mv {work}/incoming/cmake-shims {BASE}/cmake-shims

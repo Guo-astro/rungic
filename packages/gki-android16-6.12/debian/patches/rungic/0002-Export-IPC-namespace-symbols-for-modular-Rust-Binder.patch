@@ -1,0 +1,50 @@
+From: Rungic <noreply@rungic.invalid>
+Date: Mon, 28 Sep 2026 12:12:01 +0800
+Subject: Export IPC namespace symbols for modular Rust Binder
+
+Backport Alice Ryhl upstream patch 4/5, Make Rust Binder build as a module, 2026-02-05. Android 16 already builds Rust Binder as a module but its stock configuration disables IPC namespaces.
+Origin: backport, https://lists.openwall.net/linux-kernel/2026/02/05/686
+Forwarded: not-needed
+Last-Update: 2026-09-28
+X-Rungic-Status: Pending
+X-Rungic-Tests: L1:vantage-kernel-build,module-abi; L2:vantage-boot (to write)
+X-Rungic-Docs: docs/83-x70-air-pro-onboarding.md
+---
+ ipc/msgutil.c   | 3 +++
+ ipc/namespace.c | 2 ++
+ 2 files changed, 5 insertions(+)
+
+diff --git a/ipc/msgutil.c b/ipc/msgutil.c
+index c7be0c7..0e2f650 100644
+--- a/ipc/msgutil.c
++++ b/ipc/msgutil.c
+@@ -5,6 +5,7 @@
+  */
+ 
+ #include <linux/spinlock.h>
++#include <linux/export.h>
+ #include <linux/init.h>
+ #include <linux/security.h>
+ #include <linux/slab.h>
+@@ -34,6 +35,8 @@ struct ipc_namespace init_ipc_ns = {
+ #endif
+ };
+ 
++EXPORT_SYMBOL(init_ipc_ns);
++
+ struct msg_msgseg {
+ 	struct msg_msgseg *next;
+ 	/* the next part of the message follows immediately */
+diff --git a/ipc/namespace.c b/ipc/namespace.c
+index 4df91ce..0ccb7b5 100644
+--- a/ipc/namespace.c
++++ b/ipc/namespace.c
+@@ -213,6 +213,8 @@ static inline struct ipc_namespace *to_ipc_ns(struct ns_common *ns)
+ 	return container_of(ns, struct ipc_namespace, ns);
+ }
+ 
++EXPORT_SYMBOL(put_ipc_ns);
++
+ static struct ns_common *ipcns_get(struct task_struct *task)
+ {
+ 	struct ipc_namespace *ns = NULL;

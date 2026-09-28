@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify derived G100 logical images against the stock AVB chain."""
+"""Verify a pinned Motorola stock AVB chain and explicit logical partition set."""
 
 import argparse
 import hashlib
@@ -26,15 +26,21 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("stock", type=Path)
     parser.add_argument("--avbtool", type=Path, required=True)
+    parser.add_argument("--expected-fingerprint", default=(
+        "motorola/portov_cn/portov:16/W1VT36H.1-51-8/e9ec8-e96731:user/release-keys"),
+        help="Exact independently observed device fingerprint; defaults to the audited G100")
+    parser.add_argument("--logical-partitions", nargs="+", default=list(PARTITIONS),
+                        help="Exact audited logical partition names without slot suffix")
     args = parser.parse_args()
+    partitions = args.logical_partitions
+    if len(set(partitions)) != len(partitions) or any(not re.fullmatch(r"[a-z][a-z0-9_]*", p) for p in partitions):
+        raise ValueError("Invalid or duplicate logical partition name")
     stock = args.stock.resolve(strict=True)
     avbtool = args.avbtool.resolve(strict=True)
     manifest_path = stock / "manifest.json"
     manifest = json.loads(manifest_path.read_text())
-    if manifest["fingerprint"] != (
-        "motorola/portov_cn/portov:16/W1VT36H.1-51-8/e9ec8-e96731:user/release-keys"
-    ):
-        raise ValueError("Unexpected G100 stock fingerprint")
+    if manifest["fingerprint"] != args.expected_fingerprint:
+        raise ValueError("Stock fingerprint differs from the expected device")
     super_raw = stock / "super.raw.img"
     if (super_raw.stat().st_size != manifest["files"]["super.raw.img"]["bytes"] or
             digest(super_raw) != manifest["files"]["super.raw.img"]["sha256"]):
@@ -45,7 +51,7 @@ def main() -> None:
             raise ValueError("Missing primary liblp geometry")
 
     logical = {}
-    for part in PARTITIONS:
+    for part in partitions:
         image = stock / "logical" / f"{part}_a.img"
         if not image.is_file() or image.stat().st_size == 0:
             raise ValueError(f"Missing logical partition: {part}_a")
@@ -60,8 +66,8 @@ def main() -> None:
         check=True, text=True, capture_output=True,
     )
     verified = set(re.findall(r"^([a-z_]+): Successfully verified ", result.stdout, re.MULTILINE))
-    expected = set(PARTITIONS) | set(HASH_PARTITIONS) | {"vbmeta"}
-    if not expected.issubset(verified) or result.stdout.count("vbmeta: Successfully verified") != 2:
+    expected = set(partitions) | set(HASH_PARTITIONS) | {"vbmeta"}
+    if expected != verified or result.stdout.count("vbmeta: Successfully verified") != 2:
         raise ValueError(f"Incomplete AVB verification: {sorted(verified)}")
 
     key_hashes = {}

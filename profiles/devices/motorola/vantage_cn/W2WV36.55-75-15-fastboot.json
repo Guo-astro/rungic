@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "device_spec_id": "motorola/vantage_cn/RETCN/W2WV36.55-75-15",
+  "device_spec_sha256": "28caca3f7c1a9f3c87ff9936ead09c92b2ec9621ffc255f9ee2e5235f4c72c23",
+  "android_bootloader": "MBM-3.0-vantage_cn-cc61af6b1f1e-260507-W2WV36V.55-75-ST2.5-0a2efa",
+  "fastboot_bootloader": "MBM-3.0-vantage_cn-cc61af6b1f1e-260507-W2WV36V.55-75-ST2.5-0a2e",
+  "securestate": "flashing_unlocked:SDP",
+  "target_slot": "a",
+  "super_mode": "userspace",
+  "mode_probe_verified": true,
+  "bootloader_usb_replug_observed": true
+}
