@@ -48,6 +48,10 @@
 - Docker：`rootless`＋`seccomp`＋`cgroupns`，overlayfs；`hello-world`、镜像已有目录写入、bridge出网、`-p 18080:80`（容器内与Android均可访问）、Compose服务名互访——通过。用户systemd与plasmashell环境中有`DOCKER_HOST`。
 - 安全边界：桌面`/proc/sys`仍只读、写入被拒；rootless的mount namespace内`/proc/sys/net`可写，但其进程写Android网络参数被拒；Android的`lo.forwarding`保持1。
 - `rungic-integrity`：清理试验遗留的rootful配置（`/etc/docker/daemon.json`、`/etc/containerd/config.toml`、两个代理drop-in，均不属任何包）后为`clean`。
-- 未做：在“设置→服务”界面里实际开关（需要账户密码，`auth_admin`）；整包清数据刷入验收；G100 S上19篇的Android侧Docker尚未迁出停用。
+- 设置→服务界面实测（设置应用须由用户systemd启动，与桌面启动方式一致；从调试入口直接启动时polkit找不到会话，不弹密码框）：
+  - 发现KAuth的D-Bus调用使用默认25秒超时，而polkit密码框就在这次调用中等待：输入晚于25秒时页面报`could not contact the helper … reply timeout expired`，但辅助程序随后照常改了单元状态；页面因此不执行用户单元的启停与`daemon-reload`，出现“已关闭但仍在运行”、页面显示与实际不符。此问题也影响SSH开关（83篇未验证项）。修复：`Action::setTimeout`设为10分钟（提交`7ff996ca`，`rungic-plasma-services` 0.340）。
+  - 修复后：开启——先弹确认（策略中的警告），确认后弹密码框，37秒后输入，全局启用、用户服务当场启动，页面“运行中”无报错；关闭——会话内免再次输入密码，全局停用、用户服务当场停止，页面“已关闭”。
+  - 0.340仅以`dpkg -i`单独装到G100 S验证：合并远端后的release还需要另一台机器构建的KWin（`rungic8`）、kscreen（`rungic5`）等包，本机池中没有，未构建新release；在此之前`rungic-integrity`会报该包与release 20260928.5不一致。
+- 未做：整包清数据刷入验收；G100 S上19篇的Android侧Docker尚未迁出停用。
 
 试验留下的手工状态（用户级unit与`daemon.json`、按名字的数据目录、rootful配置）已在部署前后清理；从属ID段沿用试验时为`kevinzhow`分配的`165536`段。
