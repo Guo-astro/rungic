@@ -1,5 +1,7 @@
 # 原厂 Android 16 上运行 Docker（2026-09-22）
 
+> 2026-09-28：Plasma容器内的rootless Docker（Ubuntu包）已实测可用，计划取代本篇的Android侧独立运行时，见[85篇](85-lxc-rootless-docker.md)。
+
 > 改名说明（2026-09-27）：Rungic改名C阶段之后，`/data/adb/moto-docker`、`moto-docker`、`moto-docker-enter`、SELinux类型`moto_docker`/`moto_docker_file`/`moto_docker_image`、iptables链`MOTO_DOCKER_*`、开机脚本`moto-docker.sh`改为`rungic-*`/`rungic_docker*`/`RUNGIC_DOCKER_*`（运行时目录与数据镜像内的文件已整体重标）；示例项目`moto-server`/`moto-nginx`、`moto-storage-demo`、卷`moto-shared-example`、镜像标签`moto-alpine`改为`rungic-*`。对照见[70篇](70-rungic-rebrand.md)。下文按时间记录的内容保留当时的名称。
 
 设备 XT2537-4 / mumba_cn / ZY32MVJS25。沿用第 17 篇已经验证的容器内核，本次没有再次刷写 boot、init_boot 或系统分区。
@@ -142,3 +144,13 @@ Android 的 CPU、内存等控制器仍由原有 cgroup v1 层级占用，Docker
 **现有 v3 一键 ROM 没有包含这次 Docker 用户数据部署或第 17 篇的容器内核。** 从该 ROM 完整重装并清数据会清除这里的 Docker 配置、镜像和卷。
 
 官方参考：[Docker 静态安装](https://docs.docker.com/engine/install/binaries/)、[Docker 防火墙](https://docs.docker.com/engine/network/packet-filtering-firewalls/)、[containerd overlayfs 挂载配置实现](https://github.com/containerd/containerd/blob/v2.3.5/plugins/snapshots/overlay/overlay.go)、[Magisk 策略工具](https://topjohnwu.github.io/Magisk/tools.html)。
+
+## 整包内核是否支持 Docker（2026-09-28）
+
+结论：一键整包使用的自编 GKI（`packages/gki-android15-6.6/recipe.json` 的 ACK `86c6642d` + `kernel/targets/gki/lxc_defconfig`）已具备本篇部署用到的全部内核功能，无需为 Docker 改内核。
+
+- 方法：按该提交稀疏取出 Kconfig 与 `gki_defconfig`，用 kconfiglib 14.1（本机缺 flex/bison，不能编 `scripts/kconfig`；把 Kconfig 新写法 `modules` 改回等价的 `option modules`）生成完整配置，再合并 LXC 片段；与 G100 S 当前运行内核的 `/proc/config.gz` 比较，只差编译器版本、BTF/pahole、LTO 与 `TRIM_UNUSED_KSYMS` 等工具链项，功能项一致。产物在 `.work/diag/docker-kernel/`。
+- 逐项核对：namespaces（含 NET/USER）、cgroups（MEMCG、CPUSETS、CGROUP_BPF、FREEZER）、SECCOMP_FILTER、VETH、BRIDGE、iptables filter/NAT/MASQUERADE、conntrack、OVERLAY_FS、BLK_DEV_LOOP、EXT4、KEYS 在整包内核与运行内核中均为 `y`。
+- Moby `contrib/check-config.sh` 对两者给出相同的缺项清单（bridge netfilter、`xt_addrtype`、IPVS、nftables、CGROUP_PIDS/DEVICE 等），即本篇“网络”一节已绕开的那些；OverlayFS `override_creds` 的处理同样适用（同一源码）。
+- 边界：这是由固定源码与片段推导的配置，不是从 G100 整包实际产物中读出的；G100 刷入后应以其 `/proc/config.gz` 复核。
+- 整包尚未包含 Docker 用户空间：G100 S 上 `runtime` 约 340 MB（Alpine 管理环境与静态 Docker/containerd/Compose），另有启动器、`network.sh`、SELinux 规则与开机脚本；数据镜像为 8 GiB 稀疏 ext4（当前实占约 440 MB，可在首次启动时新建）。`.5` 的 product 约 6.94 GB，分区上限约 7.45 GB，放入前需核算余量。
