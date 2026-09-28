@@ -172,3 +172,14 @@ ADB reboot fastboot 后约 42 秒自动进入 fastbootd（USB 2.0），is-usersp
 - product 为 12,460,376,064 字节，小于 13,194,330,112 字节逻辑容量；SHA-256 `fc84d4771d2ab94cc67b71204159542cf6007fae4aaedbfa9d6bd457cffced1c`。4682 条路径及元数据验证通过，保留只读 APK 的 ARM64 JNI 库。
 - 包内 `VALIDATION.md`、`offline-verification.json` 和 `reports/display-runtime-acceptance.json` 明确区分离线校验和已配置账户实测。该新包没有再次清数据刷入，`clean_install_accepted=false`；旧 `.1` 的人工修复结果不转记为新包首装通过。
 - 归档完成后删除本 run 的 v3 product/rootfs/host 展开暂存，保留正式包、恢复输入、原始/压缩 rootfs、精确仓库快照及证据；共享增量构建目录和固定源码依赖保留供后续维护。当前设备保持已配置账户、scale=3、自动刷新率，无障碍调试已关闭。
+
+
+## Android density 修订整包 `.3` 已完成离线校验
+
+目录 `.work/ci/runs/vantage-20260928-density/release/vantage-20260928.3/`。使用 APK 2.10、APT release 20260928.7，首次显示默认由 Android density 与 360 逻辑宽度保护计算；已有选择及渲染模式补偿保持。当前账户实测范围与刷新状态边界见 [85 篇](85-phone-display-size-policy.md)。
+
+- 组包源码 `7744314c7a6afecb4af9a29beb467463a1d74a29`，工作区 clean；manifest `df42f11ada903c86bfcc8d4198411c894feff8c0751a2667fe339982da84f39b`，84 项文件与设备 spec 离线校验通过。
+- rootfs SHA-256 `fc528853fd9c56dd400ee34f2df3c658b4fb8e6be9f92fc3f7ee793ff7f03c0c`；1479 个安装包，文件系统检查 0，fresh-account/home 契约通过；rootfs 和 host 模板均没有已有 kwinoutputconfig.json。
+- product 12,460,355,584 字节，低于分区容量；SHA-256 `dd4e8e25cd7a6e4ec9ed76a10a6dad7d3c51e21f9123231e9b757d09a4966266`。4682 条路径/元数据通过；两份 APK 与实机安装文件一致，三份只读 ARM64 JNI 库逐一核对哈希。
+- 包内 `VALIDATION.md`、`offline-verification.json` 和 `reports/density-runtime-acceptance.json` 明确记录 `clean_install_accepted=false`。仅已有账户升级及显示测试，未再次刷写或清数据；旧版本的首装经历不转记为本包验收。
+- 已删除本轮 product/rootfs/host 展开暂存，保留正式包、镜像/种子、精确仓库、源码/实机证据及恢复输入。另在核对原 SHA 后删除旧 run 可由 41 个原厂分片重建的 `stock/super.raw.img`，记录在旧 run `super-raw-cleanup.json`；原厂分片及旧正式包保留。空间始终高于 60 GiB 预留线，清理后约 66 GiB 可用。

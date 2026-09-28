@@ -163,3 +163,7 @@ Android Surface 尺寸改变与 Linux 配置提交跨进程，不能仅因两项
 补充回归：新版本设置页的超时撤回和 Keep 保存通过；原生↔720 三轮保持 3.5↔1.9916666667，未取整 logicalDpi 不变，6 倍请求被拒绝。测试最初缓存了自动刷新率变化前的 mode ID；按实时分辨率和刷新率重新解析后通过，保留首轮失败日志。KScreen 的 VRR 枚举检查不能代替宿主策略检查：测试结束时枚举为 automatic，但宿主曾保留 90；显式切换 Never→Automatic 后回读宿主 refreshPolicy=0。未将此项称为所有刷新策略同步路径均通过，后续需单独定位客户端重复提交相同策略的边界。
 
 最终 `device/final-state.json` 同时核对 Android density=480（无 override）、1264×2780、scale=3、KScreen vrrPolicy=2、宿主 refreshPolicy=0、无障碍关闭和 dpkg audit 为空。GUI 与往返日志分别为 `device/display-gui-test.log`、`device/display-roundtrip.log`；未清数据。
+
+进一步回读原始证据：`device/before.json` 和 `after-install.json` 的宿主 refreshPolicy 都是 120，故枚举与宿主策略不一致在本轮 density 更新前已存在。不能把此前仅检查 KScreen 枚举的“自动刷新通过”推广成宿主策略通过。新增 `device/host-refresh-test.json` 从明确的宿主自动状态出发，逐步检查 300→350%、原生→720→原生及恢复 300%；每步 KScreen vrrPolicy=2 且宿主 refreshPolicy=0。该缩放路径通过，既有不一致的形成原因未据此认定已修复。
+
+交付候选为 `.work/ci/runs/vantage-20260928-density/release/vantage-20260928.3/`，APK 2.10 / APT 20260928.7；84 项 manifest 文件及设备 spec 离线校验通过。此包尚未清数据首装，详细摘要、归档和清理见 83 篇。
