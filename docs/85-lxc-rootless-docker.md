@@ -52,6 +52,7 @@
   - 发现KAuth的D-Bus调用使用默认25秒超时，而polkit密码框就在这次调用中等待：输入晚于25秒时页面报`could not contact the helper … reply timeout expired`，但辅助程序随后照常改了单元状态；页面因此不执行用户单元的启停与`daemon-reload`，出现“已关闭但仍在运行”、页面显示与实际不符。此问题也影响SSH开关（83篇未验证项）。修复：`Action::setTimeout`设为10分钟（提交`7ff996ca`，`rungic-plasma-services` 0.340）。
   - 修复后：开启——先弹确认（策略中的警告），确认后弹密码框，37秒后输入，全局启用、用户服务当场启动，页面“运行中”无报错；关闭——会话内免再次输入密码，全局停用、用户服务当场停止，页面“已关闭”。
   - 0.340仅以`dpkg -i`单独装到G100 S验证：合并远端后的release还需要另一台机器构建的KWin（`rungic8`）、kscreen（`rungic5`）等包，本机池中没有，未构建新release；在此之前`rungic-integrity`会报该包与release 20260928.5不一致。
-- 未做：整包清数据刷入验收；G100 S上19篇的Android侧Docker尚未迁出停用。
+- 未做：整包清数据刷入验收。
+- 2026-09-29 按用户要求清除G100 S上19篇的Android侧Docker（无需保留的数据）：用其`disable`与`stop`正常停止（容器正常退出，`RUNGIC_DOCKER_*`链与9000/9010策略路由随之撤除），卸下loop设备，删除`/data/adb/rungic-docker`（约787MB，含8GiB稀疏数据镜像）、`service.d/rungic-docker.sh`、存储中的`Docker`示例目录与Termux的`docker`/`docker-service`包装及检查文件。其SELinux策略只在运行时加载，重启后不再加载。`/data/adb/rungic-cutover`是改名切换的回滚备份，与Docker无关，保留。
 
 试验留下的手工状态（用户级unit与`daemon.json`、按名字的数据目录、rootful配置）已在部署前后清理；从属ID段沿用试验时为`kevinzhow`分配的`165536`段。
