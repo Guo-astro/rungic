@@ -1,3 +1,9 @@
+kwin (4:6.6.6-0ubuntu0.1+rungic5) resolute; urgency=medium
+
+  * Handset display-size policy, resolution compensation and persistent user size.
+
+ -- Rungic <noreply@rungic.invalid>  Mon, 28 Sep 2026 08:00:00 +0000
+
 kwin (4:6.6.6-0ubuntu0.1+rungic4) resolute; urgency=medium
 
   * clip-scaled-damage-to-surface.patch: surface damage padded for scaling
