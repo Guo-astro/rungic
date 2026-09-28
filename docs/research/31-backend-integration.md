@@ -525,3 +525,5 @@ Agent可直接调用的设备诊断、崩溃现场、统一追踪（perfetto + K
 2026-09-28 Miracast 通用化评估：Plasma UI → 平台桥/root 控制端 → Android WFD/P2P/厂商编码；KWin 外屏 → 宿主 CastDesktop Surface → 电视，音频继续共享 Android 后端。用户要求支持更多机型：公共层按能力探测并提供稳定状态/错误契约，Qualcomm XML、实际 codec 映射、SELinux 和具体副屏冲突放在 firmware/spec 适配器；无原生 WFD 时明确报告边界。这是后续设计，未宣称已实现；X70 只读证据、版本区分及验收见 [86 篇](../86-x70-miracast-assessment.md)。
 
 2026-09-28 Miracast 实现：公共 WFD 控制增加显式能力/错误、主动启用与系统选择页；固件数据选择 UI 租约及旧设备例外。动态 codec 生成仍为公共检查，仅 changed 时挂载且不覆盖外来挂载。独立部署器与 host seed 共用载荷/摘要，保留账户、接收端和租约。X70 的窗口层级证据、运行恢复与限制见 [86 篇](../86-x70-miracast-assessment.md)。
+
+2026-09-28 收尾补测：容器快捷开关已更新至 rungic-cast 0.331。直接关闭系统 WFD 后 watcher 恢复 UI 包/释放租约通过，但随后的两次重连超时，目标接收端最终报告 unavailable；此异常恢复边界尚未解决，详见 86 篇，不能将前三轮正常重连推广到此场景。锁屏测试由用户手动解锁，自动恢复未验收。

@@ -105,3 +105,9 @@ helper 增加 capabilities/settings、明确错误码、按主动 scan/connect �
 用户说明测试中手动解锁了手机，因此自动脚本的唤醒/恢复不能单独作为无人介入验收。20:50 的系统日志记录 `MotoKeyguardPresentation: 7` 覆盖电视、`wm_set_keyguard_shown` 同时作用于手机和电视，用户解锁后该窗口移除；WFD 全程 active_state=2。X70 当前 `secure=false`、`locksettings get-disabled=false`，即没有密码类安全锁但仍有锁屏。
 
 核对 AOSP `android-16.0.0_r1` 的 [KeyguardDisplayManager.java](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-16.0.0_r1/packages/SystemUI/src/com/android/keyguard/KeyguardDisplayManager.java)：普通非默认显示会得到 KeyguardPresentation，PRIVATE/ALWAYS_UNLOCKED 等条件才排除。X70 的 WFD 显示没有这些排除标志。该路径与 Moto splash/taskbar 的适配器是不同职责，不能通过停用 SystemUI 或改写整机锁屏去假装修好。当前结论是后台更新已验、锁屏遮挡已定位、用户解锁后桌面恢复；没有证明锁屏期间底层 Linux 新帧是否持续生成。以后如需“手机黑屏而电视继续工作”，应单独设计投屏息屏入口，与真正锁定设备区分；本轮未实现。G100 S 旧记录只证明当次息屏场景，不能据此断言它在相同 keyguard 状态下一定不同。
+
+### 最终部署与异常断开补测
+
+实现提交 `96282a7ab83cf9446ba21a11b447f7bfa525f850` 的 root 载荷已部署，摘要健康检查通过；对应 `rungic-cast 0.331` 已替换容器中的 0.278，并重启 `plasma-plasmashell.service` 加载快捷开关。APK 为 2.12/60。只关闭本次 Firefox 测试窗口并卸载临时 KWin 脚本；保留用户账户与主屏设置。备份和证据见实验目录 `linux-cast-backup.tar.gz`、`linux-install.txt`、`deploy-final/`、`final-health.txt`、`final-validation.json`。
+
+20:58 补测直接关闭 Android 无线显示开关，绕过 helper 的正常 disconnect：resident watcher 恢复两个 Moto UI 包并删除租约，证明这条异常退出清理路径生效。但紧接着两次 connect 均超时，不能把它计入前三次成功回归。日志在关闭时出现 framework `Failed to disconnect ... reason=2`，随后建立连接请求而未完成 P2P/RTSP；最后状态为目标 TCL `available=false`。这不足以判断是接收端退出等待页还是框架清理时序问题，已请求用户核对电视画面；没有据此添加固定延时、重置整机 Wi-Fi 或改写编码参数。失败后的租约/包状态恢复与 Plasma 主屏正常已核验。该异常重连场景尚未解决，不应宣称所有失败恢复已通过。
