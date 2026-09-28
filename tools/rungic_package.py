@@ -7,7 +7,11 @@ Each package directory holds:
                 the package is built from: a change there means a rebuild), upstream (patch-queue
                 components, packages/<name>, whose patched source build.sh finds in
                 $SRC/upstream/<name>; docs/71), depends,
-                build_depends (installed on the phone before a device build), description,
+                build_depends (installed on the phone before a device build), image (a device
+                package whose build.sh runs in this container image instead, next to the Mac
+                mini's build container: the Flatpak GL extension in the Freedesktop SDK),
+                shlibdeps (false: no Ubuntu library dependencies, for files that link against
+                another runtime's libraries), description,
                 formerly (the package's name before the Rungic rename: Conflicts, Replaces and the
                 enable state of its renamed units carry over, docs/70),
                 obsolete (files of the old manual installs that postinst removes once the
@@ -324,6 +328,12 @@ def build_device(pkg, tree, jobs=4):
     run = lambda script, level='container', timeout=120, check=True: host.run(script, timeout, check)
     name = pkg['name']
     base = f'{DEVICE_BASE}/{name}'
+    if pkg.get('image'):
+        # build.sh runs in another container image (a Flatpak SDK) next to the build container,
+        # sharing its build volume: only the Mac mini runs containers.
+        if host.name != 'macmini':
+            raise SystemExit(f'{name}: built in {pkg["image"]}, which needs --host macmini')
+        base = f'{build_on_device.BASE}/packages/{name}'
     if pkg.get('build_depends'):
         missing = run('dpkg-query -W -f \'${db:Status-Abbrev} ${Package}\\n\' '
                       + ' '.join(pkg['build_depends']) + ' 2>&1 | grep -v "^ii" || true', 'container').stdout
@@ -350,11 +360,26 @@ def build_device(pkg, tree, jobs=4):
         listing.unlink()
     epoch = git('log', '-1', '--format=%ct')
     unit = f'rungic-package-{name}'
+    build_step = f'''rm -rf "$DESTDIR"; mkdir -p "$DESTDIR/DEBIAN"
+sh -eu "$SRC/{pkg['dir'].relative_to(WORKSPACE)}/build.sh"'''
+    if pkg.get('image'):
+        run(f'rm -rf {base}/root && mkdir -p {base}/root/DEBIAN', 'container')
+        env = {'DESTDIR': f'{base}/root', 'SRC': f'{base}/src', 'SOURCE_DATE_EPOCH': epoch, 'JOBS': str(jobs),
+               'HOME': '/root', 'LC_ALL': 'C.UTF-8', **host.proxy()}
+        command = (f'{host.DOCKER} run --rm -u 0 --volumes-from {host.CONTAINER} '
+                   + ''.join(f'-e {k}={shlex.quote(v)} ' for k, v in env.items())
+                   + f'{pkg["image"]} nice -n 10 sh -eu {base}/src/{pkg["dir"].relative_to(WORKSPACE)}/build.sh')
+        print(f'{name}: building in {pkg["image"]}', flush=True)
+        result = host.ssh(f'{command} > /tmp/{name}-build.log 2>&1; echo "exit=$?"; tail -30 /tmp/{name}-build.log',
+                          14500, check=False)
+        output = result.stdout.decode(errors='replace')
+        if 'exit=0' not in output:
+            raise SystemExit(f'{name}: build in {pkg["image"]} failed\n{output[-4000:]}')
+        build_step = f'# the files are in $DESTDIR, built in {pkg["image"]}'
     script = f'''set -e
 cd {base}
 export DESTDIR={base}/root SRC={base}/src SOURCE_DATE_EPOCH={epoch} JOBS={jobs} LC_ALL=C.UTF-8
-rm -rf "$DESTDIR"; mkdir -p "$DESTDIR/DEBIAN"
-sh -eu "$SRC/{pkg['dir'].relative_to(WORKSPACE)}/build.sh"
+{build_step}
 cp debian-scripts/* "$DESTDIR/DEBIAN/"
 if [ -f unit.list ]; then install -Dm644 unit.list "$DESTDIR/usr/share/rungic/units/{name}.list"; fi
 # Debug information to {base}/dbgsym by build-id (for NAME-dbgsym), then strip (docs/61).
@@ -375,7 +400,7 @@ if [ -d "$DESTDIR/etc" ]; then (cd "$DESTDIR" && find etc -type f | sort | sed '
 # Library dependencies of the ELF files, as dpkg-shlibdeps computes them.
 elves=$(find "$DESTDIR" -type f ! -path "$DESTDIR/DEBIAN/*" -exec sh -c 'head -c4 "$1" | grep -q ELF && echo "$1"' _ {{}} \\;)
 rm -rf shlibs; mkdir -p shlibs/debian; printf 'Source: x\\n\\nPackage: {name}\\nArchitecture: any\\n' > shlibs/debian/control
-if [ -n "$elves" ]; then
+if [ -n "$elves" ] && {'true' if pkg.get('shlibdeps', True) else 'false'}; then
   # Libraries the package ships itself (private FFmpeg, plugins) resolve inside DESTDIR.
   libdirs=$(find "$DESTDIR" -name '*.so*' ! -path "$DESTDIR/DEBIAN/*" -printf '-l%h\n' | sort -u)
   (cd shlibs && dpkg-shlibdeps -O --ignore-missing-info $libdirs $elves 2>shlibs.err | sed -n 's/^shlibs:Depends=//p') > shlibs.txt || true

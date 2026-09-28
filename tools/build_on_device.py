@@ -36,6 +36,7 @@ import re
 import subprocess
 import tarfile
 import time
+from compression import zstd
 
 import rungic_device
 from rungic_device import WORKSPACE
@@ -171,10 +172,13 @@ class MacMini:
         return self.run(script, timeout).stdout
 
     def put_tar(self, archive, directory):
+        # Compressed: the link to the Mac mini carries about 0.5 MB/s, and a Mesa source tree is a
+        # 425 MB tar (108 MB with zstd -10, 3.6 s here; its upload did not finish in 30 minutes).
         self.ensure()
         with open(archive, 'rb') as data:
-            self.ssh(self.exec(f"sh -c 'mkdir -p {directory} && tar -xf - -C {directory} --no-same-owner'", True),
-                     1800, data=data.read())
+            packed = zstd.compress(data.read(), 10)
+        self.ssh(self.exec(f"sh -c 'mkdir -p {directory} && zstd -dc | tar -xf - -C {directory} --no-same-owner'",
+                           True), 3600, data=packed)
 
     def put(self, src, dest, mode):
         self.ensure()
