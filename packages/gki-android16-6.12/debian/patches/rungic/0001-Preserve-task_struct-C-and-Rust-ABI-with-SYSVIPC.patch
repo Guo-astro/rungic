@@ -1,0 +1,168 @@
+From: Rungic <noreply@rungic.invalid>
+Date: Mon, 28 Sep 2026 11:44:16 +0800
+Subject: Preserve task_struct C and Rust ABI with SYSVIPC
+
+Keep KABI slots 6 through 8 as the original u64 declarations. Typed accessors use slot 6 for semaphore state and contiguous slots 7 and 8 for shared-memory state, with compile-time size, alignment and adjacency checks. This preserves both gendwarfksyms reserved-field descriptions and bindgen task_struct layout.
+Forwarded: not-needed
+Last-Update: 2026-09-28
+X-Rungic-Status: Pending
+X-Rungic-Tests: L1:vantage-kernel-build,module-abi; L2:vantage-boot (to write)
+X-Rungic-Docs: docs/83-x70-air-pro-onboarding.md
+---
+ include/linux/sched.h | 29 +++++++++++++++++++++++++----
+ include/linux/shm.h   |  2 +-
+ ipc/sem.c             | 12 ++++++------
+ ipc/shm.c             |  6 +++---
+ kernel/kcmp.c         |  4 ++--
+ 5 files changed, 37 insertions(+), 16 deletions(-)
+
+diff --git a/include/linux/sched.h b/include/linux/sched.h
+index 94213ab..64edffb 100644
+--- a/include/linux/sched.h
++++ b/include/linux/sched.h
+@@ -1191,10 +1191,6 @@ struct task_struct {
+ 
+ 	struct nameidata		*nameidata;
+ 
+-#ifdef CONFIG_SYSVIPC
+-	struct sysv_sem			sysvsem;
+-	struct sysv_shm			sysvshm;
+-#endif
+ #ifdef CONFIG_DETECT_HUNG_TASK
+ 	unsigned long			last_switch_count;
+ 	unsigned long			last_switch_time;
+@@ -1694,6 +1690,31 @@ struct task_struct {
+ 	 */
+ };
+ 
++
++#ifdef CONFIG_SYSVIPC
++/*
++ * gendwarfksyms only preserves one field from a KABI replacement union.
++ * Keep all u64 placeholders intact for both C and Rust bindings. Use
++ * slot 6 for semaphore state and the contiguous storage of slots 7 and 8
++ * for the SysV shared-memory list. The layout assertions prevent overruns.
++ */
++static inline struct sysv_sem *task_sysvsem(struct task_struct *task)
++{
++	static_assert(sizeof(struct sysv_sem) == sizeof(u64));
++	static_assert(__alignof__(struct sysv_sem) <= __alignof__(u64));
++	return (struct sysv_sem *)&task->__kabi_reserved6;
++}
++
++static inline struct sysv_shm *task_sysvshm(struct task_struct *task)
++{
++	static_assert(sizeof(struct sysv_shm) == 2 * sizeof(u64));
++	static_assert(__alignof__(struct sysv_shm) <= __alignof__(u64));
++	static_assert(offsetof(struct task_struct, __kabi_reserved8) ==
++		      offsetof(struct task_struct, __kabi_reserved7) + sizeof(u64));
++	return (struct sysv_shm *)&task->__kabi_reserved7;
++}
++#endif
++
+ #ifdef CONFIG_SCHED_PROXY_EXEC
+ DECLARE_STATIC_KEY_FALSE(__sched_proxy_exec);
+ static inline bool sched_proxy_exec(void)
+diff --git a/include/linux/shm.h b/include/linux/shm.h
+index 1d3d3ae..888546f 100644
+--- a/include/linux/shm.h
++++ b/include/linux/shm.h
+@@ -17,7 +17,7 @@ struct sysv_shm {
+ long do_shmat(int shmid, char __user *shmaddr, int shmflg, unsigned long *addr,
+ 	      unsigned long shmlba);
+ void exit_shm(struct task_struct *task);
+-#define shm_init_task(task) INIT_LIST_HEAD(&(task)->sysvshm.shm_clist)
++#define shm_init_task(task) INIT_LIST_HEAD(&task_sysvshm(task)->shm_clist)
+ #else
+ struct sysv_shm {
+ 	/* empty */
+diff --git a/ipc/sem.c b/ipc/sem.c
+index a39cdc7..e696432 100644
+--- a/ipc/sem.c
++++ b/ipc/sem.c
+@@ -1851,7 +1851,7 @@ static inline int get_undo_list(struct sem_undo_list **undo_listp)
+ {
+ 	struct sem_undo_list *undo_list;
+ 
+-	undo_list = current->sysvsem.undo_list;
++	undo_list = task_sysvsem(current)->undo_list;
+ 	if (!undo_list) {
+ 		undo_list = kzalloc(sizeof(*undo_list), GFP_KERNEL_ACCOUNT);
+ 		if (undo_list == NULL)
+@@ -1860,7 +1860,7 @@ static inline int get_undo_list(struct sem_undo_list **undo_listp)
+ 		refcount_set(&undo_list->refcnt, 1);
+ 		INIT_LIST_HEAD(&undo_list->list_proc);
+ 
+-		current->sysvsem.undo_list = undo_list;
++		task_sysvsem(current)->undo_list = undo_list;
+ 	}
+ 	*undo_listp = undo_list;
+ 	return 0;
+@@ -2313,9 +2313,9 @@ int copy_semundo(unsigned long clone_flags, struct task_struct *tsk)
+ 		if (error)
+ 			return error;
+ 		refcount_inc(&undo_list->refcnt);
+-		tsk->sysvsem.undo_list = undo_list;
++		task_sysvsem(tsk)->undo_list = undo_list;
+ 	} else
+-		tsk->sysvsem.undo_list = NULL;
++		task_sysvsem(tsk)->undo_list = NULL;
+ 
+ 	return 0;
+ }
+@@ -2336,10 +2336,10 @@ void exit_sem(struct task_struct *tsk)
+ {
+ 	struct sem_undo_list *ulp;
+ 
+-	ulp = tsk->sysvsem.undo_list;
++	ulp = task_sysvsem(tsk)->undo_list;
+ 	if (!ulp)
+ 		return;
+-	tsk->sysvsem.undo_list = NULL;
++	task_sysvsem(tsk)->undo_list = NULL;
+ 
+ 	if (!refcount_dec_and_test(&ulp->refcnt))
+ 		return;
+diff --git a/ipc/shm.c b/ipc/shm.c
+index 492fcc6..0f245da 100644
+--- a/ipc/shm.c
++++ b/ipc/shm.c
+@@ -448,12 +448,12 @@ void exit_shm(struct task_struct *task)
+ 
+ 		task_lock(task);
+ 
+-		if (list_empty(&task->sysvshm.shm_clist)) {
++		if (list_empty(&task_sysvshm(task)->shm_clist)) {
+ 			task_unlock(task);
+ 			break;
+ 		}
+ 
+-		shp = list_first_entry(&task->sysvshm.shm_clist, struct shmid_kernel,
++		shp = list_first_entry(&task_sysvshm(task)->shm_clist, struct shmid_kernel,
+ 				shm_clist);
+ 
+ 		/*
+@@ -782,7 +782,7 @@ static int newseg(struct ipc_namespace *ns, struct ipc_params *params)
+ 	shp->ns = ns;
+ 
+ 	task_lock(current);
+-	list_add(&shp->shm_clist, &current->sysvshm.shm_clist);
++	list_add(&shp->shm_clist, &task_sysvshm(current)->shm_clist);
+ 	task_unlock(current);
+ 
+ 	/*
+diff --git a/kernel/kcmp.c b/kernel/kcmp.c
+index b0639f2..d8acdcb 100644
+--- a/kernel/kcmp.c
++++ b/kernel/kcmp.c
+@@ -198,8 +198,8 @@ SYSCALL_DEFINE5(kcmp, pid_t, pid1, pid_t, pid2, int, type,
+ 		break;
+ 	case KCMP_SYSVSEM:
+ #ifdef CONFIG_SYSVIPC
+-		ret = kcmp_ptr(task1->sysvsem.undo_list,
+-			       task2->sysvsem.undo_list,
++		ret = kcmp_ptr(task_sysvsem(task1)->undo_list,
++			       task_sysvsem(task2)->undo_list,
+ 			       KCMP_SYSVSEM);
+ #else
+ 		ret = -EOPNOTSUPP;

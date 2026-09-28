@@ -52,7 +52,8 @@ def main():
     }.items():
         check(prop, lambda p=prop: command("getprop " + shlex.quote(p)), expected)
     check("selinux", lambda: command("getenforce"), "Enforcing")
-    check("kernel.release", lambda: command("uname -r"), spec["kernel"]["stock_release"])
+    check("kernel.release", lambda: command("uname -r"),
+          manifest.get("kernel_release", spec["kernel"]["stock_release"]))
     for partition, image in (("boot_a", "boot.img"), ("init_boot_a", "init_boot.img"),
                              ("product_a", "product.erofs.img")):
         info = manifest["files"]["images/" + image]

@@ -1,0 +1,132 @@
+{
+  "schema_version": 1,
+  "id": "motorola/vantage_cn/RETCN/W2WV36.55-75-15",
+  "identity": {
+    "product": "vantage",
+    "device": "vantage_cn",
+    "sku": "XT2603-1",
+    "fingerprint": "motorola/vantage_cn/vantage:16/W2WV36.55-75-15/0a2efa-422586:user/release-keys",
+    "bootloader": "MBM-3.0-vantage_cn-cc61af6b1f1e-260507-W2WV36V.55-75-ST2.5-0a2efa"
+  },
+  "stock": {
+    "archive_sha256": "f4ead2e93e04e0bc044bad81ccc828d4624f010b035987d52471e3023beefbdb",
+    "boot_sha256": "d35ab78d97ead5390e02af8e7009c0aa3ec338d81a0a9916b2c246817f14ba49",
+    "init_boot_sha256": "d7a54e258aac88d989d0e9f6af16a6314d7b924207fa52be01fea90a27492bf4",
+    "vbmeta_sha256": "d83faea454c6299bc9c8748201d334f5d6fd9724572d1d53bd085f524aff8bce",
+    "vbmeta_system_sha256": "98059074fc2ab380abaa9c6bb5682d2c1fd230f68e1abea62fdb07d7e5208b1a",
+    "super_sha256": "6ae0a195ac6e5dbd17daab403269809ad6bc211d5cfd41546d489a0bcecf2c29",
+    "product_sha256": "b529a42e4ef7a9abec1107eedc7e5f7fc72b183a0546ccac978706e1d13a59bf",
+    "product_partition_bytes": 13194330112,
+    "avb_public_key_sha1": "27bcbab040b154eecdce885d6c0e6283cee9c227"
+  },
+  "kernel": {
+    "manifest_repository": "https://android.googlesource.com/kernel/manifest",
+    "manifest_commit": "35c7b6da4128d4d49b42db9bfa03c9177c847e9d",
+    "common_repository": "https://android.googlesource.com/kernel/common",
+    "common_commit": "7aecc84c5b34a3f9659e24d74a8080e1dc19b6fd",
+    "stock_release": "6.12.38-android16-5-g7aecc84c5b34-ab14496924-4k",
+    "page_size": 4096,
+    "module_trust_certificate_sha256": "f7c4d29a15e94c4ecfb1e3fbde0b4b794cfcdea580854dead28b03aaa00851ac"
+  },
+  "release_requirements": {
+    "arch": "aarch64",
+    "android_api": 36,
+    "rootfs_arch": "arm64",
+    "minimum_battery_percent": 30,
+    "minimum_host_free_gib": 120,
+    "host_reserve_gib": 60
+  },
+  "deployment": {
+    "phone_http_proxy": "http://192.168.5.45:6152"
+  },
+  "purity": {
+    "remove_preinstall": [
+      {
+        "directory": "Amap",
+        "package": "com.autonavi.minimap",
+        "apk_sha256": "9111ed0af15b4cc1b67a98ebc413c0b132be986e35422000353f1676242f197b"
+      },
+      {
+        "directory": "BaiduSearch",
+        "package": "com.baidu.searchbox",
+        "apk_sha256": "f5afb042d830f4546a4f9b9116ddac4912a2b90dcf028a963ae113344aa9fc31"
+      },
+      {
+        "directory": "BestWeather",
+        "package": "com.icoolme.android.weather",
+        "apk_sha256": "2b809d30046bf0a96045f35a84ddeee478e43caf9e61b92bb94daad777068010"
+      },
+      {
+        "directory": "Douyin",
+        "package": "com.ss.android.ugc.aweme",
+        "apk_sha256": "1efc97529e237a79b25612f989d8eb9db00f8f435faa45ba6418df2373210c2f"
+      },
+      {
+        "directory": "FanqieNovel",
+        "package": "com.dragon.read",
+        "apk_sha256": "40d2eb08dde9888026292759be1be409f0347d05f4c872ff8d7ee0e87bae1421"
+      },
+      {
+        "directory": "IQiyi",
+        "package": "com.qiyi.video",
+        "apk_sha256": "2d0a469efdbe1b179c4f965cdefe377eef9f4b35acebe1c8228f03261863c5bd"
+      },
+      {
+        "directory": "KuaishouVideo",
+        "package": "com.smile.gifmaker",
+        "apk_sha256": "72fb3932b5551f5d5f0018ee466ecaabc3e5a6bb9608cfeeeee346674a58c36d"
+      },
+      {
+        "directory": "Meituxiuxiu",
+        "package": "com.mt.mtxx.mtxx",
+        "apk_sha256": "cafb34f58b4a2ade9d9bf4ef22d3c0b40c546bbf86d536fe4887002a9b648795"
+      },
+      {
+        "directory": "NetEaseCloudMusic",
+        "package": "com.netease.cloudmusic",
+        "apk_sha256": "f9a8e9ea6e22b3fdd3a8915bc67fa5033484b203522c66abb8be004c031ccf0c"
+      },
+      {
+        "directory": "NewsArticle",
+        "package": "com.ss.android.article.news",
+        "apk_sha256": "edbf8dec03282ebe309eef75b9bd7a2f6b7be37c712f8d1f6420bc05d7fe37eb"
+      },
+      {
+        "directory": "QQMusic",
+        "package": "com.tencent.qqmusic",
+        "apk_sha256": "45a012842c54ae3ecc328086203dc14504ab35755011f1326f4b47b6e407a294"
+      },
+      {
+        "directory": "RedBook",
+        "package": "com.xingin.xhs",
+        "apk_sha256": "4aeb888fd88b365cd9659c594788c06886ce545ea14d0836ef9b802e4d2722f9"
+      },
+      {
+        "directory": "Weibo",
+        "package": "com.sina.weibo",
+        "apk_sha256": "a8d937606690929cdfcf41d307275e16c35c9ca9f81351a61a660df059872a6e"
+      },
+      {
+        "directory": "Youku",
+        "package": "com.youku.phone",
+        "apk_sha256": "767815096f3d48acecd6ccf69f67f1fe6fbf006127af0839b15a39e32ea10403"
+      },
+      {
+        "directory": "iBiliPlayer",
+        "package": "tv.danmaku.bili",
+        "apk_sha256": "9af7008c15d4a4c902b85352d6dfb0ac048a8539d77e3d8a3dca5a83af88cd9d"
+      }
+    ],
+    "remove_files": [
+      "etc/preinstall/amapconfig.ini",
+      "etc/preinstall/lenovo_aweme_183_pre_install.config",
+      "etc/preinstall/lenovo_bili_channel.txt",
+      "etc/preinstall/motorola.xhs",
+      "etc/preinstall/mtxxchannel",
+      "etc/preinstall/qqmusic_channel.txt",
+      "etc/preinstall/weibo_channel.txt",
+      "etc/preinstall/zm-config.ini"
+    ],
+    "disable_packages": []
+  }
+}

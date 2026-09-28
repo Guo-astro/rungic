@@ -11,6 +11,8 @@ import struct
 import subprocess
 import sys
 
+from flash_release import fastboot_settings
+
 
 def sha256(path):
     digest = hashlib.sha256()
@@ -30,7 +32,21 @@ def main():
     parser.add_argument("--fastboot-bootloader-value", required=True,
                         help="exact segmented fastboot getvar value observed on the target")
     parser.add_argument("--release-id", required=True)
+    parser.add_argument("--fastboot-adapter", type=Path,
+                        help="audited device-specific fastboot identity and mode mapping")
+    parser.add_argument("--source-provenance", type=Path,
+                        help="source commit and changed-file hashes for a dirty build")
     args = parser.parse_args()
+    project = Path(__file__).resolve().parents[2]
+    source_commit = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=project, text=True).strip()
+    provenance = json.loads(args.source_provenance.read_text()) if args.source_provenance else None
+    if provenance:
+        if provenance["source_commit"] != source_commit or provenance["spec_sha256"] != sha256(args.spec):
+            raise ValueError("source provenance commit/spec differs from the build")
+        for rel, expected in provenance["files_sha256"].items():
+            if Path(rel).is_absolute() or ".." in Path(rel).parts or sha256(project / rel) != expected:
+                raise ValueError(f"source provenance differs: {rel}")
     spec = json.loads(args.spec.read_text())
     stock_manifest = json.loads((args.stock / "manifest.json").read_text())
     stock_verification = json.loads((args.stock / "verification.json").read_text())
@@ -39,6 +55,9 @@ def main():
     rootfs_report = json.loads(args.rootfs_report.read_text())
     host_report = json.loads(args.host_report.read_text())
     kernel_report = json.loads(args.kernel_abi_report.read_text())
+    for report in (rootfs_report, host_report):
+        if any(report.get(key) is not True for key in ("home_layout_checked", "fresh_account_checked")):
+            raise ValueError("rootfs and host seed must pass fresh-account/home checks; rebuild legacy seeds")
     if init_report["init_boot_sha256"] != sha256(args.init_boot):
         raise ValueError("init_boot differs from its bootstrap injection report")
     if rootfs_report["rootfs_sha256"] != product_report["rootfs_sha256"] or \
@@ -56,9 +75,8 @@ def main():
         raise ValueError("kernel ABI comparison did not pass")
     if not args.serial.isalnum() or product_report["release_id"] != args.release_id:
         raise ValueError("invalid target serial or mismatched product release")
-    if not spec["identity"]["bootloader"].startswith(args.fastboot_bootloader_value) or \
-            len(spec["identity"]["bootloader"]) - len(args.fastboot_bootloader_value) > 1:
-        raise ValueError("observed fastboot bootloader is not the spec version")
+    adapter = json.loads(args.fastboot_adapter.read_text()) if args.fastboot_adapter else None
+    fastboot_settings(spec, sha256(args.spec), args.fastboot_bootloader_value, adapter)
     if product_report["device_spec_sha256"] != sha256(args.spec):
         raise ValueError("product image was built from a different device spec")
     if product_report["image_sha256"] != sha256(args.product_image):
@@ -89,6 +107,14 @@ def main():
             target.chmod(mode)
 
     copy(args.spec, "device-spec.json")
+    if args.fastboot_adapter:
+        copy(args.fastboot_adapter, "fastboot-adapter.json")
+    if provenance:
+        copy(args.source_provenance, "reports/source.json")
+        for rel in provenance["files_sha256"]:
+            copy(project / rel, "reports/source/" + rel)
+        (output / "reports/source.patch").write_bytes(subprocess.check_output(
+            ["git", "diff", "--binary"], cwd=project))
     copy(Path(__file__).with_name("flash_release.py"), "flash.py", 0o755)
     copy(args.fastboot, "bin/fastboot", 0o755)
     for source, name in ((args.product_report, "product.json"),
@@ -159,8 +185,6 @@ def main():
         raise ValueError("sparse product is larger than the logical partition")
     files = {str(path.relative_to(output)): {"sha256": sha256(path), "bytes": path.stat().st_size}
              for path in sorted(output.rglob("*")) if path.is_file()}
-    source_commit = subprocess.check_output(
-        ["git", "rev-parse", "HEAD"], cwd=Path(__file__).resolve().parents[2], text=True).strip()
     manifest = {"schema_version": 1, "release_id": args.release_id,
                 "composer_commit": source_commit, "installer_commit": source_commit,
                 "target_serial": args.serial, "device_spec_sha256": sha256(args.spec),
@@ -171,6 +195,11 @@ def main():
                     for name, info in stock_verification["logical_images"].items()},
                 "super_chunk_count": len(chunks), "files": files,
                 "installation": "full OEM Android restore, Rungic payload, userdata wipe"}
+    if args.fastboot_adapter:
+        manifest["fastboot_adapter"] = "fastboot-adapter.json"
+    if provenance:
+        manifest["source_provenance"] = "reports/source.json"
+        manifest["source_dirty"] = provenance["dirty"]
     (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     print(json.dumps({key: value for key, value in manifest.items() if key != "files"}, indent=2))
 
@@ -178,5 +207,5 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except (KeyError, OSError, ValueError, subprocess.CalledProcessError) as error:
+    except (KeyError, OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as error:
         sys.exit(f"release assembly failed: {error}")

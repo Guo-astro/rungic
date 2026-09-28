@@ -1,0 +1,4 @@
+[abi_symbol_list]
+  init_ipc_ns
+  put_ipc_ns
+  rust_helper_from_kuid

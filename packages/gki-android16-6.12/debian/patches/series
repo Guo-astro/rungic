@@ -1,0 +1,3 @@
+rungic/0001-Preserve-task_struct-C-and-Rust-ABI-with-SYSVIPC.patch
+rungic/0002-Export-IPC-namespace-symbols-for-modular-Rust-Binder.patch
+rungic/0003-Preserve-Rust-Binder-exports-across-namespace-config.patch
