@@ -1,8 +1,0 @@
-version = 4
-root = '/var/lib/docker/containerd-external'
-state = '/run/containerd'
-disabled_plugins = ['io.containerd.grpc.v1.cri', 'io.containerd.cri.v1.images', 'io.containerd.cri.v1.runtime', 'io.containerd.podsandbox.controller.v1.podsandbox', 'io.containerd.nri.v1.nri']
-[plugins.'io.containerd.server.v1.grpc']
-  address = '/run/containerd/containerd.sock'
-[plugins.'io.containerd.snapshotter.v1.overlayfs']
-  mount_options = ['override_creds=on']
