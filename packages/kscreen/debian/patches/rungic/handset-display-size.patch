@@ -9,13 +9,13 @@ X-Rungic-Status: Inappropriate [Rungic handset policy and Android rendering mode
 X-Rungic-Tests: tools/test_display_policy.py; manual deployment checks in docs/85
 X-Rungic-Docs: docs/85-phone-display-size-policy.md
 ---
- kcm/output_model.cpp   | 26 +++++++++++++++++++++++--
+ kcm/output_model.cpp   | 36 ++++++++++++++++++++++++++++++++++--
  kcm/output_model.h     |  3 +++
- kcm/ui/OutputPanel.qml | 51 +++++++++++++++++++++++++++++++++++++++++++++++++-
- 3 files changed, 77 insertions(+), 3 deletions(-)
+ kcm/ui/OutputPanel.qml | 50 +++++++++++++++++++++++++++++++++++++++++++++++++-
+ 3 files changed, 86 insertions(+), 3 deletions(-)
 
 diff --git a/kcm/output_model.cpp b/kcm/output_model.cpp
-index b097396..e796484 100644
+index b097396..329f5e6 100644
 --- a/kcm/output_model.cpp
 +++ b/kcm/output_model.cpp
 @@ -4,6 +4,7 @@
@@ -26,22 +26,32 @@ index b097396..e796484 100644
  
  #include <cstdint>
  
-@@ -67,6 +68,14 @@ QVariant OutputModel::data(const QModelIndex &index, int role) const
+@@ -67,6 +68,24 @@ QVariant OutputModel::data(const QModelIndex &index, int role) const
          return output->rotation();
      case ScaleRole:
          return output->scale();
 +    case HandsetPolicyRole: {
 +        const bool handset = Rungic::Display::isHandset(output->vendor(), output->model());
-+        const auto limits = Rungic::Display::range(resolution(output), output->sizeMm());
-+        return QVariantMap{{QStringLiteral("enabled"), handset},
-+                           {QStringLiteral("recommended"), limits.recommended},
-+                           {QStringLiteral("minimum"), limits.minimum},
-+                           {QStringLiteral("maximum"), limits.maximum}};
++        const QSize pixels = resolution(output);
++        const double edge = Rungic::Display::shortEdge(pixels.width(), pixels.height());
++        double nativeEdge = edge;
++        for (const auto &mode : output->modes()) {
++            nativeEdge = std::max(nativeEdge, Rungic::Display::shortEdge(mode->size().width(), mode->size().height()));
++        }
++        QVariantList choices;
++        if (edge > 0) {
++            const auto policy = Rungic::Display::policy();
++            for (double scale : Rungic::Display::presets(edge, Rungic::Display::dpi(pixels, output->sizeMm(), policy), nativeEdge, policy)) {
++                choices.append(scale);
++            }
++        }
++        return QVariantMap{{QStringLiteral("enabled"), handset && choices.size() == 5},
++                           {QStringLiteral("presets"), choices}};
 +    }
      case ResolutionIndexRole:
          return resolutionIndex(output);
      case ResolutionsRole:
-@@ -246,6 +255,10 @@ bool OutputModel::setData(const QModelIndex &index, const QVariant &value, int r
+@@ -246,6 +265,10 @@ bool OutputModel::setData(const QModelIndex &index, const QVariant &value, int r
          if (ok && !qFuzzyCompare(output.ptr->scale(), scale)) {
              const auto oldSize = output.ptr->explicitLogicalSizeInt();
  
@@ -52,7 +62,7 @@ index b097396..e796484 100644
              output.ptr->setScale(scale);
  
              const auto newSize = m_config->config()->logicalSizeForOutputInt(*output.ptr);
-@@ -374,6 +387,7 @@ QHash<int, QByteArray> OutputModel::roleNames() const
+@@ -374,6 +397,7 @@ QHash<int, QByteArray> OutputModel::roleNames() const
      roles[AutoRotateRole] = "autoRotate";
      roles[RotationRole] = "rotation";
      roles[ScaleRole] = "scale";
@@ -60,7 +70,7 @@ index b097396..e796484 100644
      roles[ResolutionIndexRole] = "resolutionIndex";
      roles[ResolutionsRole] = "resolutions";
      roles[ResolutionRole] = "resolution";
-@@ -573,7 +587,7 @@ inline bool refreshRateCompare(float rate1, float rate2)
+@@ -573,7 +597,7 @@ inline bool refreshRateCompare(float rate1, float rate2)
  
  bool OutputModel::setResolution(int outputIndex, int resIndex)
  {
@@ -69,7 +79,7 @@ index b097396..e796484 100644
      const auto resolutionList = resolutions(output.ptr);
      if (resIndex < 0 || resIndex >= resolutionList.size()) {
          return false;
-@@ -609,6 +623,14 @@ bool OutputModel::setResolution(int outputIndex, int resIndex)
+@@ -609,6 +633,14 @@ bool OutputModel::setResolution(int outputIndex, int resIndex)
          return false;
      }
      const auto oldSize = output.ptr->explicitLogicalSizeInt();
@@ -84,7 +94,7 @@ index b097396..e796484 100644
      output.ptr->setCurrentModeId(id);
      output.ptr->setSize(output.ptr->currentMode()->size());
  
-@@ -620,7 +642,7 @@ bool OutputModel::setResolution(int outputIndex, int resIndex)
+@@ -620,7 +652,7 @@ bool OutputModel::setResolution(int outputIndex, int resIndex)
      QModelIndex index = createIndex(outputIndex, 0);
      // Calling this directly ignores possible optimization when the
      // refresh rate hasn't changed in fact. But that's ok.
@@ -122,7 +132,7 @@ index fcfbd1a..4267d20 100644
  
      void rolesChanged(int outputId, const QList<int> &roles);
 diff --git a/kcm/ui/OutputPanel.qml b/kcm/ui/OutputPanel.qml
-index 3f83621..2ea2190 100644
+index 3f83621..070567e 100644
 --- a/kcm/ui/OutputPanel.qml
 +++ b/kcm/ui/OutputPanel.qml
 @@ -86,7 +86,7 @@ Kirigami.FormLayout {
@@ -134,7 +144,7 @@ index 3f83621..2ea2190 100644
          Kirigami.FormData.label: i18n("Scale:")
          Kirigami.FormData.buddyFor: scaleSlider
  
-@@ -132,6 +132,55 @@ Kirigami.FormLayout {
+@@ -132,6 +132,54 @@ Kirigami.FormLayout {
          }
      }
  
@@ -149,12 +159,11 @@ index 3f83621..2ea2190 100644
 +            valueRole: "scale"
 +            model: {
 +                const p = element.handsetPolicy;
-+                const values = [p.minimum, (p.minimum + p.recommended) / 2, p.recommended,
-+                                (p.recommended + p.maximum) / 2, p.maximum];
++                const values = p.presets;
 +                const labels = [i18n("Smallest"), i18n("Small"), i18n("Standard (recommended)"), i18n("Large"), i18n("Largest")];
 +                const choices = [];
 +                for (let i = 0; i < values.length; ++i) {
-+                    const scale = Math.round(values[i] * 20) / 20;
++                    const scale = values[i];
 +                    const existing = choices.findIndex(choice => Math.abs(choice.scale - scale) < 0.001);
 +                    if (existing === -1) choices.push({label: labels[i], scale: scale});
 +                    else if (i === 2) choices[existing].label = labels[i];

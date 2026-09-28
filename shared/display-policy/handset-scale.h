@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 namespace Rungic::Display
@@ -40,6 +41,17 @@ inline Range range(double edge, double dpi, const Policy &p = {})
     const double lo = std::clamp(std::ceil(dpi / p.compactDpi * 20.0) / 20.0, minimumScale, hi);
     const double preferred = std::clamp(std::round(dpi / p.targetDpi * 20.0) / 20.0, lo, hi);
     return {preferred, lo, hi};
+}
+inline std::array<double, 5> presets(double edge, double dpi, double nativeEdge, const Policy &p = {})
+{
+    if (!(edge > 0) || !validDensity(dpi) || !std::isfinite(nativeEdge)) return {1, 1, 1, 1, 1};
+    nativeEdge = std::max(edge, nativeEdge);
+    const auto native = range(nativeEdge, dpi * nativeEdge / edge, p);
+    const auto half = [](double a, double b) { return std::round((a + b) * 10) / 20; };
+    std::array<double, 5> values{native.minimum, half(native.minimum, native.recommended), native.recommended,
+                                 half(native.recommended, native.maximum), native.maximum};
+    for (auto &value : values) value = quantize(value * edge / nativeEdge);
+    return values;
 }
 // Explicit scale changes set a new preference. A mode-only request, or a client's rounded
 // compensation of the old preference, keeps its original unrounded density (no roundtrip drift).

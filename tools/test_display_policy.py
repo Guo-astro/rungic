@@ -25,6 +25,13 @@ int main() {
     assert(sameScale(native.maximum, 3.95));
     assert(1264 / native.maximum >= 320);
     assert(sameScale(range(720, lowDpi).recommended, 2.0));
+    const auto nativePresets = presets(1264, nativeDpi, 1264);
+    const auto lowPresets = presets(720, lowDpi, 1264);
+    assert(sameScale(nativePresets[2], 3.5));
+    assert(sameScale(lowPresets[2], effectiveScale(lowDpi, nativeDpi / 3.5)));
+    for (int i = 0; i < 5; ++i) {
+        assert(std::abs(1264 / nativePresets[i] - 720 / lowPresets[i]) < 1.5);
+    }
     assert(renderDpi(2780, 1264, 157, 72) == nativeDpi);
     assert(sameScale(range(1080, renderDpi(1080, 2400, 72, 157)).recommended, 3.0));
     // Same physical panel: same logical density produces the same physical size at either mode.

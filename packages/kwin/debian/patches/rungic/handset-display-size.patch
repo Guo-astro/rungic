@@ -9,8 +9,8 @@ X-Rungic-Status: Inappropriate [Rungic handset policy and Android rendering mode
 X-Rungic-Tests: tools/test_display_policy.py; manual deployment checks in docs/85
 X-Rungic-Docs: docs/85-phone-display-size-policy.md
 ---
- src/backends/android/android_backend.cpp | 25 ++++++++++++---
- src/backends/android/android_output.cpp  | 53 ++++++++++++++++++++++++++++++++
+ src/backends/android/android_backend.cpp | 25 +++++++++++---
+ src/backends/android/android_output.cpp  | 57 ++++++++++++++++++++++++++++++++
  src/backends/android/android_output.h    |  4 +++
  src/core/backendoutput.cpp               |  4 +++
  src/core/backendoutput.h                 |  3 ++
@@ -18,7 +18,7 @@ X-Rungic-Docs: docs/85-phone-display-size-policy.md
  src/outputconfigurationstore.cpp         | 15 +++++++++
  src/outputconfigurationstore.h           |  1 +
  src/workspace.cpp                        |  3 ++
- 9 files changed, 104 insertions(+), 5 deletions(-)
+ 9 files changed, 108 insertions(+), 5 deletions(-)
 
 diff --git a/src/backends/android/android_backend.cpp b/src/backends/android/android_backend.cpp
 index a167b15..afcb7fe 100644
@@ -77,7 +77,7 @@ index a167b15..afcb7fe 100644
              }
          }
 diff --git a/src/backends/android/android_output.cpp b/src/backends/android/android_output.cpp
-index aeaa905..87cf6a5 100644
+index aeaa905..5cdeed1 100644
 --- a/src/backends/android/android_output.cpp
 +++ b/src/backends/android/android_output.cpp
 @@ -6,6 +6,7 @@
@@ -98,14 +98,18 @@ index aeaa905..87cf6a5 100644
          // Android's refresh policy is offered as the adaptive refresh (VRR) policy of the output:
          // Automatic (or Always) lets Android choose the rate, Never keeps the mode's fixed rate.
          information.capabilities |= Capability::Vrr;
-@@ -40,6 +44,54 @@ AndroidOutput::AndroidOutput(const QString &name, Wayland::WaylandBackend *backe
+@@ -40,6 +44,58 @@ AndroidOutput::AndroidOutput(const QString &name, Wayland::WaylandBackend *backe
      setInformation(information);
  }
  
 +std::optional<double> AndroidOutput::recommendedScale(const QSize &size) const
 +{
 +    if (!m_phone) return std::nullopt;
-+    return Rungic::Display::range(size, physicalSize()).recommended;
++    using namespace Rungic::Display;
++    double nativeEdge = shortEdge(size.width(), size.height());
++    for (const auto &mode : modes()) nativeEdge = std::max(nativeEdge, shortEdge(mode->size().width(), mode->size().height()));
++    const auto p = policy();
++    return presets(shortEdge(size.width(), size.height()), dpi(size, physicalSize(), p), nativeEdge, p)[2];
 +}
 +
 +std::optional<double> AndroidOutput::logicalDpi() const { return m_logicalDpi; }
@@ -153,7 +157,7 @@ index aeaa905..87cf6a5 100644
  bool AndroidOutput::isPhone() const
  {
      return m_phone;
-@@ -103,6 +155,7 @@ QList<std::shared_ptr<OutputMode>> AndroidOutput::modesFor(const QSize &size, ui
+@@ -103,6 +159,7 @@ QList<std::shared_ptr<OutputMode>> AndroidOutput::modesFor(const QSize &size, ui
  
  void AndroidOutput::applyExtraChanges(State &next, const OutputChangeSet &props, OutputConfiguration::Source source)
  {
