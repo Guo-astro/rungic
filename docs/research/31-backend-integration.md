@@ -513,3 +513,5 @@ Agent可直接调用的设备诊断、崩溃现场、统一追踪（perfetto + K
 2026-09-28 首次镜像安装增加独立就绪契约（79 篇）：Magisk 首启脚本 → APK 私有原子状态文件（release/state/phase）→ 原生 loading → root `account-prepare` 的容器/账户前置检查 → 账户表单 → Plasma 启动。只有状态匹配当前 product 且所有准备完成才放行；root 控制器另查完成标记。不能用普通重启或已初始化数据替代空白刷机首启验证。
 
 2026-09-28 UX 第一批重构（[82 篇](../82-first-run-ux-refactor.md)）：安装原子状态升级 schema 2（兼容 1）；账户助手持有事务锁并提供 `--status`/`pending`，rootfs 标记 `account-protocol=2`，组包与安装验收检查该契约。APK 2.8 与 native JNI 一起更新，通过渲染线程请求屏障和当前手机输出的真实完成反馈撤除 loading；旧帧、投屏帧、合成超时反馈不能满足门槛。显示确认不等于桌面全部服务就绪。现阶段实机证据是已有账户启动进入 Plasma 欢迎页，新组件完整清数据首启另验。
+
+2026-09-28 X70 全新账户目录链补齐：Koko/Qt 与 GLib 应用 → XDG user-dirs → `plasma/user-dirs` → `~/Pictures` 等到 `~/Shared` 的链接 → bindfs → Android `Plasma/` 共享目录。会话在共享挂载真实就绪后幂等创建标准目录并调用 xdg-user-dirs-update，不依赖历史用户目录；Documents/Desktop 继续本地化。实现、上游 0.19 核验与测试见 docs/69，X70 实机证据见 docs/83。

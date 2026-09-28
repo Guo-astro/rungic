@@ -31,19 +31,9 @@ if [ -c /dev/kgsl-3d0 ] && [ -n "${QSG_RHI_BACKEND:-}" ] &&
    [ "$(kreadconfig6 --file kdeglobals --group QtQuickRendererSettings --key SceneGraphBackend 2>/dev/null)" = software ]; then
     kwriteconfig6 --file kdeglobals --group QtQuickRendererSettings --key SceneGraphBackend --delete || true
 fi
-# Downloads, Music, Pictures, Videos, Templates and Public are links to Android
-# shared storage (~/Videos -> Shared/Videos); Documents and Desktop are local
-# directories, since application data kept there needs Linux file semantics
-# (docs/69). xdg-user-dirs-update resets any whose target is missing to
-# $HOME, e.g. while the storage is not mounted yet, sending recordings,
-# screenshots and downloads to the home directory. Keep the fixed mapping.
-if mountpoint -q "$HOME/Shared"; then
-    printf 'enabled=False\n' > "$HOME/.config/user-dirs.conf"
-    for entry in DESKTOP:Desktop DOWNLOAD:Downloads TEMPLATES:Templates PUBLICSHARE:Public \
-                 DOCUMENTS:Documents MUSIC:Music PICTURES:Pictures VIDEOS:Videos; do
-        [ ! -d "$HOME/${entry#*:}" ] || xdg-user-dirs-update --set "${entry%%:*}" "$HOME/${entry#*:}" || true
-    done
-fi
+# Fresh accounts need the directories as well as their XDG mappings (docs/69).
+# The helper refuses an unmounted Shared and preserves existing user content.
+/usr/libexec/rungic-user-dirs
 # Android owns device locking: /etc/xdg/kscreenlockerrc (rungic-plasma-config) fixes
 # Autolock and LockOnResume off for every user (docs/61).
 umask 077
