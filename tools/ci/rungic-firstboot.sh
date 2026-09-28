@@ -212,6 +212,16 @@ chcon "$label" "$rungic_files" "$rungic_files/tmp"
 /data/adb/rungic-plasma/android-audio prepare || die 'audio directory preparation'
 /data/adb/rungic-plasma/rungic-plasma-enter /bin/true || die 'shared mount preflight'
 phase=finish; publish installing "$phase"
+# Casting shows the Linux desktop on the TV in an overlay window (docs/58), which needs this
+# app op; default-permissions cannot grant it. Some first boots refused appops from Magisk's
+# root context (docs/79), so the shell identity is the fallback, and the app asks again
+# itself when a TV appears. Optional (docs/75): a refusal does not stop the install.
+overlay='appops set com.rungic.plasma SYSTEM_ALERT_WINDOW allow'
+if sh -c "$overlay" || /debug_ramdisk/magisk su 2000 -c "$overlay"; then
+    echo 'overlay allowed'
+else
+    echo 'overlay not allowed; the app asks when casting (optional)'
+fi
 # Fixed Magisk 31.0 schema; INSERT returns no SQL NULL (docs/39, docs/70).
 /debug_ramdisk/magisk --sqlite "INSERT OR REPLACE INTO policies (uid,policy,until,logging,notification) VALUES($rungic_uid,2,0,1,1)" || die 'Magisk policy'
 echo "$RELEASE_ID" > "$marker.tmp"
