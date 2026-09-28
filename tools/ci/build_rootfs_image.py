@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -41,6 +42,51 @@ def packages(status):
 
 def run(*args):
     subprocess.run(args, check=True)
+
+
+def check_home_layout(root, home_path):
+    """Reject build residue or extra homes instead of reserving user logins."""
+    if not re.fullmatch(r"/home/[a-z][a-z0-9_-]{0,31}", home_path):
+        raise ValueError("desktop home must be a direct /home/<login> directory")
+    parent = root / "home"
+    home = root / home_path.lstrip("/")
+    if parent.is_symlink() or home.is_symlink() or not home.is_dir():
+        raise ValueError("desktop home must be a real directory inside the root tree")
+    unexpected = []
+    for entry in parent.iterdir():
+        if entry == home:
+            continue
+        # The legacy login alias is intentional, but must point to this template.
+        if entry.name == "linux" and entry.is_symlink() and str(entry.readlink()) in (home.name, home_path):
+            continue
+        unexpected.append(entry.name)
+    if unexpected:
+        raise ValueError("unexpected /home entries (possible build residue): " +
+                         ", ".join(sorted(unexpected)))
+
+
+def check_fresh_account(root):
+    """A first-install image must not carry a configured person's identity."""
+    accounts = [line.split(":") for line in (root / "etc/passwd").read_text().splitlines()]
+    regular = [entry for entry in accounts if 1000 <= int(entry[2]) < 65534]
+    if len(regular) != 1 or regular[0][2] != "1000":
+        raise ValueError("first-install image needs exactly one UID 1000 template account")
+    shadow = {entry[0]: entry[1] for entry in
+              (line.split(":") for line in (root / "etc/shadow").read_text().splitlines())}
+    for name in ("root", regular[0][0]):
+        # Do not include passwords or hashes in exceptions or reports.
+        value = shadow.get(name, "")
+        if not value.startswith(("!", "*")):
+            raise ValueError("first-install root and template passwords must be locked")
+    for rel in ("var/lib/rungic-host/account.json", "etc/moto-plasma/account.json"):
+        if os.path.lexists(root / rel):
+            raise ValueError("first-install image contains an account completion marker")
+    for rel in ("root", regular[0][5].lstrip("/")):
+        home = root / rel
+        for pattern in (".ssh/id_*", ".ssh/authorized_keys", ".netrc", ".codex/auth.json",
+                        ".aws/credentials", ".config/gcloud/credentials.db"):
+            if any(home.glob(pattern)):
+                raise ValueError("first-install image contains user credentials")
 
 
 def main():
@@ -79,6 +125,8 @@ def main():
     if account is None or not account[5].startswith("/home/"):
         raise ValueError("rootfs has no regular UID 1000 desktop account")
     home = root / account[5].lstrip("/")
+    check_home_layout(root, account[5])
+    check_fresh_account(root)
     if home.stat().st_uid != 1000 or home.stat().st_gid != 1000:
         raise ValueError(f"desktop home owner is not 1000:1000: {home}")
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -88,6 +136,8 @@ def main():
     stage.mkdir()
     run("rsync", "-aHAX", "--numeric-ids", *("--exclude=" + path for path in EXCLUDES),
         str(root) + "/", str(stage) + "/")
+    check_home_layout(stage, account[5])
+    check_fresh_account(stage)
     for name, mode in (("dev", 0o755), ("proc", 0o555), ("sys", 0o555),
                        ("run", 0o755), ("tmp", 0o1777), ("var/tmp", 0o1777),
                        ("var/log", 0o755), ("var/log/plasma", 0o755),
@@ -116,7 +166,9 @@ def main():
     compressed = output.with_suffix(".img.gz")
     with compressed.open("wb") as destination:
         subprocess.run(["gzip", "-1", "-n", "-c", str(output)], stdout=destination, check=True)
-    report = {"schema_version": 1, "account_status_protocol": 2, "release_version": manifest["version"],
+    report = {"schema_version": 1, "account_status_protocol": 2, "home_layout_checked": True,
+              "fresh_account_checked": True,
+              "release_version": manifest["version"],
               "release_sha256": sha256(release), "arch": "arm64",
               "package_count": len(installed), "package_lock_sha256": sha256(output.parent / "packages.lock.tsv"),
               "rootfs_bytes": output.stat().st_size, "rootfs_sha256": sha256(output),

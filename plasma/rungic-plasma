@@ -177,9 +177,20 @@ case "$action" in
     ready=0
     for attempt in $(seq 1 90); do
       if attach /bin/sh -c '
-        test -x /usr/libexec/rungic-plasma-account-setup &&
-        getent passwd 1000 >/dev/null && test -d /mnt/android-shared &&
-        state=$(systemctl is-system-running 2>/dev/null); case "$state" in running|degraded) exit 0;; *) exit 1;; esac
+        set -e
+        test -x /usr/libexec/rungic-plasma-account-setup
+        test -x /usr/libexec/rungic-user-dirs
+        name=$(getent passwd 1000 | cut -d: -f1)
+        home=$(getent passwd 1000 | cut -d: -f6)
+        test -n "$name" && test -d "$home"
+        mountpoint -q /mnt/android-shared
+        mountpoint -q "$home/Shared"
+        state=$(systemctl is-system-running 2>/dev/null) || true
+        case "$state" in running|degraded) ;; *) exit 1;; esac
+        # Directory registration is part of account readiness, not an assumption
+        # left for the first app after the desktop appears. The session repeats
+        # this idempotently after the selected login/home has been applied.
+        runuser -u "$name" -- env HOME="$home" /usr/libexec/rungic-user-dirs
       ' 9>&-; then ready=1; break; fi
       sleep 2
     done

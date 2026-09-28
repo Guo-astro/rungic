@@ -9,6 +9,8 @@ from pathlib import Path
 import subprocess
 import sys
 
+from build_rootfs_image import check_home_layout, check_fresh_account
+
 ROOT = Path(__file__).resolve().parents[2]
 ANDROID_FILES = (
     ("plasma/rungic-plasma", "rungic-plasma/rungic-plasma", 0o755),
@@ -56,6 +58,8 @@ def main():
     if not (paths["runtime"] / "usr/bin/lxc-start").is_file():
         raise ValueError("LXC manager runtime has no lxc-start")
     home = paths["rootfs_tree"] / "home/rungic"
+    check_home_layout(paths["rootfs_tree"], "/home/rungic")
+    check_fresh_account(paths["rootfs_tree"])
     if home.stat().st_uid != 1000 or home.stat().st_gid != 1000:
         raise ValueError("desktop home seed must be owned by UID/GID 1000")
     stage = paths["output"].parent / "host-tree"
@@ -70,6 +74,9 @@ def main():
         (plasma / "state" / name).mkdir(parents=True, exist_ok=True)
     run("rsync", "-aHAX", "--numeric-ids", str(paths["rootfs_tree"] / "home") + "/",
         str(plasma / "state/home") + "/")
+    check_home_layout(plasma / "state", "/home/rungic")
+    if os.path.lexists(plasma / "state/host/account.json"):
+        raise ValueError("host runtime seed contains an existing account marker")
     run("rsync", "-aHAX", "--numeric-ids", str(paths["repo"]) + "/",
         str(plasma / "state/rungic-apt") + "/")
     for name in ("plasma-shared", "plasma-wayland", "plasma-audio"):
@@ -87,7 +94,9 @@ def main():
     paths["output"].parent.mkdir(parents=True, exist_ok=True)
     run("tar", "-C", str(stage), "--numeric-owner", "-czf", str(paths["output"]),
         "rungic-lxc", "rungic-plasma")
-    report = {"schema_version": 1, "arch": "aarch64", "controller": "Alpine LXC",
+    report = {"schema_version": 1, "arch": "aarch64", "home_layout_checked": True,
+              "fresh_account_checked": True,
+              "controller": "Alpine LXC",
               "lxc_version": "6.0.4-r0", "runtime_origin": str(paths["runtime"]),
               "runtime_sha256": sha256(paths["runtime"] / "usr/bin/lxc-start"),
               "repo_release_sha256": sha256(paths["repo"] / "Release"),

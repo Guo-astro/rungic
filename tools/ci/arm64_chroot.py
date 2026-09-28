@@ -13,6 +13,17 @@ def run(*argv):
     subprocess.run(argv, check=True)
 
 
+def guest_environment(host):
+    # Host work-env.sh redirects Python bytecode beneath the developer's home.
+    # Inheriting that absolute path creates a false /home/<login> in the image.
+    # Guest-specific Python settings can still be supplied via /usr/bin/env.
+    environment = {key: value for key, value in host.items()
+                   if not key.startswith("PYTHON")}
+    environment.update(PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                       HOME="/root", DEBIAN_FRONTEND="noninteractive")
+    return environment
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--inside", action="store_true", help=argparse.SUPPRESS)
@@ -43,11 +54,8 @@ def main():
         (Path(mountdir) / "register").write_bytes(rule)
         run("mount", "-t", "proc", "proc", str(rootfs / "proc"))
         mounted.append(str(rootfs / "proc"))
-        environment = dict(os.environ)
-        environment.update(PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-                           HOME="/root", DEBIAN_FRONTEND="noninteractive")
         return subprocess.run(["chroot", str(rootfs), *command],
-                              env=environment, check=False).returncode
+                              env=guest_environment(os.environ), check=False).returncode
     finally:
         for path in reversed(mounted):
             subprocess.run(["umount", "-l", path], check=False)
