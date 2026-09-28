@@ -30,12 +30,24 @@
 
 曾把可写的`/proc/sys/net`直接绑定到容器的`/proc/sys/net`，并以为容器root缺`net_admin`就不能写Android的网络参数。实测可以写：内核对uid 0放行网络sysctl的写入。若保留，容器内systemd启动时会把Ubuntu的默认网络参数（`rp_filter`、`ping_group_range`等）写进Android。测试写入的`net.ipv4.conf.lo.forwarding=1`与原值相同（Android的`ip_forward`与各接口forwarding均为1），没有造成改变；随即撤销该绑定，改为只在rootless Docker的mount namespace内绑定，并实测：容器内`/proc/sys`恢复只读；rootless一侧进程写Android的网络参数被拒（`Permission denied`）。
 
-## 打包方案（待实施）
+## 打包与部署（2026-09-28，release 20260928.5，提交`edd3f055`）
 
-1. 项目包`rungic-docker`：依赖`docker.io docker-compose-v2 rootlesskit slirp4netns uidmap`；提供user unit与drop-in、`daemon.json`模板、启动后脚本（子mount namespace绑定`/proc/sys/net`、MASQUERADE），postinst切换iptables legacy并停用rootful服务；Docker CLI的`DOCKER_HOST`指向用户socket。
-2. `plasma/plasma.config`（Android侧，随release的`android`文件）：TUN设备与嵌套用proc/sysfs；需要重启容器生效。
-3. 账户创建时分配subuid/subgid。
-4. 设置→服务（83篇）中作为默认关闭的可选服务。
-5. 整包验证后，G100 S上的Android侧Docker（19篇）迁出数据并停用。
+- **`rungic-docker`**（`plasma/docker`，host构建，已进release的project清单）：依赖`docker.io docker-compose-v2 rootlesskit slirp4netns uidmap iptables util-linux procps`。
+  - 用户单元`/usr/lib/systemd/user/docker.service`：slirp4netns＋builtin端口驱动；数据目录`/var/lib/rungic-docker/%U`（按UID，账户改名不丢数据）；`ExecStartPre`检查目录归属。
+  - `DOCKERD=/usr/libexec/rungic-docker/dockerd-child`：在RootlessKit子命名空间里只给自己绑定可写的`/proc/sys/net`（来源`/dev/.lxc/proc`），打开转发，给经`tap0`出去的流量加MASQUERADE，读取`/etc/profile.d/proxy.sh`的代理，再以`--iptables=false --ip6tables=false --data-root`启动dockerd。
+  - 系统服务`rungic-docker-prepare.service`（开机）：建`/dev/net/tun`（0666），为UID 1000–59999的登录账户补从属UID/GID段（从现有最大段之后分配），建数据目录。
+  - postinst切换`iptables`/`ip6tables`到legacy；`environment.d`与`profile.d`设置`DOCKER_HOST`。
+- **`plasma.config`**：`devices.allow c 10:200`；`lxc.mount.entry`挂`/dev/.lxc/proc`、`/dev/.lxc/sys`（同LXC `nesting.conf`）。随release的Android侧文件部署，deploy检测到后重启容器；整包的宿主种子取同一文件。
+- **设置→服务**（`policy.json`）：新增“Docker（rootless）”（用户单元，默认关闭，风险remote）与“Docker 系统服务（rootful）”（`docker.service`、`docker.socket`、`containerd.service`，默认屏蔽并说明原因）。KCM此前对用户单元只做`daemon-reload`，现在开关可选组时对其用户单元执行`systemctl --user --no-block start/stop`，当场生效。
+- **账户设置**：`usermod --login`不会迁移`/etc/subuid`、`/etc/subgid`中按登录名记录的段（实测；G100 S上遗留的`linux:100000:65536`即初始账户`linux`改名后的残留）。`plasma/account/setup.py`改名成功后迁移这两项（新名已有段则不动）；新增两项单元测试，现有测试改用临时文件。
 
-试验留下的状态：G100 S的Plasma容器中已装上述包、切换了iptables alternative、为`kevinzhow`加了subuid/subgid与`/var/lib/rungic-docker/kevinzhow`、写了用户的Docker配置与unit；TUN设备许可、`/dev/.lxc/*`挂载与子命名空间绑定是运行时状态，容器重启后消失。
+部署：`rungic_release.py deploy 20260928.5 --snapshot never --acceptance none`（按记忆不用快照回滚），更换5个包并重启容器。
+
+实机验收（G100 S，经与服务页相同的后端操作开启：`systemctl --global enable docker.service`、用户`daemon-reload`、`--no-block start`）：
+- 系统侧：`/dev/net/tun`、`/dev/.lxc/{proc,sys}`、`rungic-docker-prepare`运行、从属ID段、`/var/lib/rungic-docker/1000`、iptables legacy、三个rootful单元为`/dev/null`。
+- Docker：`rootless`＋`seccomp`＋`cgroupns`，overlayfs；`hello-world`、镜像已有目录写入、bridge出网、`-p 18080:80`（容器内与Android均可访问）、Compose服务名互访——通过。用户systemd与plasmashell环境中有`DOCKER_HOST`。
+- 安全边界：桌面`/proc/sys`仍只读、写入被拒；rootless的mount namespace内`/proc/sys/net`可写，但其进程写Android网络参数被拒；Android的`lo.forwarding`保持1。
+- `rungic-integrity`：清理试验遗留的rootful配置（`/etc/docker/daemon.json`、`/etc/containerd/config.toml`、两个代理drop-in，均不属任何包）后为`clean`。
+- 未做：在“设置→服务”界面里实际开关（需要账户密码，`auth_admin`）；整包清数据刷入验收；G100 S上19篇的Android侧Docker尚未迁出停用。
+
+试验留下的手工状态（用户级unit与`daemon.json`、按名字的数据目录、rootful配置）已在部署前后清理；从属ID段沿用试验时为`kevinzhow`分配的`165536`段。
