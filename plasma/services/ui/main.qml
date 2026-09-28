@@ -47,11 +47,12 @@ KCM.SimpleKCM {
     Kirigami.PromptDialog {
         id: confirm
         property var group
+        // On the window: inside the scrolling page it is centred in the whole (long) content.
+        parent: QQC2.Overlay.overlay
         title: group ? "开启 " + group.name + "？" : ""
         subtitle: group ? group.warning : ""
         standardButtons: Kirigami.Dialog.Ok | Kirigami.Dialog.Cancel
         onAccepted: kcm.setEnabled(group.id, true)
-        onRejected: kcm.refresh()   // the switch goes back to the real state
     }
 
     header: QQC2.Control {
@@ -92,7 +93,12 @@ KCM.SimpleKCM {
                         description: modelData.status + "\n" + modelData.summary
                         checked: modelData.on
                         enabled: !kcm.busy
-                        onToggled: root.toggle(modelData, checked)
+                        onClicked: {
+                            root.toggle(modelData, checked)
+                            // The switch shows the real state, which refresh() reports once the change
+                            // is made (or cancelled); the click must not leave it detached from it.
+                            checked = Qt.binding(() => modelData.on)
+                        }
                     }
                     // SSH: where to connect and what the client should show on the first connection.
                     FormCard.FormTextDelegate {
@@ -138,7 +144,12 @@ KCM.SimpleKCM {
                     description: root.describe(modelData)
                     checked: modelData.on
                     enabled: !kcm.busy
-                    onToggled: root.toggle(modelData, checked)
+                    onClicked: {
+                        root.toggle(modelData, checked)
+                        // The switch shows the real state, which refresh() reports once the change is
+                        // made (or cancelled); the click must not leave it detached from it.
+                        checked = Qt.binding(() => modelData.on)
+                    }
                 }
             }
         }
