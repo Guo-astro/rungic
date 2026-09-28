@@ -9,19 +9,19 @@ X-Rungic-Status: Inappropriate [Rungic handset policy and Android rendering mode
 X-Rungic-Tests: tools/test_display_policy.py; manual deployment checks in docs/85
 X-Rungic-Docs: docs/85-phone-display-size-policy.md
 ---
- src/backends/android/android_backend.cpp | 25 +++++++++++---
- src/backends/android/android_output.cpp  | 57 ++++++++++++++++++++++++++++++++
+ src/backends/android/android_backend.cpp | 27 +++++++++++----
+ src/backends/android/android_output.cpp  | 59 +++++++++++++++++++++++++++++++-
  src/backends/android/android_output.h    |  4 +++
  src/core/backendoutput.cpp               |  4 +++
  src/core/backendoutput.h                 |  3 ++
  src/core/outputconfiguration.h           |  1 +
- src/outputconfigurationstore.cpp         | 15 +++++++++
+ src/outputconfigurationstore.cpp         | 15 ++++++++
  src/outputconfigurationstore.h           |  1 +
  src/workspace.cpp                        |  3 ++
- 9 files changed, 108 insertions(+), 5 deletions(-)
+ 9 files changed, 110 insertions(+), 7 deletions(-)
 
 diff --git a/src/backends/android/android_backend.cpp b/src/backends/android/android_backend.cpp
-index a167b15..afcb7fe 100644
+index a167b15..92db3b5 100644
 --- a/src/backends/android/android_backend.cpp
 +++ b/src/backends/android/android_backend.cpp
 @@ -7,6 +7,7 @@
@@ -55,6 +55,15 @@ index a167b15..afcb7fe 100644
              const auto mode = props->mode ? props->mode->lock() : nullptr;
              const bool sizeChanged = mode && mode->size() != output->modeSize();
              const bool rateChanged = mode && mode->refreshRate() != output->refreshRate();
+@@ -292,7 +298,7 @@ OutputConfigurationError AndroidBackend::applyOutputChanges(const OutputConfigur
+             const uint32_t rate = mode ? mode->refreshRate() : output->refreshRate();
+             if (props->vrrPolicy && *props->vrrPolicy != output->vrrPolicy()) {
+                 policy = *props->vrrPolicy == VrrPolicy::Never ? int(std::round(rate / 1000.0)) : 0;
+-            } else if (rateChanged) {
++            } else if (rateChanged && !sizeChanged) {
+                 policy = int(std::round(rate / 1000.0));
+             }
+             if (!sizeChanged && !policy) continue;
 @@ -301,9 +307,18 @@ OutputConfigurationError AndroidBackend::applyOutputChanges(const OutputConfigur
              if (policy) {
                  request.insert(QStringLiteral("refreshPolicy"), *policy);
@@ -77,7 +86,7 @@ index a167b15..afcb7fe 100644
              }
          }
 diff --git a/src/backends/android/android_output.cpp b/src/backends/android/android_output.cpp
-index aeaa905..5cdeed1 100644
+index aeaa905..ab3813f 100644
 --- a/src/backends/android/android_output.cpp
 +++ b/src/backends/android/android_output.cpp
 @@ -6,6 +6,7 @@
@@ -165,6 +174,15 @@ index aeaa905..5cdeed1 100644
      next.scale = props.scale.value_or(m_state.scale);
      next.scaleSetting = props.scaleSetting.value_or(m_state.scaleSetting);
      // The Android host owns the buffer size and physical refresh. Only explicit user changes
+@@ -111,7 +168,7 @@ void AndroidOutput::applyExtraChanges(State &next, const OutputChangeSet &props,
+     if (source == OutputConfiguration::Source::User && props.mode) {
+         if (const auto mode = props.mode->lock()) {
+             // A rate chosen on its own is a fixed rate (AndroidBackend::applyOutputChanges).
+-            if (m_phone && !props.vrrPolicy && mode->refreshRate() != refreshRate()) {
++            if (m_phone && !props.vrrPolicy && mode->size() == modeSize() && mode->refreshRate() != refreshRate()) {
+                 next.vrrPolicy = VrrPolicy::Never;
+             }
+             next.currentMode = mode;
 diff --git a/src/backends/android/android_output.h b/src/backends/android/android_output.h
 index 283804a..d99574c 100644
 --- a/src/backends/android/android_output.h
