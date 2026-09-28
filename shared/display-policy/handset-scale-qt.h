@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 #include "handset-scale.h"
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QSettings>
 #include <QSize>
 #include <QString>
@@ -19,9 +22,23 @@ inline Policy policy()
     };
     p.targetDpi = checked("TargetLogicalDpi", p.targetDpi, 96, 180);
     p.compactDpi = checked("CompactLogicalDpi", p.compactDpi, p.targetDpi, 220);
+    p.androidSizeMultiplier = checked("AndroidSizeMultiplier", p.androidSizeMultiplier, 1, 2);
+    p.minimumDefaultLogicalEdge = checked("MinimumDefaultLogicalEdge", p.minimumDefaultLogicalEdge, 360, 600);
     p.minimumLogicalEdge = checked("MinimumLogicalEdge", p.minimumLogicalEdge, 280, 480);
     p.fallbackLogicalEdge = checked("FallbackLogicalEdge", p.fallbackLogicalEdge, p.minimumLogicalEdge, 600);
     return p;
+}
+// Read-only additive host metadata; settings requests still use standard libkscreen.
+// Missing/old APK metadata falls back to physical dimensions, never to densityDpi=160.
+inline AndroidReference androidReference()
+{
+    QFile file(QStringLiteral("/mnt/android-wayland/android-display.json"));
+    if (!file.open(QIODevice::ReadOnly)) return {};
+    const auto info = QJsonDocument::fromJson(file.readAll()).object();
+    if (info.value(QStringLiteral("version")).toInt() != 1) return {};
+    return {info.value(QStringLiteral("densityDpi")).toDouble(),
+            shortEdge(info.value(QStringLiteral("densityWidthPixels")).toDouble(),
+                      info.value(QStringLiteral("densityHeightPixels")).toDouble())};
 }
 inline bool isHandset(const QString &manufacturer, const QString &model)
 {

@@ -1,3 +1,9 @@
+kscreen (4:6.6.5-0ubuntu0.1+rungic5) resolute; urgency=medium
+
+  * Share Android-density defaults with a 360-pixel logical layout guard.
+
+ -- Rungic <noreply@rungic.invalid>  Mon, 28 Sep 2026 09:30:00 +0000
+
 kscreen (4:6.6.5-0ubuntu0.1+rungic4) resolute; urgency=medium
 
   * Mark explicit handset refresh-rate choices as fixed policy.

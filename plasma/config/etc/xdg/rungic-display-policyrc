@@ -1,6 +1,10 @@
 # Rungic handset defaults (docs/85). Does not override an existing user's display size.
 [Handset]
+# Applied only to a new default or an explicit Standard selection.
+AndroidSizeMultiplier=1.25
+MinimumDefaultLogicalEdge=360
 TargetLogicalDpi=128
 CompactLogicalDpi=150
+# Larger presets are deliberate user choices; their app layouts need separate validation.
 MinimumLogicalEdge=320
 FallbackLogicalEdge=360

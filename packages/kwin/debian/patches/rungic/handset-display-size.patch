@@ -89,7 +89,7 @@ index a167b15..eb6d40b 100644
              }
          }
 diff --git a/src/backends/android/android_output.cpp b/src/backends/android/android_output.cpp
-index aeaa905..0c4eaff 100644
+index aeaa905..ac5a13e 100644
 --- a/src/backends/android/android_output.cpp
 +++ b/src/backends/android/android_output.cpp
 @@ -6,6 +6,7 @@
@@ -121,7 +121,7 @@ index aeaa905..0c4eaff 100644
 +    double nativeEdge = shortEdge(size.width(), size.height());
 +    for (const auto &mode : modes()) nativeEdge = std::max(nativeEdge, shortEdge(mode->size().width(), mode->size().height()));
 +    const auto p = policy();
-+    return presets(shortEdge(size.width(), size.height()), dpi(size, physicalSize(), p), nativeEdge, p)[2];
++    return presets(shortEdge(size.width(), size.height()), dpi(size, physicalSize(), p), nativeEdge, p, androidReference())[2];
 +}
 +
 +std::optional<double> AndroidOutput::logicalDpi() const { return m_logicalDpi; }

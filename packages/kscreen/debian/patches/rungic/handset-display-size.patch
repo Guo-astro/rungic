@@ -15,7 +15,7 @@ X-Rungic-Docs: docs/85-phone-display-size-policy.md
  3 files changed, 93 insertions(+), 4 deletions(-)
 
 diff --git a/kcm/output_model.cpp b/kcm/output_model.cpp
-index b097396..11a3794 100644
+index b097396..3735c2f 100644
 --- a/kcm/output_model.cpp
 +++ b/kcm/output_model.cpp
 @@ -4,6 +4,7 @@
@@ -41,7 +41,7 @@ index b097396..11a3794 100644
 +        QVariantList choices;
 +        if (edge > 0) {
 +            const auto policy = Rungic::Display::policy();
-+            for (double scale : Rungic::Display::presets(edge, Rungic::Display::dpi(pixels, output->sizeMm(), policy), nativeEdge, policy)) {
++            for (double scale : Rungic::Display::presets(edge, Rungic::Display::dpi(pixels, output->sizeMm(), policy), nativeEdge, policy, Rungic::Display::androidReference())) {
 +                choices.append(scale);
 +            }
 +        }
