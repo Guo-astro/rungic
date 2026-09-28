@@ -162,3 +162,13 @@ ADB reboot fastboot 后约 42 秒自动进入 fastbootd（USB 2.0），is-usersp
 用户另授权显示大小重构，最终实机 release `20260928.6`，KWin rungic7、KScreen rungic4、会话 0.314、配置 0.308。公共策略、GUI 确认/恢复、模式补偿、第二输出、Qt/GTK 和保持用户偏好的证据见 [85 篇](85-phone-display-size-policy.md)。当前设备已恢复原来的 300% 和自动刷新率，没有因新默认 350% 改写用户偏好。
 
 `.2` 修订整包使用 v3 暂存重新生成 rootfs、host seed 与 product，吸收缓存污染、标准目录、账户准备门槛和显示策略。旧 v2 仅含缓存修复且不是最终包；其可重建大文件已按 run-id 清理，保留报告/日志。新包离线校验和清数据实机验收继续分别记录，不重刷当前已配置账户。
+
+
+## 修订整包 `.2` 已完成离线校验
+
+最终目录 `.work/ci/runs/vantage-20260928-onboarding/release/vantage-20260928.2/`，79 项 manifest 文件校验通过。源码提交 `64976128623f8b1f83eba4c1c9cc02c70ff9b093`，组包时工作区 clean；APT release 为 `20260928.6`。manifest SHA-256 `90af9a73cf354e8d6bedcbd009d39d7a36c15a49f19ad482ebfda2fb6dbd53b9`。
+
+- rootfs 原始 SHA-256 `fc66e9b71f33f2b99059ba253bcbd840cfa82e2f1a002f279933783c8b0ea8e1`；1479 个安装包，文件系统检查 0，fresh-account/home 两项检查通过。
+- product 为 12,460,376,064 字节，小于 13,194,330,112 字节逻辑容量；SHA-256 `fc84d4771d2ab94cc67b71204159542cf6007fae4aaedbfa9d6bd457cffced1c`。4682 条路径及元数据验证通过，保留只读 APK 的 ARM64 JNI 库。
+- 包内 `VALIDATION.md`、`offline-verification.json` 和 `reports/display-runtime-acceptance.json` 明确区分离线校验和已配置账户实测。该新包没有再次清数据刷入，`clean_install_accepted=false`；旧 `.1` 的人工修复结果不转记为新包首装通过。
+- 归档完成后删除本 run 的 v3 product/rootfs/host 展开暂存，保留正式包、恢复输入、原始/压缩 rootfs、精确仓库快照及证据；共享增量构建目录和固定源码依赖保留供后续维护。当前设备保持已配置账户、scale=3、自动刷新率，无障碍调试已关闭。
