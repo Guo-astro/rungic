@@ -183,3 +183,12 @@ ADB reboot fastboot 后约 42 秒自动进入 fastbootd（USB 2.0），is-usersp
 - product 12,460,355,584 字节，低于分区容量；SHA-256 `dd4e8e25cd7a6e4ec9ed76a10a6dad7d3c51e21f9123231e9b757d09a4966266`。4682 条路径/元数据通过；两份 APK 与实机安装文件一致，三份只读 ARM64 JNI 库逐一核对哈希。
 - 包内 `VALIDATION.md`、`offline-verification.json` 和 `reports/density-runtime-acceptance.json` 明确记录 `clean_install_accepted=false`。仅已有账户升级及显示测试，未再次刷写或清数据；旧版本的首装经历不转记为本包验收。
 - 已删除本轮 product/rootfs/host 展开暂存，保留正式包、镜像/种子、精确仓库、源码/实机证据及恢复输入。另在核对原 SHA 后删除旧 run 可由 41 个原厂分片重建的 `stock/super.raw.img`，记录在旧 run `super-raw-cleanup.json`；原厂分片及旧正式包保留。空间始终高于 60 GiB 预留线，清理后约 66 GiB 可用。
+
+
+## 通用经验、spec 档案与旧 product 清理
+
+本轮通用方法已纳入三段式 skill 的 `references/kernel-compatibility.md`、`build-isolation.md` 及既有新机型/首启/工具指南。机型知识入口为 [W2WV spec 配套档案](../profiles/devices/motorola/vantage_cn/W2WV36.55-75-15-knowledge.md)，同目录另保存提取器实际使用的 stock identity；原执行 spec 和 fastboot adapter 未改字节，既有包的 SHA 绑定保持。
+
+按用户要求删除旧 product 构建：G100 assembled-v3 至 v8、X70 product-assembled/v1 至 v3、G100 原始 product/root 和 X70 product-stock，共 11 个目录；当前 clean 基线、最新 product、全部发行包和恢复输入保留。删除前核对 8 条发行包 product 引用的 SHA，删除后核对保留文件 inode/长度不变。旧报告/seed/元数据归档到 `.work/audits/product-cleanup-20260928/build-metadata/`；Termux APK/prefix/稀疏写入器先提升到 `.work/deps/product-seed-20260928/` 并更新本地 X70 组装脚本，不再依赖旧 G100 展开树。
+
+文件系统实际可用量由 70,679,048,192 增至 95,583,150,080 字节，释放 24,904,101,888 字节（约 23.2 GiB），清理后约 89.0 GiB 可用。Btrfs 共享及正式包硬链接保留导致实际收益小于目录 du 合计，不将旧目录总大小称为释放量。清理 JSON/原脚本快照在上述 audit 目录；未删除 rootfs、内核或其他项目缓存。

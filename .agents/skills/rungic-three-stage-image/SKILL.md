@@ -12,10 +12,11 @@ description: 本项目的三段式手机镜像制作：按机型与固件 spec �
 ## 进入任务
 
 1. 从用户请求确定范围：方案、新机型接入、单阶段构建、整包制作或授权的实机部署。沿用已给出的目标与授权；仅制作 skill/方案/候选包不授权刷写。刷写和清数据若已有明确授权，核验目标后继续，不重复确认。权限缺失时先完成可离线完成的工作，再说明具体待执行操作。
-2. 先读 `docs/80-g100-image-installation-retrospective.md` 与 `docs/77-g100-three-ci-assessment.md`；涉及具体失败再读 79 篇相关段落。75/77 的计划与 79/80 的已实施状态要区分，最终以当前源码及对应 release 证据为准。
+2. 先读目标 `profiles/devices/<vendor>/<device>/<firmware>.json`、同目录的 `*-knowledge.md`（如有）及其链接的实机记录；流水线边界参照 `docs/77-g100-three-ci-assessment.md` 与 `docs/80-g100-image-installation-retrospective.md`。计划、历史停点和最终结果要区分，以对应 release 的最新证据为准。X70 Air Pro 的入口是 `profiles/devices/motorola/vantage_cn/W2WV36.55-75-15-knowledge.md`。
 3. **新机型或固件变化**先读 [新机型接入](references/device-onboarding.md)。执行构建前读 [工具地图](references/tool-map.md)，涉及首启/刷机失败读 [首启与故障处理](references/first-boot.md)。
 4. 适配前查固定版本的上游源码、同类方案、已知问题、许可证和实机兼容性，按 `AGENTS.md` 先确认各宿主代理。记录复用/修改的理由；不能只照搬 G100 配方。
 5. 在 `.work/ci/runs/<run-id>/` 保存本次输入、阶段状态和证据。绑定源码 SHA（未提交修改另留补丁及摘要，不能只填 HEAD）、spec SHA、OEM SHA、内核配方、包版本/摘要和 release-id。未知硬要求阻止依赖它的阶段，独立工作可继续。
+6. 修改 GKI 配置、遇到模块 CRC/Rust ABI 差异时读 [内核兼容对照](references/kernel-compatibility.md)；制作 rootfs/宿主种子、核验首次默认值或清理旧构建时读 [构建隔离与产物保留](references/build-isolation.md)。经验的方法进入 skill，机型数值与实测状态进入 spec 配套档案。
 
 ## 三段流程与放行条件
 

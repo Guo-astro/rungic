@@ -24,6 +24,7 @@
 在安装、刷机、构建、部署或排障之前，先检索 `docs/`、相关工具的注释/测试和已有实机日志，读完与本次设备、固件、组件和操作路径直接相关的记录，再制定命令与回退步骤。不能只看计划文档；要核对历史的失败原因、修正版本、实际验收边界和当前源码实现，避免重复已知错误。旧记录适用于别的机型或版本时，只复用方法，重新核对本机身份、槽位、镜像哈希、接口和运行状态。
 
 - G100 / `portov_cn` 镜像工作先查 `docs/75-image-build-separation.md`、`docs/77-g100-three-ci-assessment.md`、`docs/78-g100-firmware-inventory.md`；Magisk 与刷写另查 `docs/05-magisk-root.md`、`docs/11-stock-install.md`、`docs/12-offline-magisk.md`、`docs/13-offline-magisk-user-app.md`。其中 G100 S / `mumba_cn` 的镜像、哈希和刷机命令不能直接用于 G100。
+- X70 Air Pro / `vantage_cn` / `W2WV36.55-75-15` 先读 `profiles/devices/motorola/vantage_cn/W2WV36.55-75-15-knowledge.md`，再按症状读 83/85 篇。同目录保存执行 spec、精确 fastboot adapter 和供提取器实际使用的 stock identity；知识笔记不改写已发行 spec 的哈希绑定。通用 ABI、构建隔离与清理经验已进入三段式 skill 的对应 references。
 - 已知坑：Motorola bootloader 拒绝重新封装的 `super.img` 时，参照 11 篇核验 fastbootd 的分区刷写路径；`oem fb_mode_set` 后进入 fastbootd 前要清除标志。Magisk 仅修补 `init_boot` 后的首次运行可能提示修复环境，完整离线首启机制与“不能把 Magisk 作为系统应用”的教训见 12、13 篇。Magisk 31.0 的 SQL NULL 崩溃见 39 篇。
 - 多个 ADB server 或多台手机同时在线时，先用 `adb devices -l`、端口和设备序列号核对连接归属；后续每条设备命令指定精确序列号。2026-09-27 曾同时运行 5037/5038，USB G100 被 5037 接管，5038 只显示 Wi-Fi G100 S，不能把单一端口未列出设备判定为手机启动失败。
 - G100 首次刷入 Magisk 修补的 `init_boot` 后，管理器可能提示“修复运行环境”并重启；`magiskd` 已在运行不代表 Shell 已获授权。2026-09-27 实测需在 Magisk 的“超级用户”页启用 Shell，之后 `su -c id` 才得到 uid 0。核验时同时检查 Magisk 版本、普通应用身份与 SELinux，不把一次 `su` 拒绝误判为内核启动失败。
