@@ -1,8 +1,8 @@
-# 手机显示大小策略分析
+# 手机显示大小策略与实现
 
-2026-09-28。用户要求分析如何正确修复 X70 Air Pro 的缩放与可选范围。本篇是源码核查与建议，**没有实施或部署显示改动，没有改用户倍率、重启桌面或做缩放切换测试**。首装修复的发行包工作单独继续。
+2026-09-28。用户在分析后授权重构。下文保留实施前核查与设计依据；末节记录最终代码、包版本和实机验收。源码研究、当前账户升级、无显示配置测试和整包清数据首装分别记录。
 
-## 已核实的现状
+## 实施前核实的现状
 
 - 实机 ZY22MHZKFT，ADB 5038：内屏 1264×2780，scale=3；设备报告面板约 72×157 mm，xdpi=445.9111、ydpi=449.75797。Android 基础逻辑密度 480，无 override。逻辑密度不能当作面板 PPI，也不能假定 Android dp 与 KDE 控件具有相同设计尺寸。
 - 已装 kscreen `4:6.6.5-0ubuntu0.1`，kwin-wayland `4:6.6.6-0ubuntu0.1+rungic4`。本轮读取时另有 CAST-1 输出，未修改它。
@@ -89,3 +89,36 @@ Android Surface 尺寸改变与 Linux 配置提交跨进程，不能仅因两项
 - Android [密度与 dp](https://developer.android.com/training/multiscreen/screendensities)。产品策略是本项目建议，不能称为 Android 或 KDE 的规定。
 - 固定版源文件保存在 `.work/ci/runs/vantage-20260928-onboarding/research/display-scale/`；实机只读输出在该 run 的 `device/display-policy-current.json.txt`、`display-density-investigation.txt` 和 `display-scale-investigation.log`。
 - 本轮检索未找到可直接替代上述整条链路的已核实方案；不据此宣称其他项目不存在实现。master 的 UI 仍有上限也不代表所有分支/待合并修改都已审计。
+
+
+## 已实现的公共链路（2026-09-28）
+
+`KScreen / 标准输出管理客户端 → libkscreen → KWin AndroidOutput → Android 显示宿主`。纯计算集中在 `shared/display-policy/handset-scale.h`，Qt 配置/身份适配在同目录 `handset-scale-qt.h`，通过 recipe overlay 同时进入 KWin 和 KScreen。配置 `/etc/xdg/rungic-display-policyrc` 采用目标 128、紧凑 150 逻辑像素/英寸、最小逻辑短边 320、无效面板数据回退短边 360。当前仍用设备报告的毫米值，没有把报告值称为尺量结果，也尚未加入新的 spec 面板毫米覆盖入口。
+
+- KWin 保持输出配置写入者；Android 内屏通过标准 manufacturer=`Rungic`、model=`Handset` 标识。外屏沿用原策略。启动包装器只传 bootstrap scale=1；KWin 在生成输出配置时计算首次默认值。删除旧固定 scale=3 的 KConfig 迁移，不凭已有 3 倍判断用户是否选过。
+- KWin `kwinoutputconfig.json` 增加可选 `logicalDpi`，保留原 mode/scale。已有配置根据旧模式、倍率和面板信息推导该字段。该值保持未取整，只有有效倍率按 1/120 量化；这样改变渲染尺寸不改变用户大小意图。当前字段代表明确的密度语义，没有额外策略版本字段；默认策略变更不会重算已有偏好。
+- KScreen 重新建立固定 Ubuntu 6.6.5 来源的补丁队列，复用原配置模型、布局、应用/确认/倒计时恢复。手机显示五档大小，已有范围外值标为自定义；高级设置展示真实倍率，技术范围 50–500%。未重新引入 Android 私有 KCM 控制通路。
+- 五档先按原生分辨率计算，再映射当前渲染模式。在 X70 Air Pro 原生模式为 300/325/350/375/395%；350% 的逻辑工作区约 361×794。720 模式的“标准”约 199.17%，仍约 362×795，不能把低分辨率的 200% 误当作另一种大小。
+- KScreen 预览补偿 scale 和布局；KWin 同时处理 mode-only 客户端和宿主尺寸恢复。用户请求与系统恢复都校验倍率，技术范围与配置读取一致。宿主拒绝、回复缺失或尺寸不匹配时发送旧模式/刷新策略补偿并返回失败；若宿主已死亡，补偿仍可能失败，不能保证跨进程物理事务原子性。
+- 刷新策略与大小分离：分辨率或 scale 变更不把动态 Hz 当成固定刷新率意图；显式 KScreen 选 Hz 会选择 Never/固定策略。显式 VRR 策略优先，后台自动刷新继续由 Android 决定。
+- 状态栏安全区域通过 Qt 的同一 manufacturer/model 查手机内屏，不再取 `screens[0]`；切换主屏不应把手机挖孔应用到外屏。
+
+最终候选包：KWin `4:6.6.6-0ubuntu0.1+rungic7`、KScreen `4:6.6.5-0ubuntu0.1+rungic4`、会话 `0.314`、配置 `0.308`，APT release `20260928.6`。Linux 上游补丁按 `tools/pq.py prepare/export` 维护，来源/哈希/许可证在各 recipe。构建使用 Mac mini ARM64 Ubuntu，增量同步改为 checksum 判断内容并保留未变文件的目标 mtime，避免 quilt 重生成时间戳触发全量编译；新增/变化内容仍同步。二进制构建成功；缺源包 `.dsc` 的打包 lintian 钩子未完成，不称为 lintian 通过。
+
+## 实机证据与边界
+
+仅操作 ADB 5038 / `ZY22MHZKFT`，未清除账户、未测试摄像头。证据目录 `.work/ci/runs/vantage-20260928-onboarding/device/`，安装前保存显示配置和旧 Debian 包以便恢复。实机脚本及原始 JSON 均留在该 run，不跟踪设备数据到 Git。
+
+- 离线 `tools/test_display_policy.py` 编译实际生产头文件，覆盖原生/720、旋转、无效尺寸、边界及自定义值，48,100 次往返保存密度不漂移；两组件补丁队列 lint 通过。
+- 已有用户从原版本升级保留 300%；GUI 实际点选“标准”得到 350%，15 秒未确认回到 300%，再次点击 Keep 后保持 350%。此前一次人工与脚本混合操作中读到未恢复，受控重测成功，未据此添加未经定位的回滚补丁。证据 `display-gui-timeout-trace.json`、`display-gui-result.json`。
+- 原生↔720 三轮读回 scale=3.5↔1.9916666667、未取整 logicalDpi 一致；非法 6 倍请求未写入。测试发现渲染模式切换会误选固定刷新率，修复后另以 automatic 初值重测。随后 GUI 测试又发现旧 Hz 随 scale 提交的同类问题，最终 rungic7/kscreen4 修复该分支。
+- 会话重启保留已有 350%；只临时移开 `kwinoutputconfig.json` 后重新生成默认值为 350%，再恢复原配置。证据 `display-default-test.json`。这是当前账户无显示配置测试，**不等同于新账户、整包清数据首装或整机重启验收**。
+- 后续实机补充结果记录在本节末；未完成的物理电视、宿主断线/拒绝故障注入和所有应用 395% 布局均不宣称通过。395% 是 320 逻辑宽约束给出的候选上界，目标 128 DPI 也仍可依据真实触摸体验调整。
+
+
+最终 `20260928.6` 安装后补测通过：
+
+- GUI 自动倒计时恢复/Keep 再跑一次，逐次读回 VRR policy=2（automatic），未再改成固定 Hz；原生↔720 三轮、非法 6 倍拒绝也以 automatic 初值重跑，见 `display-refactor-final-roundtrip.json`。
+- 助理输出 CAST-1 1920×1080、scale=1 在线时调整手机 300↔350%，外屏 scale 保持 1；将 CAST-1 临时设为主屏，手机 panel 高度配置保持不变，Qt 正确标识手机内屏。最后关闭本轮临时输出。见 `display-external-test.json`。这是宿主第二输出验收，不是物理电视连接验收。
+- 独立 GTK4 探针与 Qt 均报告手机逻辑 361×794；GTK 的整数缓冲 scale_factor=4 不等同于输出的 3.5 倍，逻辑坐标一致。通过真实 Android 触摸注入点击 GTK 按钮，再触摸输入框并输入 `display-test`，Gtk.Entry 实际内容回读正确；见 `display-gtk-result.json`、`display-gtk-touch-keyboard-350.png`。Qt 则通过实际 KScreen 设置应用和 GUI 点击交叉覆盖。没有把测试探针称为所有 GTK 应用或键盘完整布局验收。
+- 最后恢复用户原来的 300% 和 automatic，重开会话再次读回 scale=3、policy=2，dpkg audit 为空；辅助无障碍恢复关闭。见 `display-final-state.json`、`display-final-restored-300.png`。
