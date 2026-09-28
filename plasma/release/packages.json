@@ -165,6 +165,9 @@
     },
     "rungic-snapshot": {
       "source": "plasma/packaging/rungic-snapshot"
+    },
+    "rungic-flatpak-gl": {
+      "source": "plasma/packaging/rungic-flatpak-gl"
     }
   },
   "coupled": [
