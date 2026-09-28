@@ -21,6 +21,12 @@ ANDROID_FILES = (
     ("plasma/rootfs-mount-hook", "rungic-plasma/rootfs-mount-hook", 0o755),
     ("plasma/plasma.config", "rungic-lxc/runtime/var/lib/lxc/plasma/config", 0o644),
     ("lxc/rungic-lxc", "rungic-lxc/rungic-lxc", 0o755),
+    # Casting (docs/58); firstboot moves service.d/ into /data/adb/service.d.
+    ("shared/android/rungic-cast/rungic-cast", "rungic-wfd/rungic-cast", 0o755),
+    ("shared/android/rungic-cast/rungic-cast-watch", "rungic-wfd/rungic-cast-watch", 0o755),
+    ("shared/android/wfd.sepolicy.rule", "rungic-wfd/wfd.sepolicy.rule", 0o644),
+    ("shared/android/rungic-wfd-sepolicy.sh", "rungic-wfd/service.d/rungic-wfd-sepolicy.sh", 0o755),
+    ("shared/android/rungic-cast-watch.sh", "rungic-wfd/service.d/rungic-cast-watch.sh", 0o755),
 )
 
 
@@ -44,10 +50,13 @@ def main():
     parser.add_argument("--repo", type=Path, required=True)
     parser.add_argument("--lxc-enter", type=Path, required=True)
     parser.add_argument("--plasma-enter", type=Path, required=True)
+    parser.add_argument("--cast-jar", type=Path, required=True,
+                        help="rungic-cast.jar from shared/android/rungic-cast/build.sh")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     paths = {name: getattr(args, name).resolve(strict=name != "output")
-             for name in ("runtime", "rootfs_tree", "repo", "lxc_enter", "plasma_enter", "output")}
+             for name in ("runtime", "rootfs_tree", "repo", "lxc_enter", "plasma_enter", "cast_jar",
+                          "output")}
     if not args.inside:
         command = ["podman", "unshare", sys.executable, __file__, "--inside"]
         for name, path in paths.items():
@@ -86,14 +95,15 @@ def main():
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes((ROOT / source).read_bytes())
         target.chmod(mode)
-    for source, dest in (("lxc_enter", "rungic-lxc/rungic-lxc-enter"),
-                         ("plasma_enter", "rungic-plasma/rungic-plasma-enter")):
+    for source, dest, mode in (("lxc_enter", "rungic-lxc/rungic-lxc-enter", 0o755),
+                               ("plasma_enter", "rungic-plasma/rungic-plasma-enter", 0o755),
+                               ("cast_jar", "rungic-wfd/rungic-cast.jar", 0o644)):
         target = stage / dest
         target.write_bytes(paths[source].read_bytes())
-        target.chmod(0o755)
+        target.chmod(mode)
     paths["output"].parent.mkdir(parents=True, exist_ok=True)
     run("tar", "-C", str(stage), "--numeric-owner", "-czf", str(paths["output"]),
-        "rungic-lxc", "rungic-plasma")
+        "rungic-lxc", "rungic-plasma", "rungic-wfd")
     report = {"schema_version": 1, "arch": "aarch64", "home_layout_checked": True,
               "fresh_account_checked": True,
               "controller": "Alpine LXC",
@@ -102,6 +112,7 @@ def main():
               "repo_release_sha256": sha256(paths["repo"] / "Release"),
               "lxc_enter_sha256": sha256(paths["lxc_enter"]),
               "plasma_enter_sha256": sha256(paths["plasma_enter"]),
+              "cast_jar_sha256": sha256(paths["cast_jar"]),
               "archive_bytes": paths["output"].stat().st_size,
               "archive_sha256": sha256(paths["output"])}
     (paths["output"].parent / "host-seed-report.json").write_text(json.dumps(report, indent=2) + "\n")

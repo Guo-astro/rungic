@@ -1,0 +1,14 @@
+{
+    "KPlugin": {
+        "Description": "Services the container keeps off, and SSH login",
+        "Description[zh_CN]": "容器默认关闭的服务与 SSH 远程登录",
+        "FormFactors": ["handset", "tablet", "desktop"],
+        "Icon": "preferences-system-services",
+        "License": "MIT",
+        "Name": "Services",
+        "Name[zh_CN]": "系统服务"
+    },
+    "X-KDE-Keywords": "ssh,systemd,service,mask",
+    "X-KDE-Keywords[zh_CN]": "ssh,远程登录,服务,屏蔽,systemd",
+    "X-KDE-System-Settings-Parent-Category": "system-administration"
+}

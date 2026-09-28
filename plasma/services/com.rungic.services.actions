@@ -1,0 +1,20 @@
+[Domain]
+Name=Rungic Services
+Name[zh_CN]=Rungic 服务
+Icon=preferences-system-services
+
+[com.rungic.services.set]
+Name=Turn a service on or off
+Name[zh_CN]=开启或关闭服务
+Description=Turn on or off a service the Rungic container keeps off by default
+Description[zh_CN]=开启或关闭 Rungic 容器默认关闭的系统服务
+Policy=auth_admin
+Persistence=session
+
+[com.rungic.services.unmask]
+Name=Unmask a service
+Name[zh_CN]=解除服务屏蔽
+Description=Remove a mask that was set outside the Rungic service list
+Description[zh_CN]=解除不在 Rungic 服务清单中的服务屏蔽
+Policy=auth_admin
+Persistence=session

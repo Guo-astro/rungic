@@ -438,6 +438,51 @@ moto-cast-watch（root） ┘ ← 电视端断开时自动重连
 - 连接时Moto“超级互联显示”仍会在手机上弹出“已连接至…”横幅（`com.motorola.mobiledesktop`）。第1步确认它参与连接，不能停用。
 - 快捷开关不提供选择电视的界面：它连上次的电视。连其他电视用`moto-cast connect "<名称>"`，或对语音助手说出电视名。
 
+## 电视R2入口“失败”：厂商WFD配置超出本机编码器（2026-09-28）
+
+G100 S（XT2537-4，SM6435 `_parrot_v3`），接收端TCL 85Q6H。电视这次以`TCL 85Q6H-9E92[R2]`出现，投屏直接失败，界面没有错误信息。
+
+### 现象与定位（实机日志）
+
+- P2P建组、RTSP能力协商都成功，会话进入PLAY后约0.4秒拆除：`WFDV4L2ENC: Failed to set level` → `Failed to set profile and level` → `VIDEO_RUNTIME_ERROR`。两次失败的协商结果与成功时相同（`Dumping Negotiated Capability bitmaps`为`2 128 0 0`，1920×1080）；该位图不含level，不能据此判断level。
+- `/vendor/etc/wfdconfig.xml`是平台共用文件，H.264六个条目均为Level 7（文件注释：5.2）、4096×2160@60，H.265为Level 4（5.1）。
+- 编码器实际能力：`media_codecs_parrot_v3.xml`中`c2.qti.avc.encoder`最大2560×1440、491520宏块/秒；`MediaCodecList`报告AVC最高Level 5、HEVC最高High Tier 5，1080p60可用、1440p仅30fps、4K不可用；直接对`/dev/video32`、`/dev/video33`做`VIDIOC_QUERYCTRL`，`V4L2_CID_MPEG_VIDEO_H264_LEVEL`最大为14（5.0）。
+- 结论：WFD栈把协商得到的level直接交给V4L2编码器，而厂商配置声明的上限高于本机编码器，R2接收端接受了高level后编码器拒绝。09-24经R1入口成功，推断R1路径（日志有`Invalid R1 level 64`）没有用到高level，未单独验证。
+
+### 对照验证（同一台电视、同一R2入口）
+
+| 配置 | 时间 | 结果 |
+|---|---|---|
+| 原厂（5.2） | 17:52、18:24 | 编码器`Failed to set level`，会话拆除 |
+| 原厂 | 18:21 | 协商后电视解散P2P组（`reason=3`、-81dBm），未到编码器，不计 |
+| 手工降级（H.264 4.2、H.265 4.1、1920×1080） | 17:57、17:59、18:03、18:07 | 编码器正常出帧，用户确认画面正常 |
+| 自动生成（与手工降级逐字节相同） | 18:30 | 进入PLAYING，编码器无报错 |
+
+### 修复：按本机编码器生成WFD配置
+
+- `rungic-cast wfd-config <厂商文件> <输出>`（`WfdConfig.java`）：对每个`<VideoCodecN>`，取该类型硬件编码器（非别名、最大帧面积）经`MediaCodecList`报告的能力，把分辨率降到编码器在该条目帧率下支持的最大标准尺寸（4096×2160、3840×2160、2560×1440、1920×1080、1280×720），level降到覆盖该尺寸的最低级别（H.264表A-1、H.265表A.8），且不超过编码器报告的最高level；只降不升。使用Android公开接口，不维护芯片表。
+- `rungic-cast-watch.sh`在`sys.boot_completed`后生成`/data/adb/rungic-wfd/wfdconfig.xml`，有改动时标为`vendor_configs_file`，在init挂载命名空间bind到`/vendor/etc/wfdconfig.xml`；WFD栈每次会话都重新读取，无需重启服务。结果写入`/data/adb/rungic-wfd/wfd-config.log`。撤销：`nsenter -t 1 -m umount /vendor/etc/wfdconfig.xml`。
+- 本机输出：H.264 5.2→4.2、H.265 5.1→4.1，均为1920×1080@60。
+
+### 验收边界与遗留
+
+- 已验证：手动运行开机脚本（含已有挂载时先卸载再生成）；自动生成配置下连接电视进入PLAYING。
+- 未验证：真实重启后的开机时序（ADB经无线调试，本轮未重启）。
+- 整包：原先首启种子只含`rungic-lxc`、`rungic-plasma`，投屏组件只由`tools/rungic_cutover.py`安装，清数据刷入的机器投屏会失败。现`build_host_seed.py`（新参数`--cast-jar`）把`rungic-cast`、jar、watch、SELinux规则和两个service.d脚本放入种子的`rungic-wfd/`；`rungic-firstboot.sh`在`/data/adb/rungic-wfd/rungic-cast`不存在时安装（保留已有`last-sink`等状态），把脚本放入`/data/adb/service.d`并在本次开机启动（`setsid`并关闭安装锁描述符）。投屏按75篇属可选能力：安装失败只记日志，不阻止桌面安装；SELinux规则加载失败（其他厂商策略可能没有这些Qualcomm域）不影响其余组件。已通过`tools/ci/test_firstboot_cast.py`沙箱测试（清数据、半安装保留状态、种子不完整、已安装不覆盖）及手机mksh语法检查；尚未构建新整包，也未做清数据刷入验收。G100（SM7435，同为parrot平台）的WFD组件、SELinux域与编码器能力未实机核对。
+- 悬浮窗权限：`CastDesktop`用`TYPE_APPLICATION_OVERLAY`把桌面放上电视，需要`SYSTEM_ALERT_WINDOW`应用操作；开发机上是手工`appops set`，整包的`default-permissions`管不到它，新刷的机器投屏时电视不会出现Linux桌面（缺权限时原先静默跳过）。现首启脚本在`finish`阶段先以root、失败再以`magisk su 2000`（shell身份）执行`appops set`，结果写入首启日志且不阻止安装（G100首启曾拒绝root上下文的appops，见79篇）；APK 2.10起，电视显示出现而未获授权时，应用先用自身root授予，仍不行再打开系统授权页并在一分钟内等待用户允许。实测（G100 S，APK 2.10，先把该权限置回default再连接TV）：20:08:19连接后应用以root授予并在同一秒把桌面放上电视。首启脚本这一步只做了语法检查，未做清数据刷入验收。
+- 约45秒断开：两次会话在PLAYING约45秒后因P2P链路丢失结束（电视为组主，5240MHz，手机侧`disconnect rssi=-87`，`locally_generated=1`）；用户调整手机位置后会话稳定。18:30的会话在PLAYING后约48秒同样出现`disconnect rssi=-87`，但约3秒后重新关联，会话未中断。断开反复出现在约45–48秒，不像单纯的信号偶然波动；当时家庭Wi-Fi在5GHz另一信道，多信道并发、电视侧节能等原因均未排除。
+- 编码器失败后`rungic-cast-watch`按“电视端断开”反复重连且错误为空；快捷开关只显示“没有连上电视”，真实原因只在`console.warn`。两者待改。
+
+### 扫描发现不了电视（2026-09-28）
+
+- 现象：连续数分钟（18:54–19:02）扫描不到电视，日志反复出现`P2P: Reject scan trigger since one is already pending`。
+- 该行不是原因：打开`cmd wifi set-verbose-logging enabled`后，wpa_supplicant的P2P查找一直正常循环（社交信道2412/2437/2462与全5GHz扫描交替，约每秒一轮，其间监听），框架每10秒重复下发的`discoverPeers`在上一轮未结束时被拒。
+- 原因：电视进入屏保后，Miracast等待界面停止P2P监听，期间既不回应探测也不发组信标；用户19:02让电视退出屏保，手机立即发现电视，之后每2–10秒都能再次发现。电视监听信道为6（2437MHz），`group_capab=0x0`（等待时不是组主）。
+- 屏保期间电视仍在家庭局域网（192.168.5.21，Android 13），mDNS广播`_airplay`、`_raop`、`_leboremote`（乐播SDK），SSDP有DLNA `MediaRenderer`；无`_googlecast`与MICE的`_display._tcp`。
+- Ready For对照（同日）：停用`com.motorola.mobiledesktop`与`.core`后18:44连接成功（进入PLAYING，Linux桌面接管电视，仅多出`Failed to connect to hce service`）；之后两次失败分别为电视30秒未回应邀请和60秒未发现电视，推断与电视停止监听有关。19:37再次停用后连接成功，用户确认电视画面正常且稳定；19:38–19:40断开15秒后重连4轮，4/4成功，每轮6–7秒进入PLAYING，无编码器或运行时错误，其间Ready For进程数为0。
+- Moto框架的钩子（`services.jar`反汇编）：连接后`WifiDisplayController`把接收端的`hce ip/port`经`com.motorola.mobiledesktop.wfd.hce`交给Ready For，高通`WfdSession`也尝试绑定该服务；Ready For不在时两者都只记日志，会话照常。
+- 用户决定（2026-09-28）：Moto机型保留Ready For，不为它做专门处理；投屏只要求经Android无线显示框架＋高通WFD组件正常连接，Ready For启用或停用都可以。高通组件可以使用，不要求自研发送端（84篇原型暂缓）。
+
 ## 初版方案：Android Presentation承载外屏输出（无root假设）
 
 ```

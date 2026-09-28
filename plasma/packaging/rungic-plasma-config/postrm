@@ -1,0 +1,9 @@
+#!/bin/sh
+# The masks postinst made from service-policy.json (docs/83) go with the package's configuration.
+if [ "$1" = purge ] && [ -f /var/lib/rungic/service-defaults ]; then
+    while read -r scope unit; do
+        link=/etc/systemd/$scope/$unit
+        if [ -L "$link" ] && [ "$(readlink "$link")" = /dev/null ]; then rm -f "$link"; fi
+    done < /var/lib/rungic/service-defaults
+    rm -f /var/lib/rungic/service-defaults
+fi

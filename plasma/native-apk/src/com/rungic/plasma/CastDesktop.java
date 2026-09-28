@@ -34,6 +34,7 @@ final class CastDesktop implements DisplayManager.DisplayListener, SurfaceHolder
     private WindowManager windowManager;
     private int displayId = -1;
     private int boundWidth, boundHeight;
+    private boolean overlayRequested;
 
     private final java.util.function.Supplier<int[]> fixedSize;
 
@@ -85,7 +86,11 @@ final class CastDesktop implements DisplayManager.DisplayListener, SurfaceHolder
             displayId = -1;
             unbind();
         }
-        if (display == null || view != null || !android.provider.Settings.canDrawOverlays(activity)) return;
+        if (display == null || view != null) return;
+        if (!android.provider.Settings.canDrawOverlays(activity)) {
+            requestOverlay();
+            return;
+        }
         Context windowContext = activity.createDisplayContext(display)
             .createWindowContext(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, null);
         windowManager = windowContext.getSystemService(WindowManager.class);
@@ -114,6 +119,46 @@ final class CastDesktop implements DisplayManager.DisplayListener, SurfaceHolder
         windowManager.addView(view, lp);
         displayId = display.getDisplayId();
         Log.i("RungicCast", "cast desktop on display " + displayId + " " + mode.getPhysicalWidth() + "x" + mode.getPhysicalHeight());
+    }
+
+    /**
+     * The TV needs the overlay app op, which the first boot grants (tools/ci/rungic-firstboot.sh)
+     * but may not have. Once per run: grant it through root, else open Android's page for it; the
+     * desktop goes on the TV as soon as it is allowed.
+     */
+    private void requestOverlay() {
+        if (overlayRequested) return;
+        overlayRequested = true;
+        Handler main = new Handler(Looper.getMainLooper());
+        Thread grant = new Thread(() -> {
+            try {
+                Process p = new ProcessBuilder("su", "-c",
+                    "appops set " + activity.getPackageName() + " SYSTEM_ALERT_WINDOW allow").redirectErrorStream(true).start();
+                if (!p.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)) p.destroy();
+            } catch (Exception e) {
+                Log.w("RungicCast", "overlay grant through root failed: " + e.getMessage());
+            }
+            main.post(() -> {
+                if (android.provider.Settings.canDrawOverlays(activity)) {
+                    Log.i("RungicCast", "overlay allowed through root");
+                    update();
+                    return;
+                }
+                Log.i("RungicCast", "overlay not allowed; asking the user");
+                try {
+                    activity.startActivity(new android.content.Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        android.net.Uri.parse("package:" + activity.getPackageName())).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));
+                } catch (Exception e) {
+                    Log.w("RungicCast", "cannot open the overlay permission page: " + e.getMessage());
+                }
+                // Returning from that page raises no display event: look again for a minute.
+                for (int i = 1; i <= 60; i++) {
+                    main.postDelayed(() -> { if (view == null && android.provider.Settings.canDrawOverlays(activity)) update(); }, i * 1000L);
+                }
+            });
+        }, "rungic-overlay");
+        grant.setDaemon(true);
+        grant.start();
     }
 
     private void unbind() {
