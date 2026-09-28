@@ -269,6 +269,10 @@ private:
         KAuth::Action action(name);
         action.setHelperId(u"com.rungic.services"_s);
         action.setArguments(args);
+        // The helper asks polkit, whose password dialog waits inside this D-Bus call; with the
+        // default 25 s reply timeout a slower password entry was reported as a failure although
+        // the helper went on to make the change (docs/85).
+        action.setTimeout(10 * 60 * 1000);
         auto *job = action.execute();
         m_busy = true;
         Q_EMIT busyChanged();

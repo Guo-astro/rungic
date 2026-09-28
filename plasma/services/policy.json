@@ -18,7 +18,7 @@
    "default": "disabled",
    "risk": "remote",
    "evidence": "recorded",
-   "summary": "以当前用户身份运行的 Docker（rootless 模式），支持 bridge 网络、端口发布和 Compose。镜像与数据在 /var/lib/rungic-docker/<用户名>。不支持单个容器的内存、CPU 限制：Android 的资源控制器不在 cgroup v2 上（docs/85）。",
+   "summary": "以当前用户身份运行的 Docker（rootless 模式），支持 bridge 网络、端口发布和 Compose。镜像与数据在 /var/lib/rungic-docker/<用户 UID>。不支持单个容器的内存、CPU 限制：Android 的资源控制器不在 cgroup v2 上（docs/85）。",
    "warning": "发布的端口在手机的所有网络上都可访问，同一局域网内的设备可以连接。只发布需要对外提供的服务。",
    "user": ["docker.service"],
    "start": ["docker.service"]
