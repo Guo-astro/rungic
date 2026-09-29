@@ -26,3 +26,4 @@ install(TARGETS rungic-workspace-input rungic-workspace-stream rungic-workspace-
 install(FILES com.rungic.WorkspaceInput.desktop com.rungic.WorkspaceStream.desktop DESTINATION share/applications)
 install(PROGRAMS rungic-workspace rungic-workspace-env rungic-user DESTINATION bin)
 install(FILES rungic-workspace@.service DESTINATION lib/systemd/user)
+install(FILES defaults/kwinrc DESTINATION share/rungic-workspace/defaults)

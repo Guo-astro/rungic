@@ -88,3 +88,23 @@
   - 助理屏截图里，渲染窗口显示的是 28 采样时的预览。
   - 端到端测试（新对话“用 Blender 做一个足球”）：助理按技能调用 `rungic_render`，等状态文件显示完成后才回答；自己检查结果、修了两轮，计划三步全部完成。
 - **问题**：App 被开到了助理屏上；渲染窗口一度开到手机上。根本原因是 KWin 只有一个座席和一个活动屏，改为方案 A 的工作空间解决（docs/research/91）。
+
+## 编辑窗口里的模型显示错乱（2026-09-29，用户报告）
+
+- **现象**：小火箭用 CPU（Cycles）渲染出来是对的，但 Blender 编辑窗口里的模型“特别奇怪”：零件错位，火箭头缺失，只剩一片尾翼。
+- **编辑窗口怎么画**：编辑窗口由 GPU 实时绘制，“实体”模式是 Workbench，“材质预览”是 EEVEE。Blender 5.0.1 默认后端是 OpenGL，本机为 freedreno FD710（Adreno 710），Mesa 26.3.0-devel，即硬件加速。Blender 提示 “Could not find a matching GPU name”，不认识这块 GPU。
+- **复现**：同一文件、同一镜头，用 GPU 的 Workbench 和 EEVEE 出图，两者错得一样，而 Cycles CPU 正确。
+- **最小对照**：三个立方体，大小、颜色、位置各不相同，其中一个带倒角。OpenGL 下，物体之间的大小、颜色、位置互相串位；Cycles 正确。所以与模型和修改器无关：每个物体取自己的数据时取错了。
+- **排除**：
+  - `--debug-gpu-force-workarounds` 无效。
+  - Blender 5.0 硬性要求 `GL_ARB_shader_draw_parameters`，用 `MESA_EXTENSION_OVERRIDE` 去掉它后，Blender 直接拒绝启动，没有退路。
+  - llvmpipe（Wayland 和 Xwayland 下都试过）与 zink 在本机无法建立上下文，或者崩溃，因此没能用软件渲染对照。
+- **同一 GPU 的 Vulkan 后端**（`--gpu-backend vulkan`，Turnip Adreno 710）：三个立方体和小火箭的 Workbench、EEVEE 都正确。
+- **结论**：freedreno 的 OpenGL 实现在 Blender 按物体取数据的这条路径上出错，同一硬件的 Turnip（Vulkan）正确。用户看到的显示错乱就是这个原因，不是模型本身的问题。
+- **尚未查明**：freedreno 具体哪一处出错（gl_BaseInstance、gl_DrawID 和间接绘制的组合是首要怀疑），上游是否已有修复。
+- 脚本：`.work/logs/gpu-views.py`、`gpu-cubes.py`；对照图在当次会话的 scratchpad 中。
+- **默认改为 Vulkan（用户决定，2026-09-29）**：系统启动模块把用户的 GPU 后端偏好设为 Vulkan。
+  - 第一版只设一次（留标记），随即失效：还在用 OpenGL 的旧 Blender 退出时自动保存偏好（`use_preferences_save`），把 OpenGL 写了回去；助理再次打开时仍是 OpenGL，编辑窗口仍然错乱（用户再次报告）。
+  - 现在每次以图形界面启动时，都把偏好保持为 Vulkan，本次会话内存里的偏好也是 Vulkan，退出时自动保存的也就是 Vulkan。在 Blender 的 `config/rungic-gpu-backend` 里写 `OPENGL`，可以保留 OpenGL。
+  - 实测：关闭旧实例、恢复偏好后重新打开小火箭，进程加载了 `libvulkan_freedreno`，编辑窗口显示正确。
+  - 待查：Turnip 在 KGSL 上显示时会闪屏（56 篇）。这个问题可能也影响 Blender 窗口，尚未逐帧检测。

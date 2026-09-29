@@ -76,6 +76,8 @@ HANDS_FREE_MAX_S = 60
 # API has no emotion parameter, it follows instructions.
 REALTIME_MODEL = 'gpt-realtime-2.1-mini'
 # The agent (Codex): the fast model; tasks here are short device operations.
+# The conversation holding Home talks in (docs/67): "主对话", beside "新对话" in the app.
+MAIN_TITLE = '主对话'
 AGENT_MODEL = os.environ.get('RUNGIC_AGENT_MODEL', 'gpt-6-sol')
 AGENT_EFFORT = 'medium'
 # The agent's own workspace (docs/research/91): a KWin of its own on the Android host, where
@@ -531,6 +533,11 @@ class VoiceAgent:
         Gst.init(None)
         self.emit_raw = emit
         self.store = Store()
+        # It was titled "语音助手" before it became "主对话" beside "新对话".
+        main = self.assistant_id()
+        if main and self.store.index.get(main, {}).get('title') == '语音助手':
+            self.store.index[main]['title'] = MAIN_TITLE
+            self.store.save_index()
         self.thread_id = None
         self.realtime = False
         self.realtime_ready = threading.Event()
@@ -804,7 +811,7 @@ class VoiceAgent:
                     self.thread_id = result['thread']['id']
                     self.note_instructions(self.thread_id)
                     (DATA / 'assistant.json').write_text(json.dumps({'thread': self.thread_id}))
-                    self.store.touch(self.thread_id, '语音助手')
+                    self.store.touch(self.thread_id, MAIN_TITLE)
                     resumed.set()
                     self.emit({'type': 'assistant-reset'}, keep=False)
                 else:
@@ -884,15 +891,15 @@ class VoiceAgent:
             if wanted and self.thread_id == wanted:
                 if connect and not self.realtime:
                     threading.Thread(target=self.start_realtime, daemon=True).start()
-                return {'conversation': wanted, 'title': self.store.index.get(wanted, {}).get('title', '语音助手'),
+                return {'conversation': wanted, 'title': MAIN_TITLE,
                         'history': self.store.history(wanted)}
             if wanted:
                 opened = self.open_conversation(wanted, connect)   # resumes behind; resume_thread replaces a lost one
             else:
                 opened = self.open_conversation('', connect)
                 (DATA / 'assistant.json').write_text(json.dumps({'thread': opened['conversation']}))
-            self.store.touch(opened['conversation'], '语音助手')
-            opened['title'] = self.store.index[opened['conversation']]['title']
+            self.store.touch(opened['conversation'], MAIN_TITLE)
+            opened['title'] = MAIN_TITLE
             return opened
 
     def warm(self):
