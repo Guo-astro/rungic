@@ -118,7 +118,7 @@ def main():
             assert cli('get', second)['result'] == '401 authentication missing'
             assert '未能完成' in cli('get', second)['note']
             if len(sys.argv) >= 5:
-                subprocess.run([sys.argv[3], sys.argv[4]], env=env, check=True, timeout=20)
+                subprocess.run([sys.argv[3], sys.argv[4], *sys.argv[5:]], env=env, check=True, timeout=20)
             print('PASS: 40 cards, restart, snooze, dedup/mute, Agent handoff/result, private feedback, independent upstream state, QML preview')
         finally:
             process.terminate(); process.wait(5)
