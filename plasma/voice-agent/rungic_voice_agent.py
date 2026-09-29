@@ -49,6 +49,7 @@ import socket
 import task_state
 
 RATE = 24000                 # PCM format of the Realtime API
+RELEASE_PLAYER_S = 1.5       # after a reply, until its tail left the sink's buffers
 CHUNK_MS = 100
 MIC = 'android_microphone'
 PHONE_SINK = 'android_phone'     # always the phone itself (shared/media/media-bridge.py)
@@ -1063,6 +1064,17 @@ class VoiceAgent:
             log(f'reply audio: {self.reply_audio_ms} ms played')
             self.reply_audio_ms = 0
             self.set_state()
+            GLib.timeout_add(int(RELEASE_PLAYER_S * 1000), self.release_player)
+        return False
+
+    def release_player(self):
+        """Close the playback stream once a reply has finished playing. A stream left open
+        through the silence until the next reply lost that reply's first half second in the
+        audio server (measured against the sink: the progress lines lost their first words,
+        2026-09-29); a new stream plays from its first sample."""
+        if self.player is not None and time.monotonic() >= self.playing_until + RELEASE_PLAYER_S:
+            self.player.set_state(Gst.State.NULL)
+            self.player = None
         return False
 
     # ---- spoken progress (main loop thread) ----------------------------------------
