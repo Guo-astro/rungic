@@ -58,10 +58,11 @@ APK入口仍为`bash plasma/build-apk.sh`，输出在`.work/refs/plasma-mobile-2
 日常开发先执行：
 
 ```bash
+sh tools/dev-setup.sh      # 首次或依赖变化时：在 .work/venv 建开发用 Python
 source tools/work-env.sh
 ```
 
-这会将Python缓存和Cargo输出定向到`.work/`。项目Cargo配置也指定本地构建目录。新的日志、截图、录音录像和下载均应写到`.work/`；只有经过挑选、适合复算的证据再放入`benchmarks/`或`provenance/`。
+这会将Python缓存和Cargo输出定向到`.work/`，并启用`.work/venv`。开发依赖列在`tools/dev-requirements.txt`，目前是PySide6（在无桌面环境下测试QML与Qt逻辑，例如`tools/tests/test_call_cards.py`）和pytest。用户于2026-09-29明确：PySide6这类依赖只服务于开发时的原型与测试，不进入镜像或软件包；进入生产的部分用C++等重写，或使用设备自带的库。项目Cargo配置也指定本地构建目录。新的日志、截图、录音录像和下载均应写到`.work/`；只有经过挑选、适合复算的证据再放入`benchmarks/`或`provenance/`。
 
 ## 校验与边界
 

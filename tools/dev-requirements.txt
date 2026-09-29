@@ -1,0 +1,8 @@
+# Development-only Python dependencies (tools/dev-setup.sh installs them into .work/venv).
+# Not part of any image or package: prototypes and tests use them; what ships is rewritten
+# in C++ or runs on the device's own libraries.
+#
+# PySide6: QML components and Qt logic tested without a desktop (QT_QPA_PLATFORM=offscreen),
+# e.g. tools/tests/test_call_cards.py loads the voice assistant's ChatModel.qml.
+PySide6>=6.10
+pytest
