@@ -7,6 +7,7 @@ import QtQuick
 import QtQuick.Controls as QQC2
 import QtCore
 import com.rungic.design
+import com.rungic.voiceassistant
 
 QQC2.ApplicationWindow {
     id: root
@@ -28,6 +29,9 @@ QQC2.ApplicationWindow {
     }
     Binding { target: Theme; property: "mode"; value: settings.theme }
     property alias settings: settings
+    // The conversation is in front of the user (docs/89): the voice then says less.
+    readonly property bool watching: visible && active && Qt.application.state === Qt.ApplicationActive
+    onWatchingChanged: AgentClient.setWatching(watching)
 
     QQC2.StackView {
         id: stack
@@ -50,7 +54,10 @@ QQC2.ApplicationWindow {
         while (stack.depth > 1) stack.pop(null)
         chat.open(id, "")
     }
-    Component.onCompleted: if (initialConversation) openConversation(initialConversation)
+    Component.onCompleted: {
+        AgentClient.setWatching(watching)
+        if (initialConversation) openConversation(initialConversation)
+    }
 
     // The back key closes a settings page, then the side panel.
     onClosing: close => {

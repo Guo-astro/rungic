@@ -6,6 +6,7 @@
 #include <QDBusServiceWatcher>
 #include <QObject>
 #include <QVariant>
+#include <functional>
 #include <qqmlregistration.h>
 
 class AgentClient : public QObject
@@ -49,6 +50,13 @@ public:
     // Settings calls (Setup, SetApiKey, TestApiKey, RemoveApiKey, CodexLogin, InstallCodex,
     // CancelInstall, SetPreferences): the JSON reply comes as replied(method, json).
     Q_INVOKABLE void request(const QString &method, const QVariantList &args = {});
+    // Whether this window shows the conversation to the user (docs/89): the voice says less
+    // while someone looks. Said again when the service restarts.
+    Q_INVOKABLE void setWatching(bool watching);
+    // The conversation this window's actions belong to (docs/89). The service keeps one
+    // conversation open for everyone: before a press, a message or 朗读, this one is made the
+    // open one, and the action follows only when it is.
+    Q_PROPERTY(QString conversation MEMBER m_conversation NOTIFY conversationChanged)
 
 Q_SIGNALS:
     void conversationsListed(const QString &json);
@@ -58,12 +66,22 @@ Q_SIGNALS:
     void failed(const QString &message);
     void textReady(const QString &json);
     void replied(const QString &method, const QString &json);
+    void conversationChanged();
 
 private Q_SLOTS:
     void onEvent(const QString &json);
 
 private:
     void call(const QString &method, const QVariantList &args, void (AgentClient::*reply)(const QString &) = nullptr);
+    // `action` once this window's conversation is the service's open one.
+    void inConversation(std::function<void()> action);
+    // `action` in order: after the actions still waiting for their conversation.
+    void inOrder(std::function<void()> action);
+    void drain();
     QDBusInterface m_service;
     QDBusServiceWatcher m_watcher;
+    bool m_watching = false;
+    QString m_conversation;
+    bool m_waiting = false;                        // a Use is on its way
+    QList<std::function<void()>> m_queue;          // what came meanwhile
 };

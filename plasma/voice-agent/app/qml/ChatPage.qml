@@ -79,6 +79,9 @@ Item {
         function onTextReady(json) { composer.dictated(JSON.parse(json).text || "") }
     }
     Component.onDestruction: if (conversationId) AgentClient.closeConversation(conversationId)
+    // Presses, messages and 朗读 go to this page's conversation, whatever else was opened
+    // meanwhile (the overlay, a restart, the warm-up; docs/89).
+    Binding { target: AgentClient; property: "conversation"; value: page.conversationId }
 
     readonly property bool busy: chat.agentBusy || chat.phase === "working"
     readonly property bool speaking: chat.phase === "speaking"

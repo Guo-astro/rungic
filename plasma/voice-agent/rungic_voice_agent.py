@@ -44,6 +44,8 @@ import sys
 sys.path.insert(0, '/usr/lib/rungic-voice-agent')
 sys.path.insert(1, '/usr/lib/rungic-cua')
 import shutil
+import socket
+import task_state
 
 RATE = 24000                 # PCM format of the Realtime API
 CHUNK_MS = 100
@@ -71,10 +73,17 @@ AGENT_MODEL = 'gpt-6-sol'
 AGENT_EFFORT = 'medium'
 # Spoken progress while the agent works: Codex hands agent updates to the voice
 # model as context only (no response), so it would stay silent until the end.
+# Spoken progress (docs/89): by events, not by the clock. The screen shows every step; the
+# voice says the milestones, and more of them when nobody looks at the screen.
 PROGRESS_AFTER_S = 8         # quick tasks get no progress update
-PROGRESS_GAP_S = 6           # silence before relaying a new step
-QUIET_UPDATE_S = 20          # nothing new: say it is still working (then 30 s, 45 s, 60 s)
-PROGRESS_STALE_S = 8         # an agent note older than this describes a finished step
+GAP_AWAY_S = 8               # least silence between two updates when nobody looks
+GAP_WATCHED_S = 20           # ... and when the user looks at the chat or the assistant's screen
+LONG_STEP_S = 40             # one step this long gets a word on how far it is
+LONG_AGAIN_AWAY_S = 45       # ... and again after this much silence (at most twice per step)
+LONG_AGAIN_WATCHED_S = 90
+STILL_AFTER_S = 25           # nothing at all was said yet: one "still working"
+APOLOGY_AFTER_S = 90         # a long wait earns one short apology
+WATCHERS_FRESH_S = 3         # how long the phone's foreground state is trusted
 DATA = Path.home() / '.local/share/rungic-voice-agent'
 CONFIG = Path.home() / '.config/rungic-voice-agent'
 PROMPTS = Path('/usr/share/rungic-voice-agent/prompts')
@@ -111,6 +120,8 @@ INTERFACE = '''
     <method name="InstallCodex"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
     <method name="CancelInstall"><arg type="s" direction="out"/></method>
     <method name="SetPreferences"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
+    <method name="SetWatching"><arg type="b" direction="in"/></method>
+    <method name="Use"><arg type="s" direction="in"/></method>
     <signal name="Event"><arg type="s"/></signal>
   </interface>
 </node>
@@ -413,11 +424,16 @@ class VoiceAgent:
         self.turn_id = None
         self.turn_started = 0.0
         self.last_voice = 0.0     # last reply audio or progress request
-        self.progress_text = None
-        self.progress_at = 0.0
-        self.quiet_updates = 0
-        self.current_step = None
-        self.screen_seen = 0.0       # time of the last screen caption relayed (docs/88)
+        # The turn in words (task_state, docs/89) and what the voice already told of it.
+        self.turn = None
+        self.turn_lock = threading.Lock()
+        self.task_pending = False
+        self.told = {}
+        self.screen_seen = 0.0       # time of the last screen caption taken in (docs/88)
+        # Who looks: the app and the overlay say whether they are on screen (SetWatching, by
+        # D-Bus sender); the phone's own screen must be on and showing Plasma too.
+        self.watchers = {}
+        self.foreground = (True, 0.0)
         self.playing_until = 0.0
         self.reply_audio_ms = 0
         self.reply_sink = None
@@ -541,7 +557,10 @@ class VoiceAgent:
         # Full access without approval prompts (the user's choice, docs/59): the
         # sandbox could not reach the desktop and every approval interrupted work.
         return {'cwd': str(Path.home()), 'sandbox': 'danger-full-access', 'approvalPolicy': 'never',
-                'model': AGENT_MODEL, 'config': {'model_reasoning_effort': AGENT_EFFORT},
+                'model': AGENT_MODEL,
+                # update_plan is off unless configured (codex config resolve_update_plan_enabled):
+                # its plan is the task card's checklist and the voice's milestones (docs/89).
+                'config': {'model_reasoning_effort': AGENT_EFFORT, 'tools.update_plan.enabled': True},
                 'developerInstructions': prompt('agent.md')}
 
     def open_conversation(self, thread_id, connect=True):
@@ -959,8 +978,18 @@ class VoiceAgent:
         return False
 
     def progress_tick(self):
-        if not self.agent_busy or not self.realtime:
+        if not self.agent_busy:
             return False
+        # What it is doing on the assistant's screen (docs/88) joins the turn's current step.
+        screen = screen_activity()
+        if screen.get('state') == 'working' and screen.get('text') and screen.get('time', 0) > self.screen_seen:
+            self.screen_seen = screen['time']
+            with self.turn_lock:
+                changed = self.turn is not None and self.turn.on_screen(screen['text'])
+            if changed:
+                self.task_changed()
+        if not self.realtime:
+            return True
         now = time.monotonic()
         if self.call_in_progress():
             self.last_voice = now          # the call is what the user hears now
@@ -973,34 +1002,96 @@ class VoiceAgent:
         if self.approvals:
             self.last_voice = now     # waiting for the user, who was already asked
             return True
-        elapsed = int(now - self.turn_started)
-        # What it is doing on the assistant's screen (docs/88): the caption the floating window
-        # shows is also said, so the user hears it when they do not look.
-        screen = screen_activity()
-        if screen.get('state') == 'working' and screen.get('text') and screen.get('time', 0) > self.screen_seen:
-            self.screen_seen = screen['time']
-            self.progress_text = f"在助理屏上：{screen['text']}"
-            self.progress_at = now
-        if self.progress_text and now - self.progress_at > PROGRESS_STALE_S:
-            self.progress_text = None
-        if self.progress_text and now - self.last_voice >= PROGRESS_GAP_S:
-            text = (f'进度（已用时{elapsed}秒，任务仍在进行）：{self.progress_text}\n'
-                    '用一句很短的话告诉用户现在在做什么，不要说成结果。语气平稳、让人安心。')
-        elif now - self.last_voice >= min(60, QUIET_UPDATE_S * 1.5 ** self.quiet_updates):
-            self.quiet_updates += 1
-            step = command_summary(self.current_step) if self.current_step else '分析中'
-            text = (f'进度（已用时{elapsed}秒，任务仍在进行，当前步骤：{step}）\n'
-                    '用一句很短的话告诉用户还在处理，不要说成结果。'
-                    + ('语气平稳。' if elapsed < 45 else '已经等了一阵，语气平和，简短地为久等致歉。'))
-        else:
+        with self.turn_lock:
+            reason = self.progress_reason(now)
+            facts = self.turn.facts() if reason and self.turn else ''
+        if not reason:
             return True
-        self.progress_text = None
+        elapsed = now - self.turn_started
+        tone = '语气平稳、让人安心。'
+        if elapsed >= APOLOGY_AFTER_S and not self.told.get('apology'):
+            self.told['apology'] = True
+            tone = '已经等了一阵，语气平和，简短地为久等致歉一次。'
+        text = (f'进度（系统给你的进度信息，不是用户说的话；直接对用户说一句，不要回应这条信息本身）\n{facts}\n{reason}只说上面列出的事实：“已完成”才说成做完了，“进行中”“此刻正在”说成正在做，'
+                f'“打算”说成打算；不要补充没列出的内容，也不要重复上一次说过的话。{tone}')
         self.last_voice = now
         threading.Thread(target=self.speak_progress, args=(text,), daemon=True).start()
         return True
 
+    def progress_reason(self, now):
+        """Why to speak now, as the instruction for the voice, or None (docs/89). Milestones
+        first; the screen shows everything else, so the voice waits longer while someone looks."""
+        turn, told = self.turn, self.told
+        if turn is None:
+            return None
+        watched = self.user_watching()
+        quiet = now - self.last_voice
+        if quiet < (GAP_WATCHED_S if watched else GAP_AWAY_S):
+            return None
+        plan = turn.plan
+        if len(plan) >= 2 and not told.get('plan'):
+            told['plan'] = True
+            told['step'] = turn.step_now()
+            return '用一句话告诉用户打算分几步做（按上面的计划简短概括）。'
+        step = turn.step_now()
+        if plan and step and step != told.get('step'):
+            told['step'] = step
+            return '用一句很短的话告诉用户现在进行到哪一步了。'
+        current = turn.current
+        key = f"{current['id']}|{current['text']}" if current else ''
+        if current:
+            running = time.time() - current['since']
+            again = LONG_AGAIN_WATCHED_S if watched else LONG_AGAIN_AWAY_S
+            times = told.setdefault('long', {}).get(key, 0)
+            if running >= LONG_STEP_S and times < 2 and (times == 0 or quiet >= again):
+                told['long'][key] = times + 1
+                return '这一步用时较长：用一句话告诉用户它还在进行、进行到什么程度（有百分比或数量就说）。'
+        # Codex hands its own commentary to the voice already ([BACKEND] messages): no second
+        # telling of intentions here.
+        if not plan:
+            if current and key != told.get('activity') and time.time() - current['since'] >= 4 \
+                    and (not watched or quiet >= 30):
+                told['activity'] = key
+                return '用一句很短的话告诉用户此刻在做什么。'
+        if not told.get('still') and now - self.turn_started >= STILL_AFTER_S and quiet >= STILL_AFTER_S:
+            told['still'] = True
+            return '用一句很短的话告诉用户还在处理。'
+        return None
+
+    def user_watching(self):
+        """Someone looks at the chat (app or overlay on screen) and the phone shows Plasma."""
+        if not any(self.watchers.values()):
+            return False
+        shown, checked = self.foreground
+        if time.monotonic() - checked > WATCHERS_FRESH_S:
+            shown = platform_request({'op': 'status'}).get('foreground', True)
+            self.foreground = (shown, time.monotonic())
+        return bool(shown)
+
+    def set_watching(self, sender, watching):
+        self.watchers[sender] = bool(watching)
+
+    def watcher_gone(self, sender):
+        self.watchers.pop(sender, None)
+
+    # ---- the turn in words (task_state, docs/89) ----------------------------------------
+    def task_changed(self):
+        """The card changed: tell the app, a few times a second at most."""
+        if self.task_pending:
+            return
+        self.task_pending = True
+        GLib.timeout_add(400, self.flush_task)
+
+    def flush_task(self):
+        self.task_pending = False
+        with self.turn_lock:
+            snapshot = self.turn.snapshot() if self.turn else None
+        if snapshot is not None and self.agent_busy:
+            self.emit({'type': 'task', **snapshot}, keep=False)
+        return False
+
     def speak_progress(self, text):
-        log('progress:', text.splitlines()[0][:100])
+        log('progress:', ' | '.join(line for line in text.splitlines()[1:] if line)[:400])
         try:
             self.server.call('thread/realtime/appendSpeech', {'threadId': self.thread_id, 'text': text}, timeout=10)
         except Exception as error:
@@ -1063,8 +1154,9 @@ class VoiceAgent:
             self.turn_id = (params.get('turn') or {}).get('id')
             self.agent_busy = True
             self.turn_started = self.last_voice = time.monotonic()
-            self.progress_text = self.current_step = None
-            self.quiet_updates = 0
+            with self.turn_lock:
+                self.turn = task_state.TurnState()
+            self.told = {}
             self.emit({'type': 'agent-started'})
             GLib.idle_add(self.set_state)
             GLib.idle_add(self.start_progress)
@@ -1076,10 +1168,36 @@ class VoiceAgent:
                 from rungic_cua import activity
                 activity.report('', state='done')
             self.last_activity = time.monotonic()
+            # The card as it ended stays with the history (plan, files, steps).
+            with self.turn_lock:
+                final = self.turn.snapshot() if self.turn else None
+                self.turn = None
+            if final and (final['plan'] or final['recent'] or final['files']):
+                final.pop('current', None)
+                self.emit({'type': 'task', 'final': True, **final})
             self.emit({'type': 'agent-finished'})
             GLib.idle_add(self.set_state)
         elif method in ('item/started', 'item/completed'):
             self.agent_item(method.endswith('completed'), params.get('item') or {})
+            with self.turn_lock:
+                changed = self.turn is not None and self.turn.on_item(params.get('item') or {}, method.endswith('completed'))
+            if changed:
+                GLib.idle_add(self.task_changed)
+        elif method == 'turn/plan/updated':
+            with self.turn_lock:
+                if self.turn is not None:
+                    self.turn.on_plan(params.get('plan') or [], params.get('explanation'))
+            GLib.idle_add(self.task_changed)
+        elif method == 'item/commandExecution/outputDelta':
+            with self.turn_lock:
+                changed = self.turn is not None and self.turn.on_output(params.get('itemId', ''), params.get('delta', ''))
+            if changed:
+                GLib.idle_add(self.task_changed)
+        elif method == 'item/fileChange/patchUpdated':
+            with self.turn_lock:
+                changed = self.turn is not None and self.turn.on_patch(params.get('itemId', ''), params.get('changes') or [])
+            if changed:
+                GLib.idle_add(self.task_changed)
         elif method == 'account/login/completed':
             self.emit_raw({'type': 'account', 'success': bool(params.get('success')), 'error': params.get('error') or '',
                            'time': time.time()})
@@ -1089,8 +1207,6 @@ class VoiceAgent:
     def agent_item(self, completed, item):
         kind = item.get('type')
         if kind == 'commandExecution':
-            if not completed:
-                self.current_step = item.get('command', '')
             self.emit({'type': 'command', 'id': item.get('id'), 'command': item.get('command', ''),
                        'status': 'done' if completed else 'running', 'exitCode': item.get('exitCode'),
                        'output': (item.get('aggregatedOutput') or '')[-4000:]}, keep=completed)
@@ -1098,8 +1214,6 @@ class VoiceAgent:
             # Desktop operations (rungic-desktop MCP) shown like command cards.
             arguments = item.get('arguments') or {}
             label = arguments.get('goal') or arguments.get('app') or arguments.get('window_id') or ''
-            if not completed:
-                self.current_step = f"{item.get('tool')} {label}".strip()
             output = ''
             if item.get('error'):
                 output = str(item['error'].get('message', item['error']))
@@ -1114,8 +1228,9 @@ class VoiceAgent:
             self.emit({'type': 'files', 'id': item.get('id'), 'paths': paths, 'status': item.get('status')})
         elif kind == 'agentMessage' and completed and item.get('text'):
             if item.get('phase') != 'final_answer':
-                self.progress_text = item['text']
-                self.progress_at = time.monotonic()
+                with self.turn_lock:
+                    if self.turn is not None:
+                        self.turn.on_commentary(item['text'])
             self.emit({'type': 'agent-message', 'id': item.get('id'), 'text': item['text'],
                        'final': item.get('phase') == 'final_answer'})
 
@@ -1630,12 +1745,24 @@ def luna_goal(goal: str, timeout: float = 120, stop_when=None, window: str | Non
 class Service:
     def __init__(self):
         self.connection = None
+        self.watched = {}            # D-Bus sender -> name watch (SetWatching)
         self.agent = VoiceAgent(self.emit_signal)
         info = Gio.DBusNodeInfo.new_for_xml(INTERFACE)
         self.interface = info.interfaces[0]
         Gio.bus_own_name(Gio.BusType.SESSION, BUS_NAME, Gio.BusNameOwnerFlags.NONE,
                          self.register, None, lambda conn, name: (log('lost bus name'), os._exit(1)))
         threading.Thread(target=self.agent.warm, daemon=True).start()
+
+    def watch_sender(self, connection, sender):
+        """Forget what a client said about watching once it leaves the bus (the app quit)."""
+        def watch():
+            if sender not in self.watched:
+                self.watched[sender] = Gio.bus_watch_name_on_connection(
+                    connection, sender, Gio.BusNameWatcherFlags.NONE, None,
+                    lambda conn, name: (self.agent.watcher_gone(name),
+                                        Gio.bus_unwatch_name(self.watched.pop(name, 0)) if name in self.watched else None))
+            return False
+        GLib.idle_add(watch)
 
     def register(self, connection, name):
         self.connection = connection
@@ -1699,6 +1826,17 @@ class Service:
                     agent.call_command(args[0])
                 elif method == 'SendText':
                     agent.send_text(args[0], json.loads(args[1] or '[]'))
+                elif method == 'Use':
+                    # The app's conversation is the one its next press or message goes to
+                    # (docs/89): the overlay, a restart or the warm-up may have opened another
+                    # meanwhile, and every call below acts on whichever is open. Returns once
+                    # it is open, so the app's next call acts on it.
+                    if args[0] and args[0] != agent.thread_id:
+                        log('use', args[0], 'instead of', agent.thread_id)
+                        agent.open_conversation(args[0])
+                elif method == 'SetWatching':
+                    self.watch_sender(connection, sender)
+                    agent.set_watching(sender, args[0])
                 elif method == 'TalkToText':
                     result = json.dumps({'text': agent.talk_to_text()}, ensure_ascii=False)
                 elif method == 'ReadAloud':
@@ -1725,6 +1863,24 @@ class Service:
                 invocation.return_dbus_error('com.rungic.VoiceAgent.Error', str(error))
         # Codex calls block; keep the main loop (audio, D-Bus) responsive.
         threading.Thread(target=run, daemon=True).start()
+
+
+def platform_request(request, timeout=1.0):
+    """One request to the Android host's platform bridge (rungic-platform's socket), or {}."""
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as bridge:
+            bridge.settimeout(timeout)
+            bridge.connect('/mnt/android-wayland/platform.sock')
+            bridge.sendall(json.dumps(request).encode() + b'\n')
+            reply = b''
+            while not reply.endswith(b'\n'):
+                chunk = bridge.recv(65536)
+                if not chunk:
+                    break
+                reply += chunk
+        return json.loads(reply or b'{}')
+    except (OSError, ValueError):
+        return {}
 
 
 def screen_activity():

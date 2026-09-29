@@ -41,6 +41,8 @@ Window {
 
     property string screenName: ""
     property bool shown: false
+    onShownChanged: AgentClient.setWatching(shown)          // docs/89: the voice says less while shown
+    Binding { target: AgentClient; property: "conversation"; value: win.conversation }   // 朗读 goes to it (docs/89)
     property string conversation: ""          // the assistant's conversation id
     property bool holding: false              // Home or the sheet's bar is held
     property real micLevel: -90
@@ -83,8 +85,10 @@ Window {
         Overlay.setCard(Qt.rect(0, 0, width, above), 0)
     }
 
+    property bool reopen: false            // the service restarted while hidden: open again when shown
     function summon(screen) {
         hideTimer.stop()
+        if (reopen) { reopen = false; AgentClient.openAssistant() }
         if (screen) win.screenName = screen
         Overlay.present(win.screenName)
         updateMaterial()
@@ -211,8 +215,14 @@ Window {
         function onEvent(json) {
             const e = JSON.parse(json)
             if (e.type === "assistant-reset") { AgentClient.openAssistant(); return }
-            // The service restarted: the assistant's conversation is opened again.
-            if (e.type === "agent-restarted") { AgentClient.openAssistant(); AgentClient.request("Setup"); return }
+            // The service restarted: the assistant's conversation is opened again, but only once
+            // the overlay is shown. Opening it now would close the conversation the app just
+            // reopened, and the app's next press would talk into this one (docs/89).
+            if (e.type === "agent-restarted") {
+                AgentClient.request("Setup")
+                if (win.shown) AgentClient.openAssistant(); else win.reopen = true
+                return
+            }
             if (e.type === "preferences") { win.homeHold = e.homeHold !== false; return }
             if (!win.conversation || (e.conversation && e.conversation !== win.conversation)) return
             if (e.type === "level") { win.micLevel = e.db; return }
