@@ -59,3 +59,16 @@ def test_screen_captions_follow_the_desktop_tool():
     state.on_item({'type': 'mcpToolCall', 'id': 'm1', 'tool': 'desktop_goal'}, False, now=1)
     assert state.on_screen('打开“渲染”菜单')
     assert '打开“渲染”菜单' in state.facts(now=3)
+
+
+def test_a_live_picture_is_taken_from_this_turn_only():
+    state = ts.TurnState(now=100)
+    assert not state.on_live({'image': '/run/x-0.jpg', 'text': 'Blender 渲染 · 4/64 采样', 'progress': 0.06, 'time': 99})
+    assert state.on_live({'image': '/run/x-1.jpg', 'text': 'Blender 渲染 · 12/64 采样', 'progress': 0.19, 'time': 101,
+                          'state': 'working'})
+    assert not state.on_live({'image': '/run/x-1.jpg', 'text': 'Blender 渲染 · 12/64 采样', 'progress': 0.19, 'time': 102,
+                              'state': 'working'})
+    assert state.snapshot(now=103)['preview'] == {'image': '/run/x-1.jpg', 'text': 'Blender 渲染 · 12/64 采样',
+                                                  'progress': 0.19, 'done': False}
+    assert '约 19%' in state.facts(now=103)
+    assert not state.on_live({'text': '点击', 'time': 104})

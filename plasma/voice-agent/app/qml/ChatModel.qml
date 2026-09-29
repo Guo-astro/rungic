@@ -40,7 +40,7 @@ QtObject {
     function entry(fields) {
         return Object.assign({ kind: "", role: "", text: "", itemId: "", command: "", output: "",
                                status: "", exitCode: "", press: 0, started: 0, finished: 0,
-                               expanded: false, steps: [] }, fields)
+                               expanded: false, steps: [], task: "" }, fields)
     }
     function step(fields) {
         return Object.assign({ kind: "", text: "", itemId: "", command: "", output: "", status: "", exitCode: "" }, fields)
@@ -181,6 +181,14 @@ QtObject {
             entries.append(entry({ kind: "work", status: "running", started: e.time || Date.now() / 1000 }))
             root.workAt = entries.count - 1
             root.workOpen = true
+            break
+        }
+        case "task": {
+            // What the turn is doing, in words (docs/89): the task card of the work entry.
+            if (root.workAt < 0) return
+            const card = Object.assign({}, e)
+            delete card.type; delete card.time; delete card.conversation
+            entries.setProperty(root.workAt, "task", JSON.stringify(card))
             break
         }
         case "agent-finished":

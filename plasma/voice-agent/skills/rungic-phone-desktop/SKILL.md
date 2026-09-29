@@ -67,9 +67,17 @@ Use these tools for anything on screen; they act with ordinary pointer/keyboard 
 ## Blender (3D models, rendering)
 
 - Render with **Cycles on the CPU**. That is this phone's system default (docs/90): new scenes are Cycles on the CPU, and every render uses at most half the CPU cores so the phone stays usable; leave both as they are. Do not switch to EEVEE, a GPU device or pass `--gpu-backend` unless the user asks for GPU rendering: the GPU shares the phone's memory (EEVEE took about 0.9 GB more than Cycles for a small scene, and memory once ran out mid-render).
-- Keep it light: render at **512×512** by default (the user's choice), 64 samples with denoising: about 20 s and 0.3 GB here. Go larger (900 or more) only when the user asks for a bigger image; the time grows with the pixel count.
-- Run it where the user watches: write the script, then `desktop_launch {"app": "Blender", "args": ["--python", "/home/…/make.py"]}`. Have the script write a small status file (rendering / done) and save the image under `~/Pictures`; show it in your answer as `![…](<path>)`.
-- A render started from a script runs on Blender's main thread: the window shows "Not Responding" until the render ends. That is normal: never close or kill Blender then; watch the status file.
+- Keep it light: render at **512×512** by default (the user's choice), 64 samples: about 20 s and 0.3 GB here (rungic_render does not denoise yet). Go larger (900 or more) only when the user asks for a bigger image; the time grows with the pixel count.
+- Run it where the user watches, and render with `rungic_render` (a module of this phone's Blender, docs/90), never with `bpy.ops.render.render`:
+  ```python
+  import rungic_render
+  rungic_render.render('/home/…/Pictures/篮球.png')   # the scene's Cycles samples, in passes
+  ```
+  Build the scene in the script, then call it (from a timer if the script runs at start: `bpy.app.timers.register(lambda: rungic_render.render(path) and None, first_interval=1)`), and start the script in the visible Blender: `desktop_launch {"app": "Blender", "args": ["--python", "/home/…/make.py"]}`.
+  - The render runs in a background Blender, so the window stays responsive. Blender's render window on the assistant's screen shows each pass as it comes (the picture sharpens: 4, 12, 28, 64 samples), and so does the task card in this chat, at the same time.
+  - Wait for `<image>.status.json` to say `"phase": "done"` (or `"error"`) before you answer, e.g. `timeout 600 sh -c 'until grep -q "\"done\"\|\"error\"" /home/…/篮球.png.status.json; do sleep 2; done'`. Then show the image in your answer as `![…](<path>)`.
+- "投到电视上看": connect the TV with `rungic-cast connect`. The TV then shows the assistant's screen, render window included, with nothing to move.
+- Never close or kill a Blender that shows "Not Responding" while it works; judge by the status file.
 
 ## WeChat (微信) on screen
 

@@ -156,6 +156,28 @@ QQC2.ApplicationWindow {
                 }
             }
             Section {
+                name: "PlanStep"
+                wide: true
+                Repeater {
+                    model: ["pending", "active", "done"]
+                    Variant { label: modelData; wide: true; PlanStep { width: 300; text: "在 Blender 里渲染小茶杯"; forcedState: modelData } }
+                }
+            }
+            Section {
+                name: "ActivityCard"
+                wide: true
+                Variant { label: "thinking"; wide: true; ActivityCard { width: 330 } }
+                Variant { label: "working"; wide: true; ActivityCard { width: 330; kind: "files"; text: "新建 make_teacup.py"; detail: "+85 −0 行"; seconds: 4 } }
+                Variant { label: "progress"; wide: true; ActivityCard { width: 330; kind: "command"; text: "在后台运行 Blender（make_teacup.py）"; detail: "Fra:1 Mem:212M | Rendering | Sample 38/64"; progress: 0.59; seconds: 27 } }
+            }
+            Section {
+                name: "LivePicture"
+                Variant { label: "waiting"; LivePicture { maxWidth: 150; maxHeight: 150; text: "Blender 开始渲染"; progress: 0 } }
+                Variant { label: "live"; LivePicture { maxWidth: 150; maxHeight: 150; source: gallery.samplePicture; text: "28/64 采样"; progress: 0.44 } }
+                Variant { label: "done"; LivePicture { maxWidth: 150; maxHeight: 150; source: gallery.samplePicture; text: "渲染完成"; finished: true } }
+                Variant { label: "pressed"; LivePicture { maxWidth: 150; maxHeight: 150; source: gallery.samplePicture; text: "28/64 采样"; progress: 0.44; down: true } }
+            }
+            Section {
                 name: "Thumbnail"
                 Repeater {
                     model: ["loading", "ready", "pressed", "error"]

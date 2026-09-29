@@ -10,6 +10,7 @@ EEVEE took about 0.9 GB more for a small scene, Cycles on the CPU about 0.2 GB (
 - A new scene (the startup file, File > New) renders with Cycles on the CPU. A file that is
   opened, or a script that sets another engine, keeps its engine: this is a default.
 - Every render, and every scene of a file that is loaded, uses at most half the CPU threads.
+- No splash screen (it covered the assistant's work on its screen).
 """
 import os
 
@@ -52,6 +53,8 @@ def startup():
 
 
 def register():
+    # Blender opened by the assistant (docs/90) goes straight to work: no splash over the window.
+    bpy.context.preferences.view.show_splash = False
     for handlers, function in ((bpy.app.handlers.load_post, loaded), (bpy.app.handlers.load_factory_startup_post, loaded),
                                (bpy.app.handlers.render_init, rendering)):
         if function not in handlers:

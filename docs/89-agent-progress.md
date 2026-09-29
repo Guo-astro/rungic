@@ -93,6 +93,18 @@
 - **同批修复**：`Main.qml` 缺少 `import com.rungic.voiceassistant`，`Component.onCompleted` 报 ReferenceError，`--conversation` 启动时不会打开对话（本轮引入，已修）。
 - **待验收**：UI 路径“浮层接管后回到 App 按住说话”需要真人操作。测试时手机锁着，只验证了服务端的 `Use`。
 
+## 任务卡界面（2026-09-29，部分实测）
+
+- **设计系统新增控件**：
+  - `PlanStep`：pending、active、done；
+  - `ActivityCard`：thinking、working、progress；
+  - `LivePicture`：waiting、live、done、pressed。两张图轮流加载，新一帧加载好后淡入，中间不会空白。
+- **状态总览**：`--shot FILE` 可以离屏截图。但带圆角遮罩（MultiEffect）的图片在离屏截图里不显示，只能在真实屏幕上核对。已在真实屏幕上核对 `LivePicture` 和 `PlanStep`。
+- **对话**：
+  - 回合进行中显示计划清单、此刻正在做的步骤卡，以及实时预览图（例如渲染）；
+  - 回合结束后，“已处理 N 步”展开可以看到计划、改动的文件和步骤。
+- **输入栏**：用户决定删掉底部单独占一行的提示（“轻点右边停止”等）。
+
 ## 下一步
 
 - 第 3 步任务卡界面：计划清单、当前一步（文字、明细、进度条、秒数）、最近完成的步骤、改动的文件（点开看 diff）、产物即时出现。设计系统里要做计划步骤行、活动行等控件，照例用状态总览核对各状态。

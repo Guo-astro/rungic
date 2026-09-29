@@ -5,6 +5,8 @@ One small JSON file in the runtime directory, replaced atomically on every chang
   {"state": "working" | "done" | "question" | "failed" | "stopped",
    "text": "打开「渲染」菜单",      what is happening now (a caption, Simplified Chinese)
    "task": "...",                   the task it is part of, if any
+   "image": "/run/user/…/x.jpg",    optional: a live picture of the work (a render's latest pass, docs/90)
+   "progress": 0.44,                optional: how far, 0..1
    "time": 1790000000.0}            when it was written (seconds since the epoch)
 
 The assistant screen's floating window shows `text` as a caption over the picture while
@@ -22,12 +24,16 @@ STALE_S = 120
 PATH = Path(os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}') / 'rungic-agent-screen' / 'activity.json'
 
 
-def report(text: str, *, state: str = 'working', task: str = '') -> None:
+def report(text: str, *, state: str = 'working', task: str = '', image: str = '', progress: float | None = None) -> None:
     """Say what is happening now. Never fails the caller: the caption is a courtesy."""
     try:
         PATH.parent.mkdir(parents=True, exist_ok=True)
         data = {'state': state, 'text': ' '.join(str(text).split())[:80], 'task': ' '.join(str(task).split())[:120],
                 'time': time.time()}
+        if image:
+            data['image'] = str(image)
+        if progress is not None:
+            data['progress'] = max(0.0, min(1.0, float(progress)))
         temporary = PATH.with_suffix('.tmp')
         temporary.write_text(json.dumps(data, ensure_ascii=False))
         os.replace(temporary, PATH)
