@@ -1,5 +1,9 @@
 # 用户要求与工程约定
 
+## SSH 自动开启（用户于 2026-09-29 明确要求）
+
+用户明确要求 SSH 自动开启。升级和排障时保留启用状态，不得根据旧文档的“默认关闭”擅自关闭 SSH 或增加关闭策略。`ssh.socket` 的开机启用与监听即是自动接入入口，`ssh.service` 可按连接触发启动。
+
 ## 项目镜像制作 Skill
 
 用户于 2026-09-28 要求将三段式制作经验固化为项目通用 skill。接入新机型/固件、制作 GKI、RungicOS rootfs 或完整刷机包，以及排查整包首启时，使用 `.agents/skills/rungic-three-stage-image/SKILL.md`（可显式调用 `$rungic-three-stage-image`）。按需读取其中的新机型接入、工具地图和首启指南；设备差异进入 spec/适配器，不能将现有 G100 刷写假设直接用于其他手机。该目录随仓库维护，产物与缓存仍放 `.work/`。
@@ -54,6 +58,7 @@
 - **Mac mini构建机**（`macmini.wire.net`，见docs/71）：用`scutil --proxy`读取macOS系统代理（当前为Surge，HTTP/HTTPS `127.0.0.1:6152`，SOCKS `6153`）。经ssh执行的命令和Docker容器都不会自动使用它：容器内以`host.docker.internal`代替本机地址，每条命令带上`http_proxy`/`https_proxy`，构建镜像时以`--build-arg`传入。`tools/build_on_device.py`的`MacMini`已按此实现，其他在Mac mini上的工具也要这样做。
 - **手机**：下载走用户指定的`http://192.168.5.45:6152`（HTTP与HTTPS），优先于上级目录中的默认代理配置；容器内由`/etc/profile.d/proxy.sh`提供。
 - **本机（K8）**：访问不到`192.168.5.45:6152`，按本机现有网络设置联网。2026-09-28 用户明确要求测试不使用代理；SwiftWire 1080/8080 均超时，直连 AOSP 两个源码请求分别约 1.1/1.8 秒成功，本轮 X70 Air Pro 构建改用已授权直连。
+- **mibook**：2026-09-29 实测当前主机为 `mibook` / Xiaomi Book Pro 14，Wi-Fi 当时为 `192.168.5.62`；不是 K8。宿主身份先用 `hostnamectl` 核验，不能沿用旧任务的主机名或网络结论。本轮 HTTP/HTTPS 代理环境变量未设置，Git fetch 直连成功；Mac mini `192.168.5.45` 可达。G100 局域网 SSH 的 ARP 排障见 `docs/research/g100-ssh-connectivity-20260929.md`。
 - 新增宿主机或工具时，先确认该机器的代理设置并写入本节。
 
 ## 独立 Plasma Mobile 环境的目标版本
