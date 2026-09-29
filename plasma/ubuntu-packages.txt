@@ -79,6 +79,13 @@ python3-venv
 python3-onnxruntime
 gcc
 libglib2.0-dev
+# GPU checks (docs/49, docs/research/93): glxinfo/eglinfo/glxgears, glmark2 on X11 and Wayland
+mesa-utils
+glmark2-x11
+glmark2-es2-x11
+glmark2-wayland
+glmark2-es2-wayland
+vulkan-tools
 # Crash diagnosis (docs/55, docs/61): gdb backtraces, eu-unstrip build-ids,
 # coredumpctl over the collected reports, the ddebs archive key.
 gdb
