@@ -39,6 +39,15 @@ public:
     Q_INVOKABLE void approve(const QString &id, const QString &decision);
     // Proxied call (docs/63): monitor-on, monitor-off, take-over, hang-up.
     Q_INVOKABLE void callCommand(const QString &command);
+    // A typed message; attachments: JSON [{"path", "name", "kind"}] (docs/87).
+    Q_INVOKABLE void sendText(const QString &text, const QString &attachments);
+    // Hold released over "转文字": what was said, as text (textReady), sent nowhere.
+    Q_INVOKABLE void talkToText();
+    // "朗读": the voice reads this answer out.
+    Q_INVOKABLE void readAloud(const QString &text);
+    // Settings calls (Setup, SetApiKey, TestApiKey, RemoveApiKey, CodexLogin, InstallCodex,
+    // CancelInstall, SetPreferences): the JSON reply comes as replied(method, json).
+    Q_INVOKABLE void request(const QString &method, const QVariantList &args = {});
 
 Q_SIGNALS:
     void conversationsListed(const QString &json);
@@ -46,6 +55,8 @@ Q_SIGNALS:
     void assistantOpened(const QString &json);
     void event(const QString &json);
     void failed(const QString &message);
+    void textReady(const QString &json);
+    void replied(const QString &method, const QString &json);
 
 private Q_SLOTS:
     void onEvent(const QString &json);

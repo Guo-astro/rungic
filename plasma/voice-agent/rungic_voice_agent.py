@@ -14,9 +14,9 @@ JSON events and kept per conversation for the chat history.
   rungic-voice-agent --audio-file F.pcm   one test turn: F (S16LE 24 kHz mono) as speech
 
 Realtime runs over WebSocket so all traffic goes through the proxy that the
-`codex` wrapper sets; Codex needs an API key for that (OPENAI_API_KEY from
-~/.config/rungic-voice-agent/openai-api-key), while the agent itself uses the
-ChatGPT sign-in.
+`codex` wrapper sets; Codex needs an API key for that (OPENAI_API_KEY from the
+system keyring, rungic_cua.keyring, docs/87), while the agent itself uses Codex's
+own sign-in (a ChatGPT account, or the same key).
 """
 import argparse
 import array
@@ -38,9 +38,12 @@ import gi
 gi.require_version('Gst', '1.0')
 from gi.repository import Gio, GLib, Gst
 
-# The call proxy (docs/63) lives next to this script's shared files.
+# The call proxy (docs/63) lives next to this script's shared files; the keyring
+# module (docs/87) comes with rungic-cua.
 import sys
 sys.path.insert(0, '/usr/lib/rungic-voice-agent')
+sys.path.insert(1, '/usr/lib/rungic-cua')
+import shutil
 
 RATE = 24000                 # PCM format of the Realtime API
 CHUNK_MS = 100
@@ -97,10 +100,39 @@ INTERFACE = '''
     <method name="State"><arg type="s" direction="out"/></method>
     <method name="StartCall"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
     <method name="CallCommand"><arg type="s" direction="in"/></method>
+    <method name="SendText"><arg type="s" direction="in"/><arg type="s" direction="in"/></method>
+    <method name="TalkToText"><arg type="s" direction="out"/></method>
+    <method name="ReadAloud"><arg type="s" direction="in"/></method>
+    <method name="Setup"><arg type="s" direction="out"/></method>
+    <method name="SetApiKey"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
+    <method name="TestApiKey"><arg type="s" direction="out"/></method>
+    <method name="RemoveApiKey"><arg type="s" direction="out"/></method>
+    <method name="CodexLogin"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
+    <method name="InstallCodex"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
+    <method name="CancelInstall"><arg type="s" direction="out"/></method>
+    <method name="SetPreferences"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
     <signal name="Event"><arg type="s"/></signal>
   </interface>
 </node>
 '''
+
+
+def openai_key() -> str:
+    """The OpenAI API key (the keyring, else its old file), or ''."""
+    from rungic_cua import keyring
+    return keyring.read('openai-api-key')
+
+
+# The app's choices that change what this service does (docs/87).
+PREFERENCES = {'homeHold': True, 'speak': True, 'handsFreeAutoSend': True}
+
+
+def preferences() -> dict:
+    try:
+        saved = json.loads((CONFIG / 'preferences.json').read_text())
+    except (OSError, ValueError):
+        saved = {}
+    return {k: bool(saved.get(k, v)) for k, v in PREFERENCES.items()}
 
 
 def log(*args):
@@ -120,10 +152,14 @@ class AppServer:
 
     def __init__(self, on_notification, on_request):
         env = dict(os.environ)
-        key_file = CONFIG / 'openai-api-key'
-        if key_file.exists():
-            env['OPENAI_API_KEY'] = key_file.read_text().strip()
-        self.proc = subprocess.Popen(['codex', 'app-server'], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+        key = openai_key()
+        if key:
+            env['OPENAI_API_KEY'] = key
+        # The official install script puts codex in ~/.local/bin (docs/87).
+        codex = shutil.which('codex', path=os.environ.get('PATH', '') + ':' + str(Path.home() / '.local/bin'))
+        if not codex:
+            raise FileNotFoundError('codex')
+        self.proc = subprocess.Popen([codex, 'app-server'], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                      stderr=subprocess.DEVNULL, bufsize=0, env=env)
         self.ids = itertools.count(1)
         self.pending = {}
@@ -392,6 +428,12 @@ class VoiceAgent:
         self.recorder = None
         self.mic_buffer = b''
         self.gate = PauseGate()
+        # A press's audio stays here until it is sent (docs/87): released to send, it goes up
+        # at once; cancelled or turned into text, nothing reached the realtime session, whose
+        # input buffer could not be cleared (app-server has no such call) and would have
+        # joined the dropped words to the next press.
+        self.held = []               # gated chunks of this press, not yet uploaded
+        self.press_audio = b''       # all of this press, for speech-to-text
         self.call = None             # the proxied call, when the assistant talks in a call (docs/63)
         self.owner_audio = None      # what the user says to the call agent while talking
         # Id of the current push-to-talk press: the UI shows all transcript pieces
@@ -408,11 +450,56 @@ class VoiceAgent:
         # Audio must reach the server in order: one sender thread, fixed chunks.
         self.uploads = queue.Queue()
         threading.Thread(target=self.upload_loop, daemon=True).start()
-        self.server = AppServer(self.on_notification, self.on_request)
-        self.server.call('initialize', {'clientInfo': {'name': 'rungic-voice-agent', 'version': '1.0'},
-                                        'capabilities': {'experimentalApi': True}})
-        self.server.notify('initialized')
+        self.prefs = preferences()
+        self.key_working = None      # the last test of the API key: True, False, or not tested
+        self.installer = None        # a Codex installation under way
+        self.server = None
+        self.start_server()
         GLib.timeout_add_seconds(30, self.idle_check)
+
+    def start_server(self):
+        """codex app-server; without Codex (not installed yet) the service still runs, and
+        what needs it says so (the setup prompt, docs/87)."""
+        try:
+            server = AppServer(self.on_notification, self.on_request)
+            server.call('initialize', {'clientInfo': {'name': 'rungic-voice-agent', 'version': '1.0'},
+                                       'capabilities': {'experimentalApi': True}})
+            server.notify('initialized')
+            self.server = server
+        except (FileNotFoundError, TimeoutError, RuntimeError) as error:
+            log('codex app-server not started:', error)
+            self.server = None
+
+    def restart_server(self):
+        """A new key, sign-in or installation: Codex reads them when it starts. The open
+        conversation is closed; the app reopens it (agent-restarted)."""
+        with self.lock:
+            open_id = self.thread_id
+            self.close_conversation()
+            old, self.server = self.server, None
+            if old:
+                try:
+                    old.proc.terminate()
+                except OSError:
+                    pass
+            self.start_server()
+        self.emit_raw({'type': 'agent-restarted', 'conversation': open_id, 'time': time.time()})
+
+    def needs_setup(self, voice):
+        """What is missing before the agent can work, as a prompt in the conversation."""
+        if not self.server:
+            self.emit({'type': 'message', 'role': 'assistant', 'id': f'setup-{time.time_ns()}',
+                       'text': '这件事需要 Codex 来操作手机，但它还没有安装。'}, keep=False)
+            self.emit({'type': 'setup', 'text': '还差一步：安装 Codex', 'detail': '装好之后我就能替你做事。',
+                       'page': 'codex'}, keep=False)
+            return True
+        if voice and not openai_key():
+            self.emit({'type': 'message', 'role': 'assistant', 'id': f'setup-{time.time_ns()}',
+                       'text': '语音要用 OpenAI API Key 连上 OpenAI，现在还没有配置。'}, keep=False)
+            self.emit({'type': 'setup', 'text': '还差一步：配置 OpenAI API Key', 'detail': '配好之后就能直接说话；打字也可以先用。',
+                       'page': 'key'}, keep=False)
+            return True
+        return False
 
     # ---- events -------------------------------------------------------------
     def emit(self, event, keep=True):
@@ -476,6 +563,9 @@ class VoiceAgent:
                 self.store.touch(self.thread_id)
             else:
                 # A new thread: its id comes from Codex, and starting one is quick.
+                if not self.server:
+                    self.needs_setup(False)
+                    raise RuntimeError('Codex 还没有安装')
                 result = self.server.call('thread/start', self.thread_settings())
                 self.thread_id = result['thread']['id']
                 self.resumed = threading.Event()
@@ -492,6 +582,8 @@ class VoiceAgent:
 
     def resume_thread(self, thread_id, generation, resumed):
         started = time.monotonic()
+        if not self.server:
+            return
         try:
             self.server.call('thread/resume', {'threadId': thread_id, **self.thread_settings()})
         except Exception as error:  # noqa: BLE001
@@ -525,7 +617,9 @@ class VoiceAgent:
         if not resumed.wait(60) or self.thread_id != thread_id:
             return
         with self.lock:
-            if self.realtime or self.realtime_starting or not self.thread_id:
+            if self.realtime or self.realtime_starting or not self.thread_id or not self.server:
+                return
+            if not openai_key():
                 return
             # A second start while the first is under way replaced the session and
             # dropped the audio sent to the first (a press right after opening).
@@ -667,6 +761,9 @@ class VoiceAgent:
         self.reply_sink = sink
         if not self.thread_id:
             return False
+        if self.needs_setup(True):
+            self.set_state()
+            return False
         if not self.realtime:
             threading.Thread(target=self.start_realtime, daemon=True).start()
         self.stop_audio()           # barge in: stop speaking at once
@@ -674,6 +771,8 @@ class VoiceAgent:
         self.ensure_recorder()
         self.mic_buffer = b''
         self.gate = PauseGate()
+        self.held = []
+        self.press_audio = b''
         self.endpointer = Endpointer()
         self.hands_free = False
         self.talk_started = time.monotonic()
@@ -727,7 +826,9 @@ class VoiceAgent:
         if self.recorder is not None:
             self.recorder.set_state(Gst.State.READY)
         self.mic_buffer = b''
-        log('talk: nothing said, cancelled')
+        self.held = []
+        self.press_audio = b''
+        log('talk: cancelled, nothing sent')
         self.emit({'type': 'listen-cancelled'}, keep=False)
         self.set_state()
         return False
@@ -735,6 +836,8 @@ class VoiceAgent:
     def stop_talking(self):
         if not self.talking:
             return False
+        if self.owner_audio is None and not self.endpointer.heard:
+            return self.cancel_talking()         # nothing was said: send nothing
         self.talking = False
         self.hands_free = False
         self.last_activity = time.monotonic()
@@ -751,6 +854,10 @@ class VoiceAgent:
         log(f'talk: stop after {self.mic_chunks * CHUNK_MS} ms of audio, {self.gate.dropped_ms} ms of pauses left out')
         rest = self.gate.feed(self.mic_buffer) + self.gate.finish()
         self.mic_buffer = b''
+        for chunk in self.held:
+            self.uploads.put(chunk)
+        self.held = []
+        self.press_audio = b''
         if rest:
             self.uploads.put(rest)
         self.uploads.put(bytes(RATE * 2 * END_SILENCE_MS // 1000))
@@ -771,11 +878,12 @@ class VoiceAgent:
             data = bytes(info.data)
             buf.unmap(info)
             self.mic_buffer += data
+            self.press_audio += data
             level = self.endpointer.feed(data)
             self.emit({'type': 'level', 'db': round(level, 1)}, keep=False)
             if self.hands_free:
                 elapsed = time.monotonic() - self.talk_started
-                if self.endpointer.ended or elapsed > HANDS_FREE_MAX_S:
+                if (self.endpointer.ended and self.prefs['handsFreeAutoSend']) or elapsed > HANDS_FREE_MAX_S:
                     GLib.idle_add(self.stop_talking)
                 elif not self.endpointer.heard and elapsed > HANDS_FREE_NO_SPEECH_S:
                     GLib.idle_add(self.cancel_talking)
@@ -783,7 +891,7 @@ class VoiceAgent:
             while len(self.mic_buffer) >= chunk:
                 send = self.gate.feed(self.mic_buffer[:chunk])
                 if send:
-                    self.uploads.put(send)
+                    self.held.append(send)
                 self.mic_buffer = self.mic_buffer[chunk:]
                 self.mic_chunks += 1
         return Gst.FlowReturn.OK
@@ -813,7 +921,7 @@ class VoiceAgent:
         if self.talking:
             log('reply audio dropped while talking')
             return False
-        if self.muted:
+        if self.muted or not self.prefs['speak']:
             return False
         data = base64.b64decode(audio['data'])
         rate = audio.get('sampleRate', RATE)
@@ -944,6 +1052,11 @@ class VoiceAgent:
             GLib.idle_add(self.set_state)
         elif method in ('item/started', 'item/completed'):
             self.agent_item(method.endswith('completed'), params.get('item') or {})
+        elif method == 'account/login/completed':
+            self.emit_raw({'type': 'account', 'success': bool(params.get('success')), 'error': params.get('error') or '',
+                           'time': time.time()})
+            if params.get('success'):
+                threading.Thread(target=self.restart_server, daemon=True).start()
 
     def agent_item(self, completed, item):
         kind = item.get('type')
@@ -1179,6 +1292,204 @@ class VoiceAgent:
         self.server.respond(request_id, {'decision': answer})
         self.emit({'type': 'approval-result', 'id': approval, 'decision': answer})
 
+    # ---- typed input, speech-to-text, reading aloud (docs/87) ---------------------------
+    def send_text(self, text, attachments):
+        """A typed message (with images or files): an agent turn of its own, started
+        directly (turn/start); while one runs, Codex steers it with this instead."""
+        text = text.strip()
+        paths = [a['path'] for a in attachments if a.get('path')]
+        if not text and not paths or not self.thread_id:
+            return
+        if self.needs_setup(False):
+            return
+        if not self.resumed.wait(60):
+            raise RuntimeError('对话还没准备好')
+        images = [p for p in paths if Path(p).suffix.lower() in ('.png', '.jpg', '.jpeg', '.webp', '.gif')]
+        others = [p for p in paths if p not in images]
+        prompt_text = text
+        if others:
+            # Codex takes images as input; other files are named, and the agent reads them.
+            prompt_text += '\n\n附件：\n' + '\n'.join(others)
+        items = [{'type': 'text', 'text': prompt_text, 'text_elements': []}]
+        items += [{'type': 'localImage', 'path': p} for p in images]
+        self.store.touch(self.thread_id, text or Path(paths[0]).name)
+        self.last_activity = time.monotonic()
+        self.emit({'type': 'message', 'role': 'user', 'id': f'typed-{time.time_ns()}', 'text': text,
+                   'typed': True, 'attachments': attachments})
+        self.server.call('turn/start', {'threadId': self.thread_id, 'input': items})
+
+    def talk_to_text(self):
+        """The hold ended over "转文字": what was said comes back as text to edit; nothing
+        is sent to the assistant."""
+        if not self.talking:
+            return ''
+        audio = self.press_audio + self.mic_buffer
+        self.cancel_talking()
+        if len(audio) < RATE * 2 // 5:          # under 0.2 s
+            return ''
+        import call_proxy
+        text = call_proxy.transcribe(audio)
+        log(f'talk: {len(audio) // 48} ms turned into {len(text)} characters of text')
+        return call_proxy.simplified(text)
+
+    def read_aloud(self, text):
+        """"朗读": the voice reads an answer out (the realtime session speaks it)."""
+        if not self.thread_id or not text.strip():
+            return
+        if not self.realtime:
+            threading.Thread(target=self.start_realtime, daemon=True).start()
+        if not self.realtime_ready.wait(20):
+            raise RuntimeError('语音连接还没准备好')
+        self.muted = False
+        self.speak_progress('把下面这段话原样读给用户听，不要增减内容，也不要评论：\n' + text.strip())
+
+    # ---- settings (docs/87) ----------------------------------------------------------------
+    def setup(self):
+        from rungic_cua import keyring
+        path = shutil.which('codex', path=os.environ.get('PATH', '') + ':' + str(Path.home() / '.local/bin'))
+        version, runs = '', None
+        if path:
+            try:
+                out = subprocess.run([path, '--version'], capture_output=True, text=True, timeout=20).stdout
+                version = out.strip().split()[-1] if out.strip() else ''
+                runs = bool(version)
+            except (OSError, subprocess.SubprocessError):
+                runs = False
+        account = None
+        if self.server:
+            try:
+                account = self.server.call('account/read', {'refreshToken': False}, timeout=10).get('account')
+            except Exception as error:  # noqa: BLE001
+                log('account/read', error)
+        key = keyring.read('openai-api-key')
+        store = 'file'
+        try:
+            import tomllib
+            config = tomllib.loads((Path.home() / '.codex/config.toml').read_text())
+            store = config.get('cli_auth_credentials_store', 'file')
+        except (OSError, ValueError):
+            pass
+        try:
+            app_version = subprocess.run(['dpkg-query', '-W', '-f', '${Version}', 'rungic-voice-agent'],
+                                         capture_output=True, text=True, timeout=5).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            app_version = ''
+        return {'codex': {'installed': bool(path), 'version': version, 'path': path or '', 'runs': runs,
+                          'running': self.server is not None},
+                'account': account, 'credentials': 'keyring' if store in ('keyring', 'auto') else 'file',
+                'key': {'set': bool(key), 'masked': (key[:3] + '…' + key[-4:]) if len(key) > 10 else ('已设置' if key else ''),
+                        'store': keyring.where('openai-api-key'), 'working': self.key_working},
+                'preferences': self.prefs, 'version': app_version, 'home': str(Path.home())}
+
+    @staticmethod
+    def test_key(key):
+        """Whether OpenAI accepts the key: (ok, error)."""
+        request = urllib.request.Request('https://api.openai.com/v1/models', headers={'Authorization': 'Bearer ' + key})
+        try:
+            with urllib.request.urlopen(request, timeout=20) as response:
+                return response.status == 200, ''
+        except urllib.error.HTTPError as error:
+            return False, '密钥无效' if error.code in (401, 403) else f'OpenAI 返回 {error.code}'
+        except (OSError, ValueError) as error:
+            return False, f'连不上 OpenAI：{error}'
+
+    def set_api_key(self, key):
+        from rungic_cua import keyring
+        key = key.strip()
+        ok, error = self.test_key(key)
+        self.key_working = ok
+        if not ok:
+            return {'ok': False, 'error': error}
+        where = keyring.store('openai-api-key', key)
+        log('api key stored in', where)
+        # Codex signed in with an API key uses it for everything: sign in with the new one.
+        try:
+            account = self.server.call('account/read', {'refreshToken': False}, timeout=10).get('account') if self.server else None
+            if account and account.get('type') == 'apiKey':
+                self.server.call('account/login/start', {'type': 'apiKey', 'apiKey': key}, timeout=20)
+        except Exception as error:  # noqa: BLE001
+            log('api key sign-in', error)
+        threading.Thread(target=self.restart_server, daemon=True).start()
+        return {'ok': True, 'store': where}
+
+    def test_api_key(self):
+        key = openai_key()
+        ok, error = self.test_key(key) if key else (False, '还没有设置密钥')
+        self.key_working = ok
+        return {'ok': ok, 'error': error}
+
+    def remove_api_key(self):
+        from rungic_cua import keyring
+        keyring.clear('openai-api-key')
+        self.key_working = None
+        threading.Thread(target=self.restart_server, daemon=True).start()
+        return {'ok': True}
+
+    def codex_login(self, kind):
+        if not self.server:
+            return {'error': 'Codex 还没有安装'}
+        if kind == 'apiKey':
+            key = openai_key()
+            if not key:
+                return {'error': '先设置 API Key'}
+            result = self.server.call('account/login/start', {'type': 'apiKey', 'apiKey': key}, timeout=30)
+            threading.Thread(target=self.restart_server, daemon=True).start()
+            return result
+        return self.server.call('account/login/start', {'type': 'chatgptDeviceCode'}, timeout=30)
+
+    def set_preferences(self, values):
+        self.prefs = {k: bool(values.get(k, v)) for k, v in self.prefs.items()}
+        CONFIG.mkdir(parents=True, exist_ok=True)
+        (CONFIG / 'preferences.json').write_text(json.dumps(self.prefs))
+        self.emit_raw({'type': 'preferences', **self.prefs, 'time': time.time()})
+        return self.prefs
+
+    def install_codex(self, method):
+        """Installs Codex: the system package (polkit asks for the password) or the official
+        script into ~/.local/bin; progress as `install` events."""
+        if self.installer and self.installer.poll() is None:
+            return {'error': '正在安装'}
+        if method == 'script':
+            command = ['sh', '-c', 'curl -fsSL https://chatgpt.com/codex/install.sh | sh']
+        else:
+            command = ['pkexec', 'env', 'DEBIAN_FRONTEND=noninteractive', 'apt-get', 'install', '-y', 'rungic-codex']
+        threading.Thread(target=self.run_installer, args=(command,), daemon=True).start()
+        return {'ok': True}
+
+    def run_installer(self, command):
+        def event(**fields):
+            self.emit_raw({'type': 'install', 'time': time.time(), **fields})
+        event(step='download', state='running', line='$ ' + ' '.join(command))
+        try:
+            self.installer = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                                              env={**os.environ, 'LANG': 'C.UTF-8'})
+        except OSError as error:
+            event(state='failed', error=str(error))
+            return
+        for line in self.installer.stdout:
+            line = line.rstrip()
+            step = 'install' if re.match(r'(Unpacking|Setting up|Installing|Extracting|正在)', line) else None
+            event(line=line[:300], **({'step': step} if step else {}))
+        code = self.installer.wait()
+        if code in (-15, -9):
+            event(state='cancelled')
+            return
+        if code != 0:
+            event(state='failed', error=f'安装程序退出码 {code}')
+            return
+        event(step='check')
+        self.restart_server()
+        if not self.server:
+            event(state='failed', error='装好了，但 Codex 运行不了')
+            return
+        event(step='connect')
+        event(state='done')
+
+    def cancel_install(self):
+        if self.installer and self.installer.poll() is None:
+            self.installer.terminate()
+        return {'ok': True}
+
 
 def call_window(app: str) -> str | None:
     """The app's topmost window, which is its call window during a call (KWin)."""
@@ -1214,7 +1525,7 @@ def call_screen_connected(window_id: str | None) -> bool:
                                                '(like 00:05) shown? Answer only yes or no.'},
                 {'type': 'input_image', 'detail': 'original',
                  'image_url': 'data:image/jpeg;base64,' + base64.b64encode(buffer.getvalue()).decode()}]}]}
-        key = (CONFIG / 'openai-api-key').read_text().strip()
+        key = openai_key()
         request = urllib.request.Request('https://api.openai.com/v1/responses', data=json.dumps(body).encode(),
                                          headers={'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json'})
         with urllib.request.urlopen(request, timeout=20) as response:
@@ -1357,6 +1668,28 @@ class Service:
                     result = json.dumps(agent.start_call(json.loads(args[0])), ensure_ascii=False)
                 elif method == 'CallCommand':
                     agent.call_command(args[0])
+                elif method == 'SendText':
+                    agent.send_text(args[0], json.loads(args[1] or '[]'))
+                elif method == 'TalkToText':
+                    result = json.dumps({'text': agent.talk_to_text()}, ensure_ascii=False)
+                elif method == 'ReadAloud':
+                    agent.read_aloud(args[0])
+                elif method == 'Setup':
+                    result = json.dumps(agent.setup(), ensure_ascii=False)
+                elif method == 'SetApiKey':
+                    result = json.dumps(agent.set_api_key(args[0]), ensure_ascii=False)
+                elif method == 'TestApiKey':
+                    result = json.dumps(agent.test_api_key(), ensure_ascii=False)
+                elif method == 'RemoveApiKey':
+                    result = json.dumps(agent.remove_api_key(), ensure_ascii=False)
+                elif method == 'CodexLogin':
+                    result = json.dumps(agent.codex_login(args[0]), ensure_ascii=False)
+                elif method == 'InstallCodex':
+                    result = json.dumps(agent.install_codex(args[0]), ensure_ascii=False)
+                elif method == 'CancelInstall':
+                    result = json.dumps(agent.cancel_install(), ensure_ascii=False)
+                elif method == 'SetPreferences':
+                    result = json.dumps(agent.set_preferences(json.loads(args[0])), ensure_ascii=False)
                 invocation.return_value(GLib.Variant('(s)', (result,)) if result is not None else None)
             except Exception as error:
                 log('call failed', method, error)

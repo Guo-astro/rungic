@@ -4,6 +4,8 @@
 #include <QDBusConnection>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
+#include <QJsonArray>
+#include <QJsonDocument>
 
 static const QString Service = QStringLiteral("com.rungic.VoiceAgent");
 static const QString Path = QStringLiteral("/com/rungic/VoiceAgent");
@@ -48,4 +50,20 @@ void AgentClient::interrupt() { call(QStringLiteral("Interrupt"), {}); }
 void AgentClient::stopTask() { call(QStringLiteral("StopTask"), {}); }
 void AgentClient::approve(const QString &id, const QString &decision) { call(QStringLiteral("Approve"), {id, decision}); }
 void AgentClient::callCommand(const QString &command) { call(QStringLiteral("CallCommand"), {command}); }
+void AgentClient::sendText(const QString &text, const QString &attachments) { call(QStringLiteral("SendText"), {text, attachments}); }
+void AgentClient::talkToText() { call(QStringLiteral("TalkToText"), {}, &AgentClient::textReady); }
+void AgentClient::readAloud(const QString &text) { call(QStringLiteral("ReadAloud"), {text}); }
+void AgentClient::request(const QString &method, const QVariantList &args)
+{
+    auto *watcher = new QDBusPendingCallWatcher(m_service.asyncCallWithArgumentList(method, args), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, watcher, method]() {
+        watcher->deleteLater();
+        if (watcher->isError()) {
+            Q_EMIT replied(method, QStringLiteral("{\"error\":%1}").arg(QString::fromUtf8(QJsonDocument(QJsonArray{watcher->error().message()}).toJson(QJsonDocument::Compact)).mid(1).chopped(1)));
+            return;
+        }
+        QDBusPendingReply<QString> result = *watcher;
+        Q_EMIT replied(method, result.value().isEmpty() ? QStringLiteral("{}") : result.value());
+    });
+}
 void AgentClient::onEvent(const QString &json) { Q_EMIT event(json); }

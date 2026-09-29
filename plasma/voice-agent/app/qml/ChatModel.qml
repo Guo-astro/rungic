@@ -112,7 +112,9 @@ QtObject {
                         // The agent can start before the transcript of what started it arrives.
                         root.insertAt(root.workAt, { kind: "message", role: "user", text: e.text, itemId: e.id || "", press: e.press || 0 })
                     } else {
-                        entries.append(entry({ kind: "message", role: "user", text: e.text, itemId: e.id || "", press: e.press || 0 }))
+                        // A typed message's attachments ride in `output` (JSON), docs/87.
+                        entries.append(entry({ kind: "message", role: "user", text: e.text, itemId: e.id || "", press: e.press || 0,
+                                               output: e.attachments && e.attachments.length ? JSON.stringify(e.attachments) : "" }))
                     }
                 }
                 if (root.title === "新对话") root.title = e.text.slice(0, 20)
@@ -215,6 +217,8 @@ QtObject {
             root.callMonitor = false
             break
         case "error": case "call-error": entries.append(entry({ kind: "error", text: e.text })); break
+        // The agent is not set up yet (docs/87): what is missing and a way to the settings.
+        case "setup": entries.append(entry({ kind: "setup", text: e.text || "", output: e.detail || "", command: e.page || "key" })); break
         case "state":
             root.phase = e.phase; root.agentBusy = !!e.agentBusy; root.inCall = !!e.call
             root.handsFree = !!e.handsFree

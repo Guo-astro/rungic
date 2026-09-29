@@ -14,8 +14,9 @@
 #include <QQuickWindow>
 #include <QStandardPaths>
 
+#include <functional>
+
 #include "overlay.h"
-#include "systemtheme.h"
 
 // One app: a second start hands its conversation to the first (com.rungic.VoiceAssistantApp).
 class AppInstance : public QObject
@@ -49,10 +50,31 @@ private:
     QQmlApplicationEngine *m_engine;
 };
 
+// Runs a function on a signal of a QML object (connected by name: the design system is a
+// QML module this app does not link).
+class SchemeRelay : public QObject
+{
+    Q_OBJECT
+public:
+    SchemeRelay(std::function<void()> apply, QObject *parent)
+        : QObject(parent)
+        , m_apply(std::move(apply))
+    {
+    }
+public Q_SLOTS:
+    void apply() { m_apply(); }
+
+private:
+    std::function<void()> m_apply;
+};
+
 int main(int argc, char *argv[])
 {
     QGuiApplication app(argc, argv);
     QGuiApplication::setApplicationName(QStringLiteral("rungic-voice-assistant"));
+    // QML Settings (the app's choices, docs/87) need an organisation: ~/.config/Rungic/.
+    QGuiApplication::setOrganizationName(QStringLiteral("Rungic"));
+    QGuiApplication::setOrganizationDomain(QStringLiteral("rungic.com"));
     QGuiApplication::setApplicationDisplayName(QStringLiteral("语音助手"));
     QGuiApplication::setDesktopFileName(QStringLiteral("com.rungic.VoiceAssistant"));
     QGuiApplication::setWindowIcon(QIcon::fromTheme(QStringLiteral("audio-input-microphone")));
@@ -89,13 +111,15 @@ int main(int argc, char *argv[])
         bus.call(open);
         return 0;
     }
-    // The app's own colours, dark or light as the system is (docs/59). Declared through
+    // The app's own colours, dark or light as its theme is (docs/59, docs/87): the design
+    // system's Theme follows the system unless the app's settings choose. Declared through
     // KDE_COLOR_SCHEME_PATH: the platform theme hands it to KWin (the KDE palette protocol)
     // and Kirigami reads it, so the shell's status bar and navigation panel take the same
-    // colours. Applied again when the system switches.
-    const auto applyScheme = [&app] {
-        const QString name = SystemTheme::instance()->dark() ? QStringLiteral("RungicVoiceAssistant.colors")
-                                                             : QStringLiteral("RungicVoiceAssistantLight.colors");
+    // colours. Applied again when the theme switches.
+    QObject *theme = engine.singletonInstance<QObject *>("com.rungic.design", "Theme");
+    const auto applyScheme = [&app, theme] {
+        const bool dark = theme ? theme->property("dark").toBool() : true;
+        const QString name = dark ? QStringLiteral("RungicVoiceAssistant.colors") : QStringLiteral("RungicVoiceAssistantLight.colors");
         const QString scheme = QStandardPaths::locate(QStandardPaths::GenericDataLocation, QStringLiteral("rungic-voice-assistant/") + name);
         if (!scheme.isEmpty()) {
             app.setProperty("KDE_COLOR_SCHEME_PATH", scheme);
@@ -103,7 +127,9 @@ int main(int argc, char *argv[])
         }
     };
     applyScheme();
-    QObject::connect(SystemTheme::instance(), &SystemTheme::darkChanged, &app, applyScheme);
+    if (theme) {
+        QObject::connect(theme, SIGNAL(darkChanged()), new SchemeRelay(applyScheme, &app), SLOT(apply()));
+    }
     engine.setInitialProperties({{QStringLiteral("initialConversation"), conversation}});
     engine.loadFromModule("com.rungic.voiceassistant", "Main");
     bus.registerObject(QStringLiteral("/App"), new AppInstance(&engine), QDBusConnection::ExportScriptableSlots);

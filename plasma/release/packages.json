@@ -144,6 +144,9 @@
     "rungic-plasma-diagnostics": {
       "source": "plasma/packaging/rungic-plasma-diagnostics"
     },
+    "rungic-design": {
+      "source": "plasma/packaging/rungic-design"
+    },
     "rungic-voice-agent": {
       "source": "plasma/packaging/rungic-voice-agent"
     },

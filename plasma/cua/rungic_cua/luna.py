@@ -36,7 +36,6 @@ logger = logging.getLogger('rungic-cua.luna')
 MODEL = os.environ.get('RUNGIC_CUA_MODEL', 'gpt-6-luna')
 EFFORT = os.environ.get('RUNGIC_CUA_EFFORT', 'low')
 API = 'https://api.openai.com/v1/responses'
-KEY_FILE = Path.home() / '.config/rungic-voice-agent/openai-api-key'
 SCREENSHOT = os.environ.get('RUNGIC_SCREENSHOT', '/usr/libexec/rungic-screenshot')
 ABORT_FILE = Path(os.environ.get('XDG_RUNTIME_DIR', f'/run/user/{os.getuid()}')) / 'rungic-clicker' / 'abort'
 SETTLE_S = 0.5          # after a batch, before the screenshot: animations and repaints
@@ -78,7 +77,8 @@ class Aborted(RuntimeError):
 def api_key() -> str:
     if os.environ.get('OPENAI_API_KEY'):
         return os.environ['OPENAI_API_KEY']
-    return KEY_FILE.read_text().strip()
+    from . import keyring
+    return keyring.read('openai-api-key')
 
 
 def keysym_for(name: str) -> int:
