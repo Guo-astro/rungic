@@ -11,8 +11,13 @@ EEVEE took about 0.9 GB more for a small scene, Cycles on the CPU about 0.2 GB (
   opened, or a script that sets another engine, keeps its engine: this is a default.
 - Every render, and every scene of a file that is loaded, uses at most half the CPU threads.
 - No splash screen (it covered the assistant's work on its screen).
+- The viewport draws with Vulkan on Adreno (freedreno): its OpenGL mixed the objects' positions,
+  sizes and colours up in the viewport (Solid and Material Preview), the same GPU with Vulkan
+  (Turnip) drew them right (docs/90). Set once in the user's preferences, from the next start; a
+  choice of OpenGL made afterwards stays.
 """
 import os
+from pathlib import Path
 
 import bpy
 from bpy.app.handlers import persistent
@@ -46,9 +51,29 @@ def rendering(scene, *_):
     cap_threads(scene)
 
 
+def vulkan_viewport():
+    """OpenGL on freedreno draws the viewport wrongly: Vulkan from the next start (docs/90)."""
+    if bpy.app.background or getattr(bpy.app, 'factory_startup', False):
+        return
+    try:
+        import gpu
+        vendor, backend = gpu.platform.vendor_get(), gpu.platform.backend_type_get()
+    except Exception:  # noqa: BLE001  (no GPU context)
+        return
+    marker = Path(bpy.utils.user_resource('CONFIG')) / 'rungic-gpu-backend'
+    if 'freedreno' not in vendor.lower() or backend != 'OPENGL' or marker.exists():
+        return
+    bpy.context.preferences.system.gpu_backend = 'VULKAN'
+    bpy.ops.wm.save_userpref()
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text('VULKAN: set by rungic_render_defaults (docs/90); delete to have it set again\n')
+    print('rungic: the viewport draws with Vulkan from the next start (docs/90)')
+
+
 def startup():
     # The startup file was read before this module registered: set its scenes once now.
     loaded()
+    vulkan_viewport()
     return None
 
 
