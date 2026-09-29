@@ -30,7 +30,7 @@ import QtQuick.Controls
 import com.rungic.suggestions
 ApplicationWindow {
     width: 360; height: 740; visible: true
-    SuggestionsFeed { anchors.fill: parent; home: true }
+    SuggestionsFeed { anchors.fill: parent }
 }
 )");
     if (engine.rootObjects().isEmpty()) return 1;
@@ -38,12 +38,19 @@ ApplicationWindow {
         auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
         if (app.arguments().size() > 1 && !window->grabWindow().save(app.arguments().at(1))) failed = true;
         auto *list = window->findChild<QQuickItem *>(widget ? "suggestionsWidgetList" : "suggestionsFeed");
-        if (!list || !list->property("atYBeginning").toBool()) failed = true;
+        if (!list || !list->property("atYBeginning").toBool()) {
+            qWarning() << "preview beginning" << (list ? list->property("contentY") : QVariant())
+                       << (list ? list->property("originY") : QVariant());
+            failed = true;
+        }
         if (widget && list && list->height() > window->height() / 2) failed = true;
         if (list && list->property("count").toInt() > 10) {
             QMetaObject::invokeMethod(list, "positionViewAtEnd");
             QTimer::singleShot(300, &app, [&, list, window] {
-                if (list->property("contentY").toDouble() < 1000) failed = true;
+                if (list->property("contentY").toDouble() < 1000) {
+                    qWarning() << "preview end" << list->property("contentY") << list->property("count");
+                    failed = true;
+                }
                 if (app.arguments().size() > 1) window->grabWindow().save(app.arguments().at(1) + ".end.png");
                 app.exit(failed ? 1 : 0);
             });

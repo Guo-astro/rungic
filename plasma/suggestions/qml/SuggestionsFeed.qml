@@ -30,8 +30,13 @@ Rectangle {
     onActiveViewChanged: client.watching(activeView)
     Component.onCompleted: { rebuild(); client.watching(activeView) }
     Component.onDestruction: client.watching(false)
+    function beginning() {
+        list.forceLayout()
+        list.positionViewAtBeginning()
+        list.contentY = list.originY - list.topMargin
+    }
     function rebuild() {
-        const atBeginning = !populated || list.atYBeginning
+        const atBeginning = !populated || list.contentY <= list.originY + 1
         const y = list.contentY - list.originY
         populated = client.items.length > 0
         shown = client.items.filter(i => history ? ["resolved", "dismissed"].includes(i.state) : !["resolved", "dismissed"].includes(i.state))
@@ -40,7 +45,7 @@ Rectangle {
             if (selectedId && !positioned && client.items.some(i => i.id === selectedId)) {
                 positioned = true; select(selectedId)
             }
-            else if (atBeginning) list.positionViewAtBeginning()
+            else if (atBeginning) beginning()
             else list.contentY = list.originY + Math.max(-list.topMargin, Math.min(y, Math.max(0, list.contentHeight - list.height)))
         })
     }
@@ -51,7 +56,7 @@ Rectangle {
         const index = shown.findIndex(i => i.id === id)
         // An expanded investigation can be taller than the whole screen. Keep
         // its title and conclusion visible instead of centering its middle.
-        if (index === 0) list.positionViewAtBeginning()
+        if (index === 0) beginning()
         else if (index > 0) list.positionViewAtIndex(index, ListView.Beginning)
     }
     onSelectedIdChanged: { positioned = false; Qt.callLater(rebuild) }

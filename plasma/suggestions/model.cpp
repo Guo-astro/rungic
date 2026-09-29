@@ -184,8 +184,11 @@ void Model::reconcile(const QString &source, const QStringList &present, qint64 
         o["issueState"] = "absent";
         o["issueNote"] = "复查不再匹配此项；不代表根因已确认修复";
         if (!activeTask(o) && !o["task"].toObject()["needsReview"].toBool()) o["note"] = o["issueNote"];
-        if (o["reminderState"] == "snoozed") o["reminderState"] = "none";
-        o["updated"] = now; o.remove("remindAt"); o.remove("condition");
+        if (!o["task"].toObject()["needsReview"].toBool()) {
+            if (o["reminderState"] == "snoozed") o["reminderState"] = "none";
+            o.remove("remindAt"); o.remove("condition");
+        }
+        o["updated"] = now;
         items[id] = o;
     }
 }
@@ -280,11 +283,12 @@ QStringList Model::due(qint64 now, const QStringList &) {
         auto o = items[id].toObject();
         if (o["reminderState"] != "snoozed" || activeTask(o)) continue;
         // A fresh root batch doesn't establish freshness of every individual source.
-        if (o["issueState"] != "observed" || now - o["lastObserved"].toInteger() > 180 || now < o["lastObserved"].toInteger()) continue;
+        const bool resultReminder = o["task"].toObject()["needsReview"].toBool();
+        if (!resultReminder && (o["issueState"] != "observed" || now - o["lastObserved"].toInteger() > 180 || now < o["lastObserved"].toInteger())) continue;
         const auto at = o["remindAt"].toInteger();
         if (at > 0 && at <= now) {
             o["reminderState"] = "none"; o["note"] = "已到你约定的处理时间";
-            nextDelivery(o, "reminder"); o.remove("remindAt");
+            nextDelivery(o, resultReminder ? "task" : "reminder"); o.remove("remindAt");
             items[id] = o; result.append(id);
         }
     }

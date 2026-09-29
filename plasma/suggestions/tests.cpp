@@ -196,6 +196,15 @@ private Q_SLOTS:
         m.act(id, "dismiss", {}, 504); m.reconcile("crashes", {}, 505); m.observe(o, 506);
         QCOMPARE(m.get(id)["state"].toString(), "dismissed");
     }
+    void completedResultReminderSurvivesIssueAbsence() {
+        Care::Model m(""); const auto o = item(); const auto id = o["id"].toString(); m.observe(o, 100);
+        const auto task = m.beginTask(id, "investigate", {}, 101)["task"].toObject()["id"].toString();
+        m.taskEvent(id, task, {{"type", "finished"}}, 102);
+        m.act(id, "snooze", {{"at", 1000}}, 103);
+        m.reconcile("crashes", {}, 104);
+        QCOMPARE(m.due(1000).size(), 1);
+        QVERIFY(!m.notification(1001, false, false).isEmpty());
+    }
     void corruptedStateIsNotOverwritten() {
         QTemporaryDir d; QFile f(d.path() + "/state.json"); QVERIFY(f.open(QIODevice::WriteOnly)); f.write("broken"); f.close();
         Care::Model m(f.fileName()); QString error; QVERIFY(!m.load(&error)); QVERIFY(!error.isEmpty());
