@@ -1372,7 +1372,15 @@ class VoiceAgent:
             self.emit({'type': 'agent-started'})
             GLib.idle_add(self.set_state)
             GLib.idle_add(self.start_progress)
+        elif method == 'error':
+            if not params.get('willRetry', False):
+                error = params.get('error') or {}
+                self.emit({'type': 'error', 'text': error.get('message', 'Agent 请求失败')})
         elif method == 'turn/completed':
+            completed = params.get('turn') or {}
+            if completed.get('status') == 'failed' or completed.get('error'):
+                error = completed.get('error') or {}
+                self.emit({'type': 'error', 'text': error.get('message', 'Agent 未能完成此任务')})
             self.turn_id = None
             self.agent_busy = False
             self.agent_idle_since = time.monotonic()

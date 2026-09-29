@@ -174,6 +174,10 @@ void Suggestions::AgentEvent(const QString &json) {
         if (e.value("type") == "agent-finished" || e.value("type") == "task-stopped" || e.value("type") == "error") {
             fields["state"] = "attention";
             fields["note"] = e.value("type") == "agent-finished" ? "调查已结束，查看结果与下一步" : "处理已停止，可查看原对话继续";
+            if (e.value("type") == "error") {
+                fields["note"] = "Agent 未能完成处理，查看原因后重试";
+                fields["result"] = e.value("text").toString().left(8000);
+            }
             fields["notified"] = false;
             fields["scheduled"] = true; // Completion of work the user explicitly requested.
         }
@@ -194,7 +198,7 @@ QString Suggestions::Update(const QString &id, const QString &json) {
         if (!QStringList{"not_evaluated", "prepared", "submitted", "review", "merged", "released", "not_applicable"}.contains(status)) return failure("无效的上游状态");
         if (status != "not_evaluated" && status != "prepared" && status != "not_applicable"
             && (url.scheme() != "https" || url.host().isEmpty() || !url.userInfo().isEmpty())) return failure("该状态需要可核对的 HTTPS 上游链接");
-        fields["upstream"] = QJsonObject{{"state", status}, {"url", url.toString()}, {"verifiedBy", "maintainer"}};
+        fields["upstream"] = QJsonObject{{"state", status}, {"url", url.toString()}, {"recordedBy", "local-client"}, {"verification", "维护端记录，未自动核验远端"}};
     }
     // Recording a plan/result never auto-resolves an observed fault or silently applies code.
     if (fields.isEmpty()) return failure("没有可更新的处理记录");
