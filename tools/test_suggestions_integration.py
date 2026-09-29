@@ -35,8 +35,11 @@ def fake_voice():
             conversation = 'test-' + suggestion
             emit({'type': 'suggestion-started', 'suggestion': suggestion, 'conversation': conversation})
             invocation.return_value(GLib.Variant('(s)', (json.dumps({'conversation': conversation}),)))
-            GLib.timeout_add(80, emit, {'type': 'agent-message', 'conversation': conversation, 'final': True,
-                                       'text': '检查已完成，未修改系统；下一步需要实机验证。'})
+            if suggestion == hashlib.sha256(b'fixture:1').hexdigest()[:24]:
+                GLib.timeout_add(80, emit, {'type': 'error', 'conversation': conversation, 'text': '401 authentication missing'})
+            else:
+                GLib.timeout_add(80, emit, {'type': 'agent-message', 'conversation': conversation, 'final': True,
+                                           'text': '检查已完成，未修改系统；下一步需要实机验证。'})
             GLib.timeout_add(120, emit, {'type': 'agent-finished', 'conversation': conversation})
         else:
             invocation.return_value(None)
@@ -109,6 +112,11 @@ def main():
             assert 'do-not-export' not in data and 'false' in data
             cli('update', first, json.dumps({'upstream': {'state': 'merged', 'url': 'https://example.org/issues/1'}}))
             assert cli('get', first)['state'] == 'attention'
+            cli('act', second, 'restore')
+            cli('act', second, 'investigate')
+            wait(lambda: cli('get', second)['state'] == 'attention')
+            assert cli('get', second)['result'] == '401 authentication missing'
+            assert '未能完成' in cli('get', second)['note']
             if len(sys.argv) >= 5:
                 subprocess.run([sys.argv[3], sys.argv[4]], env=env, check=True, timeout=20)
             print('PASS: 40 cards, restart, snooze, dedup/mute, Agent handoff/result, private feedback, independent upstream state, QML preview')
