@@ -6,6 +6,7 @@ RUNGIC_COMPATIBILITY="$SRC/compatibility/entries" "$S/build/rungic-suggestions" 
 DESTDIR="$DESTDIR" cmake --install "$S/build"
 install -Dm644 "$S/rungic-suggestions.service" "$DESTDIR/usr/lib/systemd/user/rungic-suggestions.service"
 install -Dm644 "$S/com.rungic.Suggestions.service" "$DESTDIR/usr/share/dbus-1/services/com.rungic.Suggestions.service"
+install -Dm644 "$S/plasma-plasmashell.conf" "$DESTDIR/usr/lib/systemd/user/plasma-plasmashell.service.d/rungic-suggestions.conf"
 for unit in rungic-suggestions-collect.service rungic-suggestions-collect.timer; do
     install -Dm644 "$S/$unit" "$DESTDIR/usr/lib/systemd/system/$unit"
 done

@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "service.h"
 #include "collector.h"
+#include "layout.h"
 #include <QCoreApplication>
 #include <QDBusConnection>
+#include <QDBusConnectionInterface>
 #include <QDBusInterface>
 #include <QDBusReply>
 #include <QDir>
@@ -16,6 +18,13 @@ int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
     app.setApplicationName("rungic-suggestions");
     const auto args = app.arguments();
+    if (args.contains("--setup-widget")) {
+        if (QDBusConnection::sessionBus().interface()->isServiceRegistered("org.kde.plasmashell")) return 1;
+        QStringList launchers;
+        for (const auto &id : {"com.rungic.VoiceAssistant.desktop", "firefox.desktop", "org.kde.dolphin.desktop", "org.kde.mobile.plasmasettings.desktop"})
+            if (!QStandardPaths::locate(QStandardPaths::GenericDataLocation, QString("applications/") + id).isEmpty()) launchers.append(id);
+        return Care::setupWidget(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/plasma-org.kde.plasma.mobileshell-appletsrc", launchers) ? 0 : 1;
+    }
     const auto stateDir = qEnvironmentVariable("RUNGIC_SUGGESTIONS_STATE",
         QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + "/rungic-suggestions");
     const auto kb = qEnvironmentVariable("RUNGIC_COMPATIBILITY", "/usr/share/rungic/compatibility/entries");

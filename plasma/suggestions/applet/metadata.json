@@ -1,0 +1,15 @@
+{
+    "KPlugin": {
+        "Id": "com.rungic.suggestions",
+        "Name": "Agent 建议",
+        "Description": "留意使用问题，择机处理；与 Agent 建议页同步",
+        "Icon": "dialog-information",
+        "Category": "Utilities",
+        "License": "GPL-2.0-or-later",
+        "Authors": [{"Name": "Rungic"}],
+        "Version": "1.0"
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-Plasma-FormFactors": ["desktop", "mediacenter"]
+}

@@ -14,7 +14,8 @@
     "cmake",
     "qt6-base-dev",
     "qt6-declarative-dev",
-    "libkf6windowsystem-dev"
+    "libkf6windowsystem-dev",
+    "libkf6config-dev"
   ],
   "description": "Rungic suggestions, compatibility knowledge and home feed\nPersistent suggestions with bounded diagnostics, deferred reminders, Agent handoff and shared QML cards.",
   "units": {

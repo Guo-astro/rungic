@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "model.h"
+#include "layout.h"
+#include <KConfig>
+#include <KConfigGroup>
 #include <QFile>
 #include <QTemporaryDir>
 #include <QtTest>
@@ -11,6 +14,52 @@ class CareTests : public QObject {
         o["source"] = source; return o;
     }
 private Q_SLOTS:
+    void widgetLayoutPreservesUserChoicesAndRemoval() {
+        QTemporaryDir d; const auto path = d.path() + "/layout";
+        {
+            KConfig c(path, KConfig::SimpleConfig);
+            auto desktop = c.group("Containments").group("1");
+            desktop.writeEntry("plugin", QStringLiteral("org.kde.plasma.mobile.homescreen.folio"));
+            auto folio = desktop.group("Folio");
+            folio.writeEntry("favorites", QStringLiteral("[]")); // Explicitly empty is a choice.
+            folio.writeEntry("pages", QStringLiteral("[[{\"type\":\"application\",\"storageId\":\"existing.desktop\",\"row\":0,\"column\":0}]]"));
+            c.group("Containments").group("2").group("Applets").group("99").writeEntry("plugin", QStringLiteral("other.widget"));
+            QVERIFY(c.sync());
+        }
+        QVERIFY(Care::setupWidget(path, {"new.desktop"}));
+        {
+            KConfig c(path, KConfig::SimpleConfig); auto desktop = c.group("Containments").group("1");
+            auto folio = desktop.group("Folio");
+            QCOMPARE(folio.readEntry("favorites", QString()), QStringLiteral("[]"));
+            auto pages = QJsonDocument::fromJson(folio.readEntry("pages", QString()).toUtf8()).array();
+            auto items = pages[0].toArray(); QCOMPARE(items.size(), 2);
+            QCOMPARE(items[0].toObject()["storageId"].toString(), QStringLiteral("existing.desktop"));
+            QCOMPARE(items[1].toObject()["row"].toInt(), 1);
+            QCOMPARE(items[1].toObject()["id"].toInt(), 100);
+            QVERIFY(QFile::exists(path + ".before-rungic-suggestions-widget"));
+            desktop.group("Applets").group("100").deleteGroup();
+            items.removeAt(1); pages[0] = items;
+            folio.writeEntry("pages", QString::fromUtf8(QJsonDocument(pages).toJson(QJsonDocument::Compact)));
+            QVERIFY(c.sync());
+        }
+        QVERIFY(Care::setupWidget(path, {"new.desktop"}));
+        KConfig c(path, KConfig::SimpleConfig);
+        QVERIFY(!c.group("Containments").group("1").group("Applets").hasGroup("100"));
+    }
+    void widgetLayoutNeverOverwritesOccupiedPage() {
+        QTemporaryDir d; const auto path = d.path() + "/layout";
+        {
+            KConfig c(path, KConfig::SimpleConfig); auto desktop = c.group("Containments").group("1");
+            desktop.writeEntry("plugin", QStringLiteral("org.kde.plasma.mobile.homescreen.folio"));
+            desktop.group("Folio").writeEntry("pages", QStringLiteral("[[{\"type\":\"widget\",\"id\":12,\"row\":0,\"column\":0,\"gridWidth\":4,\"gridHeight\":5}]]"));
+            QVERIFY(c.sync());
+        }
+        QVERIFY(Care::setupWidget(path, {"known.desktop"}));
+        KConfig c(path, KConfig::SimpleConfig); const auto folio = c.group("Containments").group("1").group("Folio");
+        const auto pages = QJsonDocument::fromJson(folio.readEntry("pages", QString()).toUtf8()).array();
+        QCOMPARE(pages.size(), 2); QCOMPARE(pages[0].toArray()[0].toObject()["id"].toInt(), 12);
+        QVERIFY(folio.readEntry("favorites", QString()).contains("known.desktop"));
+    }
     void persistentSnoozeAndDeduplication() {
         QTemporaryDir d; const auto path = d.path() + "/state.json";
         Care::Model m(path); auto o = item(); const auto id = o["id"].toString();
