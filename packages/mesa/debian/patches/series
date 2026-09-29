@@ -1,1 +1,2 @@
 rungic/kgsl-dmabuf-import-ubwc.patch
+rungic/egl-x11-dri3-fallback-software.patch

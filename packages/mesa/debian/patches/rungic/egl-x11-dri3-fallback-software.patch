@@ -1,0 +1,38 @@
+From: clawd20130 <clawd20130@gmail.com>
+Date: Wed, 30 Sep 2026 01:02:16 +0900
+Subject: egl/x11: without a DRI3 device only Zink goes on;
+ others fall back to software
+
+The branch's Termux:X11 change (b355d4d41a86) makes dri3_x11_connect() report success when
+x11_dri3_open() fails, so Zink can go on through kopper. Every other driver then reaches
+dri2_initialize_x11_dri3() with the DRI3 image loader extensions but a software screen type,
+and drisw_init_screen() dereferences the missing swrast loader. A Flatpak app with only
+--device=dri (no /dev/kgsl-3d0 in its sandbox) on an X server without DRI3 crashed in eglInitialize
+this way (SIGSEGV in libgallium, drisw_init_screen+0x38). Keep the branch's behaviour for Zink and
+return upstream's failure otherwise: eglInitialize then retries with Zink and with the CPU renderer.
+
+Forwarded: no
+Last-Update: 2026-09-30
+X-Rungic-Status: Pending [a fix of the branch's own change, b355d4d41a86 from termux-packages 411745ec]
+X-Rungic-Tests: L3:flatpak.gl-fallback (a Flatpak X11 GL app without /dev/kgsl-3d0 starts on softpipe)
+X-Rungic-Docs: docs/49
+---
+ src/egl/drivers/dri2/platform_x11_dri3.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/src/egl/drivers/dri2/platform_x11_dri3.c b/src/egl/drivers/dri2/platform_x11_dri3.c
+index 3c5a90a..41a9dbe 100644
+--- a/src/egl/drivers/dri2/platform_x11_dri3.c
++++ b/src/egl/drivers/dri2/platform_x11_dri3.c
+@@ -537,7 +537,10 @@ dri3_x11_connect(struct dri2_egl_display *dri2_dpy, bool swrast)
+             _eglLog(_EGL_WARNING, "DRI3: Failed to initialize");
+       }
+ 
+-      return true;
++      /* Only Zink goes on without a DRI3 device (the branch's Termux:X11 case). Any other
++       * driver would get a software screen without the swrast loader and crash in
++       * drisw_init_screen: fail, and eglInitialize retries with the CPU renderer. */
++      return dri2_dpy->driver_name && !strcmp(dri2_dpy->driver_name, "zink");
+    }
+ 
+    loader_get_user_preferred_fd(&dri2_dpy->fd_render_gpu,
