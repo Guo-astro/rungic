@@ -14,6 +14,19 @@ class CareTests : public QObject {
         o["source"] = source; return o;
     }
 private Q_SLOTS:
+    void staleReferencesNeverCreateRecords() {
+        QTemporaryDir d; const auto path = d.path() + "/state.json";
+        QVERIFY(Care::writeObject(path, {{"schema", 2}, {"items", QJsonObject{{"stale", QJsonValue::Null}}}}));
+        Care::Model m(path); QVERIFY(m.load()); QVERIFY(m.list().isEmpty());
+        QVERIFY(!m.present("missing", 1, false, 100));
+        QVERIFY(!m.update("missing", {{"result", "late"}}));
+        QVERIFY(m.updatePlan("missing", {}).contains("error"));
+        QVERIFY(m.act("missing", "dismiss", {}, 100).contains("error"));
+        QVERIFY(!m.taskEvent("missing", "old-task", {{"type", "finished"}}, 100));
+        m.notifiedReceipts({QJsonObject{{"id", "missing"}, {"revision", 1}}}, 100);
+        QVERIFY(m.list().isEmpty()); QVERIFY(m.save());
+        Care::Model restarted(path); QVERIFY(restarted.load()); QVERIFY(restarted.list().isEmpty());
+    }
     void widgetLayoutPreservesUserChoicesAndRemoval() {
         QTemporaryDir d; const auto path = d.path() + "/layout";
         {

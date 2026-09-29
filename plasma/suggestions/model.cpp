@@ -103,13 +103,15 @@ bool Model::load(QString *error) {
         return false;
     }
     items = data["items"].toObject(); settings = data["settings"].toObject();
+    // Older builds inserted null entries when a stale UI receipt referenced a missing ID.
+    for (const auto &id : items.keys()) if (items.value(id).isNull()) items.remove(id);
     lastDigest = data["lastDigest"].toInteger();
     if (schema == 1) {
         if (!QFile::exists(path + ".schema1-backup") && !QFile::copy(path, path + ".schema1-backup")) {
             if (error) *error = "无法备份原建议记录，未迁移"; return false;
         }
         for (const auto &id : items.keys()) {
-            auto o = items[id].toObject(); const auto state = o["state"].toString();
+            auto o = items.value(id).toObject(); const auto state = o["state"].toString();
             o["issueState"] = state == "resolved" ? "absent" : "observed";
             o["task"] = QJsonObject{{"state", state == "working" ? "recovering" : "idle"},
                 {"needsReview", state == "attention"}, {"conversation", o["conversation"]}};
@@ -131,7 +133,7 @@ bool Model::load(QString *error) {
 bool Model::save(QString *error) const {
     return writeObject(path, {{"schema", 2}, {"items", items}, {"settings", settings}, {"lastDigest", lastDigest}}, error);
 }
-QJsonObject Model::get(const QString &id) const { return projected(items[id].toObject()); }
+QJsonObject Model::get(const QString &id) const { return projected(items.value(id).toObject()); }
 QJsonArray Model::list() const {
     QList<QJsonObject> sorted;
     for (auto it = items.begin(); it != items.end(); ++it) sorted.append(projected(it.value().toObject()));
@@ -154,7 +156,7 @@ QJsonArray Model::list() const {
 }
 bool Model::observe(QJsonObject incoming, qint64 now) {
     const auto id = incoming["id"].toString(); if (id.isEmpty()) return false;
-    auto o = items[id].toObject(); const bool fresh = o.isEmpty(), recurrent = o["issueState"] == "absent";
+    auto o = items.value(id).toObject(); const bool fresh = o.isEmpty(), recurrent = o["issueState"] == "absent";
     bool changed = fresh || recurrent;
     const int severity = o["severity"].toInt();
     // Observations can update evidence, never user choices, task state or plans.
@@ -179,7 +181,7 @@ bool Model::observe(QJsonObject incoming, qint64 now) {
 }
 void Model::reconcile(const QString &source, const QStringList &present, qint64 now) {
     for (const auto &id : items.keys()) {
-        auto o = items[id].toObject();
+        auto o = items.value(id).toObject();
         if (o["source"] != source || present.contains(id) || o["issueState"] == "absent") continue;
         o["issueState"] = "absent";
         o["issueNote"] = "复查不再匹配此项；不代表根因已确认修复";
@@ -193,7 +195,7 @@ void Model::reconcile(const QString &source, const QStringList &present, qint64 
     }
 }
 bool Model::update(const QString &id, const QJsonObject &fields) {
-    auto o = items[id].toObject(); if (o.isEmpty()) return false;
+    auto o = items.value(id).toObject(); if (o.isEmpty()) return false;
     for (auto it = fields.begin(); it != fields.end(); ++it) {
         if (QStringList{"state", "notified", "seen", "scheduled", "planRevision", "canApply"}.contains(it.key())) continue;
         o[it.key()] = it.value();
@@ -201,7 +203,7 @@ bool Model::update(const QString &id, const QJsonObject &fields) {
     items[id] = o; return true;
 }
 QJsonObject Model::updatePlan(const QString &id, const QJsonObject &fields) {
-    auto o = items[id].toObject();
+    auto o = items.value(id).toObject();
     if (o.isEmpty()) return {{"error", "建议已不存在"}};
     bool planChanged = false;
     for (const auto &key : {"plan", "verification", "rollback", "planStatus"}) if (fields.contains(key)) planChanged = true;
@@ -233,7 +235,7 @@ QJsonObject Model::beginTask(const QString &id, const QString &mode, const QStri
     return get(id);
 }
 bool Model::taskEvent(const QString &id, const QString &taskId, const QJsonObject &event, qint64 now) {
-    auto o = items[id].toObject(); auto task = o["task"].toObject();
+    auto o = items.value(id).toObject(); auto task = o["task"].toObject();
     if (taskId.isEmpty() || task["id"] != taskId || !activeTask(o)) return false;
     const auto type = event["type"].toString();
     if (type == "started") {
@@ -250,7 +252,7 @@ bool Model::taskEvent(const QString &id, const QString &taskId, const QJsonObjec
     o["task"] = task; o["updated"] = now; items[id] = o; return true;
 }
 QJsonObject Model::act(const QString &id, const QString &action, const QJsonObject &args, qint64 now) {
-    auto o = items[id].toObject();
+    auto o = items.value(id).toObject();
     if (o.isEmpty()) return {{"error", "建议已不存在"}};
     if (action == "seen" || action == "displayed") {
         present(id, args["revision"].toInteger(), action == "seen", now); return get(id);
@@ -280,7 +282,7 @@ QJsonObject Model::act(const QString &id, const QString &action, const QJsonObje
 QStringList Model::due(qint64 now, const QStringList &) {
     QStringList result;
     for (const auto &id : items.keys()) {
-        auto o = items[id].toObject();
+        auto o = items.value(id).toObject();
         if (o["reminderState"] != "snoozed" || activeTask(o)) continue;
         // A fresh root batch doesn't establish freshness of every individual source.
         const bool resultReminder = o["task"].toObject()["needsReview"].toBool();
@@ -295,7 +297,7 @@ QStringList Model::due(qint64 now, const QStringList &) {
     return result;
 }
 bool Model::present(const QString &id, qint64 revision, bool opened, qint64 now) {
-    auto o = items[id].toObject();
+    auto o = items.value(id).toObject();
     if (o.isEmpty() || revision != o["deliveryRevision"].toInteger()) return false;
     const auto key = opened ? "openedRevision" : "displayedRevision";
     if (o[key].toInteger() >= revision) return false;
@@ -328,7 +330,7 @@ void Model::notified(const QStringList &ids, qint64 now) {
 }
 void Model::notifiedReceipts(const QJsonArray &receipts, qint64 now) {
     for (const auto &v : receipts) {
-        const auto receipt = v.toObject(); const auto id = receipt["id"].toString(); auto o = items[id].toObject();
+        const auto receipt = v.toObject(); const auto id = receipt["id"].toString(); auto o = items.value(id).toObject();
         if (o.isEmpty() || o["deliveryRevision"] != receipt["revision"]) continue;
         if (o["severity"].toInt() < 2 && o["deliveryReason"] == "discovery") lastDigest = now;
         o["notifiedRevision"] = receipt["revision"]; o["notifiedAt"] = now; items[id] = o;
@@ -336,7 +338,7 @@ void Model::notifiedReceipts(const QJsonArray &receipts, qint64 now) {
 }
 void Model::recoverTasks() {
     for (const auto &id : items.keys()) {
-        auto o = items[id].toObject();
+        auto o = items.value(id).toObject();
         if (activeTask(o)) {
             auto task = o["task"].toObject(); task["state"] = "recovering";
             // Old running tasks predate task IDs: preserve results, never invent a live task.
