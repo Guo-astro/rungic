@@ -3,6 +3,8 @@ xwayland (2:24.1.10-1+rungic1) resolute; urgency=medium
   * glamor and DRI3 on the Adreno KGSL GPU (/dev/kgsl-3d0) through the GBM
     path, when the compositor offers linux-dmabuf v3 without a DRM main
     device (docs/research/93).
+  * No documentation build: a builder with xmlto and friends made files the
+    packaging does not install (Ubuntu's builders have none).
 
  -- range-dev <noreply@localhost>  Wed, 30 Sep 2026 01:45:00 +0900
 
