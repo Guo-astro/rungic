@@ -1,6 +1,6 @@
 # 主动式智能第一阶段：故障、软件适配与上游协作
 
-2026-09-29 提案，2026-09-30 完成基础框架及 USB G100 闭环验证。用户随后明确否定全屏卡片页：保留原 Folio 主屏和底部固定图标，在上方原生 widget 区域放置建议，重点是留白与壁纸可见，不强制半透明。正在按此修正桌面呈现；此前全屏卡片截图是已否定的中间设计。以下保留设计依据；当前实现与验收边界以文末记录为准。未对外提交。
+2026-09-29 提案，2026-09-30 完成基础框架及 USB G100 闭环验证。用户随后明确否定全屏卡片页：保留原 Folio 主屏和底部固定图标，在上方原生 widget 区域放置建议，重点是留白与壁纸可见，不强制半透明。已按此修正并部署原生小组件；此前全屏卡片截图是已否定的中间设计。以下保留设计依据；当前实现与验收边界以文末记录为准。未对外提交。
 
 ## 产品目标与范围
 
@@ -237,9 +237,9 @@ core、完整日志、账户/路径/文档内容不默认上传。原始证据�
 提案时具体探针、通知阈值和上游连接器尚未选型。后续实施按以下记录落地；未实现的设计目标不能作为已部署能力。SSH 策略和现有应用偏好保持不变。
 
 
-## 2026-09-30 实施：纵向卡片主屏
+## 2026-09-30 中间实现：纵向卡片主屏（已撤回）
 
-用户最终要求用建议卡片流作为 Plasma Mobile 主屏，上滑应用抽屉保持原功能。复用固定 Plasma Mobile 6.6.5 Folio 源码及现有补丁队列，新补丁 0015 替换主屏显示层，保留已有桌面布局数据、抽屉、快速设置与任务切换。主屏内手势用于纵向滚动，底部独立入口点击或上滑打开原应用抽屉。上游文件沿用 LGPL-2.0-or-later，新建议服务为 GPL-2.0-or-later。相比重写整个 shell，只改主屏承载与手势边界，继续复用成熟组件。
+用户最初要求用建议卡片流作为 Plasma Mobile 主屏，随后明确否定此呈现，要求保留原桌面并使用原生 widget。以下为已撤回的中间实现记录：基于固定 Plasma Mobile 6.6.5 Folio 的补丁 0015 曾替换主屏显示层，保留桌面布局数据、抽屉、快速设置与任务切换。主屏内手势用于纵向滚动，底部独立入口打开原应用抽屉。0015 已从补丁队列移除，最终形态见文末。上游文件沿用 LGPL-2.0-or-later，新建议服务为 GPL-2.0-or-later。
 
 `plasma/suggestions/` 是 C++/Qt 服务、共享 QML 卡片与客户端；Agent 栏目和桌面读取同一个会话 D-Bus 账本。`compatibility/entries/` 保存精确版本范围和证据；政策条目不产生故障告警。打包携带引用文档与补丁，调查可先在本机读取。
 
@@ -293,3 +293,40 @@ core、完整日志、账户/路径/文档内容不默认上传。原始证据�
 在上述有人工操作干扰的复查中，另行检查了实际实现：QML 客户端直接 `QProcess::startDetached`，没有请求 XDG activation token；单实例转发也没有携带 token。已核对构建端 `libkf6windowsystem-dev 6.24.0-0ubuntu1` 的 `kwaylandextras.h` / `kwindowsystem.h`，以及 [KWaylandExtras 官方接口](https://api.kde.org/kwaylandextras.html) 与 [Plasma 通知服务实现](https://api.kde.org/legacy/plasma/plasma-workspace/html/server_8cpp_source.html)。KWindowSystem 为 LGPL-2.1-or-later，已有依赖适用于当前 ARM64/glibc/Wayland 环境，不涉及 Android/KGSL 硬件改动。
 
 采用现成的 `xdgActivationToken(window, appId)` 异步接口，将用户点击的令牌经子进程环境和单实例 D-Bus 传入已有窗口，再调用 `KWindowSystem::activateWindow`；通知点击复用通知服务发来的 `ActivationToken`，不自行绕过焦点保护。未引入私有 KWin 强制激活脚本或新启动器。此修改补齐明确的接口缺口，但不能反推刚才有人工操作时的失败必由缺少令牌造成；部署及无干扰点击验收待追加。
+
+## 2026-09-30 修正：原 Folio 上方的原生建议小组件
+
+### 先恢复与核验原桌面
+
+先以 `20260930.5` 恢复 `6.6.5+rungic6` Folio，在 USB G100 实际查看原桌面并保存截图 `original-folio-restored.png`、配置 `original-layout-config.ini`。当时原布局为 `pages=[[]]`，`favorites` 键缺失，底部托盘和抽屉箭头存在、托盘内无图标。故迁移只在该键缺失时填入已安装的 Agent、Firefox、Dolphin、设置；已有自定义收藏或显式空数组都保留。不能声称这四个默认图标是从该手机原配置恢复出的历史收藏。
+
+固定 6.6.5 源码核验 `WidgetDelegate`、`WidgetContainer`、Folio 网格保存格式和 mobileshell `SwipeArea` 后，选择标准 Plasma Applet，移除替换整个主屏的 0015 补丁。`plasma-mobile 6.6.5-0ubuntu0.1+rungic8` 保留原生收藏、网格、壁纸、编辑、抽屉及手势。包版本 `rungic7` 属于已撤回的全屏实现，不应继续用作基础镜像来源。
+
+### 展示、布局迁移与输入接口
+
+插件为 `com.rungic.suggestions`，元数据与 QML 位于 `plasma/suggestions/applet/`，GPL-2.0-or-later。默认占上方 4×3 网格，外层 `PlasmoidItem.NoBackground`，只有独立卡片有底色；卡片间有间距，组件以下继续显示壁纸和原底部收藏。滚动限制在组件视口，标题和数量入口打开 Agent 建议列表，整张卡片打开自己的事项详情。长调查结果定位到卡片开头。
+
+`rungic-suggestions --setup-widget` 通过 `plasma-plasmashell.service` 的 ExecStartPre、KConfig 在 shell 启动前迁移；检测 shell 已在运行时拒绝写布局。保存 `.before-rungic-suggestions-widget` 备份，避开已有图标/组件格位，满页时新增页，使用未占用 applet ID。迁移标记保证用户删除后不自动重加。独立测试覆盖显式空收藏、已有图标和占用区域、ID 冲突与删除后的幂等性。尚无 Folio containment 的全新账户不会被此命令预造布局，可以通过原生组件选择器添加，或下次会话启动时完成迁移；本轮不是清数据首启验收。
+
+窗口唤起复用 [KWaylandExtras 的 activation token](https://api.kde.org/kwaylandextras.html)：桌面点击获取 token，单实例 Agent 转交 token 与事项 ID，由主窗口激活并选择详情。系统通知通过 `ActivationToken` 与 `ActionInvoked` 配对，通知关闭时清理缓存。没有通过全局降低焦点保护来修复跳转。
+
+`0.403` 首轮真实卡片点击与标题数量入口通过，但原生 Folio 会抢走组件内部的上滑并打开抽屉。另用隔离账本追加明确标注的界面验收卡片，让列表真实溢出，复现同一问题；不能用两张刚好适配视口的卡片判断滚动成功。固定源码显示 `SwipeArea` 尊重子项 `keepMouseGrab/keepTouchGrab`，因此 `0.404` 使用 Qt [MouseArea.preventStealing](https://doc.qt.io/qt-6/qml-qtquick-mousearea.html) 管理视口内的点按与拖动，继续用标准 [Flickable.flick/cancelFlick](https://doc.qt.io/qt-6/qml-qtquick-flickable.html) 实现惯性与边界。普通子 ListView 会被父 SwipeArea 抢走；无需再次修改整个 Folio。刷新时保存滚动位置，拖动/惯性期间延后替换模型。
+
+### 最终实机结果：20260930.7
+
+最终 USB G100 组合为 `rungic-suggestions 0.404`、`rungic-voice-agent 0.399`、`rungic-design 0.393`、`plasma-mobile 6.6.5-0ubuntu0.1+rungic8`。`20260930.6` 首轮原生组件部署和 `.7` 手势修正部署均为 8 项 smoke 首遍通过、无 flaky；camera 明确跳过。release mismatch 为空，`dpkg --audit` 无输出；既有 313 个翻译文件 drift 未扩展为“完整性全部通过”。之前保留的 rootfs 回退快照继续保留。
+
+最终点按通过 Android 实际输入注入而非直接调用业务 D-Bus 验证：
+
+- 两张真实历史崩溃卡分别打开其详情；第一张展开已有调查长结果并定位开头，第二张展开未调查事项。第二次唤起核对同一 Agent PID，后台窗口能恢复到前台。
+- 标题文字与右侧数量按钮均打开建议列表。组件整卡范围可点，有按压反馈。
+- 组件视口内滑动不打开抽屉；隔离账本增加 12 张显式标注“界面验收卡片”的数据，共 14 项，实际滑动后后续卡片进入视口。壁纸区上滑仍打开原应用抽屉，搜索并启动计算器成功。临时账本、环境覆盖均已移除，最终读取真实账本无验收卡片。
+- 计算器在前台时到时通知真实出现；点通知主体激活 Agent 的对应事项详情，保留“已到你约定的处理时间”。预约没有开始调查或修复。
+- 组件内长按出现原生调整边框、尺寸把手和 Options 入口，没有误打开 Agent；点壁纸退出编辑后恢复正常桌面。本轮核验了编辑入口，未声称穷尽所有尺寸组合与多页布局手势。
+- 最终 SSH socket 为 enabled/active；Luna 用户服务 override 仍在，未切回其他模型。新增测试不涉及摄像头。
+
+离线 ARM64 真实服务/QML 的 40 卡、状态持久化和任务交接集成通过，组件预览检查有界高度、长列表到达末尾及无 QML warning；C++ 模型及迁移共 10 个测试方法（含初始化/清理共 12 项）通过。真实模型验证仍以先前 Luna 调查为准，未把替身或界面验收数据当真实诊断。
+
+验收工具自身的两个前提也已修正：临时账本 `items` 是对象，不能按数组追加，现明确检查 12 项测试记录确实加载后再滑动；计算器冷启动不能固定等 1 秒便断言失败，现场窗口稍后已正常出现，改为等待活动窗口。卡片/抽屉检查已通过后只续跑未完成的通知检查，不把这两处工具前提错误记作产品通过或产品故障。
+
+证据位于 `.work/experiments/proactive/`：`widget-gesture-build.log`、`widget-gesture-integration.log`、`widget-gesture-deploy.log`、`widget-scroll-fixed.log`、`widget-device-final.log`、`widget-notification-final.log`、`widget-edit-final.log`；截图 `widget-final-home.png`、`widget-first-detail.png`、`widget-second-detail.png`、`widget-scroll-after.png`、`widget-drawer.png`、`widget-notification.png`、`widget-notification-detail.png`、`widget-native-edit.png`。`widget-device-final.log` 的末尾是计算器冷启动等待不足，最终通知通过证据在续跑日志，不能只读前一个日志作结论。
