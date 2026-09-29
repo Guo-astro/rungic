@@ -201,10 +201,10 @@ Linux桌面进程使用 `linux` / UID1000，APK是Android分配的普通应用UI
 | `watch` | `topics`：network / telephony / bluetooth / capture / clipboard 的数组；`epoch`、`seen`：上次返回的值；`timeout`：毫秒，最长60000 | 等到某个主题的版本号变化（由Android回调递增，`HostEvents`）、epoch 不同（APK重启过），或超时后返回 `{epoch,versions,changed}`；在独立线程上等待。容器侧用共享模块 `rungic_host_watch`：收到变化再取完整状态，取代定时轮询（49篇） |
 | `settings` | `target`：`network` / `bluetooth` / `display` / `sound` / `datetime` / `location` | 打开对应Android设置Activity或系统面板 |
 | `vibrate` | 无 | Android一次35ms震动；当前仅为测试入口，不是feedbackd后端 |
-| `clipboard-get` | 无 | `available`和`text`；null表示空；无焦点/非文本/敏感标记/超长时不可用 |
-| `clipboard-set` | `text`：字符串或null | 设置纯文本，null清空；相同正文不重复设置 |
+| `clipboard-get` | 无 | 转发独立宿主后端；`available`和`text`，null表示空；锁定/其他 Android 用户/非文本/敏感标记/超长时不可用，无窗口焦点要求 |
+| `clipboard-set` | `text`：字符串或null | 转发宿主后端；设置纯文本，null清空；相同正文不重复设置；锁定/其他 Android 用户时拒绝 |
 
-`status`、`brightness-get`可在没有窗口焦点时查询；其他控制操作要求 `Activity.hasWindowFocus()`。剪贴板读取另有前台与敏感标记检查。这个前台条件是窗口焦点，不是“Linux容器是否仍在运行”。
+`status`、`brightness-get`可在没有窗口焦点时查询。剪贴板在 APK 2.14 后转发独立后台服务，不经过 UI 线程或 `Activity.hasWindowFocus()`；其他涉及界面的控制操作仍按各自焦点条件处理。敏感、锁定和 Android 用户隔离由独立剪贴板后端检查。
 
 服务端检查peer UID为0或1000，socket权限0666依赖其私有父目录和受控挂载限制可达性；设置3秒socket读取超时和3秒UI线程任务等待，请求上限524288字节。客户端各有更小上限：设备页响应64KiB，亮度后端4KiB/2秒，剪贴板响应512KiB、文本UTF-8输入262144字节。Java侧文本长度上限65536按UTF-16单元计，Python侧另按字符串长度限制；不是任意长度内容转发。
 
@@ -529,3 +529,5 @@ Agent可直接调用的设备诊断、崩溃现场、统一追踪（perfetto + K
 2026-09-28 收尾补测：容器快捷开关已更新至 rungic-cast 0.331。直接关闭系统 WFD 后 watcher 恢复 UI 包/释放租约通过，但随后的两次重连超时，目标接收端最终报告 unavailable；此异常恢复边界尚未解决，详见 86 篇，不能将前三轮正常重连推广到此场景。锁屏测试由用户手动解锁，自动恢复未验收。
 
 2026-09-29 历史层补齐：Android ClipboardManager ↔ PlatformBridge ↔ rungic-clipboard/wl-clipboard ↔ KWin 标准剪贴板 → Klipper 历史。Mobile taskpanel 与桌面 clipboard 托盘通过 KlipperInterface 持有同一 plasmashell 进程内单例；桥保持只同步当前文本、不过滤规则外扩、不单独存历史的职责。G100 rungic6 已部署，首装/多输出、焦点及手机弹窗的验收边界见 [剪贴板历史记录](clipboard-history.md)。
+
+2026-09-29 后台剪贴板：`ClipboardDaemon`（APK 内代码，由 `plasma/android-clipboard` 经 Magisk 以 Shell UID 2000 启动）持有 Android framework ClipboardManager 与变化监听；生命周期由 Android 宿主 `rungic-plasma start/stop` 管理，独立于 Activity。Linux `rungic-clipboard` 直连抽象 Unix socket `com.rungic.clipboard.v1`，使用 `clipboard-get` / `clipboard-set` / `watch`，后者返回 epoch 与 versions.clipboard。服务只接受 UID 0、1000 和当前 Rungic APK UID；客户端核验服务 UID 2000。当前 LXC 共享 Android 网络命名空间，未使用网络端口。`platform.sock` 的旧剪贴板操作继续转发，旧 HostEvents 的单/多主题 watch 由独立后端事件驱动。历史仍只在 Klipper，桥不存正文日志/历史。来源、升级配套与边界见 [后台剪贴板](clipboard-background.md)。

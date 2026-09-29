@@ -92,3 +92,7 @@ G100 / portov / ADB 5038 / ZY32M9MRVP，APK 仍是 2.8/56。Mac mini 沿现有�
 2. APK 2.8 的助理屏全屏模式中 `clipboard-get` 返回 available=false，因为当前桥要求 Activity 窗口焦点；其间选中的 Linux 条目不能据此承诺同步到 Android，退出全屏后也不能假设未同步选择优先于 Android 当前值。本轮没有修改 APK 的焦点策略。普通 Rungic 前台双向同步与此分别验收。
 3. G100 无已部署的 root WFD helper，本次托盘测试是虚拟外屏桌面，未连接物理电视；没有给 X70 或 G100 S 部署。
 4. 上游默认保留 20 项并持久化，本次尊重默认/用户配置；不是 Android 输入法旧历史的导入，也不新增后台读取 Android 的权限。
+
+## 后续：窗口焦点限制已重构（2026-09-29）
+
+上述 APK 2.8 的失焦限制由 APK 2.14 / 独立宿主剪贴板后端替代。独立 Android 前台应用、自己的全屏窗口、进程恢复已有 G100 实测；详见 [clipboard-background.md](clipboard-background.md)。手机专用历史弹窗入口与物理电视验收仍不包含在本次修复中。
