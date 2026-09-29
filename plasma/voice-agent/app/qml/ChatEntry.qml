@@ -32,6 +32,8 @@ Item {
     required property real connectedAt
     required property bool privateVoiceInstructions
     required property bool independentMonitor
+    // The turn in words (task_state, docs/89): JSON of plan, current step, recent, files.
+    required property string task
     property real column: 350
     property bool callMonitor: false
     property bool callCanMonitor: true
@@ -234,16 +236,72 @@ Item {
             readonly property int seconds: Math.max(0, Math.round((running ? now : entry.finished) - entry.started))
             Timer { interval: 1000; repeat: true; running: turn.running; onTriggered: turn.now = Date.now() / 1000 }
             spacing: 8
+            // The task card (docs/89): the plan and what is happening now, from the service's
+            // task state; a turn without one (older history) shows the spoken progress instead.
+            readonly property var card: entry.task ? JSON.parse(entry.task) : null
+            readonly property var current: card && card.current ? card.current : null
+            property real cardAt: Date.now() / 1000       // when `current` came, to count on from it
+            onCurrentChanged: cardAt = Date.now() / 1000
             ShineText {
                 Layout.fillWidth: true
                 visible: turn.running
-                text: "正在处理 · " + turn.seconds + " 秒" + (entry.text ? " · " + entry.summary(entry.text).split("\n")[0] : "")
+                text: "正在处理 · " + turn.seconds + " 秒"
+                      + (!turn.card && entry.text ? " · " + entry.summary(entry.text).split("\n")[0] : "")
             }
             MetaButton {
                 visible: !turn.running
                 text: (entry.status === "stopped" ? "已停止 · " : "已处理 ") + entry.steps.count + " 步 · 用时 " + turn.seconds + " 秒"
                 expanded: entry.expanded
                 onClicked: entry.model.setProperty(entry.index, "expanded", !entry.expanded)
+            }
+            // The plan: while it runs, and when the finished turn is opened.
+            Repeater {
+                model: turn.card && (turn.running || entry.expanded) ? turn.card.plan : []
+                PlanStep {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    text: modelData.step
+                    status: modelData.status
+                }
+            }
+            ActivityCard {
+                Layout.fillWidth: true
+                visible: turn.running && turn.card !== null
+                kind: turn.current ? turn.current.kind : ""
+                text: turn.current ? turn.current.text : ""
+                detail: turn.current ? turn.current.detail || "" : ""
+                progress: turn.current && turn.current.progress !== null && turn.current.progress !== undefined ? turn.current.progress : -1
+                seconds: turn.current ? turn.current.seconds + Math.max(0, Math.round(turn.now - turn.cardAt)) : 0
+            }
+            // A live picture of the work (a render's passes, docs/90) while it runs; the finished
+            // picture comes with the answer.
+            LivePicture {
+                readonly property var preview: turn.card ? turn.card.preview : null
+                visible: turn.running && preview !== null && preview !== undefined
+                source: visible ? "file://" + preview.image.split("/").map(encodeURIComponent).join("/") : ""
+                text: visible ? preview.text : ""
+                progress: visible && preview.progress !== null && preview.progress !== undefined ? preview.progress : -1
+                finished: visible && preview.done === true
+                maxWidth: Math.min(entry.column, 360)
+                maxHeight: 360
+                onClicked: entry.openImage(source, "渲染预览")
+            }
+            // The files the turn changed, when opened: a tap opens one.
+            Flow {
+                Layout.fillWidth: true
+                visible: entry.expanded && turn.card !== null && turn.card.files.length > 0
+                spacing: 8
+                Repeater {
+                    model: entry.expanded && turn.card ? turn.card.files : []
+                    FileChip {
+                        required property var modelData
+                        name: modelData.path.split("/").pop() + (modelData.kind === "delete" ? " · 已删除"
+                              : " · +" + modelData.added + " −" + modelData.removed)
+                        maxWidth: entry.column
+                        enabled: modelData.kind !== "delete"
+                        onClicked: Qt.openUrlExternally("file://" + modelData.path)
+                    }
+                }
             }
             // The steps, when opened: what was said, notes, commands with their output.
             Repeater {

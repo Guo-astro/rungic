@@ -8,7 +8,9 @@ One TurnState per Codex turn, fed from the app-server's notifications:
                                        changes, tool calls, web searches (reasoning is not a step)
   item/commandExecution/outputDelta    a running command's output: its last line and progress
   item/fileChange/patchUpdated         files being written, with lines added and removed
-  the assistant's screen's caption     rungic_cua.activity (docs/88), for desktop work
+  the assistant's screen's caption     rungic_cua.activity (docs/88), for desktop work; with a live
+                                       picture (a Blender render's latest pass, docs/90) the card
+                                       shows it and refreshes it as passes come
   agentMessage (commentary)            Codex's own words about what it is about to do
 
 snapshot() is what the chat shows (the task card); facts() is what the voice may say, in tenses
@@ -173,6 +175,7 @@ class TurnState:
         self.intent = ''                     # Codex's latest commentary: an intention, not a result
         self.intent_at = 0.0
         self.output: dict[str, str] = {}     # item id -> recent output text (tail)
+        self.preview: dict | None = None     # {'image', 'text', 'progress', 'done'}: a live picture
 
     # ---- inputs --------------------------------------------------------------------------
     def on_plan(self, plan: list, explanation: str | None = None) -> bool:
@@ -260,6 +263,18 @@ class TurnState:
         self.current['detail'] = caption
         return True
 
+    def on_live(self, report: dict) -> bool:
+        """A report with a picture on the activity channel (rungic_cua.activity), written during
+        this turn: the card shows the latest one."""
+        if not report.get('image') or float(report.get('time') or 0) < self.started:
+            return False
+        preview = {'image': report['image'], 'text': report.get('text', ''), 'progress': report.get('progress'),
+                   'done': report.get('state') == 'done'}
+        if preview == self.preview:
+            return False
+        self.preview = preview
+        return True
+
     def on_commentary(self, text: str, now: float | None = None) -> None:
         self.intent = ' '.join(text.split())[:200]
         self.intent_at = now if now is not None else time.time()
@@ -276,7 +291,7 @@ class TurnState:
             current['seconds'] = round(now - current.pop('since'))
             current.pop('id', None)
         return {'plan': self.plan, 'explanation': self.explanation, 'current': current,
-                'recent': self.recent[-6:], 'intent': self.intent,
+                'recent': self.recent[-6:], 'intent': self.intent, 'preview': self.preview,
                 'files': [{'path': p, **f} for p, f in self.files.items()]}
 
     def facts(self, now: float | None = None) -> str:
@@ -305,6 +320,8 @@ class TurnState:
             lines.append(f"此刻正在：{self.current['text']}（{'，'.join(extra)}）")
         elif self.recent:
             lines.append(f"刚做完：{self.recent[-1]['text']}")
+        if self.preview and not self.preview['done'] and self.preview.get('progress') is not None:
+            lines.append(f"渲染进度：{self.preview['text']}（约 {round(self.preview['progress'] * 100)}%，画面正在逐步变清晰）")
         if self.intent and now - self.intent_at < 60:
             lines.append(f'接下来打算：{self.intent}（这是打算，还没做完）')
         return '\n'.join(lines)

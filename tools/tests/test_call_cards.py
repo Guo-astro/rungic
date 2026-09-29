@@ -155,7 +155,7 @@ class CallCardsTest(unittest.TestCase):
             errors = []
             self.engine.warnings.connect(lambda warnings: errors.extend(e.toString() for e in warnings))
             fields = dict(index=0, kind='call', role='客服', text='查询', itemId='one', command='connected',
-                          output='', status='running', exitCode='', started=100, finished=0, expanded=True,
+                          output='', status='running', exitCode='', started=100, finished=0, expanded=True, task='',
                           callBackend='cellular', callNumber='10000', connectedAt=125,
                           privateVoiceInstructions=False, independentMonitor=False)
             card = component.createWithInitialProperties(fields)

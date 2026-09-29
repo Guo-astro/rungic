@@ -61,7 +61,6 @@ Item {
     // What each state shows (the defaults are the idle voice bar's).
     property string barMode: "idle"
     property string label: inCall ? "按住回答助理" : "按住说话"
-    property string foot: inCall ? "对方听不到你对助理说的话" : "按住说话 · 轻点免提"
     property bool showVoice: true
     property bool showText: false
     property bool showPanel: false
@@ -77,15 +76,15 @@ Item {
         State { name: "voice" },
         State {
             name: "busy"
-            PropertyChanges { composer.label: "按住补充说明"; composer.foot: "轻点右边停止"; composer.showKeyboardButton: false; composer.showStop: true }
+            PropertyChanges { composer.label: "按住补充说明"; composer.showKeyboardButton: false; composer.showStop: true }
         },
         State {
             name: "unavailable"
-            PropertyChanges { composer.barMode: "disabled"; composer.label: "你正在通话中"; composer.foot: ""; composer.canHold: false; composer.showKeyboardButton: false; composer.showPlus: false }
+            PropertyChanges { composer.barMode: "disabled"; composer.label: "你正在通话中"; composer.canHold: false; composer.showKeyboardButton: false; composer.showPlus: false }
         },
         State {
             name: "hold"
-            PropertyChanges { composer.barMode: "hot"; composer.foot: "上滑到 × 取消 · 上滑到“文”改成文字"; composer.showTargets: true; composer.showWave: true; composer.showTimer: true; composer.showKeyboardButton: false; composer.showPlus: false }
+            PropertyChanges { composer.barMode: "hot"; composer.showTargets: true; composer.showWave: true; composer.showTimer: true; composer.showKeyboardButton: false; composer.showPlus: false }
         },
         State {
             name: "cancel"; extend: "hold"
@@ -96,18 +95,16 @@ Item {
         },
         State {
             name: "transcribing"
-            PropertyChanges { composer.barMode: "disabled"; composer.label: "正在转成文字…"; composer.foot: ""; composer.canHold: false; composer.showKeyboardButton: false; composer.showPlus: false }
+            PropertyChanges { composer.barMode: "disabled"; composer.label: "正在转成文字…"; composer.canHold: false; composer.showKeyboardButton: false; composer.showPlus: false }
         },
         State {
             name: "handsFree"
-            PropertyChanges { composer.barMode: "handsFree"; composer.foot: "免提中 · 停顿约 1 秒后自动发送"; composer.canHold: false; composer.showWave: true; composer.showHandsFree: true; composer.showKeyboardButton: false; composer.showPlus: false }
+            PropertyChanges { composer.barMode: "handsFree"; composer.canHold: false; composer.showWave: true; composer.showHandsFree: true; composer.showKeyboardButton: false; composer.showPlus: false }
         },
         State {
             name: "keyboard"
             PropertyChanges {
                 composer.showVoice: false; composer.showText: true; composer.canHold: false
-                composer.foot: composer.dictation ? "刚才说的话已转成文字，改好再发"
-                             : composer.attachments.length > 0 ? "可以再加一句说明，或直接发送" : ""
             }
             StateChangeScript { script: field.forceActiveFocus() }
         },
@@ -115,7 +112,7 @@ Item {
             name: "attach"
             PropertyChanges {
                 composer.showVoice: !composer.keyboard; composer.showText: composer.keyboard; composer.showPanel: true
-                composer.foot: ""; composer.canHold: false; composer.showKeyboardButton: !composer.keyboard
+                composer.canHold: false; composer.showKeyboardButton: !composer.keyboard
             }
             // The panel takes the keyboard's place: the keyboard goes down first.
             StateChangeScript { script: { field.focus = false; Qt.inputMethod.hide() } }
@@ -446,17 +443,6 @@ Item {
                     }
                 }
 
-                Text {
-                    Layout.fillWidth: true
-                    visible: text.length > 0
-                    horizontalAlignment: Text.AlignHCenter
-                    text: composer.foot
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.footSize
-                    lineHeight: 16
-                    lineHeightMode: Text.FixedHeight
-                    color: Theme.dim
-                }
             }
         }
 

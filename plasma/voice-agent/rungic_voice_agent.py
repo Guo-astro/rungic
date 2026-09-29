@@ -997,11 +997,14 @@ class VoiceAgent:
         if not self.agent_busy:
             return False
         # What it is doing on the assistant's screen (docs/88) joins the turn's current step.
+        # A live picture with it (a Blender render's passes, docs/90) goes on the task card.
         screen = screen_activity()
-        if screen.get('state') == 'working' and screen.get('text') and screen.get('time', 0) > self.screen_seen:
+        if screen.get('time', 0) > self.screen_seen:
             self.screen_seen = screen['time']
             with self.turn_lock:
-                changed = self.turn is not None and self.turn.on_screen(screen['text'])
+                changed = self.turn is not None and (
+                    (screen.get('state') == 'working' and bool(screen.get('text')) and self.turn.on_screen(screen['text']))
+                    | self.turn.on_live(screen))
             if changed:
                 self.task_changed()
         if not self.realtime:
