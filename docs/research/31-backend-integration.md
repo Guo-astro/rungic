@@ -560,3 +560,7 @@ Agent可直接调用的设备诊断、崩溃现场、统一追踪（perfetto + K
 新增 C++ `rungic-suggestions`，通过会话 D-Bus `com.rungic.Suggestions` 共享账本，Agent 建议页与 Folio 主屏使用同一个 QML 模块。主屏纵向滚动，底部手柄打开原应用抽屉；应用抽屉及搜索模型保留。采集链：dpkg/存储/systemd/既有 coredump 摘要 → root 定时采集 JSON → 用户服务去重/调度/持久化 → QML 卡片 → 用户委托 VoiceAgent 原对话。原硬件后端不变。
 
 根采集输出 `/var/lib/rungic-suggestions/observations.json`，用户记录 `~/.local/share/rungic-suggestions/state.json`；60 秒更新，过期系统数据不触发预约提醒。知识库 `/usr/share/rungic/compatibility/` 随包安装，版本严格匹配。D-Bus `List/Get/Act/Update/Feedback/Knowledge/SetVisible/Refresh` 与 `Changed`；VoiceAgent 的 `InvestigateSuggestion/ApplySuggestion/StopSuggestion` 用稳定事项 ID 关联 conversation。调查、确认应用、提醒三种语义分开。上游反馈先生成本地材料并记录真实链接，合入不等于本机解决。实现、来源、离线与 G100 实机验收边界见 [主动建议记录](proactive-system-care.md)，不得将测试替身结果作为实际模型或 GPU 优化成功。
+
+USB G100 已部署 `20260930.4`：suggestions `0.398`、voice-agent `0.396`、design `0.393`、Plasma Mobile `6.6.5+rungic7`。真实卡片滑动、原抽屉、预约通知、状态跨重启和 Luna 调查回写通过；最后部署的输入检查首遍未聚焦、重试通过，保留 flaky 记录。开发验收按用户授权保持 GPT-6 Luna + API Key，本机用户服务配置持久化；device-code 入口仍保留。调查结论仍为根因未知，未应用系统修复或对外提交。完整范围、初次 UI/鉴权失败及其修正、回退快照和证据路径见上述记录。
+
+同日用户否定上述全屏卡片主屏，要求先查看原桌面，再将建议作为上方原生 widget，保留底部固定图标及壁纸留白，不强制半透明。正在恢复原 Folio 并调整展示；上述全屏设计不是最终交付形态。用户也确认曾与验收并行操作手机，焦点/最小化现象须无干扰复验，不能直接归因为程序故障。
