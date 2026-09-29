@@ -113,3 +113,5 @@ helper 增加 capabilities/settings、明确错误码、按主动 scan/connect �
 20:58 补测直接关闭 Android 无线显示开关，绕过 helper 的正常 disconnect：resident watcher 恢复两个 Moto UI 包并删除租约，证明这条异常退出清理路径生效。但紧接着两次 connect 均超时，不能把它计入前三次成功回归。日志在关闭时出现 framework `Failed to disconnect ... reason=2`，随后建立连接请求而未完成 P2P/RTSP；最后状态为目标 TCL `available=false`。这不足以判断是接收端退出等待页还是框架清理时序问题，已请求用户核对电视画面；没有据此添加固定延时、重置整机 Wi-Fi 或改写编码参数。失败后的租约/包状态恢复与 Plasma 主屏正常已核验。该异常重连场景尚未解决，不应宣称所有失败恢复已通过。
 
 21:01 重新扫描后目标再次 available，第三次尝试完成 P2P group formation 与 DHCP（手机为 client），但仍未进入 WFD display connected，30 秒到期后取消。这进一步缩小该次失败到 P2P/IP 建立之后、外屏创建之前；不能再概括为电视不可发现，RTSP/接收端状态仍需核验。当前电视投屏已断开，等待用户反馈接收端画面；未自动重启电视或重置网络。
+
+21:05 用户要求再次投屏：通过容器平台桥显式连接同一 TCL 地址，约 31 秒后仍返回 timeout。过程中手机 Awake、P2P CONNECTED，`mRemoteDisplayInterface=192.168.40.83:7236`，但 `mRemoteDisplayConnected=false`；最终无外屏。证据 `.work/experiments/x70-cast-retry-20260928-210549/`。失败仍在无线网络建立后、WFD 会话完成前，不能归因于锁屏或断言电视端故障；下一步需要核对接收端页面与 RTSP 交互。
