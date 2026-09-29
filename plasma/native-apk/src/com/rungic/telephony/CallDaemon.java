@@ -33,6 +33,17 @@ public final class CallDaemon {
     private boolean supported() throws Exception {
         return (Boolean)AudioManager.class.getMethod("isPstnCallAudioInterceptable").invoke(audio);
     }
+    private AudioDeviceInfo uplinkDevice() throws IOException {
+        AudioDeviceInfo found=null;
+        for(AudioDeviceInfo device:audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS)){
+            if(device.isSink() && device.getType()==AudioDeviceInfo.TYPE_TELEPHONY){
+                if(found!=null)throw new IOException("ambiguous-telephony-output");
+                found=device;
+            }
+        }
+        if(found==null)throw new IOException("telephony-output-unavailable");
+        return found;
+    }
     private int phoneState() throws Exception {return (Integer)TelecomManager.class.getMethod("getCallState").invoke(telecom);}
     private JSONObject incall() throws Exception {
         try{return CallProtocol.request(new JSONObject().put("op","status"));}
@@ -52,6 +63,7 @@ public final class CallDaemon {
         }
         return s.put("protocol",1).put("epoch",epoch).put("phoneState",phoneState()).put("audioMode",audio.getMode())
             .put("audioCapable",supported()).put("accounts",accounts).put("audioActive",session!=null)
+            .put("uplinkMode","explicit-telephony")
             .put("audioDiagnostics",audioDiagnostics())
             .put("privateVoiceInstructions",false).put("independentMonitor",false);
     }
@@ -133,17 +145,47 @@ public final class CallDaemon {
     }
     private final class AudioSession {
         final String id;final String lease=UUID.randomUUID().toString();final LocalSocket socket;
-        volatile boolean closed;AudioRecord record;AudioTrack track;volatile long received,sent;volatile int peak;
+        volatile boolean closed;AudioRecord record;AudioTrack track;AudioDeviceInfo target;
+        volatile long received,sent;volatile int peak;
         AudioSession(String id,LocalSocket s){this.id=id;socket=s;}
         void open() throws Exception {
             AudioFormat rx=new AudioFormat.Builder().setSampleRate(24000).setEncoding(AudioFormat.ENCODING_PCM_16BIT).setChannelMask(AudioFormat.CHANNEL_IN_MONO).build();
             AudioFormat tx=new AudioFormat.Builder().setSampleRate(24000).setEncoding(AudioFormat.ENCODING_PCM_16BIT).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build();
             record=(AudioRecord)AudioManager.class.getMethod("getCallDownlinkExtractionAudioRecord",AudioFormat.class).invoke(audio,rx);
-            track=(AudioTrack)AudioManager.class.getMethod("getCallUplinkInjectionAudioTrack",AudioFormat.class).invoke(audio,tx);
+            // Explicit telephony routing lets AudioPolicy select INCALL_MUSIC for
+            // voice communication. CALL_ASSISTANT redirection can instead pick a
+            // voice_tx mix that consumes PCM without sending it to the modem.
+            // Discover the port on this device; never reuse a model/slot/port ID.
+            target=uplinkDevice();
+            track=new AudioTrack.Builder().setAudioAttributes(new AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build()).setAudioFormat(tx).build();
+            if(!track.setPreferredDevice(target))throw new IOException("telephony-route-rejected");
             // Telecom owns microphone mute across route changes. Restored when the lease ends.
             JSONObject muted=CallProtocol.request(new JSONObject().put("op","lease-acquire").put("id",id).put("lease",lease));
             if(muted.has("error"))throw new IOException("microphone-isolation-unavailable");
-            record.startRecording();track.play();
+            long deadline=SystemClock.elapsedRealtime()+1500;
+            while(!audio.isMicrophoneMute() || !incall().optBoolean("muted")){
+                if(SystemClock.elapsedRealtime()>=deadline)throw new IOException("microphone-mute-not-confirmed");
+                Thread.sleep(20);
+            }
+            track.play();
+            // Negotiate with silence before acknowledging the PCM connection. If
+            // Android rejects/falls back from this route, no agent speech is sent.
+            if(track.write(new byte[960],0,960)<=0)throw new IOException("telephony-prime-failed");
+            deadline=SystemClock.elapsedRealtime()+1000;
+            while(track.getRoutedDevice()==null && SystemClock.elapsedRealtime()<deadline)Thread.sleep(20);
+            checkUplink();
+            track.addOnRoutingChangedListener((AudioRouting.OnRoutingChangedListener)routing->{
+                if(closed)return;
+                try{checkUplink();}catch(IOException e){close();}
+            },new Handler(Looper.getMainLooper()));
+            record.startRecording();
+        }
+        void checkUplink() throws IOException {
+            AudioDeviceInfo routed=track.getRoutedDevice();
+            if(routed==null || routed.getType()!=AudioDeviceInfo.TYPE_TELEPHONY || routed.getId()!=target.getId())
+                throw new IOException("telephony-route-lost");
         }
         void stream() throws Exception {
             socket.setSoTimeout(5000);
@@ -168,6 +210,7 @@ public final class CallDaemon {
             try{
                 while(!closed){
                     int count=0;while(count<buffer.length){int n=in.read(buffer,count,buffer.length-count);if(n<0)throw new EOFException();count+=n;}
+                    checkUplink();
                     for(int i=0;i+1<count;i+=2){
                         int sample=(short)((buffer[i]&255)|(buffer[i+1]<<8));peak=Math.max(peak,Math.abs(sample));
                     }
@@ -178,8 +221,14 @@ public final class CallDaemon {
         synchronized void close(){
             if(closed)return;closed=true;
             try{socket.close();}catch(Exception ignored){}
-            try{if(record!=null){record.stop();record.release();}}catch(Exception ignored){}
-            try{if(track!=null){track.pause();track.flush();track.release();}}catch(Exception ignored){}
+            if(record!=null){
+                try{record.stop();}catch(Exception ignored){}
+                try{record.release();}catch(Exception ignored){}
+            }
+            if(track!=null){
+                try{track.pause();track.flush();}catch(Exception ignored){}
+                try{track.release();}catch(Exception ignored){}
+            }
             try{CallProtocol.request(new JSONObject().put("op","lease-release").put("id",id).put("lease",lease));}catch(Exception ignored){}
             synchronized(CallDaemon.this){if(session==this)session=null;}
         }

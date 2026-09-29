@@ -2,7 +2,13 @@
 
 2026-09-29。下文初步研究基于只读检查；后续获用户授权测试 10000，开发与实验进展另记于文末。
 
-## 结论与现有实现
+## 当前部署结论（2026-09-29，第四次实验后）
+
+G100 / `portov_cn` / `W1VT36H.1-51-8` 已增量安装 **APK 2.20（68）与 Agent 0.367**，底座仍为 20260929.2。获授权的 10000 实测中，Realtime 说出“湖南电信”后，远端进入业务菜单，证明本机双向语音链路已工作；随后接管保持原电话、释放 Agent 音频并恢复静音状态，挂断确认回到空闲。通用通道选择、原对话卡片与转写也已部署。具体证据见文末；以下早期“未部署/上行未通过”均是对应阶段的历史状态。
+
+这不是完整自主代办验收：开场时机、指令措辞、自动决策、真人通话、故障恢复与其他机型仍有缺口。私下语音指令和独立旁听保持关闭。能力接口的 `endToEndVerified` 暂未接入按设备持久化的验收记录，仍为 false，不能因本次实验把通用默认值改成 true。
+
+## 初步结论与当时实现
 
 有明确路径：Android Telecom 控制电话，Android 系统通话音频接口传输双向 PCM，再复用 Linux 通话 Agent。G100 已暴露相关音频端口；这支持进入音频实验，不能记为真实电话代谈已可用，也不能推广为 X70 / G100 S 已通过。
 
@@ -153,3 +159,49 @@
 离线验证：`test_call_backends.py` 5 项、`test_call_conversations.py` 5 项、`test_call_cards.py` 7 项、`test_cellular_state.py` 8 项，共 **25 项通过**。卡片测试实际执行 Qt/QML 的 ChatModel，并加载真实 ChatEntry 与共享设计控件；仅原生 SystemTheme/AgentClient 适配器使用替身，不代替完整 Plasma 窗口与 D-Bus 验收。技能 quick_validate、Python 语法与 diff 空白检查通过。
 
 本节所有新修改尚未部署、未提交；设备安装版本仍以前一节为准。SIM 上行与完整微信回归等未验收项仍保留，不能用离线卡片测试代替真实双向通话。恢复可访问设备的执行环境后，先核验当前主机/连接/设备/安装版本，再部署并核对原对话卡片、切换会话、微缩条、接管/挂断，以及获授权测试目标的真实远端响应。
+
+## 权限恢复后的部署与第三次 Realtime 实验（2026-09-29）
+
+重新现场核验为 mibook / x86_64，系统代理 none、路由可读；G100 `ZY32M9MRVP` 的 USB 当前在 **5038**，5037 仅列出另一台无线设备。固件仍为 `W1VT36H.1-51-8`。Mac mini 实际为 `chou-Mac-mini.local` / arm64，构建继续按 `scutil --proxy` 使用 6152 系统代理。不能沿用早先的 5037 命令。
+
+- 提交 `207b7ec2` 包含通用入口、技能、卡片、状态修复及 Android 诊断；APK **2.19 / versionCode 67** 保留上一候选的 JNI 库和无 OCR 模式，覆盖安装成功。回退 APK 在 `deployment-3/before.apk`。
+- Agent 先构建/安装 **0.366**；实机发现旧卡片转写 delegate 同时把 `text` 用作模型角色和富文本输出，文字绑定冲突，记录存在但屏幕留空。改为外层持有角色、内层 Text 渲染，加入真实 ListModel 转写的 QML 断言。提交 `a6b7f7b4` 构建/安装 **0.367**。`call-card-fixed.png` 已确认双方转写和结果实际显示。
+- 技能 SKILL.md、calls.md 与 call_backends.py 的设备 SHA-256 均与源码一致。助理与 overlay 服务 active；`ssh.socket` 仍 enabled / active。权限恢复后 5 项 socket 音频测试全部通过，前述 25 项离线测试中的 QML 用例进一步覆盖转写正文与 HTML 转义。
+- `--call-capabilities` 实机返回 cellular reachable/audioInterfaceAvailable=true、1 个中国电信语音账户，keyConfigured=true；endToEndVerified 仍 false，未改变未经验证能力的标注。
+
+第三次 Realtime 10000 实验（`realtime-3.jsonl`）：真实拨号、接通；原助理对话中的卡片显示“手机电话 · 10000”、接通计时与文字指示/接管/挂断。文字指示发给通话 Agent 后产生对应转写；切换到新建测试对话，再回原对话，call ID 和 connectedAt 保持一致，已保存的 9 项事件全部属于原对话。测试通过携带 card callId 的命令挂断，得到 hanging-up → call-ended，最终 phoneState/audioMode=0、audioActive=false、State.callInfo=null。未把控制请求当作挂断确认。微信真人通话本轮未重拨，不增加其端到端验收范围。
+
+上行仍未通过：24 kHz PCM 确有非零样本，写入峰值 15934、播放帧数增长、underruns=0，TX/RX 都是 TYPE_TELEPHONY。远端仍重复“没有听清”。`audio-policy-3.txt` 显示 CALL_ASSISTANT 的轨道进入 `voice_tx`，另有 `in_call_music` 输出（AUDIO_OUTPUT_FLAG_INCALL_MUSIC）却未活动。此为后续路由实验线索，不能把已消费 PCM 等同于基带已发送。原厂 HAL、SELinux、mixer 均未修改。
+
+
+## 显式通话上行路由与第四次 Realtime 实验（2026-09-29）
+
+### 源码核验与选型
+
+对照 [LineageOS Android 16 / lineage-23.0 的 AudioPolicyManager.cpp](https://raw.githubusercontent.com/LineageOS/android_frameworks_av/lineage-23.0/services/audiopolicy/managerdefault/AudioPolicyManager.cpp)（Apache-2.0，读取版本 SHA-256 `1f07dc56cc013c68ceea3fcc6fddc72d6159759a1dcb68836e51bdaf7c9fcb99`）：显式请求 TELEPHONY_TX、VOICE_COMMUNICATION 用途、线性 PCM 且通话音频允许访问时，策略选择 INCALL_MUSIC。该源码是可复用机制的核验，**不是已安装 Motorola 固件源码的证明**；AOSP frameworks/av 对应分支本轮抓取失败。源文件及来源清单保存在 `.work/research/cellular-call-20260929/`。
+
+选择复用 AudioTrack / AudioPolicy 的显式设备路由，不修改厂商 HAL、mixer 或 SELinux。直接使用 CALL_ASSISTANT 重定向接口虽接收 PCM，却在本机选到未产生远端响应的 voice_tx；自行操作 PAL/AGM 的厂商维护成本更高，本次标准路由实测成功后无需引入。
+
+### 隔离实验
+
+所有拨号仅为用户授权的 10000，清理绑定每次真实 Telecom call ID，无全局挂断。固定语句为“湖南电信”，24 kHz / PCM16 / mono，探针与原始媒体只放 `.work/experiments/g100-cellular-20260929/`。
+
+- `mute-probe-1/` 的两次发送与客服提示重叠，不能用于判断静音因果。`mute-probe-2/` 调整时机后，旧路由下静音及短暂解除静音均未进入下一菜单；取消静音不是有效产品修复，也不证明所有设备的静音行为。
+- `route-probe/` 改为 VOICE_COMMUNICATION + 运行时发现的唯一 TYPE_TELEPHONY 输出，保持系统静音。实际路由类型为 18；`audio-policy-route-probe.txt` 记录 in_call_music 活跃、AUDIO_OUTPUT_FLAG_INCALL_MUSIC。远端随后询问湖南宽带、手机号码激活或报故障，构成远端识别语句的语义证据。端口编号只留作该次诊断，不进入产品代码。
+
+### 部署实现
+
+APK **2.20 / versionCode 68** 的 `CallDaemon.AudioSession` 枚举本次可用通话输出；无输出或多个输出时明确失败，不猜测机型、卡槽或端口。通过 `setPreferredDevice` 请求该输出，确认 Telecom/AudioManager 静音后以静音 PCM 建立路由，再校验实际设备类型与本次设备 ID，才开放 Agent PCM 连接。监听路由变化，并在每块语音写入前检查；失去目标路由即释放音频。租约继续绑定精确通话，接管/关闭恢复原静音状态。部分初始化失败时也分别尝试停止和释放录音/播放对象，避免 stop 异常跳过 release。
+
+APK SHA-256：`43c8bb6ec64e9417b193166feca06990965e8d36bc76214fa84c26ceb771d8b0`；Agent 0.367 deb SHA-256：`eaac2d285f1f94084483df04af8bd485e556f1662814422822a65b2f66a6623a`。当前 APK、构建日志与覆盖安装记录在 `apk-2.20/`、`build-2.20.log`、`deployment-4/`；前一版 2.19 APK 为 `deployment-4/before.apk`。必要回退须先确认无通话，停止 android-calls watcher，以 Android shell 上下文安装回退 APK，再启动 watcher 并核验状态；回退会恢复旧上行缺陷，不记作可用通话版本。无需刷写或修改底座，SSH 自动开启保持不变。
+
+### 第四次实机验收与边界
+
+证据：`realtime-4.jsonl`、`call-card-4.png`。安装版本 APK 2.20 / Agent 0.367，模型 `gpt-realtime-2.1-mini`，设备上的 key 留在原配置位置，未输出或复制。
+
+1. 使用正式 Agent、共享卡片和新音频后端拨打 10000。Agent 说出“湖南电信”后，远端进入宽带/号码激活/报故障菜单，`remoteMenuAdvanced=true`。发送 PCM 峰值 22555、underruns=0，系统静音保持 true；后两项只是诊断，菜单响应才是远端听到的证据。
+2. 通过携带卡片 ID 的“我来接”命令，原 Telecom call ID 仍为 ACTIVE；Agent 音频已关闭，静音恢复 false，callPhase=user。未做接管后的真人听说验收。
+3. 随后同一卡片挂断，收到 hanging-up → call-ended。最终 `calls=[]`、phoneState/audioMode=0、audioActive=false、State.callInfo=null。未办理业务或转人工。
+4. Android 36 SDK 全量 APK 编译通过；卡片/通道/会话/状态共 25 项测试通过，权限恢复后另有 5 项 socket 音频测试通过。这些离线测试不替代通话验收。
+
+剩余问题：自动开场可能打断 IVR，Agent 对“保持安静”等主人指示可能多说一句确认；共享监督缺少 TypeSafe key 时没有完整自主询问/结束决策替代路径，本次结束由测试命令控制。专门的物理麦克风隔离挑战、租约强杀恢复、蓝牙/耳机、真人通话和其他手机/运营商未验收，私下语音指令及独立旁听仍关闭。微信本轮没有重拨真人联系人，其既有验收范围不扩大。今后继续按实际设备能力探测与远端响应验收，不能把本机成功写成所有 Android 手机支持。

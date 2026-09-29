@@ -539,3 +539,6 @@ Agent可直接调用的设备诊断、崩溃现场、统一追踪（perfetto + K
 后续执行环境限制 ADB 和远程构建，新状态修正、音频诊断与计时排版仅在工作树中，尚未部署。最新实机证据与各阶段边界以链接记录为准；底座仍为 20260929.2。
 
 2026-09-29 后续本地接口（未部署）：`CallCapabilities` / `--call-capabilities` 返回当前前提，明确接口可用不等于端到端通过；`StartCall` 显式接受 `backend=cellular + number` 或 `backend=app + app`，既有显式 app 调用兼容。选择依据用户要求，能力检测不切换通道。共享事件以 `callId` / `conversation` 关联原卡片与存储，`State.callInfo` 提供恢复信息；卡片 `CallCommand` JSON 带 callId，拒绝跨通话误操作。25 项离线回归通过，实际设备契约仍须部署后验收，细节见上述研究文档。
+
+
+2026-09-29 最新增量部署：G100 / W1VT36H.1-51-8 已安装 **APK 2.20 / Agent 0.367**（底座仍为 20260929.2）。通用通道选择、原对话卡片、转写和技能已实机部署；通过共享 CallDaemon 的 VOICE_COMMUNICATION + 运行时显式 TELEPHONY 输出，让 Android AudioPolicy 选择通话上行。10000 第四次 Realtime 实验已获得远端识别“湖南电信”并进入业务菜单的证据；接管释放 Agent 音频、恢复静音且保留原电话，随后挂断回到空闲。前述 2.18 / 0.365 与“未部署”是历史阶段；最新路由研究、版本哈希、日志、回退和边界见[通话实验记录](cellular-call-agent.md)。不写死设备端口、不修改 HAL/SELinux。物理麦克风隔离专项、故障恢复、真人/其他设备和完整自主决策仍未验收；私下语音及独立旁听保持关闭，SSH 自动开启保持不变。
