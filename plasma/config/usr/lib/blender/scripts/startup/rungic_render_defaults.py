@@ -13,8 +13,10 @@ EEVEE took about 0.9 GB more for a small scene, Cycles on the CPU about 0.2 GB (
 - No splash screen (it covered the assistant's work on its screen).
 - The viewport draws with Vulkan on Adreno (freedreno): its OpenGL mixed the objects' positions,
   sizes and colours up in the viewport (Solid and Material Preview), the same GPU with Vulkan
-  (Turnip) drew them right (docs/90). Set once in the user's preferences, from the next start; a
-  choice of OpenGL made afterwards stays.
+  (Turnip) drew them right (docs/90). Blender picks the backend before this module runs, so it is
+  the user's preference, kept at Vulkan at every start: set once only, a Blender still running
+  on OpenGL saved its preferences on quitting and put OpenGL back. "OPENGL" in Blender's
+  config/rungic-gpu-backend keeps OpenGL.
 """
 import os
 from pathlib import Path
@@ -52,21 +54,28 @@ def rendering(scene, *_):
 
 
 def vulkan_viewport():
-    """OpenGL on freedreno draws the viewport wrongly: Vulkan from the next start (docs/90)."""
+    """OpenGL on freedreno draws the viewport wrongly: the preference is Vulkan (docs/90). Kept
+    so in this session too, so that its preferences saved on quitting say Vulkan."""
     if bpy.app.background or getattr(bpy.app, 'factory_startup', False):
         return
     try:
         import gpu
-        vendor, backend = gpu.platform.vendor_get(), gpu.platform.backend_type_get()
+        vendor = gpu.platform.vendor_get()
     except Exception:  # noqa: BLE001  (no GPU context)
         return
     marker = Path(bpy.utils.user_resource('CONFIG')) / 'rungic-gpu-backend'
-    if 'freedreno' not in vendor.lower() or backend != 'OPENGL' or marker.exists():
+    try:
+        chosen = marker.read_text().split(':')[0].strip().upper()
+    except OSError:
+        chosen = ''
+    system = bpy.context.preferences.system
+    if 'freedreno' not in vendor.lower() or chosen == 'OPENGL' or system.gpu_backend == 'VULKAN':
         return
-    bpy.context.preferences.system.gpu_backend = 'VULKAN'
+    system.gpu_backend = 'VULKAN'
     bpy.ops.wm.save_userpref()
-    marker.parent.mkdir(parents=True, exist_ok=True)
-    marker.write_text('VULKAN: set by rungic_render_defaults (docs/90); delete to have it set again\n')
+    if not marker.exists():
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text('VULKAN: kept by rungic_render_defaults (docs/90); write OPENGL here to keep OpenGL\n')
     print('rungic: the viewport draws with Vulkan from the next start (docs/90)')
 
 

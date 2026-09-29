@@ -103,3 +103,8 @@
 - **结论**：freedreno 的 OpenGL 实现在 Blender 按物体取数据的这条路径上出错，同一硬件的 Turnip（Vulkan）正确。用户看到的显示错乱就是这个原因，不是模型本身的问题。
 - **尚未查明**：freedreno 具体哪一处出错（gl_BaseInstance、gl_DrawID 和间接绘制的组合是首要怀疑），上游是否已有修复。
 - 脚本：`.work/logs/gpu-views.py`、`gpu-cubes.py`；对照图在当次会话的 scratchpad 中。
+- **默认改为 Vulkan（用户决定，2026-09-29）**：系统启动模块把用户的 GPU 后端偏好设为 Vulkan。
+  - 第一版只设一次（留标记），随即失效：还在用 OpenGL 的旧 Blender 退出时自动保存偏好（`use_preferences_save`），把 OpenGL 写了回去；助理再次打开时仍是 OpenGL，编辑窗口仍然错乱（用户再次报告）。
+  - 现在每次以图形界面启动时，都把偏好保持为 Vulkan，本次会话内存里的偏好也是 Vulkan，退出时自动保存的也就是 Vulkan。在 Blender 的 `config/rungic-gpu-backend` 里写 `OPENGL`，可以保留 OpenGL。
+  - 实测：关闭旧实例、恢复偏好后重新打开小火箭，进程加载了 `libvulkan_freedreno`，编辑窗口显示正确。
+  - 待查：Turnip 在 KGSL 上显示时会闪屏（56 篇）。这个问题可能也影响 Blender 窗口，尚未逐帧检测。
