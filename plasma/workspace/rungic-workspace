@@ -23,6 +23,12 @@ mkdir -p "$state/config"
 export RUNGIC_USER_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 [ -e "$state/config/kdeglobals" ] || ln -s "$RUNGIC_USER_CONFIG_HOME/kdeglobals" "$state/config/kdeglobals"
 export XDG_CONFIG_HOME="$state/config"
+# And a cache of its own: KDE's application database (ksycoca) records the settings directory it
+# was built for, and one file shared with the user's session was rebuilt by each side in turn,
+# several times a second; every rebuild made the phone's home screen reload its apps, and it
+# lost its dock and widgets (2026-09-29).
+export XDG_CACHE_HOME="$state/cache"
+mkdir -p "$XDG_CACHE_HOME"
 
 # What the private bus starts (portals) inherits the bus daemon's environment: this workspace's
 # display. Never dbus-update-activation-environment here: it also sets the systemd user

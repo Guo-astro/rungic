@@ -1,0 +1,166 @@
+"""Apps that run once per user's data, switched into the agent's workspace (docs/research/91).
+
+The agent works in a workspace of its own. Most apps simply start a second instance there
+(its own session bus: KDE's single-instance handling stays within it). A few cannot: one
+instance per profile or login (WeChat, Firefox and Chromium profiles, Telegram ...); a second
+one fails on the profile lock or hands its request to the first, on the user's phone. Those are
+switched: closed in the user's session - only after the user agreed (the tool refuses without
+it) and never during a call - reopened in the workspace, and given back to the user's session
+once the agent is done (`restore`, from the voice agent after a quiet period).
+"""
+from __future__ import annotations
+
+import json
+import os
+import shlex
+import signal
+import subprocess
+import time
+from pathlib import Path
+
+# Program names (the executable's base name) of apps with one instance per user's data.
+SINGLE_INSTANCE = {'wechat', 'firefox', 'firefox-esr', 'chromium', 'chromium-browser', 'google-chrome',
+                   'google-chrome-stable', 'telegram-desktop', 'telegram', 'thunderbird', 'signal-desktop'}
+RUNTIME = Path(os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}')
+STATE = RUNTIME / 'rungic-workspace-switched.json'
+
+
+def programs(entry: dict) -> set[str]:
+    """Names its processes run under: the Exec program, and what that resolves to."""
+    words = shlex.split(entry.get('exec') or '') or [entry.get('id', '')]
+    names = {os.path.basename(words[0])}
+    for word in words[:1]:
+        for base in ('', *os.environ.get('PATH', '/usr/bin').split(':')):
+            path = Path(base, word) if base else Path(word)
+            if path.is_absolute() and path.exists():
+                names.add(path.resolve().name)
+                break
+    return {n.casefold() for n in names if n}
+
+
+def single_instance(entry: dict) -> bool:
+    return bool(programs(entry) & SINGLE_INSTANCE)
+
+
+def _process_name(pid: int) -> str:
+    try:
+        return os.path.basename(os.readlink(f'/proc/{pid}/exe')).casefold()
+    except OSError:
+        return ''
+
+
+def _display(pid: int) -> str | None:
+    try:
+        for item in Path(f'/proc/{pid}/environ').read_bytes().split(b'\0'):
+            if item.startswith(b'WAYLAND_DISPLAY='):
+                return item[16:].decode(errors='replace')
+    except OSError:
+        return None
+    return ''
+
+
+def processes(names: set[str], workspace: int | None) -> list[int]:
+    """This user's processes of `names`: in workspace `workspace`, or with None in the user's
+    session (any display but a workspace's)."""
+    found = []
+    for entry in Path('/proc').iterdir():
+        if not entry.name.isdigit():
+            continue
+        pid = int(entry.name)
+        try:
+            if entry.stat().st_uid != os.getuid():
+                continue
+        except OSError:
+            continue
+        if _process_name(pid) not in names:
+            continue
+        display = _display(pid)
+        if display is None:
+            continue
+        in_workspace = display.startswith('wayland-ws-')
+        if workspace is None and not in_workspace or workspace is not None and display == f'wayland-ws-{workspace}':
+            found.append(pid)
+    return found
+
+
+def in_call(names: set[str]) -> bool:
+    """Whether the app has a microphone open (a call, a meeting): never switched then."""
+    try:
+        out = subprocess.run(['pactl', '-f', 'json', 'list', 'source-outputs'], capture_output=True, text=True,
+                             timeout=5).stdout
+        streams = json.loads(out or '[]')
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return False
+    return any(str(s.get('properties', {}).get('application.process.binary', '')).casefold() in names
+               for s in streams)
+
+
+def _terminate(pids: list[int], timeout: float) -> list[int]:
+    """SIGTERM, as a session ending does: browsers keep their session, messengers their data.
+    Returns what is still running after `timeout`."""
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        pids = [p for p in pids if Path(f'/proc/{p}').exists() and _process_name(p)]
+        if not pids:
+            break
+        time.sleep(0.3)
+    return pids
+
+
+def _load() -> dict:
+    try:
+        return json.loads(STATE.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def _save(state: dict) -> None:
+    STATE.write_text(json.dumps(state, ensure_ascii=False))
+
+
+def close_in_user_session(entry: dict, pids: list[int]) -> list[int]:
+    """Close the user's instance (the user agreed) and remember to give it back. Returns the
+    processes that did not end."""
+    left = _terminate(pids, 15)
+    if not left:
+        state = _load()
+        state[entry['id']] = {'name': entry.get('name') or entry['id'], 'programs': sorted(programs(entry)),
+                              'time': time.time()}
+        _save(state)
+    return left
+
+
+def switched() -> dict:
+    return _load()
+
+
+def restore(workspace: int) -> list[str]:
+    """Give switched apps back: end them in the workspace, start them again in the user's
+    session (a messenger then signs in by itself, a browser restores its session). An app in a
+    call in the workspace is left for later. Returns the names given back."""
+    state = _load()
+    given = []
+    for app_id, info in list(state.items()):
+        names = set(info.get('programs') or [])
+        if in_call(names):
+            continue
+        if _terminate(processes(names, workspace), 15):
+            continue            # still running: try again later
+        env = dict(os.environ)
+        if env.get('RUNGIC_USER_WAYLAND_DISPLAY'):
+            env['WAYLAND_DISPLAY'] = env['RUNGIC_USER_WAYLAND_DISPLAY']
+            env['DBUS_SESSION_BUS_ADDRESS'] = env.get('RUNGIC_USER_DBUS_SESSION_BUS_ADDRESS', '')
+        for name in ('RUNGIC_WORKSPACE', 'DISPLAY', 'XAUTHORITY'):
+            env.pop(name, None)
+        if not processes(names, None):
+            subprocess.Popen(['kstart', '--application', app_id], stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL, start_new_session=True, env=env)
+        del state[app_id]
+        given.append(info.get('name') or app_id)
+    _save(state)
+    return given

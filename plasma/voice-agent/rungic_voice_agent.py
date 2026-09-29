@@ -59,6 +59,10 @@ END_SILENCE_MS = 900         # after release, so the server VAD sees the end of 
 PAUSE_KEEP_MS = 200          # the start of a pause is sent as is
 PAUSE_PREROLL_MS = 140       # and the end of a longer one, before speech resumes
 IDLE_STOP_S = 600            # stop an unused realtime session (cost)
+# Apps switched into the agent's workspace (one instance per user: WeChat, a browser profile;
+# rungic_cua.switch, docs/research/91) go back to the user's phone this long after the agent's
+# last turn ended: a follow-up request right after still finds them there.
+RESTORE_APPS_S = 120
 # Hands-free (docs/67): a hold released before anything was said keeps listening,
 # and the turn ends by itself after speech and then this much quiet.
 HANDS_FREE_END_MS = 900
@@ -167,6 +171,25 @@ def workspace_env(slot=WORKSPACE, wait=10.0):
     except OSError:
         pass
     return env
+
+
+SWITCHED_APPS = Path(os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}') / 'rungic-workspace-switched.json'
+
+
+def restore_apps():
+    """Give apps switched into the workspace back to the user's session (rungic-cua restore-apps),
+    and say so: the user saw them leave."""
+    try:
+        done = subprocess.run(['rungic-cua', 'restore-apps', str(WORKSPACE)], capture_output=True, text=True,
+                              timeout=60)
+        restored = json.loads(done.stdout or '{}').get('restored') or []
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        log('restore apps:', error)
+        return
+    if restored:
+        log('restored to the phone:', ', '.join(restored))
+        subprocess.run(['notify-send', '-a', '语音助手', '已放回你的手机', '、'.join(restored) + '已从助理屏回到你的手机上。'],
+                       capture_output=True, timeout=10)
 
 
 def openai_key() -> str:
@@ -461,6 +484,7 @@ class VoiceAgent:
         self.open_generation = 0
         self.talking = False
         self.agent_busy = False
+        self.agent_idle_since = time.monotonic()
         self.muted = False
         self.turn_id = None
         self.turn_started = 0.0
@@ -788,6 +812,9 @@ class VoiceAgent:
             self.emit_raw({'type': 'assistant-reset'})
 
     def idle_check(self):
+        if not self.agent_busy and not self.call and time.monotonic() - self.agent_idle_since > RESTORE_APPS_S \
+                and SWITCHED_APPS.exists() and SWITCHED_APPS.read_text().strip() not in ('', '{}'):
+            threading.Thread(target=restore_apps, daemon=True).start()
         if self.realtime and not self.talking and not self.agent_busy \
                 and time.monotonic() - self.last_activity > IDLE_STOP_S:
             log('idle: stopping realtime session')
@@ -1216,6 +1243,7 @@ class VoiceAgent:
         elif method == 'turn/completed':
             self.turn_id = None
             self.agent_busy = False
+            self.agent_idle_since = time.monotonic()
             # A caption left "working" (a tool call cut short) must not stay on the screen.
             if screen_activity().get('state') == 'working':
                 from rungic_cua import activity
@@ -1334,7 +1362,7 @@ class VoiceAgent:
             window = (self.call.window_id if self.call else None) or call_window(app)
             result = luna_goal('End the call that is in progress: press the hang-up (end call) control of the call '
                                'window. Press nothing else. Reply DONE once the call has ended.', timeout=60,
-                               window=window)
+                               window=window, app=app)
             log('call: hang up', result.get('outcome'), result.get('answer') or result.get('note') or '',
                 json.dumps(result.get('steps', []), ensure_ascii=False)[:1500])
 
@@ -1342,9 +1370,9 @@ class VoiceAgent:
                                          goal=params.get('goal', ''), owner=params.get('owner') or '凯文',
                                          monitor=bool(params.get('monitor')), incoming=bool(params.get('incoming')),
                                          hang_up=hang_up)
-        self.call.on_answered = lambda: call_snapshot('answered')
+        self.call.on_answered = lambda: call_snapshot('answered', app)
         call = self.call
-        self.call.confirm_connected = lambda: call_screen_connected(call.window_id or call_window(app))
+        self.call.confirm_connected = lambda: call_screen_connected(call.window_id or call_window(app), app)
         self.call.start()
         GLib.idle_add(self.set_state)
         # Dial only once the call agent can listen: the other side is heard from
@@ -1370,7 +1398,7 @@ class VoiceAgent:
                 f'{contact} from this chat{hint}: the phone button in the chat header may open a small menu first; '
                 'then choose the voice call in it. As soon as a calling or ringing screen appears, stop at once and '
                 'reply DONE. Never press anything in the call window.')
-        result = luna_goal(goal, timeout=120, stop_when=lambda: self.call.streams_seen > before)
+        result = luna_goal(goal, timeout=120, stop_when=lambda: self.call.streams_seen > before, app=app)
         deadline = time.monotonic() + 8
         while time.monotonic() < deadline and self.call.streams_seen == before and result.get('outcome') != 'failed':
             time.sleep(0.2)
@@ -1378,7 +1406,7 @@ class VoiceAgent:
         if placed:
             self.call.window_id = call_window(app)
             log('call: call window', self.call.window_id)
-            threading.Thread(target=lambda: (time.sleep(2), call_snapshot('ringing')), daemon=True).start()
+            threading.Thread(target=lambda: (time.sleep(2), call_snapshot('ringing', app)), daemon=True).start()
             threading.Thread(target=self.call.watch_ringing, daemon=True).start()
         self.emit({'type': 'call-state', 'state': 'ringing' if placed else 'dial-failed'}, keep=False)
         return {'dialed': placed, 'confirmed_by': 'call audio opened' if placed else None,
@@ -1688,23 +1716,41 @@ class VoiceAgent:
         return {'ok': True}
 
 
+def app_env(app: str | None) -> dict | None:
+    """Where `app` runs: the agent's workspace once it was switched there (rungic_cua.switch,
+    docs/research/91), else the user's session (None: this service's own environment). The call
+    helpers below look at and act on that session's windows."""
+    if not app:
+        return None
+    try:
+        from rungic_cua import switch
+        if not switch.processes({app.casefold()}, WORKSPACE):
+            return None
+    except (ImportError, OSError):
+        return None
+    env = workspace_env(wait=5)
+    return {**os.environ, **env} if env else None
+
+
 def call_window(app: str) -> str | None:
     """The app's topmost window, which is its call window during a call (KWin)."""
     try:
-        out = subprocess.run(['rungic-cua', 'top-window', app], capture_output=True, text=True, timeout=20).stdout
+        out = subprocess.run(['rungic-cua', 'top-window', app], capture_output=True, text=True, timeout=20,
+                             env=app_env(app)).stdout
         return (json.loads(out).get('window') or {}).get('id')
     except (ValueError, OSError, subprocess.SubprocessError):
         return None
 
 
-def call_screen_connected(window_id: str | None) -> bool:
+def call_screen_connected(window_id: str | None, app: str | None = None) -> bool:
     """Whether the call window shows the call connected: a running call timer, not
     "calling" or "waiting". Only its top, where call apps show the timer; about 2 s
     (docs/63). The window itself, not the active one: the chat window was active once,
     and a call that was up went unnoticed."""
     try:
         args = ['window', window_id] if window_id else ['active-window']
-        done = subprocess.run(['/usr/libexec/rungic-screenshot', *args], capture_output=True, timeout=10)
+        done = subprocess.run(['/usr/libexec/rungic-screenshot', *args], capture_output=True, timeout=10,
+                              env=app_env(app))
         if done.returncode != 0:
             return False
         end = done.stdout.index(b'\n')
@@ -1735,18 +1781,21 @@ def call_screen_connected(window_id: str | None) -> bool:
         return False
 
 
-def call_snapshot(tag: str) -> None:
+def call_snapshot(tag: str, app: str | None = None) -> None:
     """Where the call's windows are, for diagnosis (docs/63): the window list in the log, and
     both screens as they look now in ~/.cache/rungic-voice-agent (the latest call only)."""
     try:
-        info = json.loads(subprocess.run(['rungic-cua', 'windows'], capture_output=True, text=True, timeout=20).stdout)
+        env = app_env(app)
+        info = json.loads(subprocess.run(['rungic-cua', 'windows'], capture_output=True, text=True, timeout=20,
+                                         env=env).stdout)
         log(f'call: {tag}: windows', json.dumps([{k: w.get(k) for k in ('caption', 'app', 'screen', 'active', 'minimized')}
                                                  for w in info.get('windows', [])], ensure_ascii=False))
         directory = Path.home() / '.cache/rungic-voice-agent'
         directory.mkdir(parents=True, exist_ok=True)
         from PIL import Image
         for output in info.get('screens', []):
-            done = subprocess.run(['/usr/libexec/rungic-screenshot', 'screen', output], capture_output=True, timeout=15)
+            done = subprocess.run(['/usr/libexec/rungic-screenshot', 'screen', output], capture_output=True, timeout=15,
+                                  env=env)
             if done.returncode != 0:
                 continue
             end = done.stdout.index(b'\n')
@@ -1760,14 +1809,14 @@ def call_snapshot(tag: str) -> None:
         log('call snapshot', tag, error)
 
 
-def luna_goal(goal: str, timeout: float = 120, stop_when=None, window: str | None = None) -> dict:
+def luna_goal(goal: str, timeout: float = 120, stop_when=None, window: str | None = None, app: str | None = None) -> dict:
     """A task for rungic-cua's computer use on the assistant's screen (docs/68), following the
     active window. `stop_when()` turning true stops the model before its next action, through
     the abort file its loop watches (the user's "stop" uses the same file)."""
     abort = Path(os.environ.get('XDG_RUNTIME_DIR', f'/run/user/{os.getuid()}')) / 'rungic-clicker' / 'abort'
     abort.unlink(missing_ok=True)
     task = {'goal': goal, 'steps': 8, **({'window': window} if window else {})}
-    process = subprocess.Popen(['rungic-cua', 'goal', json.dumps(task, ensure_ascii=False)],
+    process = subprocess.Popen(['rungic-cua', 'goal', json.dumps(task, ensure_ascii=False)], env=app_env(app),
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     deadline = time.monotonic() + timeout
     signalled = False

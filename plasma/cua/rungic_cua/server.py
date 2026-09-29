@@ -17,6 +17,7 @@ Wayland. Codex starts MCP servers outside that sandbox, so desktop operations
   rungic-cua run '<subtask json>'
   rungic-cua goal '{"goal": ..., "app": ...}'   whole task (Luna, or JEV per step under plan atspi)
   rungic-cua screenshot OUT.png | act '<actions json>' | plan [luna|atspi]
+  rungic-cua restore-apps [N]    give apps switched into workspace N back to the user (switch.py)
 """
 from __future__ import annotations
 
@@ -34,7 +35,7 @@ from pathlib import Path
 from arc_cua import DesktopExecutor, RuntimeConfig, result_to_dict, subtask_from_dict
 from arc_cua.policies import TypeSafeJevPolicy
 
-from . import a11y, activity, names, speech
+from . import a11y, activity, names, speech, switch
 from .backend import LinuxAtspiBackend
 from .luna import ComputerUse
 
@@ -94,13 +95,20 @@ TOOLS = [
                      'or on the TV while casting); an app already open is moved there and activated. Returns its '
                      'window id and screen. `args`: files to open or command-line options, e.g. '
                      '["/home/me/Pictures/a.png"] or ["--python", "/home/me/make.py"] (a new window is started). '
-                     'screen "phone" only when the user asks for the phone.'),
+                     'screen "phone" only when the user asks for the phone. In your workspace, an app that runs '
+                     'once per user (WeChat, a browser profile, Telegram ...) and is open on the user\'s phone '
+                     'must be closed there first: the tool then returns `needs_confirmation` with a `question`; '
+                     'ask the user exactly that and call again with "switch": true only after they agree. It is '
+                     'given back to the user\'s phone after you are done.'),
      'inputSchema': {'type': 'object', 'properties': {
          'app': {'type': 'string'},
          'args': {'type': 'array', 'items': {'type': 'string'},
                   'description': 'Files, URLs or options passed to the application.'},
          'screen': {'type': 'string', 'enum': ['auto', 'agent', 'tv', 'phone'],
-                    'description': "auto (default) = agent = tv: the assistant's screen; phone: the phone."}},
+                    'description': "auto (default) = agent = tv: the assistant's screen; phone: the phone."},
+         'switch': {'type': 'boolean',
+                    'description': "The user agreed to close this app on their phone so it opens in your "
+                                   "workspace (only after needs_confirmation)."}},
          'required': ['app']},
      'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False}},
     {'name': 'desktop_observe',
@@ -128,7 +136,9 @@ TOOLS = [
                      'in a floating window (or on the TV) while the phone stays theirs.'),
      'inputSchema': {'type': 'object', 'properties': {
          'goal': {'type': 'string'},
-         'app': {'type': 'string', 'description': 'Application to open or activate first (as for desktop_launch).'},
+         'app': {'type': 'string', 'description': 'Application to open or activate first (as for desktop_launch; '
+                                                  'it may return needs_confirmation first).'},
+         'switch': {'type': 'boolean', 'description': 'As for desktop_launch: the user agreed to move `app` over.'},
          'replies': {'type': 'array', 'items': {'type': 'object', 'properties': {
              'question': {'type': 'string'}, 'answer': {'type': 'string'}}, 'required': ['question', 'answer']},
              'description': "The user's answers to questions earlier runs of this goal asked."},
@@ -345,12 +355,36 @@ class Cua:
         time.sleep(0.3)
         return {'activated': ok}
 
-    def launch(self, app: str, screen: str = 'auto', args: list[str] | None = None) -> dict:
+    def launch(self, app: str, screen: str = 'auto', args: list[str] | None = None, confirmed: bool = False) -> dict:
         """Open `app` on the assistant's screen (the phone only when asked), or bring its open
-        window there. With `args` a new window is started with them."""
+        window there. With `args` a new window is started with them. In a workspace an app that
+        runs once per user and is open in the user's session is switched over, only with the
+        user's agreement (`confirmed`, switch.py)."""
         entry = find_application(app)
         if entry is None:
             raise ValueError(f'No installed application matches {app!r}')
+        if os.environ.get('RUNGIC_WORKSPACE') and switch.single_instance(entry):
+            names = switch.programs(entry)
+            theirs = switch.processes(names, None)
+            if theirs:
+                if switch.in_call(names):
+                    return {'launched': None, 'blocked': 'in_call',
+                            'note': f"{entry['name']} is in a call on the user's phone: it cannot be moved now. "
+                                    'Tell the user; try again after the call.'}
+                if not confirmed:
+                    return {'launched': None, 'needs_confirmation': True,
+                            'question': f"{entry['name']}正在你的手机上运行。我要先把它关掉，在助理屏上重新打开，"
+                                        '用完再帮你恢复。可以吗？',
+                            'note': 'Ask the user this question and wait for the answer. Only if they agree, call '
+                                    'desktop_launch again with "switch": true. Never close it any other way '
+                                    '(kill, pkill, desktop_window).'}
+                activity.report(f"把{entry['name']}切到助理屏")
+                left = switch.close_in_user_session(entry, theirs)
+                if left:
+                    return {'launched': None, 'blocked': 'still_running',
+                            'note': f"{entry['name']} did not close on the user's phone (it may be asking "
+                                    'something there). Tell the user; do not force it.'}
+                time.sleep(0.5)
         classes = entry.pop('classes')
         exec_line = entry.pop('exec', '')
         kwin = self.backend.kwin
@@ -468,7 +502,10 @@ class Cua:
         window_id = args.get('window')          # a window the caller knows (e.g. a call window)
         if args.get('app'):
             # The window the task is about, from the window manager: the model sees that window.
-            window_id = ((self.launch(str(args['app']), 'agent') or {}).get('window') or {}).get('id')
+            launched = self.launch(str(args['app']), 'agent', confirmed=bool(args.get('switch'))) or {}
+            if launched.get('needs_confirmation') or launched.get('blocked'):
+                return launched     # the user decides first (switch.py)
+            window_id = (launched.get('window') or {}).get('id')
             time.sleep(0.8)
         computer = ComputerUse(self.backend, output, window_id)
         task = str(args['goal'])
@@ -573,7 +610,9 @@ class Cua:
         if screen.returncode != 0:
             raise RuntimeError(f'assistant screen: {screen.stderr.strip() or screen.stdout.strip()}')
         if args.get('app'):
-            self.launch(str(args['app']), 'agent')
+            launched = self.launch(str(args['app']), 'agent', confirmed=bool(args.get('switch'))) or {}
+            if launched.get('needs_confirmation') or launched.get('blocked'):
+                return launched
             time.sleep(0.8)
         command = ['rungic-clicker', 'run', str(args['goal']), '--steps', str(int(args.get('steps') or 25))]
         for reply in args.get('replies') or []:
@@ -761,7 +800,7 @@ class Cua:
             return self.window(str(arguments['window_id']), str(arguments['action']))
         if name == 'desktop_launch':
             return self.launch(str(arguments['app']), str(arguments.get('screen') or 'auto'),
-                               [str(a) for a in arguments.get('args') or []])
+                               [str(a) for a in arguments.get('args') or []], bool(arguments.get('switch')))
         if name == 'desktop_observe':
             return self.observe()
         if name == 'desktop_run':
@@ -850,6 +889,10 @@ def main() -> None:
     command = sys.argv[1] if len(sys.argv) > 1 else 'mcp'
     if command == 'mcp':
         serve()
+        return
+    if command == 'restore-apps':
+        slot = int(sys.argv[2] if len(sys.argv) > 2 else os.environ.get('RUNGIC_WORKSPACE') or 1)
+        print(json.dumps({'restored': switch.restore(slot), 'pending': sorted(switch.switched())}, ensure_ascii=False))
         return
     cua = Cua()
     if command == 'windows':

@@ -152,6 +152,27 @@ Agent 2  KWin#2 ──── │ 显示源 agent-2               │  电视 / �
 - **手机左上角的黑底光标**：宿主把 KWin 的光标表面画成了独立窗口。用户 KWin 没有第二输出后，指针落在 WL-0 上，这个问题才暴露出来。现在宿主不把以下表面当作独立窗口：无角色的、光标角色的、子表面，以及任何工作区客户端的表面。修复后 `unmanaged=0`，手机回到零拷贝路径。
 - **`kstart` 在工作区里卡住**：Codex 启动 MCP 服务时只传少数环境变量，`rungic_cua` 再用 `busctl --user` 向 systemd 取会话环境；在工作区里这条请求发到了私有总线，没有 systemd，结果缺 `XDG_DATA_DIRS` 等变量，`kstart` 找不到应用。已改为向用户总线查询。
 - **浮窗启动两次**：两个 `ensure` 同时执行。已加锁。
+- **手机主屏幕错乱**（用户报告，约 19:07 起）：
+  - 现象：壁纸放大，Dock 和时钟小部件不见，文件夹移位，应用抽屉的搜索栏超出屏幕。KWin 和 plasmashell 窗口的几何都正常（360×800），错在主屏幕 containment 本身：`desktops()` 里它的 `screen` 为 -1，也就是没有挂到任何屏幕上，于是按错误的尺寸布局。
+  - 直接原因：用户会话的 kactivitymanagerd 当前活动为空（`CurrentActivity` 返回 ""），Plasma 按活动把 containment 挂到屏幕上。用 `SetCurrentActivity` 设回唯一的 Default 活动并重启 plasmashell 后恢复（已验证：containment 1 回到 screen 0，Dock 等恢复）。
+  - 当前活动为何变空，尚未查明。时间上与 19:06 那次 APK 重启吻合；此前 18:53 做过一次 A/B 测试，第二输出增减一次，Plasma Mobile 的自动停靠写了 `plasmamobilerc` 和 `kde.org/plasmashell.conf`。工作区里没有第二个 kactivitymanagerd。`kactivitymanagerdrc` 里本来就没有 `currentActivity`。后续要继续观察是否复发。
+- **应用数据库来回重建**（同时查出）：工作区 KWin 用自己的 `XDG_CONFIG_HOME`，却与用户共用缓存目录。ksycoca 记录它是为哪个配置目录建的，两边轮流判定“不对”并重建同一个文件，每秒数次；每次重建都让手机主屏幕重新加载应用列表（`Reloading folio app list`，一个 plasmashell 实例里出现上千次）。已给工作区单独的 `XDG_CACHE_HOME`，重建随即停止（已验证：数据库文件不再变化，主屏幕不再重载）。它不是布局错乱的原因：错乱之前的实例也在重载，布局却正常。
+
+### 单实例应用的按需切换（2026-09-29，用户决定）
+
+- **规则**：
+  - 能多开的应用（Blender、Kalk、Dolphin 等）直接在工作区另开一个实例，不动用户那一份。
+  - 每个用户只能跑一份的应用（微信、同一配置的浏览器、Telegram 等）按需切换：在用户会话里关闭，在工作区打开；Agent 最后一轮结束约两分钟后，自动还给用户会话，并发一条通知。
+  - 关闭用户正在运行的实例之前，必须先征得用户同意（用户要求）。工具层强制执行：`desktop_launch` 或 `desktop_goal` 返回 `needs_confirmation` 和要问的话，只有带上 `"switch": true` 才会关闭；应用正在用麦克风（通话、会议）时一律不切换。
+- **实现**：
+  - `plasma/cua/rungic_cua/switch.py`：按程序名判断；按进程环境里的 `WAYLAND_DISPLAY` 区分会话；用 SIGTERM 正常结束；在 `$XDG_RUNTIME_DIR/rungic-workspace-switched.json` 里登记；`rungic-cua restore-apps N` 负责归还。
+  - 语音服务：空闲检查时负责归还。
+  - 微信代打电话的各个环节（查找窗口、拨号、接通检查、挂断）改为在微信当前所在的会话里执行。
+- **验证**：
+  - 单元测试 `tools/test_switch.py`（4 项）已通过。
+  - 实机：工具层的确认流程尚未在实机跑通（测试脚本卡住，待查）。
+  - 归还一步会在用户手机上打开窗口，不在实机上测试。
+  - 微信重启后是否需要在主力手机上确认登录，待测。
 
 ### D-Bus：私有还是共用（2026-09-29 的判断）
 
