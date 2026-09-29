@@ -88,11 +88,11 @@ def instructions(owner: str, contact: str, goal: str, incoming: bool = False) ->
 
 
 def api_key() -> str:
-    # The keyring (docs/87); rungic-cua ships the module.
+    # The key file (docs/87); rungic-cua ships the module that reads it.
     if '/usr/lib/rungic-cua' not in sys.path:
         sys.path.insert(0, '/usr/lib/rungic-cua')
-    from rungic_cua import keyring
-    return keyring.read('openai-api-key')
+    from rungic_cua import keys
+    return keys.read('openai-api-key')
 
 
 def proxy_settings() -> dict:

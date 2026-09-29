@@ -77,8 +77,8 @@ class Aborted(RuntimeError):
 def api_key() -> str:
     if os.environ.get('OPENAI_API_KEY'):
         return os.environ['OPENAI_API_KEY']
-    from . import keyring
-    return keyring.read('openai-api-key')
+    from . import keys
+    return keys.read('openai-api-key')
 
 
 def keysym_for(name: str) -> int:

@@ -25,7 +25,7 @@ HOME = Path.home()
 KEYS = {
     "TYPESAFE_API_KEY": (HOME / ".config/rungic-cua/typesafe-api-key", HOME / ".config/rungic-voice-agent/typesafe-api-key"),
 }
-# Keys kept by rungic_cua.keyring (the system keyring, docs/87).
+# Keys read through rungic_cua.keys (docs/87).
 KEYRING = {"CLICKER_WRITER_API_KEY": "openai-api-key"}
 DEFAULTS = {
     "CLICKER_PLATFORM": "linux",
@@ -52,10 +52,10 @@ def configure() -> None:
                 break
     if any(not os.environ.get(name) for name in KEYRING):
         sys.path.insert(0, "/usr/lib/rungic-cua")
-        from rungic_cua import keyring
+        from rungic_cua import keys
         for name, key in KEYRING.items():
             if not os.environ.get(name):
-                os.environ[name] = keyring.read(key)
+                os.environ[name] = keys.read(key)
     if not os.environ.get("TYPESAFE_API_KEY"):
         raise SystemExit("No JEV (TypeSafe) API key: put it in ~/.config/rungic-cua/typesafe-api-key")
 

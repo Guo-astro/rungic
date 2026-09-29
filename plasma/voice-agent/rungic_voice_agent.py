@@ -15,7 +15,7 @@ JSON events and kept per conversation for the chat history.
 
 Realtime runs over WebSocket so all traffic goes through the proxy that the
 `codex` wrapper sets; Codex needs an API key for that (OPENAI_API_KEY from the
-system keyring, rungic_cua.keyring, docs/87), while the agent itself uses Codex's
+key file, rungic_cua.keys, docs/87), while the agent itself uses Codex's
 own sign-in (a ChatGPT account, or the same key).
 """
 import argparse
@@ -38,7 +38,7 @@ import gi
 gi.require_version('Gst', '1.0')
 from gi.repository import Gio, GLib, Gst
 
-# The call proxy (docs/63) lives next to this script's shared files; the keyring
+# The call proxy (docs/63) lives next to this script's shared files; the key-file
 # module (docs/87) comes with rungic-cua.
 import sys
 sys.path.insert(0, '/usr/lib/rungic-voice-agent')
@@ -118,9 +118,9 @@ INTERFACE = '''
 
 
 def openai_key() -> str:
-    """The OpenAI API key (the keyring, else its old file), or ''."""
-    from rungic_cua import keyring
-    return keyring.read('openai-api-key')
+    """The OpenAI API key, or ''."""
+    from rungic_cua import keys
+    return keys.read('openai-api-key')
 
 
 # The app's choices that change what this service does (docs/87).
@@ -1345,7 +1345,7 @@ class VoiceAgent:
 
     # ---- settings (docs/87) ----------------------------------------------------------------
     def setup(self):
-        from rungic_cua import keyring
+        from rungic_cua import keys
         path = shutil.which('codex', path=os.environ.get('PATH', '') + ':' + str(Path.home() / '.local/bin'))
         version, runs = '', None
         if path:
@@ -1361,7 +1361,7 @@ class VoiceAgent:
                 account = self.server.call('account/read', {'refreshToken': False}, timeout=10).get('account')
             except Exception as error:  # noqa: BLE001
                 log('account/read', error)
-        key = keyring.read('openai-api-key')
+        key = keys.read('openai-api-key')
         store = 'file'
         try:
             import tomllib
@@ -1378,7 +1378,7 @@ class VoiceAgent:
                           'running': self.server is not None},
                 'account': account, 'credentials': 'keyring' if store in ('keyring', 'auto') else 'file',
                 'key': {'set': bool(key), 'masked': (key[:3] + '…' + key[-4:]) if len(key) > 10 else ('已设置' if key else ''),
-                        'store': keyring.where('openai-api-key'), 'working': self.key_working},
+                        'store': keys.where('openai-api-key'), 'working': self.key_working},
                 'preferences': self.prefs, 'version': app_version, 'home': str(Path.home())}
 
     @staticmethod
@@ -1394,13 +1394,13 @@ class VoiceAgent:
             return False, f'连不上 OpenAI：{error}'
 
     def set_api_key(self, key):
-        from rungic_cua import keyring
+        from rungic_cua import keys
         key = key.strip()
         ok, error = self.test_key(key)
         self.key_working = ok
         if not ok:
             return {'ok': False, 'error': error}
-        where = keyring.store('openai-api-key', key)
+        where = keys.store('openai-api-key', key)
         log('api key stored in', where)
         # Codex signed in with an API key uses it for everything: sign in with the new one.
         try:
@@ -1419,8 +1419,8 @@ class VoiceAgent:
         return {'ok': ok, 'error': error}
 
     def remove_api_key(self):
-        from rungic_cua import keyring
-        keyring.clear('openai-api-key')
+        from rungic_cua import keys
+        keys.clear('openai-api-key')
         self.key_working = None
         threading.Thread(target=self.restart_server, daemon=True).start()
         return {'ok': True}

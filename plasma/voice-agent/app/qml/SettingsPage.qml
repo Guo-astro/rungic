@@ -132,8 +132,7 @@ SettingsFrame {
                     "你按住说话时，声音才会离开手机：它经你设置的代理发到 OpenAI，由语音模型听懂并回答。松开前滑到 × 取消，这段声音就不会发出。",
                     "Agent 通过 Codex 在这台手机上执行命令、操作应用。它看到的屏幕内容和命令结果会发给 OpenAI 用来决定下一步。",
                     "对话记录只保存在这台手机上（~/.local/share/rungic-voice-agent），删除对话会一并删除记录。",
-                    page.key.store === "keyring" ? "OpenAI API Key 保存在系统钥匙串里，只用来调用 OpenAI。"
-                        : "OpenAI API Key 保存在本机的配置文件里（~/.config/rungic-voice-agent，只有你能读），只用来调用 OpenAI。"
+                    "OpenAI API Key 明文保存在本机的配置文件里（~/.config/rungic-voice-agent，只有你这个用户能读），只用来调用 OpenAI。以你身份运行的程序（包括 Agent）都能读到它。"
                 ]
                 Text {
                     required property string modelData

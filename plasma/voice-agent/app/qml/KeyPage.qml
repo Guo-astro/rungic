@@ -103,8 +103,7 @@ SettingsFrame {
         }
         Note {
             Layout.fillWidth: true
-            text: page.key.store === "file" ? "保存在本机的配置文件里（~/.config/rungic-voice-agent，只有你能读），只发给 OpenAI。"
-                : "保存在系统钥匙串里，不会写进文件，也不会发给除 OpenAI 以外的任何地方。"
+            text: "明文保存在本机的配置文件里（~/.config/rungic-voice-agent，只有你这个用户能读），只发给 OpenAI。"
         }
     }
 
