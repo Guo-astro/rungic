@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Rungic workspace input
+Comment=The agent's pointer and keyboard in its own workspace (docs/research/91)
+Exec=/usr/libexec/rungic-workspace-input
+NoDisplay=true
+X-KDE-Wayland-Interfaces=org_kde_kwin_fake_input

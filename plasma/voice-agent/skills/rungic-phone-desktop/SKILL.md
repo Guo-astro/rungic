@@ -46,7 +46,7 @@ Casting connects the phone to the TV over Wi-Fi Display; the TV then becomes the
 
 Use these tools for anything on screen; they act with ordinary pointer/keyboard input, like the user's own hands. Every step is decided from **screenshots** (GPT-6 Luna computer use): no accessibility tree and no OCR, so any app works, whatever toolkit it uses.
 
-**Which screen**: your own screen is the **assistant's screen** (`CAST-1`, 1920x1080): the user watches it in a floating window on the phone, or on the TV when one is connected (the same screen either way: nothing moves when it switches). The phone (`WL-0`) shows this assistant and must stay undisturbed; use it only when the user asks for the phone. `rungic-agent-screen on|off|status` turns the assistant's screen on or off; the tools below turn it on by themselves, and apps you launch go there.
+**Which screen**: you work in your own **workspace** (docs/research/91): a desktop of its own with one screen (`CAST-1`, 1920x1080), its own KWin, Xwayland and session bus. Whatever you open appears there from its first frame and nowhere else, whether from `desktop_launch` or from the shell. The user sees it as the **assistant's screen**: in a floating window on the phone, fullscreen, or on the TV when one is connected (the same screen either way: nothing moves when it switches). The user's phone is not reachable from the workspace, and its apps are not yours to open. `rungic-agent-screen on|off|status` turns the assistant's screen on or off; the tools below turn it on by themselves. `rungic-user <command>` runs a command in the user's session (a notification, say).
 
 **Whole tasks: `desktop_goal` (preferred for anything that takes several steps).** Give the goal as the user said it, with every literal value in it, and the app: `{"goal": "在文件传输助手里发一条消息：今晚七点见", "app": "微信"}`. GPT-6 Luna then looks at the screen and decides every click, key and text (it types any language). Results: `outcome` (`done`, `question`, `failed`, `unfinished`, `stopped`), `achieved`, `answer` (what the screen shows about the goal), `steps`. Outcome `question`: ask the user `question`, then call again with the same goal and `replies: [{"question": ..., "answer": ...}]`. Ask the user before a goal that sends, pays, deletes or changes an account, and then say in the goal that it is confirmed.
 
@@ -57,10 +57,10 @@ Use these tools for anything on screen; they act with ordinary pointer/keyboard 
 - `desktop_act {"actions": [...], "note": "打开“渲染”菜单"}` carries out a short batch in that image's pixels and returns the new screenshot. Actions: `{"type": "click", "x": 700, "y": 400}` (`button` left/right, `keys` held modifiers), `double_click`, `move`, `drag` (`path` of points), `scroll` (`x`, `y`, `scroll_y` in pixels, positive = down), `keypress` (`keys`: `["CTRL", "L"]`, `["ENTER"]`), `type` (`text`, any language, into the focused field), `wait`.
 
 **Windows** (the window manager, not the app; same in both plans):
-1. `desktop_windows` - open windows, which is active, on which screen (`WL-0` phone, `CAST-1` assistant/TV).
-2. `desktop_launch {"app": "系统设置" | "org.kde.dolphin" | "Firefox"}` starts an app on the assistant's screen, turning it on if needed (`"screen": "phone"` only when the user asks for the phone); an app already open is brought forward there instead of starting twice. `"args"` opens files or passes options in a new window: `{"app": "Koko", "args": ["/home/…/Pictures/a.png"]}`, `{"app": "Blender", "args": ["--python", "/home/…/make.py"]}` (a script run in the visible Blender: the user watches it build and render). `desktop_activate {"window_id": ...}` brings one to the front.
-3. `desktop_window {"window_id": ..., "action": "close" | "minimize" | "maximize" | "restore" | "to_phone" | "to_tv"}`. The title bar belongs to the window manager: close windows this way. If `still_open` stays true after close, the app is asking something: look at it.
-4. Never start GUI apps from the shell (`firefox &`, `xdg-open`, `kstart`): the window opens on whichever screen is active, usually the phone showing this assistant. Use `desktop_launch`; if it reports no window, check `desktop_windows` once and tell the user instead of retrying other ways. Also prefer these tools over `kill` or similar for apps on screen.
+1. `desktop_windows` - the open windows of your workspace and which one is active.
+2. `desktop_launch {"app": "系统设置" | "org.kde.dolphin" | "Firefox"}` starts an app in your workspace and shows the assistant's screen; an app already open is brought forward instead of starting twice. `"args"` opens files or passes options in a new window: `{"app": "Koko", "args": ["/home/…/Pictures/a.png"]}`, `{"app": "Blender", "args": ["--python", "/home/…/make.py"]}` (a script run in the visible Blender: the user watches it build and render). `desktop_activate {"window_id": ...}` brings one to the front.
+3. `desktop_window {"window_id": ..., "action": "close" | "minimize" | "maximize" | "restore"}`. The title bar belongs to the window manager: close windows this way. If `still_open` stays true after close, the app is asking something: look at it.
+4. Prefer `desktop_launch` to starting GUI apps from the shell: it waits for the window, returns its id and shows the assistant's screen (a program started from the shell still opens in your workspace). If it reports no window, check `desktop_windows` once and tell the user instead of retrying other ways. Also prefer these tools over `kill` or similar for apps on screen.
 
 **Plan two** (accessibility tree + OCR + JEV: `desktop_observe`, `desktop_run`, `desktop_find_name`) is not the default and its tools are not listed unless it was chosen (`rungic-cua plan atspi`, then the voice assistant restarts). Only when the user asks for it or it is active: read `plan-two.md` next to this file.
 
@@ -110,9 +110,9 @@ The call's audio must be switched to the assistant before the call starts; `--st
 
 ## Desktop windows and screenshots (shell)
 
-- Screenshot of everything: `spectacle -b -n -f -o /tmp/shot.png` (use `-m` for the active screen). Look at the image to understand what is on screen.
-- To open a URL or file, launch the app with `desktop_launch` and use `desktop_goal` or `desktop_act` (e.g. type into the address bar); `xdg-open` from the shell would open it on the phone.
-- Send a notification: `notify-send "标题" "内容"`.
+- Screenshot of your workspace: `spectacle -b -n -f -o /tmp/shot.png`. Look at the image to understand what is on screen.
+- To open a URL or file, launch the app with `desktop_launch` (`args` with the path or URL) and use `desktop_goal` or `desktop_act`.
+- Send the user a notification: `rungic-user notify-send "标题" "内容"` (plain `notify-send` would stay in your workspace, where nobody reads it).
 - Low-level AT-SPI tool for debugging only: `rungic-a11y` (apps/tree/find/act/text/windows).
 
 ## Screen recording

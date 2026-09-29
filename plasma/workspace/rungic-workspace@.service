@@ -1,0 +1,10 @@
+[Unit]
+Description=Agent workspace %i (a KWin of its own on the Android host, docs/research/91)
+PartOf=graphical-session.target
+After=plasma-kwin_wayland.service
+
+[Service]
+ExecStart=/usr/bin/rungic-workspace %i
+ExecStopPost=/bin/sh -c 'rm -f "$${XDG_STATE_HOME:-$$HOME/.local/state}/rungic-workspaces/%i/bus" "$${XDG_STATE_HOME:-$$HOME/.local/state}/rungic-workspaces/%i/display"'
+Restart=on-failure
+RestartSec=3

@@ -1,6 +1,6 @@
 # 工作空间：Agent 各自独立的 GUI 空间（方案，2026-09-29）
 
-状态：方案与调研，未实现。所有“已核验”的内容都来自本机源码或实机，未验证的推断会单独标明。
+状态：方案 A 的原型已实现，并在实机上跑通一个 Agent 的完整流程（见文末“原型实施与实测”）；尚未打包发布。所有“已核验”的内容都来自本机源码或实机，未验证的推断会单独标明。
 
 用户决定（2026-09-29）：每个空间一条独立的 D-Bus 总线；放弃过渡用的 KWin 放置补丁；直接做原型验证。
 
@@ -102,3 +102,76 @@ Agent 2  KWin#2 ──── │ 显示源 agent-2               │  电视 / �
 1. **原型**：验证清单第 1–4 项，只做一个 Agent 空间，浮窗沿用 Linux 路径。
 2. **替换现有助理屏**：现在的 CAST-1 助理屏改为 agent-1 空间；电视和全屏可以接到用户桌面或 agent-1；技能和提示词改为“一律在自己的空间工作”。
 3. **多个 Agent**：宿主层浮窗；工作空间管理；多个呈现端的切换界面（控制中心或浮窗工具栏）。
+
+## 原型实施与实测（2026-09-29）
+
+### 组成
+
+- **宿主**（`native/plasma`，APK 2.15）：
+  - `ws-1` … `ws-4` 四个监听口，连接时记下编号（`WaylandClientState.workspace`）。
+  - 每个工作区一个 1920×1080 的输出，只让该工作区的 KWin 看见（smithay 的 `create_global_for` 加按客户端过滤）。
+  - 呈现端（电视、全屏）显示“要求的显示源”，平台桥的 `agent-screen` 请求带上 `workspace`。
+  - 选中工作区时，用户的 KWin 不再有第二个输出（`sync_user_cast`）。工作区还没连上时，等它连上再呈现。
+  - APK 记住所选工作区，重启后在打开助理屏之前恢复。
+- **KWin**：`--android-workspace` 选项（补丁 `android-workspace.patch`，+rungic9）：`--android-host` 模式下不建 WL-N 输出，只用宿主给的输出。
+- **`plasma/workspace`**：
+  - `rungic-workspace N`（用户单元 `rungic-workspace@N`）：独立 D-Bus 会话、独立 KWin 设置目录、自己的 Xwayland。GPU 环境取自 `/etc/plasma/gpu-env`，另需 `FD_KGSL_DMABUF_UBWC=1`，否则报 EGL_BAD_MATCH。启动器把总线地址和 X 显示号写入 `~/.local/state/rungic-workspaces/N/`。
+  - `rungic-workspace-env N 命令`：在工作区里运行一条命令。
+  - `rungic-user 命令`：在工作区里，把一条命令送回用户会话执行（例如通知）。
+  - `rungic-workspace-input`：Agent 的指针和键盘，走 KWin fake input。
+  - `rungic-workspace-stream`：给浮窗的画面，走 zkde_screencast，内嵌指针；同时转发浮窗里的触摸。
+  - `rungic-workspace-desktop`：壁纸。
+- **语音服务**：启动时拉起工作区 1。每个 Codex 线程的 `shell_environment_policy.set` 和 `mcp_servers.rungic-desktop.env` 都设为工作区环境：`WAYLAND_DISPLAY`、`DISPLAY`、`DBUS_SESSION_BUS_ADDRESS`、`RUNGIC_WORKSPACE`，外加用户会话的 `RUNGIC_USER_*`。
+- **`rungic-agent-screen`**：`on` 或 `ensure` 时启动工作区并呈现它。浮窗始终在用户会话里打开，缺的环境变量从 systemd 用户管理器补齐，并加锁防止重复启动。
+- **浮窗**：显示工作区时，由 `rungic-workspace-stream` 提供 PipeWire 节点号。
+- **`rungic_cua`**：
+  - 在工作区里，`desktop_launch` 一律开在工作区，并顺带让助理屏显示该工作区；
+  - 会话环境改从用户总线读取；
+  - 输入走 `WorkspaceInput`。
+- **提示词和技能**：说明 Agent 在自己的工作区工作，碰不到用户手机上的应用。
+
+### 实测（实机）
+
+- 工作区 KWin 用 GPU 合成：OpenGL ES，FD710；常驻内存约 146 MB。
+- 开在工作区里的应用只出现在工作区；fake input 点击不影响用户手机上的焦点。
+- 全屏呈现工作区为零拷贝。
+- APK 重启后：
+  - 工作区 KWin 由 systemd 自动重启；
+  - APK 恢复工作区 1 的呈现；
+  - 用户 KWin 只有 WL-0；
+  - 浮窗自动接回工作区画面。
+- 端到端（新对话 01a0eced）：请求“用 Kalk 算 12×12”。
+  - Agent 在工作区打开 Kalk，在屏幕上操作，回答 144；
+  - 浮窗实时显示整个过程；
+  - 用户会话里除浮窗外没有新窗口。
+
+### 这一轮查到的问题与修正
+
+- **环境泄漏到用户会话**：启动器里的 `dbus-update-activation-environment` 把 `WAYLAND_DISPLAY=wayland-ws-1` 和 `RUNGIC_WORKSPACE=1` 写进了用户 systemd 管理器的环境，之后由 systemd 启动的用户服务都会继承。已改为在启动私有总线前 export 这些变量；已清掉泄漏的值，并复核：工作区重启、Xwayland 启动之后，用户环境不变。
+- **空工作区是透明的**：KWin 单独运行、没有 Plasma 外壳时，空白处 alpha 为 0。浮窗的图层随之整块透明，看上去像“浮窗消失”。已加壁纸程序，默认读取用户的 Plasma 壁纸设置；本机未指定图片，使用 Next 的 16:9 版本。
+- **手机左上角的黑底光标**：宿主把 KWin 的光标表面画成了独立窗口。用户 KWin 没有第二输出后，指针落在 WL-0 上，这个问题才暴露出来。现在宿主不把以下表面当作独立窗口：无角色的、光标角色的、子表面，以及任何工作区客户端的表面。修复后 `unmanaged=0`，手机回到零拷贝路径。
+- **`kstart` 在工作区里卡住**：Codex 启动 MCP 服务时只传少数环境变量，`rungic_cua` 再用 `busctl --user` 向 systemd 取会话环境；在工作区里这条请求发到了私有总线，没有 systemd，结果缺 `XDG_DATA_DIRS` 等变量，`kstart` 找不到应用。已改为向用户总线查询。
+- **浮窗启动两次**：两个 `ensure` 同时执行。已加锁。
+
+### D-Bus：私有还是共用（2026-09-29 的判断）
+
+保持**每个工作区一条私有总线**，由我们补齐缺口；不共用用户总线。
+
+- **共用的冲突是结构性的，没法逐个修补**：
+  - 第二个 KWin 拿不到 `org.kde.KWin`；
+  - 单实例应用（KDBusService Unique：Dolphin、Kate、Okular、Firefox 等）会把请求交给用户会话里已在运行的实例，窗口开在手机上；
+  - 门户、输入法、快捷键都属于用户会话。
+- **私有总线的缺口可以列举，都能在启动器或共享层补上**：
+  - 会话环境：已补；
+  - systemd 不在私有总线上：`systemctl --user` 走自己的私有套接字，不受影响；`busctl --user` 等要改走用户总线，或用 `rungic-user`；
+  - 通知：目前没人接收，待做转发到手机并标明来源；
+  - 托盘、kded：按需补。
+  - 门户、ksecretd、at-spi、plasma-keyboard 会在工作区的总线上按需自动启动（已看到进程）。
+- **边界**：用户在自己会话里登录的应用（例如微信）不在工作区里，Agent 碰不到。docs/63 的微信代打电话、代发语音需要另行设计：让微信常驻 Agent 的工作区，或做受控转发。这项待用户决定。
+
+### 待办
+
+- 打包：`plasma/workspace` 进入一个软件包；KWin +rungic9 发布；APK 2.15 发布。
+- 工作区应用的通知转发到手机。
+- 微信类流程的去向（见“边界”）。
+- 空闲时停掉工作区以省内存（约 146 MB 加上其中的应用），以及多 Agent 的工作区分配和切换界面。

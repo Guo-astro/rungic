@@ -355,8 +355,9 @@ class Cua:
         exec_line = entry.pop('exec', '')
         kwin = self.backend.kwin
         # The assistant's screen (docs/65) and the TV are the same output, CAST-n: the agent works
-        # there, where the user watches, and the phone stays the user's (docs/88).
-        to_tv = screen != 'phone'
+        # there, where the user watches, and the phone stays the user's (docs/88). In a workspace
+        # of its own (docs/research/91) there is nothing else: the phone is not reachable from it.
+        to_tv = screen != 'phone' or bool(os.environ.get('RUNGIC_WORKSPACE'))
         if to_tv:
             self.agent_output()
         info = kwin.windows()
@@ -417,7 +418,14 @@ class Cua:
 
     # ---- plan one: GPT-6 Luna computer use (luna.py) ------------------------------------------
     def agent_output(self) -> str:
-        """The assistant's screen's output (turned on if needed)."""
+        """The assistant's screen's output (turned on if needed). In a workspace of its own
+        (RUNGIC_WORKSPACE, docs/research/91) this KWin is the agent's: its output is the screen."""
+        if os.environ.get('RUNGIC_WORKSPACE'):
+            self.show_workspace()
+            outputs = [o['name'] for o in self.backend.kwin.windows().get('outputs', [])]
+            if outputs:
+                return outputs[0]
+            raise RuntimeError('the workspace has no output')
         outputs = [o['name'] for o in self.backend.kwin.windows().get('outputs', []) if o['name'].startswith('CAST')]
         if not outputs:
             screen = subprocess.run(['rungic-agent-screen', 'on'], capture_output=True, text=True, timeout=30)
@@ -429,6 +437,22 @@ class Cua:
                 raise RuntimeError("the assistant's screen did not come up")
         return outputs[0]
 
+    def show_workspace(self) -> None:
+        """The user sees the agent work: the assistant's screen on, showing this workspace (the
+        floating window on the phone, or the TV or fullscreen already showing it). At most every
+        10 s: the user may have closed it on purpose meanwhile, and the next task opens it again."""
+        now = time.monotonic()
+        if now - getattr(self, '_shown_at', -60.0) < 10:
+            return
+        self._shown_at = now
+        try:
+            state = json.loads(subprocess.run(['rungic-agent-screen', 'status'], capture_output=True, text=True,
+                                              timeout=15).stdout)
+            if not state.get('enabled') or str(state.get('workspace')) != os.environ['RUNGIC_WORKSPACE']:
+                subprocess.run(['rungic-agent-screen', 'on'], capture_output=True, timeout=30)
+        except (OSError, ValueError, subprocess.SubprocessError) as error:
+            logger.warning('assistant screen: %s', error)
+
     def agent_screen(self) -> ComputerUse:
         """The session desktop_screenshot and desktop_act share: its latest image says where
         desktop_act's pixels are. It follows the active window on the assistant's screen."""
@@ -438,7 +462,8 @@ class Cua:
         return self._computer
 
     def goal_luna(self, args: dict) -> dict:
-        subprocess.run(['rungic-agent-screen', 'on'], capture_output=True, timeout=30)
+        if not os.environ.get('RUNGIC_WORKSPACE'):
+            subprocess.run(['rungic-agent-screen', 'on'], capture_output=True, timeout=30)
         output = self.agent_output()
         window_id = args.get('window')          # a window the caller knows (e.g. a call window)
         if args.get('app'):
@@ -800,11 +825,17 @@ def import_session_environment() -> None:
     """Codex starts MCP servers with a handful of variables. Take the graphical
     session's environment from the systemd user manager, as the desktop does when
     it launches apps: without MOZ_ENABLE_WAYLAND/GDK_BACKEND, Firefox started from
-    here found no display and never showed a window."""
+    here found no display and never showed a window. In an agent workspace (docs/research/91)
+    the session bus is the workspace's own, without systemd: ask on the user's (without
+    XDG_DATA_DIRS kstart found no application and hung); the workspace's display and bus,
+    already set, stay."""
+    env = dict(os.environ)
+    if env.get('RUNGIC_USER_DBUS_SESSION_BUS_ADDRESS'):
+        env['DBUS_SESSION_BUS_ADDRESS'] = env['RUNGIC_USER_DBUS_SESSION_BUS_ADDRESS']
     try:
         out = subprocess.run(['busctl', '--user', '-j', 'get-property', 'org.freedesktop.systemd1',
                               '/org/freedesktop/systemd1', 'org.freedesktop.systemd1.Manager', 'Environment'],
-                             capture_output=True, text=True, timeout=5).stdout
+                             capture_output=True, text=True, timeout=5, env=env).stdout
         for item in json.loads(out)['data']:
             key, _, value = item.partition('=')
             os.environ.setdefault(key, value)

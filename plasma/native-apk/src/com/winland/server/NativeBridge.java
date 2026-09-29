@@ -45,6 +45,8 @@ public final class NativeBridge {
     public static native void setAgentScreenWatched(boolean watched);
     /** Phone as the TV's touchpad: 0 enable, 1 motion, 2 button, 3 scroll, 4 scroll stop (docs/58). */
     public static native void castPointer(int op, float x, float y);
+    /** Which source the TV or fullscreen shows: 0 the assistant's screen / desktop output, n agent workspace n (docs/research/91). */
+    public static native void presentWorkspace(int slot);
     /** Whether a Wayland client (KWin, for an idle-inhibiting window) inhibits idle (docs/72). */
     public static native boolean idleInhibited();
     /** eventfd that becomes readable when idleInhibited() changes; the reader drains it. */

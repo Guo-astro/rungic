@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import time
 from typing import Any
 
@@ -46,9 +47,18 @@ class LinuxAtspiBackend:
     """observe / is_fresh / execute over AT-SPI, KWin and the RemoteDesktop portal."""
 
     def __init__(self, *, max_elements: int = 600, max_depth: int = 40) -> None:
-        self.bus = A11yBus()
+        # An agent workspace (docs/research/91) has no accessibility bus of its own; plan one
+        # (screenshots, docs/68) does not need it.
+        try:
+            self.bus = A11yBus()
+        except Exception:  # noqa: BLE001 (GLib.Error: no org.a11y.Bus on this session)
+            self.bus = None
         self.kwin = KWin()
-        self.input = RemoteInput(cursor=self.kwin.cursor)
+        if os.environ.get('RUNGIC_WORKSPACE'):
+            from .fakeinput import WorkspaceInput
+            self.input = WorkspaceInput(cursor=self.kwin.cursor)
+        else:
+            self.input = RemoteInput(cursor=self.kwin.cursor)
         self.max_elements = max_elements
         self.max_depth = max_depth
         self._nodes: dict[str, Node] = {}
@@ -60,6 +70,8 @@ class LinuxAtspiBackend:
 
     def set_accessibility(self, on: bool) -> None:
         """org.a11y.Status IsEnabled; running Qt applications register within ~2 s."""
+        if self.bus is None:
+            return
         if on and not self.bus.enabled():
             self.bus.set_enabled(True)
             self.enabled_by_us = True

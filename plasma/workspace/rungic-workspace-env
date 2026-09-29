@@ -1,0 +1,22 @@
+#!/bin/sh
+# rungic-workspace-env N COMMAND...: run COMMAND in agent workspace N (docs/research/91): its
+# display, its session bus; its windows open there and nowhere else.
+set -eu
+slot=${1:?usage: rungic-workspace-env N COMMAND...}
+shift
+state=${XDG_STATE_HOME:-$HOME/.local/state}/rungic-workspaces/$slot
+runtime=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+if [ ! -s "$state/bus" ] || [ ! -S "$runtime/wayland-ws-$slot" ]; then
+    echo "workspace $slot is not running (systemctl --user start rungic-workspace@$slot)" >&2
+    exit 1
+fi
+export WAYLAND_DISPLAY=wayland-ws-$slot DBUS_SESSION_BUS_ADDRESS="$(cat "$state/bus")" RUNGIC_WORKSPACE=$slot
+export QT_QPA_PLATFORM=wayland XDG_CURRENT_DESKTOP=KDE XDG_SESSION_TYPE=wayland
+# Its own Xwayland for X11 programs; none at all rather than the phone's.
+if [ -s "$state/display" ]; then
+    export DISPLAY="$(cat "$state/display")"
+else
+    unset DISPLAY
+fi
+unset XAUTHORITY
+exec "$@"

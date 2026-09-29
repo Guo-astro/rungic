@@ -1,3 +1,10 @@
+kwin (4:6.6.6-0ubuntu0.1+rungic9) resolute; urgency=medium
+
+  * Android host: --android-workspace, an agent workspace's KWin without a phone output
+    (docs/research/91).
+
+ -- Rungic <noreply@rungic.invalid>  Tue, 29 Sep 2026 11:10:00 +0000
+
 kwin (4:6.6.6-0ubuntu0.1+rungic8) resolute; urgency=medium
 
   * Share Android-density defaults with a 360-pixel logical layout guard.

@@ -9,6 +9,7 @@
 #pragma once
 
 #include <QFileSystemWatcher>
+#include <QProcess>
 #include <QObject>
 #include <QPointer>
 #include <QRect>
@@ -71,6 +72,8 @@ private:
     void keepApart();
     void reportWatched();
     void readActivity();
+    void startWorkspaceStream();
+    void stopWorkspaceStream();
 
     std::unique_ptr<Screencasting> m_screencasting;
     std::unique_ptr<FakeInput> m_input;
@@ -90,4 +93,9 @@ private:
     QString m_activityState;
     QString m_activityText;
     double m_activityTime = 0;
+    // An agent workspace shown instead of the assistant's screen (docs/research/91): its
+    // picture comes from rungic-workspace-stream, which records that workspace's KWin.
+    int m_workspace = 0;
+    QProcess *m_workspaceStream = nullptr;
+    int m_streamedWorkspace = 0;
 };

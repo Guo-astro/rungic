@@ -71,6 +71,10 @@ REALTIME_MODEL = 'gpt-realtime-2.1-mini'
 # The agent (Codex): the fast model; tasks here are short device operations.
 AGENT_MODEL = 'gpt-6-sol'
 AGENT_EFFORT = 'medium'
+# The agent's own workspace (docs/research/91): a KWin of its own on the Android host, where
+# everything the agent opens appears and nothing reaches the user's phone. A second agent
+# would get 2, and so on (the host offers ws-1 .. ws-4).
+WORKSPACE = 1
 # Spoken progress while the agent works: Codex hands agent updates to the voice
 # model as context only (no response), so it would stay silent until the end.
 # Spoken progress (docs/89): by events, not by the clock. The screen shows every step; the
@@ -126,6 +130,43 @@ INTERFACE = '''
   </interface>
 </node>
 '''
+
+
+def workspace_env(slot=WORKSPACE, wait=10.0):
+    """Start agent workspace `slot` if it is not running and return what puts a program in it
+    (the variables rungic-workspace-env sets), or None: the host offers no workspaces (APK
+    before 2.14) or it did not come up in time. The user's own display and bus go along as
+    RUNGIC_USER_*, for what belongs on the phone (the assistant screen's floating window)."""
+    if not Path(f'/mnt/android-wayland/ws-{slot}').exists():
+        return None
+    state = Path(os.environ.get('XDG_STATE_HOME') or Path.home() / '.local/state') / 'rungic-workspaces' / str(slot)
+    runtime = Path(os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}')
+    deadline = time.monotonic() + wait
+    started = False
+    while True:
+        try:
+            bus = (state / 'bus').read_text().strip()
+        except OSError:
+            bus = ''
+        if bus and (runtime / f'wayland-ws-{slot}').exists():
+            break
+        if not started:
+            subprocess.run(['systemctl', '--user', 'start', '--no-block', f'rungic-workspace@{slot}.service'],
+                           capture_output=True, timeout=10)
+            started = True
+        if time.monotonic() > deadline:
+            log(f'workspace {slot}: not up after {wait:.0f} s')
+            return None
+        time.sleep(0.2)
+    env = {'WAYLAND_DISPLAY': f'wayland-ws-{slot}', 'DBUS_SESSION_BUS_ADDRESS': bus, 'RUNGIC_WORKSPACE': str(slot),
+           'QT_QPA_PLATFORM': 'wayland', 'XDG_SESSION_TYPE': 'wayland', 'XDG_CURRENT_DESKTOP': 'KDE',
+           'RUNGIC_USER_WAYLAND_DISPLAY': os.environ.get('WAYLAND_DISPLAY', 'wayland-0'),
+           'RUNGIC_USER_DBUS_SESSION_BUS_ADDRESS': os.environ.get('DBUS_SESSION_BUS_ADDRESS', f'unix:path={runtime}/bus')}
+    try:
+        env['DISPLAY'] = (state / 'display').read_text().strip()
+    except OSError:
+        pass
+    return env
 
 
 def openai_key() -> str:
@@ -474,6 +515,8 @@ class VoiceAgent:
         self.key_working = None      # the last test of the API key: True, False, or not tested
         self.installer = None        # a Codex installation under way
         self.server = None
+        # The workspace comes up with the service, ready before the first task needs it.
+        threading.Thread(target=workspace_env, kwargs={'wait': 20}, daemon=True).start()
         self.start_server()
         GLib.timeout_add_seconds(30, self.idle_check)
 
@@ -554,14 +597,21 @@ class VoiceAgent:
 
     # ---- conversations ----------------------------------------------------------
     def thread_settings(self):
+        # update_plan is off unless configured (codex config resolve_update_plan_enabled):
+        # its plan is the task card's checklist and the voice's milestones (docs/89).
+        config = {'model_reasoning_effort': AGENT_EFFORT, 'tools.update_plan.enabled': True}
+        # The agent works in its own workspace (docs/research/91): its commands and its desktop
+        # tools see that KWin only, so whatever it opens appears there from the first frame.
+        # Codex starts MCP servers with a few variables only (rungic-cua fills in the user's
+        # session for the rest), so they go to the server explicitly.
+        env = workspace_env()
+        if env:
+            config['shell_environment_policy.set'] = env
+            config['mcp_servers.rungic-desktop.env'] = env
         # Full access without approval prompts (the user's choice, docs/59): the
         # sandbox could not reach the desktop and every approval interrupted work.
         return {'cwd': str(Path.home()), 'sandbox': 'danger-full-access', 'approvalPolicy': 'never',
-                'model': AGENT_MODEL,
-                # update_plan is off unless configured (codex config resolve_update_plan_enabled):
-                # its plan is the task card's checklist and the voice's milestones (docs/89).
-                'config': {'model_reasoning_effort': AGENT_EFFORT, 'tools.update_plan.enabled': True},
-                'developerInstructions': prompt('agent.md')}
+                'model': AGENT_MODEL, 'config': config, 'developerInstructions': prompt('agent.md')}
 
     def open_conversation(self, thread_id, connect=True):
         """Open a conversation. What the app shows comes from our own store and returns at

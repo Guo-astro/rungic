@@ -196,6 +196,7 @@ void AgentScreen::poll()
         return;
     }
     m_enabled = state.value(QStringLiteral("enabled")).toBool();
+    m_workspace = state.value(QStringLiteral("workspace")).toInt();
     m_onTv = state.value(QStringLiteral("tv")).toBool();
     m_fullscreen = state.value(QStringLiteral("fullscreen")).toBool();
     if (!m_enabled) {  // turned off elsewhere (quick setting, rungic-agent-screen off)
@@ -223,6 +224,21 @@ void AgentScreen::reportWatched()
 
 void AgentScreen::update()
 {
+    // An agent workspace (docs/research/91): its own KWin, recorded by a helper connected to it.
+    if (m_workspace > 0) {
+        if (m_stream)  // the assistant's own screen was shown until now
+            stopStream();
+        if (m_onTv || m_fullscreen) {
+            stopWorkspaceStream();
+            setStatus(m_onTv ? QStringLiteral("tv") : QStringLiteral("fullscreen"));
+            return;
+        }
+        if (!m_workspaceStream || m_streamedWorkspace != m_workspace) {
+            startWorkspaceStream();
+        }
+        return;
+    }
+    stopWorkspaceStream();
     QScreen *output = agentOutput();
     if (!output) {
         stopStream();
@@ -271,6 +287,62 @@ void AgentScreen::startStream()
     });
 }
 
+void AgentScreen::startWorkspaceStream()
+{
+    stopWorkspaceStream();
+    m_streamedWorkspace = m_workspace;
+    m_workspaceStream = new QProcess(this);
+    m_workspaceStream->setProgram(QStringLiteral("rungic-workspace-env"));
+    m_workspaceStream->setArguments({QString::number(m_workspace), QStringLiteral("/usr/libexec/rungic-workspace-stream")});
+    m_workspaceStream->setProcessChannelMode(QProcess::ForwardedErrorChannel);
+    setStatus(QStringLiteral("connecting"));
+    QProcess *process = m_workspaceStream;
+    connect(process, &QProcess::readyReadStandardOutput, this, [this, process] {
+        while (process->canReadLine()) {
+            const QByteArray line = process->readLine().trimmed();
+            if (line.startsWith("node ")) {
+                m_nodeId = line.mid(5).toUInt();
+                Q_EMIT nodeIdChanged();
+                setStatus(QStringLiteral("running"));
+            } else if (line.startsWith("error ")) {
+                setStatus(QStringLiteral("error: ") + QString::fromUtf8(line.mid(6)));
+            }
+        }
+    });
+    connect(process, &QProcess::finished, this, [this, process] {
+        if (m_workspaceStream != process) {
+            return;
+        }
+        m_workspaceStream = nullptr;
+        process->deleteLater();
+        if (m_nodeId) {
+            m_nodeId = 0;
+            Q_EMIT nodeIdChanged();
+        }
+        // The workspace went or restarted: try again at the next poll.
+        m_streamedWorkspace = 0;
+        setStatus(QStringLiteral("waiting for the workspace"));
+    });
+    process->start();
+}
+
+void AgentScreen::stopWorkspaceStream()
+{
+    if (!m_workspaceStream) {
+        return;
+    }
+    QProcess *process = m_workspaceStream;
+    m_workspaceStream = nullptr;
+    m_streamedWorkspace = 0;
+    process->closeWriteChannel();
+    process->terminate();
+    connect(process, &QProcess::finished, process, &QObject::deleteLater);
+    if (m_nodeId) {
+        m_nodeId = 0;
+        Q_EMIT nodeIdChanged();
+    }
+}
+
 void AgentScreen::stopStream()
 {
     m_stream.reset();
@@ -283,6 +355,10 @@ void AgentScreen::stopStream()
 
 void AgentScreen::pointerMove(double fx, double fy)
 {
+    if (m_workspaceStream) {
+        m_workspaceStream->write(QStringLiteral("pointer %1 %2\n").arg(fx).arg(fy).toUtf8());
+        return;
+    }
     QScreen *output = agentOutput();
     if (!output || !m_input->isActive())
         return;
@@ -298,12 +374,23 @@ void AgentScreen::pointerMove(double fx, double fy)
 
 void AgentScreen::pointerButton(int button, bool pressed)
 {
+    if (m_workspaceStream) {
+        m_workspaceStream->write(QStringLiteral("button %1 %2\n").arg(button).arg(pressed ? 1 : 0).toUtf8());
+        return;
+    }
     if (m_input->isActive())
         m_input->button(uint(button), pressed ? 1 : 0);
 }
 
 void AgentScreen::scroll(double dx, double dy)
 {
+    if (m_workspaceStream) {
+        if (dy != 0)
+            m_workspaceStream->write(QStringLiteral("axis 0 %1\n").arg(dy).toUtf8());
+        if (dx != 0)
+            m_workspaceStream->write(QStringLiteral("axis 1 %1\n").arg(dx).toUtf8());
+        return;
+    }
     if (!m_input->isActive())
         return;
     if (dy != 0)

@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Rungic workspace stream
+Comment=A live picture of an agent workspace for its floating window (docs/research/91)
+Exec=/usr/libexec/rungic-workspace-stream
+NoDisplay=true
+X-KDE-Wayland-Interfaces=zkde_screencast_unstable_v1,org_kde_kwin_fake_input

@@ -1,0 +1,11 @@
+#!/bin/sh
+# rungic-user COMMAND...: run COMMAND in the user's session (the phone's KWin and session bus) from
+# inside an agent workspace (docs/research/91): a notification the user should read, say. The
+# workspace's programs get the user's session as RUNGIC_USER_* (rungic-voice-agent).
+set -eu
+[ $# -gt 0 ] || { echo "usage: rungic-user COMMAND..." >&2; exit 2; }
+runtime=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+export WAYLAND_DISPLAY="${RUNGIC_USER_WAYLAND_DISPLAY:-wayland-0}"
+export DBUS_SESSION_BUS_ADDRESS="${RUNGIC_USER_DBUS_SESSION_BUS_ADDRESS:-unix:path=$runtime/bus}"
+unset RUNGIC_WORKSPACE DISPLAY XAUTHORITY
+exec "$@"

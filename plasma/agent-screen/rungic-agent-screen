@@ -8,6 +8,12 @@ floating window on the phone or on the TV, switching between the two without mov
 (CAST-n). `off` turns it off (its windows move to the phone); the window quits by itself. `ensure`
 is `status` that also restarts the floating window of a screen that is on (after the Android host
 restarted, say); the quick setting polls it.
+
+The assistant's screen is the agent's workspace (docs/research/91): a KWin of its own on the
+host, `rungic-workspace@N` ($RUNGIC_WORKSPACE, else 1). `on` starts it when needed and shows it;
+the user's KWin gets no second output then. Hosts without workspaces (APK before 2.14) keep the
+old second output of the user's desktop. The floating window always opens on the phone, also
+when the agent runs this from inside its workspace (RUNGIC_USER_* are the user's session).
 """
 import json
 import os
@@ -38,12 +44,55 @@ def bridge(request, timeout=5):
 
 
 def window_running():
-    return subprocess.run(['pgrep', '-f', WINDOW], capture_output=True).returncode == 0
+    return subprocess.run(['pgrep', '-f', '^' + WINDOW], capture_output=True).returncode == 0
+
+
+def workspace():
+    """The workspace the assistant's screen shows, or 0 when the host offers none."""
+    slot = int(os.environ.get('RUNGIC_WORKSPACE') or 1)
+    return slot if os.path.exists(f'/mnt/android-wayland/ws-{slot}') else 0
+
+
+def user_env():
+    """The user's session: the floating window belongs on the phone, not in a workspace. What the
+    caller's environment lacks comes from the session's (the systemd user manager's), as for the
+    desktop's own apps: without its GPU variables the window found no EGL display and drew nothing."""
+    env = dict(os.environ)
+    if env.get('RUNGIC_USER_WAYLAND_DISPLAY'):
+        env['WAYLAND_DISPLAY'] = env['RUNGIC_USER_WAYLAND_DISPLAY']
+        env['DBUS_SESSION_BUS_ADDRESS'] = env.get('RUNGIC_USER_DBUS_SESSION_BUS_ADDRESS', '')
+    for name in ('RUNGIC_WORKSPACE', 'DISPLAY', 'XAUTHORITY'):
+        env.pop(name, None)
+    try:
+        session = subprocess.run(['systemctl', '--user', 'show-environment'], capture_output=True, text=True,
+                                 timeout=5).stdout
+        for line in session.splitlines():
+            name, _, value = line.partition('=')
+            if name and name not in ('RUNGIC_WORKSPACE', 'DISPLAY', 'XAUTHORITY'):
+                env.setdefault(name, value)
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return env
+
+
+def workspace_up(slot, timeout=15):
+    """Start workspace `slot` if it is not running; True once its KWin is there."""
+    runtime = os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}'
+    socket_path = os.path.join(runtime, f'wayland-ws-{slot}')
+    if not os.path.exists(socket_path):
+        subprocess.run(['systemctl', '--user', 'start', '--no-block', f'rungic-workspace@{slot}.service'],
+                       capture_output=True, env=user_env(), timeout=10)
+    deadline = time.monotonic() + timeout
+    while not os.path.exists(socket_path):
+        if time.monotonic() > deadline:
+            return False
+        time.sleep(0.2)
+    return True
 
 
 def output():
     """KWin's name for the assistant's screen, or None while it has none."""
-    out = subprocess.run(['kscreen-doctor', '-j'], capture_output=True, text=True, timeout=10).stdout
+    out = subprocess.run(['kscreen-doctor', '-j'], capture_output=True, text=True, timeout=10, env=user_env()).stdout
     try:
         outputs = json.loads(out).get('outputs', [])
     except ValueError:
@@ -54,24 +103,56 @@ def output():
 def status():
     state = bridge({'op': 'agent-screen'})
     shown_on = 'tv' if state.get('tv') else 'phone fullscreen' if state.get('fullscreen') else 'floating window'
-    return {'enabled': state['enabled'], 'shown_on': shown_on,
-            'size': f"{state['width']}x{state['height']}", 'output': output() if state['enabled'] else None,
+    slot = state.get('workspace', 0)
+    if not state['enabled']:
+        screen = None
+    elif slot:
+        runtime = os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}'
+        screen = f'workspace {slot}' if os.path.exists(os.path.join(runtime, f'wayland-ws-{slot}')) else None
+    else:
+        screen = output()
+    return {'enabled': state['enabled'], 'shown_on': shown_on, 'workspace': slot,
+            'size': f"{state['width']}x{state['height']}", 'output': screen,
             'window_running': window_running()}
 
 
 def start_window():
-    if not window_running():
+    """One floating window: callers at the same moment (the quick setting's poll, the agent's
+    tools) take turns, and the second finds the first's window (two were started once)."""
+    import fcntl
+    runtime = os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}'
+    with open(os.path.join(runtime, 'rungic-agent-screen.lock'), 'w') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if window_running():
+            return
         subprocess.Popen(['kstart', '--application', 'com.rungic.AgentScreen'], stdout=subprocess.DEVNULL,
-                         stderr=subprocess.DEVNULL, start_new_session=True)
+                         stderr=subprocess.DEVNULL, start_new_session=True, env=user_env())
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline and not window_running():
+            time.sleep(0.1)
 
 
 def ensure():
-    if bridge({'op': 'agent-screen'})['enabled']:
+    state = bridge({'op': 'agent-screen'})
+    if state['enabled']:
+        slot = workspace()
+        if slot:
+            workspace_up(slot)
+            if state.get('workspace') != slot:
+                bridge({'op': 'agent-screen', 'workspace': slot})
         start_window()
     return status()
 
 
 def on():
+    slot = workspace()
+    if slot:
+        workspace_up(slot)
+        # The workspace first: the host then never offers the user's KWin a second output.
+        bridge({'op': 'agent-screen', 'workspace': slot})
+        bridge({'op': 'agent-screen', 'enabled': True})
+        start_window()
+        return status()
     bridge({'op': 'agent-screen', 'enabled': True})
     start_window()
     deadline = time.monotonic() + 10

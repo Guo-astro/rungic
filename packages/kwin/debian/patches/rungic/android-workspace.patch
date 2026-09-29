@@ -1,0 +1,48 @@
+From: clawd20130 <clawd20130@gmail.com>
+Date: Tue, 29 Sep 2026 19:04:03 +0900
+Subject: Android host: an agent workspace's KWin has no phone output
+
+--android-workspace (with --android-host): the KWin of an agent workspace creates no output of
+its own; its only output is the one the host offers it on its ws-<n> socket (a cast output that
+only this client sees), where its fullscreen window is shown on the TV or fullscreen presenter.
+
+Forwarded: not-needed
+Last-Update: 2026-09-29
+X-Rungic-Status: Pending
+X-Rungic-Tests: none (gap)
+X-Rungic-Docs: docs/research/91
+---
+ src/main_wayland.cpp | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/src/main_wayland.cpp b/src/main_wayland.cpp
+index 3eb97aa..9a2e576 100644
+--- a/src/main_wayland.cpp
++++ b/src/main_wayland.cpp
+@@ -330,6 +330,9 @@ int main(int argc, char *argv[])
+     QCommandLineOption androidHostOption(QStringLiteral("android-host"), i18n("The Wayland display is the Android host's (Rungic)."));
+     QCommandLineOption androidRenderDeviceOption(QStringLiteral("android-render-device"), i18n("The GPU node on the Android host."), QStringLiteral("path"));
+     QCommandLineOption androidAllocatorOption(QStringLiteral("android-allocator"), i18n("The Android host's buffer lease socket."), QStringLiteral("path"));
++    // Rungic: an agent workspace's own KWin (docs/research/91). It connects to the host's ws-<n>
++    // socket and has no phone output: its only output is the one the host offers it.
++    QCommandLineOption androidWorkspaceOption(QStringLiteral("android-workspace"), i18n("An agent workspace on the Android host: no phone output (Rungic)."));
+     QCommandLineOption widthOption(QStringLiteral("width"),
+                                    i18n("The width for windowed mode. Default width is 1024."),
+                                    QStringLiteral("width"));
+@@ -391,6 +394,7 @@ int main(int argc, char *argv[])
+ #endif
+     parser.addOption(waylandDisplayOption);
+     parser.addOption(androidHostOption);
++    parser.addOption(androidWorkspaceOption);
+     parser.addOption(androidRenderDeviceOption);
+     parser.addOption(androidAllocatorOption);
+     parser.addOption(virtualFbOption);
+@@ -574,7 +578,7 @@ int main(int argc, char *argv[])
+         a.setSession(KWin::Session::create(KWin::Session::Type::Noop));
+         const KWin::Wayland::WaylandBackendOptions options{
+             .socketName = socketName,
+-            .outputCount = outputCount,
++            .outputCount = parser.isSet(androidHostOption) && parser.isSet(androidWorkspaceOption) ? 0 : outputCount,
+             .outputScale = outputScale,
+             .outputSize = initialWindowSize,
+             .fullscreen = fullscreen,

@@ -192,6 +192,9 @@ class RemoteInput:
     def key(self, sym: int, pressed: bool) -> None:
         self._notify('NotifyKeyboardKeysym', 'iu', sym, 1 if pressed else 0)
 
+    def scroll_notches(self, axis: int, notches: int) -> None:
+        self._notify('NotifyPointerAxisDiscrete', 'ui', axis, notches)
+
     def chord(self, keys: list[str]) -> None:
         syms = [keysym(k) for k in keys]
         for sym in syms:

@@ -260,7 +260,7 @@ class ComputerUse:
                     if delta:
                         # About 100 px a wheel notch, as the guide's desktop handler counts.
                         notches = max(1, round(abs(delta) / 100))
-                        source._notify('NotifyPointerAxisDiscrete', 'ui', axis, notches if delta > 0 else -notches)
+                        source.scroll_notches(axis, notches if delta > 0 else -notches)
                 return f"scroll ({action.get('scroll_x', 0)}, {action.get('scroll_y', 0)})"
             if kind == 'keypress':
                 syms = [keysym_for(k) for k in action['keys']]
