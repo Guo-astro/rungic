@@ -193,3 +193,10 @@ Docker的 `moto-nginx` 仍healthy，原Alpine LXC仍RUNNING；不停止这两个
 2026-09-29 模式列表修正：声明兼容的候选不再直接作为可用选项。胶囊只显示当前一致的模式和在相同发送端/接收端能力下完成准确切换检查的模式；失败项排除、软件或能力变化使旧记录失效，无未验证/试用入口。此前将编码器/API参数支持等同投屏实际输出，导致1920×1200等无效项仍可选，已修正。见 [视频模式记录](miracast-video-modes.md)。
 
 2026-09-29 胶囊交互统一：APK 2.22/70 用胶囊内的共享 BottomSheet 替换模式选择的 Android AlertDialog，设备选择复用同一容器。选中后点击应用才切换，取消/返回/遮罩/下拉回到胶囊；返回优先关闭浮层。G100/UGREEN 实测交互及1080p30→60应用通过，模式过滤与 root 后端保持不变。证据、实现边界与回退 APK 见 [视频模式记录](miracast-video-modes.md)。
+
+
+## 2026-09-30：主动建议与卡片主屏
+
+新增 C++ `rungic-suggestions`，通过会话 D-Bus `com.rungic.Suggestions` 共享账本，Agent 建议页与 Folio 主屏使用同一个 QML 模块。主屏纵向滚动，底部手柄打开原应用抽屉；应用抽屉及搜索模型保留。采集链：dpkg/存储/systemd/既有 coredump 摘要 → root 定时采集 JSON → 用户服务去重/调度/持久化 → QML 卡片 → 用户委托 VoiceAgent 原对话。原硬件后端不变。
+
+根采集输出 `/var/lib/rungic-suggestions/observations.json`，用户记录 `~/.local/share/rungic-suggestions/state.json`；60 秒更新，过期系统数据不触发预约提醒。知识库 `/usr/share/rungic/compatibility/` 随包安装，版本严格匹配。D-Bus `List/Get/Act/Update/Feedback/Knowledge/SetVisible/Refresh` 与 `Changed`；VoiceAgent 的 `InvestigateSuggestion/ApplySuggestion/StopSuggestion` 用稳定事项 ID 关联 conversation。调查、确认应用、提醒三种语义分开。上游反馈先生成本地材料并记录真实链接，合入不等于本机解决。实现、来源、离线与 G100 实机验收边界见 [主动建议记录](proactive-system-care.md)，不得将测试替身结果作为实际模型或 GPU 优化成功。
