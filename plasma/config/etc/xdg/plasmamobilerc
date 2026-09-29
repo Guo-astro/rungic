@@ -1,0 +1,4 @@
+# Rungic prepares the Linux account before starting Plasma; Android owns device setup.
+# Skip Plasma Mobile's additional welcome wizard for every new desktop account.
+[InitialStart]
+wizardRun=true

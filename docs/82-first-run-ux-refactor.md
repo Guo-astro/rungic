@@ -74,3 +74,11 @@ APK 与 native `.so` 必须一起构建。账户助手、宿主控制器和包�
 最终 APK SHA-256 为 `9b70c965c4f7f5b41d78190624e29d89340b6444f51fc28691cd4c80cb819fba`，内含当前编译的 native 库；沿用 G100 `.5` 的无 OCR 构建配置。通过流式更新安装后再次进入 Plasma 欢迎页，并检查了切到 Android 后返回。`final-resume.png`、`final-startup.log`、`final-errors.log` 留在 `.work/ux/device/`；错误日志未见本轮 AndroidRuntime / RungicWayland 异常。测试结束 `mWakefulness=Dozing`。此次不经过只读 product 预装路径，不能替代完整镜像验证。
 
 最终 APK 部署回归通过后，确认没有运行中的 cargo/rustc，定向清理本机 native target（933 MiB）、APK staging、Java 测试类与测试可执行文件，合计约 951 MiB。签名 APK、可复用 native 库、Deb 包、回退 APK、日志和截图保留；`.work/ux/` 现约 12 MiB。账户包尚未部署，其远程工作目录未按“部署通过”清理；未执行全局 Docker/Podman prune。
+
+### 取消额外的 Plasma Mobile 欢迎向导（2026-09-29）
+
+用户要求首次进入直接到桌面。核对固定 Plasma Mobile 6.6.5 源码：`kded/start/start.cpp` 分别启动 envmanager 与 `plasma-mobile-initial-start`；后者 `initialstart/settings.cpp` 从 `plasmamobilerc` 的 `[InitialStart] wizardRun` 判断是否显示向导，`initialstart/main.cpp` 在加载界面前检查并退出。相关上游文件为 GPL-2.0-or-later / LGPL-2.0-or-later，来源 [KDE Plasma Mobile](https://invent.kde.org/plasma/plasma-mobile)，版本/源码哈希见 `packages/plasma-mobile/recipe.json`。同类新组件 Plasma Setup 的账户创建流程不是本机实际运行的这个程序，不能混用关闭方式。
+
+采用上游已有 KConfig 开关：新增 `plasma/config/etc/xdg/plasmamobilerc`，设置 `[InitialStart] wizardRun=true`。由 `rungic-plasma-config` 打包为系统默认，适用于新账户，不依赖复制个人 home 或首次启动脚本逐用户写配置。保留用户显式覆盖的能力；需要查看向导时仍可手动 `plasma-mobile-initial-start --test-wizard`。不删除程序、不关闭 kded 模块，envmanager 的正常桌面配置继续运行。Rungic 的安装 ready、账户配置、真实画面 loading 门槛保持原样。
+
+G100 / portov / 5038 / ZY32M9MRVP 已部署该单一配置文件，并关闭当前已有的一个欢迎向导进程。验证：隔离空 HOME/XDG_CONFIG_HOME，显式 phone 平台，KConfig 继承 true；实际 ARM64 欢迎程序用 offscreen 平台运行，返回 0 并报告不启动向导；现有账户按实际会话环境重新启动该程序同样直接退出。证据 `.work/experiments/g100-welcome-20260929/verification.json`。这是干净配置与现有账户验收，不是重新清数据刷入整包的验收；镜像后续构建通过配置包获得该默认值。
