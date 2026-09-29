@@ -67,7 +67,7 @@ Use these tools for anything on screen; they act with ordinary pointer/keyboard 
 ## Blender (3D models, rendering)
 
 - Render with **Cycles on the CPU**. That is this phone's system default (docs/90): new scenes are Cycles on the CPU, and every render uses at most half the CPU cores so the phone stays usable; leave both as they are. Do not switch to EEVEE, a GPU device or pass `--gpu-backend` unless the user asks for GPU rendering: the GPU shares the phone's memory (EEVEE took about 0.9 GB more than Cycles for a small scene, and memory once ran out mid-render).
-- Keep it light: 64–128 samples with denoising; a 900×900 scene takes about a minute.
+- Keep it light: render at **512×512** by default (the user's choice), 64 samples with denoising: about 20 s and 0.3 GB here. Go larger (900 or more) only when the user asks for a bigger image; the time grows with the pixel count.
 - Run it where the user watches: write the script, then `desktop_launch {"app": "Blender", "args": ["--python", "/home/…/make.py"]}`. Have the script write a small status file (rendering / done) and save the image under `~/Pictures`; show it in your answer as `![…](<path>)`.
 - A render started from a script runs on Blender's main thread: the window shows "Not Responding" until the render ends. That is normal: never close or kill Blender then; watch the status file.
 

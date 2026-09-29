@@ -53,8 +53,13 @@
   - 实测：
     - `blender -b` 和 `--factory-startup` 下，默认值都是 `CYCLES CPU FIXED 4`。
     - 脚本分别设成自动和固定 8 线程，渲染时按 /proc 统计，实际都只占用 4.0 个核心。
+- **512×512 的实测**（篮球场景，Cycles CPU，4 线程，64 采样加降噪）：
+  - 渲染约 20 秒，连同启动 Blender 约 26 秒。
+  - 平均占用 3.78 个核心。
+  - Blender 常驻内存约 340 MB，可用内存最低 2.85 GB，显存只多约 30 MB（界面）。
+  - 画质正常，看不出噪点。
 - **技能**（`rungic-phone-desktop`）：
-  - 用 Cycles CPU 渲染，64–128 采样加降噪；不改用 EEVEE 或 GPU，不传 `--gpu-backend`，除非用户要求。
+  - 用 Cycles CPU 渲染；默认分辨率 512×512（用户决定，2026-09-29），64 采样加降噪，用户要大图时才提高分辨率；不改用 EEVEE 或 GPU，不传 `--gpu-backend`，除非用户要求。
   - 在助理屏上可见地运行脚本，用状态文件判断进度。
   - Not Responding 期间不关闭、不结束 Blender。
 
