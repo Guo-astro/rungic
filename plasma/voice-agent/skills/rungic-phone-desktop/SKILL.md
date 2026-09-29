@@ -64,6 +64,13 @@ Use these tools for anything on screen; they act with ordinary pointer/keyboard 
 
 **Plan two** (accessibility tree + OCR + JEV: `desktop_observe`, `desktop_run`, `desktop_find_name`) is not the default and its tools are not listed unless it was chosen (`rungic-cua plan atspi`, then the voice assistant restarts). Only when the user asks for it or it is active: read `plan-two.md` next to this file.
 
+## Blender (3D models, rendering)
+
+- Render with **Cycles on the CPU**. That is this phone's system default (docs/90): new scenes are Cycles on the CPU, and every render uses at most half the CPU cores so the phone stays usable; leave both as they are. Do not switch to EEVEE, a GPU device or pass `--gpu-backend` unless the user asks for GPU rendering: the GPU shares the phone's memory (EEVEE took about 0.9 GB more than Cycles for a small scene, and memory once ran out mid-render).
+- Keep it light: 64–128 samples with denoising; a 900×900 scene takes about a minute.
+- Run it where the user watches: write the script, then `desktop_launch {"app": "Blender", "args": ["--python", "/home/…/make.py"]}`. Have the script write a small status file (rendering / done) and save the image under `~/Pictures`; show it in your answer as `![…](<path>)`.
+- A render started from a script runs on Blender's main thread: the window shows "Not Responding" until the render ends. That is normal: never close or kill Blender then; watch the status file.
+
 ## WeChat (微信) on screen
 
 WeChat exposes its controls; use these names instead of guessing (English UI names):
