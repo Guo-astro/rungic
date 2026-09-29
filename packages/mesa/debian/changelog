@@ -1,3 +1,19 @@
+mesa (26.3.0~devel20260929+rungic1) resolute; urgency=medium
+
+  * Base: upstream Mesa main 190d227a (2026-09-29) instead of the Mesa for
+    Android container branch (docs/research/94). Carried for KGSL:
+    - freedreno gallium KGSL backend (upstream's closed !21570 as the branch
+      had it, with its later submit-lifetime fix);
+    - KGSL dma-buf sharing, rewritten: imported buffers export as themselves,
+      gralloc UBWC import on request (FD_KGSL_DMABUF_UBWC);
+    - EGL/GBM on /dev/kgsl-3d0 with MESA_LOADER_DRIVER_OVERRIDE=kgsl;
+    - Turnip KGSL: VK_KHR_display on the instance, X11 DRI3 present.
+    The branch's Termux changes (1274 for LINEAR, no xshmfence, Zink as the
+    EGL default, DRI3 failure reported as success) are gone, and with them
+    the need for two of the previous patches.
+
+ -- range-dev <noreply@localhost>  Wed, 30 Sep 2026 03:20:00 +0900
+
 mesa (26.3.0~devel20260824+rungic3) resolute; urgency=medium
 
   * KGSL: exporting an imported dma-buf gives back the same buffer; X11 GL

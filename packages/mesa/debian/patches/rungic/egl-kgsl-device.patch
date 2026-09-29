@@ -1,0 +1,227 @@
+From: clawd20130 <clawd20130@gmail.com>
+Date: Wed, 30 Sep 2026 03:11:39 +0900
+Subject: egl: use the KGSL GPU node with
+ MESA_LOADER_DRIVER_OVERRIDE=kgsl
+
+KGSL (/dev/kgsl-3d0) is not a DRM device: EGL cannot find it as an EGLDevice, GBM gets no render
+node for it, and a Wayland compositor on KGSL can advertise neither wl_drm nor a linux-dmabuf
+main device. With MESA_LOADER_DRIVER_OVERRIDE=kgsl (Options.Kgsl):
+- dri2_setup_device() does not look for a DRM device for the display;
+- the GBM platform opens /dev/kgsl-3d0 when it creates its own GBM device, and renders on the GBM
+  device's fd;
+- the surfaceless platform falls back to /dev/kgsl-3d0;
+- the Wayland platform uses /dev/kgsl-3d0 when the compositor names no device.
+
+From lfdevs/mesa-for-android-container (98f3d622) without its Termux parts: Zink stays opt-in
+(the branch made it the default without an override), and the Wayland fallback needs the
+override instead of applying to every driver.
+
+Forwarded: no
+Last-Update: 2026-09-30
+X-Rungic-Status: Pending [KGSL only; carried]
+X-Rungic-Tests: L3:gpu.gl (KWin on GBM, plasmashell and Qt/GTK apps on Wayland EGL, the ctypes GBM probe of docs/research/93)
+X-Rungic-Docs: docs/research/94
+---
+ src/egl/drivers/dri2/egl_dri2.c             |  4 ++
+ src/egl/drivers/dri2/platform_drm.c         |  4 ++
+ src/egl/drivers/dri2/platform_surfaceless.c | 30 +++++++++
+ src/egl/drivers/dri2/platform_wayland.c     | 70 ++++++++++++++-------
+ src/egl/main/eglapi.c                       |  1 +
+ src/egl/main/egldisplay.h                   |  1 +
+ 6 files changed, 87 insertions(+), 23 deletions(-)
+
+diff --git a/src/egl/drivers/dri2/egl_dri2.c b/src/egl/drivers/dri2/egl_dri2.c
+index b5b97744e..3ba054a2a 100644
+--- a/src/egl/drivers/dri2/egl_dri2.c
++++ b/src/egl/drivers/dri2/egl_dri2.c
+@@ -852,6 +852,10 @@ dri2_setup_device(_EGLDisplay *disp, EGLBoolean software)
+    _EGLDevice *dev;
+    int render_fd;
+ 
++   /* KGSL is not a DRM device: no EGLDevice to find by its fd */
++   if (disp->Options.Kgsl)
++      software = true;
++
+    /* If we're not software, we need a DRM node FD */
+    assert(software || dri2_dpy->fd_render_gpu >= 0);
+ 
+diff --git a/src/egl/drivers/dri2/platform_drm.c b/src/egl/drivers/dri2/platform_drm.c
+index 72e636e9f..7248964c5 100644
+--- a/src/egl/drivers/dri2/platform_drm.c
++++ b/src/egl/drivers/dri2/platform_drm.c
+@@ -628,6 +628,8 @@ dri2_initialize_drm(_EGLDisplay *disp)
+ 
+          dri2_dpy->fd_display_gpu =
+             loader_open_device(drm->nodes[DRM_NODE_PRIMARY]);
++      } else if (disp->Options.Kgsl) {
++         dri2_dpy->fd_display_gpu = loader_open_device("/dev/kgsl-3d0");
+       } else {
+          _EGLDevice *dev_list = _eglGlobal.DeviceList;
+          drmDevicePtr drm;
+@@ -668,6 +670,8 @@ dri2_initialize_drm(_EGLDisplay *disp)
+    if (!dri2_dpy->gbm_dri->software) {
+       dri2_dpy->fd_render_gpu =
+          get_fd_render_gpu_drm(dri2_dpy->gbm_dri, dri2_dpy->fd_display_gpu);
++      if (dri2_dpy->fd_render_gpu < 0 && disp->Options.Kgsl)
++         dri2_dpy->fd_render_gpu = dri2_dpy->fd_display_gpu;
+       if (dri2_dpy->fd_render_gpu < 0) {
+          err = "DRI2: failed to get compatible render device";
+          goto cleanup;
+diff --git a/src/egl/drivers/dri2/platform_surfaceless.c b/src/egl/drivers/dri2/platform_surfaceless.c
+index 8fbb9a60e..2f25e84c4 100644
+--- a/src/egl/drivers/dri2/platform_surfaceless.c
++++ b/src/egl/drivers/dri2/platform_surfaceless.c
+@@ -394,6 +394,36 @@ dri2_initialize_surfaceless(_EGLDisplay *disp)
+       driver_loaded = surfaceless_probe_device_sw(disp);
+    }
+ 
++   if (!driver_loaded && disp->Options.Kgsl) {
++      dri2_dpy->fd_render_gpu = loader_open_device("/dev/kgsl-3d0");
++      if (dri2_dpy->fd_render_gpu >= 0) {
++         dri2_dpy->fd_display_gpu = dri2_dpy->fd_render_gpu;
++         dri2_dpy->driver_name = strdup("kgsl");
++
++         if (dri2_dpy->driver_name) {
++            dri2_detect_swrast_kopper(disp);
++            dri2_dpy->loader_extensions = image_loader_extensions;
++
++            /* KGSL is not enumerated as an EGLDevice, but it still needs a
++             * DRI screen before dri2_setup_screen() reads screen caps.
++             */
++            if (dri2_create_screen(disp)) {
++               driver_loaded = true;
++            } else {
++               _eglLog(_EGL_WARNING, "DRI2: failed to create kgsl screen");
++            }
++         }
++
++         if (!driver_loaded) {
++            free(dri2_dpy->driver_name);
++            dri2_dpy->driver_name = NULL;
++            close(dri2_dpy->fd_render_gpu);
++            dri2_dpy->fd_display_gpu = -1;
++            dri2_dpy->fd_render_gpu = -1;
++         }
++      }
++   }
++
+    if (!driver_loaded) {
+       err = "DRI2: failed to load driver";
+       goto cleanup;
+diff --git a/src/egl/drivers/dri2/platform_wayland.c b/src/egl/drivers/dri2/platform_wayland.c
+index cdc790bf5..044e7c5d8 100644
+--- a/src/egl/drivers/dri2/platform_wayland.c
++++ b/src/egl/drivers/dri2/platform_wayland.c
+@@ -2675,6 +2675,7 @@ static EGLBoolean
+ dri2_initialize_wayland_drm(_EGLDisplay *disp)
+ {
+    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
++   bool using_kgsl = false;
+ 
+    if (dri2_wl_formats_init(&dri2_dpy->formats) < 0)
+       goto cleanup;
+@@ -2708,34 +2709,57 @@ dri2_initialize_wayland_drm(_EGLDisplay *disp)
+    if (roundtrip(dri2_dpy) < 0)
+       goto cleanup;
+ 
+-   if (!dri2_initialize_wayland_drm_extensions(dri2_dpy))
+-      goto cleanup;
+-
+-   loader_get_user_preferred_fd(&dri2_dpy->fd_render_gpu,
+-                                &dri2_dpy->fd_display_gpu);
+-
+-   if (dri2_dpy->fd_render_gpu != dri2_dpy->fd_display_gpu) {
+-      free(dri2_dpy->device_name);
+-      dri2_dpy->device_name =
+-         loader_get_device_name_for_fd(dri2_dpy->fd_render_gpu);
+-      if (!dri2_dpy->device_name) {
+-         _eglError(EGL_BAD_ALLOC, "wayland-egl: failed to get device name "
+-                                  "for requested GPU");
++   if (!dri2_initialize_wayland_drm_extensions(dri2_dpy)) {
++      if (disp->Options.Kgsl) {
++         dri2_dpy->fd_render_gpu = loader_open_device("/dev/kgsl-3d0");
++         using_kgsl = dri2_dpy->fd_render_gpu != -1;
++      } else {
+          goto cleanup;
+       }
+    }
+ 
+-   /* we have to do the check now, because loader_get_user_preferred_fd
+-    * will return a render-node when the requested gpu is different
+-    * to the server, but also if the client asks for the same gpu than
+-    * the server by requesting its pci-id */
+-   dri2_dpy->is_render_node =
+-      drmGetNodeTypeFromFd(dri2_dpy->fd_render_gpu) == DRM_NODE_RENDER;
++   /* KGSL: the compositor advertises neither wl_drm nor a v4 dma-buf feedback
++    * main device (there is no DRM device to name), so the paths above leave no
++    * render fd even when they "succeeded" (dma-buf v3 only). Use the KGSL GPU
++    * node itself. */
++   if (dri2_dpy->fd_render_gpu == -1 && disp->Options.Kgsl) {
++      dri2_dpy->fd_render_gpu = loader_open_device("/dev/kgsl-3d0");
++      if (dri2_dpy->fd_render_gpu == -1)
++         goto cleanup;
++      using_kgsl = true;
++   }
+ 
+-   if (disp->Options.Zink)
+-      dri2_dpy->driver_name = strdup("zink");
+-   else
+-      dri2_dpy->driver_name = loader_get_driver_for_fd(dri2_dpy->fd_render_gpu);
++   if (using_kgsl) {
++      dri2_dpy->fd_display_gpu = dri2_dpy->fd_render_gpu;
++      dri2_dpy->is_render_node = false;
++      dri2_dpy->driver_name = strdup("kgsl");
++   } else {
++      loader_get_user_preferred_fd(&dri2_dpy->fd_render_gpu,
++                                   &dri2_dpy->fd_display_gpu);
++
++      if (dri2_dpy->fd_render_gpu != dri2_dpy->fd_display_gpu) {
++         free(dri2_dpy->device_name);
++         dri2_dpy->device_name =
++            loader_get_device_name_for_fd(dri2_dpy->fd_render_gpu);
++         if (!dri2_dpy->device_name) {
++            _eglError(EGL_BAD_ALLOC, "wayland-egl: failed to get device name "
++                                     "for requested GPU");
++            goto cleanup;
++         }
++      }
++
++      /* we have to do the check now, because loader_get_user_preferred_fd
++       * will return a render-node when the requested gpu is different
++       * to the server, but also if the client asks for the same gpu than
++       * the server by requesting its pci-id */
++      dri2_dpy->is_render_node =
++         drmGetNodeTypeFromFd(dri2_dpy->fd_render_gpu) == DRM_NODE_RENDER;
++
++      if (disp->Options.Zink)
++         dri2_dpy->driver_name = strdup("zink");
++      else
++         dri2_dpy->driver_name = loader_get_driver_for_fd(dri2_dpy->fd_render_gpu);
++   }
+    if (dri2_dpy->driver_name == NULL) {
+       _eglError(EGL_BAD_ALLOC, "DRI2: failed to get driver name");
+       goto cleanup;
+diff --git a/src/egl/main/eglapi.c b/src/egl/main/eglapi.c
+index fb5a8b6f7..788770ce8 100644
+--- a/src/egl/main/eglapi.c
++++ b/src/egl/main/eglapi.c
+@@ -685,6 +685,7 @@ eglInitialize(EGLDisplay dpy, EGLint *major, EGLint *minor)
+ 
+       const char *env = os_get_option("MESA_LOADER_DRIVER_OVERRIDE");
+       disp->Options.Zink = env && !strcmp(env, "zink");
++      disp->Options.Kgsl = env && !strcmp(env, "kgsl");
+ 
+       const char *gallium_hud_env = os_get_option("GALLIUM_HUD");
+       disp->Options.GalliumHudWarn =
+diff --git a/src/egl/main/egldisplay.h b/src/egl/main/egldisplay.h
+index 6178140e7..169ccf052 100644
+--- a/src/egl/main/egldisplay.h
++++ b/src/egl/main/egldisplay.h
+@@ -198,6 +198,7 @@ struct _egl_display {
+ 
+    /* options that affect how the driver initializes the display */
+    struct {
++      EGLBoolean Kgsl;           /**< Use kgsl only */
+       EGLBoolean Zink;           /**< Use kopper only */
+       EGLBoolean ForceSoftware;  /**< Use software path only */
+       EGLBoolean GalliumHudWarn; /**< Using hud, warn when querying buffer age */

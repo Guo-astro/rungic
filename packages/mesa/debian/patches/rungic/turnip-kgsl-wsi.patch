@@ -1,0 +1,54 @@
+From: clawd20130 <clawd20130@gmail.com>
+Date: Wed, 30 Sep 2026 03:12:01 +0900
+Subject: turnip/kgsl: allow VK_KHR_display on the instance, present
+ through X11 DRI3
+
+- An instance that enables VK_KHR_display failed on KGSL ("I can't KHR_display"), although it
+  only needs the extension enabled, not a display: generic WSI setups enable it.
+- WSI on X11 compares the X server's DRI3 device with the GPU's DRM device; KGSL is not a DRM
+  device, so presenting was refused. On a KGSL system the only GPU is this one.
+
+From lfdevs/mesa-for-android-container (98f3d622), reduced to these two.
+
+Forwarded: no
+Last-Update: 2026-09-30
+X-Rungic-Status: Pending [KGSL only; carried]
+X-Rungic-Tests: L3:gpu.vulkan (vulkaninfo; vkcube on X11 through Xwayland DRI3)
+X-Rungic-Docs: docs/research/94
+---
+ src/freedreno/vulkan/tu_knl_kgsl.cc | 6 ++----
+ src/freedreno/vulkan/tu_wsi.cc      | 4 ++++
+ 2 files changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/src/freedreno/vulkan/tu_knl_kgsl.cc b/src/freedreno/vulkan/tu_knl_kgsl.cc
+index 44af0c222..1e08964e8 100644
+--- a/src/freedreno/vulkan/tu_knl_kgsl.cc
++++ b/src/freedreno/vulkan/tu_knl_kgsl.cc
+@@ -1822,10 +1822,8 @@ tu_kgsl_get_raytracing(int fd)
+ VkResult
+ tu_knl_kgsl_load(struct tu_instance *instance, int fd)
+ {
+-   if (instance->vk.enabled_extensions.KHR_display) {
+-      return vk_errorf(instance, VK_ERROR_INITIALIZATION_FAILED,
+-                       "I can't KHR_display");
+-   }
++   /* VK_KHR_display has no display to offer on KGSL, but an instance that
++    * merely enables it (as generic WSI setups do) can still render. */
+ 
+    struct tu_physical_device *device = (struct tu_physical_device *)
+       vk_zalloc(&instance->vk.alloc, sizeof(*device), 8,
+diff --git a/src/freedreno/vulkan/tu_wsi.cc b/src/freedreno/vulkan/tu_wsi.cc
+index 4db6d5e13..9cbd3d11a 100644
+--- a/src/freedreno/vulkan/tu_wsi.cc
++++ b/src/freedreno/vulkan/tu_wsi.cc
+@@ -27,6 +27,10 @@ tu_wsi_can_present_on_device(VkPhysicalDevice physicalDevice, int fd)
+ {
+ #ifdef HAVE_LIBDRM
+    VK_FROM_HANDLE(tu_physical_device, pdevice, physicalDevice);
++   /* KGSL is not a DRM device, so the X server's DRI3 device cannot be
++    * compared with it; on a KGSL system it can only be this GPU. */
++   if (pdevice->instance->knl && !strcmp(pdevice->instance->knl->name, "kgsl"))
++      return true;
+    return wsi_common_drm_devices_equal(fd, pdevice->local_fd);
+ #else
+    return true;

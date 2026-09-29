@@ -1,0 +1,242 @@
+From: clawd20130 <clawd20130@gmail.com>
+Date: Wed, 30 Sep 2026 03:11:02 +0900
+Subject: freedreno: dma-buf sharing on KGSL (LINEAR), gralloc UBWC
+ import on request
+
+With FD_KGSL_ENABLE_DMABUF=1 the KGSL backend shares buffers with other processes (clients and the
+compositor) as dma-bufs from /dev/dma_heap/system:
+- the screen reports dma-buf import and export (KGSL is not DRM: no DRM_CAP_PRIME);
+- shared and scanout resources are LINEAR, the only layout exported or queried as a modifier;
+- exporting a native KGSL resource that was not allocated shared reallocates it shared (shadow)
+  first, since only dma-heap memory can be exported;
+- an imported dma-buf is shared already, so exporting it again hands out the same buffer.
+  Without this, GBM's import then get_fd (Xwayland on a DRI3 client's buffer) gave a new, empty
+  buffer and X11 GL windows stayed black;
+- FD_KGSL_DMABUF_UBWC=1 also accepts importing DRM_FORMAT_MOD_QCOM_COMPRESSED buffers allocated by
+  the platform gralloc. fdl6's UBWC layout matches gralloc's RGBA8888_UBWC, and the kernel programs
+  the UBWC mode for the whole GPU (docs/57). Exports and modifier queries stay LINEAR;
+- timestamp queries on KGSL, which reports no max_freq (the tick rate is fixed).
+
+This is the lfdevs/mesa-for-android-container branch's KGSL dma-buf contract (its PR #85) with
+this project's UBWC import (docs/57) and import-is-shared fix (docs/research/93) folded in, and
+without its XWAYLAND_FORCE_KGSL_SURFACELESS alias for PRoot.
+
+Forwarded: no
+Last-Update: 2026-09-30
+X-Rungic-Status: Pending [KGSL only; carried]
+X-Rungic-Tests: L3:perf.compositor (KWin UBWC outputs), L3:xwayland.kgsl-glamor (import then export keeps the inode)
+X-Rungic-Docs: docs/57, docs/research/93, docs/research/94
+---
+ .../drivers/freedreno/freedreno_resource.c    | 57 +++++++++++++++++++
+ .../drivers/freedreno/freedreno_screen.c      | 51 ++++++++++++++++-
+ .../drivers/freedreno/freedreno_screen.h      |  9 +++
+ 3 files changed, 116 insertions(+), 1 deletion(-)
+
+diff --git a/src/gallium/drivers/freedreno/freedreno_resource.c b/src/gallium/drivers/freedreno/freedreno_resource.c
+index e2d2db607..34fcef859 100644
+--- a/src/gallium/drivers/freedreno/freedreno_resource.c
++++ b/src/gallium/drivers/freedreno/freedreno_resource.c
+@@ -1075,6 +1075,15 @@ fd_resource_destroy(struct pipe_screen *pscreen, struct pipe_resource *prsc)
+ static uint64_t
+ fd_resource_modifier(struct fd_resource *rsc)
+ {
++   struct fd_screen *screen = fd_screen(rsc->b.b.screen);
++
++   if (screen->kgsl_dmabuf) {
++      if (rsc->layout.tile_mode == 0 && !rsc->layout.ubwc_layer_size)
++         return DRM_FORMAT_MOD_LINEAR;
++
++      return DRM_FORMAT_MOD_INVALID;
++   }
++
+    if (rsc->layout.ubwc_layer_size)
+       return DRM_FORMAT_MOD_QCOM_COMPRESSED;
+ 
+@@ -1101,6 +1110,23 @@ fd_resource_get_handle(struct pipe_screen *pscreen, struct pipe_context *pctx,
+ 
+    handle->modifier = fd_resource_modifier(rsc);
+ 
++   if (fd_screen(pscreen)->kgsl_dmabuf) {
++      handle->modifier = DRM_FORMAT_MOD_LINEAR;
++
++      if (!(prsc->bind & PIPE_BIND_SHARED)) {
++         struct fd_context *ctx = fd_screen_aux_context_get(pscreen);
++
++         prsc->bind |= PIPE_BIND_SHARED;
++
++         bool ret = fd_try_shadow_resource(ctx, rsc, 0, NULL, handle->modifier);
++
++         fd_screen_aux_context_put(pscreen);
++
++         if (!ret)
++            return false;
++      }
++   }
++
+    if (prsc->target != PIPE_BUFFER) {
+       struct fdl_metadata metadata = {
+          .modifier = handle->modifier,
+@@ -1304,6 +1330,20 @@ get_best_layout(struct fd_screen *screen,
+    if (FD_DBG(NOTILE))
+        return FD_LAYOUT_LINEAR;
+ 
++   if (screen->kgsl_dmabuf &&
++       (tmpl->bind & (PIPE_BIND_SHARED | PIPE_BIND_SCANOUT))) {
++      if (has_implicit_modifier(modifiers, count) ||
++          drm_find_modifier(DRM_FORMAT_MOD_LINEAR, modifiers, count)) {
++         perf_debug("%" PRSC_FMT ": forcing linear: kgsl shared/scanout resource",
++                    PRSC_ARGS(tmpl));
++         return FD_LAYOUT_LINEAR;
++      }
++
++      perf_debug("%" PRSC_FMT ": kgsl shared/scanout resource requires linear",
++                 PRSC_ARGS(tmpl));
++      return FD_LAYOUT_ERROR;
++   }
++
+    /* Shared resources without explicit modifiers must always be linear */
+    if (!can_explicit && (tmpl->bind & PIPE_BIND_SHARED)) {
+       perf_debug("%" PRSC_FMT
+@@ -1580,8 +1620,25 @@ fd_resource_from_handle(struct pipe_screen *pscreen,
+ 
+    DBG("%" PRSC_FMT ", modifier=%" PRIx64, PRSC_ARGS(prsc), handle->modifier);
+ 
++   if (screen->kgsl_dmabuf &&
++       handle->modifier != DRM_FORMAT_MOD_LINEAR &&
++       handle->modifier != DRM_FORMAT_MOD_INVALID &&
++       !(screen->kgsl_dmabuf_ubwc &&
++         handle->modifier == DRM_FORMAT_MOD_QCOM_COMPRESSED)) {
++      if (FD_DBG(LAYOUT))
++         mesa_loge("kgsl cannot import non-linear modifier %" PRIx64,
++                   handle->modifier);
++      goto fail;
++   }
++
+    rsc->b.is_shared = true;
+ 
++   /* An imported dma-buf is shared already: exporting it again (GBM's import then get_fd,
++    * as Xwayland does for a DRI3 client's buffer) must hand out the same buffer, not a new
++    * shared shadow that the client never draws into (fd_resource_get_handle). */
++   if (screen->kgsl_dmabuf)
++      prsc->bind |= PIPE_BIND_SHARED;
++
+    struct fd_bo *bo = fd_screen_bo_from_handle(pscreen, handle);
+    if (!bo) {
+       if (FD_DBG(LAYOUT))
+diff --git a/src/gallium/drivers/freedreno/freedreno_screen.c b/src/gallium/drivers/freedreno/freedreno_screen.c
+index d1847b79c..8a239dd92 100644
+--- a/src/gallium/drivers/freedreno/freedreno_screen.c
++++ b/src/gallium/drivers/freedreno/freedreno_screen.c
+@@ -91,6 +91,18 @@ DEBUG_GET_ONCE_FLAGS_OPTION(fd_mesa_debug, "FD_MESA_DEBUG", fd_debug_options, 0)
+ int fd_mesa_debug = 0;
+ bool fd_binning_enabled = true;
+ 
++static bool
++fd_kgsl_dmabuf_enabled(void)
++{
++   return debug_get_bool_option("FD_KGSL_ENABLE_DMABUF", false);
++}
++
++static bool
++fd_kgsl_dmabuf_ubwc_enabled(void)
++{
++   return debug_get_bool_option("FD_KGSL_DMABUF_UBWC", false);
++}
++
+ static const char *
+ fd_screen_get_name(struct pipe_screen *pscreen)
+ {
+@@ -383,6 +395,13 @@ fd_init_screen_caps(struct fd_screen *screen)
+ 
+    u_init_pipe_screen_caps(&screen->base, 1);
+ 
++   /* KGSL is not DRM: drmGetCap(DRM_CAP_PRIME) cannot describe it. The backend
++    * allocates shared buffers from dma-heap/ION and imports them into KGSL. */
++   if (screen->kgsl_dmabuf) {
++      caps->dmabuf =
++         0x1 /*DRM_PRIME_CAP_IMPORT*/ | 0x2 /*DRM_PRIME_CAP_EXPORT*/;
++   }
++
+    /* this is probably not totally correct.. but it's a start: */
+ 
+    /* Supported features (boolean caps). */
+@@ -666,7 +685,9 @@ fd_init_screen_caps(struct fd_screen *screen)
+    caps->query_timestamp =
+    caps->query_time_elapsed =
+       /* only a4xx, requires new enough kernel so we know max_freq: */
+-      (screen->max_freq > 0) && (is_a4xx(screen) || is_a5xx(screen) || is_a6xx(screen));
++      /* KGSL reports no max_freq; the tick rate is fixed (fd_ticks_to_ns) */
++      (screen->max_freq > 0 || screen->is_kgsl) &&
++      (is_a4xx(screen) || is_a5xx(screen) || is_a6xx(screen));
+    caps->timer_resolution = fd_ticks_to_ns(1);
+    caps->query_buffer_object =
+    caps->query_so_overflow =
+@@ -833,6 +854,23 @@ fd_screen_query_dmabuf_modifiers(struct pipe_screen *pscreen,
+                                  uint64_t *modifiers,
+                                  unsigned int *external_only, int *count)
+ {
++   struct fd_screen *screen = fd_screen(pscreen);
++
++   if (screen->kgsl_dmabuf) {
++      *count = is_format_supported(pscreen, format,
++                                   DRM_FORMAT_MOD_LINEAR) ? 1 : 0;
++
++      if (*count && max > 0) {
++         if (modifiers)
++            modifiers[0] = DRM_FORMAT_MOD_LINEAR;
++
++         if (external_only)
++            external_only[0] = !is_rendering_supported(pscreen, format);
++      }
++
++      return;
++   }
++
+    const uint64_t all_modifiers[] = {
+       DRM_FORMAT_MOD_LINEAR,
+       DRM_FORMAT_MOD_QCOM_COMPRESSED,
+@@ -865,6 +903,14 @@ fd_screen_is_dmabuf_modifier_supported(struct pipe_screen *pscreen,
+                                        enum pipe_format format,
+                                        bool *external_only)
+ {
++   struct fd_screen *screen = fd_screen(pscreen);
++
++   if (screen->kgsl_dmabuf &&
++       modifier != DRM_FORMAT_MOD_LINEAR &&
++       modifier != DRM_FORMAT_MOD_INVALID &&
++       !(screen->kgsl_dmabuf_ubwc && modifier == DRM_FORMAT_MOD_QCOM_COMPRESSED))
++      return false;
++
+    return is_format_supported(pscreen, format, modifier);
+ }
+ 
+@@ -965,6 +1011,9 @@ fd_screen_create(int fd,
+    pscreen = &screen->base;
+ 
+    screen->dev = dev;
++   screen->is_kgsl = fd_get_features(dev) & FD_FEATURE_KGSL;
++   screen->kgsl_dmabuf = screen->is_kgsl && fd_kgsl_dmabuf_enabled();
++   screen->kgsl_dmabuf_ubwc = screen->kgsl_dmabuf && fd_kgsl_dmabuf_ubwc_enabled();
+    screen->ro = ro;
+ 
+    // maybe this should be in context?
+diff --git a/src/gallium/drivers/freedreno/freedreno_screen.h b/src/gallium/drivers/freedreno/freedreno_screen.h
+index 4a9e72447..1cb3084cd 100644
+--- a/src/gallium/drivers/freedreno/freedreno_screen.h
++++ b/src/gallium/drivers/freedreno/freedreno_screen.h
+@@ -75,6 +75,15 @@ struct fd_screen {
+    bool has_timestamp;
+    bool has_robustness;
+    bool has_syncobj;
++   bool is_kgsl;
++   bool kgsl_dmabuf;
++   /* Opt-in on the kgsl dma-buf path: import (never export) UBWC buffers
++    * allocated by the platform gralloc.  Their layout is the one
++    * fdl6_layout computes (metadata plane first); the UBWC bank/swizzle
++    * configuration is programmed by the kernel for the whole GPU, so it
++    * matches the display and the platform GLES driver.
++    */
++   bool kgsl_dmabuf_ubwc;
+ 
+    struct {
+       /* Conservative LRZ (default true) invalidates LRZ on draws with
