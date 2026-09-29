@@ -63,7 +63,10 @@ Rectangle {
     Connections {
         target: client
         function onReplied(id, action, result) {
-            if (result.error) feed.message = result.error
+            if (result.error) {
+                feed.message = result.error
+                if (action === "apply") { applyDialog.failureMessage = result.error; applyDialog.open() }
+            }
             else if (result.message) feed.message = result.message
             else if (action === "investigate") feed.message = "Agent 已接到检查请求，可离开此页面，结果会留在建议中。"
         }
@@ -142,7 +145,7 @@ Rectangle {
             expanded: item.id === feed.selectedId
             onAction: (name, args) => {
                 if (name === "snooze-menu") { feed.pendingItem = item; snooze.open() }
-                else if (name === "apply-confirm") { feed.pendingItem = JSON.parse(JSON.stringify(item)); applyDialog.open() }
+                else if (name === "apply-confirm") { feed.pendingItem = JSON.parse(JSON.stringify(item)); applyDialog.failureMessage = ""; applyDialog.open() }
                 else if (name === "conversation") client.conversation(item.conversation || "")
                 else client.act(item.id, name, args)
             }
@@ -174,15 +177,38 @@ Rectangle {
         width: Math.min(340, feed.width - 24)
         height: Math.min(500, feed.height - 40)
         title: "应用修复方案"
+        property string failureMessage: ""
+        readonly property bool outdated: !!feed.pendingItem.id && !client.items.some(i => i.id === feed.pendingItem.id && i.canApply && i.planRevision === feed.pendingItem.planRevision)
+        function updateButtons() {
+            const ok = standardButton(QQC2.Dialog.Ok)
+            if (ok) { ok.enabled = !outdated && !client.busy; ok.text = "应用" }
+            const cancel = standardButton(QQC2.Dialog.Cancel)
+            if (cancel) cancel.text = "取消"
+        }
+        onOpened: updateButtons()
+        onOutdatedChanged: updateButtons()
+        Connections { target: client; function onChanged() { if (applyDialog.visible) applyDialog.updateButtons() } }
         modal: true
         standardButtons: QQC2.Dialog.Ok | QQC2.Dialog.Cancel
-        contentItem: QQC2.ScrollView {
-          clip: true
-          Text {
-            width: applyDialog.availableWidth
-            text: "Agent 将按已展示的方案执行，并验证结果。涉及的关闭应用或重启步骤以方案为准。\n\n" + (feed.pendingItem.plan || "")
-            textFormat: Text.PlainText; wrapMode: Text.Wrap; color: Theme.text; font.pixelSize: 14
-        }
+        contentItem: ColumnLayout {
+            spacing: 12
+            Text {
+                Layout.fillWidth: true
+                visible: applyDialog.outdated || !!applyDialog.failureMessage
+                text: applyDialog.outdated ? "方案或适用证据已变化。请取消后查看当前方案，再决定是否应用。" : applyDialog.failureMessage
+                textFormat: Text.PlainText; wrapMode: Text.Wrap; color: Theme.negative; font.pixelSize: 14
+                Accessible.role: Accessible.StaticText
+                Accessible.name: text
+            }
+            QQC2.ScrollView {
+                Layout.fillWidth: true; Layout.fillHeight: true
+                clip: true
+                Text {
+                    width: applyDialog.availableWidth
+                    text: "Agent 将按已展示的方案执行，并验证结果。涉及的关闭应用或重启步骤以方案为准。\n\n" + (feed.pendingItem.plan || "")
+                    textFormat: Text.PlainText; wrapMode: Text.Wrap; color: Theme.text; font.pixelSize: 14
+                }
+            }
         }
         onAccepted: client.act(feed.pendingItem.id, "apply", { planRevision: feed.pendingItem.planRevision })
     }
