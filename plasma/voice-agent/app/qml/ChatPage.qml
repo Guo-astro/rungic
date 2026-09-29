@@ -134,6 +134,7 @@ Item {
             column: view.column
             callMonitor: chat.callMonitor
             onReadAloud: text => AgentClient.readAloud(text)
+            onOpenImage: (source, name) => viewer.show(source, name)
             onOpenSettings: which => page.Window.window.openSettings(which === "codex" ? "CodexPage.qml" : "KeyPage.qml")
         }
         // New content keeps the view at the end only while the reader is there.
@@ -240,5 +241,11 @@ Item {
         onNewRequested: { drawer.close(); page.newConversation() }
         onSettingsRequested: { drawer.close(); page.Window.window.openSettings() }
         onDeleted: id => { if (id === page.conversationId) page.newConversation() }
+    }
+
+    // A picture of an answer, large (docs/88).
+    ImageViewer {
+        id: viewer
+        onOpenExternally: source => { viewer.close(); Qt.openUrlExternally(source) }
     }
 }

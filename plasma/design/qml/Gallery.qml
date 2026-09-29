@@ -19,6 +19,11 @@ QQC2.ApplicationWindow {
     Component.onCompleted: Theme.mode = initialTheme
 
     readonly property var buttonStates: ["normal", "pressed", "checked", "disabled"]
+    // A picture for Thumbnail and ImageViewer: a 4:3 sky with a sun.
+    readonly property string samplePicture: "data:image/svg+xml;utf8," + encodeURIComponent(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><rect width="400" height="300" fill="#3b6ea5"/>'
+        + '<rect y="200" width="400" height="100" fill="#2d5a3c"/><circle cx="300" cy="90" r="40" fill="#f5c542"/></svg>')
+    ImageViewer { id: viewer }
 
     Flickable {
         anchors.fill: parent
@@ -148,6 +153,27 @@ QQC2.ApplicationWindow {
                 Repeater {
                     model: ["normal", "pressed", "disabled"]
                     Variant { label: modelData; Rectangle { width: 104; height: 96; color: Theme.side; Tile { anchors.fill: parent; anchors.margins: 6; iconName: "image"; text: "照片"; forcedState: modelData } } }
+                }
+            }
+            Section {
+                name: "Thumbnail"
+                Repeater {
+                    model: ["loading", "ready", "pressed", "error"]
+                    Variant { label: modelData; Thumbnail { source: gallery.samplePicture; name: "小火箭.png"; maxWidth: 150; maxHeight: 150; forcedState: modelData } }
+                }
+            }
+            Section {
+                name: "FileChip"
+                Repeater {
+                    model: ["normal", "pressed", "disabled"]
+                    Variant { label: modelData; FileChip { name: "小火箭.blend"; maxWidth: 200; forcedState: modelData } }
+                }
+            }
+            Section {
+                name: "ImageViewer"
+                Repeater {
+                    model: ["loading", "ready", "error"]
+                    Variant { label: modelData; PillButton { text: "查看 · " + modelData; onClicked: { viewer.forcedState = modelData; viewer.show(gallery.samplePicture, "小火箭.png") } } }
                 }
             }
             Section {

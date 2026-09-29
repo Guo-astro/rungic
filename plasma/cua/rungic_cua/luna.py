@@ -30,6 +30,7 @@ from pathlib import Path
 
 from PIL import Image
 
+from . import activity
 from .portal import BTN_LEFT, BTN_RIGHT, KEYSYMS
 
 logger = logging.getLogger('rungic-cua.luna')
@@ -66,6 +67,9 @@ sound (周凯文 for 周楷雯). Search contacts by the name's pinyin without to
 then take the person whose name sounds the same. If two different people fit, or none, stop and ask.
 - Do only what the task asks. Send, pay, delete or change accounts only when the task says so \
 explicitly (the user has confirmed it). Never type passwords; if one is needed, stop and ask.
+- With every batch of actions, also write one short phrase in Simplified Chinese (at most 15 \
+characters) saying what the batch does, e.g. 打开“文件”菜单 or 在搜索框输入 zhoukaiwen. The user sees it \
+as a live caption on the screen they watch.
 - When you stop, reply with one short message that begins with DONE, ASK or FAILED: DONE and what the \
 screen now shows about the task; ASK and the one question only the user can answer; FAILED and why."""
 
@@ -290,6 +294,8 @@ class ComputerUse:
         carried out before it is set (a voice message's send waits for the speech to end)."""
         started = time.monotonic()
         steps: list[dict] = []
+        caption_task = task.strip().splitlines()[0] if task.strip() else ''
+        activity.report('看一下屏幕', task=caption_task)
         self.screen.whole = False
         image_url, _, _ = self.screen.capture()
         body = {'model': MODEL, 'tools': TOOLS, 'instructions': INSTRUCTIONS,
@@ -312,7 +318,10 @@ class ComputerUse:
             text = ' '.join(c.get('text', '') for item in output if item.get('type') == 'message'
                             for c in item.get('content', []) if c.get('type') == 'output_text').strip()
             if not calls and not functions:
-                return self._result(text, steps, started, model_s)
+                result = self._result(text, steps, started, model_s)
+                activity.report(result.get('answer') or result.get('question') or '', state=result['outcome'],
+                                task=caption_task)
+                return result
             follow: list[dict] = []
             for function in functions:
                 if function.get('name') == 'view_whole_screen':
@@ -323,16 +332,21 @@ class ComputerUse:
             call = calls[0] if calls else None
             if call and call.get('pending_safety_checks'):
                 # The API wants the user to confirm this action; we cannot ask mid-run.
+                activity.report('需要你确认', state='question', task=caption_task)
                 return {'outcome': 'question', 'question': '; '.join(c.get('message', '') for c in call['pending_safety_checks']),
                         'safety_checks': call['pending_safety_checks'], 'steps': steps, 'elapsed_s': elapsed()}
             if call:
                 done_actions = []
                 actions = call.get('actions') or ([call['action']] if call.get('action') else [])
+                # The caption the user watches (docs/88): the model's phrase, else what the batch does.
+                shown = [a for a in actions if a.get('type') != 'screenshot'] or actions
+                activity.report(text or (activity.describe(shown[0]) if shown else '看一下屏幕'), task=caption_task)
                 for action in actions:
                     if gate is not None and action.get('type') != 'screenshot':
                         gate.wait(timeout_s)
                     if ABORT_FILE.exists():
                         ABORT_FILE.unlink(missing_ok=True)
+                        activity.report('已停止', state='stopped', task=caption_task)
                         return {'outcome': 'stopped', 'steps': steps, 'elapsed_s': elapsed()}
                     try:
                         done_actions.append(self.execute(action))
@@ -340,9 +354,11 @@ class ComputerUse:
                         done_actions.append(f'{action.get("type")}: skipped ({error})')
                     if stop and stop():
                         steps.append({'actions': done_actions})
+                        activity.report('', state='done', task=caption_task)
                         return {'outcome': 'signalled', 'steps': steps, 'elapsed_s': elapsed()}
                 steps.append({'actions': done_actions, 'note': text} if text else {'actions': done_actions})
             if len(steps) >= max_steps or time.monotonic() - started > timeout_s:
+                activity.report('没有在限定步数内完成', state='failed', task=caption_task)
                 return {'outcome': 'unfinished', 'note': f'stopped after {len(steps)} steps', 'steps': steps,
                         'elapsed_s': elapsed()}
             if not call:
@@ -353,6 +369,7 @@ class ComputerUse:
                 continue
             time.sleep(SETTLE_S)
             if stop and stop():
+                activity.report('', state='done', task=caption_task)
                 return {'outcome': 'signalled', 'steps': steps, 'elapsed_s': elapsed()}
             image_url, image, changed = self.screen.capture()
             steps[-1]['saw'] = f'{self.screen.scope} {image.width}x{image.height}' if steps else ''

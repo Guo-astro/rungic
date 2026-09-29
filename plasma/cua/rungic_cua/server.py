@@ -13,7 +13,7 @@ Wayland. Codex starts MCP servers outside that sandbox, so desktop operations
 
   rungic-cua mcp                 MCP server on stdio (newline-delimited JSON-RPC)
   rungic-cua windows|observe     print JSON
-  rungic-cua launch APP | activate WINDOW_ID | window WINDOW_ID ACTION
+  rungic-cua launch APP [SCREEN [ARGS...]] | activate WINDOW_ID | window WINDOW_ID ACTION
   rungic-cua run '<subtask json>'
   rungic-cua goal '{"goal": ..., "app": ...}'   whole task (Luna, or JEV per step under plan atspi)
   rungic-cua screenshot OUT.png | act '<actions json>' | plan [luna|atspi]
@@ -24,6 +24,7 @@ import json
 import logging
 import os
 import select
+import shlex
 import subprocess
 import sys
 import threading
@@ -33,7 +34,7 @@ from pathlib import Path
 from arc_cua import DesktopExecutor, RuntimeConfig, result_to_dict, subtask_from_dict
 from arc_cua.policies import TypeSafeJevPolicy
 
-from . import a11y, names, speech
+from . import a11y, activity, names, speech
 from .backend import LinuxAtspiBackend
 from .luna import ComputerUse
 
@@ -89,13 +90,17 @@ TOOLS = [
      'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False}},
     {'name': 'desktop_launch',
      'description': ('Open an application by desktop-file id or name (e.g. "org.kde.dolphin", "Firefox", "系统设置") '
-                     'on the TV while casting (else the phone); an app already open is moved there and activated. '
-                     'Returns its window id and screen. screen "agent": the assistant\'s screen (floating '
-                     'window or TV), where desktop_goal works.'),
+                     'on the assistant\'s screen (turned on if needed; the user watches it in a floating window, '
+                     'or on the TV while casting); an app already open is moved there and activated. Returns its '
+                     'window id and screen. `args`: files to open or command-line options, e.g. '
+                     '["/home/me/Pictures/a.png"] or ["--python", "/home/me/make.py"] (a new window is started). '
+                     'screen "phone" only when the user asks for the phone.'),
      'inputSchema': {'type': 'object', 'properties': {
          'app': {'type': 'string'},
+         'args': {'type': 'array', 'items': {'type': 'string'},
+                  'description': 'Files, URLs or options passed to the application.'},
          'screen': {'type': 'string', 'enum': ['auto', 'agent', 'tv', 'phone'],
-                    'description': "auto (default): the assistant's screen or the TV when one is on, else the phone."}},
+                    'description': "auto (default) = agent = tv: the assistant's screen; phone: the phone."}},
          'required': ['app']},
      'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False}},
     {'name': 'desktop_observe',
@@ -193,8 +198,11 @@ PLAN_ONE_TOOLS = [
      'description': ("Act on the assistant's screen yourself, from what you saw in desktop_screenshot: a short "
                      'batch of actions carried out in order, then the new screenshot comes back. For a whole '
                      'multi-step task prefer desktop_goal (faster).'),
-     'inputSchema': {'type': 'object', 'properties': {'actions': {'type': 'array', 'items': ACTION_SCHEMA}},
-                     'required': ['actions']},
+     'inputSchema': {'type': 'object', 'properties': {
+         'actions': {'type': 'array', 'items': ACTION_SCHEMA},
+         'note': {'type': 'string', 'description': ('What this batch does, a few words of Simplified Chinese '
+                                                    '(e.g. 打开“渲染”菜单): the user sees it as a live caption.')}},
+         'required': ['actions']},
      'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False}},
 ]
 PLAN_TWO_ONLY = ('desktop_observe', 'desktop_run', 'desktop_find_name')
@@ -267,7 +275,8 @@ def find_application(query: str) -> dict | None:
                    os.path.basename(info.get_executable() or '').casefold()}
         if isinstance(info, Gio.DesktopAppInfo) and info.get_startup_wm_class():
             classes.add(info.get_startup_wm_class().casefold())
-        entry = {'id': app_id, 'name': info.get_display_name(), 'classes': sorted(c for c in classes if c)}
+        entry = {'id': app_id, 'name': info.get_display_name(), 'classes': sorted(c for c in classes if c),
+                 'exec': info.get_commandline() or ''}
         if query_folded in names:
             return entry
         if best is None and any(query_folded in n for n in names if n):
@@ -336,20 +345,26 @@ class Cua:
         time.sleep(0.3)
         return {'activated': ok}
 
-    def launch(self, app: str, screen: str = 'auto') -> dict:
-        """Open `app` on the TV while casting (else the phone), or bring its open window there."""
+    def launch(self, app: str, screen: str = 'auto', args: list[str] | None = None) -> dict:
+        """Open `app` on the assistant's screen (the phone only when asked), or bring its open
+        window there. With `args` a new window is started with them."""
         entry = find_application(app)
         if entry is None:
             raise ValueError(f'No installed application matches {app!r}')
         classes = entry.pop('classes')
+        exec_line = entry.pop('exec', '')
         kwin = self.backend.kwin
+        # The assistant's screen (docs/65) and the TV are the same output, CAST-n: the agent works
+        # there, where the user watches, and the phone stays the user's (docs/88).
+        to_tv = screen != 'phone'
+        if to_tv:
+            self.agent_output()
         info = kwin.windows()
-        casting = any(s.startswith('CAST') for s in info.get('screens', []))
-        # The assistant's screen (docs/65) and the TV are the same output, CAST-n.
-        to_tv = screen in ('tv', 'agent') or (screen == 'auto' and casting)
         prefix = 'CAST' if to_tv else 'WL'
         target_screen = next((n for n in info.get('screens', []) if n.startswith(prefix)), prefix)
-        existing = next((w for w in info['windows'] if (w['resource_class'] or '').casefold() in classes), None)
+        activity.report(f"打开{entry['name']}")
+        existing = None if args else next(
+            (w for w in info['windows'] if (w['resource_class'] or '').casefold() in classes), None)
         if existing:
             if not existing['output'].startswith(prefix):
                 kwin.window_action(existing['id'], 'to_tv' if to_tv else 'to_phone')
@@ -357,9 +372,13 @@ class Cua:
             time.sleep(0.3)
             return {'launched': entry, 'already_open': True,
                     'window': {'id': existing['id'], 'caption': existing['caption'], 'screen': target_screen}}
+        # kstart runs it in its own app scope, so it outlives this server and the voice agent.
+        command = ['kstart', '--application', entry['id']]
+        if args:
+            program = (shlex.split(exec_line) or [entry['id']])[0]
+            command = ['kstart', '--desktopfile', entry['id'], '--', program, *[str(a) for a in args]]
         placed = kwin.place_next(classes, prefix, lambda: subprocess.Popen(
-            ['kstart', '--application', entry['id']], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            start_new_session=True), timeout=25)
+            command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True), timeout=25)
         if placed is None:
             return {'launched': entry, 'window': None,
                     'note': ('No window within 25 s. Check desktop_windows once; do not start the app from the '
@@ -440,8 +459,10 @@ class Cua:
         return {'screen': computer.screen.output_name, 'shows': computer.screen.scope, 'width': image.width,
                 'height': image.height, '__image__': url.split(',', 1)[1]}
 
-    def act(self, actions: list[dict]) -> dict:
+    def act(self, actions: list[dict], note: str = '') -> dict:
         computer = self.agent_screen()
+        shown = [a for a in actions if a.get('type') != 'screenshot'] or actions
+        activity.report(note or (activity.describe(shown[0]) if shown else '看一下屏幕'))
         if not computer.screen.scope:
             raise ValueError('take desktop_screenshot first: the actions are in its pixels')
         done = []
@@ -698,7 +719,7 @@ class Cua:
             if name == 'desktop_screenshot':
                 return self.screenshot(str(arguments.get('scope') or 'window'))
             if name == 'desktop_act':
-                return self.act(list(arguments['actions']))
+                return self.act(list(arguments['actions']), str(arguments.get('note') or ''))
             if name == 'desktop_voice_message':
                 return self.voice_message_luna(arguments)
             if name in PLAN_TWO_ONLY:
@@ -714,7 +735,8 @@ class Cua:
         if name == 'desktop_window':
             return self.window(str(arguments['window_id']), str(arguments['action']))
         if name == 'desktop_launch':
-            return self.launch(str(arguments['app']), str(arguments.get('screen') or 'auto'))
+            return self.launch(str(arguments['app']), str(arguments.get('screen') or 'auto'),
+                               [str(a) for a in arguments.get('args') or []])
         if name == 'desktop_observe':
             return self.observe()
         if name == 'desktop_run':
@@ -806,7 +828,7 @@ def main() -> None:
     elif command == 'activate':
         data = cua.activate(sys.argv[2])
     elif command == 'launch':
-        data = cua.launch(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else 'auto')
+        data = cua.launch(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else 'auto', sys.argv[4:])
     elif command == 'window':
         data = cua.window(sys.argv[2], sys.argv[3])
     elif command == 'run':

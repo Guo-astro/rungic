@@ -324,6 +324,7 @@ Window {
                 column: width
                 callMonitor: chat.callMonitor
                 onReadAloud: text => AgentClient.readAloud(text)
+                onOpenImage: source => Qt.openUrlExternally(source)
                 onOpenSettings: page => { Overlay.openInApp(win.conversation); win.dismiss() }
             }
             // Follows new content only while at the end.

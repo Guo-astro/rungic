@@ -417,6 +417,7 @@ class VoiceAgent:
         self.progress_at = 0.0
         self.quiet_updates = 0
         self.current_step = None
+        self.screen_seen = 0.0       # time of the last screen caption relayed (docs/88)
         self.playing_until = 0.0
         self.reply_audio_ms = 0
         self.reply_sink = None
@@ -973,6 +974,13 @@ class VoiceAgent:
             self.last_voice = now     # waiting for the user, who was already asked
             return True
         elapsed = int(now - self.turn_started)
+        # What it is doing on the assistant's screen (docs/88): the caption the floating window
+        # shows is also said, so the user hears it when they do not look.
+        screen = screen_activity()
+        if screen.get('state') == 'working' and screen.get('text') and screen.get('time', 0) > self.screen_seen:
+            self.screen_seen = screen['time']
+            self.progress_text = f"在助理屏上：{screen['text']}"
+            self.progress_at = now
         if self.progress_text and now - self.progress_at > PROGRESS_STALE_S:
             self.progress_text = None
         if self.progress_text and now - self.last_voice >= PROGRESS_GAP_S:
@@ -1063,6 +1071,10 @@ class VoiceAgent:
         elif method == 'turn/completed':
             self.turn_id = None
             self.agent_busy = False
+            # A caption left "working" (a tool call cut short) must not stay on the screen.
+            if screen_activity().get('state') == 'working':
+                from rungic_cua import activity
+                activity.report('', state='done')
             self.last_activity = time.monotonic()
             self.emit({'type': 'agent-finished'})
             GLib.idle_add(self.set_state)
@@ -1713,6 +1725,15 @@ class Service:
                 invocation.return_dbus_error('com.rungic.VoiceAgent.Error', str(error))
         # Codex calls block; keep the main loop (audio, D-Bus) responsive.
         threading.Thread(target=run, daemon=True).start()
+
+
+def screen_activity():
+    """The assistant's screen's caption (rungic_cua.activity, docs/88), or {}."""
+    try:
+        from rungic_cua import activity
+        return activity.read()
+    except ImportError:
+        return {}
 
 
 def command_summary(command):

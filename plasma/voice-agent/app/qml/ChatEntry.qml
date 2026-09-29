@@ -4,11 +4,13 @@
 // shining text while it runs ("正在处理 · 12 秒 · …") and as "已处理 N 步 · 用时 N 秒 ›"
 // afterwards, which opens its steps; the answer under it has copy and read-aloud. Calls
 // (docs/63), approvals and the "set up first" prompt are outlined blocks.
+import QtCore
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as QQC2
 import com.rungic.design
 import com.rungic.voiceassistant
+import "media.js" as Media
 
 Item {
     id: entry
@@ -29,6 +31,8 @@ Item {
     property bool callMonitor: false
     signal readAloud(string text)
     signal openSettings(string page)
+    // A picture of an answer tapped (docs/88): the page shows it large.
+    signal openImage(url source, string name)
     // A command without the shell wrapper Codex adds.
     function summary(text) { return text.replace(/^\/bin\/(?:ba)?sh -lc '([\s\S]*)'$/, "$1") }
 
@@ -40,13 +44,20 @@ Item {
     readonly property bool said: !mine && (kind === "message" || kind === "live-assistant")
     // The next entry, to know whether this is the end of a turn.
     readonly property var next: model && index + 1 < model.count ? model.get(index + 1) : null
-    // A finished agent turn whose answer nobody spoke (typed turns, or the voice was off):
-    // its final answer is shown under it.
-    readonly property string finalAnswer: {
+    // A finished agent turn's answer, and what it shows (docs/88): its pictures and files come
+    // out of the text (media.js) and sit under the turn even when the voice spoke the answer.
+    readonly property string answerText: {
         if (kind !== "work" || status === "running" || status === "live") return ""
-        if (next && (next.kind === "message" || next.kind === "live-assistant") && next.role !== "user") return ""
         for (let i = steps.count - 1; i >= 0; i--) if (steps.get(i).kind === "answer") return steps.get(i).text
         return ""
+    }
+    readonly property string home: StandardPaths.writableLocation(StandardPaths.HomeLocation)
+    readonly property var answer: Media.parse(answerText, home)
+    // The answer's text when nobody spoke it (typed turns, or the voice was off).
+    readonly property string finalAnswer: {
+        if (answer.text === "") return ""
+        if (next && (next.kind === "message" || next.kind === "live-assistant") && next.role !== "user") return ""
+        return answer.text
     }
 
     Loader {
@@ -234,6 +245,34 @@ Item {
                 delegate: Step {}
             }
             Body { visible: entry.finalAnswer !== ""; text: entry.finalAnswer }
+            // Pictures, then files, of the answer.
+            Flow {
+                Layout.fillWidth: true
+                Layout.topMargin: 2
+                visible: entry.answer.images.length + entry.answer.files.length > 0
+                spacing: 8
+                Repeater {
+                    model: entry.answer.images
+                    Thumbnail {
+                        required property var modelData
+                        source: modelData.url
+                        name: modelData.name
+                        // From the column the entry is laid out in, never from this Flow.
+                        maxWidth: entry.answer.images.length > 1 ? (entry.column - 8) / 2 : Math.min(entry.column, 320)
+                        maxHeight: 360
+                        onClicked: entry.openImage(source, name)
+                    }
+                }
+                Repeater {
+                    model: entry.answer.files
+                    FileChip {
+                        required property var modelData
+                        name: modelData.name
+                        maxWidth: entry.column
+                        onClicked: Qt.openUrlExternally(modelData.url)
+                    }
+                }
+            }
             Actions { visible: entry.finalAnswer !== ""; answer: entry.finalAnswer }
         }
     }
@@ -262,7 +301,8 @@ Item {
         Text {
             Layout.fillWidth: true
             visible: !step.isCommand
-            text: step.text
+            // Pictures show under the turn; a bare path would not load here (media.js).
+            text: step.kind === "answer" || step.kind === "note" ? Media.parse(step.text, entry.home).text : step.text
             textFormat: step.kind === "note" || step.kind === "answer" ? Text.MarkdownText : Text.PlainText
             wrapMode: Text.Wrap
             font.family: Theme.fontFamily

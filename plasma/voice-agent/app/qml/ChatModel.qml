@@ -170,6 +170,12 @@ QtObject {
             break
         }
         case "agent-started": {
+            // A turn still open here never finished (the service restarted under it, docs/87):
+            // it ended when the next one began.
+            if (root.workOpen && root.workAt >= 0 && entries.get(root.workAt).status !== "done") {
+                entries.setProperty(root.workAt, "status", "stopped")
+                entries.setProperty(root.workAt, "finished", root.lastTime || e.time || Date.now() / 1000)
+            }
             // The acknowledgement before it ("好的，我来…") stays a bubble: it was shown
             // before anyone knew work would follow, and nothing on screen should vanish.
             entries.append(entry({ kind: "work", status: "running", started: e.time || Date.now() / 1000 }))
