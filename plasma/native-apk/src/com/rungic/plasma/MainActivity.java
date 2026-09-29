@@ -648,6 +648,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     }
 
     @Override public void onBackPressed() {
+        if(castControls!=null && castControls.dismissOverlay()) return;
         WindowInsets insets=display.getRootWindowInsets();
         if(insets!=null && insets.isVisible(WindowInsets.Type.ime())) {
             getWindow().getInsetsController().hide(WindowInsets.Type.ime());
@@ -673,6 +674,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
                 boolean right=edge==android.window.BackEvent.EDGE_RIGHT;
                 edge=android.window.BackEvent.EDGE_LEFT;
                 if(accountPromptShowing) return;
+                if(castControls!=null && castControls.dismissOverlay()) return;
                 if(right) backInLinux(); else showDesktopMenu();
             }
         };
