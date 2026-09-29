@@ -484,6 +484,9 @@ class Cua:
                                               timeout=15).stdout)
             if not state.get('enabled') or str(state.get('workspace')) != os.environ['RUNGIC_WORKSPACE']:
                 subprocess.run(['rungic-agent-screen', 'on'], capture_output=True, timeout=30)
+            elif not state.get('window_running') and state.get('shown_on') == 'floating window':
+                # On, but its floating window is gone (closed, or ended with the desktop).
+                subprocess.run(['rungic-agent-screen', 'ensure'], capture_output=True, timeout=30)
         except (OSError, ValueError, subprocess.SubprocessError) as error:
             logger.warning('assistant screen: %s', error)
 
@@ -869,8 +872,9 @@ def import_session_environment() -> None:
     XDG_DATA_DIRS kstart found no application and hung); the workspace's display and bus,
     already set, stay."""
     env = dict(os.environ)
-    if env.get('RUNGIC_USER_DBUS_SESSION_BUS_ADDRESS'):
-        env['DBUS_SESSION_BUS_ADDRESS'] = env['RUNGIC_USER_DBUS_SESSION_BUS_ADDRESS']
+    if env.get('RUNGIC_USER_DBUS_SESSION_BUS_ADDRESS') or env.get('RUNGIC_WORKSPACE'):
+        runtime = env.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}'
+        env['DBUS_SESSION_BUS_ADDRESS'] = env.get('RUNGIC_USER_DBUS_SESSION_BUS_ADDRESS') or f'unix:path={runtime}/bus'
     try:
         out = subprocess.run(['busctl', '--user', '-j', 'get-property', 'org.freedesktop.systemd1',
                               '/org/freedesktop/systemd1', 'org.freedesktop.systemd1.Manager', 'Environment'],

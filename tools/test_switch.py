@@ -31,6 +31,12 @@ if shutil.which('cc'):
     source = SLEEPER.with_suffix('.c')
     source.write_text('#include <unistd.h>\nint main(void) { sleep(60); return 0; }\n')
     subprocess.run(['cc', '-o', str(SLEEPER), str(source)], check=True)
+# Like Firefox: the executable ends in "-bin", and it has a helper process of the same program.
+BROWSER = SLEEPER.parent / 'rungic-test-browser-bin'
+if shutil.which('cc'):
+    source = BROWSER.with_suffix('.c')
+    source.write_text('#include <unistd.h>\nint main(void) { fork(); sleep(60); return 0; }\n')
+    subprocess.run(['cc', '-o', str(BROWSER), str(source)], check=True)
 pytestmark = pytest.mark.skipif(not SLEEPER.exists(), reason='no C compiler for the test program')
 
 
@@ -63,6 +69,19 @@ def test_processes_by_session():
             theirs.kill(); ours.kill(); theirs.wait(); ours.wait()
 
 
+def test_a_browser_is_found_by_its_name_and_only_its_main_process():
+    with tempfile.TemporaryDirectory() as runtime:
+        switch = load(runtime)
+        env = {**os.environ, 'WAYLAND_DISPLAY': 'wayland-0'}
+        process = subprocess.Popen([str(BROWSER)], env=env)
+        time.sleep(0.2)
+        try:
+            assert switch.processes({'rungic-test-browser'}, None) == [process.pid]
+        finally:
+            subprocess.run(['pkill', '-f', str(BROWSER)])
+            process.wait()
+
+
 def test_close_records_and_restore_gives_back():
     with tempfile.TemporaryDirectory() as runtime:
         switch = load(runtime)
@@ -80,7 +99,25 @@ def test_close_records_and_restore_gives_back():
         command = popen.call_args.args[0]
         assert command == ['kstart', '--application', 'test.sleeper']
         assert popen.call_args.kwargs['env'].get('RUNGIC_WORKSPACE') is None
+        assert not popen.call_args.kwargs['env'].get('WAYLAND_DISPLAY', '').startswith('wayland-ws-')
         assert switch.switched() == {}
+
+
+def test_restore_from_inside_a_workspace_opens_on_the_phone():
+    """Called with only the workspace's environment (no RUNGIC_USER_*): still the user's session."""
+    with tempfile.TemporaryDirectory() as runtime:
+        switch = load(runtime)
+        Path(runtime, 'rungic-workspace-switched.json').write_text(
+            json.dumps({'test.sleeper': {'name': '测试', 'programs': ['rungic-test-sleeper']}}))
+        workspace = {'WAYLAND_DISPLAY': 'wayland-ws-1', 'RUNGIC_WORKSPACE': '1', 'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/tmp/x'}
+        with mock.patch.dict(os.environ, workspace), mock.patch.object(switch, 'in_call', return_value=False), \
+                mock.patch.object(switch.subprocess, 'Popen') as popen:
+            os.environ.pop('RUNGIC_USER_WAYLAND_DISPLAY', None)
+            switch.restore(1)
+        env = popen.call_args.kwargs['env']
+        assert env['WAYLAND_DISPLAY'] == 'wayland-0'
+        assert env['DBUS_SESSION_BUS_ADDRESS'] == f'unix:path={runtime}/bus'
+        assert 'RUNGIC_WORKSPACE' not in env
 
 
 def test_restore_waits_for_a_call():

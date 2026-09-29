@@ -10,6 +10,12 @@ if [ ! -s "$state/bus" ] || [ ! -S "$runtime/wayland-ws-$slot" ]; then
     echo "workspace $slot is not running (systemctl --user start rungic-workspace@$slot)" >&2
     exit 1
 fi
+# The user's session goes along, for what belongs on the phone (rungic-user, the floating window):
+# from a caller outside any workspace, its own display and bus.
+if [ -z "${RUNGIC_WORKSPACE:-}" ]; then
+    export RUNGIC_USER_WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
+    export RUNGIC_USER_DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=$runtime/bus}"
+fi
 export WAYLAND_DISPLAY=wayland-ws-$slot DBUS_SESSION_BUS_ADDRESS="$(cat "$state/bus")" RUNGIC_WORKSPACE=$slot
 export QT_QPA_PLATFORM=wayland XDG_CURRENT_DESKTOP=KDE XDG_SESSION_TYPE=wayland
 # Its own Xwayland for X11 programs; none at all rather than the phone's.

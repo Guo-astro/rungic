@@ -42,11 +42,32 @@ def single_instance(entry: dict) -> bool:
     return bool(programs(entry) & SINGLE_INSTANCE)
 
 
-def _process_name(pid: int) -> str:
+def _process_names(pid: int) -> set[str]:
+    """What a process is called: its executable, without a "-bin" suffix, and the program its
+    command line names (Firefox runs /usr/lib/firefox/firefox-bin, started as .../firefox)."""
+    names = set()
     try:
-        return os.path.basename(os.readlink(f'/proc/{pid}/exe')).casefold()
+        exe = os.path.basename(os.readlink(f'/proc/{pid}/exe')).casefold()
+        names |= {exe, exe.removesuffix('-bin')}
     except OSError:
-        return ''
+        pass
+    try:
+        argv0 = Path(f'/proc/{pid}/cmdline').read_bytes().split(b'\0', 1)[0].decode(errors='replace')
+        if argv0.startswith('/') or ' ' not in argv0:     # not a retitled process ("Web Content")
+            names.add(os.path.basename(argv0).casefold())
+    except OSError:
+        pass
+    return {n for n in names if n}
+
+
+def _parent(pid: int) -> int:
+    try:
+        for line in Path(f'/proc/{pid}/status').read_text().splitlines():
+            if line.startswith('PPid:'):
+                return int(line.split()[1])
+    except (OSError, ValueError):
+        pass
+    return 0
 
 
 def _display(pid: int) -> str | None:
@@ -72,7 +93,11 @@ def processes(names: set[str], workspace: int | None) -> list[int]:
                 continue
         except OSError:
             continue
-        if _process_name(pid) not in names:
+        if not _process_names(pid) & names:
+            continue
+        # The app itself, not its helpers (a browser's content processes): ended one by one,
+        # they left crashed tabs.
+        if _process_names(_parent(pid)) & names:
             continue
         display = _display(pid)
         if display is None:
@@ -91,8 +116,8 @@ def in_call(names: set[str]) -> bool:
         streams = json.loads(out or '[]')
     except (OSError, ValueError, subprocess.SubprocessError):
         return False
-    return any(str(s.get('properties', {}).get('application.process.binary', '')).casefold() in names
-               for s in streams)
+    binaries = {str(s.get('properties', {}).get('application.process.binary', '')).casefold() for s in streams}
+    return bool({b.removesuffix('-bin') for b in binaries} & names or binaries & names)
 
 
 def _terminate(pids: list[int], timeout: float) -> list[int]:
@@ -105,7 +130,7 @@ def _terminate(pids: list[int], timeout: float) -> list[int]:
             pass
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        pids = [p for p in pids if Path(f'/proc/{p}').exists() and _process_name(p)]
+        pids = [p for p in pids if Path(f'/proc/{p}').exists() and _process_names(p)]
         if not pids:
             break
         time.sleep(0.3)
@@ -152,9 +177,10 @@ def restore(workspace: int) -> list[str]:
         if _terminate(processes(names, workspace), 15):
             continue            # still running: try again later
         env = dict(os.environ)
-        if env.get('RUNGIC_USER_WAYLAND_DISPLAY'):
-            env['WAYLAND_DISPLAY'] = env['RUNGIC_USER_WAYLAND_DISPLAY']
-            env['DBUS_SESSION_BUS_ADDRESS'] = env.get('RUNGIC_USER_DBUS_SESSION_BUS_ADDRESS', '')
+        if env.get('RUNGIC_USER_WAYLAND_DISPLAY') or env.get('RUNGIC_WORKSPACE'):
+            env['WAYLAND_DISPLAY'] = env.get('RUNGIC_USER_WAYLAND_DISPLAY') or 'wayland-0'
+            env['DBUS_SESSION_BUS_ADDRESS'] = (env.get('RUNGIC_USER_DBUS_SESSION_BUS_ADDRESS')
+                                               or f'unix:path={RUNTIME}/bus')
         for name in ('RUNGIC_WORKSPACE', 'DISPLAY', 'XAUTHORITY'):
             env.pop(name, None)
         if not processes(names, None):

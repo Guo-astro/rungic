@@ -58,9 +58,13 @@ def user_env():
     caller's environment lacks comes from the session's (the systemd user manager's), as for the
     desktop's own apps: without its GPU variables the window found no EGL display and drew nothing."""
     env = dict(os.environ)
-    if env.get('RUNGIC_USER_WAYLAND_DISPLAY'):
-        env['WAYLAND_DISPLAY'] = env['RUNGIC_USER_WAYLAND_DISPLAY']
-        env['DBUS_SESSION_BUS_ADDRESS'] = env.get('RUNGIC_USER_DBUS_SESSION_BUS_ADDRESS', '')
+    runtime = env.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}'
+    if env.get('RUNGIC_USER_WAYLAND_DISPLAY') or env.get('RUNGIC_WORKSPACE'):
+        # From inside a workspace without them (a float opened in the workspace once): the
+        # user's session's usual display and bus.
+        env['WAYLAND_DISPLAY'] = env.get('RUNGIC_USER_WAYLAND_DISPLAY') or 'wayland-0'
+        env['DBUS_SESSION_BUS_ADDRESS'] = (env.get('RUNGIC_USER_DBUS_SESSION_BUS_ADDRESS')
+                                           or f'unix:path={runtime}/bus')
     for name in ('RUNGIC_WORKSPACE', 'DISPLAY', 'XAUTHORITY'):
         env.pop(name, None)
     try:
