@@ -405,20 +405,24 @@ Item {
             }
             Repeater {
                 model: entry.steps
-                Text {
+                ColumnLayout {
+                    id: transcript
                     required property string kind
                     required property string text
                     Layout.fillWidth: true
-                    wrapMode: Text.Wrap
-                    textFormat: Text.StyledText
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 15
-                    lineHeight: 24
-                    lineHeightMode: Text.FixedHeight
-                    font.weight: kind === "ask" ? Font.DemiBold : Font.Normal
-                    color: Theme.text
-                    readonly property string who: ({ remote: "对方", agent: "助理", owner: "你", note: "记录", ask: "问你", error: "提示" })[kind] || ""
-                    text: "<font color='" + Theme.dim + "'>" + who + "：</font>" + text.replace(/&/g, "&amp;").replace(/</g, "&lt;")
+                    Text {
+                        Layout.fillWidth: true
+                        wrapMode: Text.Wrap
+                        textFormat: Text.StyledText
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 15
+                        lineHeight: 24
+                        lineHeightMode: Text.FixedHeight
+                        font.weight: transcript.kind === "ask" ? Font.DemiBold : Font.Normal
+                        color: Theme.text
+                        readonly property string who: ({ remote: "对方", agent: "助理", owner: "你", note: "记录", ask: "问你", error: "提示" })[transcript.kind] || ""
+                        text: "<font color='" + Theme.dim + "'>" + who + "：</font>" + transcript.text.replace(/&/g, "&amp;").replace(/</g, "&lt;")
+                    }
                 }
             }
             Text {

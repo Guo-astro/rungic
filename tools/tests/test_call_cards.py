@@ -17,6 +17,7 @@ os.environ.setdefault('QT_QUICK_BACKEND', 'software')
 from PySide6.QtCore import QUrl
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlComponent, QQmlEngine, QQmlExpression
+from PySide6.QtQuick import QQuickItem
 
 ROOT = Path(__file__).resolve().parents[2]
 APP = QGuiApplication.instance() or QGuiApplication([])
@@ -145,18 +146,32 @@ class CallCardsTest(unittest.TestCase):
             (agent / 'qmldir').write_text('module com.rungic.voiceassistant\nsingleton AgentClient 1.0 AgentClient.qml\n')
             (agent / 'AgentClient.qml').write_text('pragma Singleton\nimport QtQml\nQtObject { function callCommand(c) {} function approve(id, d) {} }\n')
             self.engine.addImportPath(str(imports))
-            component = QQmlComponent(self.engine, QUrl.fromLocalFile(str(ROOT / 'plasma/voice-agent/app/qml/ChatEntry.qml')))
+            self.start()
+            self.event('call-transcript', callId='one', role='remote', text='你好 <测试>')
+            self.engine.rootContext().setContextProperty('chatData', self.model)
+            component = QQmlComponent(self.engine)
+            component.setData(('import QtQuick\nimport "' + (ROOT / 'plasma/voice-agent/app/qml').as_uri()
+                               + '"\nChatEntry { steps: chatData.entries.get(0).steps }').encode(), QUrl.fromLocalFile(str(imports / 'Card.qml')))
             errors = []
             self.engine.warnings.connect(lambda warnings: errors.extend(e.toString() for e in warnings))
             fields = dict(index=0, kind='call', role='客服', text='查询', itemId='one', command='connected',
                           output='', status='running', exitCode='', started=100, finished=0, expanded=True,
-                          steps=[], callBackend='cellular', callNumber='10000', connectedAt=125,
+                          callBackend='cellular', callNumber='10000', connectedAt=125,
                           privateVoiceInstructions=False, independentMonitor=False)
             card = component.createWithInitialProperties(fields)
             self.assertIsNotNone(card, '\n'.join(e.toString() for e in component.errors()))
             APP.processEvents()
             self.assertGreater(card.property('implicitHeight'), 0)
             self.assertEqual(errors, [])
+            items, pending = [], list(card.childItems())
+            while pending:
+                child = pending.pop()
+                items.append(child)
+                pending.extend(child.childItems())
+            texts = [child.property('text') for child in items
+                     if child.metaObject().className().startswith('QQuickText')]
+            self.assertTrue(any(isinstance(text, str) and '对方' in text and '你好 &lt;测试>' in text
+                                for text in texts), texts)
             card.deleteLater()
             APP.processEvents()
 
