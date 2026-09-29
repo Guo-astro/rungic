@@ -1,6 +1,6 @@
 # Mesa 的底座：lfdevs 分支，还是上游加我们自己的补丁（调研，2026-09-30）
 
-状态：调研，**尚未实施**。标注：“源码”指在代码或 git 历史里核对过；“文字”指只见于 PR、MR 或 README 的说法；“推断”是未验证的判断。调研工作目录：`.work` 之外的临时目录（partial clone、diffstat、分组 diff），可以随时重做。
+状态：调研后实际试过迁移，**评估未通过，已退回**（见文末“迁移尝试与结论”）。标注：“源码”指在代码或 git 历史里核对过；“文字”指只见于 PR、MR 或 README 的说法；“推断”是未验证的判断。调研工作目录：`.work` 之外的临时目录（partial clone、diffstat、分组 diff），可以随时重做。
 
 ## 现状
 
@@ -83,3 +83,41 @@
 9. 长时间运行时 dma-buf fd 和内存有没有增长。
 
 附带更正：docs/57 说 gallium 在 CPU 分块拷贝时使用写死的 `highest_bank_bit=16`。实际上 `src/gallium/drivers/freedreno` 里没有任何地方读取 `highest_bank_bit`（源码）。
+
+## 迁移尝试与结论（2026-09-30）
+
+按上面的建议移植了 4 个补丁（约 1000 行），在上游 main `190d227a` 上构建（Mesa `26.3.0~devel20260929+rungic1`）。先在隔离目录里测试：`/opt/rungic-mesa-test`，只让测试进程通过 `LD_LIBRARY_PATH` 等变量加载。
+
+通过的部分（实测）：
+- Wayland EGL：驱动 kgsl，FD710；
+- GBM 探针；
+- dma-buf 导入后再导出，inode 相同；
+- Turnip：vulkaninfo、vkcube 正常，没有 GPU hang。
+
+**freedreno gallium 在上游上不能用**（实测）：
+- 一渲染（glmark2-es2-wayland）内核就报 `kgsl-3d0: fault @ 0x403cc20000`、`GPU hang detected`，接着是大量 `submit failed (Resource deadlock avoided)`。
+- 系统装上这版后重启工作区，工作区的 KWin 报“图形复位”后 abort。已立即回退系统 Mesa，用户的会话没有受影响。
+- 换回分支的 FD710 参数（CCU 3、hbb 16、A730 寄存器魔数）后照样 hang，所以不是设备表的问题。
+- drm 核心代码（ringbuffer、bo、pipe）上游和分支完全一样。分支自 `4c1c22e9`（2026-08-24）以后没合并过上游，所以回归出在上游 2026-08-24 至 09-29 之间的 freedreno 或 ir3 改动里。未做二分定位。
+
+**zink on Turnip 评估**（为了考虑去掉 freedreno）：
+- 加了一个补丁（zink 在 KGSL 上用 KGSL 节点作 fd，EGL 不再为它找 DRM 设备）。之后 EGL Wayland 和 GLX 都能起来：GLES 3.2 / GL 4.6，“zink Vulkan 1.4 (Turnip Adreno 710)”，没有 GPU hang。
+- 性能（glmark2-es2-wayland，1280×720，`--swap-mode immediate`，同一工作区）：
+
+  | 场景 | zink on Turnip | freedreno（`+rungic3`） |
+  |---|---|---|
+  | build | 102 FPS | 252 FPS |
+  | texture | 97 | 255 |
+  | shading | 94 | 251 |
+  | refract | 33 | 62 |
+  | terrain | 22 | 39 |
+  | 分数 | 68 | 170 |
+
+  轻场景有约 10 ms 的固定帧开销，超过 120 Hz 的 8.3 ms 帧预算。推断与 KGSL 上的 Vulkan 呈现同步有关（上游 Turnip KGSL timeline 同步 !39751 仍是草稿），未验证。
+- 加上 docs/51（KWin 经 zink 慢帧 5.06% 对 0.57%）和 docs/56（Turnip WSI 闪屏），判定未通过。桌面会话里的 KWin 这次没有重测。
+
+**结论**：按用户的指示（评估不过就退回），`packages/mesa` 退回 lfdevs `98f3d622` 加我们的 4 个补丁（`+rungic3`），撤销提交为 `ff25f566`。上游移植和 zink 补丁保留在被撤销的提交 `4761cc21`、`37aa4fb7`、`8830fb95` 里。
+
+以后再试的条件：
+- 定位并修掉上游 freedreno 在 KGSL 上的回归（二分约 11 次构建）；或者
+- 上游 Turnip 的 KGSL 同步和呈现改进后，重测 zink。
