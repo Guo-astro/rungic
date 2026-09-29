@@ -1,0 +1,59 @@
+"""What the assistant is doing on its screen, for whoever shows it (docs/88).
+
+One small JSON file in the runtime directory, replaced atomically on every change:
+
+  {"state": "working" | "done" | "question" | "failed" | "stopped",
+   "text": "打开「渲染」菜单",      what is happening now (a caption, Simplified Chinese)
+   "task": "...",                   the task it is part of, if any
+   "time": 1790000000.0}            when it was written (seconds since the epoch)
+
+The assistant screen's floating window shows `text` as a caption over the picture while
+"working", and the outcome for a moment after; the voice agent speaks it as progress. A
+"working" state older than STALE_S means the writer went away (a tool call killed with Codex).
+"""
+from __future__ import annotations
+
+import json
+import os
+import time
+from pathlib import Path
+
+STALE_S = 120
+PATH = Path(os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}') / 'rungic-agent-screen' / 'activity.json'
+
+
+def report(text: str, *, state: str = 'working', task: str = '') -> None:
+    """Say what is happening now. Never fails the caller: the caption is a courtesy."""
+    try:
+        PATH.parent.mkdir(parents=True, exist_ok=True)
+        data = {'state': state, 'text': ' '.join(str(text).split())[:80], 'task': ' '.join(str(task).split())[:120],
+                'time': time.time()}
+        temporary = PATH.with_suffix('.tmp')
+        temporary.write_text(json.dumps(data, ensure_ascii=False))
+        os.replace(temporary, PATH)
+    except OSError:
+        pass
+
+
+def read() -> dict:
+    """The latest report, or {} when there is none or it went stale."""
+    try:
+        data = json.loads(PATH.read_text())
+    except (OSError, ValueError):
+        return {}
+    if data.get('state') == 'working' and time.time() - float(data.get('time') or 0) > STALE_S:
+        return {}
+    return data
+
+
+def describe(action: dict) -> str:
+    """A caption for one computer-use action when the model gave none."""
+    kind = action.get('type')
+    if kind == 'type':
+        text = ' '.join(str(action.get('text', '')).split())
+        return f'输入“{text[:24]}{"…" if len(text) > 24 else ""}”'
+    if kind == 'keypress':
+        keys = [str(k).upper() for k in action.get('keys') or []]
+        return {'ENTER': '按回车', 'ESCAPE': '按 Esc', 'TAB': '按 Tab'}.get('+'.join(keys), '按 ' + '+'.join(keys))
+    return {'click': '点击', 'double_click': '双击', 'drag': '拖动', 'move': '移动指针', 'scroll': '滚动页面',
+            'wait': '等待画面更新', 'screenshot': '看一下屏幕'}.get(kind, '操作屏幕')

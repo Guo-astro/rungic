@@ -1,6 +1,9 @@
 #include "agentscreen.h"
 
 #include <QCoreApplication>
+#include <QDateTime>
+#include <QDir>
+#include <QFile>
 #include <QGuiApplication>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -11,6 +14,7 @@
 #include <QThread>
 #include <QWaylandClientExtensionTemplate>
 #include <QtGui/qscreen_platform.h>
+#include <unistd.h>
 
 #include "qwayland-fake-input.h"
 #include "qwayland-zkde-screencast-unstable-v1.h"
@@ -18,6 +22,10 @@
 namespace
 {
 const QString kSocket = QStringLiteral("/mnt/android-wayland/platform.sock");
+// rungic_cua.activity (docs/88): a "working" report older than this was left by a writer that went away;
+// an ending is news only for a moment (the window shows it a few seconds).
+constexpr double kActivityStaleS = 120;
+constexpr double kEndingStaleS = 10;
 // No pointer in the picture: asking for it embedded makes KWin show the pointer, which then sat on the
 // phone's own screen as a black square (the host draws its cursor surface without alpha).
 constexpr uint kPointerHidden = 1;
@@ -106,7 +114,35 @@ AgentScreen::AgentScreen(QObject *parent)
     connect(m_screencasting.get(), &Screencasting::activeChanged, this, &AgentScreen::update);
     connect(&m_poll, &QTimer::timeout, this, &AgentScreen::poll);
     m_poll.start(1500);
+    // The caption: rungic-cua replaces the file by renaming, which changes the directory.
+    const QString runtime = qEnvironmentVariable("XDG_RUNTIME_DIR", QStringLiteral("/run/user/%1").arg(getuid()));
+    const QString dir = runtime + QStringLiteral("/rungic-agent-screen");
+    QDir().mkpath(dir);
+    m_activityPath = dir + QStringLiteral("/activity.json");
+    m_activityWatcher.addPath(dir);
+    connect(&m_activityWatcher, &QFileSystemWatcher::directoryChanged, this, &AgentScreen::readActivity);
+    readActivity();
     poll();
+}
+
+void AgentScreen::readActivity()
+{
+    QFile file(m_activityPath);
+    QJsonObject report;
+    if (file.open(QIODevice::ReadOnly))
+        report = QJsonDocument::fromJson(file.readAll()).object();
+    QString state = report.value(QStringLiteral("state")).toString();
+    const QString text = report.value(QStringLiteral("text")).toString();
+    const double time = report.value(QStringLiteral("time")).toDouble();
+    const double now = QDateTime::currentMSecsSinceEpoch() / 1000.0;
+    if (now - time > (state == QLatin1String("working") ? kActivityStaleS : kEndingStaleS))
+        state.clear();
+    if (state == m_activityState && text == m_activityText && time == m_activityTime)
+        return;
+    m_activityState = state;
+    m_activityText = text;
+    m_activityTime = time;
+    Q_EMIT activityChanged();
 }
 
 AgentScreen::~AgentScreen() = default;
@@ -152,6 +188,8 @@ void AgentScreen::keepApart()
 
 void AgentScreen::poll()
 {
+    if (m_activityState == QLatin1String("working"))
+        readActivity();  // goes stale when nothing reports any more
     const QJsonObject state = bridge({{QStringLiteral("op"), QStringLiteral("agent-screen")}});
     if (state.contains(QStringLiteral("error"))) {
         setStatus(QStringLiteral("error: ") + state.value(QStringLiteral("error")).toString());

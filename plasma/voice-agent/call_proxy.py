@@ -16,6 +16,7 @@ import base64
 import json
 import os
 import subprocess
+import sys
 import threading
 import time
 import urllib.parse
@@ -42,7 +43,6 @@ RATE = 24000
 CHUNK_MS = 100
 MODEL = os.environ.get('RUNGIC_CALL_MODEL', 'gpt-realtime-2.1-mini')
 VOICE = 'marin'
-KEY_FILE = Path.home() / '.config/rungic-voice-agent/openai-api-key'
 REMOTE = 'linux_speaker.monitor'        # what the other side says
 AGENT_OUT = 'linux_microphone_input'    # what the call agent says
 OWNER_SINK = 'android_phone'            # listening in: the phone itself
@@ -88,7 +88,11 @@ def instructions(owner: str, contact: str, goal: str, incoming: bool = False) ->
 
 
 def api_key() -> str:
-    return KEY_FILE.read_text().strip()
+    # The key file (docs/87); rungic-cua ships the module that reads it.
+    if '/usr/lib/rungic-cua' not in sys.path:
+        sys.path.insert(0, '/usr/lib/rungic-cua')
+    from rungic_cua import keys
+    return keys.read('openai-api-key')
 
 
 def proxy_settings() -> dict:

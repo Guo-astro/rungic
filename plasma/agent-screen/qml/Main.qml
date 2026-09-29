@@ -13,6 +13,8 @@
 // AgentFullscreen: zero-copy, turned a quarter for the phone held sideways, its own touch handling
 // and toolbar); this window hides meanwhile, as it does while a TV shows the screen.
 // Tab: a handle on the edge; tap to bring the window back, drag to slide it along the edge.
+// Caption (docs/88): while the assistant works on this screen, what it is doing now sits over the
+// bottom of the picture (its dot breathes on the tab); how it ended shows for a few seconds.
 // While a TV or the phone's fullscreen presents the screen everything hides; then it comes back.
 import QtQuick
 import QtQuick.Effects
@@ -86,9 +88,22 @@ Window {
     Component.onCompleted: {
         panelWidth = area.width * 0.72
         settle()
+        followActivity()
     }
     onAreaChanged: settle()
     onReadyChanged: Qt.callLater(updateMask)
+
+    // ---- caption: what the assistant is doing (docs/88) ---------------------------------------------
+    // hidden, working, done, question, failed, stopped. An ending shows a few seconds, then hides.
+    property string captionState: ""
+    function followActivity() {
+        const state = agent.activityState
+        captionState = ["working", "done", "question", "failed", "stopped"].indexOf(state) >= 0 ? state : ""
+        if (captionState !== "" && captionState !== "working")
+            endTimer.restart()
+    }
+    Connections { target: agent; function onActivityChanged() { root.followActivity() } }
+    Timer { id: endTimer; interval: 4000; onTriggered: if (root.captionState !== "working") root.captionState = "" }
 
     Timer {
         id: hideTimer
@@ -213,6 +228,60 @@ Window {
             }
         }
         Rectangle {
+            id: caption
+            property string label: ""
+            property color dot: "#63d471"
+            property bool shown: false
+            anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: 8 }
+            width: Math.min(parent.width - 16, captionRow.implicitWidth + 20)
+            height: captionText.implicitHeight + 10
+            radius: Math.min(14, height / 2)
+            color: Qt.rgba(0.11, 0.12, 0.15, 0.86)
+            border.color: Qt.rgba(1, 1, 1, 0.16)
+            border.width: 1
+            opacity: shown ? 1 : 0
+            visible: opacity > 0.01
+            Behavior on opacity { NumberAnimation { duration: 180 } }
+            state: root.captionState === "" ? "hidden" : root.captionState
+            states: [
+                State { name: "hidden"; PropertyChanges { caption.shown: false } },
+                State { name: "working"; PropertyChanges { caption.shown: true; caption.dot: "#63d471"; caption.label: agent.activityText || "正在操作" } },
+                State { name: "done"; PropertyChanges { caption.shown: true; caption.dot: "#8ab4f8"; caption.label: agent.activityText ? "完成 · " + agent.activityText : "完成" } },
+                State { name: "question"; PropertyChanges { caption.shown: true; caption.dot: "#e0a83c"; caption.label: "需要你回答" + (agent.activityText ? " · " + agent.activityText : "") } },
+                State { name: "failed"; PropertyChanges { caption.shown: true; caption.dot: "#e0606d"; caption.label: "没做成" + (agent.activityText ? " · " + agent.activityText : "") } },
+                State { name: "stopped"; PropertyChanges { caption.shown: true; caption.dot: "#a1a9b1"; caption.label: "已停止" } }
+            ]
+            Row {
+                id: captionRow
+                anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
+                spacing: 7
+                Rectangle {
+                    id: captionDot
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 7; height: 7; radius: 3.5
+                    color: caption.dot
+                    SequentialAnimation on opacity {
+                        running: root.captionState === "working" && caption.visible
+                        loops: Animation.Infinite
+                        onRunningChanged: if (!running) captionDot.opacity = 1
+                        NumberAnimation { to: 0.3; duration: 700; easing.type: Easing.InOutSine }
+                        NumberAnimation { to: 1; duration: 700; easing.type: Easing.InOutSine }
+                    }
+                }
+                Text {
+                    id: captionText
+                    // Sized from the picture, not from the capsule (whose width follows this text).
+                    width: Math.min(implicitWidth, panel.width - 16 - 20 - 14)
+                    text: caption.label
+                    color: "white"
+                    font.pixelSize: 12
+                    elide: Text.ElideRight
+                    wrapMode: Text.Wrap
+                    maximumLineCount: 2
+                }
+            }
+        }
+        Rectangle {
             id: roundMask
             anchors.fill: parent
             radius: 14
@@ -307,10 +376,18 @@ Window {
             color: "white"
             isMask: true
         }
-        Rectangle {  // alive: green, starting: amber
+        Rectangle {  // alive: green, starting: amber; breathes while the assistant works (docs/88)
+            id: tabDot
             anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 8 }
             width: 6; height: 6; radius: 3
             color: agent.status === "running" ? "#63d471" : "#e0a83c"
+            SequentialAnimation on opacity {
+                running: root.captionState === "working" && tab.visible
+                loops: Animation.Infinite
+                onRunningChanged: if (!running) tabDot.opacity = 1
+                NumberAnimation { to: 0.25; duration: 700; easing.type: Easing.InOutSine }
+                NumberAnimation { to: 1; duration: 700; easing.type: Easing.InOutSine }
+            }
         }
         TapHandler { onTapped: root.expand() }
         DragHandler {

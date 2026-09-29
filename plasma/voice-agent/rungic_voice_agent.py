@@ -14,9 +14,9 @@ JSON events and kept per conversation for the chat history.
   rungic-voice-agent --audio-file F.pcm   one test turn: F (S16LE 24 kHz mono) as speech
 
 Realtime runs over WebSocket so all traffic goes through the proxy that the
-`codex` wrapper sets; Codex needs an API key for that (OPENAI_API_KEY from
-~/.config/rungic-voice-agent/openai-api-key), while the agent itself uses the
-ChatGPT sign-in.
+`codex` wrapper sets; Codex needs an API key for that (OPENAI_API_KEY from the
+key file, rungic_cua.keys, docs/87), while the agent itself uses Codex's
+own sign-in (a ChatGPT account, or the same key).
 """
 import argparse
 import array
@@ -38,9 +38,14 @@ import gi
 gi.require_version('Gst', '1.0')
 from gi.repository import Gio, GLib, Gst
 
-# The call proxy (docs/63) lives next to this script's shared files.
+# The call proxy (docs/63) lives next to this script's shared files; the key-file
+# module (docs/87) comes with rungic-cua.
 import sys
 sys.path.insert(0, '/usr/lib/rungic-voice-agent')
+sys.path.insert(1, '/usr/lib/rungic-cua')
+import shutil
+import socket
+import task_state
 
 RATE = 24000                 # PCM format of the Realtime API
 CHUNK_MS = 100
@@ -68,10 +73,17 @@ AGENT_MODEL = 'gpt-6-sol'
 AGENT_EFFORT = 'medium'
 # Spoken progress while the agent works: Codex hands agent updates to the voice
 # model as context only (no response), so it would stay silent until the end.
+# Spoken progress (docs/89): by events, not by the clock. The screen shows every step; the
+# voice says the milestones, and more of them when nobody looks at the screen.
 PROGRESS_AFTER_S = 8         # quick tasks get no progress update
-PROGRESS_GAP_S = 6           # silence before relaying a new step
-QUIET_UPDATE_S = 20          # nothing new: say it is still working (then 30 s, 45 s, 60 s)
-PROGRESS_STALE_S = 8         # an agent note older than this describes a finished step
+GAP_AWAY_S = 8               # least silence between two updates when nobody looks
+GAP_WATCHED_S = 20           # ... and when the user looks at the chat or the assistant's screen
+LONG_STEP_S = 40             # one step this long gets a word on how far it is
+LONG_AGAIN_AWAY_S = 45       # ... and again after this much silence (at most twice per step)
+LONG_AGAIN_WATCHED_S = 90
+STILL_AFTER_S = 25           # nothing at all was said yet: one "still working"
+APOLOGY_AFTER_S = 90         # a long wait earns one short apology
+WATCHERS_FRESH_S = 3         # how long the phone's foreground state is trusted
 DATA = Path.home() / '.local/share/rungic-voice-agent'
 CONFIG = Path.home() / '.config/rungic-voice-agent'
 PROMPTS = Path('/usr/share/rungic-voice-agent/prompts')
@@ -97,10 +109,41 @@ INTERFACE = '''
     <method name="State"><arg type="s" direction="out"/></method>
     <method name="StartCall"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
     <method name="CallCommand"><arg type="s" direction="in"/></method>
+    <method name="SendText"><arg type="s" direction="in"/><arg type="s" direction="in"/></method>
+    <method name="TalkToText"><arg type="s" direction="out"/></method>
+    <method name="ReadAloud"><arg type="s" direction="in"/></method>
+    <method name="Setup"><arg type="s" direction="out"/></method>
+    <method name="SetApiKey"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
+    <method name="TestApiKey"><arg type="s" direction="out"/></method>
+    <method name="RemoveApiKey"><arg type="s" direction="out"/></method>
+    <method name="CodexLogin"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
+    <method name="InstallCodex"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
+    <method name="CancelInstall"><arg type="s" direction="out"/></method>
+    <method name="SetPreferences"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
+    <method name="SetWatching"><arg type="b" direction="in"/></method>
+    <method name="Use"><arg type="s" direction="in"/></method>
     <signal name="Event"><arg type="s"/></signal>
   </interface>
 </node>
 '''
+
+
+def openai_key() -> str:
+    """The OpenAI API key, or ''."""
+    from rungic_cua import keys
+    return keys.read('openai-api-key')
+
+
+# The app's choices that change what this service does (docs/87).
+PREFERENCES = {'homeHold': True, 'speak': True, 'handsFreeAutoSend': True}
+
+
+def preferences() -> dict:
+    try:
+        saved = json.loads((CONFIG / 'preferences.json').read_text())
+    except (OSError, ValueError):
+        saved = {}
+    return {k: bool(saved.get(k, v)) for k, v in PREFERENCES.items()}
 
 
 def log(*args):
@@ -120,10 +163,14 @@ class AppServer:
 
     def __init__(self, on_notification, on_request):
         env = dict(os.environ)
-        key_file = CONFIG / 'openai-api-key'
-        if key_file.exists():
-            env['OPENAI_API_KEY'] = key_file.read_text().strip()
-        self.proc = subprocess.Popen(['codex', 'app-server'], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+        key = openai_key()
+        if key:
+            env['OPENAI_API_KEY'] = key
+        # The official install script puts codex in ~/.local/bin (docs/87).
+        codex = shutil.which('codex', path=os.environ.get('PATH', '') + ':' + str(Path.home() / '.local/bin'))
+        if not codex:
+            raise FileNotFoundError('codex')
+        self.proc = subprocess.Popen([codex, 'app-server'], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                      stderr=subprocess.DEVNULL, bufsize=0, env=env)
         self.ids = itertools.count(1)
         self.pending = {}
@@ -377,10 +424,16 @@ class VoiceAgent:
         self.turn_id = None
         self.turn_started = 0.0
         self.last_voice = 0.0     # last reply audio or progress request
-        self.progress_text = None
-        self.progress_at = 0.0
-        self.quiet_updates = 0
-        self.current_step = None
+        # The turn in words (task_state, docs/89) and what the voice already told of it.
+        self.turn = None
+        self.turn_lock = threading.Lock()
+        self.task_pending = False
+        self.told = {}
+        self.screen_seen = 0.0       # time of the last screen caption taken in (docs/88)
+        # Who looks: the app and the overlay say whether they are on screen (SetWatching, by
+        # D-Bus sender); the phone's own screen must be on and showing Plasma too.
+        self.watchers = {}
+        self.foreground = (True, 0.0)
         self.playing_until = 0.0
         self.reply_audio_ms = 0
         self.reply_sink = None
@@ -392,6 +445,15 @@ class VoiceAgent:
         self.recorder = None
         self.mic_buffer = b''
         self.gate = PauseGate()
+        # A press's audio stays here until it is sent (docs/87): released to send, it goes up
+        # at once; cancelled or turned into text, nothing reached the realtime session, whose
+        # input buffer could not be cleared (app-server has no such call) and would have
+        # joined the dropped words to the next press.
+        # "朗读" (docs/87): the voice says an answer again; that speech is not a new message.
+        self.aloud_pending = False   # asked; the next assistant segment is the reading
+        self.aloud_items = set()     # transcript segments of readings: heard, never shown
+        self.held = []               # gated chunks of this press, not yet uploaded
+        self.press_audio = b''       # all of this press, for speech-to-text
         self.call = None             # the proxied call, when the assistant talks in a call (docs/63)
         self.owner_audio = None      # what the user says to the call agent while talking
         # Id of the current push-to-talk press: the UI shows all transcript pieces
@@ -408,11 +470,56 @@ class VoiceAgent:
         # Audio must reach the server in order: one sender thread, fixed chunks.
         self.uploads = queue.Queue()
         threading.Thread(target=self.upload_loop, daemon=True).start()
-        self.server = AppServer(self.on_notification, self.on_request)
-        self.server.call('initialize', {'clientInfo': {'name': 'rungic-voice-agent', 'version': '1.0'},
-                                        'capabilities': {'experimentalApi': True}})
-        self.server.notify('initialized')
+        self.prefs = preferences()
+        self.key_working = None      # the last test of the API key: True, False, or not tested
+        self.installer = None        # a Codex installation under way
+        self.server = None
+        self.start_server()
         GLib.timeout_add_seconds(30, self.idle_check)
+
+    def start_server(self):
+        """codex app-server; without Codex (not installed yet) the service still runs, and
+        what needs it says so (the setup prompt, docs/87)."""
+        try:
+            server = AppServer(self.on_notification, self.on_request)
+            server.call('initialize', {'clientInfo': {'name': 'rungic-voice-agent', 'version': '1.0'},
+                                       'capabilities': {'experimentalApi': True}})
+            server.notify('initialized')
+            self.server = server
+        except (FileNotFoundError, TimeoutError, RuntimeError) as error:
+            log('codex app-server not started:', error)
+            self.server = None
+
+    def restart_server(self):
+        """A new key, sign-in or installation: Codex reads them when it starts. The open
+        conversation is closed; the app reopens it (agent-restarted)."""
+        with self.lock:
+            open_id = self.thread_id
+            self.close_conversation()
+            old, self.server = self.server, None
+            if old:
+                try:
+                    old.proc.terminate()
+                except OSError:
+                    pass
+            self.start_server()
+        self.emit_raw({'type': 'agent-restarted', 'conversation': open_id, 'time': time.time()})
+
+    def needs_setup(self, voice):
+        """What is missing before the agent can work, as a prompt in the conversation."""
+        if not self.server:
+            self.emit({'type': 'message', 'role': 'assistant', 'id': f'setup-{time.time_ns()}',
+                       'text': '这件事需要 Codex 来操作手机，但它还没有安装。'}, keep=False)
+            self.emit({'type': 'setup', 'text': '还差一步：安装 Codex', 'detail': '装好之后我就能替你做事。',
+                       'page': 'codex'}, keep=False)
+            return True
+        if voice and not openai_key():
+            self.emit({'type': 'message', 'role': 'assistant', 'id': f'setup-{time.time_ns()}',
+                       'text': '语音要用 OpenAI API Key 连上 OpenAI，现在还没有配置。'}, keep=False)
+            self.emit({'type': 'setup', 'text': '还差一步：配置 OpenAI API Key', 'detail': '配好之后就能直接说话；打字也可以先用。',
+                       'page': 'key'}, keep=False)
+            return True
+        return False
 
     # ---- events -------------------------------------------------------------
     def emit(self, event, keep=True):
@@ -450,7 +557,10 @@ class VoiceAgent:
         # Full access without approval prompts (the user's choice, docs/59): the
         # sandbox could not reach the desktop and every approval interrupted work.
         return {'cwd': str(Path.home()), 'sandbox': 'danger-full-access', 'approvalPolicy': 'never',
-                'model': AGENT_MODEL, 'config': {'model_reasoning_effort': AGENT_EFFORT},
+                'model': AGENT_MODEL,
+                # update_plan is off unless configured (codex config resolve_update_plan_enabled):
+                # its plan is the task card's checklist and the voice's milestones (docs/89).
+                'config': {'model_reasoning_effort': AGENT_EFFORT, 'tools.update_plan.enabled': True},
                 'developerInstructions': prompt('agent.md')}
 
     def open_conversation(self, thread_id, connect=True):
@@ -476,6 +586,9 @@ class VoiceAgent:
                 self.store.touch(self.thread_id)
             else:
                 # A new thread: its id comes from Codex, and starting one is quick.
+                if not self.server:
+                    self.needs_setup(False)
+                    raise RuntimeError('Codex 还没有安装')
                 result = self.server.call('thread/start', self.thread_settings())
                 self.thread_id = result['thread']['id']
                 self.resumed = threading.Event()
@@ -492,6 +605,8 @@ class VoiceAgent:
 
     def resume_thread(self, thread_id, generation, resumed):
         started = time.monotonic()
+        if not self.server:
+            return
         try:
             self.server.call('thread/resume', {'threadId': thread_id, **self.thread_settings()})
         except Exception as error:  # noqa: BLE001
@@ -525,7 +640,9 @@ class VoiceAgent:
         if not resumed.wait(60) or self.thread_id != thread_id:
             return
         with self.lock:
-            if self.realtime or self.realtime_starting or not self.thread_id:
+            if self.realtime or self.realtime_starting or not self.thread_id or not self.server:
+                return
+            if not openai_key():
                 return
             # A second start while the first is under way replaced the session and
             # dropped the audio sent to the first (a press right after opening).
@@ -667,6 +784,9 @@ class VoiceAgent:
         self.reply_sink = sink
         if not self.thread_id:
             return False
+        if self.needs_setup(True):
+            self.set_state()
+            return False
         if not self.realtime:
             threading.Thread(target=self.start_realtime, daemon=True).start()
         self.stop_audio()           # barge in: stop speaking at once
@@ -674,6 +794,8 @@ class VoiceAgent:
         self.ensure_recorder()
         self.mic_buffer = b''
         self.gate = PauseGate()
+        self.held = []
+        self.press_audio = b''
         self.endpointer = Endpointer()
         self.hands_free = False
         self.talk_started = time.monotonic()
@@ -684,6 +806,10 @@ class VoiceAgent:
         self.recorder.set_state(Gst.State.PLAYING)
         self.mic_chunks = 0
         log('talk: start, reply on', self.reply_sink or 'default sink')
+        # The UI puts the user's bubble in place at once (docs/87): the transcript comes after
+        # the release, and the reply can begin before it, so the bubble cannot wait for it.
+        if self.owner_audio is None:
+            self.emit({'type': 'talk-started', 'press': self.press}, keep=False)
         self.set_state()
         return False
 
@@ -727,14 +853,18 @@ class VoiceAgent:
         if self.recorder is not None:
             self.recorder.set_state(Gst.State.READY)
         self.mic_buffer = b''
-        log('talk: nothing said, cancelled')
-        self.emit({'type': 'listen-cancelled'}, keep=False)
+        self.held = []
+        self.press_audio = b''
+        log('talk: cancelled, nothing sent')
+        self.emit({'type': 'listen-cancelled', 'press': self.press}, keep=False)
         self.set_state()
         return False
 
     def stop_talking(self):
         if not self.talking:
             return False
+        if self.owner_audio is None and not self.endpointer.heard:
+            return self.cancel_talking()         # nothing was said: send nothing
         self.talking = False
         self.hands_free = False
         self.last_activity = time.monotonic()
@@ -751,9 +881,14 @@ class VoiceAgent:
         log(f'talk: stop after {self.mic_chunks * CHUNK_MS} ms of audio, {self.gate.dropped_ms} ms of pauses left out')
         rest = self.gate.feed(self.mic_buffer) + self.gate.finish()
         self.mic_buffer = b''
+        for chunk in self.held:
+            self.uploads.put(chunk)
+        self.held = []
+        self.press_audio = b''
         if rest:
             self.uploads.put(rest)
         self.uploads.put(bytes(RATE * 2 * END_SILENCE_MS // 1000))
+        self.emit({'type': 'talk-sent', 'press': self.press}, keep=False)
         self.set_state()
         return False
 
@@ -771,11 +906,12 @@ class VoiceAgent:
             data = bytes(info.data)
             buf.unmap(info)
             self.mic_buffer += data
+            self.press_audio += data
             level = self.endpointer.feed(data)
             self.emit({'type': 'level', 'db': round(level, 1)}, keep=False)
             if self.hands_free:
                 elapsed = time.monotonic() - self.talk_started
-                if self.endpointer.ended or elapsed > HANDS_FREE_MAX_S:
+                if (self.endpointer.ended and self.prefs['handsFreeAutoSend']) or elapsed > HANDS_FREE_MAX_S:
                     GLib.idle_add(self.stop_talking)
                 elif not self.endpointer.heard and elapsed > HANDS_FREE_NO_SPEECH_S:
                     GLib.idle_add(self.cancel_talking)
@@ -783,7 +919,7 @@ class VoiceAgent:
             while len(self.mic_buffer) >= chunk:
                 send = self.gate.feed(self.mic_buffer[:chunk])
                 if send:
-                    self.uploads.put(send)
+                    self.held.append(send)
                 self.mic_buffer = self.mic_buffer[chunk:]
                 self.mic_chunks += 1
         return Gst.FlowReturn.OK
@@ -813,7 +949,7 @@ class VoiceAgent:
         if self.talking:
             log('reply audio dropped while talking')
             return False
-        if self.muted:
+        if self.muted or not self.prefs['speak']:
             return False
         data = base64.b64decode(audio['data'])
         rate = audio.get('sampleRate', RATE)
@@ -842,8 +978,18 @@ class VoiceAgent:
         return False
 
     def progress_tick(self):
-        if not self.agent_busy or not self.realtime:
+        if not self.agent_busy:
             return False
+        # What it is doing on the assistant's screen (docs/88) joins the turn's current step.
+        screen = screen_activity()
+        if screen.get('state') == 'working' and screen.get('text') and screen.get('time', 0) > self.screen_seen:
+            self.screen_seen = screen['time']
+            with self.turn_lock:
+                changed = self.turn is not None and self.turn.on_screen(screen['text'])
+            if changed:
+                self.task_changed()
+        if not self.realtime:
+            return True
         now = time.monotonic()
         if self.call_in_progress():
             self.last_voice = now          # the call is what the user hears now
@@ -856,27 +1002,96 @@ class VoiceAgent:
         if self.approvals:
             self.last_voice = now     # waiting for the user, who was already asked
             return True
-        elapsed = int(now - self.turn_started)
-        if self.progress_text and now - self.progress_at > PROGRESS_STALE_S:
-            self.progress_text = None
-        if self.progress_text and now - self.last_voice >= PROGRESS_GAP_S:
-            text = (f'进度（已用时{elapsed}秒，任务仍在进行）：{self.progress_text}\n'
-                    '用一句很短的话告诉用户现在在做什么，不要说成结果。语气平稳、让人安心。')
-        elif now - self.last_voice >= min(60, QUIET_UPDATE_S * 1.5 ** self.quiet_updates):
-            self.quiet_updates += 1
-            step = command_summary(self.current_step) if self.current_step else '分析中'
-            text = (f'进度（已用时{elapsed}秒，任务仍在进行，当前步骤：{step}）\n'
-                    '用一句很短的话告诉用户还在处理，不要说成结果。'
-                    + ('语气平稳。' if elapsed < 45 else '已经等了一阵，语气平和，简短地为久等致歉。'))
-        else:
+        with self.turn_lock:
+            reason = self.progress_reason(now)
+            facts = self.turn.facts() if reason and self.turn else ''
+        if not reason:
             return True
-        self.progress_text = None
+        elapsed = now - self.turn_started
+        tone = '语气平稳、让人安心。'
+        if elapsed >= APOLOGY_AFTER_S and not self.told.get('apology'):
+            self.told['apology'] = True
+            tone = '已经等了一阵，语气平和，简短地为久等致歉一次。'
+        text = (f'进度（系统给你的进度信息，不是用户说的话；直接对用户说一句，不要回应这条信息本身）\n{facts}\n{reason}只说上面列出的事实：“已完成”才说成做完了，“进行中”“此刻正在”说成正在做，'
+                f'“打算”说成打算；不要补充没列出的内容，也不要重复上一次说过的话。{tone}')
         self.last_voice = now
         threading.Thread(target=self.speak_progress, args=(text,), daemon=True).start()
         return True
 
+    def progress_reason(self, now):
+        """Why to speak now, as the instruction for the voice, or None (docs/89). Milestones
+        first; the screen shows everything else, so the voice waits longer while someone looks."""
+        turn, told = self.turn, self.told
+        if turn is None:
+            return None
+        watched = self.user_watching()
+        quiet = now - self.last_voice
+        if quiet < (GAP_WATCHED_S if watched else GAP_AWAY_S):
+            return None
+        plan = turn.plan
+        if len(plan) >= 2 and not told.get('plan'):
+            told['plan'] = True
+            told['step'] = turn.step_now()
+            return '用一句话告诉用户打算分几步做（按上面的计划简短概括）。'
+        step = turn.step_now()
+        if plan and step and step != told.get('step'):
+            told['step'] = step
+            return '用一句很短的话告诉用户现在进行到哪一步了。'
+        current = turn.current
+        key = f"{current['id']}|{current['text']}" if current else ''
+        if current:
+            running = time.time() - current['since']
+            again = LONG_AGAIN_WATCHED_S if watched else LONG_AGAIN_AWAY_S
+            times = told.setdefault('long', {}).get(key, 0)
+            if running >= LONG_STEP_S and times < 2 and (times == 0 or quiet >= again):
+                told['long'][key] = times + 1
+                return '这一步用时较长：用一句话告诉用户它还在进行、进行到什么程度（有百分比或数量就说）。'
+        # Codex hands its own commentary to the voice already ([BACKEND] messages): no second
+        # telling of intentions here.
+        if not plan:
+            if current and key != told.get('activity') and time.time() - current['since'] >= 4 \
+                    and (not watched or quiet >= 30):
+                told['activity'] = key
+                return '用一句很短的话告诉用户此刻在做什么。'
+        if not told.get('still') and now - self.turn_started >= STILL_AFTER_S and quiet >= STILL_AFTER_S:
+            told['still'] = True
+            return '用一句很短的话告诉用户还在处理。'
+        return None
+
+    def user_watching(self):
+        """Someone looks at the chat (app or overlay on screen) and the phone shows Plasma."""
+        if not any(self.watchers.values()):
+            return False
+        shown, checked = self.foreground
+        if time.monotonic() - checked > WATCHERS_FRESH_S:
+            shown = platform_request({'op': 'status'}).get('foreground', True)
+            self.foreground = (shown, time.monotonic())
+        return bool(shown)
+
+    def set_watching(self, sender, watching):
+        self.watchers[sender] = bool(watching)
+
+    def watcher_gone(self, sender):
+        self.watchers.pop(sender, None)
+
+    # ---- the turn in words (task_state, docs/89) ----------------------------------------
+    def task_changed(self):
+        """The card changed: tell the app, a few times a second at most."""
+        if self.task_pending:
+            return
+        self.task_pending = True
+        GLib.timeout_add(400, self.flush_task)
+
+    def flush_task(self):
+        self.task_pending = False
+        with self.turn_lock:
+            snapshot = self.turn.snapshot() if self.turn else None
+        if snapshot is not None and self.agent_busy:
+            self.emit({'type': 'task', **snapshot}, keep=False)
+        return False
+
     def speak_progress(self, text):
-        log('progress:', text.splitlines()[0][:100])
+        log('progress:', ' | '.join(line for line in text.splitlines()[1:] if line)[:400])
         try:
             self.server.call('thread/realtime/appendSpeech', {'threadId': self.thread_id, 'text': text}, timeout=10)
         except Exception as error:
@@ -906,8 +1121,13 @@ class VoiceAgent:
         elif method == 'thread/realtime/item/started' and (params.get('item') or {}).get('type') == 'transcriptSegment':
             item = params['item']
             role = 'user' if item.get('role') == 'user' else 'assistant'
+            if role == 'assistant' and self.aloud_pending:
+                self.aloud_pending = False
+                self.aloud_items.add(item['id'])
             self.segments[item['id']] = (role, self.press if role == 'user' else 0, time.time())
         elif method == 'thread/realtime/item/transcript/delta':
+            if params.get('itemId') in self.aloud_items:
+                return
             role, press, _ = self.segments.get(params.get('itemId'), ('assistant', 0, 0))
             event = {'type': 'delta', 'role': role, 'id': params.get('itemId'), 'text': params.get('delta', '')}
             if role == 'user':
@@ -918,6 +1138,9 @@ class VoiceAgent:
             role, press, started = self.segments.pop(item['id'], ('user' if item.get('role') == 'user' else 'assistant', self.press, 0))
             if role != 'user':
                 self.muted = False      # the reply cut by the stop button has ended
+            if item['id'] in self.aloud_items:
+                self.aloud_items.discard(item['id'])
+                return                  # a reading: heard, not a message
             text = (item.get('text') or '').strip()
             if text:
                 # When the segment began: an acknowledgement begun before agent work
@@ -931,25 +1154,59 @@ class VoiceAgent:
             self.turn_id = (params.get('turn') or {}).get('id')
             self.agent_busy = True
             self.turn_started = self.last_voice = time.monotonic()
-            self.progress_text = self.current_step = None
-            self.quiet_updates = 0
+            with self.turn_lock:
+                self.turn = task_state.TurnState()
+            self.told = {}
             self.emit({'type': 'agent-started'})
             GLib.idle_add(self.set_state)
             GLib.idle_add(self.start_progress)
         elif method == 'turn/completed':
             self.turn_id = None
             self.agent_busy = False
+            # A caption left "working" (a tool call cut short) must not stay on the screen.
+            if screen_activity().get('state') == 'working':
+                from rungic_cua import activity
+                activity.report('', state='done')
             self.last_activity = time.monotonic()
+            # The card as it ended stays with the history (plan, files, steps).
+            with self.turn_lock:
+                final = self.turn.snapshot() if self.turn else None
+                self.turn = None
+            if final and (final['plan'] or final['recent'] or final['files']):
+                final.pop('current', None)
+                self.emit({'type': 'task', 'final': True, **final})
             self.emit({'type': 'agent-finished'})
             GLib.idle_add(self.set_state)
         elif method in ('item/started', 'item/completed'):
             self.agent_item(method.endswith('completed'), params.get('item') or {})
+            with self.turn_lock:
+                changed = self.turn is not None and self.turn.on_item(params.get('item') or {}, method.endswith('completed'))
+            if changed:
+                GLib.idle_add(self.task_changed)
+        elif method == 'turn/plan/updated':
+            with self.turn_lock:
+                if self.turn is not None:
+                    self.turn.on_plan(params.get('plan') or [], params.get('explanation'))
+            GLib.idle_add(self.task_changed)
+        elif method == 'item/commandExecution/outputDelta':
+            with self.turn_lock:
+                changed = self.turn is not None and self.turn.on_output(params.get('itemId', ''), params.get('delta', ''))
+            if changed:
+                GLib.idle_add(self.task_changed)
+        elif method == 'item/fileChange/patchUpdated':
+            with self.turn_lock:
+                changed = self.turn is not None and self.turn.on_patch(params.get('itemId', ''), params.get('changes') or [])
+            if changed:
+                GLib.idle_add(self.task_changed)
+        elif method == 'account/login/completed':
+            self.emit_raw({'type': 'account', 'success': bool(params.get('success')), 'error': params.get('error') or '',
+                           'time': time.time()})
+            if params.get('success'):
+                threading.Thread(target=self.restart_server, daemon=True).start()
 
     def agent_item(self, completed, item):
         kind = item.get('type')
         if kind == 'commandExecution':
-            if not completed:
-                self.current_step = item.get('command', '')
             self.emit({'type': 'command', 'id': item.get('id'), 'command': item.get('command', ''),
                        'status': 'done' if completed else 'running', 'exitCode': item.get('exitCode'),
                        'output': (item.get('aggregatedOutput') or '')[-4000:]}, keep=completed)
@@ -957,8 +1214,6 @@ class VoiceAgent:
             # Desktop operations (rungic-desktop MCP) shown like command cards.
             arguments = item.get('arguments') or {}
             label = arguments.get('goal') or arguments.get('app') or arguments.get('window_id') or ''
-            if not completed:
-                self.current_step = f"{item.get('tool')} {label}".strip()
             output = ''
             if item.get('error'):
                 output = str(item['error'].get('message', item['error']))
@@ -973,8 +1228,9 @@ class VoiceAgent:
             self.emit({'type': 'files', 'id': item.get('id'), 'paths': paths, 'status': item.get('status')})
         elif kind == 'agentMessage' and completed and item.get('text'):
             if item.get('phase') != 'final_answer':
-                self.progress_text = item['text']
-                self.progress_at = time.monotonic()
+                with self.turn_lock:
+                    if self.turn is not None:
+                        self.turn.on_commentary(item['text'])
             self.emit({'type': 'agent-message', 'id': item.get('id'), 'text': item['text'],
                        'final': item.get('phase') == 'final_answer'})
 
@@ -1179,6 +1435,205 @@ class VoiceAgent:
         self.server.respond(request_id, {'decision': answer})
         self.emit({'type': 'approval-result', 'id': approval, 'decision': answer})
 
+    # ---- typed input, speech-to-text, reading aloud (docs/87) ---------------------------
+    def send_text(self, text, attachments):
+        """A typed message (with images or files): an agent turn of its own, started
+        directly (turn/start); while one runs, Codex steers it with this instead."""
+        text = text.strip()
+        paths = [a['path'] for a in attachments if a.get('path')]
+        if not text and not paths or not self.thread_id:
+            return
+        if self.needs_setup(False):
+            return
+        if not self.resumed.wait(60):
+            raise RuntimeError('对话还没准备好')
+        images = [p for p in paths if Path(p).suffix.lower() in ('.png', '.jpg', '.jpeg', '.webp', '.gif')]
+        others = [p for p in paths if p not in images]
+        prompt_text = text
+        if others:
+            # Codex takes images as input; other files are named, and the agent reads them.
+            prompt_text += '\n\n附件：\n' + '\n'.join(others)
+        items = [{'type': 'text', 'text': prompt_text, 'text_elements': []}]
+        items += [{'type': 'localImage', 'path': p} for p in images]
+        self.store.touch(self.thread_id, text or Path(paths[0]).name)
+        self.last_activity = time.monotonic()
+        self.emit({'type': 'message', 'role': 'user', 'id': f'typed-{time.time_ns()}', 'text': text,
+                   'typed': True, 'attachments': attachments})
+        self.server.call('turn/start', {'threadId': self.thread_id, 'input': items})
+
+    def talk_to_text(self):
+        """The hold ended over "转文字": what was said comes back as text to edit; nothing
+        is sent to the assistant."""
+        if not self.talking:
+            return ''
+        audio = self.press_audio + self.mic_buffer
+        self.cancel_talking()
+        if len(audio) < RATE * 2 // 5:          # under 0.2 s
+            return ''
+        import call_proxy
+        text = call_proxy.transcribe(audio)
+        log(f'talk: {len(audio) // 48} ms turned into {len(text)} characters of text')
+        return call_proxy.simplified(text)
+
+    def read_aloud(self, text):
+        """"朗读": the voice reads an answer out (the realtime session speaks it)."""
+        if not self.thread_id or not text.strip():
+            return
+        if not self.realtime:
+            threading.Thread(target=self.start_realtime, daemon=True).start()
+        if not self.realtime_ready.wait(20):
+            raise RuntimeError('语音连接还没准备好')
+        self.muted = False
+        self.aloud_pending = True
+        self.speak_progress('把下面这段话原样读给用户听，不要增减内容，也不要评论：\n' + text.strip())
+
+    # ---- settings (docs/87) ----------------------------------------------------------------
+    def setup(self):
+        from rungic_cua import keys
+        path = shutil.which('codex', path=os.environ.get('PATH', '') + ':' + str(Path.home() / '.local/bin'))
+        version, runs = '', None
+        if path:
+            try:
+                out = subprocess.run([path, '--version'], capture_output=True, text=True, timeout=20).stdout
+                version = out.strip().split()[-1] if out.strip() else ''
+                runs = bool(version)
+            except (OSError, subprocess.SubprocessError):
+                runs = False
+        account = None
+        if self.server:
+            try:
+                account = self.server.call('account/read', {'refreshToken': False}, timeout=10).get('account')
+            except Exception as error:  # noqa: BLE001
+                log('account/read', error)
+        key = keys.read('openai-api-key')
+        store = 'file'
+        try:
+            import tomllib
+            config = tomllib.loads((Path.home() / '.codex/config.toml').read_text())
+            store = config.get('cli_auth_credentials_store', 'file')
+        except (OSError, ValueError):
+            pass
+        try:
+            app_version = subprocess.run(['dpkg-query', '-W', '-f', '${Version}', 'rungic-voice-agent'],
+                                         capture_output=True, text=True, timeout=5).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            app_version = ''
+        return {'codex': {'installed': bool(path), 'version': version, 'path': path or '', 'runs': runs,
+                          'running': self.server is not None},
+                'account': account, 'credentials': 'keyring' if store in ('keyring', 'auto') else 'file',
+                'key': {'set': bool(key), 'masked': (key[:3] + '…' + key[-4:]) if len(key) > 10 else ('已设置' if key else ''),
+                        'store': keys.where('openai-api-key'), 'working': self.key_working},
+                'preferences': self.prefs, 'version': app_version, 'home': str(Path.home())}
+
+    @staticmethod
+    def test_key(key):
+        """Whether OpenAI accepts the key: (ok, error)."""
+        request = urllib.request.Request('https://api.openai.com/v1/models', headers={'Authorization': 'Bearer ' + key})
+        try:
+            with urllib.request.urlopen(request, timeout=20) as response:
+                return response.status == 200, ''
+        except urllib.error.HTTPError as error:
+            return False, '密钥无效' if error.code in (401, 403) else f'OpenAI 返回 {error.code}'
+        except (OSError, ValueError) as error:
+            return False, f'连不上 OpenAI：{error}'
+
+    def set_api_key(self, key):
+        from rungic_cua import keys
+        key = key.strip()
+        ok, error = self.test_key(key)
+        self.key_working = ok
+        if not ok:
+            return {'ok': False, 'error': error}
+        where = keys.store('openai-api-key', key)
+        log('api key stored in', where)
+        # Codex signed in with an API key uses it for everything: sign in with the new one.
+        try:
+            account = self.server.call('account/read', {'refreshToken': False}, timeout=10).get('account') if self.server else None
+            if account and account.get('type') == 'apiKey':
+                self.server.call('account/login/start', {'type': 'apiKey', 'apiKey': key}, timeout=20)
+        except Exception as error:  # noqa: BLE001
+            log('api key sign-in', error)
+        threading.Thread(target=self.restart_server, daemon=True).start()
+        return {'ok': True, 'store': where}
+
+    def test_api_key(self):
+        key = openai_key()
+        ok, error = self.test_key(key) if key else (False, '还没有设置密钥')
+        self.key_working = ok
+        return {'ok': ok, 'error': error}
+
+    def remove_api_key(self):
+        from rungic_cua import keys
+        keys.clear('openai-api-key')
+        self.key_working = None
+        threading.Thread(target=self.restart_server, daemon=True).start()
+        return {'ok': True}
+
+    def codex_login(self, kind):
+        if not self.server:
+            return {'error': 'Codex 还没有安装'}
+        if kind == 'apiKey':
+            key = openai_key()
+            if not key:
+                return {'error': '先设置 API Key'}
+            result = self.server.call('account/login/start', {'type': 'apiKey', 'apiKey': key}, timeout=30)
+            threading.Thread(target=self.restart_server, daemon=True).start()
+            return result
+        return self.server.call('account/login/start', {'type': 'chatgptDeviceCode'}, timeout=30)
+
+    def set_preferences(self, values):
+        self.prefs = {k: bool(values.get(k, v)) for k, v in self.prefs.items()}
+        CONFIG.mkdir(parents=True, exist_ok=True)
+        (CONFIG / 'preferences.json').write_text(json.dumps(self.prefs))
+        self.emit_raw({'type': 'preferences', **self.prefs, 'time': time.time()})
+        return self.prefs
+
+    def install_codex(self, method):
+        """Installs Codex: the system package (polkit asks for the password) or the official
+        script into ~/.local/bin; progress as `install` events."""
+        if self.installer and self.installer.poll() is None:
+            return {'error': '正在安装'}
+        if method == 'script':
+            command = ['sh', '-c', 'curl -fsSL https://chatgpt.com/codex/install.sh | sh']
+        else:
+            command = ['pkexec', 'env', 'DEBIAN_FRONTEND=noninteractive', 'apt-get', 'install', '-y', 'rungic-codex']
+        threading.Thread(target=self.run_installer, args=(command,), daemon=True).start()
+        return {'ok': True}
+
+    def run_installer(self, command):
+        def event(**fields):
+            self.emit_raw({'type': 'install', 'time': time.time(), **fields})
+        event(step='download', state='running', line='$ ' + ' '.join(command))
+        try:
+            self.installer = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                                              env={**os.environ, 'LANG': 'C.UTF-8'})
+        except OSError as error:
+            event(state='failed', error=str(error))
+            return
+        for line in self.installer.stdout:
+            line = line.rstrip()
+            step = 'install' if re.match(r'(Unpacking|Setting up|Installing|Extracting|正在)', line) else None
+            event(line=line[:300], **({'step': step} if step else {}))
+        code = self.installer.wait()
+        if code in (-15, -9):
+            event(state='cancelled')
+            return
+        if code != 0:
+            event(state='failed', error=f'安装程序退出码 {code}')
+            return
+        event(step='check')
+        self.restart_server()
+        if not self.server:
+            event(state='failed', error='装好了，但 Codex 运行不了')
+            return
+        event(step='connect')
+        event(state='done')
+
+    def cancel_install(self):
+        if self.installer and self.installer.poll() is None:
+            self.installer.terminate()
+        return {'ok': True}
+
 
 def call_window(app: str) -> str | None:
     """The app's topmost window, which is its call window during a call (KWin)."""
@@ -1214,7 +1669,7 @@ def call_screen_connected(window_id: str | None) -> bool:
                                                '(like 00:05) shown? Answer only yes or no.'},
                 {'type': 'input_image', 'detail': 'original',
                  'image_url': 'data:image/jpeg;base64,' + base64.b64encode(buffer.getvalue()).decode()}]}]}
-        key = (CONFIG / 'openai-api-key').read_text().strip()
+        key = openai_key()
         request = urllib.request.Request('https://api.openai.com/v1/responses', data=json.dumps(body).encode(),
                                          headers={'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json'})
         with urllib.request.urlopen(request, timeout=20) as response:
@@ -1290,12 +1745,24 @@ def luna_goal(goal: str, timeout: float = 120, stop_when=None, window: str | Non
 class Service:
     def __init__(self):
         self.connection = None
+        self.watched = {}            # D-Bus sender -> name watch (SetWatching)
         self.agent = VoiceAgent(self.emit_signal)
         info = Gio.DBusNodeInfo.new_for_xml(INTERFACE)
         self.interface = info.interfaces[0]
         Gio.bus_own_name(Gio.BusType.SESSION, BUS_NAME, Gio.BusNameOwnerFlags.NONE,
                          self.register, None, lambda conn, name: (log('lost bus name'), os._exit(1)))
         threading.Thread(target=self.agent.warm, daemon=True).start()
+
+    def watch_sender(self, connection, sender):
+        """Forget what a client said about watching once it leaves the bus (the app quit)."""
+        def watch():
+            if sender not in self.watched:
+                self.watched[sender] = Gio.bus_watch_name_on_connection(
+                    connection, sender, Gio.BusNameWatcherFlags.NONE, None,
+                    lambda conn, name: (self.agent.watcher_gone(name),
+                                        Gio.bus_unwatch_name(self.watched.pop(name, 0)) if name in self.watched else None))
+            return False
+        GLib.idle_add(watch)
 
     def register(self, connection, name):
         self.connection = connection
@@ -1357,12 +1824,72 @@ class Service:
                     result = json.dumps(agent.start_call(json.loads(args[0])), ensure_ascii=False)
                 elif method == 'CallCommand':
                     agent.call_command(args[0])
+                elif method == 'SendText':
+                    agent.send_text(args[0], json.loads(args[1] or '[]'))
+                elif method == 'Use':
+                    # The app's conversation is the one its next press or message goes to
+                    # (docs/89): the overlay, a restart or the warm-up may have opened another
+                    # meanwhile, and every call below acts on whichever is open. Returns once
+                    # it is open, so the app's next call acts on it.
+                    if args[0] and args[0] != agent.thread_id:
+                        log('use', args[0], 'instead of', agent.thread_id)
+                        agent.open_conversation(args[0])
+                elif method == 'SetWatching':
+                    self.watch_sender(connection, sender)
+                    agent.set_watching(sender, args[0])
+                elif method == 'TalkToText':
+                    result = json.dumps({'text': agent.talk_to_text()}, ensure_ascii=False)
+                elif method == 'ReadAloud':
+                    agent.read_aloud(args[0])
+                elif method == 'Setup':
+                    result = json.dumps(agent.setup(), ensure_ascii=False)
+                elif method == 'SetApiKey':
+                    result = json.dumps(agent.set_api_key(args[0]), ensure_ascii=False)
+                elif method == 'TestApiKey':
+                    result = json.dumps(agent.test_api_key(), ensure_ascii=False)
+                elif method == 'RemoveApiKey':
+                    result = json.dumps(agent.remove_api_key(), ensure_ascii=False)
+                elif method == 'CodexLogin':
+                    result = json.dumps(agent.codex_login(args[0]), ensure_ascii=False)
+                elif method == 'InstallCodex':
+                    result = json.dumps(agent.install_codex(args[0]), ensure_ascii=False)
+                elif method == 'CancelInstall':
+                    result = json.dumps(agent.cancel_install(), ensure_ascii=False)
+                elif method == 'SetPreferences':
+                    result = json.dumps(agent.set_preferences(json.loads(args[0])), ensure_ascii=False)
                 invocation.return_value(GLib.Variant('(s)', (result,)) if result is not None else None)
             except Exception as error:
                 log('call failed', method, error)
                 invocation.return_dbus_error('com.rungic.VoiceAgent.Error', str(error))
         # Codex calls block; keep the main loop (audio, D-Bus) responsive.
         threading.Thread(target=run, daemon=True).start()
+
+
+def platform_request(request, timeout=1.0):
+    """One request to the Android host's platform bridge (rungic-platform's socket), or {}."""
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as bridge:
+            bridge.settimeout(timeout)
+            bridge.connect('/mnt/android-wayland/platform.sock')
+            bridge.sendall(json.dumps(request).encode() + b'\n')
+            reply = b''
+            while not reply.endswith(b'\n'):
+                chunk = bridge.recv(65536)
+                if not chunk:
+                    break
+                reply += chunk
+        return json.loads(reply or b'{}')
+    except (OSError, ValueError):
+        return {}
+
+
+def screen_activity():
+    """The assistant's screen's caption (rungic_cua.activity, docs/88), or {}."""
+    try:
+        from rungic_cua import activity
+        return activity.read()
+    except ImportError:
+        return {}
 
 
 def command_summary(command):

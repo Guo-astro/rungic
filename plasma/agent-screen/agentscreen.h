@@ -8,6 +8,7 @@
 // executable through its desktop file (X-KDE-Wayland-Interfaces).
 #pragma once
 
+#include <QFileSystemWatcher>
 #include <QObject>
 #include <QPointer>
 #include <QRect>
@@ -25,6 +26,10 @@ class AgentScreen : public QObject
     Q_PROPERTY(QString status READ status NOTIFY statusChanged)
     Q_PROPERTY(uint nodeId READ nodeId NOTIFY nodeIdChanged)
     Q_PROPERTY(bool onTv READ onTv NOTIFY statusChanged)
+    // What the assistant is doing on this screen (rungic_cua.activity, docs/88): "" when nothing,
+    // "working" with a caption, or how it ended (done, question, failed, stopped).
+    Q_PROPERTY(QString activityState READ activityState NOTIFY activityChanged)
+    Q_PROPERTY(QString activityText READ activityText NOTIFY activityChanged)
 
 public:
     explicit AgentScreen(QObject *parent = nullptr);
@@ -33,6 +38,8 @@ public:
     QString status() const { return m_status; }
     uint nodeId() const { return m_nodeId; }
     bool onTv() const { return m_onTv; }
+    QString activityState() const { return m_activityState; }
+    QString activityText() const { return m_activityText; }
 
     // Input at a fraction (0..1) of the assistant's screen.
     Q_INVOKABLE void pointerMove(double fx, double fy);
@@ -52,6 +59,7 @@ public:
 Q_SIGNALS:
     void statusChanged();
     void nodeIdChanged();
+    void activityChanged();
 
 private:
     void poll();
@@ -62,6 +70,7 @@ private:
     QScreen *agentOutput() const;
     void keepApart();
     void reportWatched();
+    void readActivity();
 
     std::unique_ptr<Screencasting> m_screencasting;
     std::unique_ptr<FakeInput> m_input;
@@ -76,4 +85,9 @@ private:
     bool m_authenticated = false;
     bool m_pointerPlaced = false;
     bool m_watched = true;
+    QFileSystemWatcher m_activityWatcher;
+    QString m_activityPath;
+    QString m_activityState;
+    QString m_activityText;
+    double m_activityTime = 0;
 };
