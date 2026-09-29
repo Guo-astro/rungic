@@ -357,3 +357,9 @@ USB 精确序列号 `ZY32M9MRVP`，开发主机 mibook/x86_64、系统代理 non
 真实 GPT-6 Luna + API Key 对第二条历史桌面崩溃完成只读调查，期间主动重启建议服务，原任务 ID 与原对话保持关联，最终为 `finished`，结果回写成功，`planStatus=needs_investigation`。Agent 找到与显示模式变更相关的已有 KWayland 修复记录并确认本机已有修复包，但缺少本报告回溯，因此仍未确认根因，没有实施系统修复、安装或重启。不能把调查完成等同于修好了手机。
 
 证据在 `.work/experiments/proactive-refactor/`：`deploy.log`、`device-ui.log`、`luna.log`、`real-luna-result.json`、`integration-verified.log`。确认交互初次测试仅断言“没有启动任务”，不足以证明物理点击后的拒绝；截图中弹框仍在，故不将该次 `confirmation-ui.log` 的 PASS 作为完整成功证据。后续强化为明确检查弹框内变更提示、应用按钮禁用、服务端旧修订拒绝及物理取消关闭，最终结果另记。
+
+### 确认弹窗与迟到回执补验
+
+`20260930.9`（suggestions `0.419` / voice-agent `0.415`）自动 smoke 8 项首遍通过、无 flaky。隔离账本显示方案 A 后更新为 B，实机弹窗明确显示变更原因并禁用应用；直接提交 A 修订也被服务拒绝，未启动 Agent。按真实截图中取消按钮中心物理点按后，弹窗关闭并显示 B。通用 `ui_tap` 对此 Qt popup 使用了未计入 popup 偏移的 AT-SPI 坐标，首次取消点按落在按钮上方；确认截图后以实际 1080×2400 屏幕坐标复测，不能将工具点错解释为按钮失效。`confirmation-final.log` 和 `confirmation-cancelled.png` 保存完整结果。
+
+随后隔离列表滚动测试发现旧 ID 的迟到 `Presented` 回执会通过非 const `QJsonObject::operator[]` 意外插入 null 记录。读取统一改为 `value()`，加载时仅清除该缺陷产生的 null 项，其他记录保留；新增测试覆盖读取、回执、更新、操作、任务终态及通知回执对不存在 ID 均不创建记录，并核对保存/重启。此修正需新包部署和滚动复验，结果见后续记录。
