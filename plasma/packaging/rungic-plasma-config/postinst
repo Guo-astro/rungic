@@ -14,6 +14,8 @@ fi
 # once and recorded; a unit already recorded is left as it is, so what the user turned on or off in
 # Settings -> Services survives upgrades. Up to 0.305 this package owned the masks itself: the
 # upgrade has just removed them, and the first run here puts them back as local state.
+# openssh-server is a dependency: its first configure must run before we record the
+# disabled default, or its was-enabled fallback enables ssh.socket afterwards.
 if [ "$1" = configure ]; then
     state=/var/lib/rungic/service-defaults
     mkdir -p /var/lib/rungic /etc/systemd/system /etc/systemd/user

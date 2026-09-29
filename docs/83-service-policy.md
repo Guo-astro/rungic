@@ -68,3 +68,11 @@
 - 输入真实账户密码后，KAuth 辅助程序完整执行的一次（需要用户的密码）。2026-09-28 以 Docker 开关验证（85 篇）：发现密码输入晚于 25 秒会被报成失败（KAuth 默认 D-Bus 超时），已将动作超时改为 10 分钟后通过；SSH 开关走同一路径，未单独复测。
 - 用账户密码的 SSH 登录（服务器已声明支持 password）。
 - 从 wlan0 所在局域网的另一台设备连接。
+
+## G100 首次补装（2026-09-29）
+
+G100 原镜像没有安装服务页和 openssh-server；此前的 G100 S 验收不代表本机已部署。完整升级后服务页已实际显示，见 [G100 更新记录](research/g100-system-update-20260929.md)。
+
+首次补装发现配置顺序缺口：rungic-plasma-config 先记录 disabled 默认值，随后 openssh-server 的首次 postinst 因 deb-systemd-helper 的 was-enabled 缺省为 true，重新启用 ssh.socket；新容器启动时因此监听。核对的是本机 openssh-server `1:10.2p1-2ubuntu3.6` 实际 postinst 与配置时间。本轮立即恢复 socket/service 为 disabled、inactive。
+
+rungic-plasma-config 增加对 openssh-server 的依赖，使上游首次 configure 完成后再应用我们的默认值；后续仍按原来的逐单元标记保留用户在服务页的选择。整套 release 本来就通过服务页依赖 openssh-server，该改动补齐配置顺序。现有设备状态核验与未来清数据首装的验证边界分别记录。
