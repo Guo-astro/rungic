@@ -1,3 +1,10 @@
+mesa (26.3.0~devel20260824+rungic3) resolute; urgency=medium
+
+  * KGSL: exporting an imported dma-buf gives back the same buffer; X11 GL
+    windows flipped through Xwayland were black (docs/research/93).
+
+ -- range-dev <noreply@localhost>  Wed, 30 Sep 2026 02:40:00 +0900
+
 mesa (26.3.0~devel20260824+rungic2) resolute; urgency=medium
 
   * EGL on X11 without a DRI3 device: only Zink goes on, others fall back to
