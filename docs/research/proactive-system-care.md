@@ -363,3 +363,13 @@ USB 精确序列号 `ZY32M9MRVP`，开发主机 mibook/x86_64、系统代理 non
 `20260930.9`（suggestions `0.419` / voice-agent `0.415`）自动 smoke 8 项首遍通过、无 flaky。隔离账本显示方案 A 后更新为 B，实机弹窗明确显示变更原因并禁用应用；直接提交 A 修订也被服务拒绝，未启动 Agent。按真实截图中取消按钮中心物理点按后，弹窗关闭并显示 B。通用 `ui_tap` 对此 Qt popup 使用了未计入 popup 偏移的 AT-SPI 坐标，首次取消点按落在按钮上方；确认截图后以实际 1080×2400 屏幕坐标复测，不能将工具点错解释为按钮失效。`confirmation-final.log` 和 `confirmation-cancelled.png` 保存完整结果。
 
 随后隔离列表滚动测试发现旧 ID 的迟到 `Presented` 回执会通过非 const `QJsonObject::operator[]` 意外插入 null 记录。读取统一改为 `value()`，加载时仅清除该缺陷产生的 null 项，其他记录保留；新增测试覆盖读取、回执、更新、操作、任务终态及通知回执对不存在 ID 均不创建记录，并核对保存/重启。此修正需新包部署和滚动复验，结果见后续记录。
+
+### 最终重构验收：20260930.10
+
+最终组合：suggestions `0.421`、voice-agent `0.415`、design `0.393`、Plasma Mobile `6.6.5-0ubuntu0.1+rungic8`。空记录修正后 ARM64 C++ 共 **20 项**通过（18 个方法及初始化/清理），40 卡真实服务/替身 Agent 集成及两种真实 QML 预览再次通过，分别只有 2 张显示卡片获得回执。此前 Python 建议/错误 9 项和通话 17 项通过。本轮最终 smoke **8 项首遍通过，无 flaky**，摄像头按范围跳过。
+
+实机隔离账本保留原卡片并追加 12 张明确标记的测试卡片：首页没有提前确认测试卡；实际滑动后组件内容移动、未打开抽屉，停留后仅 1 张进入视口的测试卡获得 displayedRevision，其余没有误回执。测试完成后恢复真实账本、清除环境覆盖和临时目录；最终 4 条原有记录（其中 2 条为历史）均有 ID，无空记录或验收卡片。此前结果、原对话及 schema 1 两份备份保留，账本和备份权限均为 0600。无运行/恢复中遗留任务。
+
+最终桌面截图人工核对：上方两张真实结果卡、组件下方壁纸留白和底部四个收藏图标均正常。SSH socket enabled/active，开发环境仍为 GPT-6 Luna + API Key，`dpkg --audit` 无输出。release mismatch 为空；既有 313 个翻译文件缺失仍记为 integrity drift，没有宣称整机完整性全通过。原 rootfs 回退快照未覆盖。
+
+新增证据：`.work/experiments/proactive-refactor/{build-stale.log,integration-stale.log,deploy-stale.log,visible-device.log,final-check.log,final-home.png}`，最终部署记录 `.work/deploy/20260930-023503-20260930.10/`。完整弹窗验证见前述 `confirmation-final.log`；真实模型调查与服务重启恢复见 `luna.log`。本轮验证的是主动建议基础链、任务恢复与确认边界；不等于已修复历史崩溃、为全部软件接通硬件加速或完成外部 PR 提交。可靠应用退出条件、Android 提醒、远端 PR 自动同步及全新账户/整包安装不在本次完成范围。
