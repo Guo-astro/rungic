@@ -1,5 +1,7 @@
 # Phosh 功能逐项适配记录
 
+2026-09-29 MacBook无外部网络直连桌面评估：G100只读查询确认支持monitor声明，但在用无线模块的monitor发送回调为空，原版filin不能直接通过内置网卡实现AWDL双向直连。本地专用热点可作为无互联网基线，尚未做Mac互通验收。来源、精确固件与二进制证据见[直连研究](mac-offline-desktop-link.md)。
+
 > 历史研究记录：Phosh 专属实现已于2026-09-23移除。本篇保留共享硬件接口与研究结论；当前代码见 `shared/`、`native/plasma/`、`plasma/`，现行集成见 [40篇](../40-plasma-mobile-integration.md)。旧Phosh路径和已删除的原始日志不再作为可执行入口。
 
 更新：2026-09-23。设备 `ZY32MVJS25` / moto g100s，Android 16。本文记录**已部署的第一批功能和实际验收边界**。第 [28 篇](28-capability-audit.md) 是实施前审计，第 [29 篇](29-reuse-research.md) 是首轮选型；它们的旧状态不代表当前状态。
