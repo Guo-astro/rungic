@@ -1,6 +1,6 @@
 # X11 应用在 KGSL 上用 GPU：Xwayland 的几种做法（2026-09-30）
 
-状态：方案 B 已实施，并在工作区实测（见文末“B 的实施与实测”）；尚未进入发布，尚未做长时间运行和 Flatpak X11 应用的验收。标注说明：“实测”指在本机（XT2537-4，FD710，Ubuntu 26.04 容器）上运行的结果；“源码”指读到的代码位置；“二手”指只见于 PR/issue 文字。
+状态：方案 B 已实施并实测（见文末“B 的实施与实测”），已进入发布 20260930.2（Xwayland 2:24.1.10-1+rungic2，Mesa 26.3.0~devel20260824+rungic3）；长时间运行和 Flatpak X11 应用尚未验收。标注说明：“实测”指在本机（XT2537-4，FD710，Ubuntu 26.04 容器）上运行的结果；“源码”指读到的代码位置；“二手”指只见于 PR/issue 文字。
 
 ## 起因
 
@@ -101,4 +101,3 @@ lfdevs 的补丁说明写明 surfaceless 后端是给 “PRoot KGSL 环境” �
 - 改变窗口大小；
 - Krita 5 等 X11-only 的 Flatpak 应用：Flatpak GL 扩展还没用 +rungic3 重建；
 - 微信；
-- 进入发布：xwayland 尚未加入 `plasma/release/packages.json`，Mesa +rungic3 是在发布 20260930.1 之后单独装的。
