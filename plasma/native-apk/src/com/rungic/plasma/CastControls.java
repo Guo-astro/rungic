@@ -74,6 +74,7 @@ final class CastControls {
     private final Pill pill;
     private final Panel panel;
     private DeviceSheet sheet;
+    private ResolutionSheet resolutionSheet;
     private boolean available, imeShown, userEnded;
     private Mode mode = Mode.PHONE;
     private Session session = Session.NONE;
@@ -82,7 +83,7 @@ final class CastControls {
     /** The pill shrinks to its edge tab after this long without a touch or a change. */
     private static final long SHRINK_AFTER_MS = 4000;
     private final Runnable shrink;
-    private int statusPolls;
+    private int statusPolls, connectionGeneration;
 
     CastControls(Activity context, FrameLayout frame, Consumer<Boolean> keyboard) {
         this.context = context;
@@ -114,6 +115,7 @@ final class CastControls {
             }
         }
         if (sheet != null && !value) closeSheet();
+        if (resolutionSheet != null && !value) closeResolution(false);
         refresh();
     }
 
@@ -161,6 +163,7 @@ final class CastControls {
         return new JSONObject().put("available", available).put("mode", mode.name().toLowerCase())
             .put("session", session.name().toLowerCase()).put("tv", tvName)
             .put("expanded", panel.getParent() != null).put("devices", sheet != null)
+            .put("resolutionSheet",resolutionSheet != null)
             .put("pill", pill.getParent() == null ? "hidden" : pill.mini ? "tab" : "full")
             .put("edge", pill.right ? "right" : "left")
             .put("keepScreenOn", (context.getWindow().getAttributes().flags & WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) != 0)
@@ -198,6 +201,7 @@ final class CastControls {
         // A new pill or a new state shows in full for a while.
         if (shown && shownBefore != session) pill.setMini(false);
         if (panel.getParent() != null) panel.refresh();
+        if (sheet != null || resolutionSheet != null) pill.setVisibility(View.INVISIBLE);
     }
 
     private void expand() {
@@ -207,6 +211,11 @@ final class CastControls {
         lp.topMargin = (int) Math.max(dp(56), Math.min(pill.getY() - dp(8), frame.getHeight() - dp(360)));
         lp.leftMargin = lp.rightMargin = dp(16);
         panel.refresh();
+        if (available) tool(new String[] {"modes"},20,result -> {
+            if (!available || result.has("error")) return;
+            resolution=result.optString("actual",resolution);
+            refresh();
+        });
         frame.addView(panel, lp);
         pill.setVisibility(View.INVISIBLE);
     }
@@ -220,6 +229,7 @@ final class CastControls {
     }
 
     private void disconnect() {
+        connectionGeneration++;
         userEnded = true;
         handler.removeCallbacks(pollStatus);
         if (!available) session = Session.NONE;
@@ -234,19 +244,70 @@ final class CastControls {
         closeSheet();
         collapse();
         if (name.equals(tvName) && available) return;
+        final int generation = ++connectionGeneration;
         target = name;
         userEnded = true; // the session this ends is not the TV's doing
         handler.removeCallbacks(pollStatus);
         setMode(Mode.PHONE);
         session = Session.SWITCHING;
         refresh();
-        tool(new String[] {"connect", name}, 75, result -> {
+        tool(new String[] {"connect", name}, 180, result -> {
+            if (generation != connectionGeneration) return;
             if (result.has("error") && !available) {
                 session = Session.NONE;
-                Toast.makeText(context, "没有连上“" + name + "”，请让电视停在投屏等待画面后重试", Toast.LENGTH_LONG).show();
+                Toast.makeText(context, "没有连上“" + name + "”，接收端未能完成网络连接和协商，请重试", Toast.LENGTH_LONG).show();
             }
             target = "";
             refresh();
+        });
+    }
+
+    private void openResolution() {
+        if (!available || resolutionSheet != null) return;
+        if (mode == Mode.KEYBOARD) setMode(Mode.TOUCHPAD);
+        closeSheet(); collapse();
+        ResolutionSheet opened = new ResolutionSheet(context);
+        resolutionSheet = opened;
+        frame.addView(opened, new FrameLayout.LayoutParams(-1, -1));
+        pill.setVisibility(View.INVISIBLE);
+        tool(new String[] {"modes"}, 20, result -> {
+            if (resolutionSheet == opened && available && !context.isFinishing()) opened.show(result);
+        });
+    }
+
+    private void closeResolution(boolean returnToPanel) {
+        if (resolutionSheet == null) return;
+        resolutionSheet.body.animate().cancel();
+        frame.removeView(resolutionSheet); resolutionSheet = null;
+        pill.setVisibility(View.VISIBLE);
+        if (returnToPanel && available && !context.isFinishing() && panel.getParent() == null) expand();
+    }
+
+    /** Consume Back before it reaches the Linux desktop or the host menu. */
+    boolean dismissOverlay() {
+        if (resolutionSheet != null) { closeResolution(true); return true; }
+        if (sheet != null) { closeSheet(); if (available) expand(); return true; }
+        if (panel.getParent() != null) { collapse(); return true; }
+        return false;
+    }
+
+    private void applyResolution(String address, String id) {
+        closeResolution(false);
+        final int generation = ++connectionGeneration;
+        target = tvName; userEnded = true;
+        setMode(Mode.PHONE); session = Session.SWITCHING; collapse(); refresh();
+        tool(new String[] {"resolution", address+"/"+id}, 330, done -> {
+            if (generation != connectionGeneration) return;
+            JSONObject actual = done.optJSONObject("resolution");
+            if (actual != null) resolution = actual.optString("actual", resolution);
+            if (done.has("error")) {
+                Toast.makeText(context, done.optBoolean("restored") ? "所选模式未生效，已恢复可用模式" : "切换失败，请重试或选择自动", Toast.LENGTH_LONG).show();
+            } else if (actual != null) {
+                Toast.makeText(context, "实际投屏："+resolution, Toast.LENGTH_LONG).show();
+            }
+            session = available ? Session.CASTING : Session.NONE;
+            target = ""; refresh();
+            if (available && context.hasWindowFocus() && panel.getParent() == null && sheet == null && resolutionSheet == null) expand();
         });
     }
 
@@ -300,24 +361,29 @@ final class CastControls {
                 try { result.put("error", String.valueOf(e.getMessage())); } catch (Exception ignored) {}
             }
             JSONObject done = result;
-            handler.post(() -> callback.accept(done));
+            handler.post(() -> { if (!context.isDestroyed() && !context.isFinishing()) callback.accept(done); });
         }, "rungic-cast-" + args[0]);
         thread.setDaemon(true);
         thread.start();
     }
 
     private void openSheet() {
+        closeResolution(false);
         collapse();
         if (sheet != null) return;
         sheet = new DeviceSheet(context);
         frame.addView(sheet, new FrameLayout.LayoutParams(-1, -1));
-        tool(new String[] {"status"}, 15, result -> { if (sheet != null) sheet.show(result); });
+        pill.setVisibility(View.INVISIBLE);
+        DeviceSheet opened=sheet;
+        tool(new String[] {"status"}, 15, result -> { if (sheet == opened) opened.show(result); });
     }
 
     private void closeSheet() {
         if (sheet == null) return;
+        sheet.body.animate().cancel();
         frame.removeView(sheet);
         sheet = null;
+        pill.setVisibility(View.VISIBLE);
     }
 
     private int dp(float value) {
@@ -627,7 +693,7 @@ final class CastControls {
             TextView name = text(session == Session.SWITCHING ? target : (tvName.isEmpty() ? "电视" : tvName), 17, TEXT, true);
             texts.addView(name);
             String detail = session == Session.CASTING ? resolution
-                : session == Session.RECONNECTING ? "等待电视重新接受连接" : "电视画面会中断几秒";
+                : session == Session.RECONNECTING ? "等待电视重新接受连接" : "正在等待接收端联网和协商，最多两分钟";
             if (!detail.isEmpty()) texts.addView(text(detail, 12, TEXT_DIM, false));
             header.addView(texts, new LayoutParams(0, -2, 1));
             TextView close = text("︿", 16, 0xFFD0D5D9, false);
@@ -659,6 +725,11 @@ final class CastControls {
                     segments.addView(seg, lp);
                 }
                 addView(segments);
+                TextView modeButton = button("分辨率与帧率…", false, v -> openResolution());
+                LayoutParams mlp = new LayoutParams(-1,-2); mlp.topMargin = dp(12);
+                addView(modeButton, mlp);
+                TextView note = text("优先直接切换，必要时重新连接；未能应用时恢复可用模式。",12,TEXT_DIM,false);
+                note.setPadding(0,dp(6),0,0); addView(note);
             } else if (session == Session.RECONNECTING) {
                 TextView note = text("重连期间手机恢复为普通触控。电视回到等待画面后会自动接上。", 13, 0xFFC4CACE, false);
                 note.setLineSpacing(0, 1.3f);
@@ -681,55 +752,134 @@ final class CastControls {
         }
     }
 
-    /** "更换投屏设备": the TV in use and the others rungic-cast knows (Android cannot scan while casting). */
-    private final class DeviceSheet extends FrameLayout {
-        private final LinearLayout list;
+    /** Shared in-capsule bottom sheet. It stays in the Activity's own view tree. */
+    private class CastSheet extends FrameLayout {
+        final LinearLayout body, list, footer;
+        final TextView description;
+        final ScrollView scroll;
 
-        DeviceSheet(Context context) {
+        CastSheet(Context context, String title, String subtitle, Runnable dismiss) {
             super(context);
-            setBackgroundColor(0x8C000000);
-            setElevation(dp(16)); // above the pill and panel
-            setOnClickListener(v -> closeSheet());
-            LinearLayout sheet = new LinearLayout(context);
-            sheet.setOrientation(LinearLayout.VERTICAL);
-            GradientDrawable bg = new GradientDrawable();
-            bg.setColor(0xFF25292C);
-            float r = dp(24);
-            bg.setCornerRadii(new float[] {r, r, r, r, 0, 0, 0, 0});
-            sheet.setBackground(bg);
-            sheet.setPadding(0, dp(8), 0, dp(20));
-            sheet.setClickable(true);
+            setBackgroundColor(0x8C000000); setElevation(dp(16));
+            setOnClickListener(v -> dismiss.run());
+            body = new LinearLayout(context) {
+                @Override protected void onMeasure(int widthSpec, int heightSpec) {
+                    int available=frame.getHeight()>0?frame.getHeight():MeasureSpec.getSize(heightSpec);
+                    super.onMeasure(widthSpec, MeasureSpec.makeMeasureSpec(Math.min(MeasureSpec.getSize(heightSpec), (int)(available*0.85f)), MeasureSpec.AT_MOST));
+                }
+            };
+            body.setOrientation(LinearLayout.VERTICAL); body.setClickable(true);
+            GradientDrawable bg=round(0xFF25292C,24);float r=dp(24);
+            bg.setCornerRadii(new float[]{r,r,r,r,0,0,0,0});body.setBackground(bg);
+            body.setPadding(0,dp(8),0,dp(20));
+            setOnApplyWindowInsetsListener((v,insets) -> {
+                int bottom=insets.getInsetsIgnoringVisibility(android.view.WindowInsets.Type.navigationBars() | android.view.WindowInsets.Type.displayCutout()).bottom;
+                body.setPadding(0,dp(8),0,Math.max(dp(20),bottom+dp(8)));return insets;
+            });
+            FrameLayout grip=new FrameLayout(context);
+            View handle=new View(context);handle.setBackground(round(0xFF4D5358,2));
+            grip.addView(handle,new FrameLayout.LayoutParams(dp(36),dp(4),Gravity.CENTER));
+            body.addView(grip,new LinearLayout.LayoutParams(-1,dp(24)));
+            grip.setContentDescription("向下拖动关闭");
+            grip.setOnTouchListener(new View.OnTouchListener() {
+                private float start;
+                @Override public boolean onTouch(View v, MotionEvent event) {
+                    switch(event.getActionMasked()) {
+                        case MotionEvent.ACTION_DOWN: body.animate().cancel();start=event.getRawY();return true;
+                        case MotionEvent.ACTION_MOVE: body.setTranslationY(Math.max(0,event.getRawY()-start));return true;
+                        case MotionEvent.ACTION_UP:
+                            if(body.getTranslationY()>dp(72))dismiss.run();
+                            else {body.animate().translationY(0).setDuration(160).start();v.performClick();}return true;
+                        case MotionEvent.ACTION_CANCEL: body.animate().translationY(0).setDuration(160).start();return true;
+                    }
+                    return true;
+                }
+            });
+            LinearLayout header=new LinearLayout(context);header.setGravity(Gravity.CENTER_VERTICAL);
+            header.setPadding(dp(20),0,dp(12),dp(12));
+            LinearLayout texts=new LinearLayout(context);texts.setOrientation(LinearLayout.VERTICAL);
+            TextView heading=text(title,20,TEXT,true);heading.setAccessibilityHeading(true);texts.addView(heading);
+            description=text(subtitle,13,TEXT_DIM,false);description.setPadding(0,dp(4),0,0);texts.addView(description);
+            header.addView(texts,new LinearLayout.LayoutParams(0,-2,1));
+            TextView close=text("✕",18,TEXT_DIM,false);close.setGravity(Gravity.CENTER);close.setContentDescription("关闭");
+            pressable(close,round(Color.TRANSPARENT,22));close.setOnClickListener(v -> dismiss.run());
+            header.addView(close,new LinearLayout.LayoutParams(dp(44),dp(44)));body.addView(header);
+            list=new LinearLayout(context);list.setOrientation(LinearLayout.VERTICAL);
+            scroll=new ScrollView(context);scroll.setFillViewport(false);scroll.addView(list);
+            body.addView(scroll,new LinearLayout.LayoutParams(-1,-2,1));
+            footer=new LinearLayout(context);footer.setOrientation(LinearLayout.VERTICAL);body.addView(footer);
+            addView(body,new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM));
+            post(() -> {
+                if(getParent()==null)return;
+                requestApplyInsets();body.setTranslationY(body.getHeight());
+                body.animate().translationY(0).setDuration(220).setInterpolator(new android.view.animation.DecelerateInterpolator()).start();
+            });
+        }
+    }
 
-            View handle = new View(context);
-            handle.setBackground(round(0xFF4D5358, 2));
-            LinearLayout.LayoutParams hlp = new LinearLayout.LayoutParams(dp(36), dp(4));
-            hlp.gravity = Gravity.CENTER_HORIZONTAL;
-            hlp.bottomMargin = dp(8);
-            sheet.addView(handle, hlp);
+    private final class ResolutionSheet extends CastSheet {
+        private final TextView apply;
+        private JSONArray options;
+        private String address="",selected="",initial="";
 
-            LinearLayout header = new LinearLayout(context);
-            header.setGravity(Gravity.CENTER_VERTICAL);
-            header.setPadding(dp(20), 0, dp(12), dp(8));
-            LinearLayout texts = new LinearLayout(context);
-            texts.setOrientation(LinearLayout.VERTICAL);
-            texts.addView(text("更换投屏设备", 20, TEXT, true));
-            texts.addView(text("投屏时无法搜索新电视，列出最近发现的电视", 13, TEXT_DIM, false));
-            header.addView(texts, new LinearLayout.LayoutParams(0, -2, 1));
-            TextView close = text("✕", 18, 0xFFD0D5D9, false);
-            close.setGravity(Gravity.CENTER);
-            close.setContentDescription("关闭");
-            pressable(close, round(Color.TRANSPARENT, 22));
-            close.setOnClickListener(v -> closeSheet());
-            header.addView(close, new LinearLayout.LayoutParams(dp(44), dp(44)));
-            sheet.addView(header);
+        ResolutionSheet(Context context) {
+            super(context,"分辨率与帧率","当前："+resolution,() -> closeResolution(true));
+            LinearLayout loading=new LinearLayout(context);loading.setGravity(Gravity.CENTER_VERTICAL);
+            loading.setPadding(dp(20),dp(16),dp(20),dp(16));loading.addView(spinner(18,ACCENT_TEXT));
+            TextView label=text("正在读取可用模式…",14,TEXT_DIM,false);label.setPadding(dp(12),0,0,0);loading.addView(label);list.addView(loading);
+            TextView note=text("更改分辨率时可能需要短暂重新连接。",13,TEXT_DIM,false);
+            note.setPadding(dp(20),dp(12),dp(20),dp(12));footer.addView(note);
+            LinearLayout actions=new LinearLayout(context);actions.setPadding(dp(20),0,dp(20),0);
+            actions.addView(button("取消",false,v -> closeResolution(true)),new LinearLayout.LayoutParams(0,-2,1));
+            apply=button("应用",false,v -> {
+                if(selected.equals(initial))closeResolution(true);else applyResolution(address,selected);
+            });
+            pressable(apply,round(ACCENT,24));apply.setEnabled(false);apply.setAlpha(0.45f);
+            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);lp.leftMargin=dp(12);actions.addView(apply,lp);footer.addView(actions);
+        }
+        void show(JSONObject result) {
+            list.removeAllViews();options=result.optJSONArray("options");
+            if(result.has("error") || !result.optBoolean("adjustable") || options==null || options.length()==0) {
+                TextView error=text(result.has("error")?"暂时无法读取投屏模式，请稍后重试。":"当前没有可调整的投屏模式。",14,TEXT_DIM,false);
+                error.setPadding(dp(20),dp(16),dp(20),dp(16));list.addView(error);return;
+            }
+            address=result.optString("address");initial=result.optString("requested","auto");selected=initial;
+            description.setText("当前："+result.optString("actual",resolution));
+            boolean found=false;
+            for(int i=0;i<options.length();i++)if(options.optJSONObject(i).optString("id").equals(selected))found=true;
+            if(!found)selected=options.optJSONObject(0).optString("id");
+            for(int i=0;i<options.length();i++) {
+                JSONObject option=options.optJSONObject(i);String id=option.optString("id");
+                LinearLayout row=new LinearLayout(context);row.setGravity(Gravity.CENTER_VERTICAL);
+                row.setMinimumHeight(dp(52));row.setPadding(dp(16),dp(12),dp(16),dp(12));
+                row.addView(text(option.optString("label"),16,TEXT,false),new LinearLayout.LayoutParams(0,-2,1));
+                TextView check=text("✓",20,ACCENT_TEXT,true);row.addView(check,new LinearLayout.LayoutParams(dp(28),-2));
+                row.setTag(option);row.setOnClickListener(v -> {selected=id;updateSelection();});
+                row.setAccessibilityDelegate(new View.AccessibilityDelegate() {
+                    @Override public void onInitializeAccessibilityNodeInfo(View host,android.view.accessibility.AccessibilityNodeInfo info) {
+                        super.onInitializeAccessibilityNodeInfo(host,info);info.setClassName("android.widget.RadioButton");info.setCheckable(true);info.setChecked(host.isSelected());
+                    }
+                });
+                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.leftMargin=lp.rightMargin=dp(12);lp.bottomMargin=dp(2);list.addView(row,lp);
+            }
+            updateSelection();apply.setEnabled(true);apply.setAlpha(1f);
+        }
+        private void updateSelection() {
+            for(int i=0;i<list.getChildCount();i++) {
+                LinearLayout row=(LinearLayout)list.getChildAt(i);JSONObject option=(JSONObject)row.getTag();boolean on=selected.equals(option.optString("id"));
+                row.setSelected(on);pressable(row,round(on?0xFF263B49:Color.TRANSPARENT,12));
+                ((TextView)row.getChildAt(0)).setTextColor(on?ACCENT_TEXT:TEXT);
+                row.getChildAt(1).setVisibility(on?View.VISIBLE:View.INVISIBLE);
+                row.setContentDescription(option.optString("label")+(on?"，已选中":""));
+            }
+        }
+    }
 
-            list = new LinearLayout(context);
-            list.setOrientation(LinearLayout.VERTICAL);
-            ScrollView scroll = new ScrollView(context);
-            scroll.addView(list);
-            sheet.addView(scroll, new LinearLayout.LayoutParams(-1, -2));
+    /** "更换投屏设备": uses the same sheet as the capsule's video mode selector. */
+    private final class DeviceSheet extends CastSheet {
+        DeviceSheet(Context context) {
+            super(context,"更换投屏设备","投屏时无法搜索新电视，列出最近发现的电视",() -> closeSheet());
             list.addView(loadingRow());
-
             TextView note = text("切换时会先断开当前电视，新电视出现画面前会中断几秒，桌面上打开的应用不受影响。", 13, 0xFFC4CACE, false);
             note.setLineSpacing(0, 1.3f);
             note.setPadding(dp(14), dp(12), dp(14), dp(12));
@@ -737,9 +887,8 @@ final class CastControls {
             LinearLayout.LayoutParams nlp = new LinearLayout.LayoutParams(-1, -2);
             nlp.leftMargin = nlp.rightMargin = dp(20);
             nlp.topMargin = dp(12);
-            sheet.addView(note, nlp);
+            footer.addView(note, nlp);
 
-            addView(sheet, new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM));
         }
 
         private View loadingRow() {

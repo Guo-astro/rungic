@@ -66,12 +66,24 @@ final class WfdConfig {
 
     private static final Pattern ENTRY = Pattern.compile("<(VideoCodec\\d+)>(.*?)</\\1>", Pattern.DOTALL);
 
+    private static MediaCodecInfo[] encoderInfos;
+    private static String stockXml;
+    private static MediaCodecInfo[] codecs() {
+        if(encoderInfos==null)encoderInfos=new MediaCodecList(MediaCodecList.ALL_CODECS).getCodecInfos();
+        return encoderInfos;
+    }
+    private static final java.util.Map<String,MediaCodecInfo.CodecCapabilities> encoderCaps=new java.util.HashMap<>();
     private WfdConfig() {}
 
     /** Writes the adjusted copy of {@code vendor} to {@code out}; returns a JSON summary. */
     static String generate(File vendor, File out) throws Exception {
+        return generate(vendor, out, (WfdFormats.Mode)null);
+    }
+
+    static String generate(File vendor, File out, WfdFormats.Mode mode) throws Exception {
+        stockXml=null;
         String xml = new String(Files.readAllBytes(vendor.toPath()), StandardCharsets.UTF_8);
-        MediaCodecInfo[] codecs = new MediaCodecList(MediaCodecList.ALL_CODECS).getCodecInfos();
+        MediaCodecInfo[] codecs = codecs();
         StringBuilder result = new StringBuilder();
         StringBuilder summary = new StringBuilder();
         boolean changed = false;
@@ -82,23 +94,29 @@ final class WfdConfig {
             String name = field(body, "CodecName");
             Family family = "H.264".equals(name) ? AVC : "H.265".equals(name) ? HEVC : null;
             String entry = family == null ? "\"unknown codec\"" : null;
+            if (family == null && mode != null) throw new IllegalArgumentException("Unknown WFD codec family");
             String adjusted = body;
             if (family != null) {
                 MediaCodecInfo.CodecCapabilities caps = hardwareEncoder(codecs, family.mime);
                 if (caps == null) {
+                    if (mode != null) throw new IllegalArgumentException("No hardware encoder for " + name);
                     entry = "\"no hardware encoder\"";
                 } else {
                     int level = Integer.parseInt(field(body, "Level"));
                     int width = Integer.parseInt(field(body, "HorizontalResolution"));
                     int height = Integer.parseInt(field(body, "VerticalResolution"));
                     int fps = Integer.parseInt(field(body, "VideoFps"));
-                    int[] size = largestSize(caps.getVideoCapabilities(), width, height, fps);
+                    if (mode != null) { width = Math.min(width,mode.width); height = Math.min(height,mode.height); fps = Math.min(fps,mode.fps); }
+                    int[] size = mode == null ? largestSize(caps.getVideoCapabilities(), width, height, fps)
+                            : caps.getVideoCapabilities().areSizeAndRateSupported(width,height,fps) ? new int[]{width,height}
+                            : largestSize(caps.getVideoCapabilities(),width,height,fps);
                     int required = size == null ? family.levels.length - 1
                             : requiredLevel(family, family.frame(size[0], size[1]), fps);
                     int newLevel = Math.min(level, Math.min(maxLevel(family, caps), required));
+                    if (size == null && mode != null) throw new IllegalArgumentException("No encodable mode at requested ceiling");
                     if (size == null) size = new int[] {width, height};
-                    adjusted = set(set(set(body, "Level", newLevel), "HorizontalResolution", size[0]),
-                            "VerticalResolution", size[1]);
+                    adjusted = set(set(set(set(body, "Level", newLevel), "HorizontalResolution", size[0]),
+                            "VerticalResolution", size[1]), "VideoFps", fps);
                     entry = "{\"level\":\"" + family.names[level] + "->" + family.names[newLevel] + "\",\"size\":\""
                             + width + "x" + height + "->" + size[0] + "x" + size[1] + "@" + fps + "\"}";
                 }
@@ -109,13 +127,34 @@ final class WfdConfig {
             if (summary.length() > 0) summary.append(',');
             summary.append('"').append(m.group(1)).append(' ').append(name).append("\":").append(entry);
         }
+        if (last == 0) throw new IllegalArgumentException("Unsupported WFD configuration schema");
         result.append(xml.substring(last));
         Files.write(out.toPath(), result.toString().getBytes(StandardCharsets.UTF_8));
         return "{\"changed\":" + changed + ",\"entries\":{" + summary + "}}";
     }
 
+    static int levelForMode(int codec, int profile, WfdFormats.Mode mode, int remoteLevels) throws Exception {
+        File stock=new File("/data/adb/rungic-wfd/wfdconfig-stock.xml");
+        if(!stock.exists())return -1;
+        Family family=codec==1?AVC:HEVC;
+        MediaCodecInfo.CodecCapabilities caps=hardwareEncoder(codecs(),family.mime);
+        if(caps==null||!caps.getVideoCapabilities().areSizeAndRateSupported(mode.width,mode.height,mode.fps))return -1;
+        if(stockXml==null)stockXml=new String(Files.readAllBytes(stock.toPath()),StandardCharsets.UTF_8);
+        Matcher m=ENTRY.matcher(stockXml);
+        while(m.find()) {
+            String body=m.group(2);
+            if(!(codec==1?"H.264":"H.265").equals(field(body,"CodecName"))||Integer.parseInt(field(body,"Profile"))!=profile)continue;
+            if(mode.width>Integer.parseInt(field(body,"HorizontalResolution")) || mode.height>Integer.parseInt(field(body,"VerticalResolution"))
+                    ||mode.fps>Integer.parseInt(field(body,"VideoFps")))continue;
+            int max=Math.min(Integer.parseInt(field(body,"Level")),Math.min(maxLevel(family,caps),31-Integer.numberOfLeadingZeros(remoteLevels)));
+            if(requiredLevel(family,family.frame(mode.width,mode.height),mode.fps)<=max)return max;
+        }
+        return -1;
+    }
+
     /** The hardware (non-alias) encoder of a type with the largest supported frame. */
     private static MediaCodecInfo.CodecCapabilities hardwareEncoder(MediaCodecInfo[] codecs, String mime) {
+        if(encoderCaps.containsKey(mime))return encoderCaps.get(mime);
         MediaCodecInfo.CodecCapabilities best = null;
         long bestArea = 0;
         for (MediaCodecInfo info : codecs) {
@@ -131,6 +170,7 @@ final class WfdConfig {
                 }
             }
         }
+        encoderCaps.put(mime,best);
         return best;
     }
 
@@ -158,7 +198,7 @@ final class WfdConfig {
         for (int i = 0; i < family.levels.length; i++) {
             if (frame <= family.maxFrame[i] && frame * fps <= family.maxRate[i]) return i;
         }
-        return family.levels.length - 1;
+        return family.levels.length;
     }
 
     private static String field(String body, String tag) {

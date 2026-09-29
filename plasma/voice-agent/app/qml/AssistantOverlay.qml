@@ -31,6 +31,56 @@ Window {
     width: 360
     height: 800
 
+    // Call status is global (it can belong to the app's conversation, not this overlay's).
+    property bool callLive: false
+    property string callId: ""
+    property string callConversation: ""
+    property string callContact: ""
+    property string callStatus: "connecting"
+    property string callPhase: "agent"
+    property string callNote: ""
+    property real callStarted: 0
+    property bool callDetails: false
+    property bool callCanMonitor: false
+    readonly property bool compactCall: callLive && !shown
+    onCompactCallChanged: Qt.callLater(updateMaterial)
+
+    function callEvent(e) {
+        if (e.type !== "call-started" && e.callId && e.callId !== callId) return
+        if (e.type === "call-started") {
+            callId = e.callId || ""
+            callLive = true; callPhase = "agent"; callStatus = "connecting"
+            callConversation = e.conversation || win.conversation
+            callContact = e.contact || "电话"; callStarted = 0; callNote = ""
+            callCanMonitor = e.independentMonitor !== false
+            callDetails = false; shown = false; hideTimer.stop()
+            Overlay.present(screenName)
+        } else if (e.type === "call-state") {
+            callStatus = e.state
+            if (e.state === "connected" && !callStarted) callStarted = e.connectedAt || e.time || Date.now() / 1000
+        } else if (e.type === "call-phase") { callPhase = e.phase
+        } else if (e.type === "call-ask" || e.type === "call-error" || e.type === "call-note") {
+            callNote = e.text || ""
+        } else if (e.type === "call-ended") {
+            callLive = false; callDetails = false
+            if (!shown) Overlay.conceal()
+        } else if (e.type === "state" && e.callInfo) {
+            callId = e.callInfo.id || ""
+            callConversation = e.callInfo.conversation || e.conversation || win.conversation
+            callLive = true; callContact = e.callInfo.contact; callPhase = e.callPhase
+            callCanMonitor = e.callInfo.independentMonitor !== false
+            callStatus = e.callInfo.state || (e.callInfo.connectedAt ? "connected" : "ongoing"); callStarted = e.callInfo.connectedAt || 0
+            if (!shown) { hideTimer.stop(); Overlay.present(screenName) }
+        } else if (e.type === "agent-restarted") {
+            callLive = false
+            if (!shown) Overlay.conceal()
+        }
+        if (compactCall) Qt.callLater(updateMaterial)
+    }
+    function callCommand(op, fields) {
+        AgentClient.callCommand(JSON.stringify(Object.assign({op: op, callId: callId}, fields || {})))
+    }
+
     // The app's look, also here.
     Settings {
         id: appSettings
@@ -81,8 +131,15 @@ Window {
     onWidthChanged: updateMaterial()
     // Touch stays with the navigation panel below `above`.
     function updateMaterial() {
-        Overlay.setTouchableHeight(above)
-        Overlay.setCard(Qt.rect(0, 0, width, above), 0)
+        Overlay.setKeyboardEnabled(compactCall && callDetails)
+        if (compactCall) {
+            const rect = Qt.rect(callBar.x, callBar.y, callBar.width, callBar.height)
+            Overlay.setTouchableRect(rect)
+            Overlay.setCard(rect, 18)
+        } else {
+            Overlay.setTouchableHeight(above)
+            Overlay.setCard(Qt.rect(0, 0, width, above), 0)
+        }
     }
 
     property bool reopen: false            // the service restarted while hidden: open again when shown
@@ -102,7 +159,8 @@ Window {
         win.holding = false
         win.shown = false
         win.expanded = false
-        hideTimer.restart()
+        if (callLive) { hideTimer.stop(); updateMaterial() }
+        else hideTimer.restart()
     }
     Timer {
         id: hideTimer
@@ -214,6 +272,7 @@ Window {
         }
         function onEvent(json) {
             const e = JSON.parse(json)
+            win.callEvent(e)
             if (e.type === "assistant-reset") { AgentClient.openAssistant(); return }
             // The service restarted: the assistant's conversation is opened again, but only once
             // the overlay is shown. Opening it now would close the conversation the app just
@@ -243,7 +302,7 @@ Window {
     property real now: Date.now() / 1000
     Timer {
         interval: 1000; repeat: true
-        running: win.visible && win.view === "work"
+        running: win.visible && (win.view === "work" || win.callLive)
         onTriggered: win.now = Date.now() / 1000
     }
 
@@ -256,6 +315,7 @@ Window {
         height: win.above
         color: Theme.scrim
         opacity: win.appear
+        visible: !win.compactCall
         MouseArea {
             anchors.fill: parent
             onClicked: {
@@ -275,7 +335,7 @@ Window {
         height: Math.min(implicitHeight, maxHeight)
         // Slides up from below the screen's own area.
         y: win.above - height * win.appear
-        visible: win.appear > 0
+        visible: !win.compactCall && win.appear > 0
         spacing: 14
         // Down folds or dismisses, up shows the whole conversation; the handle toggles.
         onSwipedDown: { if (win.expanded) win.expanded = false; else win.dismiss() }
@@ -333,6 +393,7 @@ Window {
                 height: shownNow ? implicitHeight : 0
                 column: width
                 callMonitor: chat.callMonitor
+                callCanMonitor: chat.callCanMonitor
                 onReadAloud: text => AgentClient.readAloud(text)
                 onOpenImage: source => Qt.openUrlExternally(source)
                 onOpenSettings: page => { Overlay.openInApp(win.conversation); win.dismiss() }
@@ -431,6 +492,126 @@ Window {
             font.family: Theme.fontFamily
             font.pixelSize: Theme.footSize
             color: Theme.dim
+        }
+    }
+    Rectangle {
+        id: callBar
+        visible: win.compactCall
+        width: Math.min(340, win.width - 24)
+        height: win.callDetails ? 250 : (win.callNote ? 94 : 64)
+        x: win.width - width - 12
+        y: win.above - height - 12
+        radius: 18
+        color: Theme.background
+        border.width: 1
+        border.color: Theme.dim
+        onXChanged: if (visible) win.updateMaterial()
+        onYChanged: if (visible) win.updateMaterial()
+        onHeightChanged: {
+            y = Math.max(win.topHeight + 8, Math.min(y, win.above - height - 12))
+            if (visible) win.updateMaterial()
+        }
+        MouseArea {
+            anchors.fill: parent
+            drag.target: callBar
+            drag.minimumX: 8
+            drag.maximumX: win.width - callBar.width - 8
+            drag.minimumY: win.topHeight + 8
+            drag.maximumY: win.above - callBar.height - 8
+            property bool moved: false
+            onPressed: moved = false
+            onPositionChanged: if (drag.active) moved = true
+            onReleased: if (moved) callBar.x = callBar.x < (win.width-callBar.width)/2 ? 8 : win.width-callBar.width-8
+            onClicked: if (!moved) win.callDetails = !win.callDetails
+        }
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 12
+            spacing: 8
+            RowLayout {
+                Layout.fillWidth: true
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
+                    spacing: 2
+                    Text {
+                        Layout.fillWidth: true
+                        color: Theme.text
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 15
+                        elide: Text.ElideRight
+                        text: win.callContact
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Text {
+                            Layout.fillWidth: true
+                            color: Theme.dim
+                            font.pixelSize: 12
+                            elide: Text.ElideRight
+                            text: win.callPhase === "user" ? "你在通话"
+                                : ({connecting: "准备中", dialing: "拨号中", ringing: "等待接通", connected: "助理通话中",
+                                    ongoing: "通话中", "hanging-up": "正在挂断", "hangup-failed": "请检查电话"})[win.callStatus] || "通话中"
+                        }
+                        Text {
+                            visible: win.callStarted > 0
+                            color: Theme.text
+                            font.family: Theme.monoFamily
+                            font.pixelSize: 12
+                            readonly property int seconds: Math.max(0, Math.floor(win.now-win.callStarted))
+                            text: Math.floor(seconds/60) + ":" + String(seconds%60).padStart(2,"0")
+                        }
+                    }
+                }
+                QQC2.Button {
+                    text: "挂断"
+                    onClicked: win.callCommand("hang-up")
+                }
+            }
+            Text {
+                Layout.fillWidth: true
+                visible: win.callNote !== ""
+                text: win.callNote
+                color: Theme.text
+                font.pixelSize: 13
+                maximumLineCount: win.callDetails ? 3 : 1
+                wrapMode: Text.Wrap
+                elide: Text.ElideRight
+            }
+            RowLayout {
+                visible: win.callDetails
+                QQC2.Button {
+                    text: "我来接"
+                    enabled: win.callPhase === "agent"
+                    onClicked: win.callCommand("take-over")
+                }
+                QQC2.Button {
+                    text: "通话记录"
+                    onClicked: Overlay.openInApp(win.callConversation)
+                }
+                QQC2.Button {
+                    text: "收起"
+                    onClicked: win.callDetails = false
+                }
+            }
+            QQC2.TextField {
+                id: callText
+                Layout.fillWidth: true
+                visible: win.callDetails && win.callPhase === "agent"
+                placeholderText: "私下给助理的文字指令"
+                onAccepted: {
+                    if (!text.trim()) return
+                    win.callCommand("instruct", {text: text})
+                    text = ""
+                }
+            }
+            Text {
+                visible: win.callDetails
+                text: "拖动可移动 · 点按可收起"
+                color: Theme.dim
+                font.pixelSize: 12
+            }
+            Item { Layout.fillHeight: true; visible: win.callDetails }
         }
     }
 }

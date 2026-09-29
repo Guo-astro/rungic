@@ -15,7 +15,7 @@ import org.json.JSONObject;
  *
  * Topics: network (connectivity, Wi-Fi state and identity), telephony (service, signal level,
  * data), bluetooth (adapter, links, bonds, discovery), capture (desktop in front, permissions),
- * clipboard (Android's clipboard changed, or the desktop got the focus it needs to read it).
+ * clipboard (the independent Android clipboard backend reports a change or restart).
  * The epoch changes with every start of the app, so a watcher that saw an older one refreshes.
  */
 final class HostEvents {

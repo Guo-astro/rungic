@@ -27,10 +27,16 @@ Item {
     required property real finished
     required property bool expanded
     required property var steps
+    required property string callBackend
+    required property string callNumber
+    required property real connectedAt
+    required property bool privateVoiceInstructions
+    required property bool independentMonitor
     // The turn in words (task_state, docs/89): JSON of plan, current step, recent, files.
     required property string task
     property real column: 350
     property bool callMonitor: false
+    property bool callCanMonitor: true
     signal readAloud(string text)
     signal openSettings(string page)
     // A picture of an answer tapped (docs/88): the page shows it large.
@@ -404,7 +410,11 @@ Item {
             readonly property bool userTalks: entry.status === "user"
             property real now: Date.now() / 1000
             Timer { interval: 1000; repeat: true; running: callBox.running; onTriggered: callBox.now = Date.now() / 1000 }
-            readonly property int seconds: Math.max(0, Math.round((running ? now : entry.finished) - entry.started))
+            readonly property bool connected: entry.connectedAt > 0
+            readonly property int seconds: connected ? Math.max(0, Math.floor((running ? now : entry.finished) - entry.connectedAt)) : 0
+            function command(op, fields) {
+                AgentClient.callCommand(JSON.stringify(Object.assign({op: op, callId: entry.itemId}, fields || {})))
+            }
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 8
@@ -417,20 +427,30 @@ Item {
                     font.weight: Font.DemiBold
                     color: Theme.text
                     text: (callBox.userTalks ? "你在通话中"
-                           : !callBox.running ? "通话结束"
+                           : !callBox.running ? (callBox.connected || !entry.itemId ? "通话结束" : "通话未接通")
+                           : entry.command === "connecting" ? "准备通话…"
                            : entry.command === "dialing" ? "正在拨号…"
                            : entry.command === "ringing" ? "已拨出，等待接听"
                            : entry.command === "dial-failed" ? "没能拨出"
                            : entry.command === "hanging-up" ? "正在挂断…"
-                           : entry.command === "hangup-failed" ? "没能挂断，请在微信里挂断"
+                           : entry.command === "hangup-failed" ? (entry.callBackend === "cellular" ? "请在系统电话中挂断" : "请在通话应用中挂断")
                            : "助理通话中") + (entry.role ? " · " + entry.role : "")
                 }
                 Text {
+                    visible: callBox.connected
                     text: String(Math.floor(callBox.seconds / 60)).padStart(2, "0") + ":" + String(callBox.seconds % 60).padStart(2, "0")
                     font.family: Theme.monoFamily
                     font.pixelSize: 13
                     color: Theme.dim
                 }
+            }
+            Text {
+                Layout.fillWidth: true
+                text: entry.callBackend === "cellular" ? "手机电话" + (entry.callNumber ? " · " + entry.callNumber : "")
+                    : entry.callBackend === "wechat" ? "微信通话" : "应用通话 · " + entry.callBackend
+                color: Theme.dim
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.labelSize
             }
             Text {
                 Layout.fillWidth: true
@@ -443,20 +463,24 @@ Item {
             }
             Repeater {
                 model: entry.steps
-                Text {
+                ColumnLayout {
+                    id: transcript
                     required property string kind
                     required property string text
                     Layout.fillWidth: true
-                    wrapMode: Text.Wrap
-                    textFormat: Text.StyledText
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 15
-                    lineHeight: 24
-                    lineHeightMode: Text.FixedHeight
-                    font.weight: kind === "ask" ? Font.DemiBold : Font.Normal
-                    color: Theme.text
-                    readonly property string who: ({ remote: "对方", agent: "助理", owner: "你", note: "记录", ask: "问你" })[kind] || ""
-                    text: "<font color='" + Theme.dim + "'>" + who + "：</font>" + text.replace(/&/g, "&amp;").replace(/</g, "&lt;")
+                    Text {
+                        Layout.fillWidth: true
+                        wrapMode: Text.Wrap
+                        textFormat: Text.StyledText
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 15
+                        lineHeight: 24
+                        lineHeightMode: Text.FixedHeight
+                        font.weight: transcript.kind === "ask" ? Font.DemiBold : Font.Normal
+                        color: Theme.text
+                        readonly property string who: ({ remote: "对方", agent: "助理", owner: "你", note: "记录", ask: "问你", error: "提示" })[transcript.kind] || ""
+                        text: "<font color='" + Theme.dim + "'>" + who + "：</font>" + transcript.text.replace(/&/g, "&amp;").replace(/</g, "&lt;")
+                    }
                 }
             }
             Text {
@@ -470,29 +494,57 @@ Item {
             }
             RowLayout {
                 Layout.fillWidth: true
+                visible: callBox.running && !callBox.userTalks
+                QQC2.TextField {
+                    id: callInstruction
+                    Layout.fillWidth: true
+                    placeholderText: "给通话助理的文字指示"
+                    function send() {
+                        if (!text.trim()) return
+                        callBox.command("instruct", {text: text.trim()})
+                        text = ""
+                    }
+                    onAccepted: send()
+                }
+                PillButton {
+                    text: "发送"
+                    enabled: callInstruction.text.trim().length > 0
+                    onClicked: callInstruction.send()
+                }
+            }
+            Text {
+                Layout.fillWidth: true
+                visible: callBox.running && !callBox.userTalks && !entry.privateVoiceInstructions
+                text: "文字指示只发给助理；需要亲自说话时点“我来接”。"
+                wrapMode: Text.Wrap
+                color: Theme.dim
+                font.pixelSize: Theme.labelSize
+            }
+            RowLayout {
+                Layout.fillWidth: true
                 Layout.topMargin: 4
                 visible: callBox.running
                 spacing: 8
                 PillButton {
                     Layout.fillWidth: true
-                    visible: !callBox.userTalks
+                    visible: !callBox.userTalks && entry.independentMonitor
                     iconName: "headset"
                     text: entry.callMonitor ? "停止旁听" : "旁听"
-                    onClicked: AgentClient.callCommand(entry.callMonitor ? "monitor-off" : "monitor-on")
+                    onClicked: callBox.command(entry.callMonitor ? "monitor-off" : "monitor-on")
                 }
                 PillButton {
                     Layout.fillWidth: true
                     visible: !callBox.userTalks
                     iconName: "phone"
                     text: "我来接"
-                    onClicked: AgentClient.callCommand("take-over")
+                    onClicked: callBox.command("take-over")
                 }
                 PillButton {
                     Layout.fillWidth: true
                     iconName: "hang-up"
                     text: "挂断"
                     negative: true
-                    onClicked: AgentClient.callCommand("hang-up")
+                    onClicked: callBox.command("hang-up")
                 }
             }
         }

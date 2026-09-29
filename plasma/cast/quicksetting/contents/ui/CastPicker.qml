@@ -28,6 +28,9 @@ Window {
     property int scanRounds: 0
     property string connectingTo: ""
     property string error: ""
+    property int generation: 0
+    property string connectionPhase: ""
+    property int elapsedSeconds: 0
     readonly property int maxRounds: 5
 
     // The phone's own screen: TVs and the assistant's screen are CAST-n outputs.
@@ -53,11 +56,11 @@ Window {
 
     function open() {
         error = "";
-        connectingTo = "";
+        // Preserve an in-flight request when the sheet is reopened.
         receivers = [];
         visible = true;
         runner("status", merge);
-        if (!casting && !reconnecting) rescan();
+        if (!casting && !reconnecting && !connectingTo) rescan();
     }
 
     function close() {
@@ -95,6 +98,7 @@ Window {
             else error = "搜索失败，可在 Android 投屏设置中查看";
             return;
         }
+        if (result.connection) { connectionPhase = result.connection.phase; elapsedSeconds = result.connection.elapsed_seconds; }
         if (!result.receivers) return;
         const previous = {};
         for (const r of receivers) previous[r.name] = r;
@@ -119,14 +123,17 @@ Window {
         scanning = false;
         error = "";
         connectingTo = receiver.name;
+        cancelled = false; connectionPhase = "waiting-receiver"; elapsedSeconds = 0;
+        const request = ++generation;
         runner("connect '" + receiver.name.replace(/'/g, "'\\''") + "'", result => {
+            if (request !== generation) return;
             const name = connectingTo;
             connectingTo = "";
             if (result.error) {
                 // A cancel (disconnect) ends the connect with an error too: say nothing then.
                 if (result.code !== "cancelled" && visible && !cancelled) {
                     error = result.code === "timeout"
-                        ? "没有连上“" + name + "”，请让电视停在投屏等待画面后重试"
+                        ? "没有连上“" + name + "”，接收端未能完成网络连接和协商，请重试"
                         : "连接“" + name + "”失败";
                 }
                 cancelled = false;
@@ -138,11 +145,13 @@ Window {
 
     property bool cancelled: false
     function cancelConnect() {
-        cancelled = true;
-        runner("disconnect", () => {});
+        cancelled = true; generation++;
+        connectingTo = "";
+        runner("disconnect", merge);
     }
 
     function disconnect() {
+        generation++; connectingTo = "";
         runner("disconnect", () => {});
         close();
     }
@@ -155,12 +164,18 @@ Window {
                                          && receivers.filter(r => r.found).length === 0
 
     readonly property string statusLine: {
-        if (connectingTo) return "正在连接 " + connectingTo;
+        if (connectingTo) return (connectionPhase === "negotiating" ? "正在协商" : "等待接收端联网") + " · " + elapsedSeconds + " 秒";
         if (reconnecting) return "电视断开，正在重连…";
         if (casting) return "正在投屏到 " + (current.length ? current[0].name : tvName);
         if (scanning) return "正在搜索附近的电视…";
         if (nothingFound) return "附近没有找到电视";
         return "搜索已结束";
+    }
+
+    Timer {
+        interval: 2000; repeat: true
+        running: picker.visible && (!!picker.connectingTo)
+        onTriggered: picker.runner("status", picker.merge)
     }
 
     // Background shaded toward the text colour: fills that stay visible in light and dark schemes.
@@ -280,7 +295,7 @@ Window {
                     model: picker.lastUsed
                     delegate: ReceiverRow {
                         receiver: modelData
-                        subtitle: picker.connectingTo === modelData.name ? "正在连接…电视如弹出确认，请选择允许"
+                        subtitle: picker.connectingTo === modelData.name ? "正在连接…接收端切换网络可能需要两分钟"
                             : modelData.busy ? "忙碌中 · 正被其他设备使用"
                             : modelData.found ? "上次使用 · 可连接"
                             : picker.scanning ? "上次使用 · 正在查找…"
@@ -300,7 +315,7 @@ Window {
                     model: picker.others
                     delegate: ReceiverRow {
                         receiver: modelData
-                        subtitle: picker.connectingTo === modelData.name ? "正在连接…电视如弹出确认，请选择允许"
+                        subtitle: picker.connectingTo === modelData.name ? "正在连接…接收端切换网络可能需要两分钟"
                             : modelData.busy ? "忙碌中 · 正被其他设备使用"
                             : modelData.found ? "可连接" : "最近发现"
                         emphasized: picker.connectingTo === modelData.name

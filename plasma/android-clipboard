@@ -1,0 +1,48 @@
+#!/system/bin/sh
+# Container-lifetime clipboard service. Android API calls run as Shell, not root/app UID.
+set -eu
+BASE=/data/adb/rungic-plasma
+STATE=/data/adb/rungic-lxc/runtime/var/lib/lxc/plasma/state/host/clipboard
+BB=/data/adb/magisk/busybox
+CLASS=com.rungic.clipboard.ClipboardDaemon
+[ "$(id -u)" = 0 ] || exit 1
+mkdir -p "$STATE"
+chown 2000:1000 "$STATE"
+chmod 770 "$STATE"
+stop_daemon() {
+    pid=$(cat "$STATE/pid" 2>/dev/null) || return 0
+    case "$pid" in ''|*[!0-9]*) return 0;; esac
+    [ -r "/proc/$pid/cmdline" ] || return 0
+    command=$(tr '\000' ' ' <"/proc/$pid/cmdline" 2>/dev/null) || return 0
+    case "$command" in "app_process /system/bin $CLASS "*) kill "$pid" 2>/dev/null || true;; esac
+}
+case "${1:-start}" in
+ start)
+    current=$(pm path com.rungic.plasma 2>&1 | sed -n 's/^package://p' | head -n 1)
+    previous=$(cat "$BASE/clipboard-apk" 2>/dev/null) || previous=
+    [ "$current" = "$previous" ] || stop_daemon
+    touch "$BASE/clipboard.enabled"
+    # File-path flock avoids toybox's inherited-fd failure on first boot (docs/79).
+    "$BB" setsid "$BB" flock -n "$BASE/clipboard-watch.lock" "$BASE/android-clipboard" watch </dev/null >>"$BASE/clipboard.log" 2>&1 &
+    ;;
+ watch)
+    while [ -f "$BASE/clipboard.enabled" ]; do
+        apk=$(pm path com.rungic.plasma 2>&1 | sed -n 's/^package://p' | head -n 1)
+        uid=$(stat -c %u /data/user/0/com.rungic.plasma)
+        if [ -n "$apk" ] && [ "$uid" -ge 10000 ]; then
+            # cwd permits Shell to write its pid without opening /data/adb's parent.
+            printf '%s\n' "$apk" > "$BASE/clipboard-apk"
+            cd "$STATE"
+            su 2000 -c "CLASSPATH='$apk' exec app_process /system/bin $CLASS $uid" || true
+        fi
+        [ -f "$BASE/clipboard.enabled" ] || break
+        sleep 3
+    done
+    ;;
+ stop)
+    rm -f "$BASE/clipboard.enabled"
+    stop_daemon
+    "$BB" timeout 8 "$BB" flock "$BASE/clipboard-watch.lock" true
+    ;;
+ *) echo 'Usage: android-clipboard start|stop' >&2; exit 2;;
+esac

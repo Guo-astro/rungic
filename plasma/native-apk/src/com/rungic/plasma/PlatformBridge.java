@@ -38,6 +38,7 @@ final class PlatformBridge implements Closeable {
             catch(Exception e) { Log.w("RungicPlatform","desktop boost: "+e.getMessage()); }
         });
     }
+    private final AndroidClipboardBridge clipboard=new AndroidClipboardBridge();
     private final AndroidNetworkBridge network;
     private final CaptureBridge capture;
     private final OcrBridge ocr;
@@ -53,6 +54,7 @@ final class PlatformBridge implements Closeable {
         try { android.system.Os.chmod(path.getAbsolutePath(),0666); } catch(Exception e) { throw new IOException(e); }
         running=true;
         network.start();
+        clipboard.start();
         Thread thread=new Thread(() -> {
             while(running) {
                 LocalSocket client=null;
@@ -65,6 +67,11 @@ final class PlatformBridge implements Closeable {
                     int b;
                     while((b=client.getInputStream().read())!=-1 && b!='\n') { if(bytes.size()>=524288)throw new IOException("Request too large");bytes.write(b); }
                     JSONObject request=new JSONObject(bytes.toString("UTF-8"));
+                    if(request.optString("op").startsWith("clipboard-")) {
+                        JSONObject result=AndroidClipboardBridge.request(request,3000);
+                        client.getOutputStream().write((result.toString()+"\n").getBytes(StandardCharsets.UTF_8));
+                        continue;
+                    }
                     if(request.optString("op").equals("lock")) {
                         JSONObject result;
                         if(!activity.hasWindowFocus()) result=new JSONObject().put("error","请先返回 Plasma Mobile");
@@ -159,15 +166,17 @@ final class PlatformBridge implements Closeable {
             try {
                 JSONArray args=request.optJSONArray("args");
                 String command=args==null||args.length()==0?"status":args.getString(0);
-                if(!command.matches("status|capabilities|settings|scan|connect|disconnect"))throw new IllegalArgumentException("Unsupported cast command");
+                if(args!=null && args.length()>2)throw new IllegalArgumentException("Too many cast arguments");
+                if(!command.matches("status|capabilities|settings|scan|connect|disconnect|modes|resolution"))throw new IllegalArgumentException("Unsupported cast command");
                 StringBuilder line=new StringBuilder("if [ ! -x /data/adb/rungic-wfd/rungic-cast ] || [ ! -s /data/adb/rungic-wfd/rungic-cast.jar ]; then echo '{\"error\":\"Casting component is not installed\",\"code\":\"component-missing\"}'; exit 2; fi; /data/adb/rungic-wfd/rungic-cast ").append(command);
                 if(args!=null && args.length()>1) {
                     if(command.equals("scan")) { if(!args.getString(1).matches("[0-9]{1,2}"))throw new IllegalArgumentException("scan takes seconds"); }
+                    else if(command.equals("resolution")) { if(!args.getString(1).matches("(?i)[0-9a-f:]{17}/(auto|[0-9]+x[0-9]+@[0-9]+)"))throw new IllegalArgumentException("Invalid resolution selection"); }
                     else if(!command.equals("connect"))throw new IllegalArgumentException("Only connect takes a TV");
                     line.append(" '").append(args.getString(1).replace("'","'\\''")).append("'");
                 }
                 java.lang.Process process=new ProcessBuilder("su","-c",line.toString()).redirectErrorStream(true).start();
-                if(!process.waitFor(60,TimeUnit.SECONDS)) { process.destroy();throw new IOException("投屏命令超时"); }
+                if(!process.waitFor(command.equals("resolution") ? 330 : command.equals("connect") ? 180 : 60,TimeUnit.SECONDS)) { process.destroy();throw new IOException("投屏命令超时"); }
                 String out=new String(process.getInputStream().readAllBytes(),StandardCharsets.UTF_8).trim();
                 String last=out.substring(out.lastIndexOf('\n')+1);
                 result=last.startsWith("{")?new JSONObject(last):new JSONObject().put("error",out.isEmpty()?"rungic-cast failed":out);
@@ -208,18 +217,6 @@ final class PlatformBridge implements Closeable {
             } else expireAwake.run();
             return new JSONObject().put("ok",true).put("foreground",activity.hasWindowFocus()).put("locked",activity.getSystemService(KeyguardManager.class).isKeyguardLocked());
         }
-        if(op.equals("clipboard-get")) {
-            if(!activity.hasWindowFocus())return new JSONObject().put("available",false);
-            ClipboardManager clipboard=activity.getSystemService(ClipboardManager.class);
-            ClipData clip=clipboard.getPrimaryClip();
-            if(clip!=null && clip.getDescription().getExtras()!=null &&
-                clip.getDescription().getExtras().getBoolean(ClipDescription.EXTRA_IS_SENSITIVE,false))
-                return new JSONObject().put("available",false);
-            CharSequence text=clip!=null && clip.getItemCount()>0?clip.getItemAt(0).getText():null;
-            if(clip!=null && text==null)return new JSONObject().put("available",false);
-            if(text!=null && text.length()>65536)return new JSONObject().put("available",false);
-            return new JSONObject().put("available",true).put("text",text==null?JSONObject.NULL:text.toString());
-        }
         // The assistant's screen is the Linux desktop's own output (docs/65): the assistant turns it
         // on for a task whether or not Plasma Mobile is in front.
         if(op.equals("agent-screen"))return ((MainActivity)activity).agentScreen(request);
@@ -232,16 +229,6 @@ final class PlatformBridge implements Closeable {
         if(op.equals("text-commit")) {
             // Same path as the Android keyboard's commitText (for tests and tools).
             com.winland.server.NativeBridge.sendTextInput(request.getString("text"));
-            return new JSONObject().put("ok",true);
-        }
-        if(op.equals("clipboard-set")) {
-            ClipboardManager clipboard=activity.getSystemService(ClipboardManager.class);
-            String text=request.isNull("text")?null:request.getString("text");
-            if(text!=null && text.length()>65536)throw new IllegalArgumentException("Clipboard too large");
-            ClipData old=clipboard.getPrimaryClip();
-            CharSequence previous=old!=null && old.getItemCount()>0?old.getItemAt(0).getText():null;
-            if(text==null) { if(old!=null)clipboard.clearPrimaryClip(); }
-            else if(previous==null || !text.contentEquals(previous))clipboard.setPrimaryClip(ClipData.newPlainText("Linux",text));
             return new JSONObject().put("ok",true);
         }
         if(op.equals("brightness")) {
@@ -324,6 +311,6 @@ final class PlatformBridge implements Closeable {
         // A queued "boost off" still needs the root session.
         boostWorker.shutdown();
         try { boostWorker.awaitTermination(3,TimeUnit.SECONDS); } catch(InterruptedException ignored) {}
-        network.close();if(server!=null)server.close();if(bound!=null)bound.close();path.delete();
+        clipboard.close();network.close();if(server!=null)server.close();if(bound!=null)bound.close();path.delete();
     }
 }

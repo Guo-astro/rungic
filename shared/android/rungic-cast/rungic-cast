@@ -4,14 +4,14 @@
 RUN=/data/adb/rungic-wfd/run
 mkdir -p "$RUN"
 case "$1" in
-connect|disconnect)
+connect|disconnect|resolution)
     # The newest request wins: stop a connect still in progress and, for a
     # request from the user, an automatic reconnect (rungic-cast-watch).
     pid=$(cat "$RUN/connect.pid" 2>/dev/null)
     if [ -n "$pid" ] && grep -q com.rungic.cast "/proc/$pid/cmdline" 2>/dev/null; then kill "$pid"; fi
     rm -f "$RUN/connect.pid"
     [ -n "$RUNGIC_CAST_AUTO" ] || touch "$RUN/cancel-reconnect"
-    [ "$1" = connect ] && echo $$ > "$RUN/connect.pid"
+    [ "$1" = disconnect ] || echo $$ > "$RUN/connect.pid"
     ;;
 esac
 CLASSPATH=/data/adb/rungic-wfd/rungic-cast.jar exec app_process /system/bin com.rungic.cast.Main "$@"

@@ -11,7 +11,7 @@ not required. Android-side services are in `plasma/native-apk/`.
 | `media/codec-client.*`, `gst-rungic-codec.c`, `ffmpeg-rungic-codec.c` | Android MediaCodec IPC → GStreamer / FFmpeg / Firefox |
 | `media/snapshot-moto-codec.patch` | Historical Snapshot import patch; active source is `packages/snapshot/` (patch queue) |
 | `platform/network-manager.py` | Android networking → NetworkManager D-Bus interface |
-| `platform/clipboard.py` | Android clipboard ↔ Wayland clipboard |
+| `platform/clipboard.py` | 独立 Android ClipboardDaemon ↔ Wayland clipboard；无 Activity 焦点依赖，历史由 Klipper 维护 |
 | `graphics/` | EGL/GBM/AHB diagnostic helpers |
 | `android/rungic-cast/` | Root Wi-Fi Display control (scan/connect/disconnect/decor) through Android's WFD stack, run with `app_process`; `wfd-config` limits the vendor `wfdconfig.xml` video offer to the phone's hardware encoder ([docs/58](../docs/58-miracast-desktop-feasibility.md)) |
 | `android/rungic-cast/rungic-cast-watch`, `android/rungic-cast-watch.sh` | Reconnects the TV when the TV side ends the session (never after a user disconnect); boot script also binds the generated `wfdconfig.xml` over the vendor one and keeps Moto's secondary-display launcher off the TV ([docs/58](../docs/58-miracast-desktop-feasibility.md) step 5) |

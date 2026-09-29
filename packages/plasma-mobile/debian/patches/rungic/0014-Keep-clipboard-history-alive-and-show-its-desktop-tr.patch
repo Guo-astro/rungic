@@ -1,0 +1,88 @@
+From: range-dev <noreply@localhost>
+Date: Tue, 29 Sep 2026 08:04:13 +0800
+Subject: Keep clipboard history alive and show its desktop tray entry
+
+Forwarded: not-needed
+
+Last-Update: 2026-09-29
+
+X-Rungic-Status: Inappropriate [Rungic mobile and external desktop integration]
+
+X-Rungic-Tests: docs/research/clipboard-history.md
+
+X-Rungic-Docs: docs/research/clipboard-history.md
+---
+ containments/taskpanel/qml/main.qml |  7 +++++++
+ shell/contents/external-desktop.js  | 31 +++++++++++++++++++++++++++++++
+ 2 files changed, 38 insertions(+)
+
+diff --git a/containments/taskpanel/qml/main.qml b/containments/taskpanel/qml/main.qml
+index 994621e..52c4581 100644
+--- a/containments/taskpanel/qml/main.qml
++++ b/containments/taskpanel/qml/main.qml
+@@ -20,9 +20,16 @@ import org.kde.plasma.private.mobileshell.windowplugin as WindowPlugin
+ import org.kde.plasma.private.mobileshell.state as MobileShellState
+ import org.kde.plasma.workspace.keyboardlayout as Keyboards
+ import org.kde.layershell 1.0 as LayerShell
++import org.kde.plasma.private.clipboard as Clipboard
+ 
+ ContainmentItem {
+     id: root
++    // Keep the same in-process Klipper instance used by desktop tray applets
++    // alive even before an external screen or clipboard window is opened.
++    Clipboard.KlipperInterface {
++        id: clipboardHistory
++    }
++
+     Plasmoid.backgroundHints: PlasmaCore.Types.NoBackground
+     Plasmoid.status: PlasmaCore.Types.PassiveStatus // ensure that the panel never takes focus away from the running app
+ 
+diff --git a/shell/contents/external-desktop.js b/shell/contents/external-desktop.js
+index 616ad04..a671a55 100644
+--- a/shell/contents/external-desktop.js
++++ b/shell/contents/external-desktop.js
+@@ -47,6 +47,36 @@ function trayWithoutNotifications(panel) {
+     }
+ }
+ 
++// Make clipboard history one click away on both new and existing desktop
++// panels. Apply once per tray so later user visibility choices survive.
++function trayClipboard(panel) {
++    var id = "org.kde.plasma.clipboard";
++    var trays = panel.widgets("org.kde.plasma.systemtray");
++    for (var t = 0; t < trays.length; t++) {
++        var tray = trays[t];
++        tray.currentConfigGroup = ["Rungic"];
++        if (tray.readConfig("clipboardHistoryVersion", 0) >= 1) {
++            continue;
++        }
++        tray.currentConfigGroup = ["General"];
++        var extra = tray.readConfig("extraItems", []);
++        var shown = tray.readConfig("shownItems", []);
++        var hidden = tray.readConfig("hiddenItems", []);
++        if (extra.indexOf(id) < 0) {
++            tray.writeConfig("extraItems", extra.concat([id]));
++        }
++        if (shown.indexOf(id) < 0) {
++            tray.writeConfig("shownItems", shown.concat([id]));
++        }
++        if (hidden.indexOf(id) >= 0) {
++            tray.writeConfig("hiddenItems", hidden.filter(function (item) { return item !== id; }));
++        }
++        tray.currentConfigGroup = ["Rungic"];
++        tray.writeConfig("clipboardHistoryVersion", 1);
++        log.push("panel " + panel.id + ": clipboard history in tray");
++    }
++}
++
+ for (var screen = 1; screen < screenCount; screen++) {
+     // Desktop containment: Folder View instead of the mobile Folio homescreen.
+     // Scripts cannot create desktop containments, but moving one to a screen that
+@@ -98,6 +128,7 @@ var allPanels = panels();
+ for (var p = 0; p < allPanels.length; p++) {
+     if (allPanels[p].type === "org.kde.panel") {
+         trayWithoutNotifications(allPanels[p]);
++        trayClipboard(allPanels[p]);
+     }
+ }
+ 

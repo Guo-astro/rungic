@@ -167,3 +167,8 @@ Android Surface 尺寸改变与 Linux 配置提交跨进程，不能仅因两项
 进一步回读原始证据：`device/before.json` 和 `after-install.json` 的宿主 refreshPolicy 都是 120，故枚举与宿主策略不一致在本轮 density 更新前已存在。不能把此前仅检查 KScreen 枚举的“自动刷新通过”推广成宿主策略通过。新增 `device/host-refresh-test.json` 从明确的宿主自动状态出发，逐步检查 300→350%、原生→720→原生及恢复 300%；每步 KScreen vrrPolicy=2 且宿主 refreshPolicy=0。该缩放路径通过，既有不一致的形成原因未据此认定已修复。
 
 交付候选为 `.work/ci/runs/vantage-20260928-density/release/vantage-20260928.3/`，APK 2.10 / APT 20260928.7；84 项 manifest 文件及设备 spec 离线校验通过。此包尚未清数据首装，详细摘要、归档和清理见 83 篇。
+
+
+## 2026-09-29：G100 外屏缩放被既有布局间隙阻止
+
+当前 G100 的内屏逻辑宽为 360，CAST-1 的旧位置却为 x=416；KScreen 6.6.5 的整套配置校验因 56 逻辑像素空隙而拒绝保存，表现为缩放无法应用。标准 ScaleRole 已调用 maintainSnapping，但相对调整不会修复原先存在的空隙。本次以标准 kscreen-doctor 将外屏贴到实际内屏右边界 x=360，保留手机/电视倍率，断开重连后位置仍正确；没有删除上游校验或新增登录布局覆盖脚本。原始间隙来源及 GUI 再次修改倍率仍待核验，证据见 [G100 UGREEN 记录](research/g100-ugreen-miracast.md)。

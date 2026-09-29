@@ -16,6 +16,8 @@ sys.path.insert(0, str(ROOT / "tools"))
 import cast_payload
 ANDROID_FILES = (
     ("plasma/rungic-plasma", "rungic-plasma/rungic-plasma", 0o755),
+    ("plasma/android-calls", "rungic-plasma/android-calls", 0o755),
+    ("plasma/android-clipboard", "rungic-plasma/android-clipboard", 0o755),
     ("plasma/android-audio", "rungic-plasma/android-audio", 0o755),
     ("plasma/android-audio.pa", "rungic-plasma/android-audio.pa", 0o644),
     ("plasma/rootfs-image", "rungic-plasma/rootfs-image", 0o755),
