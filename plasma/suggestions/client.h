@@ -24,6 +24,7 @@ public:
     Q_INVOKABLE void open(const QString &id = {});
     Q_INVOKABLE void conversation(const QString &id);
     Q_INVOKABLE void watching(bool visible);
+    Q_INVOKABLE void present(const QVariantList &receipts, bool opened);
     Q_INVOKABLE double tomorrow(int hour = 10) const;
 Q_SIGNALS:
     void changed();

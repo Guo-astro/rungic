@@ -20,6 +20,7 @@ Rectangle {
     property bool positioned: false
     color: Theme.side
     SuggestionsClient { id: client }
+    PresentationTracker { view: list; suggestionsClient: client; active: feed.activeView && !snooze.visible && !applyDialog.visible; selectedId: feed.selectedId }
     readonly property var clientItems: client.items
     onClientItemsChanged: {
         if (list.moving) pendingRefresh = true
@@ -125,6 +126,7 @@ Rectangle {
         }
         delegate: Item {
             required property var modelData
+            readonly property var suggestionRecord: modelData
             width: list.width
             height: card.height
             SuggestionCard {
@@ -135,7 +137,7 @@ Rectangle {
             expanded: item.id === feed.selectedId
             onAction: (name, args) => {
                 if (name === "snooze-menu") { feed.pendingItem = item; snooze.open() }
-                else if (name === "apply-confirm") { feed.pendingItem = item; applyDialog.open() }
+                else if (name === "apply-confirm") { feed.pendingItem = JSON.parse(JSON.stringify(item)); applyDialog.open() }
                 else if (name === "conversation") client.conversation(item.conversation || "")
                 else client.act(item.id, name, args)
             }
@@ -157,7 +159,6 @@ Rectangle {
             QQC2.Button { Layout.fillWidth: true; text: "保留待处理"; onClicked: { client.act(feed.pendingItem.id, "later"); snooze.close() } }
             QQC2.Button { Layout.fillWidth: true; text: "一小时后提醒"; onClicked: { client.act(feed.pendingItem.id, "snooze", { at: Math.floor(Date.now() / 1000) + 3600 }); snooze.close() } }
             QQC2.Button { Layout.fillWidth: true; text: "明天 10:00 提醒"; onClicked: { client.act(feed.pendingItem.id, "snooze", { at: client.tomorrow(10) }); snooze.close() } }
-            QQC2.Button { Layout.fillWidth: true; visible: !!feed.pendingItem.process; text: "应用关闭后提醒"; onClicked: { client.act(feed.pendingItem.id, "closed"); snooze.close() } }
             QQC2.Button { Layout.fillWidth: true; text: "取消"; onClicked: snooze.close() }
         }
     }
@@ -178,6 +179,6 @@ Rectangle {
             textFormat: Text.PlainText; wrapMode: Text.Wrap; color: Theme.text; font.pixelSize: 14
         }
         }
-        onAccepted: client.act(feed.pendingItem.id, "apply")
+        onAccepted: client.act(feed.pendingItem.id, "apply", { planRevision: feed.pendingItem.planRevision })
     }
 }

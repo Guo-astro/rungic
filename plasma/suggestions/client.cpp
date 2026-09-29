@@ -75,6 +75,11 @@ void SuggestionsClient::watching(bool visible) {
     auto message = QDBusMessage::createMethodCall(BusName, BusPath, BusName, "SetVisible");
     message.setArguments({visible}); QDBusConnection::sessionBus().asyncCall(message);
 }
+void SuggestionsClient::present(const QVariantList &receipts, bool opened) {
+    auto message = QDBusMessage::createMethodCall(BusName, BusPath, BusName, "Presented");
+    message.setArguments({QString::fromUtf8(QJsonDocument(QJsonArray::fromVariantList(receipts)).toJson(QJsonDocument::Compact)), opened});
+    QDBusConnection::sessionBus().asyncCall(message);
+}
 double SuggestionsClient::tomorrow(int hour) const {
     return QDateTime(QDate::currentDate().addDays(1), QTime(qBound(0, hour, 23), 0)).toSecsSinceEpoch();
 }

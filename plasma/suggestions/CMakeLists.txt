@@ -16,7 +16,7 @@ qt_add_qml_module(rungicsuggestions
     URI com.rungic.suggestions VERSION 1.0
     PLUGIN_TARGET rungicsuggestions OUTPUT_DIRECTORY "${module_dir}"
     SOURCES client.cpp client.h
-    QML_FILES qml/SuggestionCard.qml qml/SuggestionsFeed.qml qml/SuggestionsWidget.qml)
+    QML_FILES qml/PresentationTracker.qml qml/SuggestionCard.qml qml/SuggestionsFeed.qml qml/SuggestionsWidget.qml)
 target_link_libraries(rungicsuggestions PRIVATE Qt6::Core Qt6::DBus Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 KF6::WindowSystem)
 install(TARGETS rungic-suggestions DESTINATION bin)
 install(TARGETS rungicsuggestions LIBRARY DESTINATION "${QT6_INSTALL_QML}/com/rungic/suggestions")

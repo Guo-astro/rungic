@@ -30,6 +30,7 @@ Item {
         })
     }
     SuggestionsClient { id: client }
+    PresentationTracker { view: list; suggestionsClient: client; active: widget.activeView && !pointer.pressed }
     onActiveViewChanged: client.watching(activeView)
     Component.onCompleted: { rebuild(); client.watching(activeView) }
     Component.onDestruction: client.watching(false)
@@ -88,6 +89,7 @@ Item {
             delegate: QQC2.AbstractButton {
                 id: card
                 required property var modelData
+                readonly property var suggestionRecord: modelData
                 width: list.width
                 height: 139
                 readonly property var evidence: modelData.evidence || ({})

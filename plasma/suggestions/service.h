@@ -20,6 +20,7 @@ public Q_SLOTS:
     QString Feedback(const QString &id);
     QString Knowledge();
     void SetVisible(bool visible);
+    void Presented(const QString &json, bool opened);
     void Refresh();
     void AgentEvent(const QString &json);
     void NotificationAction(uint notification, const QString &action);
@@ -28,13 +29,15 @@ public Q_SLOTS:
 Q_SIGNALS:
     void Changed();
 private:
-    void publish();
+    bool publish();
+    void recover();
     void notify();
     void open(const QString &id, const QString &token = {});
     Care::Model model;
     QString feedPath, knowledgePath, statePath;
     QTimer scanTimer;
     bool scanning = false;
+    bool notifying = false;
     QJsonArray coverage;
     QSet<QString> visibleClients;
     QHash<uint, QString> notifications;

@@ -89,8 +89,9 @@ private Q_SLOTS:
     void closedConditionAndNoImplicitExecution() {
         Care::Model m(""); auto o = item(); const auto id = o["id"].toString();
         m.observe(o, 100); QVERIFY(m.act(id, "closed", {}, 101).contains("error"));
-        o["process"] = "player"; m.observe(o, 102); m.act(id, "closed", {}, 103);
-        QVERIFY(m.due(104, {"player"}).isEmpty()); QCOMPARE(m.due(105, {}).size(), 1);
+        o["process"] = "player"; m.observe(o, 102);
+        QVERIFY(m.act(id, "closed", {}, 103).contains("error"));
+        QVERIFY(m.due(105, {}).isEmpty()); // A process name is not an application instance.
         QCOMPARE(m.get(id)["state"].toString(), "new");
     }
     void ordinaryHintsQuietOutsideFeedAndRespectInhibition() {
@@ -101,13 +102,97 @@ private Q_SLOTS:
         m.notified({o["id"].toString()}, 100001);
         m.observe(item("crash:2"), 100002);
         QVERIFY(m.notification(100002, true, false).isEmpty());
+        QVERIFY(m.notification(200002, true, false).isEmpty()); // stale evidence never delivers
+        m.observe(item("crash:2"), 200002);
         QVERIFY(!m.notification(200002, true, false).isEmpty());
     }
     void upstreamAndTaskCompletionDoNotResolveFaults() {
         Care::Model m(""); auto o = item(); const auto id = o["id"].toString();
-        m.observe(o, 100); m.update(id, {{"upstream", QJsonObject{{"state", "merged"}}}, {"state", "working"}});
-        m.recoverTasks(); QCOMPARE(m.get(id)["state"].toString(), "attention");
+        m.observe(o, 100); m.update(id, {{"upstream", QJsonObject{{"state", "merged"}}}});
+        m.beginTask(id, "investigate", {}, 101);
+        m.recoverTasks(); QCOMPARE(m.get(id)["state"].toString(), "working");
         QCOMPARE(m.get(id)["upstream"].toObject()["state"].toString(), "merged");
+    }
+    void absenceDoesNotLoseTaskOrLateResult() {
+        Care::Model m(""); const auto o = item(); const auto id = o["id"].toString();
+        m.observe(o, 100);
+        const auto task = m.beginTask(id, "investigate", {}, 101)["task"].toObject()["id"].toString();
+        m.reconcile("crashes", {}, 102);
+        QCOMPARE(m.get(id)["issueState"].toString(), "absent");
+        QCOMPARE(m.get(id)["state"].toString(), "working");
+        m.recoverTasks(); QCOMPARE(m.get(id)["task"].toObject()["state"].toString(), "recovering");
+        QVERIFY(m.taskEvent(id, task, {{"type", "result"}, {"text", "调查结果"}}, 103));
+        QVERIFY(m.taskEvent(id, task, {{"type", "finished"}}, 104));
+        QCOMPARE(m.get(id)["result"].toString(), "调查结果");
+        QCOMPARE(m.get(id)["state"].toString(), "attention");
+        QVERIFY(!m.notification(10000, false, false).isEmpty()); // task result does not need a live fault
+        m.present(id, m.get(id)["deliveryRevision"].toInteger(), true, 105);
+        QCOMPARE(m.get(id)["state"].toString(), "resolved");
+    }
+    void confirmationBindsExactPlanAndEvidence() {
+        Care::Model m(""); auto o = item(); const auto id = o["id"].toString(); m.observe(o, 100);
+        m.updatePlan(id, {{"plan", "证据不足，暂不修改"}, {"verification", "未知"}, {"rollback", "无变更"}});
+        QVERIFY(!m.get(id)["canApply"].toBool());
+        QVERIFY(m.beginTask(id, "apply", m.get(id)["planRevision"].toString(), 101).contains("error"));
+        m.updatePlan(id, {{"planStatus", "ready"}, {"plan", "配置 A"}, {"verification", "功能检查"}, {"rollback", "恢复 A"}});
+        const auto a = m.get(id)["planRevision"].toString();
+        m.updatePlan(id, {{"planStatus", "ready"}, {"plan", "配置 B"}});
+        QVERIFY(m.beginTask(id, "apply", a, 102).contains("error"));
+        const auto b = m.get(id)["planRevision"].toString();
+        auto begun = m.beginTask(id, "apply", b, 103); QVERIFY(!begun.contains("error"));
+        m.updatePlan(id, {{"plan", "配置 C"}, {"planStatus", "ready"}});
+        QCOMPARE(m.get(id)["task"].toObject()["approvedPlan"].toObject()["plan"].toString(), "配置 B");
+        const auto taskId = begun["task"].toObject()["id"].toString();
+        m.taskEvent(id, taskId, {{"type", "finished"}}, 104);
+        o["evidence"] = QJsonObject{{"version", "new"}}; m.observe(o, 105);
+        QVERIFY(!m.get(id)["canApply"].toBool());
+        QVERIFY(m.beginTask(id, "apply", m.get(id)["planRevision"].toString(), 106).contains("error"));
+    }
+    void presentationAndNotificationsArePerRevision() {
+        Care::Model m(""); const auto a = item("a"), b = item("b");
+        m.observe(a, 100000); m.observe(b, 100000);
+        const auto id = a["id"].toString();
+        QVERIFY(m.present(id, 1, false, 100001));
+        QCOMPARE(m.notification(100002, true, false)["ids"].toArray(), QJsonArray{b["id"]});
+        const auto receipt = m.notification(100002, true, false)["receipts"].toArray();
+        const auto task = m.beginTask(b["id"].toString(), "investigate", {}, 100003)["task"].toObject()["id"].toString();
+        m.taskEvent(b["id"].toString(), task, {{"type", "finished"}}, 100004);
+        m.notifiedReceipts(receipt, 100005); // notification reply for old revision must not hide the result
+        QVERIFY(!m.notification(100006, false, false).isEmpty());
+        QVERIFY(!m.present(b["id"].toString(), 1, true, 100007));
+        QVERIFY(m.present(b["id"].toString(), 2, true, 100007));
+        QVERIFY(m.notification(100008, false, false).isEmpty());
+    }
+    void restartAndReplacedTasksPreserveCorrelation() {
+        QTemporaryDir d; const auto path = d.path() + "/state.json";
+        Care::Model m(path); const auto o = item(); const auto id = o["id"].toString(); m.observe(o, 100);
+        const auto first = m.beginTask(id, "investigate", {}, 101)["task"].toObject()["id"].toString();
+        QVERIFY(m.save()); Care::Model restarted(path); QVERIFY(restarted.load()); restarted.recoverTasks();
+        QCOMPARE(restarted.get(id)["state"].toString(), "working");
+        QVERIFY(restarted.taskEvent(id, first, {{"type", "finished"}}, 102));
+        const auto second = restarted.beginTask(id, "investigate", {}, 103)["task"].toObject()["id"].toString();
+        QVERIFY(first != second);
+        QVERIFY(!restarted.taskEvent(id, first, {{"type", "failed"}, {"text", "late old error"}}, 104));
+        QCOMPARE(restarted.get(id)["state"].toString(), "working");
+    }
+    void oldLedgerMigrationKeepsChoicesAndInvalidatesLegacyPlan() {
+        QTemporaryDir d; const auto path = d.path() + "/state.json"; auto o = item(); const auto id = o["id"].toString();
+        o["state"] = "snoozed"; o["condition"] = "old-process"; o["plan"] = "旧文字";
+        o["notified"] = true; o["upstream"] = QJsonObject{{"state", "prepared"}};
+        QVERIFY(Care::writeObject(path, {{"schema", 1}, {"items", QJsonObject{{id, o}}}}));
+        Care::Model m(path); QVERIFY(m.load()); QVERIFY(QFile::exists(path + ".schema1-backup"));
+        QCOMPARE(m.get(id)["reminderState"].toString(), "snoozed");
+        QVERIFY(!m.get(id).contains("condition")); QVERIFY(!m.get(id)["canApply"].toBool());
+        QCOMPARE(m.get(id)["upstream"].toObject()["state"].toString(), "prepared"); QVERIFY(m.save());
+        QCOMPARE(Care::readObject(path)["schema"].toInt(), 2);
+    }
+    void sourceFailureCannotTriggerScheduledReminder() {
+        Care::Model m(""); const auto o = item(); const auto id = o["id"].toString(); m.observe(o, 100);
+        m.act(id, "snooze", {{"at", 500}}, 101);
+        QVERIFY(m.due(501).isEmpty()); // some other source being fresh does not validate this issue
+        m.observe(o, 502); QCOMPARE(m.due(503).size(), 1);
+        m.act(id, "dismiss", {}, 504); m.reconcile("crashes", {}, 505); m.observe(o, 506);
+        QCOMPARE(m.get(id)["state"].toString(), "dismissed");
     }
     void corruptedStateIsNotOverwritten() {
         QTemporaryDir d; QFile f(d.path() + "/state.json"); QVERIFY(f.open(QIODevice::WriteOnly)); f.write("broken"); f.close();
