@@ -1,3 +1,11 @@
+plasma-mobile (6.6.5-0ubuntu0.1+rungic6) resolute; urgency=medium
+
+  * Keep Klipper's shared in-process history manager alive in the phone
+    shell, including before a TV is connected. Show the clipboard applet
+    in desktop trays once, preserving later user visibility choices.
+
+ -- range-dev <noreply@localhost>  Tue, 29 Sep 2026 09:00:00 +0000
+
 plasma-mobile (6.6.5-0ubuntu0.1+rungic5) resolute; urgency=medium
 
   * external-screen-desktop-shell.patch: desktop panel trays leave out the

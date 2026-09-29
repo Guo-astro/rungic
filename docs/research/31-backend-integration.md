@@ -527,3 +527,5 @@ Agent可直接调用的设备诊断、崩溃现场、统一追踪（perfetto + K
 2026-09-28 Miracast 实现：公共 WFD 控制增加显式能力/错误、主动启用与系统选择页；固件数据选择 UI 租约及旧设备例外。动态 codec 生成仍为公共检查，仅 changed 时挂载且不覆盖外来挂载。独立部署器与 host seed 共用载荷/摘要，保留账户、接收端和租约。X70 的窗口层级证据、运行恢复与限制见 [86 篇](../86-x70-miracast-assessment.md)。
 
 2026-09-28 收尾补测：容器快捷开关已更新至 rungic-cast 0.331。直接关闭系统 WFD 后 watcher 恢复 UI 包/释放租约通过，但随后的两次重连超时，目标接收端最终报告 unavailable；此异常恢复边界尚未解决，详见 86 篇，不能将前三轮正常重连推广到此场景。锁屏测试由用户手动解锁，自动恢复未验收。
+
+2026-09-29 历史层补齐：Android ClipboardManager ↔ PlatformBridge ↔ rungic-clipboard/wl-clipboard ↔ KWin 标准剪贴板 → Klipper 历史。Mobile taskpanel 与桌面 clipboard 托盘通过 KlipperInterface 持有同一 plasmashell 进程内单例；桥保持只同步当前文本、不过滤规则外扩、不单独存历史的职责。G100 rungic6 已部署，首装/多输出、焦点及手机弹窗的验收边界见 [剪贴板历史记录](clipboard-history.md)。

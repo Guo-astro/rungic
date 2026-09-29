@@ -167,3 +167,5 @@ Docker的 `moto-nginx` 仍healthy，原Alpine LXC仍RUNNING；不停止这两个
 2026-09-28 X70 Miracast 部署：APK 2.12＋root 组件已安装；原厂高通 WFD 1080p60，动态配置 unchanged、无新 SELinux 规则。会话级固件适配器暂时停用并恢复两个 Moto UI 包，解决其覆盖 Linux。用户确认电视正常，三轮重连通过；后台更新通过，Dozing 时电视显示 Android 锁屏。声音/输入和整包验收边界见 [86 篇](../86-x70-miracast-assessment.md)。
 
 2026-09-28 收尾补测：容器快捷开关已更新至 rungic-cast 0.331。直接关闭系统 WFD 后 watcher 恢复 UI 包/释放租约通过，但随后的两次重连超时，目标接收端最终报告 unavailable；此异常恢复边界尚未解决，详见 86 篇，不能将前三轮正常重连推广到此场景。锁屏测试由用户手动解锁，自动恢复未验收。
+
+2026-09-29 G100 剪贴板历史：原先只有文本桥运行，Klipper 未启动。plasma-mobile rungic6 已使手机会话常驻同一个 Klipper，并在外屏桌面右下角显示原生剪贴板托盘。前台双向文本、历史选择后 GTK 实际粘贴、关闭窗口继续记录和桌面重启保留已验；托盘用虚拟外屏点击验证，非物理电视。手机通用弹窗越界、助理屏全屏时 Android 焦点限制仍未修复，Android 输入法旧历史未导入。证据与增量部署范围见 [剪贴板历史记录](clipboard-history.md)。
