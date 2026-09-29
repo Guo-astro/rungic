@@ -69,7 +69,7 @@ JEV_KEYS = (Path.home() / '.config/rungic-cua/typesafe-api-key',
 
 def instructions(owner: str, contact: str, goal: str, incoming: bool = False) -> str:
     who = '替他接听' if incoming else '替他来电'
-    return f'''你是{owner}的 AI 助理，正在替{owner}和{contact or '对方'}通电话（微信语音通话）。你只负责说话：用自然、简短、礼貌的普通话，像真人通话一样一次只说一两句。
+    return f'''你是{owner}的 AI 助理，正在替{owner}和{contact or '对方'}通电话。你只负责说话：用自然、简短、礼貌的普通话，像真人通话一样一次只说一两句。
 
 ## 身份
 - 接通后，对方先说了话（例如“喂”）就回应；系统提示你先开口时，立刻开口，不要等。第一句原样说：“你好，我是{owner}的 AI 助理，{who}。”然后说明来意。开场白只说一次：之后对方“嗯”“喂”一声，就直接接着说。
@@ -192,7 +192,10 @@ class CallProxy:
                  owner: str = '凯文', monitor: bool = False, incoming: bool = False, hang_up=None):
         self.emit, self.tell_owner, self.hang_up_ui = emit, tell_owner, hang_up
         self.app, self.contact, self.goal, self.owner, self.incoming = app, contact, goal, owner, incoming
+        self.private_voice_instructions = True
+        self.independent_monitor = True
         self.active = False                    # the call agent talks (phase 'agent')
+        self.started_at = time.time()
         self.phase = 'idle'                    # idle -> agent -> (user ->) ended
         self.ready = threading.Event()         # the realtime session is set up: safe to dial
         self.streams_seen = 0                  # app audio streams routed so far (a call opens them)
@@ -241,23 +244,28 @@ class CallProxy:
 
     def _start(self) -> None:
         Gst.init(None)
+        self._start_media()
+        self.ws = websocket.WebSocketApp('wss://api.openai.com/v1/realtime?model=' + MODEL,
+                                         header=['Authorization: Bearer ' + api_key()],
+                                         on_open=self._on_open, on_message=self._on_message,
+                                         on_error=lambda ws, e: self.emit({'type': 'call-error', 'text': str(e)}),
+                                         on_close=lambda ws, *a: self._closed())
+        self.active = True
+        self.phase = 'agent'
+        self.emit({'type': 'call-started', 'contact': self.contact, 'goal': self.goal, 'monitor': self.monitor_wanted,
+                   'backend': self.app, 'privateVoiceInstructions': self.private_voice_instructions,
+                   'independentMonitor': self.independent_monitor})
+        threading.Thread(target=self.ws.run_forever, kwargs=proxy_settings(), daemon=True).start()
+        if self.monitor_wanted:
+            self.set_monitor(True)
+
+    def _start_media(self):
         self.router = subprocess.Popen(['rungic-audio-route', '--binary', self.app, '--microphone', '--speaker'],
                                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
         if self.router.stdout.readline().strip() != 'ready':
             raise RuntimeError('audio routing did not start')
         threading.Thread(target=self._router_log, daemon=True).start()
         self.player = Player(AGENT_OUT)
-        self.ws = websocket.WebSocketApp('wss://api.openai.com/v1/realtime?model=' + MODEL,
-                                         header=['Authorization: Bearer ' + api_key()],
-                                         on_open=self._on_open, on_message=self._on_message,
-                                         on_error=lambda ws, e: self.emit({'type': 'call-error', 'text': str(e)}),
-                                         on_close=lambda ws, *a: self._closed())
-        threading.Thread(target=self.ws.run_forever, kwargs=proxy_settings(), daemon=True).start()
-        self.active = True
-        self.phase = 'agent'
-        if self.monitor_wanted:
-            self.set_monitor(True)
-        self.emit({'type': 'call-started', 'contact': self.contact, 'goal': self.goal, 'monitor': self.monitor_wanted})
 
     def _router_log(self):
         """Routing lines; when all of the app's call audio has closed for a few
@@ -371,6 +379,9 @@ class CallProxy:
                           'turn_detection': {'type': 'server_vad', 'silence_duration_ms': 600,
                                              'create_response': False, 'interrupt_response': True}},
                 'output': {'format': {'type': 'audio/pcm', 'rate': RATE}, 'voice': VOICE}}}})
+        self._capture_remote()
+
+    def _capture_remote(self):
         # The other side, as the app plays it.
         self.capture = Gst.parse_launch(
             f'pulsesrc device={REMOTE} ! audioconvert ! audioresample '

@@ -229,6 +229,11 @@
       "mode": "644"
     },
     {
+      "source": "plasma/android-calls",
+      "path": "/data/adb/rungic-plasma/android-calls",
+      "mode": "0755"
+    },
+    {
       "source": "plasma/android-clipboard",
       "path": "/data/adb/rungic-plasma/android-clipboard",
       "mode": "755"

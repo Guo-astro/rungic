@@ -136,6 +136,7 @@ Item {
         delegate: ChatEntry {
             column: view.column
             callMonitor: chat.callMonitor
+                callCanMonitor: chat.callCanMonitor
             onReadAloud: text => AgentClient.readAloud(text)
             onOpenImage: (source, name) => viewer.show(source, name)
             onOpenSettings: which => page.Window.window.openSettings(which === "codex" ? "CodexPage.qml" : "KeyPage.qml")

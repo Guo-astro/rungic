@@ -34,6 +34,8 @@ public:
     Q_INVOKABLE void setCard(const QRectF &rect, qreal radius);
     // Touches below `height` (the navigation panel) go to the shell, not the overlay.
     Q_INVOKABLE void setTouchableHeight(int height);
+    Q_INVOKABLE void setTouchableRect(const QRectF &rect);
+    Q_INVOKABLE void setKeyboardEnabled(bool enabled);
     // The whole conversation in the app.
     Q_INVOKABLE void openInApp(const QString &conversation);
 
@@ -56,6 +58,6 @@ private:
     QString m_screen;
     QRectF m_card;
     qreal m_radius = 0;
-    int m_touchable = 0;
+    QRectF m_touchable;
     QStringList m_loadedEffects;   // KWin effects this overlay loaded (and unloads)
 };

@@ -531,3 +531,7 @@ Agent可直接调用的设备诊断、崩溃现场、统一追踪（perfetto + K
 2026-09-29 历史层补齐：Android ClipboardManager ↔ PlatformBridge ↔ rungic-clipboard/wl-clipboard ↔ KWin 标准剪贴板 → Klipper 历史。Mobile taskpanel 与桌面 clipboard 托盘通过 KlipperInterface 持有同一 plasmashell 进程内单例；桥保持只同步当前文本、不过滤规则外扩、不单独存历史的职责。G100 rungic6 已部署，首装/多输出、焦点及手机弹窗的验收边界见 [剪贴板历史记录](clipboard-history.md)。
 
 2026-09-29 后台剪贴板：`ClipboardDaemon`（APK 内代码，由 `plasma/android-clipboard` 经 Magisk 以 Shell UID 2000 启动）持有 Android framework ClipboardManager 与变化监听；生命周期由 Android 宿主 `rungic-plasma start/stop` 管理，独立于 Activity。Linux `rungic-clipboard` 直连抽象 Unix socket `com.rungic.clipboard.v1`，使用 `clipboard-get` / `clipboard-set` / `watch`，后者返回 epoch 与 versions.clipboard。服务只接受 UID 0、1000 和当前 Rungic APK UID；客户端核验服务 UID 2000。当前 LXC 共享 Android 网络命名空间，未使用网络端口。`platform.sock` 的旧剪贴板操作继续转发，旧 HostEvents 的单/多主题 watch 由独立后端事件驱动。历史仍只在 Klipper，桥不存正文日志/历史。来源、升级配套与边界见 [后台剪贴板](clipboard-background.md)。
+
+## 2026-09-29：SIM 电话 Agent 可行性研究（未部署）
+
+见[研究与 G100 只读证据](cellular-call-agent.md)。现有移动网络桥没有通话控制或通话 PCM；拟复用 Telecom / InCallService 与系统上下行音频 API。G100 音频策略已列出通话 TX/RX 端口，但真实双向声音、权限、麦克风隔离与接管均未验收，本轮没有拨号。

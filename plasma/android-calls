@@ -1,0 +1,48 @@
+#!/system/bin/sh
+# Container-lifetime cellular audio backend. Framework calls require privileged identity.
+set -eu
+BASE=/data/adb/rungic-plasma
+STATE=/data/adb/rungic-lxc/runtime/var/lib/lxc/plasma/state/host/calls
+BB=/data/adb/magisk/busybox
+CLASS=com.rungic.telephony.CallDaemon
+[ "$(id -u)" = 0 ] || exit 1
+mkdir -p "$STATE"
+chown 0:0 "$STATE"
+chmod 700 "$STATE"
+stop_daemon() {
+    pid=$(cat "$STATE/pid" 2>/dev/null) || return 0
+    case "$pid" in ''|*[!0-9]*) return 0;; esac
+    [ -r "/proc/$pid/cmdline" ] || return 0
+    command=$(tr '\000' ' ' <"/proc/$pid/cmdline" 2>/dev/null) || return 0
+    case "$command" in "app_process /system/bin $CLASS "*) kill "$pid" 2>/dev/null || true;; esac
+}
+case "${1:-start}" in
+ start)
+    current=$(pm path com.rungic.plasma 2>&1 | sed -n 's/^package://p' | head -n 1)
+    previous=$(cat "$BASE/calls-apk" 2>/dev/null) || previous=
+    [ "$current" = "$previous" ] || stop_daemon
+    touch "$BASE/calls.enabled"
+    # File-path flock avoids toybox's inherited-fd failure on first boot (docs/79).
+    "$BB" setsid "$BB" flock -n "$BASE/calls-watch.lock" "$BASE/android-calls" watch </dev/null >>"$BASE/calls.log" 2>&1 &
+    ;;
+ watch)
+    while [ -f "$BASE/calls.enabled" ]; do
+        apk=$(pm path com.rungic.plasma 2>&1 | sed -n 's/^package://p' | head -n 1)
+        uid=$(stat -c %u /data/user/0/com.rungic.plasma)
+        if [ -n "$apk" ] && [ "$uid" -ge 10000 ]; then
+            # Code is loaded from the installed APK; no duplicated dex artifact.
+            printf '%s\n' "$apk" > "$BASE/calls-apk"
+            cd "$STATE"
+            CLASSPATH="$apk" app_process /system/bin "$CLASS" "$uid" || true
+        fi
+        [ -f "$BASE/calls.enabled" ] || break
+        sleep 3
+    done
+    ;;
+ stop)
+    rm -f "$BASE/calls.enabled"
+    stop_daemon
+    "$BB" timeout 8 "$BB" flock "$BASE/calls-watch.lock" true
+    ;;
+ *) echo 'Usage: android-calls start|stop' >&2; exit 2;;
+esac

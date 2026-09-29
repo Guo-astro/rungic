@@ -29,6 +29,7 @@ Item {
     required property var steps
     property real column: 350
     property bool callMonitor: false
+    property bool callCanMonitor: true
     signal readAloud(string text)
     signal openSettings(string page)
     // A picture of an answer tapped (docs/88): the page shows it large.
@@ -417,7 +418,7 @@ Item {
                 spacing: 8
                 PillButton {
                     Layout.fillWidth: true
-                    visible: !callBox.userTalks
+                    visible: !callBox.userTalks && entry.callCanMonitor
                     iconName: "headset"
                     text: entry.callMonitor ? "停止旁听" : "旁听"
                     onClicked: AgentClient.callCommand(entry.callMonitor ? "monitor-off" : "monitor-on")

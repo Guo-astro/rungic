@@ -454,6 +454,7 @@ class VoiceAgent:
         self.aloud_items = set()     # transcript segments of readings: heard, never shown
         self.held = []               # gated chunks of this press, not yet uploaded
         self.press_audio = b''       # all of this press, for speech-to-text
+        self.call_start_lock = threading.Lock()
         self.call = None             # the proxied call, when the assistant talks in a call (docs/63)
         self.owner_audio = None      # what the user says to the call agent while talking
         # Id of the current push-to-talk press: the UI shows all transcript pieces
@@ -550,7 +551,10 @@ class VoiceAgent:
         call_phase = self.call.phase if self.call and self.call.phase in ('agent', 'user') else None
         return {'conversation': self.thread_id, 'phase': phase, 'agentBusy': self.agent_busy,
                 'handsFree': self.talking and self.hands_free, 'assistant': self.thread_id == self.assistant_id(),
-                'call': call_phase == 'agent', 'callPhase': call_phase}
+                'call': call_phase == 'agent', 'callPhase': call_phase,
+                'callInfo': {'contact': self.call.contact, 'backend': self.call.app, 'started': self.call.started_at,
+                             'privateVoiceInstructions': self.call.private_voice_instructions,
+                             'independentMonitor': self.call.independent_monitor} if call_phase else None}
 
     # ---- conversations ----------------------------------------------------------
     def thread_settings(self):
@@ -777,6 +781,9 @@ class VoiceAgent:
         return False
 
     def start_talking(self, sink=None):
+        if self.call and self.call.active and not self.call.private_voice_instructions:
+            self.emit({'type': 'call-note', 'text': '蜂窝通话中请用文字给助理指示，或点“我来接”。'})
+            return False
         if self.call and self.call.phase == 'user':
             return False     # the user is on the phone themselves: the assistant is paused
         self.last_activity = time.monotonic()
@@ -1255,10 +1262,14 @@ class VoiceAgent:
 
     # ---- proxied calls (docs/63) ------------------------------------------------------
     def start_call(self, params):
+        with self.call_start_lock:
+            return self._start_call(params)
+
+    def _start_call(self, params):
         """The assistant takes part in the call that the app has placed or received."""
         import call_proxy
-        if self.call and self.call.active:
-            self.call.stop('replaced')
+        if self.call and self.call.phase in ('agent', 'user'):
+            raise RuntimeError('已有通话正在进行，请先结束或接管当前通话')
         app = params.get('app') or 'wechat'
 
         def emit(event, keep=True):
@@ -1267,7 +1278,8 @@ class VoiceAgent:
                 # The user talks on the phone now: pause the assistant (its realtime
                 # session would otherwise keep listening and could speak into the call).
                 threading.Thread(target=self.stop_realtime, daemon=True).start()
-                threading.Thread(target=self.watch_user_audio, daemon=True).start()
+                if app != 'cellular':
+                    threading.Thread(target=self.watch_user_audio, daemon=True).start()
             elif kind == 'call-ended' and self.thread_id:
                 threading.Thread(target=self.start_realtime, daemon=True).start()   # resume
                 threading.Thread(target=self.speak_call_result, args=(event.get('reason'), event.get('summary') or ''),
@@ -1284,6 +1296,26 @@ class VoiceAgent:
                                window=window)
             log('call: hang up', result.get('outcome'), result.get('answer') or result.get('note') or '',
                 json.dumps(result.get('steps', []), ensure_ascii=False)[:1500])
+
+        if app == 'cellular':
+            from cellular_call import CellularCall
+            number = params.get('number', '')
+            if not isinstance(number, str) or not re.fullmatch(r'\+?[0-9]{3,15}', number):
+                raise ValueError('请提供明确的电话号码 number')
+            self.call = CellularCall(emit, self.tell_owner, number=number, account=params.get('account', ''),
+                                     request_id=params.get('requestId'), contact=params.get('contact') or number,
+                                     goal=params.get('goal', ''), owner=params.get('owner') or '凯文')
+            try:
+                self.call.start()
+                GLib.idle_add(self.set_state)
+                if not self.call.ready.wait(20) or not self.call.active:
+                    raise RuntimeError('Realtime 连接未就绪，未拨打电话')
+                result = self.call.dial()
+                return {'started': True, 'ready': True, 'app': app, 'contact': self.call.contact, **result}
+            except Exception:
+                self.call.stop('start failed')
+                GLib.idle_add(self.set_state)
+                raise
 
         self.call = call_proxy.CallProxy(emit, self.tell_owner, app=app, contact=params.get('contact', ''),
                                          goal=params.get('goal', ''), owner=params.get('owner') or '凯文',
@@ -1374,6 +1406,15 @@ class VoiceAgent:
         call = self.call
         if not (call and call.phase in ('agent', 'user')):
             return
+        if command.startswith('{'):
+            action = json.loads(command)
+            if action.get('op') == 'instruct' and call.active:
+                call.instruct(str(action['text']))
+            elif action.get('op') == 'dtmf' and hasattr(call, 'dtmf'):
+                call.dtmf(str(action['digit']))
+            else:
+                raise ValueError('当前通话不支持此操作')
+            return
         if call.phase == 'user':
             # The user is on the phone themselves: only hanging up applies.
             if command == 'hang-up':
@@ -1400,6 +1441,8 @@ class VoiceAgent:
 
     def tell_owner(self, text):
         """Speak to the user on their side (a question from the call agent)."""
+        if self.call and self.call.active and not self.call.private_voice_instructions:
+            return  # Questions already appear as call-ask; no unverified private audio path.
         import call_proxy
         try:
             audio = call_proxy.synthesize(text)
@@ -1441,6 +1484,9 @@ class VoiceAgent:
         directly (turn/start); while one runs, Codex steers it with this instead."""
         text = text.strip()
         paths = [a['path'] for a in attachments if a.get('path')]
+        if self.call and self.call.active and text and not paths:
+            self.call.instruct(text)
+            return
         if not text and not paths or not self.thread_id:
             return
         if self.needs_setup(False):
@@ -1956,8 +2002,10 @@ def main():
                              '{"contact": ..., "goal": ..., "app": "wechat", "incoming": false, "monitor": false, '
                              '"dial": "<control that places the call, e.g. Voice Call>"}')
     parser.add_argument('--call-command', choices=['monitor-on', 'monitor-off', 'take-over', 'hang-up'])
+    parser.add_argument('--call-text', help='private text instruction for the active call agent')
+    parser.add_argument('--call-dtmf', choices=list('0123456789*#'))
     args = parser.parse_args()
-    if args.start_call or args.call_command:
+    if args.start_call or args.call_command or args.call_text or args.call_dtmf:
         bus = Gio.bus_get_sync(Gio.BusType.SESSION)
         if args.start_call:
             json.loads(args.start_call)   # fail early on bad JSON
@@ -1965,7 +2013,9 @@ def main():
                                   None, 0, 30000).unpack()[0]
             print(reply)
         else:
-            bus.call_sync(BUS_NAME, OBJECT_PATH, BUS_NAME, 'CallCommand', GLib.Variant('(s)', (args.call_command,)),
+            bus.call_sync(BUS_NAME, OBJECT_PATH, BUS_NAME, 'CallCommand', GLib.Variant('(s)', (args.call_command or json.dumps(
+                              {'op': 'instruct', 'text': args.call_text} if args.call_text else
+                              {'op': 'dtmf', 'digit': args.call_dtmf}),)),
                           None, 0, 30000)
         return
     if args.audio_file:

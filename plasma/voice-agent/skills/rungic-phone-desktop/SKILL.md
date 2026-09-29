@@ -93,6 +93,16 @@ The call's audio must be switched to the assistant before the call starts; `--st
    A call already going: the same without `dial` (`"incoming": true` if they called).
 3. With `"dialed": true`, tell the user in one sentence that the call assistant is calling, and end your turn: you stay quiet during the call (your speech does not play), the call assistant talks on its own, asks the user when needed, and its summary comes to the chat when the call ends. `rungic-voice-agent --call-command take-over|hang-up|monitor-on|monitor-off` for the user's 我来接 / 挂断 / 旁听.
 
+## SIM telephone calls (手机卡真实电话)
+
+Use the shared call agent, not a screen click in the Android dialer:
+
+- `rungic-voice-agent --start-call '{"app":"cellular","number":"10000","contact":"中国电信客服","goal":"用户要求了解的事项"}'` starts Realtime first and then places exactly one call through Android Telecom. Use only the number and purpose the user authorized; never guess a contact's phone number. `account` optionally selects an explicit Android voice SIM account.
+- The compact call bar leaves the desktop usable. Tap for details, private text instructions, “我来接” or “挂断”. `rungic-voice-agent --call-text '用户的补充要求'` sends a private text instruction; `--call-dtmf 1` sends a requested keypad digit.
+- `--call-command take-over|hang-up` uses the actual call ID. Handover releases AI audio and restores the system phone microphone. Hang-up is successful only when Telecom confirms it. A network/AI failure must never redial.
+- This path currently disables private **voice** instructions and an independent monitor switch: room-microphone isolation and simultaneous private recording are not certified. Tell the user to type or take over. Do not describe these missing features as available.
+- `dialed: true` means Telecom accepted the outgoing request, not that the other party answered. The live bar reports connected from Telecom's active state; the transcript and final summary establish what was actually said.
+
 ## Desktop windows and screenshots (shell)
 
 - Screenshot of everything: `spectacle -b -n -f -o /tmp/shot.png` (use `-m` for the active screen). Look at the image to understand what is on screen.

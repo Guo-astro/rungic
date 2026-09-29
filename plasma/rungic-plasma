@@ -216,6 +216,7 @@ case "$action" in
     # Surface recreation and explicit restarts can overlap; serialize them.
     flock 9 9>&9
     if [ "$action" = stop ]; then
+      "$BASE/android-calls" stop 9>&-
       "$BASE/android-clipboard" stop 9>&-
       if running; then "$ENTER" /usr/bin/lxc-stop -n plasma -t 15 9>&-; fi
       [ ! -f "$IMAGES/rootfs.img" ] || "$BASE/rootfs-image" detach 9>&-
@@ -225,6 +226,7 @@ case "$action" in
     fi
     "$BASE/android-audio" start 9>&-
     "$BASE/android-clipboard" start 9>&-
+    "$BASE/android-calls" start 9>&-
     # The container binds /storage/emulated/0/Plasma when it starts. After an Android
     # userspace restart vold remounts storage and that bind goes stale; only a
     # container restart recreates it (rungic-plasma-shared otherwise fails forever).

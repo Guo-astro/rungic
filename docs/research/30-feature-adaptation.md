@@ -171,3 +171,7 @@ Docker的 `moto-nginx` 仍healthy，原Alpine LXC仍RUNNING；不停止这两个
 2026-09-29 G100 剪贴板历史：原先只有文本桥运行，Klipper 未启动。plasma-mobile rungic6 已使手机会话常驻同一个 Klipper，并在外屏桌面右下角显示原生剪贴板托盘。前台双向文本、历史选择后 GTK 实际粘贴、关闭窗口继续记录和桌面重启保留已验；托盘用虚拟外屏点击验证，非物理电视。手机通用弹窗越界、助理屏全屏时 Android 焦点限制仍未修复，Android 输入法旧历史未导入。证据与增量部署范围见 [剪贴板历史记录](clipboard-history.md)。
 
 2026-09-29 后续修复：APK 2.14 将剪贴板访问移到容器生命周期内的独立 Shell 身份进程；Linux 直连、APK 仅兼容转发，取消 Activity 焦点条件。G100 上独立 Android 应用前台复制 → Wayland/Klipper、Linux 选择 → Android 实际粘贴，以及助理屏全屏主窗口失焦都已通过。敏感/非文本不跨系统；Klipper 默认阻止清空会恢复上条记录，暂时关闭该选项后双向清空通过，再恢复用户配置。部署与剩余边界见 [后台剪贴板](clipboard-background.md)。
+
+## 2026-09-29：SIM 电话 Agent 可行性研究（未部署）
+
+见[研究与 G100 只读证据](cellular-call-agent.md)。现有移动网络桥没有通话控制或通话 PCM；拟复用 Telecom / InCallService 与系统上下行音频 API。G100 音频策略已列出通话 TX/RX 端口，但真实双向声音、权限、麦克风隔离与接管均未验收，本轮没有拨号。

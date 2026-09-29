@@ -103,9 +103,23 @@ void Overlay::setCard(const QRectF &rect, qreal radius)
 
 void Overlay::setTouchableHeight(int height)
 {
-    m_touchable = height;
+    setTouchableRect(QRectF(0, 0, m_window ? m_window->width() : 1, qMax(1, height)));
+}
+
+void Overlay::setTouchableRect(const QRectF &rect)
+{
+    m_touchable = rect;
     if (m_window) {
-        m_window->setMask(QRegion(0, 0, m_window->width(), qMax(1, height)));
+        m_window->setMask(QRegion(rect.toAlignedRect()));
+    }
+}
+
+void Overlay::setKeyboardEnabled(bool enabled)
+{
+    if (m_window) {
+        LayerShellQt::Window::get(m_window)->setKeyboardInteractivity(enabled
+            ? LayerShellQt::Window::KeyboardInteractivityOnDemand
+            : LayerShellQt::Window::KeyboardInteractivityNone);
     }
 }
 
@@ -114,8 +128,8 @@ void Overlay::applyMaterial()
     if (!m_window || !m_window->isVisible()) {
         return;
     }
-    if (m_touchable > 0) {
-        m_window->setMask(QRegion(0, 0, m_window->width(), m_touchable));
+    if (!m_touchable.isEmpty()) {
+        m_window->setMask(QRegion(m_touchable.toAlignedRect()));
     }
     QPainterPath path;
     path.addRoundedRect(m_card, m_radius, m_radius);

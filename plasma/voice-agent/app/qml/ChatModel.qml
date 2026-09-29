@@ -26,6 +26,7 @@ QtObject {
     property bool inCall: false      // talking goes to the call agent
     property string callPhase: ""    // "agent": the assistant talks; "user": the user talks, assistant paused
     property bool callMonitor: false
+    property bool callCanMonitor: true
     // A press sent but never transcribed (noise only): its empty bubble goes after a while.
     property Timer sweep: Timer {
         interval: 15000
@@ -233,6 +234,7 @@ QtObject {
                                 role: e.contact || "", text: e.goal || "", expanded: true }))
             root.callAt = entries.count - 1
             root.callMonitor = !!e.monitor
+            root.callCanMonitor = e.independentMonitor !== false
             break
         case "call-transcript": case "call-owner": case "call-ask": case "call-note": {
             if (root.callAt < 0) return
