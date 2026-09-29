@@ -492,69 +492,76 @@ Item {
                         }
                     }
                 }
-                // Four across, whatever the count.
-                Grid {
-                    id: photos
-                    property var picked: []
-                    readonly property real cell: (width - 3 * spacing) / 4
+                // Four across, whatever the count. The cells are sized from the frame, not from
+                // the grid: a grid reports the width of its cells as its own implicit width, and
+                // with fewer than four photos that fed back into the layout's width and the next
+                // cell size, a polish loop that hung the app at start (docs/87).
+                Item {
+                    id: photoFrame
                     Layout.fillWidth: true
+                    implicitHeight: photos.height
                     visible: recent.count > 0
-                    columns: 4
-                    spacing: 4
-                    Repeater {
-                        model: FolderListModel {
-                            id: recent
-                            folder: StandardPaths.writableLocation(StandardPaths.PicturesLocation)
-                            nameFilters: ["*.png", "*.jpg", "*.jpeg", "*.webp"]
-                            showDirs: false
-                            sortField: FolderListModel.Time
-                        }
-                        delegate: QQC2.AbstractButton {
-                            id: photo
-                            required property int index
-                            required property url fileUrl
-                            readonly property int order: photos.picked.indexOf(fileUrl.toString())
-                            visible: index < 8
-                            width: photos.cell
-                            height: photos.cell
-                            Accessible.name: "照片 " + (index + 1) + (order >= 0 ? "，已选" : "")
-                            onClicked: {
-                                const url = fileUrl.toString()
-                                photos.picked = order >= 0 ? photos.picked.filter(u => u !== url) : photos.picked.concat([url])
+                    Grid {
+                        id: photos
+                        property var picked: []
+                        readonly property real cell: Math.floor((photoFrame.width - 3 * spacing) / 4)
+                        columns: 4
+                        spacing: 4
+                        Repeater {
+                            model: FolderListModel {
+                                id: recent
+                                folder: StandardPaths.writableLocation(StandardPaths.PicturesLocation)
+                                nameFilters: ["*.png", "*.jpg", "*.jpeg", "*.webp"]
+                                showDirs: false
+                                sortField: FolderListModel.Time
                             }
-                            background: Rectangle {
-                                radius: 8
-                                color: Theme.fill2
-                                clip: true
-                                Image {
-                                    anchors.fill: parent
-                                    source: photo.fileUrl
-                                    sourceSize: Qt.size(160, 160)
-                                    fillMode: Image.PreserveAspectCrop
-                                    asynchronous: true
+                            delegate: QQC2.AbstractButton {
+                                id: photo
+                                required property int index
+                                required property url fileUrl
+                                readonly property int order: photos.picked.indexOf(fileUrl.toString())
+                                visible: index < 8
+                                width: photos.cell
+                                height: photos.cell
+                                Accessible.name: "照片 " + (index + 1) + (order >= 0 ? "，已选" : "")
+                                onClicked: {
+                                    const url = fileUrl.toString()
+                                    photos.picked = order >= 0 ? photos.picked.filter(u => u !== url) : photos.picked.concat([url])
                                 }
-                                Rectangle {
-                                    anchors.fill: parent
+                                background: Rectangle {
                                     radius: 8
-                                    color: photo.down ? Theme.alpha(Theme.strong, 0.18) : "transparent"
-                                    border.width: photo.order >= 0 ? 3 : 0
-                                    border.color: Theme.strong
-                                }
-                                Rectangle {
-                                    anchors { right: parent.right; top: parent.top; margins: 6 }
-                                    width: 22
-                                    height: 22
-                                    radius: 11
-                                    border.width: 1.5
-                                    border.color: photo.order >= 0 ? Theme.strong : "#ffffff"
-                                    color: photo.order >= 0 ? Theme.strong : Qt.rgba(0, 0, 0, 0.25)
-                                    Text {
-                                        anchors.centerIn: parent
-                                        visible: photo.order >= 0
-                                        text: photo.order + 1
-                                        font.pixelSize: 12
-                                        font.weight: Font.DemiBold
-                                        color: Theme.strongInk
+                                    color: Theme.fill2
+                                    clip: true
+                                    Image {
+                                        anchors.fill: parent
+                                        source: photo.fileUrl
+                                        sourceSize: Qt.size(160, 160)
+                                        fillMode: Image.PreserveAspectCrop
+                                        asynchronous: true
+                                    }
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        radius: 8
+                                        color: photo.down ? Theme.alpha(Theme.strong, 0.18) : "transparent"
+                                        border.width: photo.order >= 0 ? 3 : 0
+                                        border.color: Theme.strong
+                                    }
+                                    Rectangle {
+                                        anchors { right: parent.right; top: parent.top; margins: 6 }
+                                        width: 22
+                                        height: 22
+                                        radius: 11
+                                        border.width: 1.5
+                                        border.color: photo.order >= 0 ? Theme.strong : "#ffffff"
+                                        color: photo.order >= 0 ? Theme.strong : Qt.rgba(0, 0, 0, 0.25)
+                                        Text {
+                                            anchors.centerIn: parent
+                                            visible: photo.order >= 0
+                                            text: photo.order + 1
+                                            font.pixelSize: 12
+                                            font.weight: Font.DemiBold
+                                            color: Theme.strongInk
+                                        }
                                     }
                                 }
                             }
