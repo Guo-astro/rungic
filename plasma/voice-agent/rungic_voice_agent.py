@@ -76,7 +76,7 @@ HANDS_FREE_MAX_S = 60
 # API has no emotion parameter, it follows instructions.
 REALTIME_MODEL = 'gpt-realtime-2.1-mini'
 # The agent (Codex): the fast model; tasks here are short device operations.
-AGENT_MODEL = 'gpt-6-sol'
+AGENT_MODEL = os.environ.get('RUNGIC_AGENT_MODEL', 'gpt-6-sol')
 AGENT_EFFORT = 'medium'
 # The agent's own workspace (docs/research/91): a KWin of its own on the Android host, where
 # everything the agent opens appears and nothing reaches the user's phone. A second agent
