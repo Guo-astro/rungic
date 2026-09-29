@@ -48,7 +48,10 @@ Rectangle {
         const item = client.items.find(i => i.id === id)
         if (item && ["resolved", "dismissed"].includes(item.state)) history = true
         const index = shown.findIndex(i => i.id === id)
-        if (index >= 0) list.positionViewAtIndex(index, ListView.Center)
+        // An expanded investigation can be taller than the whole screen. Keep
+        // its title and conclusion visible instead of centering its middle.
+        if (index === 0) list.positionViewAtBeginning()
+        else if (index > 0) list.positionViewAtIndex(index, ListView.Beginning)
     }
     onSelectedIdChanged: { positioned = false; Qt.callLater(rebuild) }
     Connections {
