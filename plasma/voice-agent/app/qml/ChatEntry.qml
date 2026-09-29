@@ -113,6 +113,31 @@ Item {
                 maxWidth: entry.column * 0.78
                 faded: entry.kind === "live-user"
             }
+            // In place from the press on (docs/87): listening while held, then the transcript on its way.
+            Rectangle {
+                Layout.alignment: Qt.AlignRight
+                visible: entry.kind === "live-user" && entry.text === ""
+                implicitWidth: entry.status === "listening" ? 112 : waitLabel.implicitWidth + 32
+                implicitHeight: 44
+                radius: 20
+                color: Theme.fill
+                Accessible.name: entry.status === "listening" ? "正在听" : "正在识别"
+                Wave {
+                    anchors.centerIn: parent
+                    visible: entry.status === "listening"
+                    bars: 12
+                    barHeight: 18
+                    level: 0.6
+                    color: Theme.dim
+                }
+                ShineText {
+                    id: waitLabel
+                    anchors.centerIn: parent
+                    visible: entry.status !== "listening"
+                    pixelSize: Theme.metaSize
+                    text: "正在识别…"
+                }
+            }
         }
     }
 

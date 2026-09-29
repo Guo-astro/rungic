@@ -13,10 +13,16 @@ static const QString Path = QStringLiteral("/com/rungic/VoiceAgent");
 AgentClient::AgentClient(QObject *parent)
     : QObject(parent)
     , m_service(Service, Path, Service, QDBusConnection::sessionBus())
+    , m_watcher(Service, QDBusConnection::sessionBus(), QDBusServiceWatcher::WatchForRegistration)
 {
     // Opening a conversation starts Codex and a realtime session; allow for it.
     m_service.setTimeout(120000);
     QDBusConnection::sessionBus().connect(Service, Path, Service, QStringLiteral("Event"), this, SLOT(onEvent(QString)));
+    // The service started again (restarted or crashed, docs/87): what it had open is gone, a
+    // running turn with it. Said as agent-restarted, so the pages open their conversation again.
+    connect(&m_watcher, &QDBusServiceWatcher::serviceRegistered, this, [this]() {
+        Q_EMIT event(QStringLiteral("{\"type\":\"agent-restarted\"}"));
+    });
 }
 
 void AgentClient::call(const QString &method, const QVariantList &args, void (AgentClient::*reply)(const QString &))

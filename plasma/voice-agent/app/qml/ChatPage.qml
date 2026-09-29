@@ -68,7 +68,8 @@ Item {
             const e = JSON.parse(json)
             if (e.conversation && e.conversation !== page.conversationId) return
             if (e.type === "level") { composer.micLevel = e.db; return }
-            // Codex restarted (a new key or sign-in): this conversation is opened again.
+            // Codex restarted (a new key or sign-in) or the whole service did: this conversation
+            // is opened again, and a turn that was running shows as ended.
             if (e.type === "agent-restarted") { if (page.conversationId) AgentClient.openConversation(page.conversationId); return }
             if (e.type === "preferences" || e.type === "account" || e.type === "install") return
             chat.apply(e, true)
@@ -121,8 +122,10 @@ Item {
         anchors { left: parent.left; right: parent.right; top: top.bottom; bottom: composer.top }
         clip: true
         // Short threads sit just above the composer.
-        topMargin: Math.max(8, height - contentHeight - 12)
-        bottomMargin: 12
+        topMargin: Math.max(8, height - contentHeight - bottomMargin)
+        // While held, the end of the thread (the user's waiting bubble) stays above the targets.
+        bottomMargin: 12 + composer.overlap
+        onBottomMarginChanged: if (follow) Qt.callLater(stickToEnd)
         spacing: 20
         opacity: page.loaded ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: Theme.normal } }

@@ -3,6 +3,7 @@
 #pragma once
 
 #include <QDBusInterface>
+#include <QDBusServiceWatcher>
 #include <QObject>
 #include <QVariant>
 #include <qqmlregistration.h>
@@ -64,4 +65,5 @@ private Q_SLOTS:
 private:
     void call(const QString &method, const QVariantList &args, void (AgentClient::*reply)(const QString &) = nullptr);
     QDBusInterface m_service;
+    QDBusServiceWatcher m_watcher;
 };

@@ -432,6 +432,9 @@ class VoiceAgent:
         # at once; cancelled or turned into text, nothing reached the realtime session, whose
         # input buffer could not be cleared (app-server has no such call) and would have
         # joined the dropped words to the next press.
+        # "朗读" (docs/87): the voice says an answer again; that speech is not a new message.
+        self.aloud_pending = False   # asked; the next assistant segment is the reading
+        self.aloud_items = set()     # transcript segments of readings: heard, never shown
         self.held = []               # gated chunks of this press, not yet uploaded
         self.press_audio = b''       # all of this press, for speech-to-text
         self.call = None             # the proxied call, when the assistant talks in a call (docs/63)
@@ -783,6 +786,10 @@ class VoiceAgent:
         self.recorder.set_state(Gst.State.PLAYING)
         self.mic_chunks = 0
         log('talk: start, reply on', self.reply_sink or 'default sink')
+        # The UI puts the user's bubble in place at once (docs/87): the transcript comes after
+        # the release, and the reply can begin before it, so the bubble cannot wait for it.
+        if self.owner_audio is None:
+            self.emit({'type': 'talk-started', 'press': self.press}, keep=False)
         self.set_state()
         return False
 
@@ -829,7 +836,7 @@ class VoiceAgent:
         self.held = []
         self.press_audio = b''
         log('talk: cancelled, nothing sent')
-        self.emit({'type': 'listen-cancelled'}, keep=False)
+        self.emit({'type': 'listen-cancelled', 'press': self.press}, keep=False)
         self.set_state()
         return False
 
@@ -861,6 +868,7 @@ class VoiceAgent:
         if rest:
             self.uploads.put(rest)
         self.uploads.put(bytes(RATE * 2 * END_SILENCE_MS // 1000))
+        self.emit({'type': 'talk-sent', 'press': self.press}, keep=False)
         self.set_state()
         return False
 
@@ -1014,8 +1022,13 @@ class VoiceAgent:
         elif method == 'thread/realtime/item/started' and (params.get('item') or {}).get('type') == 'transcriptSegment':
             item = params['item']
             role = 'user' if item.get('role') == 'user' else 'assistant'
+            if role == 'assistant' and self.aloud_pending:
+                self.aloud_pending = False
+                self.aloud_items.add(item['id'])
             self.segments[item['id']] = (role, self.press if role == 'user' else 0, time.time())
         elif method == 'thread/realtime/item/transcript/delta':
+            if params.get('itemId') in self.aloud_items:
+                return
             role, press, _ = self.segments.get(params.get('itemId'), ('assistant', 0, 0))
             event = {'type': 'delta', 'role': role, 'id': params.get('itemId'), 'text': params.get('delta', '')}
             if role == 'user':
@@ -1026,6 +1039,9 @@ class VoiceAgent:
             role, press, started = self.segments.pop(item['id'], ('user' if item.get('role') == 'user' else 'assistant', self.press, 0))
             if role != 'user':
                 self.muted = False      # the reply cut by the stop button has ended
+            if item['id'] in self.aloud_items:
+                self.aloud_items.discard(item['id'])
+                return                  # a reading: heard, not a message
             text = (item.get('text') or '').strip()
             if text:
                 # When the segment began: an acknowledgement begun before agent work
@@ -1341,6 +1357,7 @@ class VoiceAgent:
         if not self.realtime_ready.wait(20):
             raise RuntimeError('语音连接还没准备好')
         self.muted = False
+        self.aloud_pending = True
         self.speak_progress('把下面这段话原样读给用户听，不要增减内容，也不要评论：\n' + text.strip())
 
     # ---- settings (docs/87) ----------------------------------------------------------------

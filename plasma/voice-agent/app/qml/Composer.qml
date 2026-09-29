@@ -123,6 +123,8 @@ Item {
     ]
 
     implicitHeight: column.implicitHeight
+    // How far the targets reach up over the thread while held: the thread lifts its end above them.
+    readonly property real overlap: showTargets ? holdLayer.height : 0
 
     function reset() {
         holding = false; zone = ""; keyboard = false; attachOpen = false

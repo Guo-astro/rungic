@@ -61,7 +61,8 @@ Window {
     readonly property bool newTurn: lastUser >= floor
     readonly property bool pending: chat.agentBusy || chat.phase === "working" || chat.phase === "speaking" || awaiting
     readonly property string view: listening ? "listen"
-        : awaiting && !newTurn ? "sending"
+        // The user's bubble is in place from the press on: sending until its words arrive.
+        : awaiting && (!newTurn || userText === "") ? "sending"
         : pending && !(newTurn && replied) ? "work" : "answer"
 
     ChatModel { id: chat }
@@ -210,10 +211,12 @@ Window {
         function onEvent(json) {
             const e = JSON.parse(json)
             if (e.type === "assistant-reset") { AgentClient.openAssistant(); return }
+            // The service restarted: the assistant's conversation is opened again.
+            if (e.type === "agent-restarted") { AgentClient.openAssistant(); AgentClient.request("Setup"); return }
             if (e.type === "preferences") { win.homeHold = e.homeHold !== false; return }
             if (!win.conversation || (e.conversation && e.conversation !== win.conversation)) return
             if (e.type === "level") { win.micLevel = e.db; return }
-            if (e.type === "listen-cancelled") { win.awaiting = false; win.cancelled = true; return }
+            if (e.type === "listen-cancelled") { win.awaiting = false; win.cancelled = true }
             chat.apply(e, true)
             if (e.type === "state") return
             idleTimer.restart()

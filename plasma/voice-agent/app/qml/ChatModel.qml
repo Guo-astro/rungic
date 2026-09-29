@@ -26,6 +26,16 @@ QtObject {
     property bool inCall: false      // talking goes to the call agent
     property string callPhase: ""    // "agent": the assistant talks; "user": the user talks, assistant paused
     property bool callMonitor: false
+    // A press sent but never transcribed (noise only): its empty bubble goes after a while.
+    property Timer sweep: Timer {
+        interval: 15000
+        onTriggered: {
+            for (let i = root.entries.count - 1; i >= 0; i--) {
+                const e = root.entries.get(i)
+                if (e.kind === "live-user" && e.status === "sending" && !e.text) root.removeAt(i)
+            }
+        }
+    }
 
     function entry(fields) {
         return Object.assign({ kind: "", role: "", text: "", itemId: "", command: "", output: "",
@@ -61,6 +71,23 @@ QtObject {
         }
         return -1
     }
+    // The user's bubble of press `press` (in place since the press began), or -1.
+    function pressAt(press) {
+        if (!press) return -1
+        for (let i = entries.count - 1; i >= 0; i--) {
+            const e = entries.get(i)
+            if (e.role === "user" && e.press === press && (e.kind === "live-user" || e.kind === "message")) return i
+        }
+        return -1
+    }
+    // Where a user message of press time `at` (seconds) belongs: before everything that began
+    // after the user began to speak (docs/87). A reply can start before the transcript of what
+    // was said is done, and the history keeps messages in the order they were completed.
+    function userSlot(at) {
+        let i = entries.count
+        while (i > 0 && at > 0 && entries.get(i - 1).started > at) i--
+        return i
+    }
     function removeAt(i) {
         entries.remove(i)
         if (root.workAt > i) root.workAt--
@@ -79,21 +106,30 @@ QtObject {
         // finished text replaces that bubble where it stands (docs/59).
         case "delta": {
             if (!live || !e.text) return
-            const at = liveAt(e.id)
-            if (at >= 0) entries.setProperty(at, "text", entries.get(at).text + e.text)
+            // The user's words go into the bubble that has been waiting since the press.
+            const pressed = e.role === "user" ? pressAt(e.press) : -1
+            const at = pressed >= 0 && entries.get(pressed).kind === "live-user" ? pressed : liveAt(e.id)
+            if (at >= 0) {
+                entries.setProperty(at, "text", root.join(entries.get(at).text, e.text))
+                if (!entries.get(at).itemId) entries.setProperty(at, "itemId", e.id || "")
+            }
             else if (e.role === "user")
-                entries.append(entry({ kind: "live-user", role: "user", text: e.text, itemId: e.id || "", press: e.press || 0 }))
+                root.insertAt(userSlot((e.press || 0) / 1000), { kind: "live-user", role: "user", text: e.text, itemId: e.id || "",
+                                                                 press: e.press || 0, started: (e.press || 0) / 1000 })
             else if (root.workOpen && root.workAt >= 0) {
                 // Spoken progress streams into the work entry's status line.
                 const w = entries.get(root.workAt)
                 entries.setProperty(root.workAt, "text", w.status === "live" ? w.text + e.text : e.text)
                 entries.setProperty(root.workAt, "status", "live")
-            } else entries.append(entry({ kind: "live-assistant", role: "assistant", text: e.text, itemId: e.id || "" }))
+            } else entries.append(entry({ kind: "live-assistant", role: "assistant", text: e.text, itemId: e.id || "",
+                                          started: e.time || Date.now() / 1000 }))
             break
         }
         case "message": {
-            const liveIndex = liveAt(e.id)
+            let liveIndex = liveAt(e.id)
             if (e.role === "user") {
+                const waiting = pressAt(e.press)
+                if (waiting >= 0 && entries.get(waiting).kind === "live-user") liveIndex = waiting
                 const at = lastOf("message", "user")
                 if (e.press && at >= 0 && entries.get(at).press === e.press) {
                     // Another segment of the same press joins its message.
@@ -107,14 +143,14 @@ QtObject {
                     if (liveIndex >= 0) {
                         entries.setProperty(liveIndex, "kind", "message")
                         entries.setProperty(liveIndex, "text", e.text)
-                    } else if (root.workAt >= 0 && root.workAt === entries.count - 1 && live
-                               && entries.get(root.workAt).steps.count <= 1 && e.time - entries.get(root.workAt).started < 8) {
-                        // The agent can start before the transcript of what started it arrives.
-                        root.insertAt(root.workAt, { kind: "message", role: "user", text: e.text, itemId: e.id || "", press: e.press || 0 })
+                        entries.setProperty(liveIndex, "status", "")
                     } else {
-                        // A typed message's attachments ride in `output` (JSON), docs/87.
-                        entries.append(entry({ kind: "message", role: "user", text: e.text, itemId: e.id || "", press: e.press || 0,
-                                               output: e.attachments && e.attachments.length ? JSON.stringify(e.attachments) : "" }))
+                        // Spoken: where the press began (a history replay has no bubble waiting).
+                        // Typed: at the end; its attachments ride in `output` (JSON), docs/87.
+                        const at = e.press ? e.press / 1000 : 0
+                        root.insertAt(userSlot(at), { kind: "message", role: "user", text: e.text, itemId: e.id || "", press: e.press || 0,
+                                                      started: at || e.time || 0,
+                                                      output: e.attachments && e.attachments.length ? JSON.stringify(e.attachments) : "" })
                     }
                 }
                 if (root.title === "新对话") root.title = e.text.slice(0, 20)
@@ -217,6 +253,28 @@ QtObject {
             root.callMonitor = false
             break
         case "error": case "call-error": entries.append(entry({ kind: "error", text: e.text })); break
+        // A press began: the user's bubble is in place at once, listening (docs/87).
+        case "talk-started":
+            if (live && pressAt(e.press) < 0)
+                entries.append(entry({ kind: "live-user", role: "user", text: "", press: e.press, status: "listening",
+                                       started: e.press / 1000 }))
+            break
+        // Released and sent: the transcript is on its way.
+        case "talk-sent": {
+            const at = pressAt(e.press)
+            if (at >= 0 && entries.get(at).kind === "live-user") {
+                entries.setProperty(at, "status", "sending")
+                entries.setProperty(at, "finished", e.time || Date.now() / 1000)
+                sweep.restart()
+            }
+            break
+        }
+        // Dropped (or nothing was said): the waiting bubble goes.
+        case "listen-cancelled": {
+            const at = e.press ? pressAt(e.press) : lastOf("live-user", "user")
+            if (at >= 0 && entries.get(at).kind === "live-user" && !entries.get(at).text) root.removeAt(at)
+            break
+        }
         // The agent is not set up yet (docs/87): what is missing and a way to the settings.
         case "setup": entries.append(entry({ kind: "setup", text: e.text || "", output: e.detail || "", command: e.page || "key" })); break
         case "state":
