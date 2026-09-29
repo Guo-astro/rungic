@@ -117,6 +117,12 @@
         "libflatpak0"
       ]
     },
+    "xwayland": {
+      "source": "packages/xwayland",
+      "packages": [
+        "xwayland"
+      ]
+    },
     "gst-plugins-base1.0": {
       "source": "packages/gst-plugins-base1.0",
       "packages": [
