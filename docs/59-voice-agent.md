@@ -426,3 +426,19 @@
 - 投屏时调节手机扬声器音量的入口。
 - **第3步（已完成，见[60篇](60-computer-use.md)）**：桌面操作经MCP服务`moto-desktop`挂给Codex，界面操作由arc-cua + JEV执行。
 - **费用**：实时语音按API用量计费（`gpt-realtime`音频输入$32、输出$64/百万token；mini版$10/$20）。
+
+## 指令归用户所有，改动即时生效（2026-09-29）
+
+- **问题**：
+  - 提示词（`agent.md`、`realtime.md`）和技能 `rungic-phone-desktop` 原先是 `/usr/share` 下归 root 的系统文件，用户不能改（用户指出）。
+  - 装上新版本后，一个进行中的对话仍按旧指令做事。实例：投屏仍然先投桌面再切助理屏。原因有三：Codex 把开发者指令固定在对话加载的那一刻；在同一个 app-server 进程里，再次恢复只是重新加入对话（实测 `thread/unsubscribe` 之后对话也没有卸载）；包升级只 reload systemd，不重启用户服务。
+- **用户可编辑的副本**：
+  - `~/.config/rungic-voice-agent/prompts/`（`agent.md`、`realtime.md`）和 `~/.codex/skills/rungic-phone-desktop/`（真实目录，原先是指向 `/usr/share` 的链接）。包里的文件只作默认值。
+  - 服务启动时同步：用户没改过的副本跟随新的默认值；改过的保留用户的，新默认值另存为 `NAME.default`。记录在 `~/.local/share/rungic-voice-agent/instructions-seeded.json`。
+- **即时生效**：
+  - 每个对话在索引里记下它拿到的指令指纹（`agent.md` 和技能文件的内容哈希）。
+  - 恢复对话后，以及空闲检查时（每 30 秒，Agent 不忙、没在说话，且 10 秒内没有动静），若指纹不同，就用 `thread/inject_items` 注入一条 developer 消息：`agent.md` 变了就附上新的全文；技能变了就提醒 Agent 重读。
+  - `realtime.md` 变了，就在空闲时重启实时会话。
+- **实测**：
+  - 用户正在用的对话在恢复时收到了当前指令。
+  - 测试对话里编辑用户的 `agent.md`（追加标记）后约 30 秒，rollout 中出现带标记的第 4 条 developer 消息，下一轮已经用上。

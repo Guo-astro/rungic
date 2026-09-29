@@ -21,6 +21,7 @@ own sign-in (a ChatGPT account, or the same key).
 import argparse
 import array
 import base64
+import hashlib
 import io
 import itertools
 import json
@@ -97,6 +98,11 @@ WATCHERS_FRESH_S = 3         # how long the phone's foreground state is trusted
 DATA = Path.home() / '.local/share/rungic-voice-agent'
 CONFIG = Path.home() / '.config/rungic-voice-agent'
 PROMPTS = Path('/usr/share/rungic-voice-agent/prompts')
+SKILL = Path('/usr/share/rungic-voice-agent/skills/rungic-phone-desktop')
+# The user's own copies, theirs to edit at any time (the package's are only the defaults).
+USER_PROMPTS = CONFIG / 'prompts'
+USER_SKILL = Path.home() / '.codex/skills/rungic-phone-desktop'
+SEEDED = DATA / 'instructions-seeded.json'
 BUS_NAME = 'com.rungic.VoiceAgent'
 OBJECT_PATH = '/com/rungic/VoiceAgent'
 INTERFACE = '''
@@ -217,8 +223,53 @@ def log(*args):
     print(time.strftime('%H:%M:%S'), *args, flush=True)
 
 
+def file_hash(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def sync_user_instructions():
+    """The prompts and skill are the user's to edit: copies in ~/.config/rungic-voice-agent/prompts
+    and ~/.codex/skills/rungic-phone-desktop (once a link to the package's). The package's files
+    are the defaults. A copy the user left as it was follows a new default; one they changed stays
+    theirs, and the new default goes beside it as NAME.default (dpkg's way with configuration)."""
+    try:
+        seeded = json.loads(SEEDED.read_text())
+    except (OSError, ValueError):
+        seeded = {}
+    if USER_SKILL.is_symlink():
+        USER_SKILL.unlink()
+    for defaults, copies in ((PROMPTS, USER_PROMPTS), (SKILL, USER_SKILL)):
+        if not defaults.is_dir():
+            continue
+        copies.mkdir(parents=True, exist_ok=True)
+        for default in sorted(defaults.glob('*.md')):
+            copy = copies / default.name
+            new = file_hash(default)
+            if not copy.exists():
+                shutil.copyfile(default, copy)
+            elif seeded.get(str(copy)) != new:
+                mine = file_hash(copy)
+                if mine in (seeded.get(str(copy)), new):
+                    shutil.copyfile(default, copy)
+                else:
+                    shutil.copyfile(default, copy.with_name(copy.name + '.default'))
+                    log('instructions: kept the user\'s', copy, '- the new default is', copy.name + '.default')
+            seeded[str(copy)] = new
+    DATA.mkdir(parents=True, exist_ok=True)
+    SEEDED.write_text(json.dumps(seeded, indent=1))
+
+
+def instructions_fingerprint():
+    """{'agent': ..., 'skill': ...}: what the agent's instructions and skill are now."""
+    agent = USER_PROMPTS / 'agent.md'
+    skill = hashlib.sha256()
+    for path in sorted(USER_SKILL.glob('*.md')):
+        skill.update(path.name.encode() + file_hash(path).encode())
+    return {'agent': file_hash(agent) if agent.exists() else '', 'skill': skill.hexdigest()}
+
+
 def prompt(name, fallback=''):
-    for base in (PROMPTS, Path(__file__).resolve().parent / 'prompts'):
+    for base in (USER_PROMPTS, PROMPTS, Path(__file__).resolve().parent / 'prompts'):
         path = base / name
         if path.exists():
             return path.read_text()
@@ -488,6 +539,7 @@ class VoiceAgent:
         self.talking = False
         self.agent_busy = False
         self.agent_idle_since = time.monotonic()
+        self.realtime_prompt = None   # hash of the realtime prompt its session started with
         self.muted = False
         self.turn_id = None
         self.turn_started = 0.0
@@ -545,6 +597,10 @@ class VoiceAgent:
         self.server = None
         # The workspace comes up with the service, ready before the first task needs it.
         threading.Thread(target=workspace_env, kwargs={'wait': 20}, daemon=True).start()
+        try:
+            sync_user_instructions()
+        except OSError as error:
+            log('instructions: defaults not copied:', error)
         self.start_server()
         GLib.timeout_add_seconds(30, self.idle_check)
 
@@ -651,6 +707,36 @@ class VoiceAgent:
         return {'cwd': str(Path.home()), 'sandbox': 'danger-full-access', 'approvalPolicy': 'never',
                 'model': AGENT_MODEL, 'config': config, 'developerInstructions': prompt('agent.md')}
 
+    def note_instructions(self, thread_id, fingerprint=None):
+        entry = self.store.index.setdefault(thread_id, {'title': '新对话', 'created': time.time()})
+        entry['instructions'] = fingerprint or instructions_fingerprint()
+        self.store.save_index()
+
+    def update_instructions(self, thread_id):
+        """The conversation gets instructions changed since it last got them (the user edited
+        them, or a package update brought new defaults). Codex keeps a thread's developer
+        instructions for its life, so the change goes in as a developer message in its history
+        (thread/inject_items), between turns."""
+        now = instructions_fingerprint()
+        had = self.store.index.get(thread_id, {}).get('instructions') or {}
+        if had == now or not self.server:
+            return
+        parts = []
+        if had.get('agent') != now['agent']:
+            parts.append('Your instructions have been changed (by the user or an update of this phone\'s software). '
+                         'From now on they are these, in full, in place of the earlier ones:\n\n' + prompt('agent.md'))
+        if had.get('skill') != now['skill']:
+            parts.append('The rungic-phone-desktop skill has changed: a copy you read earlier in this conversation '
+                         'is out of date. Read the skill again before you next use it.')
+        try:
+            self.server.call('thread/inject_items', {'threadId': thread_id, 'items': [
+                {'type': 'message', 'role': 'developer', 'content': [{'type': 'input_text', 'text': '\n\n'.join(parts)}]}]})
+        except Exception as error:  # noqa: BLE001
+            log('instructions: update of', thread_id, 'failed:', error)
+            return
+        self.note_instructions(thread_id, now)
+        log('instructions: updated', thread_id, '(' + ', '.join(k for k in now if had.get(k) != now[k]) + ')')
+
     def open_conversation(self, thread_id, connect=True):
         """Open a conversation. What the app shows comes from our own store and returns at
         once; the Codex thread is resumed in the background (docs/59): only talking needs it,
@@ -679,6 +765,7 @@ class VoiceAgent:
                     raise RuntimeError('Codex 还没有安装')
                 result = self.server.call('thread/start', self.thread_settings())
                 self.thread_id = result['thread']['id']
+                self.note_instructions(self.thread_id)
                 self.resumed = threading.Event()
                 self.resumed.set()
             self.last_activity = time.monotonic()
@@ -709,6 +796,7 @@ class VoiceAgent:
                         self.store.delete(thread_id)
                     result = self.server.call('thread/start', self.thread_settings())
                     self.thread_id = result['thread']['id']
+                    self.note_instructions(self.thread_id)
                     (DATA / 'assistant.json').write_text(json.dumps({'thread': self.thread_id}))
                     self.store.touch(self.thread_id, '语音助手')
                     resumed.set()
@@ -720,6 +808,7 @@ class VoiceAgent:
             log('resumed', thread_id, 'after another was opened: left alone')
             return
         log('resumed', thread_id, f'in {time.monotonic() - started:.1f} s')
+        self.update_instructions(thread_id)
         resumed.set()
 
     def start_realtime(self):
@@ -743,6 +832,7 @@ class VoiceAgent:
                     # Instructions of the realtime model itself (replaces Codex's default,
                     # which prompts/realtime.md includes).
                     'prompt': prompt('realtime.md')})
+                self.realtime_prompt = hashlib.sha256(prompt('realtime.md').encode()).hexdigest()
             except Exception as error:
                 self.realtime_starting = False
                 self.emit({'type': 'error', 'text': f'语音连接失败：{error}'})
@@ -826,6 +916,14 @@ class VoiceAgent:
             self.emit_raw({'type': 'assistant-reset'})
 
     def idle_check(self):
+        quiet = (not self.agent_busy and not self.talking and not self.call_in_progress()
+                 and time.monotonic() - self.last_activity > 10 and time.monotonic() > self.playing_until)
+        if quiet and self.thread_id and self.resumed.is_set():
+            threading.Thread(target=self.update_instructions, args=(self.thread_id,), daemon=True).start()
+            if self.realtime and self.realtime_prompt != hashlib.sha256(prompt('realtime.md').encode()).hexdigest():
+                # The realtime model's own prompt is given when its session starts.
+                log('instructions: realtime prompt changed; restarting its session')
+                threading.Thread(target=lambda: (self.stop_realtime(), self.start_realtime()), daemon=True).start()
         if not self.agent_busy and not self.call and time.monotonic() - self.agent_idle_since > RESTORE_APPS_S \
                 and SWITCHED_APPS.exists() and SWITCHED_APPS.read_text().strip() not in ('', '{}'):
             threading.Thread(target=restore_apps, daemon=True).start()
