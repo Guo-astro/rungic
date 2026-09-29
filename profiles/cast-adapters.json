@@ -3,24 +3,34 @@
   "default": "android-native",
   "adapters": [
     {
-      "id": "motorola-vantage-w2wv36",
-      "device": "vantage",
-      "build_id": "W2WV36.55-75-15",
-      "sdk": 36,
-      "evidence": "docs/86-x70-miracast-assessment.md",
-      "suspend_packages": [
-        "com.motorola.mobiledesktop",
-        "com.motorola.systemui.desk"
-      ]
-    },
-    {
       "id": "motorola-mumba-w1waa36",
       "device": "mumba",
       "build_id": "W1WAA36.48-23-10",
       "sdk": 36,
       "evidence": "docs/58-miracast-desktop-feasibility.md",
-      "legacy_qualcomm": true,
-      "suspend_packages": []
+      "legacy_qualcomm": true
+    }
+  ],
+  "ui_rules": [
+    {
+      "id": "motorola-desktop-splash",
+      "package": "com.motorola.mobiledesktop",
+      "window_prefix": "MotoDesktopSplash: ",
+      "window_type": "2938",
+      "evidence": [
+        "docs/86-x70-miracast-assessment.md",
+        "docs/research/g100-ugreen-miracast.md"
+      ]
+    },
+    {
+      "id": "motorola-desktop-taskbar",
+      "package": "com.motorola.systemui.desk",
+      "window_prefix": "MotoTaskBar: ",
+      "window_type": "NAVIGATION_BAR",
+      "evidence": [
+        "docs/86-x70-miracast-assessment.md",
+        "docs/research/g100-ugreen-miracast.md"
+      ]
     }
   ]
 }

@@ -88,7 +88,7 @@ public final class Main {
                 System.out.println("{\"opened\":true}");
                 break;
             case "claim":
-                if ((int) call(wfdStatus(), "getActiveDisplayState") != 0) CastAdapter.claim();
+                CastAdapter.claim(connectedDisplayId());
                 System.out.println("{\"adapter\":" + quote(CastAdapter.selected().getString("id")) + "}");
                 break;
             case "adapter":
@@ -251,7 +251,6 @@ public final class Main {
             }
         }
         connecting = true;
-        CastAdapter.claim();
         long deadline = SystemClock.elapsedRealtime() + secs * 1000L;
         registerListener();
         call(dmg, "startWifiDisplayScan");
@@ -343,6 +342,7 @@ public final class Main {
                 @Override public void run() {
                     try {
                         if ((int) call(wfdStatus(), "getActiveDisplayState") == 0) CastAdapter.release(false);
+                        else CastAdapter.claim(connectedDisplayId());
                     } catch (Exception e) { System.err.println("cast cleanup: " + e); }
                     handler.postDelayed(this, 2000);
                 }
@@ -407,6 +407,7 @@ public final class Main {
         out.append(",\"backend\":\"android-wfd\",\"supported\":")
                 .append((int) call(s, "getFeatureState") != 0);
         out.append(",\"adapter\":").append(quote(CastAdapter.selected().getString("id")));
+        out.append(",\"ui_policy\":").append(CastAdapter.uiStatus());
         out.append(",\"scan_state\":").append(call(s, "getScanState"));
         out.append(",\"active_state\":").append(call(s, "getActiveDisplayState"));
         Object active = call(s, "getActiveDisplay");
@@ -421,6 +422,11 @@ public final class Main {
             out.append(display(Array.get(displays, i)));
         }
         return out.append("]}").toString();
+    }
+
+    static int connectedDisplayId() throws Exception {
+        Object s = wfdStatus();
+        return (int) call(s, "getActiveDisplayState") == CONNECTED ? activeDisplayId(call(s, "getActiveDisplay")) : -1;
     }
 
     /** The logical display Android created for the connected sink, or -1. */

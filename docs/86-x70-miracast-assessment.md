@@ -115,3 +115,6 @@ helper 增加 capabilities/settings、明确错误码、按主动 scan/connect �
 21:01 重新扫描后目标再次 available，第三次尝试完成 P2P group formation 与 DHCP（手机为 client），但仍未进入 WFD display connected，30 秒到期后取消。这进一步缩小该次失败到 P2P/IP 建立之后、外屏创建之前；不能再概括为电视不可发现，RTSP/接收端状态仍需核验。当前电视投屏已断开，等待用户反馈接收端画面；未自动重启电视或重置网络。
 
 21:05 用户要求再次投屏：通过容器平台桥显式连接同一 TCL 地址，约 31 秒后仍返回 timeout。过程中手机 Awake、P2P CONNECTED，`mRemoteDisplayInterface=192.168.40.83:7236`，但 `mRemoteDisplayConnected=false`；最终无外屏。证据 `.work/experiments/x70-cast-retry-20260928-210549/`。失败仍在无线网络建立后、WFD 会话完成前，不能归因于锁屏或断言电视端故障；下一步需要核对接收端页面与 RTSP 交互。
+
+
+2026-09-29 通用化更新：用户要求不按机型重复配置，已将上述 UI 包暂停从 vantage 固件 adapter 迁入运行时窗口冲突规则。判断实际 WFD 外屏、Linux overlay、窗口所属包/UID/类型与覆盖层级，再复用恢复租约；不因品牌、安装包存在或 SYSTEM 标志直接停用包。G100/UGREEN 的部署、首次候选漏判与修正、恢复验收及边界见 [运行时规则记录](research/g100-ugreen-miracast.md)。X70 本轮只用旧窗口快照核验解析器，未重新部署或实机重验。

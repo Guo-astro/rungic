@@ -182,3 +182,6 @@ Docker的 `moto-nginx` 仍healthy，原Alpine LXC仍RUNNING；不停止这两个
 
 
 2026-09-29 最新增量部署：G100 / W1VT36H.1-51-8 已安装 **APK 2.20 / Agent 0.367**（底座仍为 20260929.2）。通用通道选择、原对话卡片、转写和技能已实机部署；通过共享 CallDaemon 的 VOICE_COMMUNICATION + 运行时显式 TELEPHONY 输出，让 Android AudioPolicy 选择通话上行。10000 第四次 Realtime 实验已获得远端识别“湖南电信”并进入业务菜单的证据；接管释放 Agent 音频、恢复静音且保留原电话，随后挂断回到空闲。前述 2.18 / 0.365 与“未部署”是历史阶段；最新路由研究、版本哈希、日志、回退和边界见[通话实验记录](cellular-call-agent.md)。不写死设备端口、不修改 HAL/SELinux。物理麦克风隔离专项、故障恢复、真人/其他设备和完整自主决策仍未验收；私下语音及独立旁听保持关闭，SSH 自动开启保持不变。
+
+
+2026-09-29 G100 / UGREEN 投屏：已将厂商 UI 冲突从机型/固件名单重构为运行时窗口规则。确认同一 WFD 外屏中 Linux 窗口上方的已知 UI、核验所属包/UID/类型后才申请恢复租约；状态独立报告 ui_policy。修正工厂预装包未带 SYSTEM 标志的漏判后，android-native 默认路径下自动识别两类 Moto 窗口、断开恢复和重新连接已实测；初始可能短暂露出 Moto。当前外屏布局空隙也通过标准 KScreen 接口修正并在重连后保留；GUI 缩放操作、声音/输入/其他机型验收另做。证据、首个候选失败、最终 jar 和剩余边界见 [G100 UGREEN 记录](g100-ugreen-miracast.md)。
