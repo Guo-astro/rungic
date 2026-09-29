@@ -1,6 +1,6 @@
-# X11 应用在 KGSL 上用 GPU：Xwayland 的几种做法（调研与探针，2026-09-30）
+# X11 应用在 KGSL 上用 GPU：Xwayland 的几种做法（2026-09-30）
 
-状态：调研和一次可行性探针，**尚未实施**。标注说明：“实测”指在本机（XT2537-4，FD710，Ubuntu 26.04 容器）上运行的结果；“源码”指读到的代码位置；“二手”指只见于 PR/issue 文字。
+状态：方案 B 已实施，并在工作区实测（见文末“B 的实施与实测”）；尚未进入发布，尚未做长时间运行和 Flatpak X11 应用的验收。标注说明：“实测”指在本机（XT2537-4，FD710，Ubuntu 26.04 容器）上运行的结果；“源码”指读到的代码位置；“二手”指只见于 PR/issue 文字。
 
 ## 起因
 
@@ -62,3 +62,43 @@ lfdevs 的补丁说明写明 surfaceless 后端是给 “PRoot KGSL 环境” �
 ## 建议
 
 先做 B（Xwayland 补丁队列 `packages/xwayland`，Ubuntu `2:24.1.10-1`）。如果 B 在同步或陈旧采样上出现无法解决的问题，再看 A 中对应的处理（重新导入、帧回调恢复），只借用需要的部分，不整体引入 surfaceless 后端。C 作为共享层配置同时推进。
+
+## B 的实施与实测（2026-09-30）
+
+实现（都在补丁队列里）：
+- `packages/xwayland`（Ubuntu 2:24.1.10-1，`rungic/glamor-gbm-kgsl.patch`，约 55 行）：
+  - dmabuf v3、`MESA_LOADER_DRIVER_OVERRIDE=kgsl`、`/dev/kgsl-3d0` 可用时，glamor 用这个节点；
+  - 不查 `drmDevice`，不做认证，不用 DRM syncobj；
+  - Mesa 分支的 1274 标记按 LINEAR 处理。
+  - 另在 `debian/rules` 关掉文档生成（构建机装有文档工具时，会多出打包规则没安排的文件）。
+- `packages/mesa` `rungic/kgsl-import-is-shared.patch`：导入的 dma-buf 标为共享。
+
+实测时遇到的问题，按顺序：
+1. **DRI3 返回 BadAlloc**：Mesa 分支在 `loader_dri3_helper.c:1599` 把 LINEAR 写成 1274（给 Termux:X11 的标记），`gbm_bo_import` 不认。已在 Xwayland 补丁里改回 LINEAR。
+2. **GL 窗口全黑，2D 正常**：
+   - 探针：在 KGSL 上 `gbm_bo_import` 后 `gbm_bo_get_fd`，得到的是另一个 dma-buf（inode 不同）。
+   - 原因：分支的 `fd_resource_get_handle()` 在 `kgsl_dmabuf` 路径上，会把没有 `PIPE_BIND_SHARED` 的资源先影子复制成新缓冲再导出，导入的资源也不例外。Present 翻页时，Xwayland 交给 KWin 的是这块新的空缓冲。
+   - 修复：导入时标为共享（Mesa +rungic3）。
+   - 探针本身第一次崩在 `glsl_array_type`：进程里没有 GL 上下文时，GBM 导出会创建辅助上下文，GLSL 类型表没初始化。Xwayland 有 glamor 上下文，不受影响。
+
+实测结果（工作区，FD710，Xwayland 2:24.1.10-1+rungic2，Mesa +rungic3）：
+- `xdpyinfo` 列出 DRI3 和 Present。
+- `glxinfo -B`：direct rendering: Yes，Accelerated: yes，FD710，Core 4.6。
+- `eglinfo -p x11`：驱动 kgsl，FD710。
+- glxgears、glmark2 terrain 同时运行：两个窗口内容正确，连续截图画面在变化。
+- Dolphin 以 xcb 运行，由 glamor 绘制 2D：显示正确。
+- glmark2 全套（1280×720）：
+
+| | X11（Xwayland） | 原生 Wayland |
+|---|---|---|
+| GL | 218 | 193 |
+| GLES | 224 | 185 |
+
+- 同样两个场景：GPU 下 257 和 267 FPS；`LIBGL_ALWAYS_SOFTWARE=1`（softpipe）2 分钟内一个场景也没跑完。
+
+未做：
+- 30 分钟连续运行；
+- 改变窗口大小；
+- Krita 5 等 X11-only 的 Flatpak 应用：Flatpak GL 扩展还没用 +rungic3 重建；
+- 微信；
+- 进入发布：xwayland 尚未加入 `plasma/release/packages.json`，Mesa +rungic3 是在发布 20260930.1 之后单独装的。
