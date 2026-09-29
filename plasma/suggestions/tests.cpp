@@ -127,6 +127,8 @@ private Q_SLOTS:
         QCOMPARE(m.get(id)["state"].toString(), "attention");
         QVERIFY(!m.notification(10000, false, false).isEmpty()); // task result does not need a live fault
         m.present(id, m.get(id)["deliveryRevision"].toInteger(), true, 105);
+        QCOMPARE(m.get(id)["state"].toString(), "attention"); // viewing does not make a card disappear
+        m.act(id, "reviewed", {}, 106);
         QCOMPARE(m.get(id)["state"].toString(), "resolved");
     }
     void confirmationBindsExactPlanAndEvidence() {

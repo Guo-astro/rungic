@@ -72,6 +72,11 @@ Rectangle {
             Item { Layout.fillWidth: true }
         }
         PillButton {
+            visible: card.item.issueState === "absent" && card.stateName === "attention"
+            text: "已阅，归档结果"
+            onClicked: card.action("reviewed", {})
+        }
+        PillButton {
             visible: card.expanded && !!card.item.canApply
             text: "应用上述方案"
             onClicked: card.action("apply-confirm", {})

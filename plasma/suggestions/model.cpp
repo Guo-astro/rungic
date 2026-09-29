@@ -263,6 +263,9 @@ QJsonObject Model::act(const QString &id, const QString &action, const QJsonObje
             if (at <= now || at > now + 366LL * 86400) return {{"error", "请选择未来一年内的提醒时间"}};
             o["remindAt"] = at; o["note"] = QDateTime::fromSecsSinceEpoch(at).toString("M月d日 HH:mm") + " 提醒";
         }
+    } else if (action == "reviewed" && o["issueState"] == "absent") {
+        auto task = o["task"].toObject(); task["needsReview"] = false; o["task"] = task;
+        o["reminderState"] = "none"; o["note"] = o["issueNote"];
     } else if (action == "dismiss") {
         o["reminderState"] = "dismissed"; o.remove("remindAt"); o.remove("condition"); o["note"] = "已停止提醒，可随时恢复";
     } else if (action == "restore") {
@@ -293,7 +296,6 @@ bool Model::present(const QString &id, qint64 revision, bool opened, qint64 now)
     const auto key = opened ? "openedRevision" : "displayedRevision";
     if (o[key].toInteger() >= revision) return false;
     o[key] = revision; o[opened ? "openedAt" : "displayedAt"] = now;
-    if (opened) { auto task = o["task"].toObject(); task["needsReview"] = false; o["task"] = task; }
     items[id] = o; return true;
 }
 QJsonObject Model::notification(qint64 now, bool safe, bool inhibited) {
