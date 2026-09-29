@@ -97,8 +97,9 @@ public:
 
 #include "agentscreen.moc"
 
-AgentScreen::AgentScreen(QObject *parent)
+AgentScreen::AgentScreen(int workspace, QObject *parent)
     : QObject(parent)
+    , m_workspace(workspace)
     , m_screencasting(std::make_unique<Screencasting>())
     , m_input(std::make_unique<FakeInput>())
 {
@@ -147,6 +148,11 @@ void AgentScreen::readActivity()
 
 AgentScreen::~AgentScreen() = default;
 
+QString AgentScreen::op() const
+{
+    return m_workspace > 0 ? QStringLiteral("agent-screen") : QStringLiteral("desktop-mode");
+}
+
 void AgentScreen::setStatus(const QString &status)
 {
     if (m_status == status)
@@ -171,6 +177,8 @@ QScreen *AgentScreen::agentOutput() const
 // then, so move the assistant's screen next to the phone's.
 void AgentScreen::keepApart()
 {
+    if (m_workspace > 0)    // desktop mode's window looks after its output
+        return;
     QScreen *agent = agentOutput();
     if (!agent)
         return;
@@ -190,13 +198,12 @@ void AgentScreen::poll()
 {
     if (m_activityState == QLatin1String("working"))
         readActivity();  // goes stale when nothing reports any more
-    const QJsonObject state = bridge({{QStringLiteral("op"), QStringLiteral("agent-screen")}});
+    const QJsonObject state = bridge({{QStringLiteral("op"), op()}});
     if (state.contains(QStringLiteral("error"))) {
         setStatus(QStringLiteral("error: ") + state.value(QStringLiteral("error")).toString());
         return;
     }
     m_enabled = state.value(QStringLiteral("enabled")).toBool();
-    m_workspace = state.value(QStringLiteral("workspace")).toInt();
     m_onTv = state.value(QStringLiteral("tv")).toBool();
     m_fullscreen = state.value(QStringLiteral("fullscreen")).toBool();
     if (!m_enabled) {  // turned off elsewhere (quick setting, rungic-agent-screen off)
@@ -219,7 +226,10 @@ void AgentScreen::setWatched(bool watched)
 
 void AgentScreen::reportWatched()
 {
-    bridge({{QStringLiteral("op"), QStringLiteral("agent-screen")}, {QStringLiteral("watched"), m_watched}});
+    // Only desktop mode's output is paced by who watches it (docs/65).
+    if (m_workspace > 0)
+        return;
+    bridge({{QStringLiteral("op"), op()}, {QStringLiteral("watched"), m_watched}});
 }
 
 void AgentScreen::update()
@@ -402,6 +412,9 @@ void AgentScreen::scroll(double dx, double dy)
 void AgentScreen::castToTv()
 {
     setStatus(QStringLiteral("connecting the TV"));
+    // A TV shows desktop mode unless asked for the assistant's screen.
+    if (m_workspace > 0)
+        bridge({{QStringLiteral("op"), op()}, {QStringLiteral("tv"), true}});
     // Connecting takes seconds to a minute, off the UI thread; the next poll sees the TV take the screen.
     QThread *worker = QThread::create([] {
         bridge({{QStringLiteral("op"), QStringLiteral("cast")}, {QStringLiteral("args"), QJsonArray{QStringLiteral("connect")}}}, 75000);
@@ -412,7 +425,7 @@ void AgentScreen::castToTv()
 
 void AgentScreen::fullscreen()
 {
-    const QJsonObject state = bridge({{QStringLiteral("op"), QStringLiteral("agent-screen")}, {QStringLiteral("fullscreen"), true}});
+    const QJsonObject state = bridge({{QStringLiteral("op"), op()}, {QStringLiteral("fullscreen"), true}});
     if (state.contains(QStringLiteral("error"))) {
         qWarning() << "agent screen: fullscreen:" << state.value(QStringLiteral("error")).toString();
         return;
@@ -423,6 +436,6 @@ void AgentScreen::fullscreen()
 
 void AgentScreen::close()
 {
-    bridge({{QStringLiteral("op"), QStringLiteral("agent-screen")}, {QStringLiteral("enabled"), false}});
+    bridge({{QStringLiteral("op"), op()}, {QStringLiteral("enabled"), false}});
     QCoreApplication::quit();
 }

@@ -205,3 +205,44 @@ Agent 2  KWin#2 ──── │ 显示源 agent-2               │  电视 / �
 - 工作区应用的通知转发到手机。
 - 微信类流程的去向（见“边界”）。
 - 空闲时停掉工作区以省内存（约 146 MB 加上其中的应用），以及多 Agent 的工作区分配和切换界面。
+
+## 三块屏幕与 Agent 的工作位置（2026-09-29，用户定义）
+
+### 概念
+
+- **助理屏**：只指 Agent 自己的工作区屏幕。它在 Agent 需要时自己显示为浮窗，控制中心里没有它的开关（用户要求）。
+- **桌面模式**：最早的功能（docs/65），即用户的桌面多一块输出，是完整的桌面，显示在手机的浮窗里。用户从控制中心的“桌面模式”打开。
+- **投屏**：投出去之后就是桌面模式，电视显示用户的桌面。只有明确要求时（`rungic-agent-screen tv`），电视才改为显示助理屏。
+
+### Agent 在哪工作
+
+- 用户开着桌面模式，或电视在显示桌面时，默认在用户的桌面上工作。
+- 否则在自己的工作区工作。
+- 用户可以指定位置：`desktop_where`，取值 desktop、workspace 或 auto，在本次对话内有效。
+
+### 实现
+
+- **宿主**：用户 KWin 的第二输出，在桌面模式开着时按桌面模式的尺寸存在；或者在呈现端（电视、全屏）显示桌面时，按那个窗口的尺寸存在。它不再因为呈现工作区而消失（`sync_user_cast`）。
+- **APK 2.16**：两套独立状态。
+  - 平台桥：`desktop-mode` 对应桌面模式（开关、全屏、watched）；`agent-screen` 对应助理屏（开关、工作区、全屏、`tv`）。
+  - 电视和全屏各自记住显示来源（`tvSource` / `fullscreenSource`），接管画面前先设好（`bindPresenter`）；电视断开后，下一台默认显示桌面。
+  - 偏好 `desktop_mode` 和 `assistant_screen` 分开保存，旧的 `agent_screen` 迁移为后者。
+- **浮窗**：同一个程序跑两份。`--desktop`（`com.rungic.DesktopMode`）显示桌面模式，`--workspace N`（`com.rungic.AgentScreen`）显示助理屏。两个浮窗可以同时存在，默认一上一下；工具栏出现时显示名称（“桌面”或“助理屏”）。
+- **命令**：`rungic-desktop-mode`（符号链接）和 `rungic-agent-screen` 是同一个脚本，按调用时的名字区分；助理屏另有 `tv` / `notv`。
+- **控制中心**：只有“桌面模式”（`com.rungic.quicksetting.desktopmode`），原来的“助理屏”开关已删除。
+- **桌面工具**（`rungic_cua/router.py`）：
+  - 语音服务启动的 MCP 进程作为路由，每次调用时决定目标，把调用交给对应会话里的 `rungic-cua mcp` 子进程，子进程在第一次用到时启动。
+  - 目标变化时，结果里附一行 where/why。
+  - 桌面一侧需要第二屏时打开的是桌面模式。
+- **工作区应用的生命周期**：在工作区里，KIO 在会话总线上找不到 systemd，于是直接 fork，应用就留在语音服务的 cgroup 里，服务重启时被一起结束（实测：测试过程中工作区的 Kalk 消失）。现在工作区里的 `desktop_launch` 用 `systemd-run --user --scope` 给应用单独的 scope。
+- **测试**：`tools/test_router.py`（6 项）。验收检查 `agent_screen_output` 改名为 `desktop_mode_output`，检查的仍是“第二输出按尺寸出现和消失”，也就是桌面模式。
+
+### 实测（2026-09-29 20:53–21:05，APK 2.16）
+
+- 桌面模式打开后，浮窗显示完整桌面（带任务栏）；再打开助理屏，两个浮窗同时存在，一上一下。
+- 桌面模式开着时，请求“用 Kalk 算 3×7”：Kalk 开在用户的 CAST-1 上，结果里附 `where: desktop, why: desktop mode is on`，回答 21。
+- 关闭桌面模式后，请求“算 6×8”：结果里附 `where: workspace`，Kalk 只开在工作区。
+- 请求“在我的桌面上……算 9×9”：Agent 调用 `desktop_where desktop`，桌面模式随之打开，Kalk 开在用户的桌面上，回答 81。
+- 工作区启动的 Kalk 进入 `app-rungic-ws1-org.kde.kalk-….scope`，显示仍是 `wayland-ws-1`。
+- 测试后两块屏幕都已关闭，用户主屏幕正常。
+- 未测：电视在显示桌面时的路由（需要电视在场）。实测中，关闭桌面模式时 KDED 会弹出“显示器已移除”通知，这是桌面模式开关原本就有的提示。

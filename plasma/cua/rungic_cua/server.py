@@ -412,6 +412,12 @@ class Cua:
         if args:
             program = (shlex.split(exec_line) or [entry['id']])[0]
             command = ['kstart', '--desktopfile', entry['id'], '--', program, *[str(a) for a in args]]
+        if os.environ.get('RUNGIC_WORKSPACE'):
+            # In a workspace KIO finds no systemd on the session bus and forks: the app stayed in the
+            # voice agent's cgroup and ended when it restarted. A scope of its own, as in the user's
+            # session (systemd-run reaches the user manager directly; the app keeps this display).
+            unit = f"app-rungic-ws{os.environ['RUNGIC_WORKSPACE']}-{entry['id']}-{os.getpid()}-{time.monotonic_ns()}"
+            command = ['systemd-run', '--user', '--scope', '--collect', '--quiet', '--unit', unit, '--', *command]
         placed = kwin.place_next(classes, prefix, lambda: subprocess.Popen(
             command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True), timeout=25)
         if placed is None:
@@ -462,9 +468,10 @@ class Cua:
             raise RuntimeError('the workspace has no output')
         outputs = [o['name'] for o in self.backend.kwin.windows().get('outputs', []) if o['name'].startswith('CAST')]
         if not outputs:
-            screen = subprocess.run(['rungic-agent-screen', 'on'], capture_output=True, text=True, timeout=30)
+            # On the user's desktop (router.py) its second screen is desktop mode's.
+            screen = subprocess.run(['rungic-desktop-mode', 'on'], capture_output=True, text=True, timeout=30)
             if screen.returncode != 0:
-                raise RuntimeError(f'assistant screen: {screen.stderr.strip() or screen.stdout.strip()}')
+                raise RuntimeError(f'desktop mode: {screen.stderr.strip() or screen.stdout.strip()}')
             time.sleep(1)
             outputs = [o['name'] for o in self.backend.kwin.windows().get('outputs', []) if o['name'].startswith('CAST')]
             if not outputs:
@@ -499,8 +506,6 @@ class Cua:
         return self._computer
 
     def goal_luna(self, args: dict) -> dict:
-        if not os.environ.get('RUNGIC_WORKSPACE'):
-            subprocess.run(['rungic-agent-screen', 'on'], capture_output=True, timeout=30)
         output = self.agent_output()
         window_id = args.get('window')          # a window the caller knows (e.g. a call window)
         if args.get('app'):
@@ -609,9 +614,7 @@ class Cua:
     def goal(self, args: dict) -> dict:
         """A whole task through rungic-clicker (typesafe-computer-use, JEV per step; docs/64), on the
         assistant's screen (docs/65): turned on first, and the app opened there."""
-        screen = subprocess.run(['rungic-agent-screen', 'on'], capture_output=True, text=True, timeout=30)
-        if screen.returncode != 0:
-            raise RuntimeError(f'assistant screen: {screen.stderr.strip() or screen.stdout.strip()}')
+        self.agent_output()     # the screen it works on, turned on if needed
         if args.get('app'):
             launched = self.launch(str(args['app']), 'agent', confirmed=bool(args.get('switch'))) or {}
             if launched.get('needs_confirmation') or launched.get('blocked'):
@@ -818,8 +821,13 @@ class Cua:
 
 
 def serve() -> None:
-    """MCP over stdio: one JSON-RPC message per line."""
-    cua = Cua()
+    """MCP over stdio: one JSON-RPC message per line. Started in the agent's workspace (the voice
+    agent's Codex), it routes each call to the user's desktop or the workspace (router.py)."""
+    router = None
+    if os.environ.get('RUNGIC_WORKSPACE') and not os.environ.get('RUNGIC_CUA_CHILD'):
+        from .router import WHERE_TOOL, Router
+        router = Router()
+    cua = None if router else Cua()
     out = sys.stdout
 
     def send(message: dict) -> None:
@@ -839,7 +847,15 @@ def serve() -> None:
                 result = {'protocolVersion': version, 'capabilities': {'tools': {}},
                           'serverInfo': {'name': 'rungic-cua', 'version': '0.1.0'}}
             elif method == 'tools/list':
-                result = {'tools': tools_for(plan())}
+                result = {'tools': tools_for(plan()) + ([WHERE_TOOL] if router else [])}
+            elif method == 'tools/call' and router:
+                params = request.get('params', {})
+                try:
+                    result = router.call(params.get('name', ''), params.get('arguments') or {})
+                except Exception as error:  # reported to the model, not a protocol error
+                    logger.exception('tool %s failed', params.get('name'))
+                    result = {'content': [{'type': 'text', 'text': f'{type(error).__name__}: {error}'}],
+                              'isError': True}
             elif method == 'tools/call':
                 params = request.get('params', {})
                 try:
@@ -861,6 +877,8 @@ def serve() -> None:
             send({'jsonrpc': '2.0', 'id': rid, 'result': result})
         except Exception as error:
             send({'jsonrpc': '2.0', 'id': rid, 'error': {'code': -32603, 'message': str(error)}})
+    if router:
+        router.close()
 
 
 def import_session_environment() -> None:

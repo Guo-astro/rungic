@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Desktop Mode
+Name[zh_CN]=桌面模式
+Comment=A full desktop on a second screen in a floating window, or on the TV (docs/65)
+Exec=/usr/libexec/rungic-agent-screen-window --desktop
+Icon=computer
+NoDisplay=true
+X-KDE-Wayland-Interfaces=zkde_screencast_unstable_v1,org_kde_kwin_fake_input

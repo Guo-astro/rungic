@@ -2,8 +2,8 @@
 Type=Application
 Name=Assistant Screen
 Name[zh_CN]=助理屏
-Comment=The assistant's desktop screen in a floating window, or on the TV (docs/65)
-Exec=/usr/libexec/rungic-agent-screen-window
+Comment=The agent's own workspace in a floating window (docs/research/91)
+Exec=/usr/libexec/rungic-agent-screen-window --workspace 1
 Icon=video-display
 NoDisplay=true
 X-KDE-Wayland-Interfaces=zkde_screencast_unstable_v1,org_kde_kwin_fake_input

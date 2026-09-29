@@ -360,13 +360,16 @@ def _cast_outputs():
 
 
 @check
-def agent_screen_output(ctx):
-    """The assistant's screen is a cast output of the Android host (docs/65): turning it on makes
-    KWin's output CAST-n of the host output's size, turning it off removes it (docs/72, the
-    Android backend's host outputs)."""
+def desktop_mode_output(ctx):
+    """Desktop mode is a cast output of the Android host (docs/65; "the assistant's screen" before
+    docs/research/91 made that the agent's workspace): turning it on makes KWin's output CAST-n of
+    the host output's size, turning it off removes it (docs/72, the Android backend's host outputs)."""
+    # rungic-agent-screen was desktop mode on releases before the split.
+    program = '"$(command -v rungic-desktop-mode || command -v rungic-agent-screen || command -v moto-agent-screen)"'
+
     def state(command, timeout=60):
         try:
-            return json.loads(user(f"{rungic_device.prog('agent-screen')} {command}", timeout=timeout).stdout)
+            return json.loads(user(f"{program} {command}", timeout=timeout).stdout)
         except ValueError:
             return {}
     before = state('status')

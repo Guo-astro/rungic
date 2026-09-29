@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// The assistant's screen on or off (docs/65): rungic-agent-screen turns the host's second output on
-// and opens its floating window; with a TV connected the TV shows it instead.
+// Desktop mode on or off (docs/65, docs/research/91): rungic-desktop-mode gives the user's desktop
+// a second output, a full desktop, and opens its floating window; a TV or fullscreen may show it
+// instead. The assistant's screen has no tile: it shows itself when the agent works there.
 
 import QtQuick
 
@@ -11,14 +12,16 @@ import org.kde.plasma.private.mobileshell.state as MobileShellState
 QS.QuickSetting {
     id: root
 
+    readonly property string program: "rungic-desktop-mode"
+
     property bool on: false
     property bool onTv: false
     property bool fullscreen: false
     property bool busy: false
     property string error: ""
 
-    text: "助理屏"
-    icon: "video-display"
+    text: "桌面模式"
+    icon: "computer"
     enabled: on
     status: {
         if (busy) return on ? "正在关闭…" : "正在打开…";
@@ -28,7 +31,7 @@ QS.QuickSetting {
     }
 
     function run(command) {
-        executable.connectSource("/usr/bin/rungic-agent-screen " + command);
+        executable.connectSource("/usr/bin/" + program + " " + command);
     }
 
     function toggle() {
@@ -64,11 +67,11 @@ QS.QuickSetting {
             try {
                 result = JSON.parse(data["stdout"]);
             } catch (e) {
-                result = { error: (data["stderr"] || "rungic-agent-screen 没有返回结果").trim() };
+                result = { error: (data["stderr"] || root.program + " 没有返回结果").trim() };
             }
             if (command === "toggle") root.busy = false;
             if (result.error) {
-                console.warn("rungic-agent-screen " + command + ": " + result.error);
+                console.warn(root.program + " " + command + ": " + result.error);
                 root.error = "操作失败";
                 return;
             }

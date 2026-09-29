@@ -35,7 +35,8 @@ Window {
     onModeChanged: agent.setWatched(mode === "window")
     property string edge: "right"
     property real px: 12
-    property real py: 110
+    // Desktop mode's window above, the assistant's screen's below it: both may be out at once.
+    property real py: agent.workspace > 0 ? 330 : 110
     property real panelWidth: 260
     property real tabY: 180
     property bool toolbarShown: false
@@ -279,6 +280,24 @@ Window {
                     wrapMode: Text.Wrap
                     maximumLineCount: 2
                 }
+            }
+        }
+        // Which screen this is, with the toolbar: desktop mode's and the assistant's may both be out.
+        Rectangle {
+            anchors { left: parent.left; top: parent.top; margins: 8 }
+            opacity: root.toolbarShown ? 1 : 0
+            visible: opacity > 0.01
+            Behavior on opacity { NumberAnimation { duration: 180 } }
+            width: nameText.implicitWidth + 16
+            height: nameText.implicitHeight + 8
+            radius: height / 2
+            color: Qt.rgba(0.11, 0.12, 0.15, 0.86)
+            Text {
+                id: nameText
+                anchors.centerIn: parent
+                text: agent.workspace > 0 ? "助理屏" : "桌面"
+                color: "white"
+                font.pixelSize: 12
             }
         }
         Rectangle {

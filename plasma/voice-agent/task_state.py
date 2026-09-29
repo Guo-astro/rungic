@@ -44,6 +44,7 @@ PROGRAMS = [
     ({'rungic-cast'}, '投屏'),
     ({'rungic-platform'}, '调用手机功能'),
     ({'rungic-agent-screen'}, '开关助理屏'),
+    ({'rungic-desktop-mode'}, '开关桌面模式'),
     ({'rungic-cua'}, '操作桌面'),
     ({'journalctl', 'dmesg', 'coredumpctl'}, '查看日志'),
     ({'systemctl'}, '查看或管理系统服务'),

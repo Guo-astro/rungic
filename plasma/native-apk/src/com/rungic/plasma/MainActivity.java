@@ -25,7 +25,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     private CastDesktop castDesktop;
     /** The assistant's screen: a 1920x1080 desktop output, on the TV or in a Linux floating window. */
     static final int[] AGENT_SCREEN_SIZE = {1920, 1080};
-    private boolean agentScreen;
+    private boolean desktopMode;
     /** The floating window's last report of showing the assistant's screen (docs/65). */
     private boolean agentScreenWatched = true;
     private AgentFullscreen agentFullscreen;
@@ -103,8 +103,11 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         setContentView(frame);
         castTest = new CastTest(this, frame);
         castControls = new CastControls(this, frame, this::setAndroidKeyboard);
-        agentScreen = getPreferences(MODE_PRIVATE).getBoolean("agent_screen", false);
-        presentedWorkspace = getPreferences(MODE_PRIVATE).getInt("agent_workspace", 0);
+        desktopMode = getPreferences(MODE_PRIVATE).getBoolean("desktop_mode", false);
+        // "agent_screen" was the one switch before desktop mode and the assistant's screen split.
+        assistantScreen = getPreferences(MODE_PRIVATE).getBoolean("assistant_screen",
+            getPreferences(MODE_PRIVATE).getBoolean("agent_screen", false));
+        assistantWorkspace = Math.max(1, getPreferences(MODE_PRIVATE).getInt("agent_workspace", 1));
         agentFullscreen = new AgentFullscreen(this, frame, AGENT_SCREEN_SIZE[0], AGENT_SCREEN_SIZE[1], new AgentFullscreen.Host() {
             @Override public void bindPresenter(String owner, android.view.Surface surface, int width, int height, int rotation) {
                 MainActivity.this.bindPresenter(owner, surface, width, height, 60000, rotation);
@@ -112,6 +115,8 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
             @Override public void releasePresenter(String owner) { MainActivity.this.releasePresenter(owner); }
             @Override public void leaveFullscreen() { agentFullscreen.hide(); }
             @Override public void castToTv() {
+                // The TV takes over what fullscreen showed.
+                setTvSource(fullscreenSource);
                 agentFullscreen.hide();
                 // As the Plasma cast tile does (rungic-cast, docs/58): the last TV; seconds to a minute.
                 new Thread(() -> {
@@ -120,11 +125,16 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
                 }, "rungic-cast").start();
             }
             @Override public void closeAgentScreen() {
-                try { agentScreen(new org.json.JSONObject().put("enabled", false)); }
-                catch (Exception e) { Log.w("RungicWayland", "agent screen off failed: " + e); }
+                try {
+                    org.json.JSONObject off = new org.json.JSONObject().put("enabled", false);
+                    if (fullscreenSource == 0) desktopMode(off); else agentScreen(off);
+                }
+                catch (Exception e) { Log.w("RungicWayland", "screen off failed: " + e); }
             }
         });
-        castDesktop = new CastDesktop(this, () -> initialized, () -> agentScreen ? AGENT_SCREEN_SIZE : null, bound -> {
+        castDesktop = new CastDesktop(this, () -> initialized, () -> desktopMode ? AGENT_SCREEN_SIZE : null, bound -> {
+            // A TV that goes away forgets what it showed: the next one shows the desktop.
+            if (!bound) tvSource = 0;
             castControls.setAvailable(bound);
             // The TV takes the assistant's screen from fullscreen (it bound the presenter first).
             if (bound) agentFullscreen.hide();
@@ -401,11 +411,10 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
                     runOnUiThread(this::watchIdleInhibit);
                 } else NativeBridge.rebindSurface(holder.getSurface());
                 NativeBridge.resumeRendering();
-                // The assistant's screen first, so a TV connected before the desktop (re)started
-                // presents it rather than making an output of its own; its workspace before it,
-                // so the user's KWin is not offered a second output meanwhile.
-                NativeBridge.presentWorkspace(presentedWorkspace);
-                if (agentScreen) NativeBridge.setAgentScreen(true, AGENT_SCREEN_SIZE[0], AGENT_SCREEN_SIZE[1], 60000);
+                // Desktop mode first, so a TV connected before the desktop (re)started presents
+                // it rather than making an output of its own.
+                NativeBridge.presentWorkspace(0);
+                if (desktopMode) NativeBridge.setAgentScreen(true, AGENT_SCREEN_SIZE[0], AGENT_SCREEN_SIZE[1], 60000);
                 // A TV that was connected before the desktop (re)started gets it now.
                 runOnUiThread(castDesktop::refresh);
                 android.system.Os.chmod(new File(getFilesDir(), "tmp").getAbsolutePath(), 0755);
@@ -475,40 +484,71 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         return castDesktop.request(request);
     }
     /**
-     * The assistant's screen (docs/65): {"enabled": bool} turns it on or off, {"fullscreen": bool} shows
-     * it over the whole phone, {"watched": bool} is the floating window's report of showing its picture
-     * (false: tucked into the edge; the screen then gets frames at a low rate). The reply says whether
-     * it is on, its size, whether a TV ("tv") or the phone ("fullscreen") presents it, else the Linux
-     * floating window shows it, and the watched state last reported.
+     * Two screens beside the phone's own (docs/65, docs/research/91), each in its Linux floating
+     * window, fullscreen on the phone, or on the TV:
+     * - desktop mode ("desktop-mode"): the user's desktop gets a second output, a full desktop.
+     *   {"enabled"} turns it on or off, {"fullscreen"} shows it over the whole phone, {"watched"}
+     *   is its floating window's report of showing its picture (false: tucked into the edge; it
+     *   then gets frames at a low rate). A TV shows it by default: casting is desktop mode on the TV.
+     * - the assistant's screen ("agent-screen"): the agent's own workspace (a KWin of its own).
+     *   {"enabled"} shows or hides it, {"workspace"} which one, {"fullscreen"} over the whole
+     *   phone, {"tv"} on the TV instead of the desktop.
+     * The one presenter (TV or fullscreen) shows one of them at a time (bindPresenter).
      */
-    private int presentedWorkspace = 0;
-    org.json.JSONObject agentScreen(org.json.JSONObject request) throws Exception {
+    private boolean assistantScreen;
+    private int assistantWorkspace = 1;
+    private int tvSource = 0;              // what a TV shows: 0 the desktop, n workspace n
+    private int fullscreenSource = 0;      // what fullscreen shows
+    org.json.JSONObject desktopMode(org.json.JSONObject request) throws Exception {
         if (request.has("enabled")) {
-            agentScreen = request.getBoolean("enabled");
+            desktopMode = request.getBoolean("enabled");
             // A floating window starts showing its picture; a new one reports otherwise.
             setAgentScreenWatched(true);
-            if (!agentScreen) agentFullscreen.hide();
-            getPreferences(MODE_PRIVATE).edit().putBoolean("agent_screen", agentScreen).apply();
-            if (initialized) NativeBridge.setAgentScreen(agentScreen, AGENT_SCREEN_SIZE[0], AGENT_SCREEN_SIZE[1], 60000);
+            if (!desktopMode && fullscreenSource == 0) agentFullscreen.hide();
+            getPreferences(MODE_PRIVATE).edit().putBoolean("desktop_mode", desktopMode).apply();
+            if (initialized) NativeBridge.setAgentScreen(desktopMode, AGENT_SCREEN_SIZE[0], AGENT_SCREEN_SIZE[1], 60000);
         }
         if (request.has("fullscreen")) {
-            if (!request.getBoolean("fullscreen")) agentFullscreen.hide();
-            else if (!agentScreen) throw new IllegalStateException("the assistant's screen is off");
-            else if (castControls.available()) throw new IllegalStateException("a TV shows the assistant's screen");
-            else agentFullscreen.show();
+            if (!request.getBoolean("fullscreen")) { if (fullscreenSource == 0) agentFullscreen.hide(); }
+            else if (!desktopMode) throw new IllegalStateException("desktop mode is off");
+            else if (castControls.available()) throw new IllegalStateException("a TV shows the screens");
+            else { fullscreenSource = 0; agentFullscreen.show(); }
         }
         if (request.has("watched")) setAgentScreenWatched(request.getBoolean("watched"));
-        // An agent workspace on the TV or fullscreen instead (docs/research/91): 0 is the
-        // assistant's screen itself; a workspace that is gone falls back to it.
-        if (request.has("workspace")) {
-            presentedWorkspace = Math.max(0, request.getInt("workspace"));
-            getPreferences(MODE_PRIVATE).edit().putInt("agent_workspace", presentedWorkspace).apply();
-            if (initialized) NativeBridge.presentWorkspace(presentedWorkspace);
-        }
-        return new org.json.JSONObject().put("enabled", agentScreen).put("workspace", presentedWorkspace)
+        return new org.json.JSONObject().put("enabled", desktopMode)
             .put("width", AGENT_SCREEN_SIZE[0]).put("height", AGENT_SCREEN_SIZE[1])
-            .put("tv", castControls.available()).put("fullscreen", agentFullscreen.shown())
+            .put("tv", castControls.available() && tvSource == 0)
+            .put("fullscreen", agentFullscreen.shown() && fullscreenSource == 0)
             .put("watched", agentScreenWatched);
+    }
+    org.json.JSONObject agentScreen(org.json.JSONObject request) throws Exception {
+        if (request.has("workspace")) {
+            assistantWorkspace = Math.max(1, request.getInt("workspace"));
+            getPreferences(MODE_PRIVATE).edit().putInt("agent_workspace", assistantWorkspace).apply();
+        }
+        if (request.has("enabled")) {
+            assistantScreen = request.getBoolean("enabled");
+            getPreferences(MODE_PRIVATE).edit().putBoolean("assistant_screen", assistantScreen).apply();
+            if (!assistantScreen) {
+                if (fullscreenSource != 0) agentFullscreen.hide();
+                if (tvSource != 0) setTvSource(0);     // the TV goes back to the desktop
+            }
+        }
+        if (request.has("tv")) setTvSource(request.getBoolean("tv") ? assistantWorkspace : 0);
+        if (request.has("fullscreen")) {
+            if (!request.getBoolean("fullscreen")) { if (fullscreenSource != 0) agentFullscreen.hide(); }
+            else if (castControls.available()) throw new IllegalStateException("a TV shows the screens");
+            else { fullscreenSource = assistantWorkspace; agentFullscreen.show(); }
+        }
+        return new org.json.JSONObject().put("enabled", assistantScreen).put("workspace", assistantWorkspace)
+            .put("width", AGENT_SCREEN_SIZE[0]).put("height", AGENT_SCREEN_SIZE[1])
+            .put("tv", castControls.available() && tvSource == assistantWorkspace)
+            .put("fullscreen", agentFullscreen.shown() && fullscreenSource == assistantWorkspace);
+    }
+    /** What a TV shows; a TV already showing something switches at once. */
+    private void setTvSource(int source) {
+        tvSource = source;
+        if (initialized && "tv".equals(presenterOwner)) NativeBridge.presentWorkspace(source);
     }
     private void setAgentScreenWatched(boolean watched) {
         agentScreenWatched = watched;
@@ -521,6 +561,8 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
      * it only while it is the one bound, so the other is never cut off.
      */
     void bindPresenter(String owner, android.view.Surface surface, int width, int height, int refreshMhz, int rotation) {
+        // Its source first (the desktop, or a workspace), so the host makes no output for the other.
+        NativeBridge.presentWorkspace("tv".equals(owner) ? tvSource : fullscreenSource);
         NativeBridge.bindCastSurface(surface, width, height, refreshMhz, rotation);
         presenterOwner = owner;
         // Fullscreen covers the phone's own picture: the host paces it down (docs/65).

@@ -7,8 +7,9 @@
   "depends": "python3, kwin-wayland, plasma-mobile",
   "build_depends": ["cmake", "qt6-base-dev", "qt6-declarative-dev", "qt6-wayland-dev", "liblayershellqtinterface-dev",
                     "plasma-wayland-protocols"],
-  "description": "Plasma Mobile on Android: the assistant's screen\nA virtual screen the assistant operates on, shown as a floating window that folds to the\nedge (docs/65), with its quick setting.",
+  "description": "Plasma Mobile on Android: desktop mode and the assistant's screen\nDesktop mode (a full desktop on a second screen) and the agent's workspace, each in a floating\nwindow that folds to the edge (docs/65, docs/research/91); desktop mode's quick setting.",
   "obsolete": ["/usr/local/bin/moto-agent-screen", "/usr/local/libexec/moto-agent-screen-window",
                "/usr/local/bin/moto-virtual-screen", "/usr/share/applications/dev.moto.VirtualScreen.desktop",
-               "/etc/xdg/autostart/dev.moto.VirtualScreen.desktop"]
+               "/etc/xdg/autostart/dev.moto.VirtualScreen.desktop",
+               "/usr/share/plasma/quicksettings/com.rungic.quicksetting.agentscreen"]
 }

@@ -1,5 +1,7 @@
 # 助理屏：按需开启、浮窗与投屏无缝互转的第二输出
 
+> 概念调整（2026-09-29，用户定义，见 [research/91](research/91-agent-workspaces.md)）：本篇的“助理屏”，即用户桌面的第二输出，现在叫**桌面模式**（`rungic-desktop-mode`，控制中心的“桌面模式”）。“助理屏”只指 Agent 自己的工作区屏幕，由 Agent 需要时自己显示，控制中心里没有它的开关。投屏时，电视显示的是桌面模式。下文按时间记录，保留当时的名称。
+
 > 改名说明（2026-09-26）：Rungic改名B阶段之后，容器内的`moto-*`包、程序、单元、路径，`MOTO_*`变量和`dev.moto.*`名称改为`rungic-*`、`RUNGIC_*`、`com.rungic.*`；Android侧的名称在C阶段（2026-09-27）改为APK `com.rungic.plasma`、`/data/adb/rungic-*`（镜像在`/data/adb/rungic-lxc/images/`）、容器中的`/var/lib/rungic-{host,cores,apt}`、`rungic-gpu-alloc`、`rungic-cast`、`debug.rungic.*`、dm `rungic-root`与SELinux `rungic_image`。对照与边界见[70篇](70-rungic-rebrand.md)。下文按时间记录的内容保留当时的名称。
 
 2026-09-25。用户要求：

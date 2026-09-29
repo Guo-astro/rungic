@@ -1,11 +1,13 @@
-// The assistant's screen as seen from the Linux side (docs/65).
+// A screen beside the phone's own, as seen from the Linux side (docs/65, docs/research/91): one
+// floating window each.
 //
-// The Android host keeps a second output (KWin names it CAST-n) while the assistant's screen is on:
-// a TV presents it when one is connected, else nothing does. This object watches the platform
-// bridge for which of the two holds, records the output through KWin's zkde_screencast (a PipeWire
-// node the floating window shows) while no TV presents it, and forwards the window's touches into
-// that output with KWin's fake input. Both protocols are restricted: KWin grants them to this
-// executable through its desktop file (X-KDE-Wayland-Interfaces).
+// - Desktop mode (workspace 0): the Android host keeps a second output of the user's desktop
+//   (KWin names it CAST-n). This object records it through KWin's zkde_screencast (a PipeWire node
+//   the floating window shows) while no TV or fullscreen presents it, and forwards the window's
+//   touches into it with KWin's fake input. Both protocols are restricted: KWin grants them to
+//   this executable through its desktop file (X-KDE-Wayland-Interfaces).
+// - The assistant's screen (workspace n): the agent's own KWin; rungic-workspace-stream records it.
+// The platform bridge says whether the screen is on and whether a TV or fullscreen shows it.
 #pragma once
 
 #include <QFileSystemWatcher>
@@ -27,18 +29,22 @@ class AgentScreen : public QObject
     Q_PROPERTY(QString status READ status NOTIFY statusChanged)
     Q_PROPERTY(uint nodeId READ nodeId NOTIFY nodeIdChanged)
     Q_PROPERTY(bool onTv READ onTv NOTIFY statusChanged)
+    // 0: desktop mode's window; n: the assistant's screen of workspace n.
+    Q_PROPERTY(int workspace READ workspace CONSTANT)
     // What the assistant is doing on this screen (rungic_cua.activity, docs/88): "" when nothing,
     // "working" with a caption, or how it ended (done, question, failed, stopped).
     Q_PROPERTY(QString activityState READ activityState NOTIFY activityChanged)
     Q_PROPERTY(QString activityText READ activityText NOTIFY activityChanged)
 
 public:
-    explicit AgentScreen(QObject *parent = nullptr);
+    // `workspace`: 0 desktop mode, n the assistant's screen of workspace n.
+    explicit AgentScreen(int workspace, QObject *parent = nullptr);
     ~AgentScreen() override;
 
     QString status() const { return m_status; }
     uint nodeId() const { return m_nodeId; }
     bool onTv() const { return m_onTv; }
+    int workspace() const { return m_workspace; }
     QString activityState() const { return m_activityState; }
     QString activityText() const { return m_activityText; }
 
@@ -68,6 +74,7 @@ private:
     void startStream();
     void stopStream();
     void setStatus(const QString &status);
+    QString op() const;     // the platform bridge's request for this screen
     QScreen *agentOutput() const;
     void keepApart();
     void reportWatched();
@@ -93,8 +100,8 @@ private:
     QString m_activityState;
     QString m_activityText;
     double m_activityTime = 0;
-    // An agent workspace shown instead of the assistant's screen (docs/research/91): its
-    // picture comes from rungic-workspace-stream, which records that workspace's KWin.
+    // The assistant's screen shows workspace n (docs/research/91): its picture comes from
+    // rungic-workspace-stream, which records that workspace's KWin. 0: desktop mode.
     int m_workspace = 0;
     QProcess *m_workspaceStream = nullptr;
     int m_streamedWorkspace = 0;
