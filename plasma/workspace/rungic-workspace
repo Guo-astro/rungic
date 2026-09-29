@@ -42,26 +42,36 @@ export RUNGIC_WORKSPACE=$slot WAYLAND_DISPLAY=wayland-ws-$slot
 unset DISPLAY XAUTHORITY
 export QT_QPA_PLATFORM=wayland XDG_CURRENT_DESKTOP=KDE XDG_SESSION_TYPE=wayland
 
-# In a session bus of its own. KWin starts its Xwayland on the first X client and picks a free
+# In a session bus of its own, at a fixed address: conversations and tools that already know
+# it (the agent's Codex threads and their desktop tools, docs/research/91) reach the workspace
+# again after it restarted (dbus-run-session's address changed with every start, and they failed
+# with "Could not connect"). KWin starts its Xwayland on the first X client and picks a free
 # display itself; the X socket it listens on is written to $state/display for rungic-workspace-env.
-rm -f "$state/bus" "$state/display"
-exec dbus-run-session -- sh -c '
-    state="$1" slot="$2" host="$3"
-    kwin_wayland --android-host --android-workspace --wayland-display=$host \
-        --socket wayland-ws-$slot --xwayland --no-lockscreen --no-global-shortcuts --no-kactivities &
-    kwin=$!
-    for i in $(seq 100); do
-        inodes=$(ls -l /proc/$kwin/fd 2>/dev/null | sed -n "s/.*socket:\[\([0-9]*\)\].*/\1/p" | tr "\n" " ")
-        display=$(awk -v inodes=" $inodes" "index(inodes, \" \" \$7 \" \") && \$8 ~ /^\/tmp\/.X11-unix\/X/ { sub(/.*X/, \"\", \$8); print \":\" \$8; exit }" /proc/net/unix)
-        if [ -n "$display" ]; then
-            echo "$display" > "$state/display"
-            break
-        fi
-        sleep 0.1
-    done
-    echo "$DBUS_SESSION_BUS_ADDRESS" > "$state/bus"
-    # Its wallpaper: without Plasma'"'"'s shell an empty workspace is transparent.
-    while [ ! -S "$XDG_RUNTIME_DIR/wayland-ws-$slot" ] && kill -0 $kwin 2>/dev/null; do sleep 0.1; done
-    /usr/libexec/rungic-workspace-desktop &
-    trap "kill $kwin" TERM INT
-    wait $kwin' rungic-workspace "$state" "$slot" "$host"
+runtime=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+bus=$runtime/rungic-workspace-$slot.bus
+rm -f "$state/bus" "$state/display" "$bus"
+dbus-daemon --session --nofork --nopidfile --address="unix:path=$bus" &
+dbusd=$!
+for i in $(seq 50); do [ -S "$bus" ] && break; sleep 0.1; done
+export DBUS_SESSION_BUS_ADDRESS="unix:path=$bus"
+kwin_wayland --android-host --android-workspace --wayland-display="$host" \
+    --socket "wayland-ws-$slot" --xwayland --no-lockscreen --no-global-shortcuts --no-kactivities &
+kwin=$!
+trap 'kill $kwin $dbusd 2>/dev/null' TERM INT
+for i in $(seq 100); do
+    inodes=$(ls -l /proc/$kwin/fd 2>/dev/null | sed -n 's/.*socket:\[\([0-9]*\)\].*/\1/p' | tr '\n' ' ')
+    display=$(awk -v inodes=" $inodes" 'index(inodes, " " $7 " ") && $8 ~ /^\/tmp\/.X11-unix\/X/ { sub(/.*X/, "", $8); print ":" $8; exit }' /proc/net/unix)
+    if [ -n "$display" ]; then
+        echo "$display" > "$state/display"
+        break
+    fi
+    sleep 0.1
+done
+echo "$DBUS_SESSION_BUS_ADDRESS" > "$state/bus"
+# Its wallpaper: without Plasma's shell an empty workspace is transparent.
+while [ ! -S "$runtime/wayland-ws-$slot" ] && kill -0 $kwin 2>/dev/null; do sleep 0.1; done
+/usr/libexec/rungic-workspace-desktop &
+status=0
+wait $kwin || status=$?
+kill $dbusd 2>/dev/null || true
+exit $status
