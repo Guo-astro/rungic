@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=com.rungic.Suggestions
+Exec=/usr/bin/rungic-suggestions --service
+SystemdService=rungic-suggestions.service

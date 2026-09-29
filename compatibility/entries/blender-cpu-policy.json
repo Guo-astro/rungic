@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "id": "blender-cpu-policy",
+  "title": "Blender 的 CPU 渲染策略",
+  "kind": "policy",
+  "status": "verified",
+  "reviewed": "2026-09-29",
+  "match": {"package": "blender", "versions": []},
+  "explanation": "CPU 渲染可能是用户为共享内存与稳定性选择的策略，不据此推断缺少硬件加速。核对当前配置与用户指示后再决定是否调整。",
+  "scope": "90篇所记录的 7.3 GiB 共享内存设备与篮球场景；未取得当时精确软件包版本，因此只作调查时应尊重用户选择的策略依据，不作为任何版本已兼容的证明，不生成优化提示。",
+  "evidence": ["docs/90-blender-vulkan-incident.md"],
+  "upstreamProject": "blender"
+}

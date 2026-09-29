@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "id": "qt-pulseaudio-target-latency",
+  "title": "Qt 应用的声音可能出现间断",
+  "kind": "issue",
+  "status": "verified",
+  "reviewed": "2026-09-29",
+  "match": {"package": "libqt6multimedia6", "versions": ["6.10.2-2"]},
+  "explanation": "此版本的 PulseAudio 缓冲参数存在已复现问题。需要核对本机声音后端和实际播放表现，再准备适配方案。",
+  "scope": "历史实测为 Android 音频桥、PulseAudio 17；包匹配只产生待核实建议，不代表本机已复现。",
+  "evidence": ["docs/73-reduce-upstream-changes.md#第一阶段2026-09-27"],
+  "patch": "packages/qt6-multimedia/debian/patches/rungic/pulseaudio-sink-target-latency.patch",
+  "verification": "同一音频回放、录制输出并比较断点，交叉检查多个 Qt Multimedia 应用。",
+  "upstreamProject": "qt"
+}

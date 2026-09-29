@@ -16,6 +16,7 @@ SideDrawer {
     signal openRequested(string id, string title)
     signal newRequested()
     signal settingsRequested()
+    signal suggestionsRequested()
     signal deleted(string id)
 
     function refresh() { AgentClient.listConversations() }
@@ -65,6 +66,11 @@ SideDrawer {
             iconName: "compose"
             text: "新对话"
             onClicked: drawer.newRequested()
+        }
+        NavItem {
+            iconName: "alert"
+            text: "建议"
+            onClicked: drawer.suggestionsRequested()
         }
         ListView {
             id: list

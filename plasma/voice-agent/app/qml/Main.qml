@@ -13,6 +13,8 @@ QQC2.ApplicationWindow {
     id: root
     // --conversation ID: open straight in that conversation (the overlay's "open in app").
     property string initialConversation: ""
+    property bool initialSuggestions: false
+    property string initialSuggestion: ""
     title: "Agent"
     width: 390
     height: 844
@@ -48,6 +50,10 @@ QQC2.ApplicationWindow {
         stack.push(Qt.resolvedUrl(page || "SettingsPage.qml"))
     }
     function back() { if (stack.depth > 1) stack.pop() }
+    function openSuggestions(id) {
+        while (stack.depth > 1) stack.pop(null)
+        stack.push(Qt.resolvedUrl("SuggestionsPage.qml"), { suggestionId: id || "" })
+    }
 
     // Called over D-Bus (a second start, the overlay's "open in app").
     function openConversation(id) {
@@ -57,6 +63,7 @@ QQC2.ApplicationWindow {
     Component.onCompleted: {
         AgentClient.setWatching(watching)
         if (initialConversation) openConversation(initialConversation)
+        if (initialSuggestions) openSuggestions(initialSuggestion)
     }
 
     // The back key closes a settings page, then the side panel.

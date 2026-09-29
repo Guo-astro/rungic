@@ -70,6 +70,7 @@ Package: plasma-mobile
 Architecture: any
 Multi-Arch: foreign
 Depends: kde-style-breeze (>= 4:6.0.0~),
+         rungic-suggestions,
          kf6-breeze-icon-theme,
          layer-shell-qt (>= 6.0.0~),
          milou,

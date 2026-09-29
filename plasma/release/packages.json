@@ -59,7 +59,8 @@
       "packages": [
         "plasma-mobile",
         "plasma-mobile-tweaks"
-      ]
+      ],
+      "version": "6.6.5-0ubuntu0.1+rungic7"
     },
     "plasma-settings": {
       "source": "packages/plasma-settings",
@@ -176,6 +177,9 @@
     },
     "rungic-flatpak-gl": {
       "source": "plasma/packaging/rungic-flatpak-gl"
+    },
+    "rungic-suggestions": {
+      "source": "plasma/packaging/rungic-suggestions"
     }
   },
   "coupled": [
@@ -210,6 +214,9 @@
       "rungic-plasma-network.service",
       "rungic-plasma-bluetooth.service",
       "rungic-plasma-modem.service"
+    ],
+    "rungic-suggestions": [
+      "rungic-suggestions-collect.timer"
     ]
   },
   "android": [

@@ -12,3 +12,4 @@ rungic/desktop-size-windows-on-tv.patch
 rungic/home-hold-voice-assistant.patch
 rungic/panels-app-colours.patch
 rungic/0014-Keep-clipboard-history-alive-and-show-its-desktop-tr.patch
+rungic/0015-Show-the-shared-Agent-suggestion-feed-on-the-phone-h.patch

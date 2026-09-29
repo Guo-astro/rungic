@@ -1,0 +1,119 @@
+From: Rungic <noreply@rungic.invalid>
+Date: Wed, 30 Sep 2026 00:03:39 +0800
+Subject: Show the shared Agent suggestion feed on the phone home screen
+
+Keep Folio's application drawer and search model. Give the card list the
+vertical gesture; a separate bottom handle opens the existing app drawer.
+Preserve the previous icon/widget layout data for rollback.
+
+Forwarded: not-needed
+Last-Update: 2026-09-30
+X-Rungic-Status: Inappropriate (Rungic product home screen)
+X-Rungic-Tests: plasma/suggestions/tests.cpp; G100 home/feed/drawer acceptance
+X-Rungic-Docs: docs/research/proactive-system-care.md
+---
+ .../homescreens/folio/qml/FolioHomeScreen.qml      | 49 +++++++++++++++++++++-
+ 1 file changed, 47 insertions(+), 2 deletions(-)
+
+diff --git a/containments/homescreens/folio/qml/FolioHomeScreen.qml b/containments/homescreens/folio/qml/FolioHomeScreen.qml
+index 2f09b6f..7351a9b 100644
+--- a/containments/homescreens/folio/qml/FolioHomeScreen.qml
++++ b/containments/homescreens/folio/qml/FolioHomeScreen.qml
+@@ -6,6 +6,7 @@ import QtQuick.Window
+ import QtQuick.Layouts
+ import QtQuick.Effects
+ import QtQuick.Controls as QQC2
++import com.rungic.suggestions as Suggestions
+ 
+ import org.kde.kirigami as Kirigami
+ 
+@@ -129,6 +130,7 @@ Item {
+             anchors.fill: parent
+ 
+             interactive: root.interactive &&
++                folio.HomeScreenState.viewState !== Folio.HomeScreenState.PageView &&
+                 settings.homeScreenInteractive &&
+                 !dropArea.containsDrag &&
+                 (appDrawer.flickable.atYBeginning || // there are cases where contentY > 0 but atYBeginning is true
+@@ -206,6 +208,7 @@ Item {
+ 
+                 HomeScreenPages {
+                     id: homeScreenPages
++                    visible: false // The saved icon/widget layout remains available for rollback.
+                     folio: root.folio
+                     maskManager: root.maskManager
+                     homeScreen: root
+@@ -321,7 +324,7 @@ Item {
+ 
+                     // don't show in settings mode
+                     opacity: 1 - folio.HomeScreenState.settingsOpenProgress
+-                    visible: folio.FolioSettings.showFavouritesBarBackground
++                    visible: false // Suggestions home has its own app-drawer handle.
+ 
+                     anchors.top: folio.HomeScreenState.favouritesBarLocation === Folio.HomeScreenState.Bottom ? favouritesBar.top : parent.top
+                     anchors.bottom: parent.bottom
+@@ -343,7 +346,7 @@ Item {
+ 
+                     // don't show in settings mode
+                     opacity: 1 - folio.HomeScreenState.settingsOpenProgress
+-                    visible: opacity > 0
++                    visible: false
+ 
+                     // one is ignored as anchors are set
+                     height: Kirigami.Units.gridUnit * 6
+@@ -439,6 +442,7 @@ Item {
+ 
+                 Item {
+                     id: pageIndicatorWrapper
++                    visible: false
+                     property bool favouritesBarAtBottom: folio.HomeScreenState.favouritesBarLocation === Folio.HomeScreenState.Bottom
+ 
+                     // don't show in settings mode
+@@ -493,6 +497,47 @@ Item {
+                 }
+             }
+ 
++            // The main screen is a vertically scrolling suggestion feed. Folio still owns
++            // the existing drawer and its search/application model. Only the bottom handle
++            // starts a drawer swipe, so a swipe through cards never steals that gesture.
++            Item {
++                anchors.fill: parent
++                visible: mainHomeScreen.visible
++                opacity: mainHomeScreen.opacity
++                z: 0.5
++                Suggestions.SuggestionsFeed {
++                    id: suggestionsHome
++                    home: true
++                    anchors.fill: parent
++                    anchors.topMargin: root.topMargin
++                    anchors.bottomMargin: root.bottomMargin + 52
++                    anchors.leftMargin: root.leftMargin
++                    anchors.rightMargin: root.rightMargin
++                    activeView: visible && root.Window.active && folio.HomeScreenState.viewState === Folio.HomeScreenState.PageView
++                }
++                Rectangle {
++                    anchors { left: parent.left; right: parent.right; bottom: parent.bottom; bottomMargin: root.bottomMargin }
++                    height: 52
++                    color: Kirigami.Theme.backgroundColor
++                    PC3.Label {
++                        anchors.centerIn: parent
++                        text: "上滑打开应用"
++                    }
++                    MouseArea {
++                        anchors.fill: parent
++                        property real startY: 0
++                        onPressed: mouse => startY = mouse.y
++                        onReleased: mouse => {
++                            if (mouse.y < startY - 16 || Math.abs(mouse.y - startY) < 8)
++                                folio.HomeScreenState.openAppDrawer();
++                        }
++                        Accessible.role: Accessible.Button
++                        Accessible.name: "打开应用抽屉"
++                        Accessible.onPressAction: folio.HomeScreenState.openAppDrawer()
++                    }
++                }
++            }
++
+             // folder view
+             FolderView {
+                 id: folderView
