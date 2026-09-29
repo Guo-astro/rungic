@@ -83,6 +83,56 @@ public final class Main {
             case "capabilities":
                 System.out.println(status());
                 break;
+            case "configure":
+                CastResolution.configure(args.length > 1 ? args[1] : "auto");
+                System.out.println("{\"configured\":true}");
+                break;
+            case "modes":
+                System.out.println(resolution());
+                break;
+            case "resolution": {
+                if (args.length != 2 || !args[1].matches("(?i)[0-9a-f:]{17}/(auto|[0-9]+x[0-9]+@[0-9]+)"))
+                    throw new CastFailure("invalid-argument", "resolution needs receiver-address/auto|WIDTHxHEIGHT@FPS");
+                String[] selection = args[1].split("/");
+                Object active = call(wfdStatus(), "getActiveDisplay");
+                if (connectedDisplayId() < 0 || active == null || !matches(active, selection[0]))
+                    throw new CastFailure("receiver-changed", "The selected receiver is no longer connected");
+                if (!CastResolution.supported(selection[0], selection[1]))
+                    throw new CastFailure("unsupported", "The receiver, encoder and installed mode control do not share this mode");
+                ModeHistory history=ModeHistory.open(selection[0],WfdCapture.read(selection[0]));
+                String previous = CastResolution.preference(selection[0]);
+                org.json.JSONObject before = resolution();
+                CastResolution.save(selection[0], selection[1]);
+                org.json.JSONObject result;
+                try {
+                    if (CastResolution.applyOnline(selection[0],selection[1])) result = new org.json.JSONObject(status());
+                    else { disconnect(10); result = new org.json.JSONObject(connect(selection[0], 120)); }
+                    org.json.JSONObject actual = result.getJSONObject("resolution");
+                    if (!selection[1].equals("auto") && (!selection[1].equals(videoId(actual)) || !displayMatches(CastResolution.mode(selection[1]))))
+                        throw new CastFailure("mode-not-applied", "The sender did not negotiate the requested video mode");
+                    WfdFormats.Mode verified=CastResolution.verify(selection[1]);
+                    if(verified==null)throw new CastFailure("mode-not-applied","Video mode and display did not remain consistent");
+                    if(history!=null)history.record(verified.id(),"passed","Negotiated video mode and Android display matched for five seconds");
+                    result=new org.json.JSONObject(status()).put("mode_applied",true);
+                } catch (Exception failure) {
+                    if(history!=null)history.record(selection[1],failure instanceof CastFailure && ((CastFailure)failure).code.equals("mode-not-applied")?"rejected":"failed",failure.getMessage());
+                    CastResolution.save(selection[0],previous);
+                    boolean restored = false;
+                    try {
+                        if (connectedDisplayId() >= 0 && videoId(before).equals(videoId(resolution()))) {
+                            CastResolution.configure(previous);
+                            result = new org.json.JSONObject(status());
+                        } else if(CastResolution.applyOnline(selection[0],videoId(before))) {
+                            result = new org.json.JSONObject(status());
+                        } else { disconnect(10); result = new org.json.JSONObject(connect(selection[0],120)); }
+                        restored = connectedDisplayId() >= 0;
+                    } catch (Exception recovery) { result = new org.json.JSONObject(status()); }
+                    result.put("error",failure.getMessage()).put("code","mode-not-applied").put("restored",restored)
+                            .put("requested_mode",selection[1]);
+                }
+                System.out.println(result);
+                break;
+            }
             case "settings":
                 command("am", "start", "--user", "current", "-a", "android.settings.CAST_SETTINGS");
                 System.out.println("{\"opened\":true}");
@@ -108,7 +158,7 @@ public final class Main {
                 // "connect 40" (seconds only) and "connect last" use the TV connected last.
                 boolean named = args.length > 1 && !args[1].equals("last") && !args[1].matches("\\d+");
                 int secondsAt = named || (args.length > 1 && args[1].equals("last")) ? 2 : 1;
-                System.out.println(connect(named ? args[1] : lastSink(), seconds(args, secondsAt, 30)));
+                System.out.println(connect(named ? args[1] : lastSink(), seconds(args, secondsAt, 120, 180)));
                 break;
             }
             case "disconnect":
@@ -163,8 +213,12 @@ public final class Main {
     }
 
     private static int seconds(String[] args, int index, int fallback) {
+        return seconds(args, index, fallback, 45);
+    }
+
+    private static int seconds(String[] args, int index, int fallback, int max) {
         int value = args.length > index ? Integer.parseInt(args[index]) : fallback;
-        if (value < 1 || value > 45) throw new CastFailure("invalid-argument", "Duration must be 1..45 seconds");
+        if (value < 1 || value > max) throw new CastFailure("invalid-argument", "Duration must be 1.." + max + " seconds");
         return value;
     }
 
@@ -251,27 +305,55 @@ public final class Main {
             }
         }
         connecting = true;
-        long deadline = SystemClock.elapsedRealtime() + secs * 1000L;
+        long started = SystemClock.elapsedRealtime();
+        long deadline = started + secs * 1000L;
+        progress(target, started, secs, 0, 0);
         registerListener();
         call(dmg, "startWifiDisplayScan");
-        try {
-            long lastRequest = 0;
+        try (WfdCapture capture = new WfdCapture()) {
+            long lastRequest = 0, lastProgress = 0, stableSince = 0;
+            int attempts = 0;
+            String configuredFor = null;
             while (SystemClock.elapsedRealtime() < deadline) {
                 Object s = wfdStatus();
                 Object active = call(s, "getActiveDisplay");
                 if ((int) call(s, "getActiveDisplayState") == CONNECTED && active != null
                         && (matches(active, target)
                             || (address != null && address.equalsIgnoreCase((String) call(active, "getDeviceAddress"))))) {
+                    if (stableSince == 0) stableSince = SystemClock.elapsedRealtime();
+                    if (SystemClock.elapsedRealtime() - stableSince < 2000 || activeDisplayId(active) < 0) { Thread.sleep(250); continue; }
                     Files.write(LAST_SINK.toPath(), (call(active, "getDeviceAddress") + "\n"
                             + call(active, "getDeviceName") + "\n").getBytes(StandardCharsets.UTF_8));
+                    String connectedAddress=(String)call(active,"getDeviceAddress");
+                    capture.record(connectedAddress);
+                    String preferred=CastResolution.preference(connectedAddress);
+                    if(!preferred.equals("auto")) {
+                        try { CastResolution.applyOnline(connectedAddress,preferred); }
+                        catch(Exception e) { System.err.println("Requested WFD mode not applied: "+e.getMessage()); }
+                    }
                     return status();
                 }
+                stableSince = 0;
                 String found = findAvailable(address != null ? address : target);
                 if (found == null && address != null) found = findAvailable(sibling(address));
                 debug("state=" + call(s, "getActiveDisplayState") + " scan=" + call(s, "getScanState") + " found=" + found);
                 long now = SystemClock.elapsedRealtime();
-                if ((int) call(s, "getActiveDisplayState") == 0 && found != null && now - lastRequest > 3000) {
+                if (now - lastProgress >= 1000) { progress(target, started, secs, attempts, (int)call(s,"getActiveDisplayState")); lastProgress = now; }
+                if ((int) call(s, "getActiveDisplayState") == 0 && found != null && now - lastRequest > 5000) {
                     address = found;
+                    if (!address.equals(configuredFor)) {
+                        String preferred=CastResolution.preference(address);
+                        try { CastResolution.configure(preferred); }
+                        catch(Exception unavailable) {
+                            // Optional mode adapter must not block native casting on an unknown backend.
+                            // Exact-mode requests are checked again after connection and rolled back by their caller.
+                            System.err.println("WFD offer control unavailable: "+unavailable.getMessage());
+                            if(!preferred.equals("auto"))try {CastResolution.configure("auto");}
+                            catch(Exception ignored){}
+                        }
+                        configuredFor = address;
+                    }
+                    attempts++;
                     debug("connectWifiDisplay " + address);
                     call(dmg, "connectWifiDisplay", address);
                     lastRequest = now;
@@ -283,7 +365,7 @@ public final class Main {
         }
         call(dmg, "disconnectWifiDisplay"); // Do not leave an orphan connection after timeout.
         CastAdapter.release(true);
-        throw new CastFailure("timeout", "Keep the TV on its Miracast waiting page; timed out connecting to "
+        throw new CastFailure("timeout", "Receiver did not complete network setup and negotiation within the connection budget: "
                 + (address != null ? address : target));
     }
 
@@ -340,8 +422,12 @@ public final class Main {
             Handler handler = new Handler(Looper.getMainLooper());
             handler.post(new Runnable() {
                 @Override public void run() {
+                    WfdCapture.reap();
                     try {
-                        if ((int) call(wfdStatus(), "getActiveDisplayState") == 0) CastAdapter.release(false);
+                        if ((int) call(wfdStatus(), "getActiveDisplayState") == 0) {
+                            CastAdapter.release(false);
+                            if (connectionProgress() == null) CastResolution.restoreIdle();
+                        }
                         else CastAdapter.claim(connectedDisplayId());
                     } catch (Exception e) { System.err.println("cast cleanup: " + e); }
                     handler.postDelayed(this, 2000);
@@ -400,6 +486,37 @@ public final class Main {
         return null;
     }
 
+    private static String videoId(org.json.JSONObject value) {
+        return value.optInt("video_width",-1)+"x"+value.optInt("video_height",-1)+"@"+value.optInt("video_fps",-1);
+    }
+    private static org.json.JSONObject resolution() throws Exception {
+        Object active = call(wfdStatus(), "getActiveDisplay");
+        int id = connectedDisplayId();
+        return CastResolution.modes(id < 0 ? null : call(dmg, "getDisplayInfo", id),
+                active == null ? null : (String)call(active, "getDeviceAddress"));
+    }
+
+    private static final File PROGRESS = new File(DIR, "run/connection.json");
+    private static void progress(String target, long start, int budget, int attempt, int state) throws Exception {
+        PROGRESS.getParentFile().mkdirs();
+        org.json.JSONObject value = new org.json.JSONObject().put("pid", android.os.Process.myPid())
+                .put("target", target).put("started_ms", start).put("budget_seconds", budget)
+                .put("attempt", attempt).put("phase", state == 2 ? "connected" : state == 1 ? "negotiating" : "waiting-receiver");
+        android.util.AtomicFile file = new android.util.AtomicFile(PROGRESS);
+        java.io.FileOutputStream stream = file.startWrite();
+        try { stream.write(value.toString().getBytes(StandardCharsets.UTF_8)); file.finishWrite(stream); }
+        catch (Exception e) { file.failWrite(stream); throw e; }
+    }
+    private static org.json.JSONObject connectionProgress() {
+        try {
+            org.json.JSONObject value = new org.json.JSONObject(new String(new android.util.AtomicFile(PROGRESS).readFully(), StandardCharsets.UTF_8));
+            long age = SystemClock.elapsedRealtime() - value.getLong("started_ms");
+            String process = new String(Files.readAllBytes(new File("/proc/"+value.getInt("pid")+"/cmdline").toPath()), StandardCharsets.UTF_8);
+            if (age < 0 || age > 210000 || !process.contains("com.rungic.cast.Main")) return null;
+            return value.put("elapsed_seconds", age / 1000);
+        } catch (Exception ignored) { return null; }
+    }
+
     private static String status() throws Exception {
         Object s = wfdStatus();
         StringBuilder out = new StringBuilder("{");
@@ -414,6 +531,8 @@ public final class Main {
         out.append(",\"active\":").append(active == null ? "null" : display(active));
         out.append(",\"android_display_id\":").append(activeDisplayId(active));
         out.append(",\"reconnecting\":").append(reconnecting());
+        out.append(",\"connection\":").append(connectionProgress());
+        out.append(",\"resolution\":").append(resolution());
         out.append(",\"receivers\":").append(receivers(s, active));
         out.append(",\"displays\":[");
         Object displays = call(s, "getDisplays");
@@ -422,6 +541,14 @@ public final class Main {
             out.append(display(Array.get(displays, i)));
         }
         return out.append("]}").toString();
+    }
+
+    static boolean displayMatches(WfdFormats.Mode requested) throws Exception {
+        int id=connectedDisplayId();
+        if(id<0)return false;
+        Object info=call(dmg,"getDisplayInfo",id);
+        return info!=null && info.getClass().getField("logicalWidth").getInt(info)==requested.width
+                && info.getClass().getField("logicalHeight").getInt(info)==requested.height;
     }
 
     static int connectedDisplayId() throws Exception {

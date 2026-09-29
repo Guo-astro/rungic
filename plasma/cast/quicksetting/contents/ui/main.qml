@@ -103,7 +103,8 @@ QS.QuickSetting {
                 console.warn("rungic-cast: " + result.error);
                 if (result.code === "component-missing") root.error = "投屏组件未就绪";
                 else if (result.code === "unsupported") root.error = "系统不支持无线投屏";
-            } else if (result.active_state !== undefined) {
+            }
+            if (result.active_state !== undefined) {
                 root.apply(result);
             }
             if (callback) callback(result);

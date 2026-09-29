@@ -166,15 +166,17 @@ final class PlatformBridge implements Closeable {
             try {
                 JSONArray args=request.optJSONArray("args");
                 String command=args==null||args.length()==0?"status":args.getString(0);
-                if(!command.matches("status|capabilities|settings|scan|connect|disconnect"))throw new IllegalArgumentException("Unsupported cast command");
+                if(args!=null && args.length()>2)throw new IllegalArgumentException("Too many cast arguments");
+                if(!command.matches("status|capabilities|settings|scan|connect|disconnect|modes|resolution"))throw new IllegalArgumentException("Unsupported cast command");
                 StringBuilder line=new StringBuilder("if [ ! -x /data/adb/rungic-wfd/rungic-cast ] || [ ! -s /data/adb/rungic-wfd/rungic-cast.jar ]; then echo '{\"error\":\"Casting component is not installed\",\"code\":\"component-missing\"}'; exit 2; fi; /data/adb/rungic-wfd/rungic-cast ").append(command);
                 if(args!=null && args.length()>1) {
                     if(command.equals("scan")) { if(!args.getString(1).matches("[0-9]{1,2}"))throw new IllegalArgumentException("scan takes seconds"); }
+                    else if(command.equals("resolution")) { if(!args.getString(1).matches("(?i)[0-9a-f:]{17}/(auto|[0-9]+x[0-9]+@[0-9]+)"))throw new IllegalArgumentException("Invalid resolution selection"); }
                     else if(!command.equals("connect"))throw new IllegalArgumentException("Only connect takes a TV");
                     line.append(" '").append(args.getString(1).replace("'","'\\''")).append("'");
                 }
                 java.lang.Process process=new ProcessBuilder("su","-c",line.toString()).redirectErrorStream(true).start();
-                if(!process.waitFor(60,TimeUnit.SECONDS)) { process.destroy();throw new IOException("投屏命令超时"); }
+                if(!process.waitFor(command.equals("resolution") ? 330 : command.equals("connect") ? 180 : 60,TimeUnit.SECONDS)) { process.destroy();throw new IOException("投屏命令超时"); }
                 String out=new String(process.getInputStream().readAllBytes(),StandardCharsets.UTF_8).trim();
                 String last=out.substring(out.lastIndexOf('\n')+1);
                 result=last.startsWith("{")?new JSONObject(last):new JSONObject().put("error",out.isEmpty()?"rungic-cast failed":out);

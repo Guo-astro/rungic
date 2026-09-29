@@ -82,7 +82,7 @@ final class CastControls {
     /** The pill shrinks to its edge tab after this long without a touch or a change. */
     private static final long SHRINK_AFTER_MS = 4000;
     private final Runnable shrink;
-    private int statusPolls;
+    private int statusPolls, connectionGeneration;
 
     CastControls(Activity context, FrameLayout frame, Consumer<Boolean> keyboard) {
         this.context = context;
@@ -207,6 +207,11 @@ final class CastControls {
         lp.topMargin = (int) Math.max(dp(56), Math.min(pill.getY() - dp(8), frame.getHeight() - dp(360)));
         lp.leftMargin = lp.rightMargin = dp(16);
         panel.refresh();
+        if (available) tool(new String[] {"modes"},20,result -> {
+            if (!available || result.has("error")) return;
+            resolution=result.optString("actual",resolution);
+            refresh();
+        });
         frame.addView(panel, lp);
         pill.setVisibility(View.INVISIBLE);
     }
@@ -220,6 +225,7 @@ final class CastControls {
     }
 
     private void disconnect() {
+        connectionGeneration++;
         userEnded = true;
         handler.removeCallbacks(pollStatus);
         if (!available) session = Session.NONE;
@@ -234,19 +240,62 @@ final class CastControls {
         closeSheet();
         collapse();
         if (name.equals(tvName) && available) return;
+        final int generation = ++connectionGeneration;
         target = name;
         userEnded = true; // the session this ends is not the TV's doing
         handler.removeCallbacks(pollStatus);
         setMode(Mode.PHONE);
         session = Session.SWITCHING;
         refresh();
-        tool(new String[] {"connect", name}, 75, result -> {
+        tool(new String[] {"connect", name}, 180, result -> {
+            if (generation != connectionGeneration) return;
             if (result.has("error") && !available) {
                 session = Session.NONE;
-                Toast.makeText(context, "没有连上“" + name + "”，请让电视停在投屏等待画面后重试", Toast.LENGTH_LONG).show();
+                Toast.makeText(context, "没有连上“" + name + "”，接收端未能完成网络连接和协商，请重试", Toast.LENGTH_LONG).show();
             }
             target = "";
             refresh();
+        });
+    }
+
+    private void openResolution() {
+        tool(new String[] {"modes"}, 20, result -> {
+            if (!available || context.isFinishing()) return;
+            if (!result.optBoolean("adjustable")) {
+                Toast.makeText(context, "当前系统暂不支持调整分辨率与帧率", Toast.LENGTH_LONG).show(); return;
+            }
+            JSONArray options = result.optJSONArray("options");
+            if (options == null || options.length() == 0) return;
+            String[] labels = new String[options.length()];
+            int[] selected = {0};
+            for (int i=0; i<labels.length; i++) {
+                JSONObject option = options.optJSONObject(i);
+                labels[i] = option.optString("label");
+                if (option.optString("id").equals(result.optString("requested"))) selected[0] = i;
+            }
+            String address = result.optString("address");
+            new android.app.AlertDialog.Builder(context)
+                .setTitle("分辨率与帧率 · 当前 " + result.optString("actual", resolution))
+                .setSingleChoiceItems(labels, selected[0], (dialog, which) -> selected[0] = which)
+                .setNegativeButton("取消", null)
+                .setPositiveButton("应用", (dialog, which) -> {
+                    final int generation = ++connectionGeneration;
+                    target = tvName; userEnded = true;
+                    setMode(Mode.PHONE); session = Session.SWITCHING; collapse(); refresh();
+                    tool(new String[] {"resolution", address+"/"+options.optJSONObject(selected[0]).optString("id")}, 330, done -> {
+                        if (generation != connectionGeneration) return;
+                        JSONObject mode = done.optJSONObject("resolution");
+                        if (done.has("error")) {
+                            session = available ? Session.CASTING : Session.NONE;
+                            Toast.makeText(context, done.optBoolean("restored") ? "所选模式未生效，已恢复可用模式" : "切换失败，请重试或选择自动", Toast.LENGTH_LONG).show();
+                        } else if (mode != null) {
+                            resolution = mode.optString("actual", resolution);
+                            Toast.makeText(context, "实际投屏："+resolution, Toast.LENGTH_LONG).show();
+                        }
+                        session = available ? Session.CASTING : Session.NONE;
+                        target = ""; refresh();
+                    });
+                }).show();
         });
     }
 
@@ -627,7 +676,7 @@ final class CastControls {
             TextView name = text(session == Session.SWITCHING ? target : (tvName.isEmpty() ? "电视" : tvName), 17, TEXT, true);
             texts.addView(name);
             String detail = session == Session.CASTING ? resolution
-                : session == Session.RECONNECTING ? "等待电视重新接受连接" : "电视画面会中断几秒";
+                : session == Session.RECONNECTING ? "等待电视重新接受连接" : "正在等待接收端联网和协商，最多两分钟";
             if (!detail.isEmpty()) texts.addView(text(detail, 12, TEXT_DIM, false));
             header.addView(texts, new LayoutParams(0, -2, 1));
             TextView close = text("︿", 16, 0xFFD0D5D9, false);
@@ -659,6 +708,11 @@ final class CastControls {
                     segments.addView(seg, lp);
                 }
                 addView(segments);
+                TextView modeButton = button("分辨率与帧率…", false, v -> openResolution());
+                LayoutParams mlp = new LayoutParams(-1,-2); mlp.topMargin = dp(12);
+                addView(modeButton, mlp);
+                TextView note = text("优先直接切换，必要时重新连接；未能应用时恢复可用模式。",12,TEXT_DIM,false);
+                note.setPadding(0,dp(6),0,0); addView(note);
             } else if (session == Session.RECONNECTING) {
                 TextView note = text("重连期间手机恢复为普通触控。电视回到等待画面后会自动接上。", 13, 0xFFC4CACE, false);
                 note.setLineSpacing(0, 1.3f);

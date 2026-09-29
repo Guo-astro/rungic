@@ -7,6 +7,8 @@ host app's root tool rungic-cast through the platform bridge.
   rungic-cast settings            Android's receiver selection page
   rungic-cast scan [seconds]      look for TVs (default 8 s); lists them as "receivers"
   rungic-cast connect [TV]        the TV used last, or one by name/address
+  rungic-cast modes               current video mode and receiver/source compatible modes
+  rungic-cast resolution MAC/1920x1080@30 change the active video mode and reconnect
   rungic-cast disconnect          stop casting (no automatic reconnect follows)
 
 Prints the tool's JSON; exits 1 with {"error": ...} on failure.
@@ -16,12 +18,12 @@ import socket
 import sys
 
 SOCKET = '/mnt/android-wayland/platform.sock'
-COMMANDS = ('status', 'capabilities', 'settings', 'scan', 'connect', 'disconnect')
+COMMANDS = ('status', 'capabilities', 'settings', 'scan', 'connect', 'disconnect', 'modes', 'resolution')
 
 
 def request(args: list[str]) -> dict:
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
-        conn.settimeout(75)
+        conn.settimeout(350)
         conn.connect(SOCKET)
         conn.sendall(json.dumps({'op': 'cast', 'args': args}, ensure_ascii=False).encode() + b'\n')
         with conn.makefile('rb') as stream:
@@ -30,7 +32,7 @@ def request(args: list[str]) -> dict:
 
 def main() -> int:
     args = sys.argv[1:] or ['status']
-    if args[0] not in COMMANDS or len(args) > (2 if args[0] in ('connect', 'scan') else 1):
+    if args[0] not in COMMANDS or len(args) > (2 if args[0] in ('connect', 'scan', 'resolution') else 1):
         print(__doc__.strip(), file=sys.stderr)
         return 2
     try:
