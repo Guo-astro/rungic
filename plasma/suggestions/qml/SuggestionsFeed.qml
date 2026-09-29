@@ -70,7 +70,13 @@ Rectangle {
         reuseItems: true
         model: feed.shown
         onMovingChanged: if (!moving && feed.pendingRefresh) feed.rebuild()
-        QQC2.ScrollBar.vertical: QQC2.ScrollBar { policy: QQC2.ScrollBar.AsNeeded }
+        QQC2.ScrollBar.vertical: QQC2.ScrollBar {
+            policy: QQC2.ScrollBar.AsNeeded
+            implicitWidth: 4
+            padding: 0
+            background: null
+            contentItem: Rectangle { implicitWidth: 3; radius: 2; color: Theme.dim; opacity: parent.active ? 0.5 : 0.15 }
+        }
         header: ColumnLayout {
             width: list.width
             spacing: 14

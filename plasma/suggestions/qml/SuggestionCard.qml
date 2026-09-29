@@ -9,6 +9,10 @@ Rectangle {
     required property var item
     property bool expanded: false
     signal action(string name, var args)
+    readonly property var evidence: item.evidence || ({})
+    readonly property string displayTitle: evidence.package === "plasma-workspace" ? "桌面组件曾意外退出" : (item.title || "建议")
+    readonly property string basis: evidence.reports ? "已保存 " + evidence.reports + " 份异常记录。相关组件版本：" + (evidence.version || "待核实")
+        : evidence.scope || (evidence.unit ? "检测到服务运行失败，需要确认实际影响。" : "来自本机诊断，处理前会重新核对。")
     readonly property string stateName: item.state || "new"
     implicitHeight: content.implicitHeight + 36
     radius: 20
@@ -16,7 +20,7 @@ Rectangle {
     border.width: 1
     border.color: expanded ? Theme.link : Theme.line
     Accessible.role: Accessible.Grouping
-    Accessible.name: item.title || "建议"
+    Accessible.name: displayTitle
 
     ColumnLayout {
         id: content
@@ -39,13 +43,13 @@ Rectangle {
                 QQC2.MenuItem { text: "准备反馈材料"; onTriggered: card.action("feedback", {}) }
             }
         }
-        Text { Layout.fillWidth: true; text: card.item.title || ""; textFormat: Text.PlainText; wrapMode: Text.Wrap; font.pixelSize: 19; font.weight: Font.DemiBold; color: Theme.text }
+        Text { Layout.fillWidth: true; text: card.displayTitle; textFormat: Text.PlainText; wrapMode: Text.Wrap; font.pixelSize: 19; font.weight: Font.DemiBold; color: Theme.text }
         Text { Layout.fillWidth: true; text: card.item.body || ""; textFormat: Text.PlainText; wrapMode: Text.Wrap; font.pixelSize: 14; lineHeight: 1.35; color: Theme.dim }
         Text { Layout.fillWidth: true; visible: !!card.item.note; text: card.item.note || ""; textFormat: Text.PlainText; wrapMode: Text.Wrap; font.pixelSize: 12; color: Theme.link }
         Text {
             Layout.fillWidth: true
             visible: card.expanded
-            text: [card.item.result, card.item.plan ? "方案：" + card.item.plan : "", card.item.verification ? "验证：" + card.item.verification : "", card.item.rollback ? "回退：" + card.item.rollback : "", "诊断摘要：\n" + JSON.stringify(card.item.evidence || {}, null, 2)].filter(Boolean).join("\n\n")
+            text: [card.item.result, card.item.plan ? "方案：" + card.item.plan : "", card.item.verification ? "验证：" + card.item.verification : "", card.item.rollback ? "回退：" + card.item.rollback : "", "判断依据：" + card.basis].filter(Boolean).join("\n\n")
             textFormat: Text.PlainText; wrapMode: Text.WrapAnywhere; font.pixelSize: 13; color: Theme.dim
         }
         RowLayout {
