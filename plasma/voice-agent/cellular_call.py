@@ -53,7 +53,7 @@ class CellularCall(CallProxy):
         deadline = time.monotonic() + 20
         misses = 0
         try:
-            while self.phase in ('agent', 'user'):
+            while self.phase == 'agent':
                 status = request('status')
                 calls = status.get('calls', [])
                 if self.call_id is None:
@@ -78,7 +78,10 @@ class CellularCall(CallProxy):
                         self.answered = self.connected = True
                         self.emit({'type': 'call-state', 'state': 'connected'}, keep=False)
                         # A single return from Android's outgoing call screen. Never a focus loop.
-                        request('show-linux', id=self.call_id)
+                        try:
+                            request('show-linux', id=self.call_id)
+                        except Exception:
+                            self.emit({'type': 'call-note', 'text': '电话继续中，可手动返回 Rungic 查看通话条。'})
                         threading.Thread(target=self._answered, daemon=True).start()
                 time.sleep(.5)
         except Exception as error:
@@ -108,6 +111,19 @@ class CellularCall(CallProxy):
             self.emit({'type': 'call-phase', 'phase': 'user', 'summary': self.summary})
             if self.ws:
                 self.ws.close()
+            threading.Thread(target=self._watch_user_call, daemon=True).start()
+
+    def _watch_user_call(self):
+        while self.phase == 'user':
+            try:
+                status = request('status')
+                if status.get('available') is not False and not any(
+                        c['id'] == self.call_id and c['state'] != 7 for c in status.get('calls', [])):
+                    self._end('ended')
+                    return
+            except (OSError, RuntimeError):
+                pass  # Lost state is not a confirmed hang-up. Keep the call controls visible.
+            time.sleep(1)
 
     def set_monitor(self, on):
         self.emit({'type': 'call-note', 'text': '本机通话使用系统听筒；尚未提供独立旁听开关。'})

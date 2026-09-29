@@ -85,8 +85,12 @@ public final class CallDaemon {
         if(op.equals("dial"))return dial(r);
         if(op.equals("show-linux")){
             call(r.getString("id"));
-            context.startActivity(new Intent().setComponent(new ComponentName("com.rungic.plasma","com.rungic.plasma.MainActivity"))
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            // app_process's system Context cannot attribute an activity launch to
+            // this APK. Use the same root shell entry point as the host controller.
+            java.lang.Process launch=new ProcessBuilder("/system/bin/am","start","--user","0","-n",
+                "com.rungic.plasma/.MainActivity").redirectErrorStream(true).start();
+            try(InputStream output=launch.getInputStream()){byte[] b=new byte[1024];while(output.read(b)!=-1){}}
+            if(launch.waitFor()!=0)throw new IOException("linux-ui-unavailable");
             return new JSONObject().put("accepted",true);
         }
         if(op.equals("release-audio")){
