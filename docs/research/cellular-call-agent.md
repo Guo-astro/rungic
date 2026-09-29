@@ -86,3 +86,70 @@
 - 通话条之外不遮挡、不模糊、不拦截桌面触摸；切换应用与屏幕不改变通话生命周期。
 - 现有 `AssistantOverlay.qml` 是全屏 LayerShell 窗口，input mask 覆盖导航栏以上区域，不能只把视觉卡片缩小就声称实现微缩。须配套缩小输入区域或使用独立小窗。
 - Android 原厂通话界面和 Linux Agent 界面分别处理：Agent 发起电话后应能回到 Linux 小窗，仍保留原厂电话入口；不能用持续抢前台的方式覆盖用户正在操作的应用。
+
+## Realtime 接入与第二轮部署（2026-09-29，未完成双向验收）
+
+执行时现场核验：开发机 `mibook` / x86_64；目标仍为 5037 / `ZY32M9MRVP` / G100。Mac mini 构建端现场返回 `chou-Mac-mini.local` / arm64，`scutil --proxy` 的 HTTP/HTTPS 端口为 6152。这里只记录本次事实。
+
+用户指定的 `/home/kevinzhow/.config/rungic-voice-agent/openai-api-key` 实际在 **G100 的 Linux 容器**，本机同路径不存在。按容器原路径读取，权限从 0644 收紧到 0600；未复制、输出或提交密钥。真实 WebSocket 返回 `session.created`、模型 `gpt-realtime-2.1-mini`；保留项目既有模型。
+
+官方协议对照：[Realtime conversations](https://developers.openai.com/api/docs/guides/realtime-conversations)。本轮实测 `session.update` 的 nested audio 配置、24 kHz 单声道 PCM、输入转写及输出音频事件可用。通话端继续复用 `call_proxy.py` 的 Realtime 对话、文字指示和摘要，蜂窝运输放在 `cellular_audio.py` / `cellular_call.py`，不经过微信的 PulseAudio 路由。
+
+### 当前已安装候选
+
+- APK **2.18 / versionCode 66**，`rungic-voice-agent` **0.365**，源码提交 `c6f92bc0`；底座仍为 `20260929.2`，这不是新的完整发行包。
+- `plasma/android-calls` 生命周期进入宿主控制器、host seed 与 release Android 清单。实际部署保留数据覆盖安装；备份 APK / controller / helper 在 `deployment-2/`。源码 APK 内的 non-UI InCallService 保留原厂电话界面，实验阶段禁用的 component 已重新启用。
+- root daemon 绑定 socket 成功后才写 PID，避免第二实例覆盖有效 PID。拨号 request ID 写入本地持久文件后才调用 Telecom，不在网络恢复时重拨。
+- 音频拥有者断开时释放 AudioRecord/AudioTrack、恢复原静音状态。InCallService 持有独立的 4 秒静音租约；daemon 每秒续期。SIGKILL 恢复机制已实现，但本轮未做实机故障注入，不能标为通过。
+- 用户态 `StartCall` / `--start-call` 支持 `app=cellular, number=...`，Realtime 就绪后才拨号；`--call-text` 为文字指示，`--call-dtmf` 为按键，`take-over` / `hang-up` 绑定真实 call ID。
+- 私下语音指令及独立旁听开关明确关闭。未证明物理麦克风隔离，UI/能力报告不能宣称已验证。
+- Plasma 实际重新进入成功；SSH `ssh.socket` 保持 enabled / active，没有修改关闭策略。
+
+### 两次 10000 实验
+
+证据统一在 `.work/experiments/g100-cellular-20260929/`：`realtime-1.jsonl`、`realtime-2.jsonl`、`realtime-call-2.png`、`compact-touch-2.png`、构建/安装日志及 APK。
+
+1. **第一次**（APK 2.17 / Agent 0.364）：拨号、接通、打开通话音频成功；从 root app_process 的 system Context 启动 MainActivity 被 Android 拒绝。异常使 Agent 提前交回通话，未完成 Realtime 代谈。观察到静音恢复为 false，按 call ID 挂断后 phoneState/audioMode=0、audioActive=false。不能把这次当作上行测试通过。
+2. **第二次**（APK 2.18 / Agent 0.365）：改用宿主控制器同类的 `am start --user 0` 返回 Linux，一次执行而非持续抢前台；UI 失败也不再中断音频。Realtime 识别出湖南电信 10000 的归属地转接菜单；Agent 生成语音，并接受私下文字指示后生成“湖南电信”。远端后续仍播报“没有听清”，**上行远端语义响应未通过**。可能涉及静音影响、实际 TX 路由、音量/格式或菜单时序，当前证据不能选定根因。
+3. 第二次的电话由测试结束流程挂断。最终记录 `calls=[], phoneState=0, audioMode=0, audioActive=false`，没有残留通话。摘要只是模型对转写的归纳，不能用摘要替代远端听到声音的证据。
+4. 微缩条在 Linux 桌面显示对象、通话状态和挂断；条外点击应用抽屉成功。该次抽屉截图取得时电话已结束，所以仅与点击时序共同作为初步触摸证据，尚需在同一截图/记录中确认持续通话与其他应用并存。拖动、详情输入、接管及多输出完整回归未完成。首次截图的计时被对象名挤掉，后续本地改为独立两行，尚未部署。
+
+### 受限环境下的后续源码检查（尚未部署）
+
+用户继续时执行环境切换为 workspace-write / network restricted / approval never。现场 `ip route` 的 netlink 与 ADB 5037 socket 均报 `Operation not permitted`；并非设备断线的证据。自此没有继续发起电话、修改手机或远程构建。`.git` 只读，新修改未提交；不能把源码工作树等同于手机已安装版本。
+
+用户随后指出自己使用 `--yolo`。2026-09-29 复查本条会话的 rollout `turn_context`（只读取权限元数据，未复制对话正文）：北京时间 09-28 11:09 为 `danger-full-access / permission_profile=disabled`；14:56 变成 `workspace-write / network_access=false`；15:05 恢复完整访问；09-29 17:13:37 再次变为受限策略。`approval_policy` 一直是 `never`。因此 `--yolo` 对应的权限曾实际生效，不能说用户没有授权或把 never 单独当作完整访问。现场 CLI 为 0.157.1，实际命令沙箱来自 app-server-daemon 0.159.0；版本差异仅作线索，不作为已确认原因。现有元数据没有说明由哪个客户端/恢复请求触发切换，不能断言升级、IDE 或用户操作导致。排查应核对会话恢复/后续 turn 的权限传递；拔插手机不会修复这一层限制。官方参数说明见 [Agent approvals & security](https://learn.chatgpt.com/docs/agent-approvals-security)。
+
+本地已补：
+
+- Android 最后一个 Call 结束后会解绑 InCallService；`phoneState=IDLE` 仍能确认通话结束。不能因 `available=false` 永远留下接管后的通话条，也不能把 busy 状态下丢失/重建 call ID 当成已挂断。
+- Realtime 就绪前用户取消时禁止随后拨号；状态回归还覆盖彩铃不打开 PCM、UI 失败保持音频、失去 call ID 只交回不重拨，以及接管幂等。
+- 增加无音频正文的诊断：写入/采集字节数、PCM 峰值、播放帧数、underrun、实际路由设备类型、采样率及系统静音状态。它们用于排查，不等于远端可听验证。
+- daemon 检测通话途中系统解除静音后释放 Agent 音频，避免继续声称隔离。此行为未做实机验收。
+
+验证边界：第一次受限切换前 5 项 socket-pair 音频测试通过。切换后重跑，其中 4 项在 `sendall` 被沙箱拒绝，1 项纯缓冲测试通过，不能记录为代码回归失败或全部通过。新增 `tools/tests/test_cellular_state.py` 的 **8 项无 I/O 状态测试通过**；Android 36 SDK 上三个 Java 类编译通过。QML 修改尚未完成新构建/实机验收。
+
+### 上行下一步实验与研究线索
+
+先固定 PCM、菜单提示后的发送时机和当前通话 ID，保存 AudioFlinger/AudioPolicy 与上述诊断，再比较“系统静音”与“短暂取消静音”的远端响应。取消静音只是授权 10000 的受控实验，不作为产品修复；绝不能为了听到上行而默默把用户房间声音混入代打电话。应使用独立 root 探针并恢复原静音状态；新版租约守卫会在解除静音时退出，不能把它的退出误判为硬件失败。不要沿用旧 `CallProbe.java` 的全局 endCall watchdog，后续清理仍绑定精确 call ID。
+
+一个历史源码线索：[AOSP qcom audio 合并提交 6c480d7 的 voice.c 修改](https://android.googlesource.com/platform/hardware/qcom/audio/+/6c480d775814f3b9182180fdce3808e7df2e0703%5E1..6c480d775814f3b9182180fdce3808e7df2e0703/)在 incall music 活跃时区分设备 TX mute 与混合后 voice stream mute。这支持“静音可能连注入一起静音”作为待验证假设；它是 **2019 旧 Qualcomm HAL 的实现**，不是 G100 Android 16 AIDL HAL 的来源证明。本轮未找到并核验当前设备对应 PAL/AIDL 实现，未修改 mixer、HAL 或 SELinux。不得直接照搬该旧实现。
+
+另外，现有共享对话监督依赖 TypeSafe key；本次 `call-step` 一直为 CONTINUE / 0.0。没有该 key 时，GPT Realtime 会说话但尚无完整自动询问主人/结束通话决策的替代路径。此缺口、远端上行、打断时的已播/未播语音同步、租约故障恢复和普通电话/微信回归仍需完成，不能宣称“电话 Agent 已完成”。
+
+## 按用户意图选通道与共享卡片（2026-09-29，本地实现，未部署）
+
+用户明确要求：**“打电话”走手机卡，“打微信电话”走微信**。查询当前能力只核验指定方式的前提；不可根据可用性、上次成功的 App 或机型自动改换通道。联系人/号码有歧义时只澄清该歧义。此规则进入 `rungic-phone-desktop/SKILL.md` 和按需引用的 `calls.md`，不把 10000、G100、开发机名或本轮未验收能力写成通用默认。
+
+本轮先对照 63 篇的微信代理和 89 篇的会话记录实现，并检查 `CallProxy`、`VoiceAgent`、`ChatModel`、`ChatEntry` 与打包脚本。复用项目现有 Realtime 引擎、卡片和两个音频后端，不引入第三方组件或另一套硬件通路；项目 Python 为 MIT，QML 为 GPL-2.0-or-later，许可证不变。
+
+- 新增 `call_backends.resolve`，接受显式 `backend=cellular + number` 或 `backend=app + app`。兼容原来明确指定 `app=cellular` / `app=wechat` 的调用；缺少通道信息不再默认微信。冲突参数在创建代理前拒绝，不拨号、不回退。
+- 新增 D-Bus `CallCapabilities` / CLI `--call-capabilities`。读取本次 Telecom 账户、音频接口与应用路由前提，不拨号、不输出 key。连不上后端保留为未知，不能推断硬件不支持；`audioInterfaceAvailable` 与 `endToEndVerified` 分开，后者当前为 false。
+- 每次通话有独立 `callId` 和发起它的 `conversation`。转写、状态、错误、文字指示及结果始终写入原对话；切换对话不迁移卡片。历史与状态快照按 ID 恢复同一张卡片，不把旧通话复活为新通话。
+- 卡片显示实际通道/对象，从接通时计时；提供文字指示、接管、挂断和按后端能力显示的旁听。蜂窝失败提示指向系统电话，其他 App 指向通话应用。卡片/微缩条命令携带 `callId`，服务拒绝旧卡片操作下一通通话；既有面向当前通话的 CLI 保持兼容。
+- 共享事件写入器尊重显式 conversation，不再把标着旧会话的事件存进当前会话。延迟到达的旧通话事件不会暂停新通话或在另一个对话播报结果。
+- 打包纳入 `call_backends.py`；现有技能 Markdown 打包通配符包含 `calls.md`。
+
+离线验证：`test_call_backends.py` 5 项、`test_call_conversations.py` 5 项、`test_call_cards.py` 7 项、`test_cellular_state.py` 8 项，共 **25 项通过**。卡片测试实际执行 Qt/QML 的 ChatModel，并加载真实 ChatEntry 与共享设计控件；仅原生 SystemTheme/AgentClient 适配器使用替身，不代替完整 Plasma 窗口与 D-Bus 验收。技能 quick_validate、Python 语法与 diff 空白检查通过。
+
+本节所有新修改尚未部署、未提交；设备安装版本仍以前一节为准。SIM 上行与完整微信回归等未验收项仍保留，不能用离线卡片测试代替真实双向通话。恢复可访问设备的执行环境后，先核验当前主机/连接/设备/安装版本，再部署并核对原对话卡片、切换会话、微缩条、接管/挂断，以及获授权测试目标的真实远端响应。

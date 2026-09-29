@@ -5,7 +5,7 @@ cmake --build "$V/app/build" -j"${JOBS:-4}"
 DESTDIR="$DESTDIR" cmake --install "$V/app/build"
 install -Dm755 "$V/rungic_voice_agent.py" "$DESTDIR/usr/bin/rungic-voice-agent"
 install -Dm644 "$V/call_proxy.py" "$DESTDIR/usr/lib/rungic-voice-agent/call_proxy.py"
-for f in cellular_audio cellular_call; do install -Dm644 "$V/$f.py" "$DESTDIR/usr/lib/rungic-voice-agent/$f.py"; done
+for f in cellular_audio cellular_call call_backends; do install -Dm644 "$V/$f.py" "$DESTDIR/usr/lib/rungic-voice-agent/$f.py"; done
 install -Dm644 "$V/task_state.py" "$DESTDIR/usr/lib/rungic-voice-agent/task_state.py"
 for f in "$V"/prompts/*.md; do install -Dm644 "$f" "$DESTDIR/usr/share/rungic-voice-agent/prompts/$(basename "$f")"; done
 for f in "$V"/skills/rungic-phone-desktop/*.md; do

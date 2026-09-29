@@ -33,6 +33,7 @@ Window {
 
     // Call status is global (it can belong to the app's conversation, not this overlay's).
     property bool callLive: false
+    property string callId: ""
     property string callConversation: ""
     property string callContact: ""
     property string callStatus: "connecting"
@@ -45,7 +46,9 @@ Window {
     onCompactCallChanged: Qt.callLater(updateMaterial)
 
     function callEvent(e) {
+        if (e.type !== "call-started" && e.callId && e.callId !== callId) return
         if (e.type === "call-started") {
+            callId = e.callId || ""
             callLive = true; callPhase = "agent"; callStatus = "connecting"
             callConversation = e.conversation || win.conversation
             callContact = e.contact || "电话"; callStarted = 0; callNote = ""
@@ -54,24 +57,28 @@ Window {
             Overlay.present(screenName)
         } else if (e.type === "call-state") {
             callStatus = e.state
-            if (e.state === "connected" && !callStarted) callStarted = Date.now() / 1000
+            if (e.state === "connected" && !callStarted) callStarted = e.connectedAt || e.time || Date.now() / 1000
         } else if (e.type === "call-phase") { callPhase = e.phase
         } else if (e.type === "call-ask" || e.type === "call-error" || e.type === "call-note") {
             callNote = e.text || ""
         } else if (e.type === "call-ended") {
             callLive = false; callDetails = false
             if (!shown) Overlay.conceal()
-        } else if (e.type === "state" && e.callInfo && !callLive) {
-            callConversation = e.conversation || win.conversation
+        } else if (e.type === "state" && e.callInfo) {
+            callId = e.callInfo.id || ""
+            callConversation = e.callInfo.conversation || e.conversation || win.conversation
             callLive = true; callContact = e.callInfo.contact; callPhase = e.callPhase
             callCanMonitor = e.callInfo.independentMonitor !== false
-            callStatus = "ongoing"; callStarted = 0
+            callStatus = e.callInfo.state || (e.callInfo.connectedAt ? "connected" : "ongoing"); callStarted = e.callInfo.connectedAt || 0
             if (!shown) { hideTimer.stop(); Overlay.present(screenName) }
         } else if (e.type === "agent-restarted") {
             callLive = false
             if (!shown) Overlay.conceal()
         }
         if (compactCall) Qt.callLater(updateMaterial)
+    }
+    function callCommand(op, fields) {
+        AgentClient.callCommand(JSON.stringify(Object.assign({op: op, callId: callId}, fields || {})))
     }
 
     // The app's look, also here.
@@ -523,21 +530,42 @@ Window {
             spacing: 8
             RowLayout {
                 Layout.fillWidth: true
-                Text {
+                ColumnLayout {
                     Layout.fillWidth: true
-                    color: Theme.text
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 15
-                    elide: Text.ElideRight
-                    readonly property int seconds: win.callStarted ? Math.max(0, Math.floor(win.now-win.callStarted)) : 0
-                    readonly property string stateText: win.callPhase === "user" ? "你在通话"
-                        : ({connecting: "准备中", dialing: "拨号中", ringing: "等待接通", connected: "助理通话中",
-                            ongoing: "通话中", "hanging-up": "正在挂断", "hangup-failed": "请检查电话"})[win.callStatus] || "通话中"
-                    text: win.callContact + " · " + stateText + (win.callStarted ? "  " + Math.floor(seconds/60) + ":" + String(seconds%60).padStart(2,"0") : "")
+                    Layout.minimumWidth: 0
+                    spacing: 2
+                    Text {
+                        Layout.fillWidth: true
+                        color: Theme.text
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 15
+                        elide: Text.ElideRight
+                        text: win.callContact
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Text {
+                            Layout.fillWidth: true
+                            color: Theme.dim
+                            font.pixelSize: 12
+                            elide: Text.ElideRight
+                            text: win.callPhase === "user" ? "你在通话"
+                                : ({connecting: "准备中", dialing: "拨号中", ringing: "等待接通", connected: "助理通话中",
+                                    ongoing: "通话中", "hanging-up": "正在挂断", "hangup-failed": "请检查电话"})[win.callStatus] || "通话中"
+                        }
+                        Text {
+                            visible: win.callStarted > 0
+                            color: Theme.text
+                            font.family: Theme.monoFamily
+                            font.pixelSize: 12
+                            readonly property int seconds: Math.max(0, Math.floor(win.now-win.callStarted))
+                            text: Math.floor(seconds/60) + ":" + String(seconds%60).padStart(2,"0")
+                        }
+                    }
                 }
                 QQC2.Button {
                     text: "挂断"
-                    onClicked: AgentClient.callCommand("hang-up")
+                    onClicked: win.callCommand("hang-up")
                 }
             }
             Text {
@@ -555,7 +583,7 @@ Window {
                 QQC2.Button {
                     text: "我来接"
                     enabled: win.callPhase === "agent"
-                    onClicked: AgentClient.callCommand("take-over")
+                    onClicked: win.callCommand("take-over")
                 }
                 QQC2.Button {
                     text: "通话记录"
@@ -573,7 +601,7 @@ Window {
                 placeholderText: "私下给助理的文字指令"
                 onAccepted: {
                     if (!text.trim()) return
-                    AgentClient.callCommand(JSON.stringify({op: "instruct", text: text}))
+                    win.callCommand("instruct", {text: text})
                     text = ""
                 }
             }

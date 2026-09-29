@@ -172,6 +172,10 @@ Docker的 `moto-nginx` 仍healthy，原Alpine LXC仍RUNNING；不停止这两个
 
 2026-09-29 后续修复：APK 2.14 将剪贴板访问移到容器生命周期内的独立 Shell 身份进程；Linux 直连、APK 仅兼容转发，取消 Activity 焦点条件。G100 上独立 Android 应用前台复制 → Wayland/Klipper、Linux 选择 → Android 实际粘贴，以及助理屏全屏主窗口失焦都已通过。敏感/非文本不跨系统；Klipper 默认阻止清空会恢复上条记录，暂时关闭该选项后双向清空通过，再恢复用户配置。部署与剩余边界见 [后台剪贴板](clipboard-background.md)。
 
-## 2026-09-29：SIM 电话 Agent 可行性研究（未部署）
+## 2026-09-29：SIM 电话 Agent 候选（双向验收未完成）
 
-见[研究与 G100 只读证据](cellular-call-agent.md)。现有移动网络桥没有通话控制或通话 PCM；拟复用 Telecom / InCallService 与系统上下行音频 API。G100 音频策略已列出通话 TX/RX 端口，但真实双向声音、权限、麦克风隔离与接管均未验收，本轮没有拨号。
+见[研究、部署和 10000 实验](cellular-call-agent.md)。G100 已安装 APK 2.18 / Agent 0.365 候选：共享 Realtime 对话 → `cellular_call` / `cellular_audio` → root CallDaemon / non-UI InCallService → Android Telecom 与系统通话 PCM → SIM。已验证真实拨号/接通/挂断、客服下行转写、Linux 微缩通话条和文字指示。客服仍表示未听清，远端上行、物理麦克风隔离、接管与故障恢复未通过完整验收，不能作为跨机型可用能力。私下语音指令和独立旁听开关未开放。
+
+后续执行环境限制 ADB 和远程构建，新状态修正、音频诊断与计时排版仅在工作树中，尚未部署。最新实机证据与各阶段边界以链接记录为准；底座仍为 20260929.2。
+
+2026-09-29 后续本地源码：手机卡/微信通话按用户指定的通道进入同一套助理卡片；能力查询不自动改选。卡片按通话与原对话 ID 恢复，旧卡片控制受校验。25 项离线回归和技能校验通过，尚未部署；不增加上行或跨机型验收结论。详见上述研究文档的“按用户意图选通道与共享卡片”。

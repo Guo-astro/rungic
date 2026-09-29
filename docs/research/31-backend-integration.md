@@ -532,6 +532,10 @@ Agent可直接调用的设备诊断、崩溃现场、统一追踪（perfetto + K
 
 2026-09-29 后台剪贴板：`ClipboardDaemon`（APK 内代码，由 `plasma/android-clipboard` 经 Magisk 以 Shell UID 2000 启动）持有 Android framework ClipboardManager 与变化监听；生命周期由 Android 宿主 `rungic-plasma start/stop` 管理，独立于 Activity。Linux `rungic-clipboard` 直连抽象 Unix socket `com.rungic.clipboard.v1`，使用 `clipboard-get` / `clipboard-set` / `watch`，后者返回 epoch 与 versions.clipboard。服务只接受 UID 0、1000 和当前 Rungic APK UID；客户端核验服务 UID 2000。当前 LXC 共享 Android 网络命名空间，未使用网络端口。`platform.sock` 的旧剪贴板操作继续转发，旧 HostEvents 的单/多主题 watch 由独立后端事件驱动。历史仍只在 Klipper，桥不存正文日志/历史。来源、升级配套与边界见 [后台剪贴板](clipboard-background.md)。
 
-## 2026-09-29：SIM 电话 Agent 可行性研究（未部署）
+## 2026-09-29：SIM 电话 Agent 候选（双向验收未完成）
 
-见[研究与 G100 只读证据](cellular-call-agent.md)。现有移动网络桥没有通话控制或通话 PCM；拟复用 Telecom / InCallService 与系统上下行音频 API。G100 音频策略已列出通话 TX/RX 端口，但真实双向声音、权限、麦克风隔离与接管均未验收，本轮没有拨号。
+见[研究、部署和 10000 实验](cellular-call-agent.md)。G100 已安装 APK 2.18 / Agent 0.365 候选：共享 Realtime 对话 → `cellular_call` / `cellular_audio` → root CallDaemon / non-UI InCallService → Android Telecom 与系统通话 PCM → SIM。已验证真实拨号/接通/挂断、客服下行转写、Linux 微缩通话条和文字指示。客服仍表示未听清，远端上行、物理麦克风隔离、接管与故障恢复未通过完整验收，不能作为跨机型可用能力。私下语音指令和独立旁听开关未开放。
+
+后续执行环境限制 ADB 和远程构建，新状态修正、音频诊断与计时排版仅在工作树中，尚未部署。最新实机证据与各阶段边界以链接记录为准；底座仍为 20260929.2。
+
+2026-09-29 后续本地接口（未部署）：`CallCapabilities` / `--call-capabilities` 返回当前前提，明确接口可用不等于端到端通过；`StartCall` 显式接受 `backend=cellular + number` 或 `backend=app + app`，既有显式 app 调用兼容。选择依据用户要求，能力检测不切换通道。共享事件以 `callId` / `conversation` 关联原卡片与存储，`State.callInfo` 提供恢复信息；卡片 `CallCommand` JSON 带 callId，拒绝跨通话误操作。25 项离线回归通过，实际设备契约仍须部署后验收，细节见上述研究文档。

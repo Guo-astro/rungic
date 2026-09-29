@@ -12,6 +12,18 @@ from call_proxy import CallProxy
 from cellular_audio import PCMPlayer, request
 
 
+def confirmed_ended(status, call_id):
+    """Telecom's idle state remains authoritative after InCallService unbinds.
+    A lost bridge or changed Call ID while telephony is busy is not a hang-up.
+    """
+    if status.get('phoneState') == 0:
+        return True
+    if status.get('available') is False:
+        return False
+    call = next((c for c in status.get('calls', []) if c['id'] == call_id), None)
+    return call is not None and call.get('state') == 7
+
+
 class CellularCall(CallProxy):
     def __init__(self, emit, tell_owner, *, number, account='', request_id=None, **kwargs):
         super().__init__(emit, tell_owner, app='cellular', **kwargs)
@@ -22,6 +34,7 @@ class CellularCall(CallProxy):
         self.independent_monitor = False
         self.monitor_wanted = False
         self._audio_opened = False
+        self.connected_at = 0.0
         self._handover_lock = threading.Lock()
 
     def _start_media(self):
@@ -36,7 +49,7 @@ class CellularCall(CallProxy):
         pass                              # audio opens only for a confirmed active Call
 
     def dial(self):
-        if not (self.active and self.ready.is_set()):
+        if not (self.active and self.ready.is_set()) or self.ending:
             raise RuntimeError('Realtime 尚未就绪，未拨号')
         self.emit({'type': 'call-state', 'state': 'dialing'}, keep=False)
         result = request('dial', number=self.number, account=self.account, requestId=self.request_id)
@@ -65,17 +78,20 @@ class CellularCall(CallProxy):
                         raise RuntimeError('未能识别已拨出的电话，请在系统电话中查看')
                 call = next((c for c in calls if c['id'] == self.call_id), None)
                 if self.call_id:
+                    if confirmed_ended(status, self.call_id):
+                        super().stop('ended')
+                        return
                     # A transient bridge failure is not proof that the phone hung up.
                     if status.get('available') is False:
                         raise RuntimeError('系统通话服务失去连接')
                     misses = misses + 1 if call is None else 0
-                    if (call and call['state'] == 7) or misses >= 2:
-                        super().stop('ended')
-                        return
+                    if misses >= 2:
+                        raise RuntimeError('通话标识已改变，已停止代理，请从系统电话查看')
                     if call and call['state'] == 4 and self.phase == 'agent' and not self._audio_opened:
                         self.player.open(self.call_id, self._remote, self._audio_failed)
                         self._audio_opened = True
                         self.answered = self.connected = True
+                        self.connected_at = time.time()
                         self.emit({'type': 'call-state', 'state': 'connected'}, keep=False)
                         # A single return from Android's outgoing call screen. Never a focus loop.
                         try:
@@ -117,8 +133,7 @@ class CellularCall(CallProxy):
         while self.phase == 'user':
             try:
                 status = request('status')
-                if status.get('available') is not False and not any(
-                        c['id'] == self.call_id and c['state'] != 7 for c in status.get('calls', [])):
+                if confirmed_ended(status, self.call_id):
                     self._end('ended')
                     return
             except (OSError, RuntimeError):
@@ -148,8 +163,7 @@ class CellularCall(CallProxy):
                 request('hangup', id=self.call_id)
                 while time.monotonic() < until:
                     status = request('status')
-                    if status.get('available') is not False and not any(
-                            c['id'] == self.call_id and c['state'] != 7 for c in status.get('calls', [])):
+                    if confirmed_ended(status, self.call_id):
                         super(CellularCall, self).stop('hung up')
                         return
                     time.sleep(.25)

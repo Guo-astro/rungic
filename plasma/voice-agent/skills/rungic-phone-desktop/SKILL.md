@@ -1,6 +1,6 @@
 ---
 name: rungic-phone-desktop
-description: Operate this phone's Linux desktop (KDE Plasma Mobile on Android) and Android-side device functions - brightness, clipboard, orientation, vibration, network/display info, Android settings panels, TV casting, screen recording, operating GUI apps (rungic-desktop MCP tools: launch, observe, run UI subtasks), windows and screenshots. Use whenever a request is about the phone, the desktop, apps on screen, or the TV.
+description: "Operate this phone's Linux desktop (KDE Plasma Mobile on Android) and Android-side device functions - brightness, clipboard, orientation, vibration, network/display info, Android settings panels, TV casting, screen recording, phone/SIM and application voice calls, operating GUI apps (rungic-desktop MCP tools: launch, observe, run UI subtasks), windows and screenshots. Use whenever a request is about the phone, the desktop, apps on screen, or the TV."
 ---
 
 # Phone and desktop control
@@ -86,22 +86,12 @@ When the user asks you to send a voice message (发语音, 用语音告诉…):
 
 ## Calls on the user's behalf (通话代理)
 
-The call's audio must be switched to the assistant before the call starts; `--start-call` does that first and then dials, so never start a call yourself.
+Choose the transport from the user's request: **“打电话” means a SIM/telephone call; “打微信电话” means a WeChat voice call.** An explicitly named other app stays that app. Check capabilities to see whether that choice can work; never switch transports because another one is available, was used last time, or worked on an earlier device. If the requested contact/number is ambiguous, resolve that detail; do not ask the user to choose again when they already specified it.
 
-1. Open the chat with the person (`desktop_goal`), so it is the active window on the assistant's screen.
-2. `rungic-voice-agent --start-call '{"contact": "<name in the chat header>", "goal": "<what to say or find out>", "dial": "Voice Call"}'`: switches WeChat's microphone and speaker to the call assistant, then dials. `"dialed": true` means the call audio opened; otherwise the call was not placed.
-   A call already going: the same without `dial` (`"incoming": true` if they called).
-3. With `"dialed": true`, tell the user in one sentence that the call assistant is calling, and end your turn: you stay quiet during the call (your speech does not play), the call assistant talks on its own, asks the user when needed, and its summary comes to the chat when the call ends. `rungic-voice-agent --call-command take-over|hang-up|monitor-on|monitor-off` for the user's 我来接 / 挂断 / 旁听.
-
-## SIM telephone calls (手机卡真实电话)
-
-Use the shared call agent, not a screen click in the Android dialer:
-
-- `rungic-voice-agent --start-call '{"app":"cellular","number":"10000","contact":"中国电信客服","goal":"用户要求了解的事项"}'` starts Realtime first and then places exactly one call through Android Telecom. Use only the number and purpose the user authorized; never guess a contact's phone number. `account` optionally selects an explicit Android voice SIM account.
-- The compact call bar leaves the desktop usable. Tap for details, private text instructions, “我来接” or “挂断”. `rungic-voice-agent --call-text '用户的补充要求'` sends a private text instruction; `--call-dtmf 1` sends a requested keypad digit.
-- `--call-command take-over|hang-up` uses the actual call ID. Handover releases AI audio and restores the system phone microphone. Hang-up is successful only when Telecom confirms it. A network/AI failure must never redial.
-- This path currently disables private **voice** instructions and an independent monitor switch: room-microphone isolation and simultaneous private recording are not certified. Tell the user to type or take over. Do not describe these missing features as available.
-- `dialed: true` means Telecom accepted the outgoing request, not that the other party answered. The live bar reports connected from Telecom's active state; the transcript and final summary establish what was actually said.
+1. Run `rungic-voice-agent --call-capabilities` in the current desktop session. This reads current backend/SIM/key prerequisites without dialing. Unreachable is not proof of unsupported hardware; interface availability is not proof the remote party can hear the agent. Consult the returned verification/capability fields and report a limitation when it affects the requested call. Do not hard-code a handset, host, SIM, test number, or a permanent lack of a feature into your decision.
+2. Use `--start-call` for the requested transport, with the recipient and purpose the user authorized. It prepares Realtime before dialing. See [calls.md](calls.md) for parameters and controls. Do not click a dial button first or fabricate a contact's phone number.
+3. A call appears as a **card in the originating voice-assistant conversation**, for both SIM and app calls. The card owns its status, transcript, questions, private text instructions, takeover/hang-up controls and final result. Leaving the assistant can keep a compact call bar; returning restores the card. Do not replace the card with a full-screen workflow.
+4. `dialed: true` acknowledges the outgoing request, not connection or a successful conversation. Let the live call state and remote responses establish those. After starting, briefly tell the user which recipient and transport is calling, then let the call agent speak. On a timeout or lost connection inspect the existing call; never automatically redial or fall back to a different transport.
 
 ## Desktop windows and screenshots (shell)
 

@@ -7,6 +7,7 @@ QtObject {
     id: root
     readonly property ListModel entries: ListModel {}
     property string title: "新对话"
+    property string conversation: ""
     // Session state (the "state" events).
     property string phase: "connecting"
     property bool agentBusy: false
@@ -41,7 +42,25 @@ QtObject {
     function entry(fields) {
         return Object.assign({ kind: "", role: "", text: "", itemId: "", command: "", output: "",
                                status: "", exitCode: "", press: 0, started: 0, finished: 0,
-                               expanded: false, steps: [] }, fields)
+                               expanded: false, steps: [], callBackend: "", callNumber: "", connectedAt: 0,
+                               privateVoiceInstructions: true, independentMonitor: true }, fields)
+    }
+    function callIndex(e) {
+        if (e.callId) {
+            for (let i = entries.count - 1; i >= 0; --i) {
+                const row = entries.get(i)
+                if (row.kind === "call" && row.itemId === e.callId) return i
+            }
+            return -1
+        }
+        return root.callAt >= 0 ? root.callAt : root.staleCallAt
+    }
+    function callEntry(e) {
+        return entry({kind: "call", status: "running", itemId: e.callId || "", command: "connecting",
+                      started: e.time || Date.now()/1000, role: e.contact || "", text: e.goal || "",
+                      callBackend: e.backend || "wechat", callNumber: e.number || "",
+                      privateVoiceInstructions: e.privateVoiceInstructions !== false,
+                      independentMonitor: e.independentMonitor !== false, expanded: true})
     }
     function step(fields) {
         return Object.assign({ kind: "", text: "", itemId: "", command: "", output: "", status: "", exitCode: "" }, fields)
@@ -229,38 +248,62 @@ QtObject {
             }
             break
         }
-        case "call-started":
-            entries.append(entry({ kind: "call", status: "running", started: e.time || Date.now() / 1000,
-                                role: e.contact || "", text: e.goal || "", expanded: true }))
-            root.callAt = entries.count - 1
+        case "call-started": {
+            let at = e.callId ? root.callIndex(e) : -1
+            if (at < 0) { entries.append(root.callEntry(e)); at = entries.count - 1 }
+            root.callAt = at
             root.callMonitor = !!e.monitor
             root.callCanMonitor = e.independentMonitor !== false
-            break
-        case "call-transcript": case "call-owner": case "call-ask": case "call-note": {
-            if (root.callAt < 0) return
-            const who = e.type === "call-owner" ? "owner" : e.type === "call-ask" ? "ask"
-                      : e.type === "call-note" ? "note" : e.role
-            entries.get(root.callAt).steps.append(root.step({ kind: who, text: e.text }))
+            if (live) { root.inCall = true; root.callPhase = "agent" }
             break
         }
-        case "call-monitor": root.callMonitor = !!e.on; break
-        case "call-state":   // dialing -> ringing -> connected (or dial-failed)
-            if (root.callAt >= 0) entries.setProperty(root.callAt, "command", e.state)
-            break
-        case "call-phase":
-            if (root.callAt >= 0 && e.phase === "user") entries.setProperty(root.callAt, "status", "user")
-            root.callMonitor = false
-            break
-        case "call-ended":
-            if (root.callAt >= 0) {
-                entries.setProperty(root.callAt, "status", e.reason === "handover" ? "handover" : "done")
-                entries.setProperty(root.callAt, "finished", e.time || Date.now() / 1000)
-                entries.setProperty(root.callAt, "output", e.summary || "")
+        case "call-transcript": case "call-owner": case "call-ask": case "call-note": case "call-error": {
+            const at = root.callIndex(e)
+            if (at < 0) {
+                if (e.type === "call-error") entries.append(entry({kind: "error", text: e.text}))
+                break
             }
-            root.callAt = -1
-            root.callMonitor = false
+            const who = e.type === "call-owner" ? "owner" : e.type === "call-ask" ? "ask"
+                      : e.type === "call-note" ? "note" : e.type === "call-error" ? "error" : e.role
+            entries.get(at).steps.append(root.step({ kind: who, text: e.text }))
             break
-        case "error": case "call-error": entries.append(entry({ kind: "error", text: e.text })); break
+        }
+        case "call-monitor":
+            if (root.callIndex(e) === root.callAt) root.callMonitor = !!e.on
+            break
+        case "call-state": {
+            const at = root.callIndex(e)
+            if (at >= 0) {
+                entries.setProperty(at, "command", e.state)
+                if (e.state === "connected" && !entries.get(at).connectedAt)
+                    entries.setProperty(at, "connectedAt", e.connectedAt || e.time || Date.now()/1000)
+            }
+            break
+        }
+        case "call-phase": {
+            const at = root.callIndex(e)
+            if (at >= 0 && e.phase === "user" && entries.get(at).status !== "done")
+                entries.setProperty(at, "status", "user")
+            if (at >= 0 && at === root.callAt) {
+                if (live) { root.inCall = e.phase === "agent"; root.callPhase = e.phase }
+                root.callMonitor = false
+            }
+            break
+        }
+        case "call-ended": {
+            const at = root.callIndex(e)
+            if (at >= 0) {
+                entries.setProperty(at, "status", "done")
+                entries.setProperty(at, "finished", e.time || Date.now() / 1000)
+                entries.setProperty(at, "output", e.summary || "")
+            }
+            if (at >= 0 && (at === root.callAt || at === root.staleCallAt)) {
+                root.callAt = -1; root.staleCallAt = -1; root.callMonitor = false
+                if (live) { root.inCall = false; root.callPhase = "" }
+            }
+            break
+        }
+        case "error": entries.append(entry({ kind: "error", text: e.text })); break
         // A press began: the user's bubble is in place at once, listening (docs/87).
         case "talk-started":
             if (live && pressAt(e.press) < 0)
@@ -289,13 +332,27 @@ QtObject {
             root.phase = e.phase; root.agentBusy = !!e.agentBusy; root.inCall = !!e.call
             root.handsFree = !!e.handsFree
             root.callPhase = e.callPhase || ""
-            if (root.staleCallAt >= 0 && root.staleCallAt < entries.count) {
-                if (root.callPhase) {
-                    entries.setProperty(root.staleCallAt, "status", root.callPhase === "user" ? "user" : "running")
-                    root.callAt = root.staleCallAt
+            const info = e.callInfo
+            const belongsHere = info && (!info.conversation || info.conversation === root.conversation)
+            if (root.callPhase && belongsHere) {
+                let at = root.callIndex({callId: info.id})
+                if (at < 0) {
+                    entries.append(root.callEntry(Object.assign({}, info, {callId: info.id, time: info.started})))
+                    at = entries.count - 1
                 }
-                root.staleCallAt = -1
+                entries.setProperty(at, "status", root.callPhase === "user" ? "user" : "running")
+                entries.setProperty(at, "command", info.state || "connecting")
+                entries.setProperty(at, "connectedAt", info.connectedAt || entries.get(at).connectedAt)
+                entries.setProperty(at, "privateVoiceInstructions", info.privateVoiceInstructions !== false)
+                entries.setProperty(at, "independentMonitor", info.independentMonitor !== false)
+                root.callCanMonitor = info.independentMonitor !== false
+                root.callAt = at
+            } else if (!info && root.callPhase && root.staleCallAt >= 0
+                       && !entries.get(root.staleCallAt).itemId) {
+                entries.setProperty(root.staleCallAt, "status", root.callPhase === "user" ? "user" : "running")
+                root.callAt = root.staleCallAt
             }
+            root.staleCallAt = -1
             break
         }
     }
@@ -303,6 +360,8 @@ QtObject {
     // A conversation opened (history replayed, nothing running any more).
     function load(opened) {
         root.title = opened.title
+        root.conversation = opened.conversation || ""
+        root.inCall = false; root.callPhase = ""; root.callMonitor = false; root.callCanMonitor = true
         entries.clear()
         root.workAt = -1
         root.workOpen = false

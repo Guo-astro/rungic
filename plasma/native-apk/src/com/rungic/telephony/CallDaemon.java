@@ -52,7 +52,25 @@ public final class CallDaemon {
         }
         return s.put("protocol",1).put("epoch",epoch).put("phoneState",phoneState()).put("audioMode",audio.getMode())
             .put("audioCapable",supported()).put("accounts",accounts).put("audioActive",session!=null)
+            .put("audioDiagnostics",audioDiagnostics())
             .put("privateVoiceInstructions",false).put("independentMonitor",false);
+    }
+    private JSONObject audioDiagnostics() throws Exception {
+        AudioSession current=session;
+        if(current==null)return new JSONObject();
+        JSONObject d=new JSONObject().put("capturedBytes",current.sent).put("writtenBytes",current.received)
+            .put("writtenPeak",current.peak).put("microphoneMuted",audio.isMicrophoneMute());
+        // No audio samples are persisted. Write success alone does not prove the remote
+        // heard it: expose consumption, negotiated format and actual framework routes.
+        try{
+            AudioDeviceInfo tx=current.track.getRoutedDevice(),rx=current.record.getRoutedDevice();
+            d.put("trackRate",current.track.getSampleRate()).put("recordRate",current.record.getSampleRate())
+                .put("playedFrames",Integer.toUnsignedLong(current.track.getPlaybackHeadPosition()))
+                .put("underruns",current.track.getUnderrunCount())
+                .put("txDeviceType",tx==null?JSONObject.NULL:tx.getType())
+                .put("rxDeviceType",rx==null?JSONObject.NULL:rx.getType());
+        }catch(IllegalStateException ignored){d.put("closing",true);}
+        return d;
     }
     private synchronized JSONObject dial(JSONObject r) throws Exception {
         String token=r.getString("requestId"),number=r.getString("number");
@@ -110,13 +128,13 @@ public final class CallDaemon {
         if(calls.length()!=1 || !calls.getJSONObject(0).getString("id").equals(id)
             || calls.getJSONObject(0).getInt("state")!=Call.STATE_ACTIVE
             || calls.getJSONObject(0).optBoolean("emergency"))throw new IllegalStateException("requires-single-active-call");
-        AudioSession candidate=new AudioSession(id,socket,state.optBoolean("muted"));
+        AudioSession candidate=new AudioSession(id,socket);
         try{candidate.open();session=candidate;return candidate;}catch(Exception e){candidate.close();throw e;}
     }
     private final class AudioSession {
-        final String id;final String lease=UUID.randomUUID().toString();final LocalSocket socket;final boolean wasMuted;
-        volatile boolean closed;AudioRecord record;AudioTrack track;long received,sent;
-        AudioSession(String id,LocalSocket s,boolean mute){this.id=id;socket=s;wasMuted=mute;}
+        final String id;final String lease=UUID.randomUUID().toString();final LocalSocket socket;
+        volatile boolean closed;AudioRecord record;AudioTrack track;volatile long received,sent;volatile int peak;
+        AudioSession(String id,LocalSocket s){this.id=id;socket=s;}
         void open() throws Exception {
             AudioFormat rx=new AudioFormat.Builder().setSampleRate(24000).setEncoding(AudioFormat.ENCODING_PCM_16BIT).setChannelMask(AudioFormat.CHANNEL_IN_MONO).build();
             AudioFormat tx=new AudioFormat.Builder().setSampleRate(24000).setEncoding(AudioFormat.ENCODING_PCM_16BIT).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build();
@@ -142,7 +160,7 @@ public final class CallDaemon {
                         JSONObject heartbeat=CallProtocol.request(new JSONObject().put("op","lease-renew").put("id",id).put("lease",lease));
                         if(heartbeat.has("error"))break;
                         JSONObject s=incall();JSONArray cs=s.getJSONArray("calls");
-                        if(cs.length()!=1 || !cs.getJSONObject(0).getString("id").equals(id)
+                        if(!s.optBoolean("muted") || cs.length()!=1 || !cs.getJSONObject(0).getString("id").equals(id)
                             || cs.getJSONObject(0).getInt("state")!=Call.STATE_ACTIVE)break;}
                 }catch(Exception e){}finally{close();}
             },"call-lifetime");guard.start();
@@ -150,6 +168,9 @@ public final class CallDaemon {
             try{
                 while(!closed){
                     int count=0;while(count<buffer.length){int n=in.read(buffer,count,buffer.length-count);if(n<0)throw new EOFException();count+=n;}
+                    for(int i=0;i+1<count;i+=2){
+                        int sample=(short)((buffer[i]&255)|(buffer[i+1]<<8));peak=Math.max(peak,Math.abs(sample));
+                    }
                     int offset=0;while(offset<count){int n=track.write(buffer,offset,count-offset);if(n<=0)throw new IOException("uplink-ended");offset+=n;received+=n;}
                 }
             }finally{close();}

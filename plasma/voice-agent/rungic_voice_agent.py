@@ -33,6 +33,7 @@ import subprocess
 import threading
 import time
 import urllib.request
+import uuid
 
 import gi
 gi.require_version('Gst', '1.0')
@@ -107,6 +108,7 @@ INTERFACE = '''
     <method name="StopTask"/>
     <method name="Approve"><arg type="s" direction="in"/><arg type="s" direction="in"/></method>
     <method name="State"><arg type="s" direction="out"/></method>
+    <method name="CallCapabilities"><arg type="s" direction="out"/></method>
     <method name="StartCall"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
     <method name="CallCommand"><arg type="s" direction="in"/></method>
     <method name="SendText"><arg type="s" direction="in"/><arg type="s" direction="in"/></method>
@@ -525,10 +527,11 @@ class VoiceAgent:
     # ---- events -------------------------------------------------------------
     def emit(self, event, keep=True):
         event.setdefault('time', time.time())
-        if self.thread_id:
-            event.setdefault('conversation', self.thread_id)
+        conversation = event.get('conversation') or self.thread_id
+        if conversation:
+            event.setdefault('conversation', conversation)
             if keep:
-                self.store.append(self.thread_id, event)
+                self.store.append(conversation, event)
         self.emit_raw(event)
 
     def set_state(self):
@@ -552,7 +555,13 @@ class VoiceAgent:
         return {'conversation': self.thread_id, 'phase': phase, 'agentBusy': self.agent_busy,
                 'handsFree': self.talking and self.hands_free, 'assistant': self.thread_id == self.assistant_id(),
                 'call': call_phase == 'agent', 'callPhase': call_phase,
-                'callInfo': {'contact': self.call.contact, 'backend': self.call.app, 'started': self.call.started_at,
+                'callInfo': {'id': getattr(self.call, 'id', ''),
+                             'conversation': getattr(self.call, 'conversation', self.thread_id),
+                             'state': getattr(self.call, 'ui_state', 'connecting'),
+                             'number': getattr(self.call, 'number', ''),
+                             'contact': self.call.contact, 'goal': self.call.goal, 'backend': self.call.app,
+                             'started': self.call.started_at,
+                             'connectedAt': getattr(self.call, 'connected_at', 0),
                              'privateVoiceInstructions': self.call.private_voice_instructions,
                              'independentMonitor': self.call.independent_monitor} if call_phase else None}
 
@@ -782,7 +791,7 @@ class VoiceAgent:
 
     def start_talking(self, sink=None):
         if self.call and self.call.active and not self.call.private_voice_instructions:
-            self.emit({'type': 'call-note', 'text': '蜂窝通话中请用文字给助理指示，或点“我来接”。'})
+            self.call.emit({'type': 'call-note', 'text': '蜂窝通话中请用文字给助理指示，或点“我来接”。'})
             return False
         if self.call and self.call.phase == 'user':
             return False     # the user is on the phone themselves: the assistant is paused
@@ -1261,36 +1270,61 @@ class VoiceAgent:
             self.server.respond(request_id, {'decision': 'decline'})
 
     # ---- proxied calls (docs/63) ------------------------------------------------------
+    def call_capabilities(self):
+        from call_backends import capabilities
+        import call_proxy
+        try:
+            configured = bool(call_proxy.api_key())
+        except (OSError, RuntimeError, ValueError):
+            configured = False
+        return capabilities(key_configured=configured)
+
     def start_call(self, params):
         with self.call_start_lock:
             return self._start_call(params)
 
     def _start_call(self, params):
-        """The assistant takes part in the call that the app has placed or received."""
+        """Prepare the shared call agent for the transport the user requested."""
         import call_proxy
         if self.call and self.call.phase in ('agent', 'user'):
             raise RuntimeError('已有通话正在进行，请先结束或接管当前通话')
-        app = params.get('app') or 'wechat'
+        from call_backends import resolve
+        backend, app = resolve(params)
+        if not self.thread_id:
+            self.open_assistant()
+        conversation = self.thread_id
+        call_id = uuid.uuid4().hex
 
         def emit(event, keep=True):
+            # A call outlives the currently selected chat. Its card and transcript
+            # stay in the originating conversation, even while the user opens another.
+            event.update(conversation=conversation, callId=call_id)
             kind = event.get('type')
-            if kind == 'call-phase' and event.get('phase') == 'user':
+            current = self.call and getattr(self.call, 'id', '') == call_id
+            if kind == 'call-started':
+                event['number'] = params.get('number', '') if app == 'cellular' else ''
+            if kind == 'call-state' and current:
+                self.call.ui_state = event.get('state', '')
+                if event.get('state') == 'connected':
+                    self.call.connected_at = getattr(self.call, 'connected_at', 0) or time.time()
+                    event['connectedAt'] = self.call.connected_at
+            if current and kind == 'call-phase' and event.get('phase') == 'user':
                 # The user talks on the phone now: pause the assistant (its realtime
                 # session would otherwise keep listening and could speak into the call).
                 threading.Thread(target=self.stop_realtime, daemon=True).start()
                 if app != 'cellular':
                     threading.Thread(target=self.watch_user_audio, daemon=True).start()
-            elif kind == 'call-ended' and self.thread_id:
+            elif current and kind == 'call-ended' and self.thread_id == conversation:
                 threading.Thread(target=self.start_realtime, daemon=True).start()   # resume
                 threading.Thread(target=self.speak_call_result, args=(event.get('reason'), event.get('summary') or ''),
                                  daemon=True).start()
             if kind in ('call-phase', 'call-ended'):
                 GLib.idle_add(self.set_state)
-            self.emit(event, keep)
+            self.emit(event, keep or kind in ('call-state', 'call-monitor'))
 
         def hang_up():
             # The model finds the hang-up control in the call window (computer use plan one, docs/68).
-            window = (self.call.window_id if self.call else None) or call_window(app)
+            window = call.window_id or call_window(app)
             result = luna_goal('End the call that is in progress: press the hang-up (end call) control of the call '
                                'window. Press nothing else. Reply DONE once the call has ended.', timeout=60,
                                window=window)
@@ -1300,18 +1334,19 @@ class VoiceAgent:
         if app == 'cellular':
             from cellular_call import CellularCall
             number = params.get('number', '')
-            if not isinstance(number, str) or not re.fullmatch(r'\+?[0-9]{3,15}', number):
-                raise ValueError('请提供明确的电话号码 number')
             self.call = CellularCall(emit, self.tell_owner, number=number, account=params.get('account', ''),
                                      request_id=params.get('requestId'), contact=params.get('contact') or number,
                                      goal=params.get('goal', ''), owner=params.get('owner') or '凯文')
+            self.call.id, self.call.conversation = call_id, conversation
+            self.call.ui_state = 'connecting'
             try:
                 self.call.start()
                 GLib.idle_add(self.set_state)
                 if not self.call.ready.wait(20) or not self.call.active:
                     raise RuntimeError('Realtime 连接未就绪，未拨打电话')
                 result = self.call.dial()
-                return {'started': True, 'ready': True, 'app': app, 'contact': self.call.contact, **result}
+                return {'started': True, 'ready': True, 'backend': backend, 'app': app,
+                        'callId': call_id, 'conversation': conversation, 'contact': self.call.contact, **result}
             except Exception:
                 self.call.stop('start failed')
                 GLib.idle_add(self.set_state)
@@ -1321,6 +1356,8 @@ class VoiceAgent:
                                          goal=params.get('goal', ''), owner=params.get('owner') or '凯文',
                                          monitor=bool(params.get('monitor')), incoming=bool(params.get('incoming')),
                                          hang_up=hang_up)
+        self.call.id, self.call.conversation = call_id, conversation
+        self.call.ui_state = 'connecting'
         self.call.on_answered = lambda: call_snapshot('answered')
         call = self.call
         self.call.confirm_connected = lambda: call_screen_connected(call.window_id or call_window(app))
@@ -1329,7 +1366,8 @@ class VoiceAgent:
         # Dial only once the call agent can listen: the other side is heard from
         # their first word instead of after the setup (10-20 s when set up later).
         ready = self.call.ready.wait(20)
-        result = {'started': True, 'ready': ready, 'contact': params.get('contact', ''), 'app': app}
+        result = {'started': True, 'ready': ready, 'contact': params.get('contact', ''), 'app': app,
+                  'backend': backend, 'callId': call_id, 'conversation': conversation}
         if params.get('dial') and ready:
             result.update(self.dial(app, params.get('contact', ''), params['dial']))
             if not result['dialed']:
@@ -1341,7 +1379,7 @@ class VoiceAgent:
         checks the header shows `contact` and starts a voice call; the call counts as placed only
         when the app opens its call audio (a system signal, not the click), and the model is
         stopped at that moment so it presses nothing in the call window."""
-        self.emit({'type': 'call-state', 'state': 'dialing'}, keep=False)
+        self.call.emit({'type': 'call-state', 'state': 'dialing'}, keep=False)
         before = self.call.streams_seen
         hint = f' (it may be labelled "{control}")' if control and control.isascii() and len(control) < 40 else ''
         goal = (f'The active window shows a chat. First check the name in the chat header: it must be {contact}. '
@@ -1359,7 +1397,7 @@ class VoiceAgent:
             log('call: call window', self.call.window_id)
             threading.Thread(target=lambda: (time.sleep(2), call_snapshot('ringing')), daemon=True).start()
             threading.Thread(target=self.call.watch_ringing, daemon=True).start()
-        self.emit({'type': 'call-state', 'state': 'ringing' if placed else 'dial-failed'}, keep=False)
+        self.call.emit({'type': 'call-state', 'state': 'ringing' if placed else 'dial-failed'}, keep=False)
         return {'dialed': placed, 'confirmed_by': 'call audio opened' if placed else None,
                 'outcome': result.get('outcome'), 'screen': result.get('answer') or result.get('note'),
                 'actions': [a for step in result.get('steps', []) for a in step.get('actions', [])]}
@@ -1408,13 +1446,21 @@ class VoiceAgent:
             return
         if command.startswith('{'):
             action = json.loads(command)
-            if action.get('op') == 'instruct' and call.active:
-                call.instruct(str(action['text']))
-            elif action.get('op') == 'dtmf' and hasattr(call, 'dtmf'):
+            if action.get('callId') and action['callId'] != getattr(call, 'id', ''):
+                raise ValueError('这张卡片的通话已结束，未操作其他通话')
+            command = action.get('op', '')
+            if command == 'instruct':
+                if not call.active:
+                    raise ValueError('当前由你接听，通话助理已暂停')
+                text = str(action['text']).strip()
+                if text:
+                    call.instruct(text)
+                return
+            if command == 'dtmf':
+                if not hasattr(call, 'dtmf'):
+                    raise ValueError('当前通话不支持拨号按键')
                 call.dtmf(str(action['digit']))
-            else:
-                raise ValueError('当前通话不支持此操作')
-            return
+                return
         if call.phase == 'user':
             # The user is on the phone themselves: only hanging up applies.
             if command == 'hang-up':
@@ -1866,6 +1912,8 @@ class Service:
                     agent.approve(args[0], args[1])
                 elif method == 'State':
                     result = json.dumps(agent.state())
+                elif method == 'CallCapabilities':
+                    result = json.dumps(agent.call_capabilities(), ensure_ascii=False)
                 elif method == 'StartCall':
                     result = json.dumps(agent.start_call(json.loads(args[0])), ensure_ascii=False)
                 elif method == 'CallCommand':
@@ -1998,16 +2046,19 @@ def main():
     parser.add_argument('--stop-after', type=float, help='test: press the stop button after this many seconds')
     parser.add_argument('--raw', action='store_true', help='test: send the file without shortening pauses')
     parser.add_argument('--start-call', metavar='JSON',
-                        help='let the assistant take part in the call just placed or received: '
-                             '{"contact": ..., "goal": ..., "app": "wechat", "incoming": false, "monitor": false, '
-                             '"dial": "<control that places the call, e.g. Voice Call>"}')
+                        help='start the requested backend: {"backend":"cellular","number":"...","goal":"..."} '
+                             'or {"backend":"app","app":"wechat","contact":"...","goal":"...","dial":"Voice Call"}')
+    parser.add_argument('--call-capabilities', action='store_true', help='inspect current call backends without dialing')
     parser.add_argument('--call-command', choices=['monitor-on', 'monitor-off', 'take-over', 'hang-up'])
     parser.add_argument('--call-text', help='private text instruction for the active call agent')
     parser.add_argument('--call-dtmf', choices=list('0123456789*#'))
     args = parser.parse_args()
-    if args.start_call or args.call_command or args.call_text or args.call_dtmf:
+    if args.call_capabilities or args.start_call or args.call_command or args.call_text or args.call_dtmf:
         bus = Gio.bus_get_sync(Gio.BusType.SESSION)
-        if args.start_call:
+        if args.call_capabilities:
+            reply = bus.call_sync(BUS_NAME, OBJECT_PATH, BUS_NAME, 'CallCapabilities', None, None, 0, 10000).unpack()[0]
+            print(reply)
+        elif args.start_call:
             json.loads(args.start_call)   # fail early on bad JSON
             reply = bus.call_sync(BUS_NAME, OBJECT_PATH, BUS_NAME, 'StartCall', GLib.Variant('(s)', (args.start_call,)),
                                   None, 0, 30000).unpack()[0]
