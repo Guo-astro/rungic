@@ -27,7 +27,7 @@ Rectangle {
             Icon { name: card.item.kind === "fault" ? "alert" : "compose"; color: card.item.severity >= 2 ? Theme.negative : Theme.link; implicitWidth: 20; implicitHeight: 20 }
             Text {
                 Layout.fillWidth: true
-                text: ({ working: "正在处理", attention: "需要你查看", snoozed: "已安排", resolved: "已完成", dismissed: "不再提醒" })[card.stateName] || (card.item.kind === "fault" ? "使用问题" : "改善建议")
+                text: ({ working: "正在处理", attention: "需要你查看", snoozed: "已安排", resolved: "已归档", dismissed: "不再提醒" })[card.stateName] || (card.item.kind === "fault" ? "使用问题" : "改善建议")
                 font.pixelSize: 12; color: Theme.dim
             }
             QQC2.ToolButton { text: "···"; Accessible.name: "建议选项"; onClicked: options.open() }
@@ -52,9 +52,10 @@ Rectangle {
             Layout.fillWidth: true
             spacing: 8
             PillButton {
-                text: card.stateName === "working" ? "查看进度" : card.item.conversation ? "查看处理结果" : card.stateName === "dismissed" ? "恢复建议" : card.stateName === "resolved" ? "查看详情" : "让 Agent 检查"
+                text: card.stateName === "working" ? "查看进度" : card.stateName === "dismissed" ? "恢复建议" : card.item.conversation ? "查看处理结果" : card.stateName === "resolved" ? "查看详情" : "让 Agent 检查"
                 onClicked: {
-                    if (card.item.conversation) card.action("conversation", {})
+                    if (card.stateName === "dismissed") card.action("restore", {})
+                    else if (card.item.conversation) card.action("conversation", {})
                     else if (card.stateName === "resolved") card.expanded = !card.expanded
                     else card.action(card.stateName === "dismissed" ? "restore" : "investigate", {})
                 }

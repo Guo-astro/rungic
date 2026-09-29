@@ -118,7 +118,7 @@ void Model::reconcile(const QString &source, const QStringList &present, qint64 
         auto o = get(id);
         if (o.value("source").toString() != source || present.contains(id)) continue;
         if (o.value("state").toString() == "resolved") continue;
-        o["state"] = "resolved"; o["note"] = "复查时该异常已不存在";
+        o["state"] = "resolved"; o["note"] = "复查不再匹配此项，已归档；不代表根因已确认修复";
         o["updated"] = now; o.remove("remindAt"); o.remove("condition");
         items[id] = o;
     }

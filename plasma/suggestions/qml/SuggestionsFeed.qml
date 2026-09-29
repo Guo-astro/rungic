@@ -17,6 +17,7 @@ Rectangle {
     property var shown: []
     property bool pendingRefresh: false
     property bool populated: false
+    property bool positioned: false
     color: Theme.side
     SuggestionsClient { id: client }
     readonly property var clientItems: client.items
@@ -35,7 +36,10 @@ Rectangle {
         shown = client.items.filter(i => history ? ["resolved", "dismissed"].includes(i.state) : !["resolved", "dismissed"].includes(i.state))
         pendingRefresh = false
         Qt.callLater(() => {
-            if (atBeginning) list.positionViewAtBeginning()
+            if (selectedId && !positioned && client.items.some(i => i.id === selectedId)) {
+                positioned = true; select(selectedId)
+            }
+            else if (atBeginning) list.positionViewAtBeginning()
             else list.contentY = list.originY + Math.max(-list.topMargin, Math.min(y, Math.max(0, list.contentHeight - list.height)))
         })
     }
@@ -46,7 +50,7 @@ Rectangle {
         const index = shown.findIndex(i => i.id === id)
         if (index >= 0) list.positionViewAtIndex(index, ListView.Center)
     }
-    onSelectedIdChanged: Qt.callLater(() => select(selectedId))
+    onSelectedIdChanged: { positioned = false; Qt.callLater(rebuild) }
     Connections {
         target: client
         function onReplied(id, action, result) {
