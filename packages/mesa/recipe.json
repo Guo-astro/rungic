@@ -1,12 +1,12 @@
 {
- "comment": "Pinned upstream of Mesa (docs/40, docs/71, docs/73, docs/research/94): upstream Mesa main at a fixed commit, checked by its tree hash, with this project's KGSL patches (freedreno gallium KGSL backend, KGSL dma-buf sharing, EGL on the KGSL node, Turnip KGSL WSI) in debian/patches/rungic. Until 2026-09-30 the base was the Mesa for Android container branch (lfdevs/mesa-for-android-container 98f3d622); its KGSL parts that this setup needs are carried here, its Termux/PRoot parts are not. Built with meson (plasma/mesa-meson-options, tools/build_mesa.py) and packaged by plasma/package-mesa.py; debian/ holds only the patches and the changelog that names the package version.",
+ "comment": "Pinned upstream of Mesa (docs/40, docs/71, docs/73): the Mesa for Android container branch (KGSL support for Freedreno/Turnip and the KGSL dma-buf path) at a fixed commit, checked by its tree hash. Built on the phone with meson (plasma/mesa-meson-options, tools/build_mesa.py) and packaged by plasma/package-mesa.py; debian/ holds only the patches and the changelog that names the package version.",
  "kind": "git",
  "source": "mesa",
- "version": "26.3.0~devel20260929",
- "git": "https://gitlab.freedesktop.org/mesa/mesa.git",
- "commit": "190d227a72267d8f29718553b5e756636c3493b5",
- "tree": "5d17a144ded3ddaf736a30106ab6f60272f59a03",
- "upstream": "https://gitlab.freedesktop.org/mesa/mesa",
+ "version": "26.3.0~devel20260824",
+ "git": "https://github.com/lfdevs/mesa-for-android-container",
+ "commit": "98f3d6229d61452cef80f8563af7c56ae599dc14",
+ "tree": "5d0abacd0ef77a988c930198957975b037289494",
+ "upstream": "https://github.com/lfdevs/mesa-for-android-container",
  "licenses": "MIT and others; see docs/license.rst and per-file licenses",
  "files": {}
 }

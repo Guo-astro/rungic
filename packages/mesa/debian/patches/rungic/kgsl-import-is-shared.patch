@@ -1,0 +1,39 @@
+From: clawd20130 <clawd20130@gmail.com>
+Date: Wed, 30 Sep 2026 02:24:29 +0900
+Subject: freedreno/kgsl: exporting an imported dma-buf gives back the same
+ buffer
+
+On the branch's KGSL dma-buf path fd_resource_get_handle() shadows every resource without
+PIPE_BIND_SHARED into a new shared buffer before exporting it. A resource imported from a dma-buf
+had no such bind, so importing a buffer and exporting it again produced a different dma-buf (checked:
+gbm_bo_import then gbm_bo_get_fd gave another inode). Xwayland does exactly that for a DRI3 client's
+buffer on a Present flip, so KWin showed a new, empty buffer: X11 GL windows (glxgears, glmark2)
+stayed black while glamor's own 2D drawing was right. An imported dma-buf is shared by definition:
+mark it so, and its export duplicates the imported fd (kgsl_bo_dmabuf).
+
+Forwarded: no
+Last-Update: 2026-09-30
+X-Rungic-Status: Pending [a fix of the branch's KGSL dma-buf path]
+X-Rungic-Tests: L3:xwayland.kgsl-glamor (glxgears and glmark2 on X11 draw in their windows; import then export keeps the inode)
+X-Rungic-Docs: docs/research/93
+---
+ src/gallium/drivers/freedreno/freedreno_resource.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/src/gallium/drivers/freedreno/freedreno_resource.c b/src/gallium/drivers/freedreno/freedreno_resource.c
+index 995b3fa..a54c1d9 100644
+--- a/src/gallium/drivers/freedreno/freedreno_resource.c
++++ b/src/gallium/drivers/freedreno/freedreno_resource.c
+@@ -1573,6 +1573,12 @@ fd_resource_from_handle(struct pipe_screen *pscreen,
+ 
+    rsc->b.is_shared = true;
+ 
++   /* An imported dma-buf is shared already: exporting it again (GBM's import then get_fd,
++    * as Xwayland does for a DRI3 client's buffer) must hand out the same buffer, not a new
++    * shared shadow that the client never draws into (fd_resource_get_handle). */
++   if (screen->kgsl_dmabuf)
++      prsc->bind |= PIPE_BIND_SHARED;
++
+    struct fd_bo *bo = fd_screen_bo_from_handle(pscreen, handle);
+    if (!bo) {
+       if (FD_DBG(LAYOUT))

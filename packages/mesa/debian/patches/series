@@ -1,5 +1,4 @@
-rungic/freedreno-kgsl-backend.patch
-rungic/freedreno-kgsl-dmabuf.patch
-rungic/egl-kgsl-device.patch
-rungic/turnip-kgsl-wsi.patch
-rungic/zink-kgsl-no-drm.patch
+rungic/kgsl-dmabuf-import-ubwc.patch
+rungic/egl-x11-dri3-fallback-software.patch
+rungic/x11-kgsl-needs-dri3.patch
+rungic/kgsl-import-is-shared.patch
