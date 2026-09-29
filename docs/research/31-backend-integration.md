@@ -1,5 +1,7 @@
 # Phosh 与 Android 后端的连接：架构、研究过程和维护方法
 
+2026-09-29 MacBook直连研究：连接层（本地热点/AWDL候选）与桌面串流分离，采集和编码优先复用KWin/PipeWire及共享MediaCodec桥。G100现有无线模块monitor的标准发送回调缺失，原版filin不能直接使用；只读能力与在用模块Build ID/重定位证据见[接口与选型记录](mac-offline-desktop-link.md)。本轮未实现或部署，外部网络独立的发现/信令、远程观看降速与硬编拥塞控制仍待验。
+
 > 改名说明（2026-09-26）：Rungic改名B阶段之后，容器内的`moto-*`包、程序、单元、路径，`MOTO_*`变量和`dev.moto.*`名称改为`rungic-*`、`RUNGIC_*`、`com.rungic.*`；Android侧的名称在C阶段（2026-09-27）改为APK `com.rungic.plasma`、`/data/adb/rungic-*`（镜像在`/data/adb/rungic-lxc/images/`）、容器中的`/var/lib/rungic-{host,cores,apt}`、`rungic-gpu-alloc`、`rungic-cast`、`debug.rungic.*`、dm `rungic-root`与SELinux `rungic_image`。对照与边界见[70篇](../70-rungic-rebrand.md)。下文按时间记录的内容保留当时的名称。
 
 > 历史研究记录：Phosh 专属实现已于2026-09-23移除。本篇保留共享硬件接口与研究结论；当前代码见 `shared/`、`native/plasma/`、`plasma/`，现行集成见 [40篇](../40-plasma-mobile-integration.md)。旧Phosh路径和已删除的原始日志不再作为可执行入口。
