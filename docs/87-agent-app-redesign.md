@@ -141,6 +141,9 @@
 - **发布**：`rungic-design`、`rungic-voice-agent`、`rungic-cua` 0.347 已随正式版本 20260929.1（提交 e0d1e7e1，66 个包）部署到 G100 S。
   - 同一版本也补齐了远端的 KWin `+rungic8` 和 kscreen `+rungic5`；完整性检查为 clean。
   - 部署时手机熄屏，所以部署报告“桌面未就绪”；进程均已运行。
-  - 浮层服务在会话启动时第一次失败（启动过早），3 秒后自动重启成功。
+  - 浮层服务在会话启动时第一次失败，3 秒后自动重启成功。
+    - 原因：plasmashell 的启动任务连续超时（熄屏时），`After=` 只等任务结束，不管成败，浮层于是在 plasmashell 起来前就启动了。它加载时要通过 D-Bus 询问 plasmashell 的面板，于是卡住，直到 systemd 判它超时。
+    - 修复：浮层先等 plasmashell 在会话总线上注册 `org.kde.plasmashell`，最多等 120 秒，`TimeoutStartSec=180`。
+    - 实机验证：停掉 plasmashell 后启动浮层，浮层停在 activating；再启动 plasmashell，2 秒后浮层变为 active，重启次数为 0。
   - 部署后的界面还没有在亮屏状态下复查。
 - 宽屏布局、附件缩略图的圆角裁切。
