@@ -330,3 +330,30 @@ core、完整日志、账户/路径/文档内容不默认上传。原始证据�
 验收工具自身的两个前提也已修正：临时账本 `items` 是对象，不能按数组追加，现明确检查 12 项测试记录确实加载后再滑动；计算器冷启动不能固定等 1 秒便断言失败，现场窗口稍后已正常出现，改为等待活动窗口。卡片/抽屉检查已通过后只续跑未完成的通知检查，不把这两处工具前提错误记作产品通过或产品故障。
 
 证据位于 `.work/experiments/proactive/`：`widget-gesture-build.log`、`widget-gesture-integration.log`、`widget-gesture-deploy.log`、`widget-scroll-fixed.log`、`widget-device-final.log`、`widget-notification-final.log`、`widget-edit-final.log`；截图 `widget-final-home.png`、`widget-first-detail.png`、`widget-second-detail.png`、`widget-scroll-after.png`、`widget-drawer.png`、`widget-notification.png`、`widget-notification-detail.png`、`widget-native-edit.png`。`widget-device-final.log` 的末尾是计算器冷启动等待不足，最终通知通过证据在续跑日志，不能只读前一个日志作结论。
+
+## 2026-09-30 审查后重构：独立生命周期与方案确认
+
+审查发现五项实现缺口：探针归档覆盖运行中任务、确认未绑定方案版本、非空文字被当成可应用方案、整个可见窗口抑制通知，以及用崩溃进程名猜测应用关闭。本轮保留原生 widget 布局，重构共享账本与交互契约。
+
+- **账本 schema 2**：`issueState` 表示观测是否仍匹配；`task` 保存独立任务 ID、执行阶段、conversation、结果待查看状态与确认快照；`reminderState` 保存用户稍后/静音选择。外部 `state` 只是供现有界面使用的投影。问题消失不会终止任务或取消其结果回写，完成结果可单独延后；结果归档是明确操作，阅读回执不自动让卡片消失。同一问题消失再出现仍保留静音选择。
+- **迁移与回退**：首次读取 schema 1 先复制 `state.json.schema1-backup`，失败则不迁移；保留原对话、结果、上游记录和定时预约。旧文字方案默认待调查，旧进程名退出条件转为保留待处理并提示重选时间。rootfs 快照不包含 home；若回退旧程序，必须先保留 schema 2 最新账本，再使用迁移前的 schema 1 备份，不能让旧程序误读新格式。
+- **任务协议**：VoiceAgent 的 `InvestigateSuggestion/ApplySuggestion/StopSuggestion` 同时携带事项 ID 与任务 ID；`SuggestionTask` 核对当前任务或已保存终态。事件以 `suggestionTask` 关联，旧任务迟到事件不能覆盖新任务。建议服务重启后核对任务，不直接将运行中任务变为结束；Agent 将最终结果与终态保存到原对话索引，支持建议服务错过事件后的恢复。停止失败保留运行状态和重试入口。
+- **方案协议**：`planStatus` 明确为 `needs_investigation/unavailable/ready`；`ready` 还要求具体方案、验证和回退。方案修订标识绑定这些字段和适用证据。确认框复制展示快照，提交该修订标识；服务拒绝旧确认，并先持久化不可变 `task.approvedPlan`，Agent 只读取这份已确认快照。证据变化、未完成方案或纯粹“证据不足，暂不修改”不能启用应用按钮。调查仍沿用用户既有 Codex 执行权限和只读任务指令，不宣称新增了 OS 沙箱。
+- **逐卡片提醒**：`deliveryRevision` 只在新发现、影响升级、预约到时和任务结果等有意义事件递增。`displayedRevision/openedRevision/notifiedRevision` 分开保存。QML 通过 [Qt Item 的坐标映射接口](https://doc.qt.io/qt-6/qml-qtquick-item.html) 核对摘要是否位于滚动视口及活动窗口内，停留至少 800 ms 后提交对应修订的回执；滚动时不计入。未滚到的卡片不被可见窗口代替确认，已展示的同一进展也不会离开桌面后再次通知。异步通知的旧回执不能吞掉后来的任务结果。每个来源须有新鲜证据，其他探针正常不代表失败来源也已复查。
+- **条件提醒边界**：现有采集只提供崩溃进程名，没有已验证的应用实例标识。原“应用关闭后提醒”从 UI 移除，服务端也拒绝该条件；保留待处理、一小时和明天定时选项。不把停止一个辅助进程或 `/proc/comm` 同名匹配当作应用退出。可靠的应用实例追踪仍待单独接入标准桌面生命周期接口，未伪造该项验收。
+
+呈现排序优先紧急影响、等待用户查看的任务结果及进行中任务，普通机会随后，稍后项目后置；同一签名继续归并。知识库和上游仍沿用已验证的小规模条目、维护者审阅与本地反馈材料，未扩展为全应用能力探针或自动对外提交 PR。
+
+### 离线验证
+
+ARM64 Ubuntu 26.04 / Qt 6.10.2 的 C++ 检查共 19 项通过（17 个测试方法及初始化/清理），覆盖迁移备份、归档时任务仍运行、重启后任务关联、旧结果拒绝、方案/证据变更拒绝旧确认、已批准快照不随后续编辑变化、逐版本回执、过期来源不提醒、任务结果可在问题消失后预约。Python 建议任务/错误回归 9 项、原通话回归 17 项通过。
+
+私有 D-Bus 使用真实建议服务、替身 Agent 传输和 40 卡，验证调查中问题消失、服务重启恢复、停止后结果保留、旧方案确认拒绝及持久化。小组件与完整建议页的真实 QML 预览都验证只确认当前显示的 2 张卡片，其余卡片没有误回执；长列表滚动及无 QML warning 通过。新增回执刷新暴露了完整页顶部边距偏移，修正起始位置恢复后两种预览均通过。这些替身测试不等于实际模型执行或应用修复成功。
+
+### G100 第一轮实机闭环（20260930.8）
+
+USB 精确序列号 `ZY32M9MRVP`，开发主机 mibook/x86_64、系统代理 none，构建端现场核验 Mac mini/ARM64、Surge 6152 与 Qt 6.10.2，手机代理仍为 192.168.5.45:6152。增量部署 suggestions `0.417`、voice-agent `0.415`，其余已安装基线与 Android 载荷保留；8 项 smoke 首遍通过、无 flaky，camera 跳过。schema 1 已备份并迁移，旧结果和对话保留；旧“无足够证据”的文字方案在实机无应用按钮，条件提醒菜单不再提供进程名推断的选项。实际卡片点击、同实例恢复、栏目入口、组件/抽屉手势与预约通知跳转复验通过。
+
+真实 GPT-6 Luna + API Key 对第二条历史桌面崩溃完成只读调查，期间主动重启建议服务，原任务 ID 与原对话保持关联，最终为 `finished`，结果回写成功，`planStatus=needs_investigation`。Agent 找到与显示模式变更相关的已有 KWayland 修复记录并确认本机已有修复包，但缺少本报告回溯，因此仍未确认根因，没有实施系统修复、安装或重启。不能把调查完成等同于修好了手机。
+
+证据在 `.work/experiments/proactive-refactor/`：`deploy.log`、`device-ui.log`、`luna.log`、`real-luna-result.json`、`integration-verified.log`。确认交互初次测试仅断言“没有启动任务”，不足以证明物理点击后的拒绝；截图中弹框仍在，故不将该次 `confirmation-ui.log` 的 PASS 作为完整成功证据。后续强化为明确检查弹框内变更提示、应用按钮禁用、服务端旧修订拒绝及物理取消关闭，最终结果另记。
