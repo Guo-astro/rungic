@@ -7,7 +7,8 @@ phone, fullscreen, or on the TV:
       on the TV.
   rungic-agent-screen on | off | toggle | status | ensure [tv]   the assistant's screen: the
       agent's own workspace, `rungic-workspace@N` ($RUNGIC_WORKSPACE, else 1), started when needed.
-      `tv`: show it on the TV instead of the desktop (`notv` gives the TV back).
+      `tv`: show it on the TV instead of the desktop, connecting the TV if none is (`notv` gives
+      the TV back to the desktop).
 
 Each prints one JSON object. `on` turns the screen on and opens its floating window; `off` turns
 it off and the window quits by itself. `ensure` is `status` that also brings back the window of a
@@ -178,12 +179,23 @@ def off():
 
 
 def tv(show=True):
-    """The assistant's screen on the TV instead of the desktop (or back to the desktop)."""
+    """The assistant's screen on the TV instead of the desktop (or back to the desktop). The TV's
+    source is set first and a TV is connected if none is: the TV shows the assistant's screen
+    from its first frame, never the desktop on the way (it took a connect, then a switch)."""
     if DESKTOP:
         raise SystemExit(json.dumps({'error': 'a TV shows desktop mode anyway; rungic-cast connects one'}))
     if show:
         on()
-    bridge({'op': OP, 'tv': show})
+    state = bridge({'op': OP, 'tv': show})
+    if show and not state.get('tv'):
+        # No TV yet: the last one, as the quick setting and the floating window connect it
+        # (seconds to a minute).
+        result = bridge({'op': 'cast', 'args': ['connect']}, timeout=75)
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline and not bridge({'op': OP}).get('tv'):
+            time.sleep(0.3)
+        if not bridge({'op': OP}).get('tv'):
+            raise SystemExit(json.dumps({'error': 'the TV did not connect', 'cast': result}, ensure_ascii=False))
     return status()
 
 
