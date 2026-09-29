@@ -15,6 +15,9 @@ MESA_LOADER_DRIVER_OVERRIDE=kgsl and an accessible /dev/kgsl-3d0, open it like a
 (no drmDevice, no authentication, no DRM syncobjs) and let the rest of the stock GBM path run:
 buffers over linux-dmabuf v3, DRI3 for clients, Present flips.
 
+That Mesa branch sends 1274 instead of DRM_FORMAT_MOD_LINEAR for linear DRI3 buffers (a marker for
+Termux:X11): on KGSL, map it back to LINEAR so gbm_bo_import() accepts the client's buffers.
+
 Unlike lfdevs/xwayland's KGSL surfaceless backend (made for PRoot, where no GBM device can be
 opened), this keeps upstream's allocation, DRI3 and Present code.
 
@@ -24,13 +27,13 @@ X-Rungic-Status: Pending [Android/KGSL only; not planned for upstream]
 X-Rungic-Tests: L3:xwayland.kgsl-glamor (glamor on FD710 in Xorg log; glmark2 and X11 GL apps on the GPU)
 X-Rungic-Docs: docs/research/93
 ---
- hw/xwayland/xwayland-glamor-gbm.c | 48 +++++++++++++++++++++++++++++++++++++++
+ hw/xwayland/xwayland-glamor-gbm.c | 54 +++++++++++++++++++++++++++++++++++++++
  hw/xwayland/xwayland-glamor-gbm.h |  1 +
- hw/xwayland/xwayland-glamor.c     |  4 ++++
- 3 files changed, 53 insertions(+)
+ hw/xwayland/xwayland-glamor.c     |  4 +++
+ 3 files changed, 59 insertions(+)
 
 diff --git a/hw/xwayland/xwayland-glamor-gbm.c b/hw/xwayland/xwayland-glamor-gbm.c
-index 05668b8..24530b1 100644
+index 05668b8..5261256 100644
 --- a/hw/xwayland/xwayland-glamor-gbm.c
 +++ b/hw/xwayland/xwayland-glamor-gbm.c
 @@ -31,6 +31,7 @@
@@ -41,7 +44,20 @@ index 05668b8..24530b1 100644
  #include <errno.h>
  #include <poll.h>
  #ifdef DRI3
-@@ -1225,6 +1226,10 @@ xwl_gbm_supports_syncobjs(struct xwl_screen *xwl_screen)
+@@ -773,6 +774,12 @@ glamor_pixmap_from_fds(ScreenPtr screen, CARD8 num_fds, const int *fds,
+         strides[0] < width * bpp / 8)
+        goto error;
+ 
++    /* The KGSL branch of Mesa (lfdevs/mesa-for-android-container, for Termux:X11) sends 1274,
++     * not a DRM modifier, for LINEAR buffers (loader_dri3_helper.c); gbm_bo_import() refuses it
++     * and the client gets BadAlloc. */
++    if (modifier == 1274 && !xwl_gbm->device)
++        modifier = DRM_FORMAT_MOD_LINEAR;
++
+     if (xwl_gbm->dmabuf_capable && modifier != DRM_FORMAT_MOD_INVALID) {
+ #ifdef GBM_BO_WITH_MODIFIERS
+        struct gbm_import_fd_modifier_data data;
+@@ -1225,6 +1232,10 @@ xwl_gbm_supports_syncobjs(struct xwl_screen *xwl_screen)
      struct xwl_gbm_private *xwl_gbm = xwl_gbm_get(xwl_screen);
      uint64_t syncobj_cap = 0;
  
@@ -52,7 +68,7 @@ index 05668b8..24530b1 100644
      if (drmGetCap(xwl_gbm->drm_fd, DRM_CAP_SYNCOBJ_TIMELINE,
                    &syncobj_cap) || !syncobj_cap)
          return FALSE;
-@@ -1661,12 +1666,55 @@ xwl_glamor_try_gles_api(struct xwl_screen *xwl_screen)
+@@ -1661,12 +1672,55 @@ xwl_glamor_try_gles_api(struct xwl_screen *xwl_screen)
      return TRUE;
  }
  
