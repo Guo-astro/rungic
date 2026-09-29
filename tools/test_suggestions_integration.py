@@ -153,6 +153,10 @@ def main():
             print('PASS: task survives disappearance/restart; stop and result correlation; stale confirmation rejected')
             if len(sys.argv) >= 5:
                 subprocess.run([sys.argv[3], sys.argv[4], *sys.argv[5:]], env=env, check=True, timeout=20)
+                shown = [i for i in cli('list')['items'] if i.get('displayedRevision', 0)]
+                assert 0 < len(shown) < 40, ('presentation must acknowledge only visible cards', len(shown))
+                assert all(not i.get('openedRevision') for i in cli('list')['items'])
+                print('PASS: QML acknowledged only displayed card revisions:', len(shown))
             print('PASS: 40 cards, restart, snooze, dedup/mute, Agent handoff/result, private feedback, independent upstream state, QML preview')
         finally:
             process.terminate(); process.wait(5)
