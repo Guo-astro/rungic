@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// The conversations, in the side panel (docs/87): search, "新对话", the conversations by
-// day (the open one marked), and the settings at the bottom. Holding a conversation
-// offers to delete it.
+// The conversations, in the side panel (docs/87): search, "新对话", the main conversation (the
+// one holding Home talks in, docs/67: always there, not deleted, not filtered by the search),
+// the other conversations (the user's own) by day (the open one marked), and the settings at
+// the bottom. Holding one of the others offers to delete it.
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as QQC2
@@ -37,9 +38,12 @@ SideDrawer {
         if (days < 30) return (d.getMonth() + 1) + "月" + d.getDate() + "日"
         return "更早"
     }
+    // The service marks the main conversation in the list (`assistant`).
+    readonly property var main: all.find(c => c.assistant) || null
     readonly property var shown: {
         const q = search.text.trim().toLowerCase()
-        return all.filter(c => !q || (c.title || "").toLowerCase().includes(q) || (c.preview || "").toLowerCase().includes(q))
+        return all.filter(c => !c.assistant)
+                  .filter(c => !q || (c.title || "").toLowerCase().includes(q) || (c.preview || "").toLowerCase().includes(q))
                   .map(c => ({ cid: c.id, title: c.title || "新对话", day: dayOf(c.updated || c.created || 0) }))
     }
     // Sections need a ListModel.
@@ -66,6 +70,32 @@ SideDrawer {
             text: "新对话"
             onClicked: drawer.newRequested()
         }
+        SectionLabel {
+            Layout.fillWidth: true
+            visible: drawer.main !== null
+            text: "主对话"
+            // Above the days' labels: the two parts of the list.
+            color: Theme.text
+            font.weight: Font.Medium
+            topPadding: 18
+            bottomPadding: 6
+        }
+        NavItem {
+            visible: drawer.main !== null
+            iconName: "voice"
+            text: drawer.main ? (drawer.main.title || "主对话") : ""
+            current: drawer.main !== null && drawer.main.id === drawer.current
+            onClicked: drawer.openRequested(drawer.main.id, drawer.main.title || "主对话")
+        }
+        SectionLabel {
+            Layout.fillWidth: true
+            text: "其他对话"
+            // Above the days' labels: the two parts of the list.
+            color: Theme.text
+            font.weight: Font.Medium
+            topPadding: 18
+            bottomPadding: 0
+        }
         ListView {
             id: list
             Layout.fillWidth: true
@@ -78,7 +108,8 @@ SideDrawer {
                 required property string section
                 width: ListView.view.width
                 text: section
-                topPadding: 18
+                // The first day sits right under "其他对话".
+                topPadding: rows.count > 0 && section === rows.get(0).day ? 6 : 18
                 bottomPadding: 6
             }
             delegate: Item {
@@ -125,7 +156,7 @@ SideDrawer {
             Text {
                 anchors.centerIn: parent
                 visible: list.count === 0
-                text: search.text ? "没有找到对话" : "还没有对话"
+                text: search.text ? "没有找到对话" : "还没有其他对话"
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.metaSize
                 color: Theme.dim
