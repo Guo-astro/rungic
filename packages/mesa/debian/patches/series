@@ -2,3 +2,4 @@ rungic/freedreno-kgsl-backend.patch
 rungic/freedreno-kgsl-dmabuf.patch
 rungic/egl-kgsl-device.patch
 rungic/turnip-kgsl-wsi.patch
+rungic/zink-kgsl-no-drm.patch

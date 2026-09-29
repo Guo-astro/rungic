@@ -1,4 +1,4 @@
-mesa (26.3.0~devel20260929+rungic1) resolute; urgency=medium
+mesa (26.3.0~devel20260929+rungic3) resolute; urgency=medium
 
   * Base: upstream Mesa main 190d227a (2026-09-29) instead of the Mesa for
     Android container branch (docs/research/94). Carried for KGSL:
@@ -11,6 +11,8 @@ mesa (26.3.0~devel20260929+rungic1) resolute; urgency=medium
     The branch's Termux changes (1274 for LINEAR, no xshmfence, Zink as the
     EGL default, DRI3 failure reported as success) are gone, and with them
     the need for two of the previous patches.
+  * Zink on KGSL without a DRM device (Wayland EGL, GBM, DRI3), to evaluate
+    GL through Zink on Turnip instead of freedreno (docs/research/94).
 
  -- range-dev <noreply@localhost>  Wed, 30 Sep 2026 03:20:00 +0900
 

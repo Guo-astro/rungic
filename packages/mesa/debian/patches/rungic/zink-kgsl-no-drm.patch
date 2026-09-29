@@ -1,0 +1,79 @@
+From: clawd20130 <clawd20130@gmail.com>
+Date: Wed, 30 Sep 2026 03:56:40 +0900
+Subject: zink: run on KGSL without a DRM device (Wayland EGL, GBM,
+ DRI3)
+
+KGSL (/dev/kgsl-3d0) is not a DRM device. Zink picks its Vulkan device itself when it has no fd,
+and presents on Wayland through Vulkan WSI (kopper), but:
+- EGL's Wayland platform gave up when the compositor named no device (no wl_drm, linux-dmabuf v3
+  without feedback), even with MESA_LOADER_DRIVER_OVERRIDE=zink: go on without a fd for Zink;
+- zink_drm_create_screen() refused a fd that is not a DRM device (GBM on the KGSL node, as KWin
+  and Xwayland use, or a DRI3 client given that node): treat it as no fd.
+
+Forwarded: no
+Last-Update: 2026-09-30
+X-Rungic-Status: Pending [KGSL only; evaluation of Zink on Turnip, docs/research/94]
+X-Rungic-Tests: L3:gpu.zink (glmark2-es2-wayland and KWin with MESA_LOADER_DRIVER_OVERRIDE=zink)
+X-Rungic-Docs: docs/research/94
+---
+ src/egl/drivers/dri2/platform_wayland.c | 11 +++++++++++
+ src/gallium/drivers/zink/zink_screen.c  |  5 +++++
+ 2 files changed, 16 insertions(+)
+
+diff --git a/src/egl/drivers/dri2/platform_wayland.c b/src/egl/drivers/dri2/platform_wayland.c
+index 044e7c5d80..61ac19a446 100644
+--- a/src/egl/drivers/dri2/platform_wayland.c
++++ b/src/egl/drivers/dri2/platform_wayland.c
+@@ -2676,6 +2676,7 @@ dri2_initialize_wayland_drm(_EGLDisplay *disp)
+ {
+    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+    bool using_kgsl = false;
++   bool zink_without_device = false;
+ 
+    if (dri2_wl_formats_init(&dri2_dpy->formats) < 0)
+       goto cleanup;
+@@ -2713,6 +2714,10 @@ dri2_initialize_wayland_drm(_EGLDisplay *disp)
+       if (disp->Options.Kgsl) {
+          dri2_dpy->fd_render_gpu = loader_open_device("/dev/kgsl-3d0");
+          using_kgsl = dri2_dpy->fd_render_gpu != -1;
++      } else if (disp->Options.Zink) {
++         /* No device named (KGSL has none): Zink picks its Vulkan device and
++          * presents through Vulkan WSI (kopper), without a DRM fd. */
++         zink_without_device = true;
+       } else {
+          goto cleanup;
+       }
+@@ -2728,11 +2733,17 @@ dri2_initialize_wayland_drm(_EGLDisplay *disp)
+          goto cleanup;
+       using_kgsl = true;
+    }
++   if (dri2_dpy->fd_render_gpu == -1 && disp->Options.Zink)
++      zink_without_device = true;
+ 
+    if (using_kgsl) {
+       dri2_dpy->fd_display_gpu = dri2_dpy->fd_render_gpu;
+       dri2_dpy->is_render_node = false;
+       dri2_dpy->driver_name = strdup("kgsl");
++   } else if (zink_without_device) {
++      dri2_dpy->fd_render_gpu = dri2_dpy->fd_display_gpu = -1;
++      dri2_dpy->is_render_node = false;
++      dri2_dpy->driver_name = strdup("zink");
+    } else {
+       loader_get_user_preferred_fd(&dri2_dpy->fd_render_gpu,
+                                    &dri2_dpy->fd_display_gpu);
+diff --git a/src/gallium/drivers/zink/zink_screen.c b/src/gallium/drivers/zink/zink_screen.c
+index 8e92a9d2e8..e642fb03f0 100644
+--- a/src/gallium/drivers/zink/zink_screen.c
++++ b/src/gallium/drivers/zink/zink_screen.c
+@@ -3938,6 +3938,11 @@ zink_render_rdev(int fd, int64_t *dev_major, int64_t *dev_minor)
+    if (fd == -1)
+       return 0;
+ 
++   /* Not a DRM device (KGSL's /dev/kgsl-3d0 through GBM or DRI3): there is no
++    * render node to match, so pick the Vulkan device as without a fd. */
++   if (drmGetNodeTypeFromFd(fd) < 0)
++      return 0;
++
+    if (drmGetDevice2(fd, 0, &dev))
+       return -1;
+ 
