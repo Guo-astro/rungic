@@ -31,6 +31,7 @@ Q_SIGNALS:
 private:
     Q_SLOT void onChanged();
     void call(const QString &method, const QVariantList &args, const QString &id = {}, const QString &action = {});
+    void launch(const QStringList &arguments);
     QVariantList m_items;
     QStringList m_coverage;
     QString m_error;

@@ -14,6 +14,7 @@
 #include <QFutureWatcher>
 #include <QJsonDocument>
 #include <QProcess>
+#include <QProcessEnvironment>
 #include <QUrl>
 #include <QtConcurrent>
 
@@ -32,6 +33,10 @@ Suggestions::Suggestions(const QString &state, const QString &feed, const QStrin
     bus.connect(Voice, VoicePath, Voice, "Event", this, SLOT(AgentEvent(QString)));
     bus.connect("org.freedesktop.Notifications", "/org/freedesktop/Notifications", "org.freedesktop.Notifications",
                 "ActionInvoked", this, SLOT(NotificationAction(uint,QString)));
+    bus.connect("org.freedesktop.Notifications", "/org/freedesktop/Notifications", "org.freedesktop.Notifications",
+                "ActivationToken", this, SLOT(NotificationToken(uint,QString)));
+    bus.connect("org.freedesktop.Notifications", "/org/freedesktop/Notifications", "org.freedesktop.Notifications",
+                "NotificationClosed", this, SLOT(NotificationClosed(uint,uint)));
     connect(bus.interface(), &QDBusConnectionInterface::serviceOwnerChanged, this,
             [this](const QString &name, const QString &, const QString &owner) { if (owner.isEmpty()) visibleClients.remove(name); });
     scanTimer.setInterval(60000);
@@ -81,12 +86,25 @@ void Suggestions::Refresh() {
     });
     w->setFuture(QtConcurrent::run(Care::collectUser));
 }
-void Suggestions::open(const QString &id) {
-    QProcess::startDetached("/usr/bin/rungic-voice-assistant", {"--suggestion", id});
+void Suggestions::open(const QString &id, const QString &token) {
+    QProcess process;
+    auto environment = QProcessEnvironment::systemEnvironment();
+    environment.remove("XDG_ACTIVATION_TOKEN");
+    if (!token.isEmpty()) environment.insert("XDG_ACTIVATION_TOKEN", token);
+    process.setProcessEnvironment(environment);
+    process.setProgram("/usr/bin/rungic-voice-assistant");
+    process.setArguments({"--suggestion", id});
+    process.startDetached();
+}
+void Suggestions::NotificationToken(uint id, const QString &token) {
+    if (notifications.contains(id)) notificationTokens[id] = token;
+}
+void Suggestions::NotificationClosed(uint id, uint) {
+    notifications.remove(id); notificationTokens.remove(id);
 }
 void Suggestions::NotificationAction(uint id, const QString &action) {
     if (!notifications.contains(id)) return;
-    if (action == "default") open(notifications.value(id));
+    if (action == "default") open(notifications.value(id), notificationTokens.take(id));
     else if (action == "later") Act(notifications.value(id), "later", "{}");
 }
 void Suggestions::notify() {

@@ -9,6 +9,10 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QProcess>
+#include <QProcessEnvironment>
+#include <QGuiApplication>
+#include <KWaylandExtras>
+#include <KWindowSystem>
 #include <QTimer>
 
 static constexpr auto BusName = "com.rungic.Suggestions";
@@ -49,8 +53,23 @@ void SuggestionsClient::scan() {
 void SuggestionsClient::act(const QString &id, const QString &action, const QVariantMap &args) {
     call("Act", {id, action, QString::fromUtf8(QJsonDocument(QJsonObject::fromVariantMap(args)).toJson(QJsonDocument::Compact))}, id, action);
 }
-void SuggestionsClient::open(const QString &id) { QProcess::startDetached("/usr/bin/rungic-voice-assistant", {"--suggestion", id}); }
-void SuggestionsClient::conversation(const QString &id) { if (!id.isEmpty()) QProcess::startDetached("/usr/bin/rungic-voice-assistant", {"--conversation", id}); }
+void SuggestionsClient::launch(const QStringList &arguments) {
+    const auto start = [arguments](const QString &token) {
+        QProcess process;
+        auto environment = QProcessEnvironment::systemEnvironment();
+        environment.remove("XDG_ACTIVATION_TOKEN");
+        if (!token.isEmpty()) environment.insert("XDG_ACTIVATION_TOKEN", token);
+        process.setProcessEnvironment(environment);
+        process.setProgram("/usr/bin/rungic-voice-assistant");
+        process.setArguments(arguments);
+        process.startDetached();
+    };
+    if (auto *window = QGuiApplication::focusWindow(); window && KWindowSystem::isPlatformWayland())
+        KWaylandExtras::xdgActivationToken(window, "com.rungic.VoiceAssistant").then(this, start);
+    else start({});
+}
+void SuggestionsClient::open(const QString &id) { launch({"--suggestion", id}); }
+void SuggestionsClient::conversation(const QString &id) { if (!id.isEmpty()) launch({"--conversation", id}); }
 void SuggestionsClient::watching(bool visible) {
     m_watching = visible;
     auto message = QDBusMessage::createMethodCall(BusName, BusPath, BusName, "SetVisible");

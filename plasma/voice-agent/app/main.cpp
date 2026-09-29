@@ -4,6 +4,7 @@
 //   --conversation ID    open that conversation (in the running app, if there is one)
 #include <KColorScheme>
 #include <KSharedConfig>
+#include <KWindowSystem>
 
 #include <QDBusConnection>
 #include <QDBusMessage>
@@ -31,13 +32,19 @@ public:
     }
 
 public Q_SLOTS:
+    Q_SCRIPTABLE void OpenActivated(bool suggestions, const QString &id, const QString &token)
+    {
+        KWindowSystem::setCurrentXdgActivationToken(token);
+        if (suggestions) OpenSuggestions(id);
+        else Open(id);
+    }
     Q_SCRIPTABLE void OpenSuggestions(const QString &id)
     {
         const auto roots = m_engine->rootObjects();
         auto *window = roots.isEmpty() ? nullptr : qobject_cast<QQuickWindow *>(roots.constFirst());
         if (!window) return;
         QMetaObject::invokeMethod(window, "openSuggestions", Q_ARG(QVariant, id));
-        window->showNormal(); window->raise(); window->requestActivate();
+        window->showNormal(); window->raise(); KWindowSystem::activateWindow(window);
     }
     Q_SCRIPTABLE void Open(const QString &conversation)
     {
@@ -51,7 +58,7 @@ public Q_SLOTS:
         }
         window->showNormal();
         window->raise();
-        window->requestActivate();
+        KWindowSystem::activateWindow(window);
     }
 
 private:
@@ -78,6 +85,9 @@ private:
 
 int main(int argc, char *argv[])
 {
+    // Qt can consume the environment token during application initialization.
+    // Preserve it for forwarding to an already running instance.
+    const QString activationToken = qEnvironmentVariable("XDG_ACTIVATION_TOKEN");
     QGuiApplication app(argc, argv);
     QGuiApplication::setApplicationName(QStringLiteral("rungic-voice-assistant"));
     // QML Settings (the app's choices, docs/87) need an organisation: ~/.config/Rungic/.
@@ -117,8 +127,8 @@ int main(int argc, char *argv[])
     }
     if (!bus.registerService(QStringLiteral("com.rungic.VoiceAssistantApp"))) {
         QDBusMessage open = QDBusMessage::createMethodCall(QStringLiteral("com.rungic.VoiceAssistantApp"), QStringLiteral("/App"),
-                                                           QStringLiteral("com.rungic.VoiceAssistantApp"), suggestions ? QStringLiteral("OpenSuggestions") : QStringLiteral("Open"));
-        open.setArguments({suggestions ? suggestion : conversation});
+                                                           QStringLiteral("com.rungic.VoiceAssistantApp"), QStringLiteral("OpenActivated"));
+        open.setArguments({suggestions, suggestions ? suggestion : conversation, activationToken});
         bus.call(open);
         return 0;
     }

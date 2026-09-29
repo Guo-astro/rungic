@@ -3,6 +3,7 @@ project(RungicSuggestions LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_AUTOMOC ON)
 find_package(Qt6 REQUIRED COMPONENTS Core DBus Concurrent Gui Qml Quick QuickControls2 Test)
+find_package(KF6WindowSystem 6.19 REQUIRED)
 qt_standard_project_setup(REQUIRES 6.5)
 qt_policy(SET QTP0004 NEW)
 add_library(caremodel STATIC model.cpp model.h collector.cpp collector.h)
@@ -15,7 +16,7 @@ qt_add_qml_module(rungicsuggestions
     PLUGIN_TARGET rungicsuggestions OUTPUT_DIRECTORY "${module_dir}"
     SOURCES client.cpp client.h
     QML_FILES qml/SuggestionCard.qml qml/SuggestionsFeed.qml)
-target_link_libraries(rungicsuggestions PRIVATE Qt6::Core Qt6::DBus Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2)
+target_link_libraries(rungicsuggestions PRIVATE Qt6::Core Qt6::DBus Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 KF6::WindowSystem)
 install(TARGETS rungic-suggestions DESTINATION bin)
 install(TARGETS rungicsuggestions LIBRARY DESTINATION "${QT6_INSTALL_QML}/com/rungic/suggestions")
 install(FILES "${module_dir}/qmldir" "${module_dir}/rungicsuggestions.qmltypes" DESTINATION "${QT6_INSTALL_QML}/com/rungic/suggestions")
