@@ -23,6 +23,10 @@ mkdir -p "$state/config"
 export RUNGIC_USER_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 [ -e "$state/config/kdeglobals" ] || ln -s "$RUNGIC_USER_CONFIG_HOME/kdeglobals" "$state/config/kdeglobals"
 export XDG_CONFIG_HOME="$state/config"
+# A desktop's window behaviour, not the phone's: Plasma Mobile's configuration leaves the search
+# path, the workspace defaults come first (defaults/kwinrc).
+dirs=$(printf '%s' "${XDG_CONFIG_DIRS:-/etc/xdg}" | tr ':' '\n' | grep -v '/plasma-mobile/*$' | grep . | paste -sd: -)
+export XDG_CONFIG_DIRS="/usr/share/rungic-workspace/defaults:$dirs"
 # And a cache of its own: KDE's application database (ksycoca) records the settings directory it
 # was built for, and one file shared with the user's session was rebuilt by each side in turn,
 # several times a second; every rebuild made the phone's home screen reload its apps, and it

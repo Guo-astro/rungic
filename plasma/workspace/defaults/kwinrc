@@ -1,0 +1,15 @@
+# An agent workspace's KWin (docs/research/91): a desktop, not a phone. The user session's
+# Plasma Mobile settings (~/.config/plasma-mobile/kwinrc, immutable keys) maximized every window
+# without its title bar: one window showed at a time and the agent had to switch through its
+# tools. Windows keep their decorations and open at their size where there is room. The
+# workspace's own kwinrc (in its XDG_CONFIG_HOME) still overrides these.
+[Windows]
+Placement=Smart
+BorderlessMaximizedWindows=false
+
+[Plugins]
+convergentwindowsEnabled=false
+mobiletaskswitcherEnabled=false
+
+[Input]
+TabletMode=off
