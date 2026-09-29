@@ -15,7 +15,7 @@ Item {
     property bool refreshPending: false
     readonly property var clientItems: client.items
     onClientItemsChanged: {
-        if (list && list.moving) refreshPending = true
+        if (list && (list.moving || pointer.pressed)) refreshPending = true
         else rebuild()
     }
     function rebuild() {
@@ -51,6 +51,8 @@ Item {
                 font.weight: Font.DemiBold
                 style: Text.Raised; styleColor: "#70000000"
                 Layout.fillWidth: true
+                opacity: titleTap.pressed ? 0.6 : 1
+                MouseArea { id: titleTap; anchors.fill: parent; onClicked: client.open() }
             }
             QQC2.AbstractButton {
                 text: widget.pending.length ? widget.pending.length + " 项  ›" : "查看  ›"
@@ -70,9 +72,13 @@ Item {
             clip: true
             spacing: 12
             boundsBehavior: Flickable.StopAtBounds
+            // Folio's outer SwipeArea steals a normal nested Flickable's drag.
+            // Own this viewport's pointer sequence using Qt's preventStealing;
+            // keep ListView's layout, bounds and kinetic flick implementation.
+            interactive: false
             reuseItems: true
             model: widget.pending
-            onMovingChanged: if (!moving && widget.refreshPending) widget.rebuild()
+            onMovingChanged: if (!moving && !pointer.pressed && widget.refreshPending) widget.rebuild()
             QQC2.ScrollBar.vertical: QQC2.ScrollBar {
                 implicitWidth: 3; padding: 0
                 policy: QQC2.ScrollBar.AsNeeded
@@ -90,7 +96,7 @@ Item {
                 onClicked: client.open(modelData.id)
                 background: Rectangle {
                     radius: 22
-                    color: card.down ? Theme.hover : Theme.background
+                    color: card.down || (pointer.pressed && !pointer.dragged && pointer.pressId === card.modelData.id) ? Theme.hover : Theme.background
                     border.width: 1
                     border.color: Theme.line
                 }
@@ -126,6 +132,52 @@ Item {
                     Text { text: "暂时没有待处理建议"; color: Theme.text; font.pixelSize: 16; Layout.fillWidth: true; wrapMode: Text.Wrap }
                     Text { text: client.error || (client.coverage.length ? "部分检查尚未完成，可以在 Agent 中查看。" : "有新发现时会留在这里。" ); color: Theme.dim; font.pixelSize: 12; Layout.fillWidth: true; wrapMode: Text.Wrap }
                 }
+            }
+            MouseArea {
+                id: pointer
+                parent: list
+                anchors.fill: parent
+                z: 2
+                preventStealing: true
+                scrollGestureEnabled: false
+                property real startY: 0
+                property real startContentY: 0
+                property real lastY: 0
+                property double lastTime: 0
+                property real velocity: 0
+                property bool dragged: false
+                property bool held: false
+                property string pressId: ""
+                function bounded(y) { return Math.max(list.originY, Math.min(y, list.originY + Math.max(0, list.contentHeight - list.height))) }
+                onPressed: mouse => {
+                    list.cancelFlick()
+                    startY = lastY = mouse.y
+                    startContentY = list.contentY
+                    lastTime = Date.now(); velocity = 0; dragged = false; held = false
+                    const index = list.indexAt(mouse.x + list.contentX, mouse.y + list.contentY)
+                    pressId = index >= 0 ? widget.pending[index].id : ""
+                }
+                onPositionChanged: mouse => {
+                    if (!pressed) return
+                    if (Math.abs(mouse.y - startY) > Qt.styleHints.startDragDistance) dragged = true
+                    if (dragged) {
+                        const now = Date.now()
+                        velocity = (mouse.y - lastY) * 1000 / Math.max(1, now - lastTime)
+                        lastY = mouse.y; lastTime = now
+                        list.contentY = bounded(startContentY + startY - mouse.y)
+                    }
+                }
+                onPressAndHold: held = true // Folio's parent handles native widget editing.
+                onReleased: mouse => {
+                    if (dragged) {
+                        if (Date.now() - lastTime < 100 && Math.abs(velocity) > 80)
+                            list.flick(0, Math.max(-1800, Math.min(1800, velocity)))
+                    } else if (!held && mouse.x >= 0 && mouse.x < width && mouse.y >= 0 && mouse.y < height) {
+                        client.open(pressId)
+                    }
+                }
+                onPressedChanged: if (!pressed && !list.moving && widget.refreshPending) Qt.callLater(widget.rebuild)
+                onWheel: wheel => { list.contentY = bounded(list.contentY - wheel.angleDelta.y / 2); wheel.accepted = true }
             }
         }
     }
