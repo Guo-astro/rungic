@@ -110,6 +110,13 @@
         "wl-clipboard"
       ]
     },
+    "flatpak": {
+      "source": "packages/flatpak",
+      "packages": [
+        "flatpak",
+        "libflatpak0"
+      ]
+    },
     "gst-plugins-base1.0": {
       "source": "packages/gst-plugins-base1.0",
       "packages": [
