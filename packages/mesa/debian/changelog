@@ -1,3 +1,12 @@
+mesa (26.3.0~devel20260824+rungic2) resolute; urgency=medium
+
+  * EGL on X11 without a DRI3 device: only Zink goes on, others fall back to
+    software instead of crashing in drisw_init_screen (docs/49).
+  * X11: open KGSL for DRI3 only when the X server has DRI3; a client waited
+    forever on an Xwayland without it (docs/49).
+
+ -- range-dev <noreply@localhost>  Wed, 30 Sep 2026 01:40:00 +0900
+
 mesa (26.3.0~devel20260824+rungic1) resolute; urgency=medium
 
   * Patch queue (docs/71, docs/73): the Mesa for Android container branch at
