@@ -1,0 +1,137 @@
+From: clawd20130 <clawd20130@gmail.com>
+Date: Wed, 30 Sep 2026 01:37:52 +0900
+Subject: xwayland: glamor and DRI3 on the KGSL GPU through the GBM path
+
+On an Android kernel the Adreno GPU is Qualcomm KGSL (/dev/kgsl-3d0), not a DRM device: the
+compositor (KWin on the Android host) offers linux-dmabuf v3 without a main device and no wl_drm,
+and libdrm's device queries fail on the node. Xwayland therefore refused glamor ("'wl_drm' not
+supported and linux-dmabuf v4 not supported") and ran on software, without DRI3; X11 GL clients
+fell back to the CPU.
+
+Mesa's GBM and EGL already work on the node (freedreno with -Dfreedreno-kmds=kgsl and
+MESA_LOADER_DRIVER_OVERRIDE=kgsl; checked: gbm_create_device, LINEAR dma-buf buffers,
+EGL_PLATFORM_GBM_MESA, FD710 GL 4.6). So only find the device: with linux-dmabuf v3,
+MESA_LOADER_DRIVER_OVERRIDE=kgsl and an accessible /dev/kgsl-3d0, open it like a render node
+(no drmDevice, no authentication, no DRM syncobjs) and let the rest of the stock GBM path run:
+buffers over linux-dmabuf v3, DRI3 for clients, Present flips.
+
+Unlike lfdevs/xwayland's KGSL surfaceless backend (made for PRoot, where no GBM device can be
+opened), this keeps upstream's allocation, DRI3 and Present code.
+
+Forwarded: no
+Last-Update: 2026-09-30
+X-Rungic-Status: Pending [Android/KGSL only; not planned for upstream]
+X-Rungic-Tests: L3:xwayland.kgsl-glamor (glamor on FD710 in Xorg log; glmark2 and X11 GL apps on the GPU)
+X-Rungic-Docs: docs/research/93
+---
+ hw/xwayland/xwayland-glamor-gbm.c | 48 +++++++++++++++++++++++++++++++++++++++
+ hw/xwayland/xwayland-glamor-gbm.h |  1 +
+ hw/xwayland/xwayland-glamor.c     |  4 ++++
+ 3 files changed, 53 insertions(+)
+
+diff --git a/hw/xwayland/xwayland-glamor-gbm.c b/hw/xwayland/xwayland-glamor-gbm.c
+index 05668b8..24530b1 100644
+--- a/hw/xwayland/xwayland-glamor-gbm.c
++++ b/hw/xwayland/xwayland-glamor-gbm.c
+@@ -31,6 +31,7 @@
+ #include <xwayland-config.h>
+ 
+ #include <fcntl.h>
++#include <unistd.h>
+ #include <errno.h>
+ #include <poll.h>
+ #ifdef DRI3
+@@ -1225,6 +1226,10 @@ xwl_gbm_supports_syncobjs(struct xwl_screen *xwl_screen)
+     struct xwl_gbm_private *xwl_gbm = xwl_gbm_get(xwl_screen);
+     uint64_t syncobj_cap = 0;
+ 
++    /* KGSL has no DRM syncobjs */
++    if (!xwl_gbm->device)
++        return FALSE;
++
+     if (drmGetCap(xwl_gbm->drm_fd, DRM_CAP_SYNCOBJ_TIMELINE,
+                   &syncobj_cap) || !syncobj_cap)
+         return FALSE;
+@@ -1661,12 +1666,55 @@ xwl_glamor_try_gles_api(struct xwl_screen *xwl_screen)
+     return TRUE;
+ }
+ 
++/* The Adreno GPU on an Android kernel (Qualcomm KGSL) is not a DRM device: the compositor can
++ * advertise neither wl_drm nor a linux-dmabuf main device, and libdrm's device queries fail on it.
++ * Mesa's GBM and EGL use it directly when told to (freedreno built with -Dfreedreno-kmds=kgsl,
++ * MESA_LOADER_DRIVER_OVERRIDE=kgsl). */
++#define XWL_KGSL_DEVICE "/dev/kgsl-3d0"
++
++Bool
++xwl_glamor_gbm_has_kgsl(void)
++{
++    const char *driver = getenv("MESA_LOADER_DRIVER_OVERRIDE");
++
++    return driver && strcmp(driver, "kgsl") == 0 &&
++           access(XWL_KGSL_DEVICE, R_OK | W_OK) == 0;
++}
++
++static Bool
++xwl_glamor_gbm_init_kgsl(struct xwl_screen *xwl_screen)
++{
++    struct xwl_gbm_private *xwl_gbm = xwl_gbm_get(xwl_screen);
++
++    xwl_gbm->device_name = strdup(XWL_KGSL_DEVICE);
++    if (!xwl_gbm->device_name)
++        return FALSE;
++
++    xwl_gbm->drm_fd = open(xwl_gbm->device_name, O_RDWR | O_CLOEXEC);
++    if (xwl_gbm->drm_fd < 0) {
++        ErrorF("wayland-egl: could not open %s (%s)\n",
++               xwl_gbm->device_name, strerror(errno));
++        return FALSE;
++    }
++
++    /* No drmDevice (only linux-dmabuf v4 feedback uses it) and, like a render node, no
++     * authentication: DRI3 clients get their own open of the same node. */
++    xwl_gbm->fd_render_node = TRUE;
++    LogMessageVerb(X_INFO, 3, "glamor: using the KGSL GPU %s over linux-dmabuf v%d\n",
++                   xwl_gbm->device_name, xwl_screen->dmabuf_protocol_version);
++    return TRUE;
++}
++
+ static Bool
+ xwl_glamor_gbm_init_main_dev(struct xwl_screen *xwl_screen)
+ {
+     struct xwl_gbm_private *xwl_gbm = xwl_gbm_get(xwl_screen);
+     drmDevice *main_dev;
+ 
++    /* Before v4 there is no feedback, and so no main device, to wait for. */
++    if (xwl_screen->dmabuf_protocol_version < 4 && xwl_glamor_gbm_has_kgsl())
++        return xwl_glamor_gbm_init_kgsl(xwl_screen);
++
+     while (!xwl_screen->default_feedback.feedback_done) {
+         if (wl_display_dispatch(xwl_screen->display) < 0) {
+             ErrorF("Failed to dispatch Wayland display\n");
+diff --git a/hw/xwayland/xwayland-glamor-gbm.h b/hw/xwayland/xwayland-glamor-gbm.h
+index b346a0b..9cde92e 100644
+--- a/hw/xwayland/xwayland-glamor-gbm.h
++++ b/hw/xwayland/xwayland-glamor-gbm.h
+@@ -41,6 +41,7 @@ Bool xwl_glamor_has_wl_drm(struct xwl_screen *xwl_screen);
+ Bool xwl_glamor_gbm_init_egl(struct xwl_screen *xwl_screen);
+ Bool xwl_glamor_gbm_init_screen(struct xwl_screen *xwl_screen);
+ drmDevice *xwl_gbm_get_main_device(struct xwl_screen *xwl_screen);
++Bool xwl_glamor_gbm_has_kgsl(void);
+ 
+ /* Explicit buffer synchronization points */
+ Bool xwl_glamor_gbm_set_syncpts(struct xwl_window *xwl_window, PixmapPtr pixmap);
+diff --git a/hw/xwayland/xwayland-glamor.c b/hw/xwayland/xwayland-glamor.c
+index 88ced5d..294d139 100644
+--- a/hw/xwayland/xwayland-glamor.c
++++ b/hw/xwayland/xwayland-glamor.c
+@@ -123,6 +123,10 @@ xwl_glamor_has_wl_interfaces(struct xwl_screen *xwl_screen)
+ {
+     if (!xwl_glamor_has_wl_drm(xwl_screen) &&
+         xwl_screen->dmabuf_protocol_version < 4) {
++        /* KGSL: the device is known without the compositor's help, and v3 carries the
++         * buffers (xwl_glamor_gbm_init_main_dev) */
++        if (xwl_screen->dmabuf_protocol_version >= 3 && xwl_glamor_gbm_has_kgsl())
++            return TRUE;
+         LogMessageVerb(X_INFO, 3, "glamor: 'wl_drm' not supported and linux-dmabuf v4 not supported\n");
+         return FALSE;
+     }
