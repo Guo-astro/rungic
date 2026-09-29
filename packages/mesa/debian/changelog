@@ -1,4 +1,4 @@
-mesa (26.3.0~devel20260929+rungic3) resolute; urgency=medium
+mesa (26.3.0~devel20260929+rungic4) resolute; urgency=medium
 
   * Base: upstream Mesa main 190d227a (2026-09-29) instead of the Mesa for
     Android container branch (docs/research/94). Carried for KGSL:
