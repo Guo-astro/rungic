@@ -50,7 +50,10 @@ export QT_QPA_PLATFORM=wayland XDG_CURRENT_DESKTOP=KDE XDG_SESSION_TYPE=wayland
 runtime=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
 bus=$runtime/rungic-workspace-$slot.bus
 rm -f "$state/bus" "$state/display" "$bus"
-dbus-daemon --session --nofork --nopidfile --address="unix:path=$bus" &
+# Its own configuration: the workspace's accessibility bus (rungic-workspace-a11y) must not take
+# the user's over.
+dbus-daemon --config-file=/usr/share/rungic-workspace/dbus-1/session.conf --nofork --nopidfile \
+    --address="unix:path=$bus" &
 dbusd=$!
 for i in $(seq 50); do [ -S "$bus" ] && break; sleep 0.1; done
 export DBUS_SESSION_BUS_ADDRESS="unix:path=$bus"

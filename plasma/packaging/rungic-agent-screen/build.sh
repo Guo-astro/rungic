@@ -2,6 +2,11 @@
 # window's executable holds KWin's screencast and fake-input grants through its desktop files
 # (X-KDE-Wayland-Interfaces, matched by executable path).
 A=$SRC/plasma/agent-screen
+# The workspaces (docs/research/91): launcher, input/stream/background helpers, their buses.
+W=$SRC/plasma/workspace
+cmake -S "$W" -B "$W/build" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_CXX_FLAGS=-g1
+cmake --build "$W/build" -j"${JOBS:-4}"
+DESTDIR="$DESTDIR" cmake --install "$W/build"
 cmake -S "$A" -B "$A/build" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_CXX_FLAGS=-g1
 cmake --build "$A/build" -j"${JOBS:-4}"
 DESTDIR="$DESTDIR" cmake --install "$A/build"
