@@ -11,10 +11,27 @@ Item {
     implicitWidth: 340
     implicitHeight: 340
     property bool activeView: visible && Window.active
-    readonly property var pending: client.items.filter(i => !["resolved", "dismissed"].includes(i.state))
+    property var pending: []
+    property bool refreshPending: false
+    readonly property var clientItems: client.items
+    onClientItemsChanged: {
+        if (list && list.moving) refreshPending = true
+        else rebuild()
+    }
+    function rebuild() {
+        if (!list) return
+        const top = list.atYBeginning
+        const offset = list.contentY - list.originY
+        pending = client.items.filter(i => !["resolved", "dismissed"].includes(i.state))
+        refreshPending = false
+        Qt.callLater(() => {
+            if (top) list.positionViewAtBeginning()
+            else list.contentY = list.originY + Math.max(0, Math.min(offset, list.contentHeight - list.height))
+        })
+    }
     SuggestionsClient { id: client }
     onActiveViewChanged: client.watching(activeView)
-    Component.onCompleted: client.watching(activeView)
+    Component.onCompleted: { rebuild(); client.watching(activeView) }
     Component.onDestruction: client.watching(false)
     Accessible.role: Accessible.Grouping
     Accessible.name: "Agent 建议小组件"
@@ -55,6 +72,7 @@ Item {
             boundsBehavior: Flickable.StopAtBounds
             reuseItems: true
             model: widget.pending
+            onMovingChanged: if (!moving && widget.refreshPending) widget.rebuild()
             QQC2.ScrollBar.vertical: QQC2.ScrollBar {
                 implicitWidth: 3; padding: 0
                 policy: QQC2.ScrollBar.AsNeeded
