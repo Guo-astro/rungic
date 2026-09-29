@@ -669,6 +669,17 @@ class VoiceAgent:
             if suggestion:
                 event.setdefault('suggestion', suggestion)
                 event.setdefault('suggestionTask', self.store.index.get(conversation, {}).get('suggestionTask', ''))
+                entry = self.store.index.get(conversation, {})
+                terminal = {'agent-finished': 'finished', 'task-stopped': 'stopped', 'error': 'failed'}
+                if (isinstance(entry, dict) and event.get('suggestionTask') == entry.get('suggestionTask')
+                        and entry.get('suggestionTaskState') == 'running'):
+                    if event.get('type') == 'agent-message' and event.get('final'):
+                        entry['suggestionResult'] = event.get('text', '')[:16000]
+                        self.store.save_index()
+                    if event.get('type') in terminal:
+                        entry['suggestionTaskState'] = terminal[event['type']]
+                        if event['type'] == 'error': entry['suggestionResult'] = event.get('text', '')[:16000]
+                        self.store.save_index()
             if keep:
                 self.store.append(conversation, event)
         self.emit_raw(event)
@@ -1762,6 +1773,8 @@ class VoiceAgent:
             opened = self.open_conversation(item.get('conversation', '') if apply else '', connect=False)
             self.store.index[self.thread_id]['suggestion'] = suggestion_id
             self.store.index[self.thread_id]['suggestionTask'] = task_id
+            self.store.index[self.thread_id]['suggestionTaskState'] = 'running'
+            self.store.index[self.thread_id].pop('suggestionResult', None)
             self.store.touch(self.thread_id, '检查：' + item.get('title', '系统建议'))
             self.emit({'type': 'suggestion-started', 'suggestion': suggestion_id})
             text = ('请调查这条系统建议，先读取 /usr/share/rungic/compatibility/entries 中的相关知识，'
@@ -1786,10 +1799,14 @@ class VoiceAgent:
             return {'conversation': opened['conversation']}
 
     def suggestion_task(self, suggestion_id, task_id):
-        entry = self.store.index.get(self.thread_id, {})
-        matches = entry.get('suggestion') == suggestion_id and entry.get('suggestionTask') == task_id
-        return {'state': 'running' if matches and self.agent_busy else 'inactive',
-                'conversation': self.thread_id if matches else ''}
+        for conversation, entry in self.store.index.items():
+            if entry.get('suggestion') != suggestion_id or entry.get('suggestionTask') != task_id:
+                continue
+            state = entry.get('suggestionTaskState')
+            if state not in ('finished', 'failed', 'stopped'):
+                state = 'running' if conversation == self.thread_id and self.agent_busy else 'inactive'
+            return {'state': state, 'conversation': conversation, 'result': entry.get('suggestionResult', '')}
+        return {'state': 'inactive', 'conversation': ''}
 
     def stop_suggestion(self, suggestion_id, task_id):
         with self.lock:

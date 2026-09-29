@@ -38,7 +38,13 @@ Suggestions::Suggestions(const QString &state, const QString &feed, const QStrin
     bus.connect("org.freedesktop.Notifications", "/org/freedesktop/Notifications", "org.freedesktop.Notifications",
                 "NotificationClosed", this, SLOT(NotificationClosed(uint,uint)));
     connect(bus.interface(), &QDBusConnectionInterface::serviceOwnerChanged, this,
-            [this](const QString &name, const QString &, const QString &owner) { if (owner.isEmpty()) visibleClients.remove(name); });
+            [this](const QString &name, const QString &, const QString &owner) {
+                if (owner.isEmpty()) visibleClients.remove(name);
+                if (name == Voice) {
+                    if (owner.isEmpty()) { model.recoverTasks(); publish(); }
+                    else recover();
+                }
+            });
     scanTimer.setInterval(60000);
     connect(&scanTimer, &QTimer::timeout, this, &Suggestions::Refresh);
     scanTimer.start(); QTimer::singleShot(0, this, &Suggestions::Refresh);
@@ -80,7 +86,14 @@ void Suggestions::recover() {
             if (reply.isError()) return; // Unreachable is not evidence that a task stopped.
             const auto r = QJsonDocument::fromJson(reply.value().toUtf8()).object();
             if (r["state"] == "running") model.taskEvent(id, taskId, {{"type", "started"}, {"conversation", r["conversation"]}}, QDateTime::currentSecsSinceEpoch());
-            else model.taskEvent(id, taskId, {{"type", "interrupted"}, {"text", "原任务已不在运行，请查看已保存结果后决定是否重试"}}, QDateTime::currentSecsSinceEpoch());
+            else {
+                const auto now = QDateTime::currentSecsSinceEpoch();
+                if (!r["result"].toString().isEmpty()) model.taskEvent(id, taskId, {{"type", "result"}, {"text", r["result"]}}, now);
+                const auto state = r["state"].toString();
+                const bool terminal = QStringList{"finished", "failed", "stopped"}.contains(state);
+                model.taskEvent(id, taskId, {{"type", terminal ? state : QString("interrupted")},
+                    {"text", terminal ? r["result"].toString("处理已停止") : QString("原任务已不在运行，请查看已保存结果后决定是否重试")}}, now);
+            }
             publish();
         });
     }
