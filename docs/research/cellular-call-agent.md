@@ -205,3 +205,19 @@ APK SHA-256：`43c8bb6ec64e9417b193166feca06990965e8d36bc76214fa84c26ceb771d8b0`
 4. Android 36 SDK 全量 APK 编译通过；卡片/通道/会话/状态共 25 项测试通过，权限恢复后另有 5 项 socket 音频测试通过。这些离线测试不替代通话验收。
 
 剩余问题：自动开场可能打断 IVR，Agent 对“保持安静”等主人指示可能多说一句确认；共享监督缺少 TypeSafe key 时没有完整自主询问/结束决策替代路径，本次结束由测试命令控制。专门的物理麦克风隔离挑战、租约强杀恢复、蓝牙/耳机、真人通话和其他手机/运营商未验收，私下语音指令及独立旁听仍关闭。微信本轮没有重拨真人联系人，其既有验收范围不扩大。今后继续按实际设备能力探测与远端响应验收，不能把本机成功写成所有 Android 手机支持。
+
+## G100 S（mumba_cn）增量部署（2026-09-29 21:15–21:26，未做通话验收）
+
+- 设备：`motorola/mumba_cn/mumba:16/W1WAA36.48-23-10`，SELinux Enforcing，未插 SIM。这是 G100 S，不是上文实验用的 G100（portov_cn）；上文所有实验结论不适用于本机。
+- **APK 2.23（71）**：包含剪贴板后台和本通话栈，由 `tools/deploy_clipboard.py` 与剪贴板后台一起安装，备份在 `.work/deploy/moto-2.23-clipboard-*`。
+- **宿主**：
+  - `plasma/android-calls` 放入 `/data/adb/rungic-plasma/`；控制器按仓库 `plasma/rungic-plasma` 的位置插入启停钩子（停止时先于剪贴板，启动时在剪贴板之后），用 rename 原子替换。
+  - 原控制器备份在 `.work/deploy/moto-2.23-calls-20260929-222525/controller.before`。
+  - `CallDaemon` 以 app_process 运行，日志无错误。
+- **容器**：语音服务及 `call_proxy`、`cellular_audio`、`cellular_call`、`call_backends`、语音助手 App（通话卡片、微缩通话条）、技能 `calls.md`，按打包脚本的位置临时安装，未重新打包。
+- **只读能力检查**（`rungic-voice-agent --call-capabilities`）：
+  - cellular 后端：reachable，通话音频接口可用；账户只有“紧急呼叫”（无 SIM），`endToEndVerified: false`。
+  - app 路由可用；已配置 OpenAI key。
+  - 没有拨号，也没有做任何真实通话测试。
+- 部署后用户主屏幕、plasmashell、工作区和语音服务都正常。
+- **回退**：`android-calls stop`，恢复 `controller.before`；容器文件按旧版本重装。
