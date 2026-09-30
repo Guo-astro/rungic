@@ -559,16 +559,6 @@ msgctxt "@label how Codex is signed in"
 msgid "Sign-in"
 msgstr "登录方式"
 
-#: qml/CodexPage.qml:108
-msgctxt "@info"
-msgid "Not signed in"
-msgstr "未登录"
-
-#: qml/CodexPage.qml:109
-msgctxt "@info how Codex is signed in"
-msgid "ChatGPT account"
-msgstr "ChatGPT 账号"
-
 #: qml/CodexPage.qml:114
 msgctxt "@label"
 msgid "Credentials kept in"
@@ -824,11 +814,6 @@ msgctxt "@info"
 msgid "The sign-in didn't finish"
 msgstr "登录没有完成"
 
-#: qml/KeyPage.qml:64
-msgctxt "@info"
-msgid "Codex uses this key to call OpenAI. You're billed for what you use."
-msgstr "Codex 用这把密钥调用 OpenAI，按用量计费。"
-
 #: qml/KeyPage.qml:71
 #, kde-format
 msgctxt "@info a link; keep the markup"
@@ -861,36 +846,6 @@ msgstr "这把密钥用不了。检查一下是否复制完整，或在 OpenAI �
 msgctxt "@info %1 is a folder"
 msgid "Kept in plain text in a config file on this phone (%1, readable only by your user) and sent only to OpenAI."
 msgstr "明文保存在本机的配置文件里（%1，只有你这个用户能读），只发给 OpenAI。"
-
-#: qml/KeyPage.qml:119
-msgctxt "@info"
-msgid "Codex is signed in with ChatGPT"
-msgstr "Codex 已用 ChatGPT 账号登录"
-
-#: qml/KeyPage.qml:119
-msgctxt "@action:button"
-msgid "Sign in with ChatGPT instead"
-msgstr "改用 ChatGPT 账号登录"
-
-#: qml/KeyPage.qml:120
-msgctxt "@info"
-msgid "Billed to your ChatGPT plan"
-msgstr "按 ChatGPT 套餐计费"
-
-#: qml/KeyPage.qml:121
-msgctxt "@info"
-msgid "Sign in with your browser. Billed to your ChatGPT plan."
-msgstr "在浏览器里登录，按 ChatGPT 套餐计费"
-
-#: qml/KeyPage.qml:127
-msgctxt "@action:button"
-msgid "Sign Codex in with the API key instead"
-msgstr "改用 API Key 登录 Codex"
-
-#: qml/KeyPage.qml:128
-msgctxt "@info"
-msgid "The Agent's tasks are then billed to this key too"
-msgstr "Agent 的任务也按这把密钥的用量计费"
 
 #: qml/KeyPage.qml:149
 #, kde-format
@@ -1200,3 +1155,96 @@ msgstr "更新到 %1"
 msgctxt "@info Codex; %1 is a version"
 msgid "Update to %1"
 msgstr "可更新到 %1"
+
+#: qml/AccountPage.qml qml/KeyPage.qml qml/SettingsPage.qml qml/CodexPage.qml qml/account.js (docs/101)
+msgctxt "@info how Codex is signed in; %1 is the plan's name"
+msgid "ChatGPT plan (%1)"
+msgstr "ChatGPT 套餐（%1）"
+
+msgctxt "@info how Codex is signed in"
+msgid "ChatGPT plan"
+msgstr "ChatGPT 套餐"
+
+msgctxt "@info how Codex is signed in"
+msgid "API key"
+msgstr "API Key"
+
+msgctxt "@info how Codex is signed in"
+msgid "Not signed in"
+msgstr "未登录"
+
+msgctxt "@info"
+msgid "The Agent's tasks count against your ChatGPT plan."
+msgstr "Agent 的任务计入 ChatGPT 套餐的额度。"
+
+msgctxt "@info"
+msgid "The Agent's tasks are billed to the OpenAI API by use, not to a ChatGPT plan."
+msgstr "Agent 的任务按 OpenAI API 用量计费，不计入 ChatGPT 套餐。"
+
+msgctxt "@info"
+msgid "The Agent needs Codex to be signed in before it can work."
+msgstr "Codex 登录后，Agent 才能工作。"
+
+msgctxt "@title how Codex signs in"
+msgid "Sign-in"
+msgstr "登录方式"
+
+msgctxt "@title:group how Codex is signed in now"
+msgid "Now"
+msgstr "当前"
+
+msgctxt "@title:group"
+msgid "Sign in with"
+msgstr "选择登录方式"
+
+msgctxt "@option:radio how Codex signs in"
+msgid "ChatGPT account"
+msgstr "ChatGPT 账户"
+
+msgctxt "@info"
+msgid "Sign in in a browser, on any device. Counts against your ChatGPT plan."
+msgstr "在任意设备的浏览器里登录，计入 ChatGPT 套餐。"
+
+msgctxt "@option:radio how Codex signs in"
+msgid "API key"
+msgstr "API Key"
+
+msgctxt "@info"
+msgid "The OpenAI API key set for voice. Billed to the OpenAI API by use."
+msgstr "使用为语音设置的 OpenAI API Key，按 API 用量计费。"
+
+msgctxt "@info"
+msgid "Set an OpenAI API key first"
+msgstr "请先设置 OpenAI API Key"
+
+msgctxt "@title"
+msgid "Sign Codex in with the API key?"
+msgstr "让 Codex 改用 API Key 登录？"
+
+msgctxt "@info"
+msgid "The Agent's tasks will then be billed to the OpenAI API by use, no longer to your ChatGPT plan. You can sign in with ChatGPT again here."
+msgstr "之后 Agent 的任务将按 OpenAI API 用量计费，不再计入 ChatGPT 套餐。你可以随时在这里重新用 ChatGPT 登录。"
+
+msgctxt "@info:status"
+msgid "Waiting for the sign-in in the browser…"
+msgstr "正在等你在浏览器里完成登录…"
+
+msgctxt "@info what the API key is for"
+msgid "Voice, speech to text and calls"
+msgstr "语音对话、转文字和代打电话"
+
+msgctxt "@action:button"
+msgid "Use the API key"
+msgstr "改用 API Key"
+
+msgctxt "@action:button"
+msgid "Cancel"
+msgstr "取消"
+
+msgctxt "@info"
+msgid "For what Codex's sign-in doesn't cover: talking by voice (Codex connects the realtime voice only with an API key), speech to text, and calls. Billed to the OpenAI API by use, apart from a ChatGPT plan."
+msgstr "用于 Codex 登录覆盖不到的地方：语音对话（Codex 连接实时语音时只接受 API Key）、转文字和代打电话。按 OpenAI API 的用量计费，与 ChatGPT 套餐分开。"
+
+msgctxt "@label how Codex is signed in"
+msgid "Codex sign-in"
+msgstr "Codex 登录方式"

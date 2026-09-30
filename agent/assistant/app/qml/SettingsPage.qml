@@ -6,11 +6,12 @@ import QtQuick.Controls as QQC2
 import com.rungic.design
 import com.rungic.voiceassistant
 import "efforts.js" as Efforts
+import "account.js" as Account
 
 SettingsFrame {
     id: page
     // i18nc for efforts.js (a library has no context to find it in).
-    readonly property var tr: (context, text) => i18nc(context, text)
+    readonly property var tr: (context, text, ...args) => i18nc(context, text, ...args)
     title: i18nc("@title", "Settings")
     property var setup: ({})
     readonly property var settings: QQC2.ApplicationWindow.window ? QQC2.ApplicationWindow.window.settings : null
@@ -70,15 +71,16 @@ SettingsFrame {
             accessory: "chevron"
             onClicked: page.push("ModelPage.qml")
         }
-        ListRow { text: i18nc("@title", "Agent Usage"); accessory: "chevron"; onClicked: page.push("UsagePage.qml") }
+        // How Codex signs in, and so who pays for the Agent's tasks (docs/101).
         ListRow {
-            text: "OpenAI API Key"
-            value: page.key.set ? page.key.masked : (page.setup.key ? i18nc("@info the API key", "Not set") : "")
-            valueMono: page.key.set === true
-            dot: page.setup.key && !page.key.set ? "negative" : ""
+            text: i18nc("@label how Codex is signed in", "Sign-in")
+            value: page.setup.codex === undefined ? "" : Account.label(page.tr, page.setup.account || null)
+            dot: page.setup.codex !== undefined && page.codex.installed && !page.setup.account ? "negative" : ""
+            enabled: page.codex.installed !== false
             accessory: "chevron"
-            onClicked: page.push("KeyPage.qml")
+            onClicked: page.push("AccountPage.qml")
         }
+        ListRow { text: i18nc("@title", "Agent Usage"); accessory: "chevron"; onClicked: page.push("UsagePage.qml") }
     }
 
     SectionLabel { Layout.fillWidth: true; text: i18nc("@title:group", "Voice") }
@@ -86,6 +88,16 @@ SettingsFrame {
         Layout.fillWidth: true
         Layout.leftMargin: Theme.groupMargin
         Layout.rightMargin: Theme.groupMargin
+        // What Codex's sign-in doesn't cover: the realtime voice, speech to text, calls (docs/101).
+        ListRow {
+            text: "OpenAI API Key"
+            subtitle: i18nc("@info what the API key is for", "Voice, speech to text and calls")
+            value: page.key.set ? page.key.masked : (page.setup.key ? i18nc("@info the API key", "Not set") : "")
+            valueMono: page.key.set === true
+            dot: page.setup.key && !page.key.set ? "negative" : ""
+            accessory: "chevron"
+            onClicked: page.push("KeyPage.qml")
+        }
         ListRow {
             text: i18nc("@option:check", "Hold Home to open")
             onClicked: homeToggle.toggle()

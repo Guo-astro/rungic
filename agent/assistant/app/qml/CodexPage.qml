@@ -7,11 +7,13 @@ import QtQuick
 import QtQuick.Layouts
 import com.rungic.design
 import com.rungic.voiceassistant
+import "account.js" as Account
 
 SettingsFrame {
     id: page
     title: install.running ? (install.updating ? i18nc("@title", "Update Codex") : i18nc("@title", "Install Codex")) : "Codex"
     property var setup: ({})
+    readonly property var tr: (context, text, ...args) => i18nc(context, text, ...args)
     readonly property var codex: setup.codex || {}
     readonly property var update: codex.update || {}
     // The installation under way: InstallCodex events.
@@ -115,10 +117,10 @@ SettingsFrame {
             }
             ListRow {
                 text: i18nc("@label how Codex is signed in", "Sign-in")
-                value: !page.setup.account ? i18nc("@info", "Not signed in") : page.setup.account.type === "apiKey" ? "API Key"
-                    : i18nc("@info how Codex is signed in", "ChatGPT account")
+                value: Account.label(page.tr, page.setup.account || null)
+                subtitle: Account.billing(page.tr, page.setup.account || null)
                 accessory: "chevron"
-                onClicked: page.push("KeyPage.qml")
+                onClicked: page.push("AccountPage.qml")
             }
             ListRow {
                 text: i18nc("@label", "Credentials kept in")

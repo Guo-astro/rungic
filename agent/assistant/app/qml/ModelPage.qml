@@ -12,7 +12,7 @@ import "efforts.js" as Efforts
 SettingsFrame {
     id: page
     // i18nc for efforts.js (a library has no context to find it in).
-    readonly property var tr: (context, text) => i18nc(context, text)
+    readonly property var tr: (context, text, ...args) => i18nc(context, text, ...args)
     title: i18nc("@title", "Model")
     property var catalog: ({})
     property string failure: ""           // the last SetAgentModel error

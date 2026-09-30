@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// OpenAI API Key (docs/87): what it is for, the key (hidden unless revealed), whether it
-// works, where it is kept; signing Codex in with a ChatGPT account instead.
+// OpenAI API Key (docs/87, docs/101): what it is for, the key (hidden unless revealed), whether it
+// works, where it is kept. It serves what Codex's sign-in doesn't: the realtime voice (Codex takes
+// only an API key for it), speech to text and calls. How Codex itself signs in is AccountPage.
 import QtQuick
 import QtQuick.Layouts
 import com.rungic.design
 import com.rungic.voiceassistant
+import "account.js" as Account
 
 SettingsFrame {
     id: page
@@ -13,7 +15,7 @@ SettingsFrame {
     property string status: ""                // "" | testing | ok | error
     property string error: ""
     property bool edited: false
-    property var login: null                  // a ChatGPT device-code sign-in under way
+    readonly property var tr: (context, text, ...args) => i18nc(context, text, ...args)
     readonly property var key: setup.key || {}
 
     Component.onCompleted: AgentClient.request("Setup")
@@ -37,13 +39,11 @@ SettingsFrame {
                 page.status = ""
                 page.edited = false
                 AgentClient.request("Setup")
-            } else if (method === "CodexLogin") {
-                page.login = r.error ? { error: r.error } : r
             }
         }
         function onEvent(json) {
             const e = JSON.parse(json)
-            if (e.type === "account") { page.login = e.success ? null : { error: e.error || i18nc("@info", "The sign-in didn't finish") }; AgentClient.request("Setup") }
+            if (e.type === "account" || e.type === "agent-restarted") AgentClient.request("Setup")
         }
     }
 
@@ -61,7 +61,7 @@ SettingsFrame {
         spacing: 12
         Text {
             Layout.fillWidth: true
-            text: i18nc("@info", "Codex uses this key to call OpenAI. You're billed for what you use.")
+            text: i18nc("@info", "For what Codex's sign-in doesn't cover: talking by voice (Codex connects the realtime voice only with an API key), speech to text, and calls. Billed to the OpenAI API by use, apart from a ChatGPT plan.")
             wrapMode: Text.Wrap
             font.family: Theme.fontFamily
             font.pixelSize: Theme.bodySize
@@ -110,58 +110,16 @@ SettingsFrame {
     }
 
     Item { implicitHeight: 20 }
+    // The Agent's tasks go by Codex's own sign-in, not by this key (unless Codex is signed in with it).
     ListGroup {
         Layout.fillWidth: true
         Layout.leftMargin: Theme.groupMargin
         Layout.rightMargin: Theme.groupMargin
         ListRow {
-            readonly property bool chatgpt: page.setup.account && page.setup.account.type === "chatgpt"
-            text: chatgpt ? i18nc("@info", "Codex is signed in with ChatGPT") : i18nc("@action:button", "Sign in with ChatGPT instead")
-            subtitle: chatgpt ? (page.setup.account.email || i18nc("@info", "Billed to your ChatGPT plan"))
-                : i18nc("@info", "Sign in with your browser. Billed to your ChatGPT plan.")
-            accessory: chatgpt ? "" : "chevron"
-            onClicked: if (!chatgpt) AgentClient.request("CodexLogin", ["chatgpt"])
-        }
-        ListRow {
-            visible: page.setup.account && page.setup.account.type === "chatgpt" && page.key.set === true
-            text: i18nc("@action:button", "Sign Codex in with the API key instead")
-            subtitle: i18nc("@info", "The Agent's tasks are then billed to this key too")
+            text: i18nc("@label how Codex is signed in", "Codex sign-in")
+            value: page.setup.codex === undefined ? "" : Account.label(page.tr, page.setup.account || null)
             accessory: "chevron"
-            onClicked: AgentClient.request("CodexLogin", ["apiKey"])
-        }
-    }
-    // A device-code sign-in: the code to enter on the page it names.
-    ColumnLayout {
-        Layout.fillWidth: true
-        Layout.margins: Theme.gutter
-        visible: page.login !== null
-        spacing: 8
-        Note {
-            Layout.fillWidth: true
-            visible: page.login && page.login.error
-            tone: "negative"
-            text: page.login && page.login.error ? page.login.error : ""
-        }
-        Text {
-            Layout.fillWidth: true
-            visible: page.login && page.login.userCode
-            text: page.login && page.login.userCode
-                ? i18nc("@info a link; keep the markup", "On any device, open <a href='%1'>%1</a> and enter this code:", page.login.verificationUrl) : ""
-            textFormat: Text.StyledText
-            linkColor: Theme.link
-            wrapMode: Text.Wrap
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.metaSize
-            color: Theme.text
-            onLinkActivated: link => Qt.openUrlExternally(link)
-        }
-        Text {
-            visible: page.login && page.login.userCode
-            text: page.login ? page.login.userCode || "" : ""
-            font.family: Theme.monoFamily
-            font.pixelSize: 28
-            font.weight: Font.DemiBold
-            color: Theme.text
+            onClicked: page.push("AccountPage.qml")
         }
     }
 

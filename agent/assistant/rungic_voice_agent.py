@@ -91,6 +91,8 @@ MAIN_TITLES = ('主对话', '语音助手')
 # RUNGIC_AGENT_MODEL, for development, runs every task on that model whatever the choice.
 AGENT_MODEL_OVERRIDE = os.environ.get('RUNGIC_AGENT_MODEL', '')
 AGENT_PROVIDER = 'codex'
+# A ChatGPT device code is valid this long (codex-rs login/src/device_code_auth.rs: 15 minutes).
+DEVICE_CODE_S = 15 * 60
 # The agent's own workspace (docs/research/91): a KWin of its own on the Android host, where
 # everything the agent opens appears and nothing reaches the user's phone. A second agent
 # would get 2, and so on (the host offers ws-1 .. ws-4).
@@ -148,6 +150,7 @@ INTERFACE = '''
     <method name="TestApiKey"><arg type="s" direction="out"/></method>
     <method name="RemoveApiKey"><arg type="s" direction="out"/></method>
     <method name="CodexLogin"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
+    <method name="CancelCodexLogin"><arg type="s" direction="out"/></method>
     <method name="InstallCodex"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
     <method name="CheckCodexUpdate"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
     <method name="CancelInstall"><arg type="s" direction="out"/></method>
@@ -421,6 +424,7 @@ class AppServer:
         codex = codex_install.command()
         if not codex:
             raise FileNotFoundError('codex')
+        self.retired = False       # set by restart_server before it stops this one
         self.proc = subprocess.Popen([codex, 'app-server'], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                      stderr=subprocess.DEVNULL, bufsize=0, env=env)
         self.ids = itertools.count(1)
@@ -474,6 +478,11 @@ class AppServer:
                 self.on_request(message['id'], message['method'], message.get('params') or {})
             else:
                 self.on_notification(message['method'], message.get('params') or {})
+        if self.retired:
+            # Replaced on purpose (restart_server: a new key, sign-in or Codex): the service goes on.
+            log('codex app-server exited (replaced)')
+            return
+        # Died on its own: the service exits and systemd starts it again with a new app-server.
         log('codex app-server exited')
         os._exit(1)
 
@@ -795,6 +804,10 @@ class VoiceAgent:
         self.model_choice = model_choices()
         self.key_working = None      # the last test of the API key: True, False, or not tested
         self.installer = None        # a Codex installation under way
+        # The ChatGPT device-code sign-in under way (docs/101): {loginId, userCode, verificationUrl, started}.
+        self.login = None
+        self.login_lock = threading.Lock()
+        self.logins_cancelled = set()   # their end ("Login was not completed") is only logged
         # Codex follows OpenAI's stable releases, updated when the user says so (docs/99).
         self.codex_update = codex_install.UpdateCheck(self.codex_version)
         # Codex turns in threads of our own that no conversation shows (briefing curation):
@@ -837,6 +850,9 @@ class VoiceAgent:
             self.close_conversation()
             old, self.server = self.server, None
             if old:
+                # Its reader must not take the service down with it (2026-10-01: a switch of the
+                # sign-in restarted the whole service twice).
+                old.retired = True
                 try:
                     old.proc.terminate()
                 except OSError:
@@ -1867,10 +1883,7 @@ class VoiceAgent:
             if changed:
                 GLib.idle_add(self.task_changed)
         elif method == 'account/login/completed':
-            self.emit_raw({'type': 'account', 'success': bool(params.get('success')), 'error': params.get('error') or '',
-                           'time': time.time()})
-            if params.get('success'):
-                threading.Thread(target=self.restart_server, daemon=True).start()
+            self.login_completed(params)
 
     def agent_item(self, completed, item):
         kind = item.get('type')
@@ -2478,7 +2491,10 @@ class VoiceAgent:
                 'account': account, 'credentials': 'keyring' if store in ('keyring', 'auto') else 'file',
                 'key': {'set': bool(key), 'masked': (key[:3] + '…' + key[-4:]) if len(key) > 10 else (_('Set') if key else ''),
                         'store': keys.where('openai-api-key'), 'working': self.key_working},
-                'preferences': self.prefs, 'version': app_version, 'home': str(Path.home())}
+                'preferences': self.prefs, 'version': app_version, 'home': str(Path.home()),
+                # A device-code sign-in under way: the page shows its code again (docs/101).
+                'login': ({k: v for k, v in self.login.items() if k != 'started'}
+                          if self.login and time.time() - self.login['started'] < DEVICE_CODE_S - 60 else None)}
 
     @staticmethod
     def test_key(key):
@@ -2525,16 +2541,67 @@ class VoiceAgent:
         return {'ok': True}
 
     def codex_login(self, kind):
+        """CodexLogin(): 'apiKey' signs Codex in with the key at once; 'chatgpt' starts a device-code
+        sign-in, or hands back the one under way while its code is valid (docs/101). Codex replaces a
+        sign-in under way with every new one and ends the old one as "Login was not completed": a
+        second tap, or a page opened again, would have thrown away the code shown."""
         if not self.server:
             return {'error': _("Codex isn't installed yet")}
         if kind == 'apiKey':
             key = openai_key()
             if not key:
                 return {'error': _('Set an API key first')}
+            with self.login_lock:
+                self.login = None
+            log('codex login: api key')
             result = self.server.call('account/login/start', {'type': 'apiKey', 'apiKey': key}, timeout=30)
             threading.Thread(target=self.restart_server, daemon=True).start()
             return result
-        return self.server.call('account/login/start', {'type': 'chatgptDeviceCode'}, timeout=30)
+        with self.login_lock:
+            if self.login and time.time() - self.login['started'] < DEVICE_CODE_S - 60:
+                log('codex login: device code', self.login['loginId'], 'still valid, shown again')
+                return {k: v for k, v in self.login.items() if k != 'started'}
+            result = self.server.call('account/login/start', {'type': 'chatgptDeviceCode'}, timeout=30)
+            if result.get('userCode'):
+                self.login = {'loginId': result.get('loginId') or '', 'userCode': result['userCode'],
+                              'verificationUrl': result.get('verificationUrl') or '', 'started': time.time()}
+                log('codex login: device code', self.login['loginId'], 'started')
+            return result
+
+    def cancel_codex_login(self):
+        """CancelCodexLogin(): end the device-code sign-in under way (account/login/cancel)."""
+        with self.login_lock:
+            login, self.login = self.login, None
+            if login:
+                self.logins_cancelled.add(login['loginId'])
+        if login and self.server:
+            try:
+                self.server.call('account/login/cancel', {'loginId': login['loginId']}, timeout=10)
+            except Exception as error:  # noqa: BLE001  (already over)
+                log('codex login: cancel', error)
+            log('codex login: device code', login['loginId'], 'cancelled')
+        return {'ok': True}
+
+    def login_completed(self, params):
+        """account/login/completed: the sign-in under way ended. One that a newer sign-in replaced is
+        only logged: its "Login was not completed" must not cover the newer code on the page."""
+        login_id = params.get('loginId') or ''
+        with self.login_lock:
+            current = self.login['loginId'] if self.login else ''
+            if login_id and current and login_id != current:
+                log('codex login:', login_id, 'replaced by', current, '-', params.get('error') or 'ended')
+                return
+            if login_id in self.logins_cancelled:
+                # Cancelled here (CancelCodexLogin): the user knows; a page must not show it as a failure.
+                self.logins_cancelled.discard(login_id)
+                log('codex login:', login_id, 'cancelled -', params.get('error') or 'ended')
+                return
+            self.login = None
+        log('codex login:', login_id or '(no id)', 'succeeded' if params.get('success') else f"failed: {params.get('error')}")
+        self.emit_raw({'type': 'account', 'success': bool(params.get('success')), 'error': params.get('error') or '',
+                       'loginId': login_id, 'time': time.time()})
+        if params.get('success'):
+            threading.Thread(target=self.restart_server, daemon=True).start()
 
     def set_preferences(self, values):
         self.prefs = {k: bool(values.get(k, v)) for k, v in self.prefs.items()}
@@ -2845,6 +2912,8 @@ class Service:
                     result = json.dumps(agent.remove_api_key(), ensure_ascii=False)
                 elif method == 'CodexLogin':
                     result = json.dumps(agent.codex_login(args[0]), ensure_ascii=False)
+                elif method == 'CancelCodexLogin':
+                    result = json.dumps(agent.cancel_codex_login(), ensure_ascii=False)
                 elif method == 'InstallCodex':
                     result = json.dumps(agent.install_codex(args[0]), ensure_ascii=False)
                 elif method == 'CheckCodexUpdate':
