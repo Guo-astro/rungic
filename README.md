@@ -2,7 +2,7 @@
 
 <p align="center"><strong>AgentOS in your hand.</strong></p>
 
-<p align="center">An Android phone, a full Linux desktop computer, and an assistant that does the work for you.</p>
+<p align="center">A budget-friendly Android phone, a full Linux desktop computer, and an assistant that does the work for you.</p>
 
 <p align="center">
   <img src="docs/images/readme/demo.gif" width="300" alt="Asked for a rocket, the assistant plans the work, builds the model in Blender on its own screen, renders it and hands back the picture and the file">
@@ -10,7 +10,7 @@
 
 <p align="center"><sub>“Make a little rocket in Blender and render it for me.” The whole task took about 2½ minutes; shown here sped up.</sub></p>
 
-Rungic turns a phone into a real computer. It opens to the KDE Plasma desktop and runs desktop software such as Firefox, Blender, Krita and VS Code. Connect a TV and it becomes a desktop PC.
+Rungic turns a compatible Android phone into a real computer—a budget-friendly way to make more of the hardware you already own. It opens to the KDE Plasma desktop and runs desktop software such as Firefox, Blender, Krita and VS Code. Connect a TV and it becomes a desktop PC.
 
 It also comes with an AI assistant that can see, speak and act. Tell it what you need, and it opens the apps and gets the job done while you watch.
 
