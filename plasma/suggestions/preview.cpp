@@ -64,10 +64,13 @@ ApplicationWindow {
             failed = true;
         }
         if (widget && list && app.arguments().contains("--swipe-test")) {
-            QQuickItem *stack = nullptr;
-            auto *content = qvariant_cast<QQuickItem *>(list->property("contentItem"));
-            if (content) for (auto *child : content->childItems())
-                if (child->objectName() == "desktopSuggestionStack" && child->property("count").toInt() > 1) { stack = child; break; }
+            auto findStack = [&]() -> QQuickItem * {
+                auto *content = qvariant_cast<QQuickItem *>(list->property("contentItem"));
+                if (content) for (auto *child : content->childItems())
+                    if (child->objectName() == "desktopSuggestionStack" && child->property("count").toInt() > 1) return child;
+                return nullptr;
+            };
+            auto *stack = findStack();
             auto require = [&](bool ok, const char *label) {
                 if (!ok) { qWarning() << "swipe test:" << label; failed = true; }
             };
@@ -75,12 +78,16 @@ ApplicationWindow {
             if (stack) {
                 const auto offset = list->property("contentY").toDouble();
                 auto swipe = [&](int distance, int duration = 180, int settle = 250) {
+                    stack = findStack();
+                    Q_ASSERT(stack);
                     const QPoint from = stack->mapToScene(QPointF(stack->width() / 2, stack->height() / 2)).toPoint();
                     QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, from);
                     for (int n = 1; n <= 6; ++n)
                         QTest::mouseMove(window, from + QPoint(0, distance * n / 6), duration / 6);
                     QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, from + QPoint(0, distance));
                     QTest::qWait(settle);
+                    stack = findStack();
+                    Q_ASSERT(stack);
                 };
                 swipe(90); // First-card boundary: keep the pointer, spring back.
                 require(stack->property("currentIndex").toInt() == 0, "first boundary");
