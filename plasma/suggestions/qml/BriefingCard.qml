@@ -155,7 +155,8 @@ Rectangle {
         Item { Layout.fillHeight: true }
         RowLayout {
             Layout.fillWidth: true
-            visible: primary.visible || secondary.visible
+            // From the texts, not the buttons: a hidden row hides its children, which would keep it hidden.
+            visible: face.primaryText !== "" || face.secondaryText !== ""
             spacing: 8
             PillButton {
                 id: primary

@@ -78,7 +78,10 @@ Item {
     }
     readonly property string meta: {
         if (briefing.curating) return l10n.i18nc("@info the agent is choosing the cards again", "Sorting new findings…")
-        if (deckState === "cards" && briefing.source === "fallback") return l10n.i18nc("@info %1 the agent's name", "%1 unavailable", agentName)
+        // A fallback card is either waiting for the first sort or stands in for an agent that failed.
+        if (deckState === "cards" && briefing.source === "fallback")
+            return briefing.error ? l10n.i18nc("@info %1 the agent's name", "%1 unavailable", agentName)
+                                  : l10n.i18nc("@info the agent has not chosen the cards yet", "Not sorted yet")
         if (!briefing.generatedAt) return ""
         return deckState === "empty" ? l10n.i18nc("@info %1 relative time", "Checked %1", ago(briefing.generatedAt)) : ago(briefing.generatedAt)
     }
