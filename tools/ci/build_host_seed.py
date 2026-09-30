@@ -58,12 +58,14 @@ def main():
              for name in ("runtime", "rootfs_tree", "repo", "lxc_enter", "plasma_enter", "cast_jar",
                           "output")}
     if not args.inside:
+        cast_payload.validate_build(paths["cast_jar"])
         command = ["podman", "unshare", sys.executable, __file__, "--inside"]
         for name, path in paths.items():
             command += ["--" + name.replace("_", "-"), str(path)]
         os.execvp(command[0], command)
     if paths["output"].exists():
         raise ValueError("host seed output already exists")
+    cast_build = cast_payload.validate_build(paths["cast_jar"])
     if not (paths["runtime"] / "usr/bin/lxc-start").is_file():
         raise ValueError("LXC manager runtime has no lxc-start")
     home = paths["rootfs_tree"] / "home/rungic"
@@ -114,6 +116,7 @@ def main():
               "lxc_enter_sha256": sha256(paths["lxc_enter"]),
               "plasma_enter_sha256": sha256(paths["plasma_enter"]),
               "cast_jar_sha256": sha256(paths["cast_jar"]),
+              "cast_build": cast_build,
               "archive_bytes": paths["output"].stat().st_size,
               "archive_sha256": sha256(paths["output"])}
     (paths["output"].parent / "host-seed-report.json").write_text(json.dumps(report, indent=2) + "\n")

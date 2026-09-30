@@ -519,7 +519,7 @@ public final class Main {
 
     private static String status() throws Exception {
         Object s = wfdStatus();
-        StringBuilder out = new StringBuilder("{");
+        StringBuilder out = new StringBuilder("{\"protocol_version\":1,");
         out.append("\"feature_state\":").append(call(s, "getFeatureState"));
         out.append(",\"backend\":\"android-wfd\",\"supported\":")
                 .append((int) call(s, "getFeatureState") != 0);

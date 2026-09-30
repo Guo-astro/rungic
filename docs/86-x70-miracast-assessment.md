@@ -118,3 +118,32 @@ helper 增加 capabilities/settings、明确错误码、按主动 scan/connect �
 
 
 2026-09-29 通用化更新：用户要求不按机型重复配置，已将上述 UI 包暂停从 vantage 固件 adapter 迁入运行时窗口冲突规则。判断实际 WFD 外屏、Linux overlay、窗口所属包/UID/类型与覆盖层级，再复用恢复租约；不因品牌、安装包存在或 SYSTEM 标志直接停用包。G100/UGREEN 的部署、首次候选漏判与修正、恢复验收及边界见 [运行时规则记录](research/g100-ugreen-miracast.md)。X70 本轮只用旧窗口快照核验解析器，未重新部署或实机重验。
+
+
+## 2026-09-30：新独立镜像搜索为空与空态居中修复
+
+本轮开发机现场核验为 mibook / x86_64；GNOME 系统代理为 none，Git 配置代理为 `192.168.5.45:6152`。USB X70 `ZY22MHZKFT` 由 ADB **5038** 管理，固件仍为 `W2WV36.55-75-15`；另一台 Wi-Fi 手机不在本轮范围。保留用户重新配置的 kevinzhow 账户、Android 数据和自动 SSH，没有刷机或重装。
+
+### 搜索失败的实际原因
+
+Android `dumpsys display` 与 root helper 已找到可连接的 TCL 85Q6H，但桌面仍显示找不到电视。`.7` 独立载荷组包复用了旧 host-v2 的 `rungic-cast.jar`，其响应只有 `displays`，缺少新版 CastPicker 使用的合并列表 `receivers`。界面静默忽略旧响应，导致错误的空列表；不是本轮发现 Wi-Fi、电视或 SELinux 不可用。
+
+旧 JAR SHA-256 为 `e7448bd0fc284d9531a18bc0e1d052d16b3cb740180d7c7f37f02b5dd5a21240`。旧镜像的 9 项基础 smoke 不含投屏，不能把桌面/声音通过延伸为投屏通过。
+
+### 修改与来源核验
+
+- 重建当前 Java helper，状态/能力/扫描响应明确返回 `protocol_version: 1`。Linux `rungic-cast` 校验协议版本及 `receivers` 数组，旧响应明确报 `backend-incompatible`；搜索错误不再同时显示“没有电视”的空态。
+- 构建脚本生成 `rungic-cast.build.json`，绑定 Java 源码、构建脚本、组包工具与 JAR 摘要；编译前后核对输入。部署器的公共 stage、CI1 host seed 和 CI3 pack 均拒绝缺失、过期或摘要不符的证明，防止复用旧缓存。此证明是构建一致性检查，不是第三方签名。
+- 空态内层 ColumnLayout 的隐式最大宽度受到子项约束，`Layout.fillWidth` 未使它铺满弹窗，图标因此在左侧窄列内居中。改为外层全宽 Item、内层左右锚定布局；标题全宽居中并允许换行。先核对 [Qt Layout 文档](https://doc.qt.io/qt-6/qml-qtquick-layouts-layout.html) 的隐式最大宽度与 fillWidth 边界，再在手机 Qt 6.10.2 实测。复用 Qt/Kirigami（上游许可证不变），只修改自有 QML；Android WFD 和共享平台桥保持现有职责，没有新建扫描协议或放宽 SELinux。
+
+### 部署与验收
+
+重建 JAR SHA-256：`b9d767b8ed32eccc8c1b84547a547082016776755edac162393aa759e6d9c290`。通过 `deploy_cast.py` 备份并升级 root 载荷；桌面安装 `rungic-cast 0.374+cast3`，对应 release/pin 为 `20260930.16`，APK 仍为 2.27。`apt-get check`、`dpkg --audit` 通过；SSH socket enabled/active，账户保留，SELinux Enforcing。
+
+从手机快捷设置实际点击 Cast，投屏弹窗显示 **TCL 85Q6H-9E92** 和 **UGREEN-52BCCF3C**，均 Available；同时保存可见无障碍节点和实际 Android 截图，不仅核验 CLI。空态以同一生产 QML 在手机 QtTest/offscreen 中注入空列表，图标中心 `180.5`、窗口宽 `361`，误差小于 1 像素，实际渲染截图居中；3 项 QtTest 通过。受控空列表测试不等于关闭现场接收器后的无线扫描验收。
+
+Python 构建/接口/首启测试 23 项通过（含 13 个 subtests），覆盖旧 JAR、缺失来源、源码变化、JAR 摘要变化、过期 host report、正常空/非空扫描和明确后端错误。现场不再连接电视：本轮通过的是发现、列表呈现与空态布局，未重验电视实际画面、声音、分辨率或重连。
+
+证据与组件备份：`.work/cast/x70-discovery-20260930/`，包括 `android-before.log`、`installed-payload.log`、`build/`、`deploy-host/`、`linux-install.log`、`final-health.log`、`final-cast-status.json`、`picker-visible.json`、`picker-fixed.png`、`preview-test.log`、`empty-centered.png`。临时 Qt 测试目录已清理，无障碍测试开关恢复原先关闭状态。回退时同时恢复备份的 root 载荷、桌面包与 release pin，不能仅换回旧 JAR。
+
+**产物边界：** 本轮是保留账户的配套组件升级，没有重建 `.7` 独立镜像；原 `.7` 不变，仍含旧 JAR。下次制作新载荷须重新构建投屏 JAR、host seed 及新版桌面包，使用更新后的 pack 校验，且另做新安装投屏验收。

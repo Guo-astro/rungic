@@ -5,10 +5,21 @@ import subprocess
 import tempfile
 import unittest
 
-from standalone import FILES, digest, preflight, verify
+from standalone import FILES, digest, preflight, verify, validate_cast_host, cast_payload
 
 
 class PayloadTests(unittest.TestCase):
+    def test_cached_host_requires_matching_cast_sources_and_jar(self):
+        for old in ({}, {'cast_build': {}}, {'cast_build': {'schema': 1, 'inputs': {}}}):
+            with self.subTest(old=old), self.assertRaisesRegex(ValueError, 'stale'):
+                validate_cast_host(old)
+        host = {'cast_build': {'schema': 1, 'inputs': cast_payload.build_inputs(), 'jar_sha256': 'abc'},
+                'cast_jar_sha256': 'abc'}
+        validate_cast_host(host)
+        host['cast_jar_sha256'] = 'different'
+        with self.assertRaisesRegex(ValueError, 'provenance'):
+            validate_cast_host(host)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

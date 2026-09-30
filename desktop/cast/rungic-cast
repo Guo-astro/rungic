@@ -21,13 +21,25 @@ SOCKET = '/mnt/android-wayland/platform.sock'
 COMMANDS = ('status', 'capabilities', 'settings', 'scan', 'connect', 'disconnect', 'modes', 'resolution')
 
 
+def validate_result(command: str, result: dict) -> dict:
+    """A mismatched host must not look like a successful scan with no TVs."""
+    if not isinstance(result, dict):
+        return {'error': 'Invalid casting response', 'code': 'backend-incompatible'}
+    if 'error' in result or command not in ('status', 'capabilities', 'scan'):
+        return result
+    if result.get('protocol_version') != 1 or not isinstance(result.get('receivers'), list):
+        return {'error': 'Casting components need to be updated together',
+                'code': 'backend-incompatible'}
+    return result
+
+
 def request(args: list[str]) -> dict:
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
         conn.settimeout(350)
         conn.connect(SOCKET)
         conn.sendall(json.dumps({'op': 'cast', 'args': args}, ensure_ascii=False).encode() + b'\n')
         with conn.makefile('rb') as stream:
-            return json.loads(stream.readline(1 << 20))
+            return validate_result(args[0], json.loads(stream.readline(1 << 20)))
 
 
 def main() -> int:

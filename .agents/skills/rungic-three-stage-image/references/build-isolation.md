@@ -32,3 +32,8 @@ rootfs 与 host seed 都包含账户环境，须分别检查，不能只修其�
 4. 记录删除路径、依赖新位置、保留镜像哈希与清理结果。解包树或重组 super 删除后，注明从哪些保留 OEM 输入重建；不要让下次工具继续依赖已消失的暂存。
 
 已有账户升级、配置隔离测试和离线包检查都不替代同一产物的全新 Rungic 首装；新路径不要求清空 Android 数据。独立首装与升级分别验收；旧整包若使用 `clean_install_accepted` 字段，仍按其原有清数据含义记录，不挪作新流程证据。需要人工修复才能进入桌面的包如实记录，修订后未重新执行相应安装路径就不能提升验收状态。
+
+
+## 投屏 JAR 与桌面接口同步
+
+X70 `.7` 曾误复用旧 host-v2 JAR，Android 搜到电视但新版界面缺 `receivers` 而显示空列表（docs/86、93）。构建必须使用 `shared/android/rungic-cast/build.sh` 生成 JAR 和同目录 `rungic-cast.build.json`；部署、host seed、CI3 pack 按当前源码与 JAR 摘要检查来源。缺少侧文件或输入过期须重建，不能手写证明或绕过校验。桌面包同步更新，运行时检查 `protocol_version: 1` 与 `receivers`。基础 smoke 不含投屏，另从手机快捷设置验证真实接收器列表；电视画面和声音分别验收。

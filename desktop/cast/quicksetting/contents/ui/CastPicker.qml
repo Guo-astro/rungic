@@ -94,7 +94,7 @@ Window {
     function merge(result, fromScan) {
         if (result.error) {
             if (result.code === "wifi-unavailable") error = i18n("Turn on Wi-Fi first");
-            else if (result.code === "component-missing") error = i18n("Casting isn't ready yet");
+            else if (result.code === "component-missing" || result.code === "backend-incompatible") error = i18n("Casting isn't ready yet");
             else error = i18n("Search failed. Check Android's cast settings.");
             return;
         }
@@ -160,10 +160,11 @@ Window {
     readonly property var current: receivers.filter(r => r.active)
     // Nearby: found by this picker's scans; while casting, those seen lately.
     readonly property var others: receivers.filter(r => !r.last && !r.active && (r.found || ((casting || reconnecting) && r.recent)))
-    readonly property bool nothingFound: !scanning && !connectingTo && !casting && !reconnecting
+    readonly property bool nothingFound: !error && !scanning && !connectingTo && !casting && !reconnecting
                                          && receivers.filter(r => r.found).length === 0
 
     readonly property string statusLine: {
+        if (error) return error;
         if (connectingTo) return connectionPhase === "negotiating"
             ? i18np("Negotiating · %1 second", "Negotiating · %1 seconds", elapsedSeconds)
             : i18np("Waiting for the receiver to join the network · %1 second", "Waiting for the receiver to join the network · %1 seconds", elapsedSeconds);
@@ -328,22 +329,34 @@ Window {
                 }
 
                 // Nothing found: what to check.
-                ColumnLayout {
+                Item {
                     visible: picker.nothingFound && picker.lastUsed.length === 0
                     Layout.fillWidth: true
                     Layout.topMargin: Kirigami.Units.gridUnit
-                    spacing: Kirigami.Units.gridUnit * 0.5
-                    Kirigami.Icon {
-                        Layout.alignment: Qt.AlignHCenter
-                        source: "video-television"
-                        implicitWidth: Kirigami.Units.iconSizes.huge
-                        implicitHeight: implicitWidth
-                        color: Kirigami.Theme.disabledTextColor
-                    }
-                    Kirigami.Heading {
-                        Layout.alignment: Qt.AlignHCenter
-                        text: i18n("No TVs found nearby")
-                        level: 3
+                    implicitHeight: emptyState.implicitHeight
+                    // A nested layout's fixed children constrain its maximum
+                    // width. The full-width item gives centering a sheet-wide cell.
+                    ColumnLayout {
+                        id: emptyState
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.margins: Kirigami.Units.gridUnit * 1.25
+                        spacing: Kirigami.Units.gridUnit * 0.5
+                        Kirigami.Icon {
+                            objectName: "castEmptyIcon"
+                            Layout.alignment: Qt.AlignHCenter
+                            source: "video-television"
+                            implicitWidth: Kirigami.Units.iconSizes.huge
+                            implicitHeight: implicitWidth
+                            color: Kirigami.Theme.disabledTextColor
+                        }
+                        Kirigami.Heading {
+                            Layout.fillWidth: true
+                            horizontalAlignment: Text.AlignHCenter
+                            wrapMode: Text.Wrap
+                            text: i18n("No TVs found nearby")
+                            level: 3
+                        }
                     }
                 }
 

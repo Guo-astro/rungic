@@ -16,6 +16,8 @@ import subprocess
 import sys
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parent))
+import cast_payload
 FILES = {'rootfs.img.gz', 'host-seed.tar.gz', 'rungic.apk', 'termux.apk',
          'termux-prefix.tar.gz', 'rungic-sparse-write', 'firstboot.sh', 'service.sh',
          'boot-dispatch.sh', 'seed.env', 'device-spec.json', 'rootfs-report.json', 'host-seed-report.json',
@@ -64,6 +66,14 @@ def verify(folder, expected=None):
     return m
 
 
+def validate_cast_host(host):
+    build = host.get('cast_build')
+    if not isinstance(build, dict) or build.get('schema') != 1 or build.get('inputs') != cast_payload.build_inputs():
+        raise ValueError('host casting build is missing or stale; rebuild the host seed')
+    if not build.get('jar_sha256') or build['jar_sha256'] != host.get('cast_jar_sha256'):
+        raise ValueError('host casting jar does not match its build provenance')
+
+
 def pack(args):
     out = args.output
     if out.exists():
@@ -80,6 +90,7 @@ def pack(args):
         raise ValueError('rootfs architecture/protocol/filesystem check failed')
     if not host.get('home_layout_checked') or not host.get('fresh_account_checked') or host['arch'] != 'aarch64':
         raise ValueError('host seed is not a fresh ARM64 runtime')
+    validate_cast_host(host)
     for file, expected in ((args.rootfs_gz, root['compressed_sha256']),
                            (args.host_seed, host['archive_sha256']),
                            (args.package_lock, root['package_lock_sha256']),

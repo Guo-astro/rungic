@@ -1,5 +1,7 @@
 # Phosh 功能逐项适配记录
 
+2026-09-30 X70 投屏搜索修复：旧镜像 JAR 返回 `displays`，新版桌面需要 `receivers`，实际发现被显示为空。配套升级 root helper 与桌面包后，手机实际列表可见 TCL/UGREEN；增加协议检查和构建来源校验，并修复空态居中。此轮仅验证发现与 UI，没有重建 `.7` 镜像或重验电视画面/声音，证据与边界见 [86 篇](../86-x70-miracast-assessment.md)。
+
 2026-09-30 X70 新镜像复验：OS `20260930.15`、独立载荷 `.7`、APK 2.27。修复 APK umask 0077 导致 cgroup 0700，以及 Android 音频持久化 PID 被其他应用复用的两个独立冷启动故障；全新账户 UI、连续三轮整机重启首次打开、9 项 smoke 全部通过。此前 `.5` 第三轮失败仍保留证据；用户选择最终空白账户，由其自行配置。固定产物、日志与验收边界见 [93 篇](../93-x70-independent-image-revalidation.md)。
 
 2026-09-30 X70 重刷补验：原厂 Android 分区、GKI 和 Magisk 引导实际刷入并清数据，再从无 Rungic/Termux 的底座独立安装；账户、桌面/触摸、SSH 和首轮重启已走通；末轮首次打开失败、检查后重试恢复，稳定性仍待定位。首次会话的五个迁移程序崩溃定位到桌面前误用 Wayland，`desktop/session` 对迁移命令局部使用 offscreen；另修正 CI2 的旧 APT 版本锁遗留。原载荷与后续修补包分别记录，Magisk 仍需安装完整管理器和修复环境，详见 [92 篇](../92-x70-android-base-end-to-end.md)。
