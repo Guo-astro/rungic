@@ -16,9 +16,9 @@ It also comes with an AI assistant that can see, speak and act. Tell it what you
 
 ## Still your Android phone
 
-Rungic is an app. After a one-time setup of the phone (see [Supported devices](#supported-devices)), install the APK, tap its icon, and the Linux desktop opens.
+Rungic opens as an Android app after the phone has been prepared. Our installation starts with the manufacturer's original firmware for the exact device and firmware version. We modify that firmware and rebuild its matching GKI kernel with the capabilities needed to run RungicOS in LXC. Android remains the phone's operating system, alongside the Linux desktop.
 
-You don't give anything up for it. Android is not wiped or replaced: your apps, calls, messages, photos and accounts stay where they are, and you can switch back to them at any time. The desktop and Android run side by side, sharing the clipboard and your photos, videos and downloads.
+Once installation, account setup and device checks are complete, tap the Rungic icon to open the desktop, or return to Android to use your phone. Both environments run side by side, sharing the clipboard and your photos, videos and downloads. **The initial full installation resets the phone and erases user data.** Back up before starting; see [Before you install](#before-you-install) for app and manufacturer restrictions.
 
 ## Just say it
 
@@ -123,14 +123,14 @@ The assistant has two parts: a realtime voice model talks with you, and an agent
 
 ## Supported devices
 
-Rungic is not tied to one phone model. It changes very little on the phone: the Linux desktop runs in a container on the phone's own kernel, and the Rungic app reaches the screen, touch, sound and cameras through standard Android interfaces.
+Rungic's architecture can be adapted to different phones. The Linux desktop runs in an LXC container sharing Android's kernel, and the Rungic app reaches the screen, touch, sound and cameras through Android interfaces.
 
-The one system-level change is the kernel. Android's Generic Kernel Image (GKI) ships with a few features that containers need turned off, so we rebuild it from Google's source with them turned on: System V IPC, POSIX message queues, IPC, PID and user namespaces, and devtmpfs. The build keeps the kernel's module interface intact, so the phone maker's own drivers keep loading as before. Only the boot partition changes; Android, its apps and data stay.
+For each device, we pin kernel sources and a build configuration matching its stock firmware, then enable the missing container capabilities, such as System V IPC, POSIX message queues, IPC/PID/user namespaces and devtmpfs. Keeping the manufacturer's drivers usable requires checking the rebuilt kernel's module ABI and signature trust, followed by testing on the device. Full flash packages also integrate root, the Rungic app and first-boot installation; their partition changes are recorded in the device's release manifest.
 
-So most Android phones that meet these conditions should be able to run it:
+The current adaptation path requires:
 
-- **The bootloader can be unlocked and the phone rooted** (Magisk). Unlocking usually erases the phone once, so back it up first.
-- **It runs a GKI kernel**, which phones launched with Android 12 or later do. Kernels built so far: android15-6.6 and android16-6.12; older GKI branches follow the same method.
+- **An unlockable bootloader and a supported root setup.** Current device integrations use Magisk; eligibility and consequences depend on the manufacturer and device variant.
+- **A GKI kernel with matching sources and compatible vendor modules.** Kernels built so far: android15-6.6 and android16-6.12. Other branches need their own adaptation and checks; the Android version alone does not establish compatibility.
 - **A Snapdragon chip with an Adreno GPU**, for the hardware-accelerated desktop (Mesa's Turnip and freedreno on Adreno's KGSL driver). Phones with other GPUs need their own graphics work first.
 - **ARM64 and enough free storage** for the Linux system.
 
@@ -143,6 +143,13 @@ Tested so far:
 | moto g100s (XT2537-4) | android15-6.6 | Main development device, most complete |
 | moto g100 (XT2533-4) | android15-6.6 | One-step flash package verified on a wiped phone |
 | moto X70 Air Pro | android16-6.12 | In progress |
+
+### Before you install
+
+1. **Make a complete backup off the phone.** The full flash installation resets the device and erases user data; bootloader unlocking also normally triggers a [factory reset](https://source.android.com/docs/core/architecture/bootloader/locking_unlocking). Back up photos, files, contacts and messages, export app-specific data, and make sure you can restore access to your accounts. Keeping the manufacturer's Android base does not preserve your existing user data through this process.
+2. **The goal is to retain normal Android functionality.** Calls, messages, networking, cameras and other phone functions should remain available alongside RungicOS after adaptation and validation. This is a design goal, not a blanket guarantee for every phone or firmware. Check the device's acceptance record and release notes, including any selected preinstalled apps removed or disabled by its firmware profile.
+3. **Some apps may reject the modified device.** Apps or their services can check root, bootloader state or device integrity and restrict access, even when Android itself works normally. For example, [Play Integrity](https://developer.android.com/google/play/integrity/overview) lets developers apply their own access policies. Such restrictions are imposed by the app or service; Rungic cannot guarantee that every app will accept the device. Other app failures still need diagnosis rather than being assumed to be security-policy restrictions.
+4. **Research the manufacturer's policies for your exact model and variant.** Before unlocking or rooting, check eligibility, the required procedure, and whether protected features or update support will change. Some effects can persist after restoring stock firmware: [Samsung's Knox documentation](https://docs.samsungknox.com/admin/knox-platform-for-enterprise/faq/), for example, describes restrictions on Knox-dependent services after its Warranty Bit is tripped. This is a manufacturer-specific example, not a statement that Samsung devices are supported by Rungic.
 
 ## Status
 
