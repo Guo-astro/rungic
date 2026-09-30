@@ -449,3 +449,14 @@ ARM64 C++ 24 项通过。40 事项 / 39 组的真实服务集成分别执行普�
 每个 Agent 带自己的标志（描述文件 `icon`，Claude Spark 来自 Anthropic 资料包、未修改；Codex 为本项目原创像素标志）。
 
 验证范围：Python 51 项、ARM64 C++ 34 项、构建容器私有总线上的服务集成通过；**未部署到手机，未做实机验收**。设计、调研来源（文档/未文档化区分、版本与许可证）、测试与验收办法见 [95 篇](95-agent-usage-providers.md)。
+
+## 2026-09-30：桌面组件按简报与通用用量重做
+
+设计稿：Claude Design 画布“Rungic 桌面组件重设计”（沿用语音助手设计系统的结构，配色按 App 现行 `com.rungic.design` Theme；旧设计系统的金色强调已不在代码中）。
+
+- **Agent 建议**（`SuggestionsWidget.qml`、`BriefingCard.qml`）：只显示 Agent 策展的卡片，一次一张，下方露出堆叠边缘；上滑/下滑为分页式切换，不再有滚动列表与被切半的卡片。卡片顶部是写卡 Agent 自己的标志与名称（`AgentMark.qml`，取提供方描述文件的 `icon`），状态：卡片、Agent 正在处理、有结果、重新整理中、回退（未整理/Agent 不可用分开说明）、一切正常、首次、服务重连；4×2/4×3/4×4 尺寸。点击开一个对话，同一张卡再点回到同一对话（服务端 card→conversation，打开中重复点击共享结果）。App 建议页顶部放同一堆叠，下方为“全部记录”。
+- **Agent 用量**（`AgentWidget.qml`）：任一提供方同样呈现；额度窗口并排，数字紧凑（67.4K / 6.7万），一天内倒计时、更远为星期与时间；无额度时显示 token；多个 Agent 用切换片；未登录、无 Agent、连不上、首次加载骨架、离线旧值；2×1 尺寸只显示用量最高的窗口。
+- **添加小组件**：名称/说明改为真实用途，两个专用图标（`icons/rungic-agent-*.svg`）。Codex 标志为本项目像素画（终端提示符），Claude 为 Anthropic 资料包原图。
+- **状态画廊**：`rungic-suggestions-gallery [--theme light|dark] --shot FILE`（离屏）逐一渲染上述状态，QML 警告时退出码 3；`care-preview --widget --swipe-test` 以固定卡片做真实指针分页测试。
+
+实机（XT2537-4，release 20260930.6–.8）：离屏画廊浅/深色全部状态核对；桌面实际显示 Codex 策展出的单张卡（36 条记录合成一张）与用量组件。部署后发现并修正：按钮行因“按子项可见性决定自身可见”永远隐藏；两组件格子无间距（各留上下 6 px）；未整理的回退卡误称“Codex 不可用”；双击同一卡开出两个对话。部署工具不会自动重启 `rungic-suggestions` 与 plasmashell，QML/服务更新后需手动重启（本轮手动完成）。`camera.frames` 冒烟在部署当下两次偶发失败、单独重跑通过，与本改动无关。
