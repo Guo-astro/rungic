@@ -59,12 +59,12 @@
   - 场景 2：在 `/data/adb` 下临时模拟一个已完成的独立安装（`active.env`、完成标记、payload 中的仓库版首启脚本）。先停容器，再 `pm clear`，然后打开 APK：root 重新发布了来源文件和 `ready/complete` 状态，属主为 APK uid，SELinux 标签与 APK 数据目录一致；首启日志只有 “already installed”；桌面 10 秒内启动（`t5-*.log`）。测完删除了全部模拟文件。
 - **未验收**：“复用底座上还有旧 product seed”这一支需要 X70 等带 product seed 的设备；开机路径的重新发布只有 L1 覆盖。
 
-## 验证中发现的既有问题（未修）
+## 验证中发现的既有问题（已由 [95 篇](95-desktop-recovery-after-apk-restart.md) 修复）
 
 1. **清除 APK 数据后，正在运行的容器仍绑定已删除的目录**：容器内 `/mnt/android-wayland` 指向 `/data/com.rungic.plasma/files/tmp//deleted`。APK 重建的 `files/tmp` 在容器里不可见，KWin/plasmashell 连不上，APK 显示“暂时无法进入”。在 APK 重新创建 `files/tmp` 之前，所有经过 `rungic-plasma-enter` 的控制命令也都会报 `bind Android Wayland socket directory`。停止容器后由 APK 重新启动即可恢复。
 2. **APK 被强制停止后，plasmashell 可能停在 failed**：Wayland 服务端随 APK 消失，systemd 在合成器回来之前约 1 秒内重启 plasmashell，又断开一次，退出码 255，unit 进入 failed。APK 重开后 KWin 恢复，plasmashell 不会再被拉起；控制器等待 120 秒后报错，APK 显示“暂时无法进入”。Android 因内存紧张杀掉 APK 时也可能走到这条路径。执行 `rungic-plasma restart-session`，再在 APK 里点“重新检查”即可恢复。
 
-两者都应放在共享层修（控制器的 start 检查 bind mount 是否失效，以及会话对合成器消失的重试策略），并加入 L2 的 `install` 级别场景。
+两者已在共享层修复：控制器的 start 检查 bind 是否失效，会话等待上一个会话的 stop 作业结束，控制器在 plasmashell 已 failed 时改走 restart-session。机制、真机对比和边界见 95 篇。
 
 ## 本轮真机范围与还原
 

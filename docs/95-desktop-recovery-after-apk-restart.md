@@ -1,0 +1,50 @@
+# APK 数据被清除或被强制停止后的桌面恢复
+
+2026-09-30，承接 [94 篇](94-install-use-case-tests.md)。那一轮用 `pm clear` 和强制停止做真机验证时，发现两个既有问题，桌面都要人工处理才能恢复。用户要求修复。真机为 G100 S（ZY32MVJS25，`10.77.0.16:35577`，K8-Plus 通过 Wi-Fi/VPN 连接），证据在 `.work/verify/20260930-review-fixes/`（`t9`–`t16`）。
+
+## A. 清除数据后，容器仍绑定已删除的 socket 目录
+
+- **机制**：`rungic-plasma-enter` 在容器启动时，把 `/data/user/0/com.rungic.plasma/files/tmp` bind 到容器的 `/mnt/android-wayland`。bind 固定的是目录 inode。`pm clear` 或卸载重装会删除并重建这个目录，运行中的容器仍指向 `files/tmp//deleted`，KWin 连不上新的 Wayland 服务端，APK 显示“暂时无法进入”。
+- **选型**：
+  - 控制器已有同类处理：Android 重新挂载共享存储后 bind 失效，`start` 会重启容器（`shared-storage` 阶段）。
+  - 也考虑过热重绑：用 `open_tree`/`move_mount` 把新目录挂进容器的 mount namespace。没有采用，原因有二：
+    - 卸载重装可能改变 APK 的 uid 和 SELinux 标签，而 `android-shm-context` 只在 `start_container` 时生成；
+    - 这个场景很少出现，重启容器的代价可以接受，而且实现更简单。
+- **修复**：`start` 和 `restart-session` 在容器运行时，比较主机上 `files/tmp` 与容器内 `/mnt/android-wayland` 的 inode；两边都能读到且不一致时，停止容器，由后续步骤重新启动。任一侧读取失败时不重启，避免因一次 attach 失败误重启。
+- **真机**：在容器运行时 `pm clear`，然后打开 APK。容器 init PID 从 28030 变为 12381，容器内 inode 与新目录一致（559170），15 秒内 KWin/plasmashell 恢复为 active，全程无人工干预（`t15-A-pmclear.log`）。
+- **仍需注意**：在 APK 重新创建 `files/tmp` 之前，所有经过 `rungic-plasma-enter` 的控制命令都会报 `bind Android Wayland socket directory`。APK 在调用这些命令前会先创建该目录；94 篇新增的 `install-publish` 不经过 enter。
+
+## B. APK 被强制停止后再打开，plasmashell 停在 failed 或 inactive
+
+- **机制**（journal 时间线，`t9-reproduce-B2-journal.log`）：
+  1. 新 APK 进程启动时，KWin 的 Wayland 连接断开，plasmashell 以 255 退出；因为 `Restart=on-failure`，systemd 立即重启它。
+  2. APK 发起 `restart-session`。会话 unit 的 `ExecStop` 执行 `systemctl --user stop graphical-session.target`，target 停止后命令就返回了，而 plasmashell 还要 1–2 秒才退出。
+  3. 新会话的 `plasma-core.target` 对 plasmashell 只是 `Wants=`。systemd 会丢弃与正在运行的 stop 作业冲突的弱依赖启动作业，结果 target 显示“已到达”，plasmashell 却从未启动。
+- **复现**：
+  - 强制停止后立刻重开：未复现；
+  - 强制停止后隔 30 秒再重开：复现，plasmashell 停在 failed。
+- **修复 1（预防）**：`desktop/session` 在已有的“等待上一个 startplasma-wayland 退出”之后，再等待用户 systemd 中的 stop 作业结束，最多 20 秒。等待过时会在 journal 写一行 `Waited Nx0.1 s ...`。
+- **修复 2（恢复）**：APK 在 Wayland 已初始化时点“重新检查”，发送的是 `start`，而 `start` 只会等待 plasmashell，不会拉起它。现在控制器在 `start` 时发现 plasmashell unit 处于 failed，就改走 `restart-session`。
+- **真机确定性对比**（`t14-*`）：临时给 plasmashell 加一个用户级 drop-in `ExecStopPost=/bin/sleep 3`，让它每次都停得慢，稳定制造竞争：
+  - 未修复的会话脚本：`restart-session` 后 plasmashell 停在 inactive，控制器等到超时；
+  - 修复后：连续 2 轮都记录了 `Waited 20x0.1 s`，plasmashell active，控制器报告就绪；
+  - drop-in 测完已删除。
+- **其他真机结果**：
+  - 修复 2：在 plasmashell 已 failed 的状态下点“重新检查”，5 秒内 plasmashell、KWin 和语音浮层都恢复（`t11-retry-recovery.log`）。
+  - 部署修复后，按“强制停止 → 30 秒 → 重开”共跑了 7 轮，全部正常（`t12`、`t13`）。但这 7 轮里等待循环都没有触发：部署同时带进了 d006ba6 对 `kconf_update` 的修改，会话启动时序变了。因此这 7 轮只是回归结果，不能作为修复 1 有效的证据；修复 1 的证据是上面的确定性对比。
+
+## 离线测试
+
+`tools/ci/test_session_recovery.py` 从真实的控制器和会话脚本中抽出这些片段，用桩命令运行，共 9 个用例：
+
+- inode 不一致时重启容器、一致时不动、任一侧读取失败时不动；
+- plasmashell 已 failed 时 `start` 改走 `restart-session`；
+- 会话脚本等待 stop 作业（不等待 start 作业），并且等待有上限。
+
+拿修复前的源码运行，9 个全部失败。`tools/run-tests.sh` 已包含这个文件。
+
+## 部署状态与边界
+
+- G100 S 上的 `rungic-plasma` 和容器内的 `/usr/libexec/rungic-plasma-session` 是为这次验证直接替换的。后者属于 `rungic-plasma-session` 软件包，直接替换后完整性检查会报告它被改过；要随下一次打包发布正式下发。部署前的原文件在 `device-backup/`。
+- 最终 smoke 9/9 通过（`.work/acceptance/unreleased/20260930-202509/`）。OCR 模型和 prefs 已从备份恢复，标签按目录的完整 MLS 类别重新 `chcon`。
+- 还没做的：Android 低内存时真实杀死 APK 的场景（这次用 `am force-stop` 近似），以及卸载后重装导致 uid 变化的场景。

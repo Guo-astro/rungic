@@ -266,6 +266,26 @@ case "$action" in
       echo 'Android storage was remounted; restarting the Plasma container' >&2
       "$ENTER" /usr/bin/lxc-stop -n plasma -t 15 9>&- || true
     fi
+    # The container binds the APK's socket directory (files/tmp) when it starts. Cleared app
+    # data or a reinstall recreates that directory and can change the APK's UID and SELinux
+    # label; the running container keeps the deleted one and the desktop cannot connect
+    # (docs/95). A container restart binds the new directory with the current label.
+    startup_phase=wayland-directory
+    if running; then
+      apk_dir=$(stat -c %i /data/user/0/com.rungic.plasma/files/tmp 2>/dev/null) || apk_dir=
+      bound_dir=$(attach stat -c %i /mnt/android-wayland 2>/dev/null 9>&-) || bound_dir=
+      if [ -n "$apk_dir" ] && [ -n "$bound_dir" ] && [ "$apk_dir" != "$bound_dir" ]; then
+        echo 'The desktop APK data was recreated; restarting the Plasma container' >&2
+        "$ENTER" /usr/bin/lxc-stop -n plasma -t 15 9>&- || true
+      fi
+    fi
+    # A plasmashell that failed while its compositor went away stays failed, and start would
+    # only wait for it; the APK's retry sends start (docs/95). Restart the session instead.
+    if [ "$action" = start ] && running &&
+       attach /usr/bin/rungic-plasma-user-exec systemctl --user is-failed --quiet plasma-plasmashell.service 9>&-; then
+      echo 'plasmashell had failed; restarting the desktop session' >&2
+      action=restart-session
+    fi
     old_pids=
     if [ "$action" = restart-session ] && running; then
       startup_phase=session-restart
