@@ -19,6 +19,9 @@ public Q_SLOTS:
     QString List();
     QString AgentUsage();
     void RefreshAgentUsage();
+    // Usage adapters (docs/research/95): a session's cumulative tokens, and "read me again".
+    void RecordTokens(const QString &provider, const QString &json);
+    void ProviderChanged(const QString &provider);
     QString Get(const QString &id);
     QString Act(const QString &id, const QString &action, const QString &json);
     QString Update(const QString &id, const QString &json);
@@ -57,9 +60,17 @@ private:
     Care::Model model;
     Care::Briefing briefing;
     QTimer curationTimer;
+    void loadUsageProviders(qint64 now);
+    void refreshUsage(const Care::UsageProvider &provider, bool force);
+    void readUsage(const Care::UsageProvider &provider);
+    void accept(const Care::UsageProvider &provider, const QByteArray &reply);
+    void usageDone(const Care::UsageProvider &provider);
     Care::Usage usage;
-    bool usageRefreshing = false;
-    qint64 usageAttempt = 0;
+    struct UsageFetch { bool running = false, dirty = false; qint64 attempt = 0; };
+    QHash<QString, UsageFetch> usageFetches;
+    qint64 usageWatched = 0, providersLoaded = 0;
+    QStringList usageDescriptorErrors;
+    QSet<QString> usagePushers; // providers that called RecordTokens/ProviderChanged themselves
     QString feedPath, knowledgePath, statePath;
     QTimer scanTimer;
     bool scanning = false;

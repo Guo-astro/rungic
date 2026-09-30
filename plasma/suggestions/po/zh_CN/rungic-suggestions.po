@@ -478,8 +478,8 @@ msgstr "尚未收到用量记录"
 msgid "%1 tokens recorded on this device"
 msgstr "本机已记录 %1 token"
 
-msgid "Open the Codex assistant"
-msgstr "打开 Codex 助理"
+msgid "Open the %1 assistant"
+msgstr "打开 %1 助理"
 
 msgid "View Agent usage"
 msgstr "查看 Agent 用量"
@@ -509,8 +509,8 @@ msgstr "查看账户用量与额度"
 msgid "Model not read yet"
 msgstr "模型尚未读取"
 
-msgid "Recorded today: %1 tokens. Counts only the Codex turns this account ran through the assistant on this device; it leaves out voice and is not the account's bill."
-msgstr "今日记录 %1 token。仅统计此账户通过本机助理收到的 Codex 回合用量；不包含语音消耗，也不是账户账单。"
+msgid "Recorded today: %1 tokens. Counts only what this account used through this device; it is not the account's bill."
+msgstr "今日记录 %1 token。仅统计此账户经本机产生的用量，不是账户账单。"
 
 msgid "An API key is billed as you go; it has no subscription limits or reset times."
 msgstr "API Key 按量使用，未提供订阅额度和重置时间。"
@@ -570,8 +570,26 @@ msgstr "查看各次调查与处理进度"
 msgid "The usage service isn't connected yet"
 msgstr "用量服务暂未连接"
 
-msgid "Agent usage is unavailable right now; try again later"
-msgstr "Agent 用量暂时不可用，稍后重试"
+msgid "%1 usage is unavailable right now; try again later"
+msgstr "%1 用量暂时不可用，稍后重试"
+
+msgid "%1 returned usage that can't be read"
+msgstr "%1 返回的用量无法读取"
+
+msgid "The usage reader for %1 didn't answer in time"
+msgstr "%1 的用量读取程序未及时响应"
+
+msgid "The usage reader for %1 failed"
+msgstr "%1 的用量读取程序出错"
+
+msgid "The usage reader for %1 isn't installed"
+msgstr "%1 的用量读取程序未安装"
+
+msgid "Subscription"
+msgstr "订阅"
+
+msgid "Unavailable"
+msgstr "暂不可用"
 
 msgid "The usage record wasn't saved: %1"
 msgstr "用量记录未保存：%1"

@@ -1,0 +1,27 @@
+{
+  "purpose": "Each agent's own mark in the desktop's agent usage (docs/research/95): the descriptor's icon, shown next to that agent's usage.",
+  "files": {
+    "plasma/suggestions/agent-usage/icons/claude-code.svg": {
+      "installed": "/usr/share/rungic/agent-usage/icons/claude-code.svg",
+      "source": "Anthropic press kit, https://www.anthropic.com/press-kit (served as https://www-cdn.anthropic.com/ae59ca4ca194dac9c9dc3bc78c5829468cb0e8af.zip, sha256 c68ac92df86c825f95177e24016fcc9a8863a3fd4ca344fe6f0700b2c1e07151)",
+      "member": "Anthropic media resources/Anthropic logos/Claude logos/3 Claude Spark/SVG/Claude Spark - Clay.svg",
+      "downloaded": "2026-09-30",
+      "sha256": "6d53db4be375e899c937c26cf16684a80d6e869b1928d72b37748bef2560e219",
+      "modified": false,
+      "rights": "Trademark of Anthropic (the Claude Spark mark). Not covered by this repository's licences. Used unmodified and only to identify Claude Code as the agent whose usage is shown (nominative use); no endorsement implied.",
+      "note": "The copy handed over for this task and the member of the press kit downloaded on K8-Plus on 2026-09-30 are byte-identical. A hash given with the hand-over (0b272d36…) matched neither; the kit's own member is the reference."
+    },
+    "plasma/voice-agent/agent-usage/icons/codex-light.svg": {
+      "installed": "/usr/share/rungic/agent-usage/icons/codex-light.svg",
+      "source": "Original Rungic artwork (2026-09-30): a terminal prompt \">_\" on a rounded tile, 10x10 pixel grid. Drawn for this project instead of OpenAI's brand file, at the user's request.",
+      "sha256": "7017f31ccfde43f47c71637c62d4cefd51b13a4ab59107b41a831319d586b4d8",
+      "license": "GPL-2.0-or-later"
+    },
+    "plasma/voice-agent/agent-usage/icons/codex-dark.svg": {
+      "installed": "/usr/share/rungic/agent-usage/icons/codex-dark.svg",
+      "source": "Original Rungic artwork (2026-09-30), the dark-theme colours of codex-light.svg.",
+      "sha256": "81c135a567ae6f8b8ddb65d2899671a5a4e77e3c9a88f860b71030e7b1ec9389",
+      "license": "GPL-2.0-or-later"
+    }
+  }
+}

@@ -441,3 +441,11 @@ ARM64 C++ 24 项通过。40 事项 / 39 组的真实服务集成分别执行普�
 - 后台策展可用 `~/.config/rungic-suggestionsrc` 的 `[Briefing] BackgroundCuration=false` 关闭。
 
 接口、JSON 形状、常量、Codex 0.156.1 协议源码核验、同类产品（iOS Smart Stack、Pixel At a Glance、Google Discover）比较、隐私与成本见 [96 篇](96-agent-curated-briefing.md)。本轮只有离线验证（Mac mini ARM64 构建 suggestions/voice-agent 0.474，C++ QtTest 31 项、替身 app-server 在内的 Python 54 项通过），未部署手机，未做真实模型策展、通知和卡片堆叠 UI 验收；QML 仍显示旧的分组卡，新的堆叠界面由后续 UI 工作接入 `SuggestionsClient.cards/briefing`。
+
+## 2026-09-30：Agent 用量改为通用提供方接口
+
+`AgentUsage` 升为 schema 2：`{schema, primary, updatedAt, providers[]}`，每个 Agent 一个提供方对象（状态、账户类型、模型、本机/当日/账户 token、额度窗口、stale/error），契约之外的字段丢弃。Agent 由描述文件 `<数据目录>/rungic/agent-usage/providers/<id>.json` 声明，来源为 D-Bus 方法或不经 shell 的读取命令；系统目录由拥有适配器的包安装，用户目录可添加或覆盖。新增 D-Bus `RecordTokens(provider, json)`、`ProviderChanged(provider)`；账本按提供方与账户分区，schema 1 迁移到 `codex` 且不重复计数。Codex 描述文件随 `rungic-voice-agent` 安装，VoiceAgent `Usage` 直接返回提供方对象并推送 token；旧事件转换保留一个发布周期。另加 Claude Code 读取器：token 来自其会话记录（格式为内部格式，按 ccusage 方式去重，自有账本），额度只来自文档化的 statusline `rate_limits`，未文档化的 OAuth 用量端点不采用。
+
+每个 Agent 带自己的标志（描述文件 `icon`，Claude Spark 来自 Anthropic 资料包、未修改；Codex 为本项目原创像素标志）。
+
+验证范围：Python 51 项、ARM64 C++ 34 项、构建容器私有总线上的服务集成通过；**未部署到手机，未做实机验收**。设计、调研来源（文档/未文档化区分、版本与许可证）、测试与验收办法见 [95 篇](95-agent-usage-providers.md)。
