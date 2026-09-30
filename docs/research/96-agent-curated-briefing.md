@@ -153,7 +153,8 @@ BackgroundCuration=false
 
 ## 验证状态
 
-- **离线测试（本轮）**：C++ QtTest 新增 7 个方法（严格校验、实质/非实质触发+防抖+最小间隔+紧急间隔+每日上限、回退内容、Agent 卡保留与未见记录补卡、忽略至实质变化、反馈进入下次输入、脱敏）；Python 新增 8 项（替身 app-server）。运行结果见提交说明与 proactive-system-care 当日小节。
+- **离线测试（本轮）**：C++ QtTest 新增 7 个方法（严格校验、实质/非实质触发+防抖+最小间隔+紧急间隔+每日上限、回退内容、Agent 卡保留与未见记录补卡、忽略至实质变化、反馈进入下次输入、脱敏）；Python 新增 8 项（替身 app-server）。
+- **构建与运行结果**：执行端现场核验为 K8-Plus / x86_64、默认路由 192.168.0.1、无代理环境变量；构建端 Mac mini（`chou-Mac-mini.local`，arm64，系统代理 Surge 127.0.0.1:6152）。在工作树执行 `python3 tools/rungic_package.py build rungic-suggestions rungic-voice-agent` 生成 `rungic-suggestions_0.474_arm64.deb` 与 `rungic-voice-agent_0.474_arm64.deb`（Ubuntu 26.04 ARM64 容器，含 ctest 与 zh_CN 目录编译）；同一构建树中 `care-tests` **31 项通过**（29 个方法及初始化/清理）。首轮构建发现 `qBound<qint64>` 重载歧义，改为显式类型后通过。本机 `python3 -m pytest -q tools/tests plasma/voice-agent` **54 项通过**（含新增 8 项）。工作树内构建需先建立 `.work/cache`，版本号按工作树提交数计算，产物只在工作树 `.work/apt`，未发布、未部署。
 - **未验证**：真实 Codex 策展回合与费用、严格 schema/低推理在固定模型上的接受情况、`thread/inject_items` 在首回合前注入的实机行为、通知实际呈现、QML 卡片堆叠界面（由上层实现）、手机部署。
 
 ## 剩余问题

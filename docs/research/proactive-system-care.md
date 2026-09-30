@@ -440,4 +440,4 @@ ARM64 C++ 24 项通过。40 事项 / 39 组的真实服务集成分别执行普�
 - 通知改为按卡片决策，沿用原修订回执、新鲜度、每日摘要上限和不响铃规则；卡片的 `notify` 只相当于“合适时机”。
 - 后台策展可用 `~/.config/rungic-suggestionsrc` 的 `[Briefing] BackgroundCuration=false` 关闭。
 
-接口、JSON 形状、常量、Codex 0.156.1 协议源码核验、同类产品（iOS Smart Stack、Pixel At a Glance、Google Discover）比较、隐私与成本见 [96 篇](96-agent-curated-briefing.md)。本轮只有离线验证（C++ QtTest 与替身 app-server 的 Python 测试、Mac mini ARM64 构建），未部署手机，未做真实模型策展、通知和卡片堆叠 UI 验收；QML 仍显示旧的分组卡，新的堆叠界面由后续 UI 工作接入 `SuggestionsClient.cards/briefing`。
+接口、JSON 形状、常量、Codex 0.156.1 协议源码核验、同类产品（iOS Smart Stack、Pixel At a Glance、Google Discover）比较、隐私与成本见 [96 篇](96-agent-curated-briefing.md)。本轮只有离线验证（Mac mini ARM64 构建 suggestions/voice-agent 0.474，C++ QtTest 31 项、替身 app-server 在内的 Python 54 项通过），未部署手机，未做真实模型策展、通知和卡片堆叠 UI 验收；QML 仍显示旧的分组卡，新的堆叠界面由后续 UI 工作接入 `SuggestionsClient.cards/briefing`。
