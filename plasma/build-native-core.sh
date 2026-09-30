@@ -2,7 +2,8 @@
 set -euo pipefail
 task_root=$(cd "$(dirname "$0")/.." && pwd)
 task_tools="$task_root/tools/toolchains"
-task_native="$task_root/native/plasma"
+export PYTHONPYCACHEPREFIX=${PYTHONPYCACHEPREFIX:-$task_root/.work/cache/pycache}
+task_native=$(python3 "$task_root/tools/prepare_android_host.py")
 export PATH="$HOME/.cargo/bin:$PATH"
 # The project proxy (AGENTS.md); RUNGIC_PROXY= builds without it on machines that cannot reach it.
 task_proxy=${RUNGIC_PROXY-http://192.168.5.45:6152}

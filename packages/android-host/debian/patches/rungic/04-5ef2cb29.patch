@@ -1,0 +1,107 @@
+From: Rungic <noreply@rungic.invalid>
+Date: Wed, 30 Sep 2026 12:34:37 +0800
+Subject: Host: UBWC allocation, rotation fix for zero-copy; tooling and docs
+
+Preserve the deployed implementation during the source/patch migration.
+
+Origin: vendor, RungicCore commit:5ef2cb298d6d6c079fc344053df202e670ba1c1a
+Forwarded: no
+Last-Update: 2026-09-30
+X-Rungic-Status: Inappropriate; Android host integration
+X-Rungic-Tests: L0:source-replay; L1:android-cross-build (host); runtime scope in docs/73
+X-Rungic-Docs: docs/73; docs/49; docs/research/91
+---
+ src/android/backend/smithay_backend.rs | 23 ++++++++++++++++++++++-
+ src/android/backend/wayland/seat.rs    |  3 +++
+ 2 files changed, 25 insertions(+), 1 deletion(-)
+
+diff --git a/src/android/backend/smithay_backend.rs b/src/android/backend/smithay_backend.rs
+index e47b0e6..4fbc09c 100644
+--- a/src/android/backend/smithay_backend.rs
++++ b/src/android/backend/smithay_backend.rs
+@@ -112,6 +112,11 @@ pub fn composite_multi(state: &mut AndroidSmithayState, surfaces: &[RenderItem])
+             log::warn!("composite_multi: eglMakeCurrent failed (egl_error=0x{:x})", eglGetError());
+             return;
+         }
++        // Size of the buffer this frame draws into. Android updates EGL_WIDTH/HEIGHT
++        // at eglSwapBuffers for the *next* buffer, so it must be read before drawing.
++        let (mut frame_w, mut frame_h) = (0, 0);
++        eglQuerySurface(display, surface, EGL_WIDTH, &mut frame_w);
++        eglQuerySurface(display, surface, EGL_HEIGHT, &mut frame_h);
+ 
+         log::debug!("composite_multi: eglMakeCurrent OK, viewport {}x{}",
+             physical_sw as i32, physical_sh as i32);
+@@ -367,7 +372,11 @@ pub fn composite_multi(state: &mut AndroidSmithayState, surfaces: &[RenderItem])
+         gl::UseProgram(0);
+ 
+         let swap_ok = eglSwapBuffers(display, surface);
+-        if swap_ok != 0 { crate::android::frame_clock::note_present(); }
++        if swap_ok != 0 {
++            crate::android::frame_clock::note_present();
++            // After a rotation the window's buffers can lag SurfaceChanged by frames.
++            state.window_frame_size = (frame_w, frame_h);
++        }
+         log::debug!("composite_multi: eglSwapBuffers -> {} (egl_error=0x{:x})", swap_ok, eglGetError());
+         let _ = eglMakeCurrent(display, egl::NO_SURFACE, egl::NO_SURFACE, egl::NO_CONTEXT);
+     }
+@@ -438,6 +447,7 @@ extern "C" {
+     fn eglCreateContext(display: *mut std::ffi::c_void, config: *mut std::ffi::c_void, share_context: *mut std::ffi::c_void, attrib_list: *const i32) -> *mut std::ffi::c_void;
+     fn eglMakeCurrent(display: *mut std::ffi::c_void, draw: *mut std::ffi::c_void, read: *mut std::ffi::c_void, ctx: *mut std::ffi::c_void) -> u32;
+     fn eglSwapBuffers(display: *mut std::ffi::c_void, surface: *mut std::ffi::c_void) -> u32;
++    fn eglQuerySurface(display: *mut std::ffi::c_void, surface: *mut std::ffi::c_void, attribute: i32, value: *mut i32) -> u32;
+     fn eglDestroySurface(display: *mut std::ffi::c_void, surface: *mut std::ffi::c_void) -> u32;
+     fn eglDestroyContext(display: *mut std::ffi::c_void, ctx: *mut std::ffi::c_void) -> u32;
+     fn eglTerminate(display: *mut std::ffi::c_void) -> u32;
+@@ -481,6 +491,11 @@ pub struct AndroidSmithayState {
+     pub shm_enabled: bool,
+     pub shm_region: Option<ShmRegion>,
+     pub frames_presented: u64,
++    /// Size of the last frame drawn into the native window with GLES (queried from
++    /// EGL). The zero-copy layer is a child of that window's layer and SurfaceFlinger
++    /// crops it to the parent's buffer, so after a resize (rotation) GLES frames come
++    /// first until the window's buffers have the new size.
++    pub window_frame_size: (i32, i32),
+     pub(crate) presenter: Option<crate::android::surface_control::Presenter>,
+     /// User-requested resolution override (set by SetResolution from Dashboard).
+     /// When Some, SurfaceChanged uses this instead of native Android dimensions.
+@@ -525,6 +540,7 @@ impl AndroidSmithayState {
+             shm_enabled: false,
+             shm_region: None,
+             frames_presented: 0,
++            window_frame_size: (0, 0),
+             presenter: None,
+             requested_resolution: None,
+             requested_scale: None,
+@@ -625,6 +641,10 @@ fn try_zero_copy(state: &mut AndroidSmithayState, items: &mut [RenderItem]) -> b
+     if !crate::android::backend::wayland::engine_timing::is_rendering_active() {
+         return false;
+     }
++    if state.window_frame_size != state.surface_size {
++        note_fallback("window resized: parent frame first");
++        return false;
++    }
+     let [RenderItem::DmaBuf { fd, fourcc, width, height, x: 0, y: 0, is_cursor: false, hold, acquire, release, .. }] = items else {
+         note_fallback("not a single full-surface dma-buf");
+         return false;
+@@ -731,6 +751,7 @@ fn release_native_window_inner(state: &mut AndroidSmithayState) {
+ /// Fast-path: if EGL context already exists, only create a new surface + make current.
+ /// Full init: first-time setup of display, config, context, shaders.
+ pub fn bind_native_window(state: &mut AndroidSmithayState, native_window_ptr: *mut ndk_sys::ANativeWindow) -> Result<(), String> {
++    state.window_frame_size = (0, 0);
+     if native_window_ptr.is_null() {
+         return Err("ANativeWindow pointer is null".to_string());
+     }
+diff --git a/src/android/backend/wayland/seat.rs b/src/android/backend/wayland/seat.rs
+index 6ffeff3..1fc9dbe 100644
+--- a/src/android/backend/wayland/seat.rs
++++ b/src/android/backend/wayland/seat.rs
+@@ -344,6 +344,9 @@ impl AndroidSeatRuntime {
+                 Format { code: Fourcc::Xbgr8888, modifier: Modifier::Invalid },
+                 Format { code: Fourcc::Abgr8888, modifier: Modifier::Linear },
+                 Format { code: Fourcc::Abgr8888, modifier: Modifier::Invalid },
++                // Adreno UBWC, only from the AHB allocator (gpu_allocator.rs, v2 requests).
++                Format { code: Fourcc::Xbgr8888, modifier: Modifier::from(0x0500000000000001u64) },
++                Format { code: Fourcc::Abgr8888, modifier: Modifier::from(0x0500000000000001u64) },
+             ];
+         let dmabuf_global =
+             dmabuf_state.create_global::<AndroidSeatRuntime>(

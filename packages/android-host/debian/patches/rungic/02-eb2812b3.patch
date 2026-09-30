@@ -1,0 +1,495 @@
+From: Rungic <noreply@rungic.invalid>
+Date: Wed, 30 Sep 2026 12:34:37 +0800
+Subject: Host: zero-copy presentation and sync_file explicit synchronization
+
+Preserve the deployed implementation during the source/patch migration.
+
+Origin: vendor, RungicCore commit:eb2812b30565484337e6909672a3ad5a11bac7ad
+Forwarded: no
+Last-Update: 2026-09-30
+X-Rungic-Status: Inappropriate; Android host integration
+X-Rungic-Tests: L0:source-replay; L1:android-cross-build (host); runtime scope in docs/73
+X-Rungic-Docs: docs/73; docs/49; docs/research/91
+---
+ src/android/backend/smithay_backend.rs |  79 ++++++++++++++++++++--
+ src/android/backend/wayland/mod.rs     |   2 +
+ src/android/backend/wayland/seat.rs    | 118 +++++++++++++++++++++++++--------
+ src/android/mod.rs                     |   2 +
+ src/compositor.rs                      |  22 +++++-
+ 5 files changed, 188 insertions(+), 35 deletions(-)
+
+diff --git a/src/android/backend/smithay_backend.rs b/src/android/backend/smithay_backend.rs
+index 6b294fd..e47b0e6 100644
+--- a/src/android/backend/smithay_backend.rs
++++ b/src/android/backend/smithay_backend.rs
+@@ -198,7 +198,13 @@ pub fn composite_multi(state: &mut AndroidSmithayState, surfaces: &[RenderItem])
+                     gl::DisableVertexAttribArray(1);
+                     gl::DeleteTextures(1, &tex);
+                 }
+-                RenderItem::DmaBuf { ref fd, fourcc, modifier, offset, stride, width, height, .. } => {
++                RenderItem::DmaBuf { ref fd, fourcc, modifier, offset, stride, width, height, ref acquire, .. } => {
++                    if let Some(fence) = acquire {
++                        // The client did not wait for its GPU work (explicit sync).
++                        if !crate::android::backend::wayland::explicit_sync::wait(fence, 1000) {
++                            log::warn!("explicit-sync: acquire fence not signalled within 1 s; sampling anyway");
++                        }
++                    }
+                     if offset > 0 {
+                         log::debug!("dmabuf: KGSL path detected fd={} offset={} (gem_handle={})",
+                                     fd.as_raw_fd(), offset, offset >> 12);
+@@ -475,6 +481,7 @@ pub struct AndroidSmithayState {
+     pub shm_enabled: bool,
+     pub shm_region: Option<ShmRegion>,
+     pub frames_presented: u64,
++    pub(crate) presenter: Option<crate::android::surface_control::Presenter>,
+     /// User-requested resolution override (set by SetResolution from Dashboard).
+     /// When Some, SurfaceChanged uses this instead of native Android dimensions.
+     pub requested_resolution: Option<(i32, i32)>,
+@@ -518,6 +525,7 @@ impl AndroidSmithayState {
+             shm_enabled: false,
+             shm_region: None,
+             frames_presented: 0,
++            presenter: None,
+             requested_resolution: None,
+             requested_scale: None,
+             current_scale: 1.0,
+@@ -557,6 +565,13 @@ pub(crate) enum RenderItem {
+         y: i32,
+         scale: f32,
+         is_cursor: bool,
++        /// Keeps the client's wl_buffer unreleased while Android may read it
++        /// (zero-copy presentation, crate::android::surface_control).
++        hold: Option<smithay::backend::renderer::utils::Buffer>,
++        /// GPU completion fence of the commit (zwp_linux_explicit_synchronization_v1).
++        acquire: Option<std::sync::Arc<OwnedFd>>,
++        /// get_release object of the commit, answered when the last reference drops.
++        release: Option<std::sync::Arc<crate::android::backend::wayland::explicit_sync::ReleaseOnDrop>>,
+     },
+ }
+ 
+@@ -576,13 +591,63 @@ pub fn flush_deferred_composite(
+     state: &mut AndroidSmithayState,
+     rx: &crossbeam_channel::Receiver<Vec<RenderItem>>,
+ ) {
++    if let Some(presenter) = state.presenter.as_mut() {
++        presenter.collect();
++    }
++    // Only the newest frame matters; older queued frames would be overdrawn.
+     let mut all_items: Vec<RenderItem> = Vec::new();
+     while let Ok(items) = rx.try_recv() {
+-        all_items.extend(items);
++        all_items = items;
++    }
++    if all_items.is_empty() {
++        return;
++    }
++    if try_zero_copy(state, &mut all_items) {
++        return;
++    }
++    if let Some(presenter) = state.presenter.as_mut() {
++        presenter.hide();
++    }
++    composite_multi(state, &all_items);
++}
++
++/// Hand a single full-surface leased buffer (KWin's output) to SurfaceFlinger
++/// without drawing it. Returns false, with a recorded reason, to use GLES.
++fn try_zero_copy(state: &mut AndroidSmithayState, items: &mut [RenderItem]) -> bool {
++    use crate::android::surface_control::note_fallback;
++    if state.presenter.is_none() {
++        return false;
+     }
+-    if !all_items.is_empty() {
+-        composite_multi(state, &all_items);
++    if !crate::android::surface_control::enabled() {
++        note_fallback("disabled");
++        return false;
+     }
++    if !crate::android::backend::wayland::engine_timing::is_rendering_active() {
++        return false;
++    }
++    let [RenderItem::DmaBuf { fd, fourcc, width, height, x: 0, y: 0, is_cursor: false, hold, acquire, release, .. }] = items else {
++        note_fallback("not a single full-surface dma-buf");
++        return false;
++    };
++    if hold.is_none() {
++        note_fallback("no committed buffer to hold");
++        return false;
++    }
++    let Some(ahb) = crate::android::gpu_allocator::lookup(fd.as_raw_fd(), *width, *height, *fourcc) else {
++        note_fallback("not a leased AHardwareBuffer");
++        return false;
++    };
++    let surface_size = state.surface_size;
++    let (w, h) = (*width, *height);
++    let hold = hold.take().expect("checked above");
++    // SurfaceFlinger takes ownership of the acquire fence fd and waits for it itself.
++    let acquire_fd = acquire.as_ref().and_then(|fence| fence.try_clone().ok());
++    if let Some(presenter) = state.presenter.as_mut() {
++        presenter.present(ahb, hold, release.take(), acquire_fd, (w, h), surface_size);
++    }
++    crate::android::frame_clock::note_present();
++    state.frames_presented += 1;
++    true
+ }
+ 
+ /// Lightweight suspend: destroy only the EGL surface + ANativeWindow.
+@@ -600,6 +665,7 @@ pub fn suspend_native_window_inner(state: &mut AndroidSmithayState) {
+     }
+     state.egl_surface = None;
+ 
++    state.presenter = None;
+     if let Some(ptr) = state.native_window.take() {
+         unsafe {
+             ndk_sys::ANativeWindow_release(ptr);
+@@ -652,6 +718,7 @@ fn release_native_window_inner(state: &mut AndroidSmithayState) {
+     state.egl_config = None;
+     state.egl_lib = None;
+ 
++    state.presenter = None;
+     if let Some(ptr) = state.native_window.take() {
+         unsafe {
+             ndk_sys::ANativeWindow_release(ptr);
+@@ -674,6 +741,7 @@ pub fn bind_native_window(state: &mut AndroidSmithayState, native_window_ptr: *m
+         if state.egl_surface.is_some() {
+             unsafe { let _ = eglDestroySurface(display, state.egl_surface.take().unwrap()); }
+         }
++        state.presenter = None;
+         if let Some(old_window) = state.native_window.take() {
+             unsafe { ndk_sys::ANativeWindow_release(old_window); }
+         }
+@@ -688,6 +756,8 @@ pub fn bind_native_window(state: &mut AndroidSmithayState, native_window_ptr: *m
+             if surface != egl::NO_SURFACE {
+                 state.egl_surface = Some(surface);
+                 state.native_window = Some(native_window_ptr);
++    state.presenter = crate::android::surface_control::Presenter::new(native_window_ptr);
++                state.presenter = crate::android::surface_control::Presenter::new(native_window_ptr);
+                 unsafe { let _ = eglMakeCurrent(display, surface, surface, context); }
+                 unsafe { let _ = eglMakeCurrent(display, egl::NO_SURFACE, egl::NO_SURFACE, egl::NO_CONTEXT); }
+                 log::info!("Android backend: ANativeWindow rebound (context reused)");
+@@ -916,6 +986,7 @@ pub fn bind_native_window(state: &mut AndroidSmithayState, native_window_ptr: *m
+     }
+ 
+     state.native_window = Some(native_window_ptr);
++    state.presenter = crate::android::surface_control::Presenter::new(native_window_ptr);
+     state.egl_display = Some(display);
+     state.egl_surface = Some(surface);
+     state.egl_context = Some(context);
+diff --git a/src/android/backend/wayland/mod.rs b/src/android/backend/wayland/mod.rs
+index 40a4ec9..b89f930 100644
+--- a/src/android/backend/wayland/mod.rs
++++ b/src/android/backend/wayland/mod.rs
+@@ -2,6 +2,8 @@ pub mod bind;
+ pub mod compositor;
+ pub mod engine_timing;
+ pub mod event_centralizer;
++#[cfg(feature = "smithay_android")]
++pub mod explicit_sync;
+ pub mod handlers;
+ pub mod input;
+ pub mod arabic_input;
+diff --git a/src/android/backend/wayland/seat.rs b/src/android/backend/wayland/seat.rs
+index 19a6892..6ffeff3 100644
+--- a/src/android/backend/wayland/seat.rs
++++ b/src/android/backend/wayland/seat.rs
+@@ -334,15 +334,16 @@ impl AndroidSeatRuntime {
+         });
+         log::info!("SmithayRuntime: init stage=dmabuf_state");
+         let mut dmabuf_state = DmabufState::new();
++            // R,G,B(,A) byte order only: these map to AHARDWAREBUFFER_FORMAT_R8G8B8A8.
++            // XRGB/ARGB would map to HAL BGRA_8888, which SurfaceFlinger's Skia
++            // RenderEngine cannot sample when it has to GPU-compose the zero-copy
++            // layer ("Unable to generate SkImage ... colorType 6", SurfaceFlinger
++            // abort and a system restart on 2026-09-24, docs/57).
+             let dmabuf_formats = vec![
+                 Format { code: Fourcc::Xbgr8888, modifier: Modifier::Linear },
+                 Format { code: Fourcc::Xbgr8888, modifier: Modifier::Invalid },
+-                Format { code: Fourcc::Xrgb8888, modifier: Modifier::Linear },
+-                Format { code: Fourcc::Xrgb8888, modifier: Modifier::Invalid },
+                 Format { code: Fourcc::Abgr8888, modifier: Modifier::Linear },
+                 Format { code: Fourcc::Abgr8888, modifier: Modifier::Invalid },
+-                Format { code: Fourcc::Argb8888, modifier: Modifier::Linear },
+-                Format { code: Fourcc::Argb8888, modifier: Modifier::Invalid },
+             ];
+         let dmabuf_global =
+             dmabuf_state.create_global::<AndroidSeatRuntime>(
+@@ -374,6 +375,8 @@ impl AndroidSeatRuntime {
+         let fractional_scale_state = init_stage("fractional_scale_state", || {
+             FractionalScaleManagerState::new::<Self>(display)
+         });
++        log::info!("SmithayRuntime: init stage=explicit_sync");
++        crate::android::backend::wayland::explicit_sync::create_global(display);
+         log::info!("SmithayRuntime: init stage=presentation_state");
+         let presentation_state = init_stage("presentation_state", || {
+             PresentationState::new::<Self>(display, libc::CLOCK_MONOTONIC as u32)
+@@ -602,7 +605,7 @@ impl AndroidSeatRuntime {
+             output.name()
+         );
+ 
+-        Ok(Self {
++        let mut runtime = Self {
+             compositor_state,
+             shm_state,
+             dmabuf_state,
+@@ -698,7 +701,10 @@ impl AndroidSeatRuntime {
+             output_management_state,
+             x11_window_to_surface: HashMap::new(),
+             x11_pending_pings: HashMap::new(),
+-        })
++        };
++        // The seat starts in touch mode: no wl_pointer (see sync_pointer_capability).
++        runtime.sync_pointer_capability();
++        Ok(runtime)
+     }
+ 
+     /// إعادة حساب المساحة المحجوزة من طبقات wlr_layer الحية
+@@ -986,9 +992,25 @@ impl AndroidSeatRuntime {
+ 
+     pub(crate) fn set_input_mode(&mut self, mode: WinlandInputMode) {
+         self.current_input_mode = mode;
++        self.sync_pointer_capability();
+         log::info!("SmithayRuntime: input mode -> {:?}", mode);
+     }
+ 
++    /// Offer wl_pointer only in mouse/trackpad mode. Touch mode delivers wl_touch
++    /// only; advertising a pointer made KWin draw its cursor at (0,0) at every
++    /// start (a black square with an arrow, top-left) until a pointer device moved.
++    pub(crate) fn sync_pointer_capability(&mut self) {
++        let wants = matches!(self.current_input_mode, WinlandInputMode::Mouse | WinlandInputMode::Trackpad);
++        match (wants, self.seat.get_pointer().is_some()) {
++            (true, false) => self.pointer = self.seat.add_pointer(),
++            (false, true) => {
++                self.seat.remove_pointer();
++                self.cursor_status = None;
++            }
++            _ => {}
++        }
++    }
++
+     pub(crate) fn clear_focused_surface(&mut self) {
+         self.focused_surface = None;
+         if let Some(keyboard) = self.keyboard.clone() {
+@@ -1087,33 +1109,52 @@ impl AndroidSeatRuntime {
+     /// The runtime and GL submission execute on the same compositor thread;
+     /// no client commits are dispatched between render_all and this call.
+     pub(crate) fn finish_presentation(&self) {
+-        use smithay::wayland::compositor::with_states;
+-        use smithay::wayland::presentation::{PresentationFeedbackCachedState, Refresh};
+-        use wayland_protocols::wp::presentation_time::server::wp_presentation_feedback;
+         let mut now = libc::timespec { tv_sec: 0, tv_nsec: 0 };
+         if unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut now) } != 0 { return; }
+-        let time = std::time::Duration::new(now.tv_sec as u64, now.tv_nsec as u32);
+-        let refresh = Refresh::fixed(std::time::Duration::from_secs_f64(
+-            1000.0 / crate::android::frame_clock::refresh_mhz() as f64));
+-        let finish = |surface: &WlSurface| {
+-            let callbacks = with_states(surface, |states| {
++        let time = now.tv_sec as u64 * 1_000_000_000 + now.tv_nsec as u64;
++        self.complete_presentation(self.take_presentation_feedback(), time, false);
++    }
++
++    /// Presentation feedback of the surfaces just submitted to Android.
++    pub(crate) fn take_presentation_feedback(&self) -> Vec<smithay::wayland::presentation::PresentationFeedbackCallback> {
++        use smithay::wayland::compositor::with_states;
++        use smithay::wayland::presentation::PresentationFeedbackCachedState;
++        let mut all = Vec::new();
++        let mut take = |surface: &WlSurface| {
++            all.extend(with_states(surface, |states| {
+                 std::mem::take(&mut states.cached_state
+                     .get::<PresentationFeedbackCachedState>().current().callbacks)
+-            });
+-            for feedback in callbacks {
+-                feedback.presented(&self.output, time, refresh, 0,
+-                    wp_presentation_feedback::Kind::empty());
+-            }
++            }));
+         };
+         for elem in self.space.elements() {
+             if let Some(surface) = elem.0.wl_surface() {
+-                finish(surface.as_ref());
++                take(surface.as_ref());
+                 for (popup, _) in PopupManager::popups_for_surface(surface.as_ref()) {
+-                    finish(popup.wl_surface());
++                    take(popup.wl_surface());
+                 }
+             }
+         }
+-        for surface in &self.unmanaged_surfaces { finish(surface); }
++        for surface in &self.unmanaged_surfaces { take(surface); }
++        all
++    }
++
++    /// Report a presentation. `hardware`: the time is the display's present fence
++    /// (zero-copy); otherwise a software estimate right after eglSwapBuffers.
++    pub(crate) fn complete_presentation(
++        &self,
++        callbacks: Vec<smithay::wayland::presentation::PresentationFeedbackCallback>,
++        time_ns: u64,
++        hardware: bool,
++    ) {
++        use smithay::wayland::presentation::Refresh;
++        use wayland_protocols::wp::presentation_time::server::wp_presentation_feedback::Kind;
++        let time = std::time::Duration::from_nanos(time_ns);
++        let refresh = Refresh::fixed(std::time::Duration::from_secs_f64(
++            1000.0 / crate::android::frame_clock::refresh_mhz() as f64));
++        let flags = if hardware { Kind::Vsync | Kind::HwClock | Kind::HwCompletion } else { Kind::empty() };
++        for feedback in callbacks {
++            feedback.presented(&self.output, time, refresh, 0, flags);
++        }
+     }
+ 
+     fn send_frame_callback(wl_surface: &WlSurface) {
+@@ -1198,7 +1239,21 @@ impl AndroidSeatRuntime {
+         Some(pixels)
+     }
+ 
++    /// The committed buffer of `surface` as Smithay's release-on-drop handle, if it
++    /// is `buffer`. Holding it delays wl_buffer.release (zero-copy presentation).
++    fn committed_buffer(surface: &WlSurface, buffer: &WlBuffer) -> Option<smithay::backend::renderer::utils::Buffer> {
++        use smithay::backend::renderer::utils::RendererSurfaceStateUserData;
++        smithay::wayland::compositor::with_states(surface, |states| {
++            states
++                .data_map
++                .get::<RendererSurfaceStateUserData>()
++                .and_then(|data| data.lock().ok())
++                .and_then(|guard| guard.buffer().filter(|b| *b == buffer).cloned())
++        })
++    }
++
+     fn try_get_dmabuf_render_item(
++        surface: &WlSurface,
+         buffer: &WlBuffer,
+         x: i32,
+         y: i32,
+@@ -1210,6 +1265,7 @@ impl AndroidSeatRuntime {
+         use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+ 
+         let dmabuf = get_dmabuf(buffer).ok()?;
++        let (acquire, release) = crate::android::backend::wayland::explicit_sync::current(surface);
+         let fd = dmabuf.handles().next()?;
+         let fourcc = dmabuf.format().code as u32;
+         let modifier: u64 = dmabuf.format().modifier.into();
+@@ -1226,7 +1282,7 @@ impl AndroidSeatRuntime {
+         unsafe { libc::fcntl(duped, libc::F_SETFD, libc::FD_CLOEXEC); }
+         let owned_fd = unsafe { OwnedFd::from_raw_fd(duped) };
+ 
+-        log::info!(
++        log::debug!(
+             "dmabuf render_item created fd={} fourcc=0x{:x} modifier=0x{:x} {}x{} stride={} offset={}",
+             owned_fd.as_raw_fd(), fourcc, modifier, width, height, stride, offset
+         );
+@@ -1243,6 +1299,9 @@ impl AndroidSeatRuntime {
+             y,
+             scale,
+             is_cursor,
++            hold: Self::committed_buffer(surface, buffer),
++            acquire,
++            release,
+         })
+     }
+ 
+@@ -1295,7 +1354,7 @@ impl AndroidSeatRuntime {
+                         .data::<smithay::wayland::shm::ShmBufferUserData>()
+                         .is_some();
+                     if !is_shm {
+-                        if let Some(item) = Self::try_get_dmabuf_render_item(&buffer, loc.x, loc.y, surface_scale, false) {
++                        if let Some(item) = Self::try_get_dmabuf_render_item(wl_surface, &buffer, loc.x, loc.y, surface_scale, false) {
+                             render_list.push(item);
+                         } else if log_this {
+                             log::warn!("  space[{}]: non-SHM and dmabuf read failed", idx);
+@@ -1400,7 +1459,7 @@ impl AndroidSeatRuntime {
+                             .data::<smithay::wayland::shm::ShmBufferUserData>()
+                             .is_none()
+                         {
+-                            if let Some(item) = Self::try_get_dmabuf_render_item(&buffer, abs_loc.x, abs_loc.y, popup_scale, false) {
++                            if let Some(item) = Self::try_get_dmabuf_render_item(popup_surface, &buffer, abs_loc.x, abs_loc.y, popup_scale, false) {
+                                 render_list.push(item);
+                             }
+                             continue;
+@@ -1459,7 +1518,7 @@ impl AndroidSeatRuntime {
+                     .data::<smithay::wayland::shm::ShmBufferUserData>()
+                     .is_some();
+                 if !is_shm {
+-                    if let Some(item) = Self::try_get_dmabuf_render_item(&buffer, 0, self.reserved_top, surface_scale, false) {
++                    if let Some(item) = Self::try_get_dmabuf_render_item(s, &buffer, 0, self.reserved_top, surface_scale, false) {
+                         render_list.push(item);
+                     } else if log_this {
+                         log::warn!("  unmanaged[{}]: non-SHM and dmabuf read failed", idx);
+@@ -1539,7 +1598,10 @@ impl AndroidSeatRuntime {
+         // ── Cursor overlay ──
+         let cursor_pos = self.pointer.current_location();
+ 
+-        if let Some(ref cursor_status) = self.cursor_status {
++        // Touch mode has no pointer: drawing the cursor put a stray arrow at the
++        // last pointer position (top-left) and kept every frame off zero-copy.
++        let pointer_mode = matches!(self.current_input_mode, WinlandInputMode::Mouse | WinlandInputMode::Trackpad);
++        if let Some(ref cursor_status) = self.cursor_status.as_ref().filter(|_| pointer_mode) {
+             match cursor_status {
+                 CursorImageStatus::Hidden => {}
+                 CursorImageStatus::Named(_) => {
+@@ -1586,7 +1648,7 @@ impl AndroidSeatRuntime {
+                                 .data::<smithay::wayland::shm::ShmBufferUserData>()
+                                 .is_none()
+                             {
+-                                if let Some(item) = Self::try_get_dmabuf_render_item(&buffer, cx, cy, surface_scale, true)
++                                if let Some(item) = Self::try_get_dmabuf_render_item(wl_surface, &buffer, cx, cy, surface_scale, true)
+                                 {
+                                     render_list.push(item);
+                                 } else if log_this {
+diff --git a/src/android/mod.rs b/src/android/mod.rs
+index 3d5f01a..b08c08b 100644
+--- a/src/android/mod.rs
++++ b/src/android/mod.rs
+@@ -11,5 +11,7 @@ pub mod bridge_clipboard;   // الحافظة (updateClipboard, sendClipboardTex
+ pub mod bridge_lifecycle;   // دورة حياة العرض (suspendRendering, resumeRendering)
+ 
+ pub mod gpu_allocator;
++#[cfg(feature = "smithay_android")]
++pub mod surface_control;
+ 
+ pub mod frame_clock;
+diff --git a/src/compositor.rs b/src/compositor.rs
+index 5d2c20a..c511b41 100644
+--- a/src/compositor.rs
++++ b/src/compositor.rs
+@@ -457,7 +457,22 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+             flush_deferred_composite(&mut backend_state, &render_rx);
+             if crate::android::frame_clock::presented_count() != presents_before {
+                 if let Some(server) = wayland_server.as_mut() {
+-                    server.runtime.finish_presentation();
++                    // Zero-copy frames are reported when SurfaceFlinger presents them.
++                    let unclaimed = backend_state.presenter.as_mut().and_then(|p| p.take_unclaimed_frame());
++                    match unclaimed.filter(|_| crate::android::surface_control::hardware_feedback()) {
++                        Some(id) => {
++                            let callbacks = server.runtime.take_presentation_feedback();
++                            if let Some(presenter) = backend_state.presenter.as_mut() {
++                                presenter.attach_feedback(id, callbacks);
++                            }
++                        }
++                        None => server.runtime.finish_presentation(),
++                    }
++                }
++            }
++            if let (Some(server), Some(presenter)) = (wayland_server.as_mut(), backend_state.presenter.as_mut()) {
++                for presented in presenter.drain_presented() {
++                    server.runtime.complete_presentation(presented.callbacks, presented.time_ns, presented.hardware);
+                 }
+             }
+             render_background_tick(&backend_state);
+@@ -485,14 +500,15 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+                         .map(|s| format!("{:?}", s.id()))
+                         .unwrap_or_else(|| "none".to_string());
+                     let stats = format!(
+-                        "windows={} unmanaged={} focus={} injected={} dispatch={} focus_decision={} cursor={}",
++                        "windows={} unmanaged={} focus={} injected={} dispatch={} focus_decision={} cursor={} {}",
+                         server.runtime.space.elements().count(),
+                         server.runtime.unmanaged_surfaces.len(),
+                         focused,
+                         server.runtime.injected_events,
+                         server.runtime.last_seat_dispatch,
+                         server.runtime.last_focus_decision,
+-                        server.runtime.last_cursor_mode
++                        server.runtime.last_cursor_mode,
++                        crate::android::surface_control::stats()
+                     );
+                     crate::android::command_channel::set_runtime_stats(stats);
+                 }

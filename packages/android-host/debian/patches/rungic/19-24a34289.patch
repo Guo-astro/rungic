@@ -1,0 +1,509 @@
+From: Rungic <noreply@rungic.invalid>
+Date: Wed, 30 Sep 2026 12:34:38 +0800
+Subject: Agent workspaces: a KWin of the agent's own on the Android host,
+ shown in the float, fullscreen or on the TV (docs/research/91)
+
+Preserve the deployed implementation during the source/patch migration.
+
+Origin: vendor, RungicCore commit:24a34289ebf0ae4203adb279227a8ef6ef40dd20
+Forwarded: no
+Last-Update: 2026-09-30
+X-Rungic-Status: Inappropriate; Android host integration
+X-Rungic-Tests: L0:source-replay; L1:android-cross-build (host); runtime scope in docs/73
+X-Rungic-Docs: docs/73; docs/49; docs/research/91
+---
+ src/android/backend/wayland/handlers.rs | 37 ++++++++++++-
+ src/android/backend/wayland/seat.rs     | 97 +++++++++++++++++++++++++--------
+ src/android/backend/wayland/server.rs   | 65 ++++++++++++++++++++++
+ src/android/bridge_surface.rs           | 11 ++++
+ src/android/command_channel.rs          |  3 +
+ src/compositor.rs                       | 71 ++++++++++++++----------
+ 6 files changed, 230 insertions(+), 54 deletions(-)
+
+diff --git a/src/android/backend/wayland/handlers.rs b/src/android/backend/wayland/handlers.rs
+index 0943525..2d2b723 100644
+--- a/src/android/backend/wayland/handlers.rs
++++ b/src/android/backend/wayland/handlers.rs
+@@ -261,10 +261,27 @@ impl CompositorHandler for AndroidSeatRuntime {
+             .get(surface)
+             .and_then(|w| w.x11_surface())
+             .is_some();
++        // Never drawn as a surface of their own on the phone: one without a role (KWin commits its
++        // pointer's cursor surface before giving it one), a pointer's cursor image and a subsurface
++        // (KWin's cursor layer is a subsurface of its output's window). With no second output the
++        // pointer sat on the phone's, and KWin's cursor was drawn at the phone's top-left corner
++        // on a black square. Nor anything of an agent workspace's KWin (docs/research/91), shown
++        // only through its output's window and the presenter. A surface may get its role after its
++        // first commit: it leaves the list then. (Windows, layer surfaces and input-method popups
++        // have their roles before they commit.)
++        let role = smithay::wayland::compositor::get_role(surface);
++        let part = role.is_none() || role == Some(smithay::wayland::seat::CURSOR_IMAGE_ROLE)
++            || role == Some(smithay::wayland::compositor::SUBSURFACE_ROLE);
++        if part {
++            self.unmanaged_surfaces.retain(|s| s != surface);
++        }
++        let from_workspace = surface
++            .client()
++            .is_some_and(|client| crate::android::backend::wayland::server::client_workspace(&client) != 0);
+         let is_new_unmanaged = if let Some(window) = self.wl_to_window.get(surface) {
+             window.on_commit();
+             false
+-        } else if !self.unmanaged_surfaces.contains(surface) {
++        } else if !part && !from_workspace && !self.unmanaged_surfaces.contains(surface) {
+             self.unmanaged_surfaces.push(surface.clone());
+             true
+         } else {
+@@ -384,6 +401,7 @@ impl CompositorHandler for AndroidSeatRuntime {
+             root = parent;
+         }
+         crate::android::backend::wayland::engine_timing::note_commit(self.is_cast_surface(&root));
++        self.note_workspace_commit(&root);
+ 
+         self.sync_text_input_to_android();
+     }
+@@ -423,8 +441,14 @@ impl XdgShellHandler for AndroidSeatRuntime {
+         let window = Window::new_wayland_window(surface);
+         let elem = WindowElement(window.clone());
+ 
+-        let pos = Point::<i32, Logical>::from((0, self.reserved_top));
+-        self.space.map_element(elem, pos, true);
++        // A workspace's window starts outside the phone too: no touch of the phone hits it.
++        let workspace = wl_surface.client().map_or(0, |client| crate::android::backend::wayland::server::client_workspace(&client));
++        let pos = if workspace != 0 {
++            Point::<i32, Logical>::from((100_000 + workspace as i32 * 10_000, 0))
++        } else {
++            Point::<i32, Logical>::from((0, self.reserved_top))
++        };
++        self.space.map_element(elem, pos, workspace == 0);
+         self.wl_to_window.insert(wl_surface.clone(), window);
+ 
+         let ft_handle = self
+@@ -434,6 +458,13 @@ impl XdgShellHandler for AndroidSeatRuntime {
+         self.foreign_toplevel_handles
+             .insert(wl_surface.clone(), ft_handle);
+ 
++        // An agent workspace's KWin (docs/research/91) never takes the phone's focus: its only
++        // window goes fullscreen on its own output (claim_cast_window).
++        if workspace != 0 {
++            log::info!("workspace {workspace}: toplevel created (no focus)");
++            return;
++        }
++
+         log::info!("SmithayRuntime: xdg toplevel configured, setting focus to surface");
+         self.focused_surface = Some(wl_surface.clone());
+ 
+diff --git a/src/android/backend/wayland/seat.rs b/src/android/backend/wayland/seat.rs
+index 6368f90..878f6bb 100644
+--- a/src/android/backend/wayland/seat.rs
++++ b/src/android/backend/wayland/seat.rs
+@@ -241,6 +241,17 @@ pub struct AndroidSeatRuntime {
+     pub(crate) wl_to_window: HashMap<WlSurface, Window>,
+     /// Miracast TV output and its window (cast.rs).
+     pub(crate) cast: Option<crate::android::backend::wayland::cast::CastOutput>,
++    /// Agent workspaces, one per slot (ws-1 ..): each an output of its own KWin (cast.rs,
++    /// docs/research/91).
++    pub(crate) workspaces: Vec<Option<crate::android::backend::wayland::cast::CastOutput>>,
++    /// The source the TV or fullscreen presenter shows: 0 the cast output, n workspace n.
++    pub(crate) presented: usize,
++    /// The source asked for (the platform bridge): a workspace whose KWin is not there
++    /// yet is presented when it connects; until then the presenter shows nothing.
++    pub(crate) wanted_source: usize,
++    /// A TV or fullscreen window is bound: its size and refresh (the cast output's when it
++    /// presents the user's desktop without the assistant's screen).
++    pub(crate) cast_window: Option<((i32, i32), i32)>,
+     /// The assistant's screen is on: size and refresh of the second output it keeps (docs/65).
+     pub(crate) agent_screen: Option<((i32, i32), i32)>,
+     /// Newest buffer of the cast window, taken by the compositor loop after render_all.
+@@ -646,6 +657,10 @@ impl AndroidSeatRuntime {
+             cast: None,
+             agent_screen: None,
+             pending_cast_frame: None,
++            workspaces: (0..crate::android::backend::wayland::server::WORKSPACE_SLOTS).map(|_| None).collect(),
++            presented: 0,
++            wanted_source: 0,
++            cast_window: None,
+             pacing: OutputPacing::default(),
+             cast_pointer: false,
+             unmanaged_surfaces: Vec::new(),
+@@ -1184,10 +1199,15 @@ impl AndroidSeatRuntime {
+     /// refresh rate. With the phone's rate KWin kept switching the TV output's
+     /// mode (120 Hz in front, 30 Hz with the app in the background).
+     pub(crate) fn finish_cast_presentation(&self) {
++        self.finish_source_presentation(self.presented);
++    }
++
++    /// Report the frame of source `slot` (0 the cast output, n a workspace) as presented.
++    pub(crate) fn finish_source_presentation(&self, slot: usize) {
+         use smithay::wayland::compositor::with_states;
+         use smithay::wayland::presentation::{PresentationFeedbackCachedState, Refresh};
+         use wayland_protocols::wp::presentation_time::server::wp_presentation_feedback::Kind;
+-        let Some(cast) = self.cast.as_ref() else { return };
++        let Some(cast) = self.source(slot) else { return };
+         let Some(surface) = cast.surface.as_ref() else { return };
+         let callbacks = with_states(surface, |states| {
+             let mut cached = states.cached_state.get::<PresentationFeedbackCachedState>();
+@@ -1233,29 +1253,54 @@ impl AndroidSeatRuntime {
+     /// The cast window: take its new frame for the presenter and release its frame
+     /// callbacks, at its own pace and only after it committed.
+     fn render_cast(&mut self, now: std::time::Instant) {
+-        use smithay::wayland::compositor::{with_states, SurfaceAttributes};
+-        let Some(surface) = self.cast.as_ref().and_then(|c| c.surface.clone()) else { return };
+-        if !surface.is_alive() {
+-            return;
++        // The user's cast output, paced as before (docs/65).
++        if let Some(surface) = self.cast.as_ref().and_then(|c| c.surface.clone()).filter(|s| s.is_alive()) {
++            let commits = engine_timing::cast_commit_count();
++            let pending = commits != self.pacing.cast_commits_seen || self.pacing.cast_deferred;
++            let interval = if self.presented == 0 { self.pacing.cast_interval } else { None };
++            let p = &mut self.pacing;
++            if OutputPacing::take_turn(pending, interval, &mut p.last_cast_frame, &mut p.cast_deferred, &mut p.due, now) {
++                self.pacing.cast_commits_seen = commits;
++                self.pacing.cast_turns += 1;
++                self.take_source_frame(0, &surface);
++            }
+         }
+-        let commits = engine_timing::cast_commit_count();
+-        let pending = commits != self.pacing.cast_commits_seen || self.pacing.cast_deferred;
+-        let p = &mut self.pacing;
+-        if !OutputPacing::take_turn(pending, p.cast_interval, &mut p.last_cast_frame, &mut p.cast_deferred, &mut p.due, now) {
+-            return;
++        // Agent workspaces: at their own pace, the presented one at the presenter's.
++        for slot in 1..=self.workspaces.len() {
++            let presented = self.presented == slot;
++            let interval = if presented { self.pacing.cast_interval } else { None };
++            let Some(workspace) = self.workspaces[slot - 1].as_mut() else { continue };
++            let Some(surface) = workspace.surface.clone().filter(|s| s.is_alive()) else { continue };
++            let pending = workspace.commits != workspace.commits_seen || workspace.deferred;
++            if !OutputPacing::take_turn(pending, interval, &mut workspace.last_frame, &mut workspace.deferred, &mut self.pacing.due, now) {
++                continue;
++            }
++            workspace.commits_seen = workspace.commits;
++            self.take_source_frame(slot, &surface);
+         }
+-        self.pacing.cast_commits_seen = commits;
+-        self.pacing.cast_turns += 1;
+-        if let Some(buffer) = Self::get_surface_buffer(&surface) {
+-            if crate::android::backend::wayland::cast::take_new_buffer(self.cast.as_mut(), &buffer) {
+-                let scale = with_states(&surface, |states| {
+-                    states.cached_state.get::<SurfaceAttributes>().current().buffer_scale.max(1)
+-                }) as f32;
+-                self.pending_cast_frame = Self::try_get_dmabuf_render_item(&surface, &buffer, 0, 0, scale, false);
++    }
++
++    /// A turn of source `slot`: the presented one hands its new frame to the presenter (and
++    /// is reported when the loop presents it); every other gets its frame reported at once.
++    fn take_source_frame(&mut self, slot: usize, surface: &WlSurface) {
++        use smithay::wayland::compositor::{with_states, SurfaceAttributes};
++        // A workspace presented while no TV or fullscreen window is bound (the floating window
++        // records it in its own KWin) is reported at once like any other.
++        if slot == self.presented && (slot == 0 || self.cast_window.is_some()) {
++            if let Some(buffer) = Self::get_surface_buffer(surface) {
++                if crate::android::backend::wayland::cast::take_new_buffer(self.source_mut(slot), &buffer) {
++                    let scale = with_states(surface, |states| {
++                        states.cached_state.get::<SurfaceAttributes>().current().buffer_scale.max(1)
++                    }) as f32;
++                    self.pending_cast_frame = Self::try_get_dmabuf_render_item(surface, &buffer, 0, 0, scale, false);
++                }
+             }
++            Self::send_frame_callback(surface);
++            self.pacing.cast_released = true;
++        } else {
++            Self::send_frame_callback(surface);
++            self.finish_source_presentation(slot);
+         }
+-        Self::send_frame_callback(&surface);
+-        self.pacing.cast_released = true;
+     }
+ 
+     /// KWin renders the next frame of an output as soon as the previous one is reported
+@@ -1271,9 +1316,17 @@ impl AndroidSeatRuntime {
+             });
+         };
+         let (phone, cast) = (self.pacing.phone_interval.is_some(), self.pacing.cast_interval.is_some());
++        let presented = self.presented_surface().cloned();
+         for elem in self.space.elements() {
+             if let Some(surface) = elem.0.wl_surface() {
+-                let hold = if self.is_cast_surface(surface.as_ref()) { cast } else { phone };
++                // The presented source at the presenter's pace; other workspaces are not held.
++                let hold = if presented.as_ref() == Some(surface.as_ref()) {
++                    cast
++                } else if self.is_cast_surface(surface.as_ref()) {
++                    self.cast.as_ref().and_then(|c| c.surface.as_ref()) == Some(surface.as_ref()) && cast
++                } else {
++                    phone
++                };
+                 set(surface.as_ref(), hold);
+             }
+         }
+@@ -1893,7 +1946,7 @@ pub(crate) struct OutputPacing {
+     cast_commits_seen: u64,
+     /// A change held back by the interval (or a render list the consumer dropped).
+     phone_deferred: bool,
+-    cast_deferred: bool,
++    pub(crate) cast_deferred: bool,
+     last_phone_frame: Option<std::time::Instant>,
+     last_cast_frame: Option<std::time::Instant>,
+     /// When a held-back output is due; the loop wakes for it.
+diff --git a/src/android/backend/wayland/server.rs b/src/android/backend/wayland/server.rs
+index 80c73ce..0bf3880 100644
+--- a/src/android/backend/wayland/server.rs
++++ b/src/android/backend/wayland/server.rs
+@@ -40,6 +40,19 @@ const XWAYLAND_MAX_RECONNECT_ATTEMPTS: u32 = 20;
+ #[derive(Default)]
+ pub(crate) struct WaylandClientState {
+     pub(crate) compositor_state: CompositorClientState,
++    /// The workspace the client belongs to (docs/research/91): 0 the user's (wayland-0), 1..
++    /// an agent's KWin, connected through ws-<n>.
++    pub(crate) workspace: usize,
++}
++
++/// Workspace slots the host listens for (ws-1 .. ws-<N>, docs/research/91).
++#[cfg(feature = "smithay_android")]
++pub(crate) const WORKSPACE_SLOTS: usize = 4;
++
++/// The workspace a client belongs to (0: the user's; XWayland and unknown clients too).
++#[cfg(feature = "smithay_android")]
++pub(crate) fn client_workspace(client: &smithay::reexports::wayland_server::Client) -> usize {
++    client.get_data::<WaylandClientState>().map_or(0, |state| state.workspace)
+ }
+ 
+ #[cfg(feature = "smithay_android")]
+@@ -164,6 +177,8 @@ pub struct WaylandServer {
+     pub(crate) runtime: AndroidSeatRuntime,
+     display: Display<AndroidSeatRuntime>,
+     listener: ListeningSocket,
++    /// ws-1 .. ws-N: one agent workspace's KWin each (docs/research/91).
++    workspace_listeners: Vec<ListeningSocket>,
+     socket_name: String,
+     socket_path: PathBuf,
+     accepted_clients: u64,
+@@ -311,6 +326,29 @@ impl WaylandServer {
+             socket_dir.display()
+         );
+ 
++        // Agent workspaces (docs/research/91): a KWin per workspace connects to ws-<n>; its
++        // output is its own and nobody else sees it.
++        let mut workspace_listeners = Vec::new();
++        for slot in 1..=WORKSPACE_SLOTS {
++            let path = socket_dir.join(format!("ws-{slot}"));
++            let _ = fs::remove_file(&path);
++            let _ = fs::remove_file(socket_dir.join(format!("ws-{slot}.lock")));
++            match ListeningSocket::bind_absolute(path.clone()) {
++                Ok(listener) => {
++                    if let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) {
++                        // SAFETY: valid C string, dirfd + flag constants only.
++                        unsafe { libc::fchmodat(libc::AT_FDCWD, c_path.as_ptr(), 0o666, libc::AT_SYMLINK_NOFOLLOW) };
++                    }
++                    workspace_listeners.push(listener);
++                }
++                Err(error) => {
++                    log::warn!("workspace: cannot listen on {}: {error}", path.display());
++                    break;
++                }
++            }
++        }
++        log::info!("workspace: {} slots listening", workspace_listeners.len());
++
+         log::info!(
+             "SmithayRuntime: WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR={}",
+             socket_dir.display()
+@@ -322,6 +360,7 @@ impl WaylandServer {
+             runtime,
+             display,
+             listener,
++            workspace_listeners,
+             socket_name: "wayland-0".to_string(),
+             socket_path,
+             accepted_clients: 0,
+@@ -566,6 +605,32 @@ impl WaylandServer {
+             }
+         }
+ 
++        // Agent workspaces: one KWin per slot; its output comes with it and goes with it.
++        for index in 0..self.workspace_listeners.len() {
++            let slot = index + 1;
++            loop {
++                let stream = match self.workspace_listeners[index].accept() {
++                    Ok(Some(stream)) => stream,
++                    Ok(None) => break,
++                    Err(error) => {
++                        log::warn!("workspace {slot}: accept failed: {error}");
++                        break;
++                    }
++                };
++                let state = Arc::new(WaylandClientState { workspace: slot, ..Default::default() });
++                match self.display.handle().insert_client(stream, state) {
++                    Ok(client) => {
++                        self.accepted_clients += 1;
++                        log::info!("workspace {slot}: client connected");
++                        self.runtime.workspace_client_connected(slot, client.id());
++                    }
++                    Err(error) => log::warn!("workspace {slot}: failed to add client: {error}"),
++                }
++            }
++        }
++        let handle = self.display.handle();
++        self.runtime.drop_gone_workspaces(|id| handle.backend_handle().get_client_data(id.clone()).is_ok());
++
+         if self.xwayland_event_loop.is_none() {
+             let display = crate::android::command_channel::get_xwayland_display();
+             if display >= 0 {
+diff --git a/src/android/bridge_surface.rs b/src/android/bridge_surface.rs
+index 780cce1..940b75b 100644
+--- a/src/android/bridge_surface.rs
++++ b/src/android/bridge_surface.rs
+@@ -189,6 +189,17 @@ pub extern "system" fn Java_com_winland_server_NativeBridge_castPointer(
+     crate::android::command_channel::send_command(crate::android::command_channel::JniCommand::CastPointer { op, x, y });
+ }
+ 
++/// Which source the TV or fullscreen presenter shows (0 the cast output, n agent workspace n;
++/// docs/research/91).
++#[no_mangle]
++pub extern "system" fn Java_com_winland_server_NativeBridge_presentWorkspace(
++    _env: JNIEnv,
++    _class: JClass,
++    slot: jni::sys::jint,
++) {
++    crate::android::command_channel::send_command(crate::android::command_channel::JniCommand::PresentWorkspace { slot });
++}
++
+ #[no_mangle]
+ pub extern "system" fn Java_com_winland_server_NativeBridge_sendRelativeMotion(
+     _env: JNIEnv,
+diff --git a/src/android/command_channel.rs b/src/android/command_channel.rs
+index af5ddab..3e7fdd7 100644
+--- a/src/android/command_channel.rs
++++ b/src/android/command_channel.rs
+@@ -70,6 +70,9 @@ pub enum JniCommand {
+     /// pressed), 3 finger scroll (x, y in TV pixels), 4 scroll stop,
+     /// 5 absolute position (x, y in the output's pixels; fullscreen touch, docs/65).
+     CastPointer { op: i32, x: f32, y: f32 },
++    /// Which source the TV or fullscreen presenter shows (docs/research/91): 0 the cast
++    /// output (the user's desktop or the assistant's screen), n agent workspace n.
++    PresentWorkspace { slot: i32 },
+     SurfaceChanged {
+         width: i32,
+         height: i32,
+diff --git a/src/compositor.rs b/src/compositor.rs
+index 42b0c46..2c3c279 100644
+--- a/src/compositor.rs
++++ b/src/compositor.rs
+@@ -144,7 +144,7 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+             let mut phone_commands = 0u32;
+             while let Ok(cmd) = cmd_rx.try_recv() {
+                 commands_this_spin += 1;
+-                if !matches!(cmd, JniCommand::CastPointer { .. } | JniCommand::GetRuntimeStats { .. }
++                if !matches!(cmd, JniCommand::CastPointer { .. } | JniCommand::PresentWorkspace { .. } | JniCommand::GetRuntimeStats { .. }
+                     | JniCommand::GetSurfaceSize { .. } | JniCommand::GetScrollSensitivity { .. }
+                     | JniCommand::GetBackendSnapshot { .. }) {
+                     phone_commands += 1;
+@@ -352,50 +352,46 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+                             if let Some(server) = wayland_server.as_mut() {
+                                 // With the assistant's screen on, the TV presents that output as it
+                                 // is (the host scales the frames to the window); nothing moves.
+-                                match server.runtime.agent_screen {
+-                                    Some((size, refresh)) if server.runtime.cast.is_none() => {
+-                                        server.runtime.add_cast_output(size, refresh)
+-                                    }
+-                                    Some(_) => {}
+-                                    None => server.runtime.add_cast_output((width, height), refresh_mhz),
+-                                }
++                                // Without it, the user's desktop gets an output of the TV's size,
++                                // unless a workspace is presented (sync_user_cast).
++                                let rt = &mut server.runtime;
++                                rt.cast_window = Some(((width, height), refresh_mhz));
++                                rt.sync_user_cast();
+                                 // A new presenter starts empty: hand it the current frame.
+-                                if let Some(cast) = server.runtime.cast.as_mut() {
+-                                    cast.last_buffer = None;
++                                let presented = rt.presented;
++                                if let Some(source) = rt.source_mut(presented) {
++                                    source.last_buffer = None;
+                                 }
+                             }
+                         }
+                     }
+                     JniCommand::ReleaseCastWindow => {
+                         if let Some(server) = wayland_server.as_mut() {
+-                            if server.runtime.agent_screen.is_some() {
+-                                // Back to the floating window: the output stays, frames go nowhere.
+-                                if let Some(cast) = server.runtime.cast.as_mut() {
+-                                    cast.last_buffer = None;
+-                                }
+-                            } else {
+-                                server.runtime.remove_cast_output();
++                            // Back to the floating window: the output stays while the assistant's
++                            // screen is on, frames go nowhere.
++                            let rt = &mut server.runtime;
++                            rt.cast_window = None;
++                            let presented = rt.presented;
++                            if let Some(source) = rt.source_mut(presented) {
++                                source.last_buffer = None;
+                             }
++                            rt.sync_user_cast();
+                         }
+                         crate::android::backend::smithay_backend::release_cast_window(&mut backend_state);
+                     }
+                     JniCommand::AgentScreen { enabled, width, height, refresh_mhz } => {
+                         if let Some(server) = wayland_server.as_mut() {
+                             let rt = &mut server.runtime;
+-                            if enabled && width > 0 && height > 0 {
+-                                rt.agent_screen = Some(((width, height), refresh_mhz));
+-                                if rt.cast.is_none() {
+-                                    rt.add_cast_output((width, height), refresh_mhz);
+-                                }
+-                            } else {
+-                                rt.agent_screen = None;
+-                                if backend_state.cast.is_none() {
+-                                    rt.remove_cast_output();
+-                                }
+-                            }
++                            rt.agent_screen = (enabled && width > 0 && height > 0).then_some(((width, height), refresh_mhz));
++                            rt.sync_user_cast();
+                             log::info!("agent screen: {}", if enabled { "on" } else { "off" });
+                         }
+                     }
++                    JniCommand::PresentWorkspace { slot } => {
++                        if let Some(server) = wayland_server.as_mut() {
++                            server.runtime.present_source(slot.max(0) as usize);
++                        }
++                    }
+                     JniCommand::CastPointer { op, x, y } => {
+                         if let Some(server) = wayland_server.as_mut() {
+                             let rt = &mut server.runtime;
+@@ -658,10 +654,26 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+                             crate::android::backend::wayland::engine_timing::commit_count()),
+                         None => "cast(none)".to_string(),
+                     };
++                    // Agent workspaces (docs/research/91): slot, whether its KWin's window is claimed.
++                    let workspaces = format!("workspaces(presented={} {})", server.runtime.presented,
++                        server.runtime.workspaces.iter().enumerate()
++                            .map(|(i, w)| match w {
++                                Some(w) => format!("{}:{}", i + 1, if w.surface.is_some() { "window" } else { "output" }),
++                                None => format!("{}:-", i + 1),
++                            })
++                            .collect::<Vec<_>>().join(","));
++                    // What each unmanaged surface is: its role, its client's workspace, its buffer.
++                    let unmanaged = server.runtime.unmanaged_surfaces.iter().map(|surface| {
++                        use smithay::reexports::wayland_server::Resource;
++                        let role = smithay::wayland::compositor::get_role(surface).unwrap_or("none");
++                        let slot = surface.client().map_or(0, |c| crate::android::backend::wayland::server::client_workspace(&c));
++                        format!("{}:{}:ws{}", surface.id().protocol_id(), role, slot)
++                    }).collect::<Vec<_>>().join(",");
+                     let stats = format!(
+-                        "windows={} unmanaged={} focus={} injected={} dispatch={} focus_decision={} cursor={} {} {} {} {}",
++                        "windows={} unmanaged={}[{}] focus={} injected={} dispatch={} focus_decision={} cursor={} {} {} {} {} {}",
+                         server.runtime.space.elements().count(),
+                         server.runtime.unmanaged_surfaces.len(),
++                        unmanaged,
+                         focused,
+                         server.runtime.injected_events,
+                         server.runtime.last_seat_dispatch,
+@@ -671,6 +683,7 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+                         crate::android::frame_clock::stats(),
+                         cast,
+                         server.runtime.pacing.stats(),
++                        workspaces,
+                     );
+                     crate::android::command_channel::set_runtime_stats(stats);
+                 }

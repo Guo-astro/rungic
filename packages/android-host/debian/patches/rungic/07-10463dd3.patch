@@ -1,0 +1,103 @@
+From: Rungic <noreply@rungic.invalid>
+Date: Wed, 30 Sep 2026 12:34:37 +0800
+Subject: Host input: text-input without an IME client,
+ correct Android key codes
+
+Preserve the deployed implementation during the source/patch migration.
+
+Origin: vendor, RungicCore commit:10463dd342ed57327ef96cda282db35f7a4daaf1
+Forwarded: no
+Last-Update: 2026-09-30
+X-Rungic-Status: Inappropriate; Android host integration
+X-Rungic-Tests: L0:source-replay; L1:android-cross-build (host); runtime scope in docs/73
+X-Rungic-Docs: docs/73; docs/49; docs/research/91
+---
+ src/android/backend/wayland/keymap.rs | 45 +++++++++++++++++++----------------
+ 1 file changed, 25 insertions(+), 20 deletions(-)
+
+diff --git a/src/android/backend/wayland/keymap.rs b/src/android/backend/wayland/keymap.rs
+index 800560c..961a282 100644
+--- a/src/android/backend/wayland/keymap.rs
++++ b/src/android/backend/wayland/keymap.rs
+@@ -37,7 +37,9 @@ pub fn unicode_to_keycode(
+     None
+ }
+ 
+-// Maps Android KeyEvent keycodes to Linux evdev key codes, then converts to xkb keycode (+8).
++// Maps Android KeyEvent keycodes to Linux evdev key codes (linux/input-event-codes.h),
++// then converts to xkb keycode (+8). Punctuation, Home/End/Insert/SysRq and keypad
++// divide/multiply/dot were off by one entry before 2026-09-24 (docs/58 step 3).
+ pub fn android_keycode_to_xkb_scancode(android_keycode: i32) -> u32 {
+ 	let evdev = match android_keycode {
+ 		// Digits 0-9
+@@ -87,16 +89,16 @@ pub fn android_keycode_to_xkb_scancode(android_keycode: i32) -> u32 {
+ 		22 => 106, // DPAD_RIGHT
+ 		92 => 104, // PAGE_UP
+ 		93 => 109, // PAGE_DOWN
+-		122 => 110, // MOVE_HOME
+-		123 => 115, // MOVE_END
++		122 => 102, // MOVE_HOME
++		123 => 107, // MOVE_END
+ 		112 => 111, // FORWARD_DEL
+-		124 => 210, // INSERT
++		124 => 110, // INSERT
+ 		61 => 15,  // TAB
+ 		62 => 57,  // SPACE
+ 		66 => 28,  // ENTER
+ 		67 => 14,  // DEL/BACKSPACE
+ 		111 => 1,  // ESCAPE
+-		120 => 119, // SYSRQ/PRINTSCREEN
++		120 => 99,  // SYSRQ/PRINTSCREEN
+ 		116 => 70,  // SCROLL_LOCK
+ 		121 => 119, // BREAK (best-effort mapping)
+ 		82 => 127,  // MENU
+@@ -114,17 +116,19 @@ pub fn android_keycode_to_xkb_scancode(android_keycode: i32) -> u32 {
+ 		142 => 88,  // F12
+ 
+ 		// Punctuation
+-		55 => 52, // COMMA
+-		56 => 53, // PERIOD
+-		68 => 12, // GRAVE
+-		69 => 13, // MINUS
+-		70 => 26, // EQUALS
+-		71 => 27, // LEFT_BRACKET
+-		72 => 43, // RIGHT_BRACKET
+-		73 => 39, // BACKSLASH
+-		74 => 40, // SEMICOLON
+-		75 => 51, // APOSTROPHE
+-		76 => 41, // SLASH
++		55 => 51, // COMMA
++		56 => 52, // PERIOD
++		68 => 41, // GRAVE
++		69 => 12, // MINUS
++		70 => 13, // EQUALS
++		71 => 26, // LEFT_BRACKET
++		72 => 27, // RIGHT_BRACKET
++		73 => 43, // BACKSLASH
++		74 => 39, // SEMICOLON
++		75 => 40, // APOSTROPHE
++		76 => 53, // SLASH
++		81 => 78, // PLUS (keypad plus: no unshifted '+' key on a US layout)
++		17 => 55, // STAR (keypad asterisk)
+ 
+ 		// Modifiers
+ 		57 => 56,  // ALT_LEFT
+@@ -147,13 +151,14 @@ pub fn android_keycode_to_xkb_scancode(android_keycode: i32) -> u32 {
+ 		151 => 71,  // NUMPAD_7
+ 		152 => 72,  // NUMPAD_8
+ 		153 => 73,  // NUMPAD_9
+-		154 => 55,  // NUMPAD_DIVIDE
+-		155 => 98,  // NUMPAD_MULTIPLY
++		154 => 98,  // NUMPAD_DIVIDE
++		155 => 55,  // NUMPAD_MULTIPLY
+ 		156 => 74,  // NUMPAD_SUBTRACT
+ 		157 => 78,  // NUMPAD_ADD
+-		158 => 96,  // NUMPAD_DOT
+-		160 => 28,  // NUMPAD_ENTER
++		158 => 83,  // NUMPAD_DOT
++		160 => 96,  // NUMPAD_ENTER
+ 		143 => 69,  // NUM_LOCK
++		115 => 58,  // CAPS_LOCK
+ 
+ 		// Unknown: drop with a warning instead of passing through as fake
+ 		// evdev (numeric collisions with the 0..256 range produce wrong

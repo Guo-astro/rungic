@@ -1,0 +1,607 @@
+From: Rungic <noreply@rungic.invalid>
+Date: Wed, 30 Sep 2026 12:34:38 +0800
+Subject: Output pacing: an output nobody sees gets frames at a low rate;
+ outputs no longer repaint each other (docs/65)
+
+Preserve the deployed implementation during the source/patch migration.
+
+Origin: vendor, RungicCore commit:ecdfacecad4b1f485ddc8bab50e2535bdcb50f4f
+Forwarded: no
+Last-Update: 2026-09-30
+X-Rungic-Status: Inappropriate; Android host integration
+X-Rungic-Tests: L0:source-replay; L1:android-cross-build (host); runtime scope in docs/73
+X-Rungic-Docs: docs/73; docs/49; docs/research/91
+---
+ src/android/backend/wayland/engine_timing.rs |  70 +++++++++-
+ src/android/backend/wayland/handlers.rs      |   6 +-
+ src/android/backend/wayland/seat.rs          | 186 ++++++++++++++++++++++++---
+ src/android/bridge_lifecycle.rs              |  35 +++++
+ src/compositor.rs                            |  69 ++++++++--
+ 5 files changed, 330 insertions(+), 36 deletions(-)
+
+diff --git a/src/android/backend/wayland/engine_timing.rs b/src/android/backend/wayland/engine_timing.rs
+index c5c91d1..d826358 100644
+--- a/src/android/backend/wayland/engine_timing.rs
++++ b/src/android/backend/wayland/engine_timing.rs
+@@ -18,6 +18,58 @@ pub fn is_rendering_active() -> bool {
+     RENDERING_ACTIVE.load(Ordering::Relaxed)
+ }
+ 
++// Output pacing (docs/65). An output nobody sees is still rendered, at a low rate: its
++// windows get frame callbacks, so KWin and the apps on it draw that often. Stopping it
++// would save little more (measured: 1 fps is within a few % of a core of stopped) and
++// would leave the agent's screen stale for its own screenshots.
++
++/// The phone's picture while the assistant's screen is fullscreen above it.
++#[cfg(feature = "smithay_android")]
++pub const COVERED_PHONE_INTERVAL: std::time::Duration = std::time::Duration::from_millis(1000);
++/// The assistant's screen while no one looks at it: no TV or fullscreen presenter, and its
++/// floating window tucked into the edge or the phone's picture gone.
++#[cfg(feature = "smithay_android")]
++pub const UNWATCHED_CAST_INTERVAL: std::time::Duration = std::time::Duration::from_millis(200);
++
++#[cfg(feature = "smithay_android")]
++static PHONE_COVERED: AtomicBool = AtomicBool::new(false);
++#[cfg(feature = "smithay_android")]
++static AGENT_SCREEN_WATCHED: AtomicBool = AtomicBool::new(true);
++
++/// The assistant's screen is fullscreen on the phone, above the phone's own picture
++/// (NativeBridge.setPhoneCovered). Rendering, input and the EGL surface stay as they are.
++#[cfg(feature = "smithay_android")]
++pub fn set_phone_covered(covered: bool) {
++    if PHONE_COVERED.swap(covered, Ordering::Relaxed) != covered {
++        log::info!("SmithayRuntime: phone_covered = {}", covered);
++    }
++}
++
++#[cfg(feature = "smithay_android")]
++pub fn is_phone_covered() -> bool {
++    PHONE_COVERED.load(Ordering::Relaxed)
++}
++
++/// Whether the assistant's floating window shows its picture (false: tucked into the edge;
++/// NativeBridge.setAgentScreenWatched).
++#[cfg(feature = "smithay_android")]
++pub fn set_agent_screen_watched(watched: bool) {
++    if AGENT_SCREEN_WATCHED.swap(watched, Ordering::Relaxed) != watched {
++        log::info!("SmithayRuntime: agent_screen_watched = {}", watched);
++    }
++}
++
++#[cfg(feature = "smithay_android")]
++pub fn agent_screen_watched() -> bool {
++    AGENT_SCREEN_WATCHED.load(Ordering::Relaxed)
++}
++
++/// Whether anyone sees the phone's picture: the surface is there and not covered.
++#[cfg(feature = "smithay_android")]
++pub fn phone_visible() -> bool {
++    is_rendering_active() && !is_phone_covered()
++}
++
+ #[cfg(feature = "smithay_android")]
+ pub fn now_ms_u32() -> u32 {
+     SystemTime::now()
+@@ -78,16 +130,32 @@ pub fn set_hybrid_trace_enabled(enabled: bool) {
+ /// Client commit counter for idle frame-skipping: the compositor loop
+ /// renders on commits/input, plus a slow heartbeat, instead of 60fps of
+ /// identical frames on a static desktop (major CPU/battery saver).
++/// Cast window commits are counted apart (docs/65): a frame of the assistant's screen or
++/// the TV must not re-present the phone.
+ static COMMIT_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
++static CAST_COMMIT_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+ 
+-pub fn note_commit() {
++pub fn note_commit(cast: bool) {
+     COMMIT_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
++    if cast {
++        CAST_COMMIT_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
++    }
+ }
+ 
++/// All commits.
+ pub fn commit_count() -> u64 {
+     COMMIT_COUNT.load(std::sync::atomic::Ordering::Relaxed)
+ }
+ 
++pub fn cast_commit_count() -> u64 {
++    CAST_COMMIT_COUNT.load(std::sync::atomic::Ordering::Relaxed)
++}
++
++/// Commits of everything shown on the phone.
++pub fn phone_commit_count() -> u64 {
++    commit_count() - cast_commit_count()
++}
++
+ #[cfg(feature = "smithay_android")]
+ #[allow(dead_code)]
+ pub(crate) fn rect_contains_f32(rect: &(f32, f32, f32, f32), x: f32, y: f32) -> bool {
+diff --git a/src/android/backend/wayland/handlers.rs b/src/android/backend/wayland/handlers.rs
+index 9e68eb5..0943525 100644
+--- a/src/android/backend/wayland/handlers.rs
++++ b/src/android/backend/wayland/handlers.rs
+@@ -379,7 +379,11 @@ impl CompositorHandler for AndroidSeatRuntime {
+         // within ~1 frame anyway. Rendering synchronously per commit
+         // duplicated the loop's full render and stalled protocol dispatch.
+         // Signal the loop instead (idle frame-skip counter).
+-        crate::android::backend::wayland::engine_timing::note_commit();
++        let mut root = surface.clone();
++        while let Some(parent) = smithay::wayland::compositor::get_parent(&root) {
++            root = parent;
++        }
++        crate::android::backend::wayland::engine_timing::note_commit(self.is_cast_surface(&root));
+ 
+         self.sync_text_input_to_android();
+     }
+diff --git a/src/android/backend/wayland/seat.rs b/src/android/backend/wayland/seat.rs
+index 13eca60..6368f90 100644
+--- a/src/android/backend/wayland/seat.rs
++++ b/src/android/backend/wayland/seat.rs
+@@ -245,6 +245,9 @@ pub struct AndroidSeatRuntime {
+     pub(crate) agent_screen: Option<((i32, i32), i32)>,
+     /// Newest buffer of the cast window, taken by the compositor loop after render_all.
+     pub(crate) pending_cast_frame: Option<crate::android::backend::smithay_backend::RenderItem>,
++    /// Output pacing (docs/65): each output is rendered when its own windows changed, at
++    /// most once per interval while nobody sees it (set by the compositor loop).
++    pub(crate) pacing: OutputPacing,
+     /// The phone is the TV's touchpad: the pointer lives on the cast window (cast.rs).
+     pub(crate) cast_pointer: bool,
+     pub(crate) unmanaged_surfaces: Vec<WlSurface>,
+@@ -643,6 +646,7 @@ impl AndroidSeatRuntime {
+             cast: None,
+             agent_screen: None,
+             pending_cast_frame: None,
++            pacing: OutputPacing::default(),
+             cast_pointer: false,
+             unmanaged_surfaces: Vec::new(),
+             last_seat_dispatch: "none".to_string(),
+@@ -1151,8 +1155,13 @@ impl AndroidSeatRuntime {
+         let mut all = Vec::new();
+         let mut take = |surface: &WlSurface| {
+             all.extend(with_states(surface, |states| {
+-                std::mem::take(&mut states.cached_state
+-                    .get::<PresentationFeedbackCachedState>().current().callbacks)
++                let mut cached = states.cached_state.get::<PresentationFeedbackCachedState>();
++                let current = cached.current();
++                // Superseded while the phone was paced down (hold_superseded).
++                for superseded in current.superseded.drain(..) {
++                    superseded.discarded();
++                }
++                std::mem::take(&mut current.callbacks)
+             }));
+         };
+         for elem in self.space.elements() {
+@@ -1181,7 +1190,13 @@ impl AndroidSeatRuntime {
+         let Some(cast) = self.cast.as_ref() else { return };
+         let Some(surface) = cast.surface.as_ref() else { return };
+         let callbacks = with_states(surface, |states| {
+-            std::mem::take(&mut states.cached_state.get::<PresentationFeedbackCachedState>().current().callbacks)
++            let mut cached = states.cached_state.get::<PresentationFeedbackCachedState>();
++            let current = cached.current();
++            // Superseded while the cast window was paced down (hold_superseded).
++            for superseded in current.superseded.drain(..) {
++                superseded.discarded();
++            }
++            std::mem::take(&mut current.callbacks)
+         });
+         if callbacks.is_empty() {
+             return;
+@@ -1215,14 +1230,22 @@ impl AndroidSeatRuntime {
+         }
+     }
+ 
+-    /// Collect the cast window's frame and pace only that window. The phone's
+-    /// windows get no frame callbacks, so KWin stops drawing the phone output.
+-    fn render_cast_only(&mut self) {
++    /// The cast window: take its new frame for the presenter and release its frame
++    /// callbacks, at its own pace and only after it committed.
++    fn render_cast(&mut self, now: std::time::Instant) {
+         use smithay::wayland::compositor::{with_states, SurfaceAttributes};
+         let Some(surface) = self.cast.as_ref().and_then(|c| c.surface.clone()) else { return };
+         if !surface.is_alive() {
+             return;
+         }
++        let commits = engine_timing::cast_commit_count();
++        let pending = commits != self.pacing.cast_commits_seen || self.pacing.cast_deferred;
++        let p = &mut self.pacing;
++        if !OutputPacing::take_turn(pending, p.cast_interval, &mut p.last_cast_frame, &mut p.cast_deferred, &mut p.due, now) {
++            return;
++        }
++        self.pacing.cast_commits_seen = commits;
++        self.pacing.cast_turns += 1;
+         if let Some(buffer) = Self::get_surface_buffer(&surface) {
+             if crate::android::backend::wayland::cast::take_new_buffer(self.cast.as_mut(), &buffer) {
+                 let scale = with_states(&surface, |states| {
+@@ -1232,6 +1255,31 @@ impl AndroidSeatRuntime {
+             }
+         }
+         Self::send_frame_callback(&surface);
++        self.pacing.cast_released = true;
++    }
++
++    /// KWin renders the next frame of an output as soon as the previous one is reported
++    /// presented or discarded (at most two pending). A paced output's superseded frames are
++    /// therefore reported discarded only at its next turn, else KWin would render at its own
++    /// rate and throw most frames away (docs/65).
++    fn hold_superseded_while_paced(&self) {
++        use smithay::wayland::compositor::with_states;
++        use smithay::wayland::presentation::PresentationFeedbackCachedState;
++        let set = |surface: &WlSurface, hold: bool| {
++            with_states(surface, |states| {
++                states.cached_state.get::<PresentationFeedbackCachedState>().current().hold_superseded = hold;
++            });
++        };
++        let (phone, cast) = (self.pacing.phone_interval.is_some(), self.pacing.cast_interval.is_some());
++        for elem in self.space.elements() {
++            if let Some(surface) = elem.0.wl_surface() {
++                let hold = if self.is_cast_surface(surface.as_ref()) { cast } else { phone };
++                set(surface.as_ref(), hold);
++            }
++        }
++        for surface in &self.unmanaged_surfaces {
++            set(surface, phone);
++        }
+     }
+ 
+     fn send_frame_callback(wl_surface: &WlSurface) {
+@@ -1382,14 +1430,36 @@ impl AndroidSeatRuntime {
+         })
+     }
+ 
++    /// Re-present everything now: a window was mapped, moved or minimized, or the output changed.
+     pub(crate) fn render_all(&mut self) {
++        self.render(true);
++    }
++
++    /// Render what changed, each output at its pace (docs/65): the cast window's new frame,
++    /// and the phone's windows when one of them committed or `force_phone`. `pacing.due`
++    /// says when an output held back by its interval is next due.
++    pub(crate) fn render(&mut self, force_phone: bool) {
++        let now = std::time::Instant::now();
++        self.pacing.due = None;
++        self.hold_superseded_while_paced();
++        self.render_cast(now);
++        // The phone surface is gone (app in the background, docs/58): the phone's windows
++        // get nothing until it is back; a cast display keeps showing the desktop.
+         if !engine_timing::is_rendering_active() {
+-            // The phone surface is gone (app in background, docs/58); a cast
+-            // display keeps showing the desktop.
+-            self.render_cast_only();
+             return;
+         }
++        let commits = engine_timing::phone_commit_count();
++        let pending = force_phone || commits != self.pacing.phone_commits_seen || self.pacing.phone_deferred;
++        let p = &mut self.pacing;
++        if !OutputPacing::take_turn(pending, p.phone_interval, &mut p.last_phone_frame, &mut p.phone_deferred, &mut p.due, now) {
++            return;
++        }
++        self.pacing.phone_commits_seen = commits;
++        self.pacing.phone_frames += 1;
++        self.render_phone();
++    }
+ 
++    fn render_phone(&mut self) {
+         use smithay::wayland::compositor::{with_states, SurfaceAttributes};
+         use smithay::wayland::shm::with_buffer_contents;
+ 
+@@ -1430,13 +1500,7 @@ impl AndroidSeatRuntime {
+                 }) as f32;
+ 
+                 if self.is_cast_surface(wl_surface) {
+-                    // The cast window goes to the TV, never onto the phone surface.
+-                    if let Some(buffer) = buffer_info {
+-                        // Field access (not a method): `self.space` is borrowed by the loop.
+-                        if crate::android::backend::wayland::cast::take_new_buffer(self.cast.as_mut(), &buffer) {
+-                            self.pending_cast_frame = Self::try_get_dmabuf_render_item(wl_surface, &buffer, 0, 0, surface_scale, false);
+-                        }
+-                    }
++                    // The cast window goes to the TV, never onto the phone surface (render_cast).
+                     continue;
+                 }
+                 if let Some(buffer) = buffer_info {
+@@ -1788,14 +1852,21 @@ impl AndroidSeatRuntime {
+         }
+ 
+         if !render_list.is_empty() {
+-            // Bounded channel: drop (stale) frames when the consumer lags
+-            // instead of growing memory unboundedly; the next spin renders
+-            // fresh anyway.
+-            let _ = self.render_sender.try_send(render_list);
++            // Bounded channel: drop (stale) frames when the consumer lags instead of
++            // growing memory unboundedly. A dropped frame is rendered again next spin:
++            // with nothing else committing, nothing else would re-present it.
++            if self.render_sender.try_send(render_list).is_err() {
++                self.pacing.phone_deferred = true;
++                self.pacing.due = Some(std::time::Instant::now());
++            }
+         }
+ 
+         for elem in self.space.elements() {
+             if let Some(wl_surface) = elem.0.wl_surface() {
++                // The cast window is paced on its own (render_cast).
++                if self.is_cast_surface(wl_surface.as_ref()) {
++                    continue;
++                }
+                 Self::send_frame_callback(wl_surface.as_ref());
+                 for (popup, _) in PopupManager::popups_for_surface(wl_surface.as_ref()) {
+                     Self::send_frame_callback(popup.wl_surface());
+@@ -1808,6 +1879,81 @@ impl AndroidSeatRuntime {
+     }
+ }
+ 
++// ── Output pacing (docs/65) ─────────────────────────────────────────────────
++
++/// Per-output render state. The phone and the cast window (TV or the assistant's screen)
++/// are rendered apart: a frame of one does not re-present the other, and an output that
++/// nobody sees gets its frame callbacks at most once per interval.
++#[cfg(feature = "smithay_android")]
++#[derive(Debug)]
++pub(crate) struct OutputPacing {
++    pub phone_interval: Option<std::time::Duration>,
++    pub cast_interval: Option<std::time::Duration>,
++    phone_commits_seen: u64,
++    cast_commits_seen: u64,
++    /// A change held back by the interval (or a render list the consumer dropped).
++    phone_deferred: bool,
++    cast_deferred: bool,
++    last_phone_frame: Option<std::time::Instant>,
++    last_cast_frame: Option<std::time::Instant>,
++    /// When a held-back output is due; the loop wakes for it.
++    pub due: Option<std::time::Instant>,
++    /// The cast window's frame callbacks went out this round: report its presentation.
++    pub cast_released: bool,
++    /// Phone frames rendered and cast turns taken (diagnostics: native-stats).
++    pub phone_frames: u64,
++    pub cast_turns: u64,
++}
++
++#[cfg(feature = "smithay_android")]
++impl Default for OutputPacing {
++    fn default() -> Self {
++        Self {
++            phone_interval: None,
++            cast_interval: None,
++            phone_commits_seen: engine_timing::phone_commit_count(),
++            cast_commits_seen: engine_timing::cast_commit_count(),
++            phone_deferred: true,
++            cast_deferred: false,
++            last_phone_frame: None,
++            last_cast_frame: None,
++            due: None,
++            cast_released: false,
++            phone_frames: 0,
++            cast_turns: 0,
++        }
++    }
++}
++
++#[cfg(feature = "smithay_android")]
++impl OutputPacing {
++    /// Whether an output with `pending` work renders now; else note when it is due.
++    fn take_turn(pending: bool, interval: Option<std::time::Duration>, last: &mut Option<std::time::Instant>,
++                 deferred: &mut bool, due: &mut Option<std::time::Instant>, now: std::time::Instant) -> bool {
++        if !pending {
++            return false;
++        }
++        if let (Some(interval), Some(last)) = (interval, *last) {
++            if now < last + interval {
++                *deferred = true;
++                let at = last + interval;
++                *due = Some(due.map_or(at, |d| d.min(at)));
++                return false;
++            }
++        }
++        *deferred = false;
++        *last = Some(now);
++        true
++    }
++
++    pub fn stats(&self) -> String {
++        let ms = |i: Option<std::time::Duration>| i.map_or("-".to_string(), |d| format!("{}ms", d.as_millis()));
++        format!("pacing(phone={} cast={} phone_frames={} cast_turns={} deferred={}/{} commits={}/{})", ms(self.phone_interval),
++            ms(self.cast_interval), self.phone_frames, self.cast_turns, self.phone_deferred, self.cast_deferred,
++            engine_timing::phone_commit_count(), engine_timing::cast_commit_count())
++    }
++}
++
+ // ── Fallback cursor bitmap ──────────────────────────────────────────────────
+ 
+ #[cfg(feature = "smithay_android")]
+diff --git a/src/android/bridge_lifecycle.rs b/src/android/bridge_lifecycle.rs
+index e8ab272..b53a54b 100644
+--- a/src/android/bridge_lifecycle.rs
++++ b/src/android/bridge_lifecycle.rs
+@@ -39,3 +39,38 @@ pub unsafe extern "system" fn Java_com_winland_server_NativeBridge_resumeRenderi
+     #[cfg(feature = "smithay_android")]
+     crate::android::backend::wayland::engine_timing::set_rendering_active(true);
+ }
++
++#[no_mangle]
++/// # Safety
++///
++/// Called from the JVM when the assistant's screen goes fullscreen on the phone, above the
++/// phone's own picture, and when it leaves (docs/65). The covered phone gets frames at a
++/// low rate; rendering, input and the surface stay as they are.
++pub unsafe extern "system" fn Java_com_winland_server_NativeBridge_setPhoneCovered(
++    _env: JNIEnv,
++    _class: JClass,
++    covered: jni::sys::jboolean,
++) {
++    #[cfg(feature = "smithay_android")]
++    {
++        crate::android::backend::wayland::engine_timing::set_phone_covered(covered != 0);
++        crate::android::frame_clock::kick();
++    }
++}
++
++#[no_mangle]
++/// # Safety
++///
++/// Called from the JVM when the assistant's floating window shows its picture or is tucked
++/// into the edge (docs/65). Unwatched, the assistant's screen gets frames at a low rate.
++pub unsafe extern "system" fn Java_com_winland_server_NativeBridge_setAgentScreenWatched(
++    _env: JNIEnv,
++    _class: JClass,
++    watched: jni::sys::jboolean,
++) {
++    #[cfg(feature = "smithay_android")]
++    {
++        crate::android::backend::wayland::engine_timing::set_agent_screen_watched(watched != 0);
++        crate::android::frame_clock::kick();
++    }
++}
+diff --git a/src/compositor.rs b/src/compositor.rs
+index 419109e..4aa4048 100644
+--- a/src/compositor.rs
++++ b/src/compositor.rs
+@@ -118,24 +118,37 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+         // Idle frame-skip state: render on content/input activity, else a
+         // 500ms heartbeat (cursor blink/animations stay alive, steppy).
+         let mut last_commits = crate::android::backend::wayland::engine_timing::commit_count();
++        let mut last_phone_commits = crate::android::backend::wayland::engine_timing::phone_commit_count();
+         let mut last_render = Instant::now();
+         let mut last_vsync = 0;
+         // On-demand vsync (frame_clock.rs): park after a quiet period.
+         let mut last_activity = Instant::now();
+         let mut parked = false;
++        // Output pacing (docs/65): the phone is re-rendered once when it stops being covered.
++        let mut last_covered = false;
+         log::info!("Compositor: runtime loop started");
+ 
+         while thread_running.load(Ordering::Relaxed) {
++            // An output held back by its pacing interval wakes the parked loop when it is due.
++            let parked_timeout = wayland_server.as_ref().and_then(|s| s.runtime.pacing.due)
++                .map_or(PARKED_TIMEOUT, |due| due.saturating_duration_since(Instant::now()).min(PARKED_TIMEOUT));
+             match wayland_server.as_ref() {
+-                Some(server) if parked => crate::android::frame_clock::wait_parked(&server.wait_fds(), PARKED_TIMEOUT),
++                Some(server) if parked => crate::android::frame_clock::wait_parked(&server.wait_fds(), parked_timeout),
+                 // Active: also wake for KWin's commits and SurfaceFlinger's callbacks as they
+                 // come, not only at the next vsync (frame_clock::wait_active).
+                 Some(server) => crate::android::frame_clock::wait_active(&server.wait_fds(), &mut last_vsync),
+                 None => crate::android::frame_clock::wait_next(&mut last_vsync),
+             }
+             let mut commands_this_spin = 0u32;
++            // Commands that may change what the phone shows: not the cast pointer or queries.
++            let mut phone_commands = 0u32;
+             while let Ok(cmd) = cmd_rx.try_recv() {
+                 commands_this_spin += 1;
++                if !matches!(cmd, JniCommand::CastPointer { .. } | JniCommand::GetRuntimeStats { .. }
++                    | JniCommand::GetSurfaceSize { .. } | JniCommand::GetScrollSensitivity { .. }
++                    | JniCommand::GetBackendSnapshot { .. }) {
++                    phone_commands += 1;
++                }
+                 match cmd {
+                     JniCommand::TouchInput { action, id, x, y } => {
+                         if trace_next_touch && (action == 0 || action == 5) && id != -1 {
+@@ -516,30 +529,51 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+                     server.runtime.inject_routed_event(&event);
+                     crate::android::backend::wayland::seat_injector::record_injection(&event);
+                     commands_this_spin += 1;
++                    phone_commands += 1;
+                 }
+ 
+                 server.pump();
+                 crate::android::command_channel::set_clients_connected(server.connected_client_count() > 0);
++
++                // Output pacing (docs/65). The phone covered by the assistant's screen in
++                // fullscreen, and the assistant's screen while nobody looks at it (no TV or
++                // fullscreen presenter; its floating window tucked away or the phone's
++                // picture gone), get frames at a low rate.
++                use crate::android::backend::wayland::engine_timing as timing;
++                let covered = timing::is_phone_covered();
++                let uncovered = last_covered && !covered;
++                last_covered = covered;
++                let watched = backend_state.cast.is_some()
++                    || (timing::agent_screen_watched() && timing::is_rendering_active());
++                server.runtime.pacing.phone_interval = covered.then_some(timing::COVERED_PHONE_INTERVAL);
++                server.runtime.pacing.cast_interval = (!watched).then_some(timing::UNWATCHED_CAST_INTERVAL);
++
+                 // Idle frame-skip: a static desktop renders at the 500ms
+                 // heartbeat instead of 60fps of identical SHM copies.
+                 // Any client commit, input command, or gesture forces fresh.
+-                let commits = crate::android::backend::wayland::engine_timing::commit_count();
++                let commits = timing::commit_count();
++                let phone_commits = timing::phone_commit_count();
+                 let heartbeat = !parked && last_render.elapsed() >= Duration::from_millis(500);
+-                if commits != last_commits || commands_this_spin > 0 {
++                let due = server.runtime.pacing.due.is_some_and(|d| Instant::now() >= d);
++                // Only the phone needs its vsync: cast frames are handled as they arrive.
++                if phone_commits != last_phone_commits || phone_commands > 0 {
+                     last_activity = Instant::now();
+                 }
+-                if commits != last_commits || commands_this_spin > 0 || heartbeat {
+-                    server.runtime.render_all();
++                last_phone_commits = phone_commits;
++                if commits != last_commits || commands_this_spin > 0 || heartbeat || due || uncovered {
++                    server.runtime.render(phone_commands > 0 || uncovered);
+                     last_render = Instant::now();
+                     last_commits = commits;
+                     if let Some(frame) = server.runtime.pending_cast_frame.take() {
+                         crate::android::backend::smithay_backend::present_cast(&mut backend_state, frame);
+                     }
+                     // KWin keeps at most two frames of an output pending. Report every
+-                    // cast commit now, also one that brought no new buffer (the same
+-                    // buffer again after a configure): left unanswered, it stopped the
+-                    // TV for good after returning from the background.
+-                    server.runtime.finish_cast_presentation();
++                    // cast commit when it is rendered, also one that brought no new buffer
++                    // (the same buffer again after a configure): left unanswered, it
++                    // stopped the TV for good after returning from the background.
++                    if std::mem::take(&mut server.runtime.pacing.cast_released) {
++                        server.runtime.finish_cast_presentation();
++                    }
+                 }
+             }
+             if let Some(cast) = backend_state.cast.as_mut() {
+@@ -580,7 +614,7 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+             // the phone screen off): no vsync to follow. Render each cast commit as
+             // it arrives; KWin paces the cast output itself from its presentation
+             // feedback, so the TV keeps its own rate without the phone's display.
+-            let cast_only = !crate::android::backend::wayland::engine_timing::is_rendering_active()
++            let cast_only = !crate::android::backend::wayland::engine_timing::phone_visible()
+                 && backend_state.cast.is_some();
+             parked = wayland_server.is_some() && (cast_only || (last_activity.elapsed() >= PARK_AFTER
+                 && crate::android::surface_control::on_demand_vsync()));
+@@ -609,17 +643,18 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+                         .map(|s| format!("{:?}", s.id()))
+                         .unwrap_or_else(|| "none".to_string());
+                     let cast = match backend_state.cast.as_ref() {
+-                        Some(c) => format!("cast(frames={} new={} skipped={:?} settled={} window={} rendering={} commits={})", c.frames,
++                        Some(c) => format!("cast(frames={} new={} skipped={:?} settled={} window={} rendering={} covered={} commits={})", c.frames,
+                             server.runtime.cast.as_ref().map_or(0, |o| o.new_frames),
+                             crate::android::backend::smithay_backend::CAST_SKIPPED.iter().map(|c| c.load(std::sync::atomic::Ordering::Relaxed)).collect::<Vec<_>>(),
+                             c.presenter.settled(),
+                             server.runtime.cast.as_ref().is_some_and(|o| o.surface.is_some()),
+                             crate::android::backend::wayland::engine_timing::is_rendering_active(),
++                            crate::android::backend::wayland::engine_timing::is_phone_covered(),
+                             crate::android::backend::wayland::engine_timing::commit_count()),
+                         None => "cast(none)".to_string(),
+                     };
+                     let stats = format!(
+-                        "windows={} unmanaged={} focus={} injected={} dispatch={} focus_decision={} cursor={} {} {} {}",
++                        "windows={} unmanaged={} focus={} injected={} dispatch={} focus_decision={} cursor={} {} {} {} {}",
+                         server.runtime.space.elements().count(),
+                         server.runtime.unmanaged_surfaces.len(),
+                         focused,
+@@ -629,13 +664,19 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+                         server.runtime.last_cursor_mode,
+                         crate::android::surface_control::stats(),
+                         crate::android::frame_clock::stats(),
+-                        cast
++                        cast,
++                        server.runtime.pacing.stats(),
+                     );
+                     crate::android::command_channel::set_runtime_stats(stats);
+                 }
+             }
+ 
+-
++            // Send what this spin produced (frame callbacks, presentation feedback) before
++            // waiting: pump() flushes only before rendering, and a parked loop may not spin
++            // again for up to a second, holding back a paced output's next frame (docs/65).
++            if let Some(server) = wayland_server.as_mut() {
++                let _ = server.flush();
++            }
+         }
+         log::info!("Compositor: runtime loop stopped");
+     });

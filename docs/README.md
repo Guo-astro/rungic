@@ -80,16 +80,14 @@ The acceptance scope of each item is in its documents. Known limits: Turnip's Wa
 
 | Directory | Contents |
 |---|---|
-| `plasma/` | KDE and Android APK integration, session configuration, build scripts |
-| `native/plasma/` | The native Wayland backend in Rust (Smithay) |
-| `packages/` | Upstream components kept as patch queues: a pinned upstream plus DEP-3 patches ([71](71-upstream-patch-queue.md)) |
-| `vendor/` | Provenance and audit exceptions for the foreign trees still tracked directly (`native/plasma/`, `plasma/firefox-mobile/`) |
+| `plasma/` | Rungic's apps, desktop integration, Android APK, session configuration and build scripts; `android-host/` holds our own Rust modules used as recipe overlays |
+| `packages/` | Pinned upstream sources and DEP-3 patches, including the Android host, Smithay, Winit, KDE and Firefox mobile configuration ([71](71-upstream-patch-queue.md), [migration completion](73-reduce-upstream-changes.md#remaining-source-trees-migrated-2026-09-30)) |
 | `shared/` | Common Linux interfaces for media, network, clipboard and GPU |
 | `tools/` | Management, ROM, build and diagnostic tools |
 | `kernel/`, `lxc/`, `cutout/` | Kernel, container and device configuration |
 | `docs/` | Implementation documents; `research/` keeps reusable findings |
 | `benchmarks/` | Selected raw performance data and analyses |
-| `provenance/` | Upstream sources, versions and checksums |
+| `provenance/` | Upstream origin records, versions, checksums, migration evidence and exact-hash audit exceptions |
 | `signing/development/` | The development APK signing identity, synced at the user's request |
 | `.work/` | Not synced: downloads, dependencies, caches, logs, media, packages and other keys |
 
@@ -102,7 +100,7 @@ Boundaries and migration notes: [repository scope](52-git-repository-scope.md). 
 - Media and display still have open acceptance items; see [48](48-plasma-media-pipelines.md) and [50](50-plasma-display-settings.md). An installation that succeeds is not a completed acceptance.
 - Device management: `python3 tools/rungic_plasma.py status`. Development environment: `source tools/work-env.sh`. APK build: `bash plasma/build-apk.sh`, output under `.work/`.
 - Graphics and backend architecture: [40](40-plasma-mobile-integration.md) and the [shared bridges](../shared/README.md). A fresh build machine still needs the SDK/NDK and some dependencies.
-- Remote source checks and multi-machine work: [53](53-remote-system-development.md). Modified upstream components (KWin, Mesa, Xwayland, flatpak and others) are patch queues in `packages/` (`tools/pq.py`), built with `tools/build_on_device.py`; only `native/plasma/` and `plasma/firefox-mobile/` are tracked directly ([vendor notes](../vendor/README.md)).
+- Remote source checks and multi-machine work: [53](53-remote-system-development.md). Upstream modifications live in `packages/` and are edited through `tools/pq.py prepare/export`. Linux upstream packages use `tools/build_on_device.py`. For Android, `tools/prepare_android_host.py` assembles the host and its Smithay/Winit dependencies under `.work/`, then `plasma/build-native-core.sh` cross-compiles the library. Firefox mobile configuration is prepared from its recipe by `tools/rungic_package.py`. No directly tracked upstream source-tree exceptions remain; see [73](73-reduce-upstream-changes.md#remaining-source-trees-migrated-2026-09-30).
 
 Which layer a vendor adaptation belongs in, and what can move to a shared backend: [54](54-vendor-adaptation-boundaries.md).
 

@@ -169,3 +169,9 @@ plasma-keyboard、xdg-desktop-portal-kde、wl-clipboard、arc-cua、LiteRT、lib
 传输问题：`docker exec cat`经ssh传大文件时曾以成功状态提前结束（13.7 MB的包只收到12.9 MB），现在上传与下载都核对大小与SHA-256，不一致重试。
 
 手机与Mac mini在同一局域网（192.168.5.60与192.168.5.45，也可经wire.net的10.77.0.x互通），大文件由手机直接传给构建机，不经本机与VPN：手机容器的专用密钥`/root/.ssh/id_ed25519_buildhost`在Mac的`authorized_keys`中受限为`restrict`、只接受手机的两个地址、强制命令为构建容器里的`tools/pq/rungic-transfer`（`put DIR`解包到、`get FILE`读取`/root/rungic-build`下的路径，拒绝绝对路径与`..`）。实测6.8 MB/s（经本机转发约1.2 MB/s），其他命令与路径被拒绝。崩溃符号化已改用此路径。
+
+## Android宿主与配置源码收尾（2026-09-30）
+
+原先直接维护的`native/plasma`与`plasma/firefox-mobile`也已进入配方流程，见[73篇收尾记录](73-reduce-upstream-changes.md#remaining-source-trees-migrated-2026-09-30)。git类型配方可用`subdir`选取固定提交中的子树，此时`tree`为子树哈希；可用`exclude`显式排除随上游入库的非构建内容，升级后排除项不存在会报错。所有实际源码仍只在`.work`展开。
+
+Android宿主、Smithay、Winit分别维护配方，由`tools/prepare_android_host.py`组装供交叉编译；自有模块作为overlay。宿主上的项目包也支持`upstream`输入，与设备构建共用`stage_sources`，Firefox移动配置已用真实DEB验证。没有恢复直接跟踪外来源码的例外。

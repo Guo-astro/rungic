@@ -154,3 +154,41 @@ plasma-settings `+rungic3`删除`android-hardware-settings`补丁：蜂窝、蓝
 
 
 2026-09-28 显示大小需求更新：KScreen 因手机五档大小与分辨率预览补偿重新采用固定来源＋小型补丁队列（`packages/kscreen`），仍走 libkscreen/KWin 标准接口，不恢复旧 Android 私有控制补丁。KWin 负责默认和持久化；两组件共用策略头文件。见 [85 篇](85-phone-display-size-policy.md)。
+
+## Remaining source trees migrated (2026-09-30)
+
+用户指出`native/plasma/`与`plasma/`并存，要求补齐补丁管理。此前“全部迁完”仅覆盖当时列出的Linux组件；`vendor/manifest.json`仍允许Winland衍生宿主及Firefox移动配置直接维护。这两个例外现已取消，`vendor/`也已删除。`plasma/`继续保存自有应用、Android APK和集成代码，不是KDE上游源码副本；KDE源码仍由`packages/plasma-mobile`、`packages/kwin`等配方管理。
+
+### 固定基线与选择
+
+本次先读71/73/52篇、旧来源清单、实际Cargo路径依赖和Firefox打包脚本，再从原来源取得固定提交/发行归档并核验。只迁移管理方式，不升级组件、不修改功能。
+
+| 配方 | 固定来源 | 本地修改与管理方式 |
+|---|---|---|
+| `packages/android-host` | Winland `4269ec048e83133102d00464fd4c23af44d84707`的`native`子树，树哈希`1403bf57e8df1b8b87adf2497b99230c75e2235e` | 按原仓库提交顺序重放为19条补丁，记录原提交；7个自有新增模块移到`plasma/android-host/src/`作为overlay |
+| `packages/smithay` | 同一Winland提交的`native/lib/smithay`子树，树哈希`ddc78efe6616bcce50ce6fecf7560385f6a78212` | 5个修改文件，按原功能提交保存为3条补丁：文本输入、输出节拍、workspace |
+| `packages/winit` | 同一Winland提交的`native/lib/winit`子树，树哈希`96a7a370234c7691e6147dbef3251bf357a5228f` | 与所用基线一致，无本地补丁 |
+| `packages/mobile-config-firefox` | postmarketOS `5.4.1`发行归档，SHA256在recipe中 | 1条补丁保留Android 16 / Mobile默认UA，其余运行文件保持上游原样 |
+
+Smithay/Winit固定的是**Winland当时带入的子树**，不是仅凭Cargo版本号宣称等同于官方发布版；recipe同时记录实际来源和原项目地址。分别维护配方使以后升级某个依赖时可以独立核对，而本轮没有混入换基线工作。相比继续直接入库，该方式能单独审查本地差异；相比立刻切换官方最新版本，它保持本机已使用的输入。
+
+许可证：Smithay保留MIT许可证，Winit保留Apache-2.0许可证，Firefox配置为MPL-2.0。Winland固定提交仍缺少根LICENSE，其README声明MIT；这是52篇已记录的来源缺口，本次在recipe中明确保留，没有补造许可证或把它标为已解决。
+
+### 构建与编辑入口
+
+- `tools/pq.py`的git配方支持`subdir`，`tree`核对所选子树；缓存名包含子树选择和树哈希，防止改选子树后复用旧归档。`exclude`显式排除Winland入库的生成日志、分析缓存及另行准备的依赖；排除项消失时会失败，要求升级时重新核对。
+- `python3 tools/prepare_android_host.py`先展开`android-host`及overlay，再将独立配方的Smithay/Winit放入生成树的`lib/`。全部位于`.work/build/android-host/source/`，现有Cargo路径关系保留。
+- `bash plasma/build-native-core.sh`与`plasma/test-native-core.sh`均先调用该准备入口。输出库名和JNI接口不变，APK仍从原生构建输出目录取库。修改宿主上游部分用`pq.py prepare android-host`，在补丁分支修改/提交，再`pq.py export android-host`；Smithay同理。自有模块直接修改`plasma/android-host/`，再构建组装树。
+- `rungic-firefox/package.json`声明`upstream: ["mobile-config-firefox"]`，内容标识包括recipe和补丁。`rungic_package.py`的宿主构建现与设备构建一样，通过`stage_sources`取得`$SRC/upstream/<name>`，不再读取旧安装树。打包仍只安装原有运行文件，沿用Rungic自有policies及codec配置；没有额外引入上游Makefile安装的metainfo或策略文件。
+- 原`vendor/audit-exceptions.json`移至`provenance/audit-exceptions.json`，当前仍为空；审计与改名工具、开发者目录说明和AGENTS同步更新。历史研究文档中的旧源码路径保留为当时证据，当前编辑入口以本节为准。
+
+### 本轮验证
+
+执行机现场核验为mibook/x86_64，路由经`192.168.5.1`，系统代理模式none；Git已有HTTP代理`192.168.5.45:6152`，上游获取使用该代理。使用现有本机patch-queue容器与Android交叉工具链；构建没有操作手机。
+
+1. **源码重放**：新流程的706个原生文件/链接与迁移前逐项一致，检查文件SHA256、Git可表达的可执行位及符号链接目标，差异为0；`debian/`、`.pc`等构建管理文件不计入运行源码。
+2. **原生构建**：迁移前直接源码与迁移后补丁组装源码均通过`aarch64-linux-android`、`--locked --release --features smithay_android`构建，Cargo离线使用已有缓存；原有17条编译警告未在本轮顺手修改。
+3. **Firefox真实打包**：通过修改后的`build_host`生成隔离测试DEB并解包，与旧脚本生成的安装树比较，46个文件/链接全部一致。没有把测试包加入正式发布或安装到手机。
+4. **工具回归**：`tools/test_pq.py`共18项通过，包括6项新增的实际本地Git子树归档及固定时间戳、原整树归档兼容性、缓存选择、树哈希拒绝、排除路径升级检查与越界路径拒绝。四个新配方的补丁字段校验通过。
+
+原始清单、源码差异、构建日志、测试DEB位于`.work/migration/20260930-pq/`；可同步的基线与校验摘要在`provenance/source-patch-migration-20260930.json`。本轮是源码管理及构建验收，不是新一轮手机部署、触摸/显示/投屏实机验收，也没有重新验证APK安装；运行行为继续引用原对应版本的实机记录。

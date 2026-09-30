@@ -1,0 +1,13 @@
+{
+  "comment": "Pinned subtree of the Winland fork used by the existing Android host. This migration preserves its baseline; it does not claim this subtree equals an official upstream release. See docs/73.",
+  "kind": "git",
+  "source": "winit",
+  "version": "0.31.0-beta.2",
+  "git": "https://github.com/eirkkk/winland-Android",
+  "commit": "4269ec048e83133102d00464fd4c23af44d84707",
+  "subdir": "native/lib/winit",
+  "tree": "96a7a370234c7691e6147dbef3251bf357a5228f",
+  "upstream": "https://github.com/rust-windowing/winit",
+  "licenses": "Apache-2.0; winit/LICENSE",
+  "files": {}
+}

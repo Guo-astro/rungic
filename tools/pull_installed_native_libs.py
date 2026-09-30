@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 """Extract lib/ from the desktop APK installed on the phone, for Java-only APK rebuilds.
 
-Use when this machine has no Rust/NDK build of native/plasma: the installed
+Use when this machine has no Rust/NDK build of packages/android-host: the installed
 APK's native libraries are reused unchanged. Writes SHA256SUMS next to them so
 the reused binaries stay identifiable.
 """

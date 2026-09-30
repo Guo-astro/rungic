@@ -1,0 +1,251 @@
+From: Rungic <noreply@rungic.invalid>
+Date: Wed, 30 Sep 2026 12:34:38 +0800
+Subject: Cast: keep the TV running with the app in the background or the
+ screen off
+
+Preserve the deployed implementation during the source/patch migration.
+
+Origin: vendor, RungicCore commit:5c6e0958c03237d7a9d1f552f6a70f0a56617d78
+Forwarded: no
+Last-Update: 2026-09-30
+X-Rungic-Status: Inappropriate; Android host integration
+X-Rungic-Tests: L0:source-replay; L1:android-cross-build (host); runtime scope in docs/73
+X-Rungic-Docs: docs/73; docs/49; docs/research/91
+---
+ src/android/backend/smithay_backend.rs | 11 +++++-
+ src/android/backend/wayland/seat.rs    | 68 +++++++++++++++++++++++++++++++++-
+ src/compositor.rs                      | 40 +++++++++++++++-----
+ 3 files changed, 106 insertions(+), 13 deletions(-)
+
+diff --git a/src/android/backend/smithay_backend.rs b/src/android/backend/smithay_backend.rs
+index 78c473a..063f6b4 100644
+--- a/src/android/backend/smithay_backend.rs
++++ b/src/android/backend/smithay_backend.rs
+@@ -739,15 +739,22 @@ pub fn release_cast_window(state: &mut AndroidSmithayState) {
+ }
+ 
+ /// Hand the cast window's buffer (a leased AHardwareBuffer from KWin) to SurfaceFlinger.
++/// Cast frames not presented, by reason (diagnostics): no cast window, not a
++/// dmabuf, not a host-allocated buffer, no buffer hold.
++pub static CAST_SKIPPED: [std::sync::atomic::AtomicU64; 4] = [const { std::sync::atomic::AtomicU64::new(0) }; 4];
++
+ pub fn present_cast(state: &mut AndroidSmithayState, mut item: RenderItem) -> bool {
+-    let Some(cast) = state.cast.as_mut() else { return false };
++    use std::sync::atomic::Ordering::Relaxed;
++    let Some(cast) = state.cast.as_mut() else { CAST_SKIPPED[0].fetch_add(1, Relaxed); return false };
+     let RenderItem::DmaBuf { ref fd, fourcc, width, height, ref mut hold, ref acquire, ref mut release, .. } = item else {
++        CAST_SKIPPED[1].fetch_add(1, Relaxed);
+         return false;
+     };
+     let Some(ahb) = crate::android::gpu_allocator::lookup(fd.as_raw_fd(), width, height, fourcc) else {
++        CAST_SKIPPED[2].fetch_add(1, Relaxed);
+         return false;
+     };
+-    let Some(hold) = hold.take() else { return false };
++    let Some(hold) = hold.take() else { CAST_SKIPPED[3].fetch_add(1, Relaxed); return false };
+     let acquire_fd = acquire.as_ref().and_then(|fence| fence.try_clone().ok());
+     cast.presenter.present(ahb, hold, release.take(), acquire_fd, (width, height), cast.size);
+     cast.frames += 1;
+diff --git a/src/android/backend/wayland/seat.rs b/src/android/backend/wayland/seat.rs
+index 241dea2..d2c00d2 100644
+--- a/src/android/backend/wayland/seat.rs
++++ b/src/android/backend/wayland/seat.rs
+@@ -755,8 +755,15 @@ impl AndroidSeatRuntime {
+         // Single source of truth: update caches inside this function.
+         // The render loop (compositor.rs) is a READER only — it never writes.
+         self.physical_size = crate::android::command_channel::get_physical_size();
+-        self.screen_size = (width, height);
+         let scale = scale_override.unwrap_or_else(compute_dpi_scale);
++        // Resuming from the background reports the unchanged size again. Nested
++        // KWin treats every sized configure as an output change and rebuilds
++        // all outputs, which left the cast screen's windows without frame
++        // callbacks (docs/58): only reconfigure windows on a real change.
++        let unchanged = self.screen_size == (width, height)
++            && self.output.current_mode().is_some_and(|m| m.size == (width, height).into())
++            && (self.output.current_scale().fractional_scale() - scale).abs() < 1e-6;
++        self.screen_size = (width, height);
+         log::info!(
+             "SmithayRuntime: updating output mode to {}x{} scale={} (override={:?}) physical={:?}",
+             width,
+@@ -769,6 +776,9 @@ impl AndroidSeatRuntime {
+         // Update caches immediately — the single source of truth.
+         crate::android::command_channel::set_surface_size(width, height);
+         crate::android::command_channel::set_logical_size(width, height);
++        if unchanged {
++            return (width, height);
++        }
+ 
+         let mode = OutputMode {
+             size: (width, height).into(),
+@@ -1144,6 +1154,10 @@ impl AndroidSeatRuntime {
+         };
+         for elem in self.space.elements() {
+             if let Some(surface) = elem.0.wl_surface() {
++                // The cast window is reported with the TV's own timing.
++                if self.is_cast_surface(surface.as_ref()) {
++                    continue;
++                }
+                 take(surface.as_ref());
+                 for (popup, _) in PopupManager::popups_for_surface(surface.as_ref()) {
+                     take(popup.wl_surface());
+@@ -1154,6 +1168,31 @@ impl AndroidSeatRuntime {
+         all
+     }
+ 
++    /// Report the cast frame just handed to the TV, on the cast output at its
++    /// refresh rate. With the phone's rate KWin kept switching the TV output's
++    /// mode (120 Hz in front, 30 Hz with the app in the background).
++    pub(crate) fn finish_cast_presentation(&self) {
++        use smithay::wayland::compositor::with_states;
++        use smithay::wayland::presentation::{PresentationFeedbackCachedState, Refresh};
++        use wayland_protocols::wp::presentation_time::server::wp_presentation_feedback::Kind;
++        let Some(cast) = self.cast.as_ref() else { return };
++        let Some(surface) = cast.surface.as_ref() else { return };
++        let callbacks = with_states(surface, |states| {
++            std::mem::take(&mut states.cached_state.get::<PresentationFeedbackCachedState>().current().callbacks)
++        });
++        if callbacks.is_empty() {
++            return;
++        }
++        let mut now = libc::timespec { tv_sec: 0, tv_nsec: 0 };
++        if unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut now) } != 0 { return; }
++        let time = std::time::Duration::new(now.tv_sec as u64, now.tv_nsec as u32);
++        let refresh_mhz = cast.output.current_mode().map_or(60000, |m| m.refresh.max(1000));
++        let refresh = Refresh::fixed(std::time::Duration::from_secs_f64(1000.0 / refresh_mhz as f64));
++        for feedback in callbacks {
++            feedback.presented(&cast.output, time, refresh, 0, Kind::empty());
++        }
++    }
++
+     /// Report a presentation. `hardware`: the time is the display's present fence
+     /// (zero-copy); otherwise a software estimate right after eglSwapBuffers.
+     pub(crate) fn complete_presentation(
+@@ -1173,6 +1212,25 @@ impl AndroidSeatRuntime {
+         }
+     }
+ 
++    /// Collect the cast window's frame and pace only that window. The phone's
++    /// windows get no frame callbacks, so KWin stops drawing the phone output.
++    fn render_cast_only(&mut self) {
++        use smithay::wayland::compositor::{with_states, SurfaceAttributes};
++        let Some(surface) = self.cast.as_ref().and_then(|c| c.surface.clone()) else { return };
++        if !surface.is_alive() {
++            return;
++        }
++        if let Some(buffer) = Self::get_surface_buffer(&surface) {
++            if crate::android::backend::wayland::cast::take_new_buffer(self.cast.as_mut(), &buffer) {
++                let scale = with_states(&surface, |states| {
++                    states.cached_state.get::<SurfaceAttributes>().current().buffer_scale.max(1)
++                }) as f32;
++                self.pending_cast_frame = Self::try_get_dmabuf_render_item(&surface, &buffer, 0, 0, scale, false);
++            }
++        }
++        Self::send_frame_callback(&surface);
++    }
++
+     fn send_frame_callback(wl_surface: &WlSurface) {
+         use smithay::wayland::compositor::{with_states, SurfaceAttributes};
+         let now = crate::android::frame_clock::timestamp_ms();
+@@ -1323,6 +1381,9 @@ impl AndroidSeatRuntime {
+ 
+     pub(crate) fn render_all(&mut self) {
+         if !engine_timing::is_rendering_active() {
++            // The phone surface is gone (app in background, docs/58); a cast
++            // display keeps showing the desktop.
++            self.render_cast_only();
+             return;
+         }
+ 
+@@ -1368,7 +1429,10 @@ impl AndroidSeatRuntime {
+                 if self.is_cast_surface(wl_surface) {
+                     // The cast window goes to the TV, never onto the phone surface.
+                     if let Some(buffer) = buffer_info {
+-                        self.pending_cast_frame = Self::try_get_dmabuf_render_item(wl_surface, &buffer, 0, 0, surface_scale, false);
++                        // Field access (not a method): `self.space` is borrowed by the loop.
++                        if crate::android::backend::wayland::cast::take_new_buffer(self.cast.as_mut(), &buffer) {
++                            self.pending_cast_frame = Self::try_get_dmabuf_render_item(wl_surface, &buffer, 0, 0, surface_scale, false);
++                        }
+                     }
+                     continue;
+                 }
+diff --git a/src/compositor.rs b/src/compositor.rs
+index aa3f61e..1e3da49 100644
+--- a/src/compositor.rs
++++ b/src/compositor.rs
+@@ -335,6 +335,10 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+                         if crate::android::backend::smithay_backend::bind_cast_window(&mut backend_state, window, (width, height)) {
+                             if let Some(server) = wayland_server.as_mut() {
+                                 server.runtime.add_cast_output((width, height), refresh_mhz);
++                                // A new presenter starts empty: hand it the current frame.
++                                if let Some(cast) = server.runtime.cast.as_mut() {
++                                    cast.last_buffer = None;
++                                }
+                             }
+                         }
+                     }
+@@ -493,12 +497,13 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+                     last_render = Instant::now();
+                     last_commits = commits;
+                     if let Some(frame) = server.runtime.pending_cast_frame.take() {
+-                        if crate::android::backend::smithay_backend::present_cast(&mut backend_state, frame) {
+-                            // KWin keeps at most two frames of an output pending; report the
+-                            // cast frame now rather than with the next phone frame.
+-                            server.runtime.finish_presentation();
+-                        }
++                        crate::android::backend::smithay_backend::present_cast(&mut backend_state, frame);
+                     }
++                    // KWin keeps at most two frames of an output pending. Report every
++                    // cast commit now, also one that brought no new buffer (the same
++                    // buffer again after a configure): left unanswered, it stopped the
++                    // TV for good after returning from the background.
++                    server.runtime.finish_cast_presentation();
+                 }
+             }
+             if let Some(cast) = backend_state.cast.as_mut() {
+@@ -535,8 +540,14 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+             if settling {
+                 last_activity = Instant::now();
+             }
+-            parked = wayland_server.is_some() && last_activity.elapsed() >= PARK_AFTER
+-                && crate::android::surface_control::on_demand_vsync();
++            // Phone surface suspended with a TV attached (app in the background or
++            // the phone screen off): no vsync to follow. Render each cast commit as
++            // it arrives; KWin paces the cast output itself from its presentation
++            // feedback, so the TV keeps its own rate without the phone's display.
++            let cast_only = !crate::android::backend::wayland::engine_timing::is_rendering_active()
++                && backend_state.cast.is_some();
++            parked = wayland_server.is_some() && (cast_only || (last_activity.elapsed() >= PARK_AFTER
++                && crate::android::surface_control::on_demand_vsync()));
+             crate::android::frame_clock::set_wants_vsync(!parked);
+ 
+             // Snapshot/diagnostics at ~2Hz, not every spin: the format!s and
+@@ -561,8 +572,18 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+                     let focused = server.runtime.focused_surface.as_ref()
+                         .map(|s| format!("{:?}", s.id()))
+                         .unwrap_or_else(|| "none".to_string());
++                    let cast = match backend_state.cast.as_ref() {
++                        Some(c) => format!("cast(frames={} new={} skipped={:?} settled={} window={} rendering={} commits={})", c.frames,
++                            server.runtime.cast.as_ref().map_or(0, |o| o.new_frames),
++                            crate::android::backend::smithay_backend::CAST_SKIPPED.iter().map(|c| c.load(std::sync::atomic::Ordering::Relaxed)).collect::<Vec<_>>(),
++                            c.presenter.settled(),
++                            server.runtime.cast.as_ref().is_some_and(|o| o.surface.is_some()),
++                            crate::android::backend::wayland::engine_timing::is_rendering_active(),
++                            crate::android::backend::wayland::engine_timing::commit_count()),
++                        None => "cast(none)".to_string(),
++                    };
+                     let stats = format!(
+-                        "windows={} unmanaged={} focus={} injected={} dispatch={} focus_decision={} cursor={} {} {}",
++                        "windows={} unmanaged={} focus={} injected={} dispatch={} focus_decision={} cursor={} {} {} {}",
+                         server.runtime.space.elements().count(),
+                         server.runtime.unmanaged_surfaces.len(),
+                         focused,
+@@ -571,7 +592,8 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+                         server.runtime.last_focus_decision,
+                         server.runtime.last_cursor_mode,
+                         crate::android::surface_control::stats(),
+-                        crate::android::frame_clock::stats()
++                        crate::android::frame_clock::stats(),
++                        cast
+                     );
+                     crate::android::command_channel::set_runtime_stats(stats);
+                 }

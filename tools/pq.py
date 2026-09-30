@@ -32,7 +32,7 @@ import subprocess
 import sys
 import tarfile
 import urllib.request
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 WORKSPACE = Path(__file__).resolve().parent.parent
 PACKAGES = WORKSPACE / 'packages'
@@ -62,6 +62,23 @@ def sha256(path):
     return digest.hexdigest()
 
 
+def relative_source_path(value):
+    """Recipe paths must stay within the selected upstream tree."""
+    path = PurePosixPath(value)
+    if not value or path.is_absolute() or '..' in path.parts or str(path) == '.':
+        raise SystemExit(f'invalid source path: {value!r}')
+    return str(path)
+
+
+def git_archive_name(name, info):
+    suffix = ''
+    if info.get('subdir'):
+        subdir = relative_source_path(info['subdir'])
+        selection = hashlib.sha256(f"{subdir}:{info['tree']}".encode()).hexdigest()[:16]
+        suffix = f'-{selection}'
+    return f"{name}-{info['commit'][:12]}{suffix}.tar"
+
+
 def fetch(name, opener=urllib.request.urlopen):
     info = recipe(name)
     cache = SOURCES / name
@@ -84,10 +101,10 @@ def fetch(name, opener=urllib.request.urlopen):
 
 
 def fetch_git(name, info, cache):
-    """kind "git": an upstream without release tarballs, pinned by commit. The commit's tree hash is
-    the recipe's check; the tarball is `git archive` of it, so it is the same wherever it is made."""
+    """kind "git": pinned commit, optionally selecting a subdir. The recipe checks the selected
+    tree hash; `git archive` makes the same source archive on each build host."""
     repo, commit = cache / 'repo.git', info['commit']
-    tarball = cache / f"{name}-{commit[:12]}.tar"
+    tarball = cache / git_archive_name(name, info)
     if tarball.exists():
         return cache
     if not repo.exists():
@@ -95,13 +112,23 @@ def fetch_git(name, info, cache):
     have = subprocess.run(['git', '-C', str(repo), 'cat-file', '-e', f'{commit}^{{commit}}'], capture_output=True)
     if have.returncode:
         subprocess.run(['git', '-C', str(repo), 'fetch', '-q', '--depth=1', info['git'], commit], check=True)
-    tree = subprocess.run(['git', '-C', str(repo), 'rev-parse', f'{commit}^{{tree}}'], capture_output=True,
+    # Some upstream repositories embed dependencies as ordinary subtrees. Pin each subtree
+    # independently without importing unrelated apps, generated caches or other dependencies.
+    treeish = f"{commit}:{relative_source_path(info['subdir'])}" if info.get('subdir') else f'{commit}^{{tree}}'
+    tree = subprocess.run(['git', '-C', str(repo), 'rev-parse', treeish], capture_output=True,
                           text=True, check=True).stdout.strip()
     if tree != info['tree']:
         raise SystemExit(f"{name}: commit {commit} has tree {tree}, recipe says {info['tree']}")
     partial = tarball.with_suffix('.part')
+    archive_ref, archive_options = commit, []
+    if info.get('subdir'):
+        # A tree object has no timestamp: git archive otherwise uses the current clock.
+        # Keep whole-commit archives unchanged; subtree archives use the pinned commit time.
+        timestamp = subprocess.run(['git', '-C', str(repo), 'show', '-s', '--format=%ct', commit],
+                                   capture_output=True, text=True, check=True).stdout.strip()
+        archive_ref, archive_options = treeish, [f'--mtime=@{timestamp}']
     subprocess.run(['git', '-C', str(repo), 'archive', '--format=tar', f'--prefix={name}/', '-o', str(partial),
-                    commit], check=True)
+                    *archive_options, archive_ref], check=True)
     partial.rename(tarball)
     return cache
 
@@ -124,7 +151,7 @@ def orig_tarball(name):
     (kind "upstream", the recipe's 'tarball'), or an archive of a pinned commit (kind "git")."""
     info = recipe(name)
     if info.get('kind') == 'git':
-        return fetch(name) / f"{name}-{info['commit'][:12]}.tar"
+        return fetch(name) / git_archive_name(name, info)
     if info.get('kind') == 'upstream':
         return fetch(name) / info['tarball']
     tars = [f for f in info['files'] if '.orig.tar.' in f and not f.endswith(('.asc', '.sig'))]
@@ -175,6 +202,18 @@ def source(name, output=None):
     [top] = list(unpack.iterdir())
     top.rename(output)
     unpack.rmdir()
+    # Explicit exclusions are for upstream's checked-in build/debug output and dependencies
+    # prepared separately. Missing paths fail so an upstream upgrade must review the selection.
+    for entry in recipe(name).get('exclude', []):
+        target = output / relative_source_path(entry)
+        if not target.parent.resolve().is_relative_to(output):
+            raise SystemExit(f'{name}: excluded path escapes source tree: {entry}')
+        if target.is_symlink() or target.is_file():
+            target.unlink()
+        elif target.is_dir():
+            shutil.rmtree(target)
+        else:
+            raise SystemExit(f'{name}: excluded upstream path no longer exists: {entry}')
     # A pinned upstream without changes and without packaging of its own has no debian/.
     if (PACKAGES / name / 'debian').exists():
         shutil.rmtree(output / 'debian', ignore_errors=True)

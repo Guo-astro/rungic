@@ -1,0 +1,111 @@
+From: Rungic <noreply@rungic.invalid>
+Date: Wed, 30 Sep 2026 12:34:38 +0800
+Subject: Cast step 3: phone as the TV's touchpad and keyboard
+
+Preserve the deployed implementation during the source/patch migration.
+
+Origin: vendor, RungicCore commit:277f2d49ab8a39959816ab5ae32edddd5d1c29a2
+Forwarded: no
+Last-Update: 2026-09-30
+X-Rungic-Status: Inappropriate; Android host integration
+X-Rungic-Tests: L0:source-replay; L1:android-cross-build (host); runtime scope in docs/73
+X-Rungic-Docs: docs/73; docs/49; docs/research/91
+---
+ src/android/backend/wayland/seat.rs |  6 +++++-
+ src/android/bridge_surface.rs       | 11 +++++++++++
+ src/android/command_channel.rs      |  4 ++++
+ src/compositor.rs                   | 13 +++++++++++++
+ 4 files changed, 33 insertions(+), 1 deletion(-)
+
+diff --git a/src/android/backend/wayland/seat.rs b/src/android/backend/wayland/seat.rs
+index c787f92..241dea2 100644
+--- a/src/android/backend/wayland/seat.rs
++++ b/src/android/backend/wayland/seat.rs
+@@ -243,6 +243,8 @@ pub struct AndroidSeatRuntime {
+     pub(crate) cast: Option<crate::android::backend::wayland::cast::CastOutput>,
+     /// Newest buffer of the cast window, taken by the compositor loop after render_all.
+     pub(crate) pending_cast_frame: Option<crate::android::backend::smithay_backend::RenderItem>,
++    /// The phone is the TV's touchpad: the pointer lives on the cast window (cast.rs).
++    pub(crate) cast_pointer: bool,
+     pub(crate) unmanaged_surfaces: Vec<WlSurface>,
+     pub(crate) last_seat_dispatch: String,
+     pub(crate) last_focus_decision: String,
+@@ -638,6 +640,7 @@ impl AndroidSeatRuntime {
+             wl_to_window: HashMap::new(),
+             cast: None,
+             pending_cast_frame: None,
++            cast_pointer: false,
+             unmanaged_surfaces: Vec::new(),
+             last_seat_dispatch: "none".to_string(),
+             last_focus_decision: "none".to_string(),
+@@ -1012,7 +1015,8 @@ impl AndroidSeatRuntime {
+     /// only; advertising a pointer made KWin draw its cursor at (0,0) at every
+     /// start (a black square with an arrow, top-left) until a pointer device moved.
+     pub(crate) fn sync_pointer_capability(&mut self) {
+-        let wants = matches!(self.current_input_mode, WinlandInputMode::Mouse | WinlandInputMode::Trackpad);
++        let wants = matches!(self.current_input_mode, WinlandInputMode::Mouse | WinlandInputMode::Trackpad)
++            || self.cast_pointer;
+         match (wants, self.seat.get_pointer().is_some()) {
+             (true, false) => self.pointer = self.seat.add_pointer(),
+             (false, true) => {
+diff --git a/src/android/bridge_surface.rs b/src/android/bridge_surface.rs
+index 386fa04..2080e11 100644
+--- a/src/android/bridge_surface.rs
++++ b/src/android/bridge_surface.rs
+@@ -158,6 +158,17 @@ pub extern "system" fn Java_com_winland_server_NativeBridge_releaseCastSurface(_
+     crate::android::command_channel::send_command(crate::android::command_channel::JniCommand::ReleaseCastWindow);
+ }
+ 
++#[no_mangle]
++pub extern "system" fn Java_com_winland_server_NativeBridge_castPointer(
++    _env: JNIEnv,
++    _class: JClass,
++    op: jint,
++    x: jfloat,
++    y: jfloat,
++) {
++    crate::android::command_channel::send_command(crate::android::command_channel::JniCommand::CastPointer { op, x, y });
++}
++
+ #[no_mangle]
+ pub extern "system" fn Java_com_winland_server_NativeBridge_sendRelativeMotion(
+     _env: JNIEnv,
+diff --git a/src/android/command_channel.rs b/src/android/command_channel.rs
+index 820b6be..571d273 100644
+--- a/src/android/command_channel.rs
++++ b/src/android/command_channel.rs
+@@ -52,6 +52,10 @@ pub enum JniCommand {
+         refresh_mhz: i32,
+     },
+     ReleaseCastWindow,
++    /// Phone as the TV's touchpad (docs/58 step 3). op: 0 enable (x != 0),
++    /// 1 relative motion (x, y in TV pixels), 2 button (x = Linux code, y != 0
++    /// pressed), 3 finger scroll (x, y in TV pixels), 4 scroll stop.
++    CastPointer { op: i32, x: f32, y: f32 },
+     SurfaceChanged {
+         width: i32,
+         height: i32,
+diff --git a/src/compositor.rs b/src/compositor.rs
+index 1133a48..aa3f61e 100644
+--- a/src/compositor.rs
++++ b/src/compositor.rs
+@@ -344,6 +344,19 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+                         }
+                         crate::android::backend::smithay_backend::release_cast_window(&mut backend_state);
+                     }
++                    JniCommand::CastPointer { op, x, y } => {
++                        if let Some(server) = wayland_server.as_mut() {
++                            let rt = &mut server.runtime;
++                            match op {
++                                0 => rt.set_cast_pointer(x != 0.0),
++                                1 => rt.cast_pointer_motion(x as f64, y as f64),
++                                2 => rt.cast_pointer_button(x as u32, y != 0.0),
++                                3 => rt.cast_pointer_scroll(x as f64, y as f64, false),
++                                4 => rt.cast_pointer_scroll(0.0, 0.0, true),
++                                _ => {}
++                            }
++                        }
++                    }
+                     JniCommand::ReleaseNativeWindow { response } => {
+                         crate::android::backend::smithay_backend::release_native_window(&mut backend_state);
+                         let _ = response.send(());

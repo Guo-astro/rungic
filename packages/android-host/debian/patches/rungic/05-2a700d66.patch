@@ -1,0 +1,42 @@
+From: Rungic <noreply@rungic.invalid>
+Date: Wed, 30 Sep 2026 12:34:37 +0800
+Subject: Host: configure xdg toplevels only on real state changes (APK 1.25)
+
+Preserve the deployed implementation during the source/patch migration.
+
+Origin: vendor, RungicCore commit:2a700d66edee89d2b0e87418776218ac077e894e
+Forwarded: no
+Last-Update: 2026-09-30
+X-Rungic-Status: Inappropriate; Android host integration
+X-Rungic-Tests: L0:source-replay; L1:android-cross-build (host); runtime scope in docs/73
+X-Rungic-Docs: docs/73; docs/49; docs/research/91
+---
+ src/android/backend/wayland/input_router.rs | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/src/android/backend/wayland/input_router.rs b/src/android/backend/wayland/input_router.rs
+index 63caab3..2976d7c 100644
+--- a/src/android/backend/wayland/input_router.rs
++++ b/src/android/backend/wayland/input_router.rs
+@@ -152,7 +152,7 @@ impl AndroidSeatRuntime {
+                 if let Some(old_window) = self.wl_to_window.get(old_surface) {
+                     old_window.set_activated(false);
+                     if let Some(toplevel) = old_window.toplevel() {
+-                        toplevel.send_configure();
++                        toplevel.send_pending_configure();
+                     }
+                 }
+             }
+@@ -162,8 +162,11 @@ impl AndroidSeatRuntime {
+ 
+         if let Some(window) = self.wl_to_window.get(&target) {
+             window.set_activated(true);
++            // Every touch-down refocuses; only a real state change may configure,
++            // otherwise KWin reapplies its output configuration (and rescans cursor
++            // themes) on each touch (docs/57).
+             if let Some(toplevel) = window.toplevel() {
+-                toplevel.send_configure();
++                toplevel.send_pending_configure();
+             }
+         }
+ 

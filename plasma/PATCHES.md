@@ -1,9 +1,7 @@
-# 补丁与正式源码的关系
+# 补丁与自有源码的关系
 
-2026-09-23开始，修改后的正式源码已直接vendor进`vendor/`。KWin、KScreen、Plasma Mobile、Settings、Keyboard、Portal、libcamera、Qt Multimedia、Plasma Camera、FFmpeg和Snapshot的构建以vendor源码为准。
+上游源码统一由`packages/<名称>/recipe.json`固定来源、版本、校验值与许可证，本地修改在`debian/patches/rungic/`，顺序由`debian/patches/series`声明。用`tools/pq.py prepare/export`维护补丁，实际源码只在`.work/`展开。2026-09-30已补齐Android宿主、Smithay/Winit及Firefox移动配置，原`vendor/`和直接维护的两棵源码树已删除。见[71篇](../docs/71-upstream-patch-queue.md)、[73篇](../docs/73-reduce-upstream-changes.md#remaining-source-trees-migrated-2026-09-30)。
 
-这里的已应用补丁和`shared/media/snapshot-moto-codec.patch`保留为首次适配的历史证据；版本及顺序见`vendor/manifest.json`。不要修改源码后再手工维护一份同内容补丁，也不要对vendor重放它们。后续变化直接提交Git，按基线提交导出diff即可。
+`plasma/`与`shared/`中的自有应用、桥接和共享模块直接维护；上游组件使用它们时由recipe的`overlay`加入生成树，不在多个补丁中复制。宿主自有Rust模块在`plasma/android-host/`，上游宿主修改在`packages/android-host/`。
 
-例外：`qt-video-duration.patch`仍为独立的未验收实验，没有包含进vendor/Qt正式代码。如需继续研究，应在开发分支或独立构建副本应用，验收后再合入正式源码。
-
-`androidgraphicsbuffer.h`和`libcamera/pipewire_frame_generator.*`是指向正式vendor文件的兼容链接；显示协议头及FFmpeg桥仍由`plasma/android-display-client.h`与`shared/media/`统一提供。
+`qt-video-duration.patch`仍是未验收实验，没有进入`packages/qt6-multimedia`的补丁队列。其他历史适配补丁若仍由导入记录引用，只作为历史证据，不是当前构建入口；不要把旧补丁手动叠加到已准备好的源码树。

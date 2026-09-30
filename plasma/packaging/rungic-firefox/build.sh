@@ -1,6 +1,13 @@
 # rungic-firefox
 install -Dm755 "$SRC/plasma/firefox" "$DESTDIR/usr/bin/firefox"
-cp -a "$SRC/plasma/firefox-mobile/usr" "$DESTDIR/"
+# Install the same runtime subset as before, directly from the patched upstream source.
+# Its Makefile also adds metainfo and policies; Rungic maintains its own policies below.
+task_mcf="$SRC/upstream/mobile-config-firefox/src"
+mkdir -p "$DESTDIR/usr/lib/mobile-config-firefox"
+cp -a "$task_mcf/modules/." "$DESTDIR/usr/lib/mobile-config-firefox/"
+cp -a "$task_mcf/themes" "$DESTDIR/usr/lib/mobile-config-firefox/"
+install -Dm644 "$task_mcf/mobile-config-prefs.js" "$DESTDIR/usr/lib/firefox/defaults/pref/mobile-config-prefs.js"
+install -Dm644 "$task_mcf/mobile-config-autoconfig.js" "$DESTDIR/usr/lib/firefox/mobile-config-autoconfig.js"
 install -Dm644 "$SRC/plasma/firefox-policies.json" "$DESTDIR/usr/lib/firefox/distribution/policies.json"
 install -Dm644 "$SRC/plasma/firefox-codec-prefs.js" "$DESTDIR/usr/lib/firefox/defaults/pref/rungic-codec.js"
 # Firefox loads FFmpeg from its own directory first: the private build with the moto codecs.

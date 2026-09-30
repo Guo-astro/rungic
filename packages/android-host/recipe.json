@@ -1,0 +1,32 @@
+{
+  "comment": "Pinned subtree of the Winland fork used by the existing Android host. This migration preserves its baseline; it does not claim this subtree equals an official upstream release. See docs/73.",
+  "kind": "git",
+  "source": "android-host",
+  "version": "0.2.0",
+  "git": "https://github.com/eirkkk/winland-Android",
+  "commit": "4269ec048e83133102d00464fd4c23af44d84707",
+  "subdir": "native",
+  "tree": "1403bf57e8df1b8b87adf2497b99230c75e2235e",
+  "upstream": "https://github.com/eirkkk/winland-Android",
+  "licenses": "Winland README declares MIT; pinned root has no LICENSE (unresolved); preserved per-file notices",
+  "files": {},
+  "exclude": [
+    "lib",
+    ".cargo",
+    ".tmp_uniffi",
+    "build_error.log",
+    "build_error_v2.log",
+    "cxx_stubs.c",
+    "temp_bindgen",
+    "src/graphify-out"
+  ],
+  "overlay": {
+    "src/android/frame_clock.rs": "plasma/android-host/src/android/frame_clock.rs",
+    "src/android/gpu_allocator.rs": "plasma/android-host/src/android/gpu_allocator.rs",
+    "src/android/idle_inhibit.rs": "plasma/android-host/src/android/idle_inhibit.rs",
+    "src/android/surface_control.rs": "plasma/android-host/src/android/surface_control.rs",
+    "src/android/presentation_gate.rs": "plasma/android-host/src/android/presentation_gate.rs",
+    "src/android/backend/wayland/explicit_sync.rs": "plasma/android-host/src/android/backend/wayland/explicit_sync.rs",
+    "src/android/backend/wayland/cast.rs": "plasma/android-host/src/android/backend/wayland/cast.rs"
+  }
+}

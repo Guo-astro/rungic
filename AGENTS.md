@@ -88,10 +88,10 @@
 
 ## 上游源码与多机协作
 
-- 2026-09-27起所有修改过的Linux上游组件都按“固定上游＋补丁队列”维护（docs/71、docs/73）：只在`packages/<名称>/`（`recipe.json`固定来源与许可证，`debian/patches/rungic/`为DEP-3补丁），用`tools/pq.py prepare/export`修改补丁，`tools/build_on_device.py`在手机上构建；共享文件用配方的`overlay`放入源码树，不复制进补丁。不要恢复`vendor/`源码目录或`stage_vendor.py`。
-- `vendor/manifest.json`只记录仍直接跟踪的外来树（`native/plasma/`、`plasma/firefox-mobile/`），直接修改它们；Android宿主和共享代码仍在各自目录。`plasma/qt-video-duration.patch`是未验收实验，未进入Qt补丁队列。
+- 所有修改过的上游组件按“固定上游＋补丁队列”维护（docs/71、docs/73）：只在`packages/<名称>/`（`recipe.json`固定来源与许可证，`debian/patches/rungic/`为DEP-3补丁），用`tools/pq.py prepare/export`修改补丁；共享和自有模块用配方的`overlay`放入源码树，不复制进补丁。不要恢复`vendor/`源码目录或`stage_vendor.py`。
+- 2026-09-30已补齐原先直接维护的例外：Android原生宿主在`packages/android-host/`，Smithay/Winit分别在`packages/smithay/`、`packages/winit/`，Firefox移动配置在`packages/mobile-config-firefox/`。`native/plasma/`、`plasma/firefox-mobile/`和`vendor/`已删除。宿主自有模块在`plasma/android-host/`，`tools/prepare_android_host.py`在`.work/build/android-host/source/`组装三份固定源码；`plasma/build-native-core.sh`交叉编译Android库，Linux上游包继续用`tools/build_on_device.py`。`plasma/qt-video-duration.patch`是未验收实验，未进入Qt补丁队列。
 - 上游升级先核对新版本是否已包含我们的修复，已包含的删除；升级时更新配方版本、哈希和许可证记录。跨组件协议变更在同一组Git提交中同步；本机和K8用提交SHA协作，协作与核对结果见`docs/53-remote-system-development.md`。
-- 本机生成的源码树、构建产物只能进入`.work`；审计仅按精确哈希豁免已核对的上游公开文件（`vendor/audit-exceptions.json`）。
+- 本机生成的源码树、构建产物只能进入`.work`；审计仅按精确哈希豁免已核对的上游公开文件（`provenance/audit-exceptions.json`）。
 
 ## 完整镜像的首次进入流程（用户于 2026-09-28 明确要求）
 

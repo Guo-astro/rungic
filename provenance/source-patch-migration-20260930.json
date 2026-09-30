@@ -1,0 +1,93 @@
+{
+  "date": "2026-09-30",
+  "reference_commit": "e5511528c2abd0c508098c3b0b464c4c1e808b8b",
+  "scope": "Pinned source and patch migration; no device deployment or upstream version upgrade",
+  "components": {
+    "android-host": {
+      "recipe": "packages/android-host/recipe.json",
+      "origin": "https://github.com/eirkkk/winland-Android",
+      "commit": "4269ec048e83133102d00464fd4c23af44d84707",
+      "subdir": "native",
+      "tree": "1403bf57e8df1b8b87adf2497b99230c75e2235e",
+      "archive_checksums": {},
+      "licenses": "Winland README declares MIT; pinned root has no LICENSE (unresolved); preserved per-file notices",
+      "patches": [
+        "rungic/01-f0a7c6a1.patch",
+        "rungic/02-eb2812b3.patch",
+        "rungic/03-bd28a948.patch",
+        "rungic/04-5ef2cb29.patch",
+        "rungic/05-2a700d66.patch",
+        "rungic/06-8de5b537.patch",
+        "rungic/07-10463dd3.patch",
+        "rungic/08-277f2d49.patch",
+        "rungic/09-5c6e0958.patch",
+        "rungic/10-18d1948c.patch",
+        "rungic/11-58279319.patch",
+        "rungic/12-825dfc2d.patch",
+        "rungic/14-66c02d41.patch",
+        "rungic/15-05176412.patch",
+        "rungic/16-ecdfacec.patch",
+        "rungic/17-96a89955.patch",
+        "rungic/18-04779298.patch",
+        "rungic/19-24a34289.patch",
+        "rungic/20-57e1a07d.patch"
+      ]
+    },
+    "smithay": {
+      "recipe": "packages/smithay/recipe.json",
+      "origin": "https://github.com/eirkkk/winland-Android",
+      "commit": "4269ec048e83133102d00464fd4c23af44d84707",
+      "subdir": "native/lib/smithay",
+      "tree": "ddc78efe6616bcce50ce6fecf7560385f6a78212",
+      "archive_checksums": {},
+      "licenses": "MIT; LICENSE.txt",
+      "patches": [
+        "rungic/02-10463dd3.patch",
+        "rungic/03-ecdfacec.patch",
+        "rungic/04-24a34289.patch"
+      ]
+    },
+    "winit": {
+      "recipe": "packages/winit/recipe.json",
+      "origin": "https://github.com/eirkkk/winland-Android",
+      "commit": "4269ec048e83133102d00464fd4c23af44d84707",
+      "subdir": "native/lib/winit",
+      "tree": "96a7a370234c7691e6147dbef3251bf357a5228f",
+      "archive_checksums": {},
+      "licenses": "Apache-2.0; winit/LICENSE",
+      "patches": []
+    },
+    "mobile-config-firefox": {
+      "recipe": "packages/mobile-config-firefox/recipe.json",
+      "origin": "https://gitlab.postmarketos.org/postmarketOS/mobile-config-firefox",
+      "commit": null,
+      "subdir": null,
+      "tree": null,
+      "archive_checksums": {
+        "mobile-config-firefox-5.4.1.tar.gz": "4a380df41608638ef52504a19a668f91461cb0c2147ba30402c15b8d7a8bfb13"
+      },
+      "licenses": "MPL-2.0; LICENSE",
+      "patches": [
+        "rungic/android-mobile-user-agent.patch"
+      ]
+    }
+  },
+  "verification": {
+    "native": {
+      "entries": 706,
+      "differences": 0,
+      "manifest_sha256": "ae8fc4900de2a804f6e59341073e9dca7bcd3f17844d8a9751005c2c0d64561d",
+      "comparison": "File SHA256, executable bit and symlink target; native excludes generated .pc/debian metadata"
+    },
+    "firefox": {
+      "entries": 46,
+      "differences": 0,
+      "manifest_sha256": "dde91c347403b856a7425e7b750f236ff4001cc500203313e1cb0f2f55db09fe",
+      "comparison": "File SHA256, executable bit and symlink target; native excludes generated .pc/debian metadata"
+    },
+    "android_release_build": "passed before and after, locked/offline aarch64-linux-android",
+    "firefox_deb": "built by build_host in isolated output, unpacked and compared",
+    "pq_unit_tests": 18,
+    "device_deployment": false
+  }
+}

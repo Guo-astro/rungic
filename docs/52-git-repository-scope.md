@@ -12,9 +12,9 @@ moto/
 ├── .agents/skills/            项目共享 Skill 与执行参考，随 Git 同步
 ├── docs/                      设备、ROM、容器、Plasma实施文档
 │   └── research/              可复用的硬件接口与早期研究结论
-├── plasma/                    KDE适配、Android APK、配置、构建脚本
-├── native/plasma/             Rust/Smithay原生Wayland后端及锁定依赖
-├── vendor/                    KWin、Mesa、Qt及桌面/媒体组件的正式源码
+├── plasma/                    自有应用、KDE集成、Android APK、配置、构建脚本
+│   └── android-host/          自有Rust宿主模块（由recipe overlay接入）
+├── packages/                  上游固定配方、打包和DEP-3补丁；包含Android宿主及其依赖
 ├── shared/                    共享媒体、网络、剪贴板和GPU诊断代码
 ├── tools/                     管理、刷机、审计和性能测试工具
 │   └── toolchains/            Android编译器包装脚本
@@ -44,14 +44,14 @@ moto/
 - `shared/media/`：Camera2到PipeWire的camera-source、麦克风/摄像头需求管理、MediaCodec客户端、GStreamer/FFmpeg适配、Snapshot补丁。
 - `shared/platform/`：NetworkManager D-Bus桥和剪贴板桥。
 - `shared/graphics/`：GPU及共享缓冲诊断。
-- `native/plasma/`：Plasma正在使用的完整原生后端，含Smithay/Winit本地路径依赖及原许可证。
+- 原先的`native/plasma/`：当时保留了完整原生后端及Smithay/Winit依赖。2026-09-30已迁入`packages/android-host`、`packages/smithay`、`packages/winit`，自有新增模块留在`plasma/android-host`，不再直接跟踪上游源码树。见[73篇收尾记录](73-reduce-upstream-changes.md#remaining-source-trees-migrated-2026-09-30)。
 - `.work/deps/`：Plasma构建继续需要的Mesa、FFmpeg、Snapshot源码和Android/libxkbcommon依赖库；开发签名身份现位于`signing/development/`。
 
 28–35篇中可复用的硬件接口研究移到`docs/research/`并标明历史状态。文档中保留的Phosh历史描述不代表该桌面仍受支持；最新实现看Plasma集成文档。原始排障记录已有删除，不能把历史路径当成可执行安装步骤。
 
 ## 构建与后续文件位置
 
-原生构建入口仍为`bash plasma/build-native-core.sh`，现在从`native/plasma/`读源码，使用`tools/toolchains/`，输出到`.work/build/native-target/`和`.work/refs/plasma-mobile-20260923/native-libs/`。
+原生构建入口仍为`bash plasma/build-native-core.sh`。2026-09-30起先由`tools/prepare_android_host.py`将固定上游、补丁和overlay组装到`.work/build/android-host/source/`，再使用`tools/toolchains/`编译，输出到`.work/build/native-target/`和`.work/refs/plasma-mobile-20260923/native-libs/`。修改上游代码用`tools/pq.py prepare/export`，不要直接编辑生成树作为最终修改。
 
 APK入口仍为`bash plasma/build-apk.sh`，输出在`.work/refs/plasma-mobile-20260923/`，默认使用`signing/development/launcher-signing.p12`签名，也可用`MOTO_APK_KEYSTORE`指定同类型密钥路径。它不安装APK或重启手机。本次移动的是原有开发签名身份，没有重新生成密钥；`.gitignore`与审计工具仅对此指定文件增加例外。
 

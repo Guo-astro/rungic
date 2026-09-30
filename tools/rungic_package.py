@@ -270,6 +270,14 @@ def build_host(pkg, tree):
         root = work / 'root'
         (root / 'DEBIAN').mkdir(parents=True)
         env = dict(os.environ, DESTDIR=str(root), SRC=str(WORKSPACE), SOURCE_DATE_EPOCH=epoch, LC_ALL='C.UTF-8')
+        if pkg.get('upstream'):
+            # Use the same staged, patched inputs as device builds. Host packages must not
+            # silently read an old installed/vendor tree in place of their pinned upstream.
+            source = work / 'src'
+            source.mkdir()
+            with tarfile.open(stage_sources(pkg)) as archive:
+                archive.extractall(source, filter='tar')
+            env['SRC'] = str(source)
         subprocess.run(['sh', '-eu', str(pkg['dir'] / 'build.sh')], cwd=WORKSPACE, env=env, check=True)
         maintainer_scripts(pkg, root)
         if unit_list(pkg):
