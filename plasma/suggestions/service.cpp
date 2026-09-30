@@ -246,7 +246,7 @@ void Suggestions::scheduleCuration() {
     const auto now = QDateTime::currentSecsSinceEpoch();
     const auto next = briefing.curating || !backgroundCuration() ? 0 : briefing.nextRun(now);
     if (!next) { curationTimer.stop(); return; }
-    curationTimer.start(int(qBound<qint64>(0, next - now, 86400) * 1000 + 500));
+    curationTimer.start(int(qBound(qint64(0), next - now, qint64(86400)) * 1000 + 500));
 }
 QString Suggestions::Briefing() {
     return encoded(briefing.view(model.list(), backgroundCuration(), QDateTime::currentSecsSinceEpoch()));
