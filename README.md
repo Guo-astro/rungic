@@ -16,45 +16,6 @@ It also comes with an AI assistant that can see, speak and act. Tell it what you
 
 **Rungic is built for agents of your choice.** The bundled assistant is a working demonstration and default implementation, currently powered by Codex. You can use another agent: the desktop, phone interfaces and system services are available independently of that choice. Integrating a replacement into the bundled assistant's voice, task and widget experience requires an adapter; there is no universal one-click switch yet.
 
-## Still your Android phone
-
-Rungic opens as an Android app after the phone has been prepared. Device preparation starts with the manufacturer's original firmware for the exact model and version, with a matching GKI kernel rebuilt for LXC. Our delivery direction separates that preparation from installing RungicOS: once the Android base is compatible, Rungic can be built and updated independently. Android remains the phone's operating system, alongside the Linux desktop.
-
-Once installation, account setup and device checks are complete, tap the Rungic icon to open the desktop, or return to Android to use your phone. Both environments run side by side, sharing the clipboard and your photos, videos and downloads. **Bootloader unlocking or the required device-preparation procedure can erase user data.** Separate Rungic installation is intended to preserve Android data; the new standalone installer still needs implementation and validation. Back up before starting; see [Before you install](#before-you-install) for app and manufacturer restrictions.
-
-## What makes it Agent Ready
-
-Rungic gives an agent a place to work, tools to act, evidence to inspect and a way to deliver the result. These capabilities sit in the system and can be reused by different agents.
-
-| What the system provides | What an agent can do | What you get |
-|---|---|---|
-| **A real Linux environment** | Run code and command-line tools, work with files, install desktop software through the package system | Finished documents, images, projects and installed apps |
-| **Desktop control** | Launch apps, inspect windows, take screenshots, click and type through desktop MCP tools | Work in existing graphical apps, including apps without an agent-specific integration |
-| **An agent workspace** | Work on a separate desktop, or use your desktop when requested | A visible work session that can run alongside your own |
-| **Phone and desktop interfaces** | Read device state, change brightness, use the shared clipboard and control casting through structured commands | Tasks that connect desktop software with the phone and its display |
-| **Diagnostics and compatibility knowledge** | Inspect available logs and crash evidence, check installed versions against known issues, propose a scoped fix | An explanation grounded in this device's evidence and software versions |
-| **Persistent suggestions and task state** | Pick up an issue, report investigation and repair progress, and record the outcome | Problems you can revisit and results you can review |
-
-The bundled assistant shows how to connect these pieces: a request becomes a plan, visible actions, progress updates and files you can open from the conversation. The same foundations support development agents through diagnostic MCP tools and the repository's build and installation skills. Phone-side assistance and developer-side device management have different access requirements.
-
-Agent choice and model choice are separate from these system capabilities. A replacement can use the Linux tools and supported MCP, command-line and D-Bus interfaces; its own execution, conversation and authorization behavior belongs to that integration. See the [integration map](docs/README.md#integrating-another-agent) for the reusable interfaces and the parts currently connected to Codex.
-
-### Interfaces an agent can use
-
-Rungic exposes two **MCP (Model Context Protocol) servers**, alongside command-line tools, D-Bus services and standard Linux interfaces. MCP is one way to connect an agent; these capabilities do not require Codex.
-
-| Interface | Entry point | What it exposes |
-|---|---|---|
-| **Desktop MCP** · on the phone | `rungic-cua mcp` | Screenshots, pointer/keyboard actions, app launch and window management, whole-task execution and voice messages. Workspace routing adds `desktop_where`; available tools depend on the selected execution mode. |
-| **Development MCP** · on the development computer | [`tools/rungic_agent_mcp.py`](tools/rungic_agent_mcp.py), configured in [`.mcp.json`](.mcp.json) | Device/renderer state, merged Android/Linux/kernel logs, crash reports and symbolization, integrity checks, screenshots, evidence bundles, UI inspection/actions, performance traces and build status. Requires separately configured device access. |
-| **Phone control** · CLI + JSON | `rungic-platform --request '<json>'` | Device, network and display state; brightness, clipboard, orientation, vibration and Android settings panels. |
-| **Workspaces and displays** · CLI + JSON | `rungic-workspace-env`, `rungic-user`, `rungic-agent-screen`, `rungic-desktop-mode`, `rungic-cast` | Run in the selected desktop session, show the assistant's screen, control desktop mode, discover/connect TVs and inspect casting capabilities. |
-| **Proactive system care** · D-Bus + CLI | `com.rungic.Suggestions`, `rungic-suggestions` | Issue/evidence queries, compatibility knowledge, reminders, investigation results, repair plans and local upstream-feedback material. Task handoff currently targets the bundled assistant. |
-| **Tasks, voice and usage** · D-Bus | `com.rungic.VoiceAgent`; suggestion-service usage methods/signals | Conversations, task progress/stop, voice and call controls, observed tokens and provider-supplied quotas. Replacing the bundled agent requires adapting this bridge and its usage data. |
-| **Files, packages and hardware** · Linux interfaces | Shell/files, PackageKit/`pkgcli`, polkit, Wayland, desktop portals, AT-SPI, PipeWire/PulseAudio and Android-backed D-Bus services | Work with files, install software with system authorization, and use the same desktop/media/device interfaces as ordinary Linux apps. Android-backed services implement documented subsets. |
-
-For MCP startup examples, the current tool inventory, D-Bus methods, session requirements and integration limits, see the [Agent Ready interface reference](docs/agent-ready-interfaces.md). Low-level screenshot/action tools can use the connecting agent's own reasoning; the bundled `desktop_goal` helper has its own configured model backend. Display/input separation does not isolate the agent from files owned by the same Linux user.
-
 ## Just say it
 
 <table>
@@ -105,15 +66,6 @@ The assistant works on a desktop of its own, so your phone stays yours.
 
 <p align="center"><sub>The assistant's screen at full size: Blender with the rocket it just built.</sub></p>
 
-## You stay in control
-
-- **It asks first.** Before it closes an app you are using, deletes or overwrites your files, or sends a message, it asks you.
-- **Your password stays yours.** When something needs administrator rights, the system shows a password dialog on your screen. You type it; the assistant never sees it.
-- **No silent detours.** If the plan hits a wall, it explains the options and what each one means, and you choose. It does not quietly settle for less.
-- **You set the rules.** The assistant's guidelines and skills are plain text files in your home folder. Edit them and the change applies right away.
-
-These describe the bundled assistant's workflow. Its separate desktop isolates the work session's display and input; it shares your Linux account and files. Instructions to ask first are agent behavior, while administrator authentication uses the system's authorization dialog. A replacement agent needs its own corresponding policies and integration.
-
 ## Proactive intelligence: useful suggestions, at your pace
 
 The first scope is system care: faults that need attention and known software compatibility or optimization opportunities. Rungic keeps a local record of the issue, its evidence, your decision and any investigation or repair task.
@@ -127,6 +79,15 @@ The first scope is system care: faults that need attention and known software co
 A separate **Agent widget** shows the bundled Codex integration's activity and usage with small pixel illustrations. It displays token usage observed by the integration and account quota/reset information when the account provides it; API-key accounts do not get invented subscription reset times. It opens the assistant or usage details when tapped. Another agent needs to supply its own usage data for this experience.
 
 This is an implemented foundation with a deliberately bounded scope. It does not yet detect every Android fault or automatically determine whether every app is using hardware acceleration. Compatibility suggestions depend on reviewed knowledge entries, and automatic upstream PR submission and status synchronization are not implemented. The [implementation and acceptance record](docs/research/proactive-system-care.md) separates device-tested behavior from remaining work.
+
+## You stay in control
+
+- **It asks first.** Before it closes an app you are using, deletes or overwrites your files, or sends a message, it asks you.
+- **Your password stays yours.** When something needs administrator rights, the system shows a password dialog on your screen. You type it; the assistant never sees it.
+- **No silent detours.** If the plan hits a wall, it explains the options and what each one means, and you choose. It does not quietly settle for less.
+- **You set the rules.** The assistant's guidelines and skills are plain text files in your home folder. Edit them and the change applies right away.
+
+These describe the bundled assistant's workflow. Its separate desktop isolates the work session's display and input; it shares your Linux account and files. Instructions to ask first are agent behavior, while administrator authentication uses the system's authorization dialog. A replacement agent needs its own corresponding policies and integration.
 
 ## A real computer in your pocket
 
@@ -150,6 +111,12 @@ This is an implemented foundation with a deliberately bounded scope. It does not
 
 <p align="center"><sub>The same desktop on a TV or in the floating window.</sub></p>
 
+## Still your Android phone
+
+Rungic opens as an Android app after the phone has been prepared. Device preparation starts with the manufacturer's original firmware for the exact model and version, with a matching GKI kernel rebuilt for LXC. Our delivery direction separates that preparation from installing RungicOS: once the Android base is compatible, Rungic can be built and updated independently. Android remains the phone's operating system, alongside the Linux desktop.
+
+Once installation, account setup and device checks are complete, tap the Rungic icon to open the desktop, or return to Android to use your phone. Both environments run side by side, sharing the clipboard and your photos, videos and downloads. **Bootloader unlocking or the required device-preparation procedure can erase user data.** Separate Rungic installation is intended to preserve Android data; the new standalone installer still needs implementation and validation. Back up before starting; see [Before you install](#before-you-install) for app and manufacturer restrictions.
+
 ## How it works
 
 ```mermaid
@@ -170,7 +137,49 @@ flowchart TB
 
 Rungic does not replace the phone's operating system. Android keeps handling calls, networking, the camera and the rest of the hardware. The Linux desktop runs in a container, and the Rungic app ties together its picture, touch input, sound and camera.
 
-The bundled assistant has two parts: a realtime voice model talks with you, and Codex runs tasks in the background. This is the reference integration; another agent can reuse the system capabilities described above.
+The bundled assistant has two parts: a realtime voice model talks with you, and Codex runs tasks in the background. This is the reference integration; another agent can reuse the system capabilities described below.
+
+## What makes it Agent Ready
+
+Rungic gives an agent a place to work, tools to act, evidence to inspect and a way to deliver the result. These capabilities sit in the system and can be reused by different agents.
+
+| What the system provides | What an agent can do | What you get |
+|---|---|---|
+| **A real Linux environment** | Run code and command-line tools, work with files, install desktop software through the package system | Finished documents, images, projects and installed apps |
+| **Desktop control** | Launch apps, inspect windows, take screenshots, click and type through desktop MCP tools | Work in existing graphical apps, including apps without an agent-specific integration |
+| **An agent workspace** | Work on a separate desktop, or use your desktop when requested | A visible work session that can run alongside your own |
+| **Phone and desktop interfaces** | Read device state, change brightness, use the shared clipboard and control casting through structured commands | Tasks that connect desktop software with the phone and its display |
+| **Diagnostics and compatibility knowledge** | Inspect available logs and crash evidence, check installed versions against known issues, propose a scoped fix | An explanation grounded in this device's evidence and software versions |
+| **Persistent suggestions and task state** | Pick up an issue, report investigation and repair progress, and record the outcome | Problems you can revisit and results you can review |
+
+The bundled assistant shows how to connect these pieces: a request becomes a plan, visible actions, progress updates and files you can open from the conversation. The same foundations support development agents through diagnostic MCP tools and the repository's build and installation skills. Phone-side assistance and developer-side device management have different access requirements.
+
+Agent choice and model choice are separate from these system capabilities. A replacement can use the Linux tools and supported MCP, command-line and D-Bus interfaces; its own execution, conversation and authorization behavior belongs to that integration. See the [integration map](docs/README.md#integrating-another-agent) for the reusable interfaces and the parts currently connected to Codex.
+
+### Interfaces an agent can use
+
+Rungic exposes two **MCP (Model Context Protocol) servers**, alongside command-line tools, D-Bus services and standard Linux interfaces. MCP is one way to connect an agent; these capabilities do not require Codex.
+
+| Interface | Entry point | What it exposes |
+|---|---|---|
+| **Desktop MCP** · on the phone | `rungic-cua mcp` | Screenshots, pointer/keyboard actions, app launch and window management, whole-task execution and voice messages. Workspace routing adds `desktop_where`; available tools depend on the selected execution mode. |
+| **Development MCP** · on the development computer | [`tools/rungic_agent_mcp.py`](tools/rungic_agent_mcp.py), configured in [`.mcp.json`](.mcp.json) | Device/renderer state, merged Android/Linux/kernel logs, crash reports and symbolization, integrity checks, screenshots, evidence bundles, UI inspection/actions, performance traces and build status. Requires separately configured device access. |
+| **Phone control** · CLI + JSON | `rungic-platform --request '<json>'` | Device, network and display state; brightness, clipboard, orientation, vibration and Android settings panels. |
+| **Workspaces and displays** · CLI + JSON | `rungic-workspace-env`, `rungic-user`, `rungic-agent-screen`, `rungic-desktop-mode`, `rungic-cast` | Run in the selected desktop session, show the assistant's screen, control desktop mode, discover/connect TVs and inspect casting capabilities. |
+| **Proactive system care** · D-Bus + CLI | `com.rungic.Suggestions`, `rungic-suggestions` | Issue/evidence queries, compatibility knowledge, reminders, investigation results, repair plans and local upstream-feedback material. Task handoff currently targets the bundled assistant. |
+| **Tasks, voice and usage** · D-Bus | `com.rungic.VoiceAgent`; suggestion-service usage methods/signals | Conversations, task progress/stop, voice and call controls, observed tokens and provider-supplied quotas. Replacing the bundled agent requires adapting this bridge and its usage data. |
+| **Files, packages and hardware** · Linux interfaces | Shell/files, PackageKit/`pkgcli`, polkit, Wayland, desktop portals, AT-SPI, PipeWire/PulseAudio and Android-backed D-Bus services | Work with files, install software with system authorization, and use the same desktop/media/device interfaces as ordinary Linux apps. Android-backed services implement documented subsets. |
+
+For MCP startup examples, the current tool inventory, D-Bus methods, session requirements and integration limits, see the [Agent Ready interface reference](docs/agent-ready-interfaces.md). Low-level screenshot/action tools can use the connecting agent's own reasoning; the bundled `desktop_goal` helper has its own configured model backend. Display/input separation does not isolate the agent from files owned by the same Linux user.
+
+## Status
+
+Rungic is under active development and in private preview. Still being polished:
+
+- The interface follows the desktop's language (English and Chinese so far), and the assistant answers in the language you speak to it. Account setup and some technical documents are still in Chinese.
+- Larger tasks, such as modelling in 3D, take the assistant about two minutes; work to speed this up is under way.
+- The call agent, which makes and answers phone calls for you, is still being tested.
+- Vulkan desktop rendering flickers on this GPU family, so the desktop uses OpenGL ES for now.
 
 ## Supported devices
 
@@ -201,15 +210,6 @@ Tested so far:
 2. **The goal is to retain normal Android functionality.** Calls, messages, networking, cameras and other phone functions should remain available alongside RungicOS after adaptation and validation. This is a design goal, not a blanket guarantee for every phone or firmware. Check the device's acceptance record and release notes, including any selected preinstalled apps removed or disabled by its firmware profile.
 3. **Some apps may reject the modified device.** Apps or their services can check root, bootloader state or device integrity and restrict access, even when Android itself works normally. For example, [Play Integrity](https://developer.android.com/google/play/integrity/overview) lets developers apply their own access policies. Such restrictions are imposed by the app or service; Rungic cannot guarantee that every app will accept the device. Other app failures still need diagnosis rather than being assumed to be security-policy restrictions.
 4. **Research the manufacturer's policies for your exact model and variant.** Before unlocking or rooting, check eligibility, the required procedure, and whether protected features or update support will change. Some effects can persist after restoring stock firmware: [Samsung's Knox documentation](https://docs.samsungknox.com/admin/knox-platform-for-enterprise/faq/), for example, describes restrictions on Knox-dependent services after its Warranty Bit is tripped. This is a manufacturer-specific example, not a statement that Samsung devices are supported by Rungic.
-
-## Status
-
-Rungic is under active development and in private preview. Still being polished:
-
-- The interface follows the desktop's language (English and Chinese so far), and the assistant answers in the language you speak to it. Account setup and some technical documents are still in Chinese.
-- Larger tasks, such as modelling in 3D, take the assistant about two minutes; work to speed this up is under way.
-- The call agent, which makes and answers phone calls for you, is still being tested.
-- Vulkan desktop rendering flickers on this GPU family, so the desktop uses OpenGL ES for now.
 
 ## Skills
 
