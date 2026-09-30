@@ -88,9 +88,8 @@ final class AccountSetup {
                     } catch(Exception e) {
                         activity.runOnUiThread(() -> {
                             if(activity.isDestroyed())return;
-                            String reason=e.getMessage()==null?"":e.getMessage().trim();
                             // system/account/setup.py's SetupError texts: matched, never shown.
-                            if(reason.equals("这个用户名已被使用") || reason.equals("这个用户名的主目录已存在")) {
+                            if(ControlException.usernameTaken(e)) {
                                 username.setError(activity.getString(R.string.account_username_taken));
                                 message.setText(R.string.account_not_created);
                                 username.setEnabled(true);password.setEnabled(true);confirmation.setEnabled(true);

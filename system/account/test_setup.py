@@ -91,4 +91,5 @@ class Tests(unittest.TestCase):
    m.main()
   self.assertTrue(json.loads(output.getvalue())['configured'])
 
-unittest.main()
+if __name__ == "__main__":
+    unittest.main()

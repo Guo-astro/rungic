@@ -60,6 +60,8 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     private String writtenDisplayMetrics;
     private volatile boolean accountReady;
     private volatile boolean accountPromptShowing;
+    /** Cleared app data loses the install status; root republishes it once per process (docs/94). */
+    private static volatile boolean installRepublishAsked;
     private android.window.OnBackInvokedCallback edgeBackCallback;
 
     @Override public void onCreate(Bundle state) {
@@ -338,9 +340,15 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         worker.execute(() -> {
             try {
                 if (isDestroyed() || generation!=surfaceGeneration || !holder.getSurface().isValid()) return;
-                FirstBootState install=FirstBootState.readSource(new File(getFilesDir(),"rungic-install-source.properties"),
-                    new File("/product/etc/rungic/seed.env"),
-                    new File(getFilesDir(),"rungic-install.properties"));
+                File installSource=new File(getFilesDir(),"rungic-install-source.properties");
+                File installStatus=new File(getFilesDir(),"rungic-install.properties");
+                if(!installRepublishAsked && !installSource.exists() && !installStatus.exists()) {
+                    installRepublishAsked=true;
+                    try { control("install-publish"); }
+                    catch(Exception e) { Log.w("RungicWayland","Install status not republished",e); }
+                }
+                FirstBootState install=FirstBootState.readSource(installSource,
+                    new File("/product/etc/rungic/seed.env"),installStatus);
                 if(!install.ready) {
                     runOnUiThread(() -> {
                         if(isDestroyed() || generation!=surfaceGeneration)return;
@@ -702,11 +710,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         if (!p.waitFor(action.equals("account-prepare")?240:90, TimeUnit.SECONDS)) {
             p.destroy(); throw new IOException(controlTimeout); }
         reader.join(2000);
-        if (p.exitValue() != 0) {
-            String details=out.toString("UTF-8").trim();
-            throw new IOException("Control " + action + " failed (exit " + p.exitValue() + ")"
-                + (details.isEmpty()?"":": " + details));
-        }
+        if (p.exitValue() != 0) throw new ControlException(action, p.exitValue(), out.toString("UTF-8"));
         return out.toString("UTF-8");
     }
 
@@ -775,7 +779,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
                 getString(R.string.menu_stop), getString(R.string.menu_refresh)}, (d, i) -> {
             if (i == 1 && initialized) worker.execute(() -> {
                 try { control("home"); }
-                catch (Exception e) { runOnUiThread(() -> Toast.makeText(this, e.getMessage(), Toast.LENGTH_LONG).show()); }
+                catch (Exception e) { runOnUiThread(() -> Toast.makeText(this, ControlException.userText(e), Toast.LENGTH_LONG).show()); }
             });
             if (i == 2) setAndroidKeyboard(true);
             if (i == 3) moveTaskToBack(true);

@@ -42,6 +42,18 @@ publish() {
     chcon "$rungic_label" "$status_tmp"
     mv "$status_tmp" "$rungic_files/rungic-install.properties"
 }
+# Which release the APK waits for. App data can be cleared at any time, so every run
+# republishes it (docs/94); a legacy product run removes a descriptor it does not own.
+source_file=$rungic_files/rungic-install-source.properties
+if [ "$seed" = /product/etc/rungic ]; then
+    rm -f "$source_file"
+else
+    printf 'RELEASE_ID=%s\n' "$RELEASE_ID" > "$rungic_files/.rungic-install-source.properties.tmp"
+    chmod 0600 "$rungic_files/.rungic-install-source.properties.tmp"
+    chown "$rungic_uid:$rungic_uid" "$rungic_files/.rungic-install-source.properties.tmp"
+    chcon "$rungic_label" "$rungic_files/.rungic-install-source.properties.tmp"
+    mv "$rungic_files/.rungic-install-source.properties.tmp" "$source_file"
+fi
 if [ -f "$marker" ] && [ "$(cat "$marker")" = "$RELEASE_ID" ]; then
     publish ready complete
     echo 'already installed'

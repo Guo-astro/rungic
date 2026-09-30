@@ -209,6 +209,26 @@ case "$action" in
     if ! running; then start_container; fi
     attach /usr/libexec/rungic-plasma-account-setup 9>&-
     ;;
+  install-publish)
+    # Cleared APK data loses the app-private install status (docs/94). A completed
+    # release republishes it through its own first-boot script, which then only
+    # publishes and exits; an install in progress publishes itself.
+    if [ -f /data/adb/rungic-install/active.env ]; then
+      source_env=/data/adb/rungic-install/active.env
+      set -- /data/adb/rungic-install/payload/firstboot.sh /data/adb/rungic-install/payload
+    elif [ -f /product/etc/rungic/seed.env ]; then
+      source_env=/product/etc/rungic/seed.env
+      set -- /product/etc/rungic/firstboot.sh
+    else
+      echo 'No managed installation'; exit 0
+    fi
+    expected_release=$(sed -n 's/^RELEASE_ID=//p' "$source_env" | tr -d "\"'")
+    installed_release=$(cat /data/adb/rungic-firstboot.complete 2>/dev/null) || installed_release=
+    if [ -z "$expected_release" ] || [ "$installed_release" != "$expected_release" ]; then
+      echo 'Installation not complete'; exit 0
+    fi
+    exec /system/bin/sh "$@"
+    ;;
   lock)
     # Acknowledge before Android suspends the foreground APK on screen-off.
     nohup /system/bin/sh -c 'sleep 0.3; /system/bin/input keyevent 223' >/dev/null 2>&1 </dev/null &

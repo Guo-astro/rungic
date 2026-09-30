@@ -53,8 +53,10 @@ clear_stale_pid() {
                 # Fail closed if a live process cannot be inspected.
                 # An exited daemon can briefly remain as a zombie until its
                 # parent reaps it; it has no executable or live audio socket.
+                # Kernel threads never have an executable either, and after a
+                # reboot one can own the saved PID; neither can be the daemon.
                 if ! readlink "/proc/$old_pid/exe" >/dev/null 2>&1; then
-                    grep -q '^State:[[:space:]]*Z' "/proc/$old_pid/status" 2>/dev/null || return 1
+                    grep -qE '^(State:[[:space:]]*Z|Kthread:[[:space:]]*1$)' "/proc/$old_pid/status" 2>/dev/null || return 1
                 fi
                 if private_pid; then
                     echo 'Private audio daemon is still running' >&2
