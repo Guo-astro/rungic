@@ -49,7 +49,7 @@ Rectangle {
         Text {
             Layout.fillWidth: true
             visible: card.expanded
-            text: [card.item.result, card.item.plan ? "方案：" + card.item.plan : "", card.item.verification ? "验证：" + card.item.verification : "", card.item.rollback ? "回退：" + card.item.rollback : "", "判断依据：" + card.basis].filter(Boolean).join("\n\n")
+            text: [card.item.issueNote, card.item.result, "方案状态：" + (({ready: "方案已准备，可核对后应用", unavailable: "当前暂无可应用方案", needs_investigation: "仍需调查"})[card.item.planStatus] || "仍需调查"), card.item.plan ? "方案：" + card.item.plan : "", card.item.verification ? "验证：" + card.item.verification : "", card.item.rollback ? "回退：" + card.item.rollback : "", "判断依据：" + card.basis].filter(Boolean).join("\n\n")
             textFormat: Text.PlainText; wrapMode: Text.WrapAnywhere; font.pixelSize: 13; color: Theme.dim
         }
         RowLayout {
@@ -72,7 +72,12 @@ Rectangle {
             Item { Layout.fillWidth: true }
         }
         PillButton {
-            visible: card.expanded && card.stateName === "attention" && !!card.item.plan && !!card.item.verification && !!card.item.rollback
+            visible: card.item.issueState === "absent" && card.stateName === "attention"
+            text: "已阅，归档结果"
+            onClicked: card.action("reviewed", {})
+        }
+        PillButton {
+            visible: card.expanded && !!card.item.canApply
             text: "应用上述方案"
             onClicked: card.action("apply-confirm", {})
         }

@@ -28,6 +28,11 @@ public:
     QJsonObject notification(qint64 now, bool safe, bool inhibited);
     void notified(const QStringList &ids, qint64 now);
     void recoverTasks();
+    QJsonObject updatePlan(const QString &id, const QJsonObject &fields);
+    QJsonObject beginTask(const QString &id, const QString &mode, const QString &approvedRevision, qint64 now);
+    bool taskEvent(const QString &id, const QString &taskId, const QJsonObject &event, qint64 now);
+    bool present(const QString &id, qint64 revision, bool opened, qint64 now);
+    void notifiedReceipts(const QJsonArray &receipts, qint64 now);
     QJsonObject settings;
 private:
     QString path;

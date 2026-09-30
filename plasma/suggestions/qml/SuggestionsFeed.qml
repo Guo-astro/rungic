@@ -20,6 +20,7 @@ Rectangle {
     property bool positioned: false
     color: Theme.side
     SuggestionsClient { id: client }
+    PresentationTracker { view: list; suggestionsClient: client; active: feed.activeView && !snooze.visible && !applyDialog.visible; selectedId: feed.selectedId }
     readonly property var clientItems: client.items
     onClientItemsChanged: {
         if (list.moving) pendingRefresh = true
@@ -29,8 +30,13 @@ Rectangle {
     onActiveViewChanged: client.watching(activeView)
     Component.onCompleted: { rebuild(); client.watching(activeView) }
     Component.onDestruction: client.watching(false)
+    function beginning() {
+        list.forceLayout()
+        list.positionViewAtBeginning()
+        list.contentY = list.originY - list.topMargin
+    }
     function rebuild() {
-        const atBeginning = !populated || list.atYBeginning
+        const atBeginning = !populated || list.contentY <= list.originY + 1
         const y = list.contentY - list.originY
         populated = client.items.length > 0
         shown = client.items.filter(i => history ? ["resolved", "dismissed"].includes(i.state) : !["resolved", "dismissed"].includes(i.state))
@@ -39,7 +45,7 @@ Rectangle {
             if (selectedId && !positioned && client.items.some(i => i.id === selectedId)) {
                 positioned = true; select(selectedId)
             }
-            else if (atBeginning) list.positionViewAtBeginning()
+            else if (atBeginning) beginning()
             else list.contentY = list.originY + Math.max(-list.topMargin, Math.min(y, Math.max(0, list.contentHeight - list.height)))
         })
     }
@@ -50,14 +56,17 @@ Rectangle {
         const index = shown.findIndex(i => i.id === id)
         // An expanded investigation can be taller than the whole screen. Keep
         // its title and conclusion visible instead of centering its middle.
-        if (index === 0) list.positionViewAtBeginning()
+        if (index === 0) beginning()
         else if (index > 0) list.positionViewAtIndex(index, ListView.Beginning)
     }
     onSelectedIdChanged: { positioned = false; Qt.callLater(rebuild) }
     Connections {
         target: client
         function onReplied(id, action, result) {
-            if (result.error) feed.message = result.error
+            if (result.error) {
+                feed.message = result.error
+                if (action === "apply") { applyDialog.failureMessage = result.error; applyDialog.open() }
+            }
             else if (result.message) feed.message = result.message
             else if (action === "investigate") feed.message = "Agent 已接到检查请求，可离开此页面，结果会留在建议中。"
         }
@@ -125,6 +134,7 @@ Rectangle {
         }
         delegate: Item {
             required property var modelData
+            readonly property var suggestionRecord: modelData
             width: list.width
             height: card.height
             SuggestionCard {
@@ -135,7 +145,7 @@ Rectangle {
             expanded: item.id === feed.selectedId
             onAction: (name, args) => {
                 if (name === "snooze-menu") { feed.pendingItem = item; snooze.open() }
-                else if (name === "apply-confirm") { feed.pendingItem = item; applyDialog.open() }
+                else if (name === "apply-confirm") { feed.pendingItem = JSON.parse(JSON.stringify(item)); applyDialog.failureMessage = ""; applyDialog.open() }
                 else if (name === "conversation") client.conversation(item.conversation || "")
                 else client.act(item.id, name, args)
             }
@@ -157,7 +167,6 @@ Rectangle {
             QQC2.Button { Layout.fillWidth: true; text: "保留待处理"; onClicked: { client.act(feed.pendingItem.id, "later"); snooze.close() } }
             QQC2.Button { Layout.fillWidth: true; text: "一小时后提醒"; onClicked: { client.act(feed.pendingItem.id, "snooze", { at: Math.floor(Date.now() / 1000) + 3600 }); snooze.close() } }
             QQC2.Button { Layout.fillWidth: true; text: "明天 10:00 提醒"; onClicked: { client.act(feed.pendingItem.id, "snooze", { at: client.tomorrow(10) }); snooze.close() } }
-            QQC2.Button { Layout.fillWidth: true; visible: !!feed.pendingItem.process; text: "应用关闭后提醒"; onClicked: { client.act(feed.pendingItem.id, "closed"); snooze.close() } }
             QQC2.Button { Layout.fillWidth: true; text: "取消"; onClicked: snooze.close() }
         }
     }
@@ -168,16 +177,39 @@ Rectangle {
         width: Math.min(340, feed.width - 24)
         height: Math.min(500, feed.height - 40)
         title: "应用修复方案"
+        property string failureMessage: ""
+        readonly property bool outdated: !!feed.pendingItem.id && !client.items.some(i => i.id === feed.pendingItem.id && i.canApply && i.planRevision === feed.pendingItem.planRevision)
+        function updateButtons() {
+            const ok = standardButton(QQC2.Dialog.Ok)
+            if (ok) { ok.enabled = !outdated && !client.busy; ok.text = "应用" }
+            const cancel = standardButton(QQC2.Dialog.Cancel)
+            if (cancel) cancel.text = "取消"
+        }
+        onOpened: updateButtons()
+        onOutdatedChanged: updateButtons()
+        Connections { target: client; function onChanged() { if (applyDialog.visible) applyDialog.updateButtons() } }
         modal: true
         standardButtons: QQC2.Dialog.Ok | QQC2.Dialog.Cancel
-        contentItem: QQC2.ScrollView {
-          clip: true
-          Text {
-            width: applyDialog.availableWidth
-            text: "Agent 将按已展示的方案执行，并验证结果。涉及的关闭应用或重启步骤以方案为准。\n\n" + (feed.pendingItem.plan || "")
-            textFormat: Text.PlainText; wrapMode: Text.Wrap; color: Theme.text; font.pixelSize: 14
+        contentItem: ColumnLayout {
+            spacing: 12
+            Text {
+                Layout.fillWidth: true
+                visible: applyDialog.outdated || !!applyDialog.failureMessage
+                text: applyDialog.outdated ? "方案或适用证据已变化。请取消后查看当前方案，再决定是否应用。" : applyDialog.failureMessage
+                textFormat: Text.PlainText; wrapMode: Text.Wrap; color: Theme.negative; font.pixelSize: 14
+                Accessible.role: Accessible.StaticText
+                Accessible.name: text
+            }
+            QQC2.ScrollView {
+                Layout.fillWidth: true; Layout.fillHeight: true
+                clip: true
+                Text {
+                    width: applyDialog.availableWidth
+                    text: "Agent 将按已展示的方案执行，并验证结果。涉及的关闭应用或重启步骤以方案为准。\n\n" + (feed.pendingItem.plan || "")
+                    textFormat: Text.PlainText; wrapMode: Text.Wrap; color: Theme.text; font.pixelSize: 14
+                }
+            }
         }
-        }
-        onAccepted: client.act(feed.pendingItem.id, "apply")
+        onAccepted: client.act(feed.pendingItem.id, "apply", { planRevision: feed.pendingItem.planRevision })
     }
 }

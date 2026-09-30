@@ -19,9 +19,10 @@ def fake_voice():
     from gi.repository import Gio, GLib
     bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
     info = Gio.DBusNodeInfo.new_for_xml('''<node><interface name="com.rungic.VoiceAgent">
-      <method name="InvestigateSuggestion"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
-      <method name="ApplySuggestion"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
-      <method name="StopSuggestion"><arg type="s" direction="in"/></method>
+      <method name="InvestigateSuggestion"><arg type="s" direction="in"/><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
+      <method name="ApplySuggestion"><arg type="s" direction="in"/><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
+      <method name="StopSuggestion"><arg type="s" direction="in"/><arg type="s" direction="in"/></method>
+      <method name="SuggestionTask"><arg type="s" direction="in"/><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
       <signal name="Event"><arg type="s"/></signal></interface></node>''')
 
     def emit(event):
@@ -29,26 +30,36 @@ def fake_voice():
                         GLib.Variant('(s)', (json.dumps(event),)))
         return False
 
+    running = {}
     def call(connection, sender, path, interface, method, params, invocation):
         if method in ('InvestigateSuggestion', 'ApplySuggestion'):
-            suggestion = params.unpack()[0]
+            suggestion, task_id = params.unpack()
             conversation = 'test-' + suggestion
-            emit({'type': 'suggestion-started', 'suggestion': suggestion, 'conversation': conversation})
+            running[(suggestion, task_id)] = conversation
+            fields = {'suggestion': suggestion, 'suggestionTask': task_id}
+            emit({'type': 'suggestion-started', **fields, 'conversation': conversation})
             invocation.return_value(GLib.Variant('(s)', (json.dumps({'conversation': conversation}),)))
+            if suggestion == hashlib.sha256(b'fixture:2').hexdigest()[:24]: return
             if suggestion == hashlib.sha256(b'fixture:1').hexdigest()[:24]:
-                GLib.timeout_add(80, emit, {'type': 'error', 'conversation': conversation, 'text': '401 authentication missing'})
+                GLib.timeout_add(80, emit, {'type': 'error', **fields, 'conversation': conversation, 'text': '401 authentication missing'})
             else:
-                GLib.timeout_add(80, emit, {'type': 'agent-message', 'conversation': conversation, 'final': True,
+                GLib.timeout_add(80, emit, {'type': 'agent-message', **fields, 'conversation': conversation, 'final': True,
                                            'text': '检查已完成，未修改系统；下一步需要实机验证。'})
-            GLib.timeout_add(120, emit, {'type': 'agent-finished', 'conversation': conversation})
+            GLib.timeout_add(120, emit, {'type': 'agent-finished', **fields, 'conversation': conversation})
+        elif method == 'SuggestionTask':
+            key = tuple(params.unpack())
+            invocation.return_value(GLib.Variant('(s)', (json.dumps({'state': 'running' if key in running else 'inactive', 'conversation': running.get(key, '')}),)))
         else:
+            suggestion, task_id = params.unpack()
+            running.pop((suggestion, task_id), None)
+            emit({'type': 'task-stopped', 'suggestion': suggestion, 'suggestionTask': task_id})
             invocation.return_value(None)
 
     bus.register_object('/com/rungic/VoiceAgent', info.interfaces[0], call, None, None)
     Gio.bus_own_name_on_connection(bus, 'com.rungic.VoiceAgent', Gio.BusNameOwnerFlags.NONE, None, None)
     loop = GLib.MainLoop()
     threading.Thread(target=loop.run, daemon=True).start()
-    return bus, loop
+    return bus, loop, emit, running
 
 
 def main():
@@ -104,8 +115,8 @@ def main():
             wait(lambda: cli('get', first)['state'] == 'attention')
             assert '未修改系统' in cli('get', first)['result']
             assert 'error' in cli('act', first, 'apply', error=True)
-            cli('update', first, json.dumps({'plan': '具体变更', 'verification': '实际功能复查', 'rollback': '恢复原设置'}))
-            cli('act', first, 'apply')
+            cli('update', first, json.dumps({'planStatus': 'ready', 'plan': '具体变更', 'verification': '实际功能复查', 'rollback': '恢复原设置'}))
+            cli('act', first, 'apply', json.dumps({'planRevision': cli('get', first)['planRevision']}))
             wait(lambda: cli('get', first)['state'] == 'attention')
             report = cli('feedback', first)
             data = Path(report['path']).read_text()
@@ -116,9 +127,36 @@ def main():
             cli('act', second, 'investigate')
             wait(lambda: cli('get', second)['state'] == 'attention')
             assert cli('get', second)['result'] == '401 authentication missing'
-            assert '未能完成' in cli('get', second)['note']
+            assert '401 authentication missing' in cli('get', second)['note']
+            # Running tasks survive both ledger-service restart and disappearing observations.
+            third = items[2]['id']
+            started = cli('act', third, 'investigate')
+            task_id = started['task']['id']
+            wait(lambda: cli('get', third).get('conversation'))
+            process.terminate(); process.wait(5)
+            process = subprocess.Popen([binary, '--service'], env=env, stdout=log, stderr=log)
+            wait(lambda: cli('get', third)['task']['state'] == 'running')
+            (root / 'feed.json').write_text(json.dumps({'schema': 1, 'generated': int(time.time()),
+                                                       'items': [i for i in items if i['id'] != third], 'sources': ['fixture']}))
+            cli('refresh')
+            wait(lambda: cli('get', third)['issueState'] == 'absent')
+            assert cli('get', third)['state'] == 'working'
+            voice[2]({'type': 'agent-message', 'suggestion': third, 'suggestionTask': task_id,
+                      'final': True, 'text': '结果在问题消失后仍须保留'})
+            wait(lambda: '仍须保留' in cli('get', third).get('result', ''))
+            cli('act', third, 'stop')
+            wait(lambda: cli('get', third)['task']['state'] == 'stopped')
+            assert cli('get', third)['state'] == 'attention'
+            old = cli('get', first)['planRevision']
+            cli('update', first, json.dumps({'planStatus': 'ready', 'plan': 'another plan'}))
+            assert 'error' in cli('act', first, 'apply', json.dumps({'planRevision': old}), error=True)
+            print('PASS: task survives disappearance/restart; stop and result correlation; stale confirmation rejected')
             if len(sys.argv) >= 5:
                 subprocess.run([sys.argv[3], sys.argv[4], *sys.argv[5:]], env=env, check=True, timeout=20)
+                shown = [i for i in cli('list')['items'] if i.get('displayedRevision', 0)]
+                assert 0 < len(shown) < 40, ('presentation must acknowledge only visible cards', len(shown))
+                assert all(not i.get('openedRevision') for i in cli('list')['items'])
+                print('PASS: QML acknowledged only displayed card revisions:', len(shown))
             print('PASS: 40 cards, restart, snooze, dedup/mute, Agent handoff/result, private feedback, independent upstream state, QML preview')
         finally:
             process.terminate(); process.wait(5)
