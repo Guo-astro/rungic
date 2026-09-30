@@ -85,6 +85,7 @@ def main():
                           'body': '发现播放过程中持续掉帧。原因尚未确认，可以先让 Agent 检查适配情况。',
                           'kind': 'optimization', 'severity': 0,
                           'evidence': {'package': 'synthetic-player', 'version': '1.0', 'private': 'do-not-export'}})
+        for item in items[:2]: item['source'] = 'crashes'
         (root / 'feed.json').write_text(json.dumps({'schema': 1, 'generated': int(time.time()),
                                                    'items': items, 'sources': ['fixture']}))
 
@@ -108,6 +109,8 @@ def main():
         process = subprocess.Popen([binary, '--service'], env=env, stdout=log, stderr=log)
         try:
             wait(lambda: len(cli('list')['items']) == 40)
+            assert len(cli('list')['groups']) == 39
+            assert any(g['count'] == 2 for g in cli('list')['groups'])
             first, second = items[0]['id'], items[1]['id']
             cli('act', first, 'snooze', json.dumps({'at': int(time.time()) + 2}))
             assert cli('get', first)['state'] == 'snoozed'
@@ -165,6 +168,8 @@ def main():
                 assert ('--agent' in sys.argv or '--usage' in sys.argv) or 0 < len(shown) < 40, ('presentation must acknowledge only visible cards', len(shown))
                 assert all(not i.get('openedRevision') for i in cli('list')['items'])
                 print('PASS: QML acknowledged only displayed card revisions:', len(shown))
+                if '--widget' in sys.argv:
+                    assert not (cli('get', first).get('displayedRevision') and cli('get', second).get('displayedRevision')), 'hidden stack member was acknowledged'
             print('PASS: 40 cards, restart, snooze, dedup/mute, Agent handoff/result, private feedback, independent upstream state, QML preview')
         finally:
             process.terminate(); process.wait(5)
