@@ -50,6 +50,7 @@ import shutil
 import socket
 import task_state
 import model_catalog
+import codex_install
 from voice_i18n import _, desktop_language, language_name, language_note
 
 RATE = 24000                 # PCM format of the Realtime API
@@ -148,6 +149,7 @@ INTERFACE = '''
     <method name="RemoveApiKey"><arg type="s" direction="out"/></method>
     <method name="CodexLogin"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
     <method name="InstallCodex"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
+    <method name="CheckCodexUpdate"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
     <method name="CancelInstall"><arg type="s" direction="out"/></method>
     <method name="SetPreferences"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
     <method name="Models"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
@@ -415,8 +417,8 @@ class AppServer:
         key = openai_key()
         if key:
             env['OPENAI_API_KEY'] = key
-        # The official install script puts codex in ~/.local/bin (docs/87).
-        codex = shutil.which('codex', path=os.environ.get('PATH', '') + ':' + str(Path.home() / '.local/bin'))
+        # The official standalone installation in the home, through /usr/bin/codex (docs/99).
+        codex = codex_install.command()
         if not codex:
             raise FileNotFoundError('codex')
         self.proc = subprocess.Popen([codex, 'app-server'], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
@@ -793,6 +795,8 @@ class VoiceAgent:
         self.model_choice = model_choices()
         self.key_working = None      # the last test of the API key: True, False, or not tested
         self.installer = None        # a Codex installation under way
+        # Codex follows OpenAI's stable releases, updated when the user says so (docs/99).
+        self.codex_update = codex_install.UpdateCheck(self.codex_version)
         # Codex turns in threads of our own that no conversation shows (briefing curation):
         # thread id -> BackgroundTurn, fed by on_notification.
         self.background = {}
@@ -806,6 +810,9 @@ class VoiceAgent:
             log('instructions: defaults not copied:', error)
         self.start_server()
         GLib.timeout_add_seconds(30, self.idle_check)
+        # A newer Codex: looked for a minute after start and then every few hours; Settings shows it.
+        GLib.timeout_add_seconds(60, lambda: self.look_for_codex_update() and False)
+        GLib.timeout_add_seconds(codex_install.CHECK_EVERY_S, self.look_for_codex_update)
 
     def start_server(self):
         """codex app-server; without Codex (not installed yet) the service still runs, and
@@ -2411,17 +2418,42 @@ class VoiceAgent:
                             'leaving out nothing, without comment:\n' + text.strip())
 
     # ---- settings (docs/87) ----------------------------------------------------------------
+    def codex_version(self):
+        """The installed standalone Codex's version, (0, 159, 2), or None."""
+        path = codex_install.standalone()
+        if not path:
+            return None
+        try:
+            return codex_install.parse_version(subprocess.run([str(path), '--version'], capture_output=True,
+                                                              text=True, timeout=20).stdout)
+        except (OSError, subprocess.SubprocessError):
+            return None
+
+    def check_codex_update(self, force=False):
+        """CheckCodexUpdate(): {"installed", "latest", "available", "checked", "error"}."""
+        was = self.codex_update.result.get('available')
+        result = self.codex_update.check(force)
+        if result['available'] != was:
+            self.emit_raw({'type': 'codex-update', **result, 'time': time.time()})
+        return result
+
+    def look_for_codex_update(self):
+        threading.Thread(target=self.check_codex_update, daemon=True).start()
+        return True       # the periodic timer keeps going (the one after start returns False itself)
+
+    def wait_idle(self, timeout=1800):
+        """Until no task runs and nobody talks (a Codex update restarts the app-server under them)."""
+        end = time.monotonic() + timeout
+        while (self.agent_busy or self.talking) and time.monotonic() < end:
+            time.sleep(2)
+
     def setup(self):
         from rungic_cua import keys
-        path = shutil.which('codex', path=os.environ.get('PATH', '') + ':' + str(Path.home() / '.local/bin'))
+        path = codex_install.standalone()
         version, runs = '', None
         if path:
-            try:
-                out = subprocess.run([path, '--version'], capture_output=True, text=True, timeout=20).stdout
-                version = out.strip().split()[-1] if out.strip() else ''
-                runs = bool(version)
-            except (OSError, subprocess.SubprocessError):
-                runs = False
+            parts = self.codex_version()
+            version, runs = codex_install.version_text(parts), bool(parts)
         account = None
         if self.server:
             try:
@@ -2441,8 +2473,8 @@ class VoiceAgent:
                                          capture_output=True, text=True, timeout=5).stdout.strip()
         except (OSError, subprocess.SubprocessError):
             app_version = ''
-        return {'codex': {'installed': bool(path), 'version': version, 'path': path or '', 'runs': runs,
-                          'running': self.server is not None},
+        return {'codex': {'installed': bool(path), 'version': version, 'path': str(path or ''), 'runs': runs,
+                          'running': self.server is not None, 'update': self.codex_update.check()},
                 'account': account, 'credentials': 'keyring' if store in ('keyring', 'auto') else 'file',
                 'key': {'set': bool(key), 'masked': (key[:3] + '…' + key[-4:]) if len(key) > 10 else (_('Set') if key else ''),
                         'store': keys.where('openai-api-key'), 'working': self.key_working},
@@ -2510,15 +2542,13 @@ class VoiceAgent:
         self.emit_raw({'type': 'preferences', **self.prefs, 'time': time.time()})
         return self.prefs
 
-    def install_codex(self, method):
-        """Installs Codex: the system package (polkit asks for the password) or the official
-        script into ~/.local/bin; progress as `install` events."""
+    def install_codex(self, method=''):
+        """Installs or updates Codex with OpenAI's official script (the latest stable release into
+        ~/.codex/packages/standalone, docs/99); progress as `install` events. `method` is left from
+        when the system package was the other way (the system has no Codex of its own now)."""
         if self.installer and self.installer.poll() is None:
             return {'error': _('Already installing')}
-        if method == 'script':
-            command = ['sh', '-c', 'curl -fsSL https://chatgpt.com/codex/install.sh | sh']
-        else:
-            command = ['pkexec', 'env', 'DEBIAN_FRONTEND=noninteractive', 'apt-get', 'install', '-y', 'rungic-codex']
+        command = codex_install.install_command()
         threading.Thread(target=self.run_installer, args=(command,), daemon=True).start()
         return {'ok': True}
 
@@ -2534,7 +2564,9 @@ class VoiceAgent:
             return
         for line in self.installer.stdout:
             line = line.rstrip()
-            step = 'install' if re.match(r'(Unpacking|Setting up|Installing|Extracting|正在)', line) else None
+            # The script's "==> Downloading Codex CLI", "==> Installing standalone package ..." (docs/99).
+            step = ('download' if re.match(r'(==> )?Downloading', line)
+                    else 'install' if re.match(r'(==> )?(Unpacking|Setting up|Installing|Extracting|Updating)', line) else None)
             event(line=line[:300], **({'step': step} if step else {}))
         code = self.installer.wait()
         if code in (-15, -9):
@@ -2544,12 +2576,15 @@ class VoiceAgent:
             event(state='failed', error=_('The installer exited with code {code}').format(code=code))
             return
         event(step='check')
+        # An update replaces the Codex a task or a press is using: after them (docs/99).
+        self.wait_idle()
         self.restart_server()
         if not self.server:
             event(state='failed', error=_("Installed, but Codex doesn't run"))
             return
         event(step='connect')
         event(state='done')
+        self.check_codex_update()
 
     def cancel_install(self):
         if self.installer and self.installer.poll() is None:
@@ -2812,6 +2847,9 @@ class Service:
                     result = json.dumps(agent.codex_login(args[0]), ensure_ascii=False)
                 elif method == 'InstallCodex':
                     result = json.dumps(agent.install_codex(args[0]), ensure_ascii=False)
+                elif method == 'CheckCodexUpdate':
+                    options = json.loads(args[0] or '{}')
+                    result = json.dumps(agent.check_codex_update(bool(options.get('force'))), ensure_ascii=False)
                 elif method == 'CancelInstall':
                     result = json.dumps(agent.cancel_install(), ensure_ascii=False)
                 elif method == 'SetPreferences':

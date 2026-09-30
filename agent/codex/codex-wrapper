@@ -1,6 +1,14 @@
 #!/bin/sh
-# Codex for the Plasma desktop (docs/59). Every Codex process -- login, CLI,
-# app-server, the realtime WebSocket -- must reach OpenAI through the user's
-# proxy, whoever starts it; reqwest and Codex's WebSocket dialer both read these.
-. /etc/profile.d/proxy.sh
-exec /usr/lib/codex/current/bin/codex "$@"
+# Codex for the Plasma desktop (docs/59, docs/99). The system has no Codex of its own: Codex is
+# OpenAI's official standalone installation in the user's home, installed and updated from
+# Settings > Codex with OpenAI's script (~/.codex/packages/standalone). This command runs it for
+# every caller -- the assistant's app-server, the CLI, the realtime WebSocket -- behind the user's
+# proxy, which reqwest and Codex's WebSocket dialer both read.
+[ ! -r /etc/profile.d/proxy.sh ] || . /etc/profile.d/proxy.sh
+codex="${CODEX_HOME:-$HOME/.codex}/packages/standalone/current/bin/codex"
+if [ ! -x "$codex" ]; then
+    echo "codex: not installed. Install it in Settings > Codex, or run:" >&2
+    echo "  curl -fsSL https://chatgpt.com/codex/install.sh | sh" >&2
+    exit 127
+fi
+exec "$codex" "$@"

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// Codex (docs/87): ready (version, sign-in, where credentials are kept, the config file),
-// not installed (how to install it), or installing (steps and output).
+// Codex (docs/87, docs/99): ready (version and whether a newer stable release is out, sign-in,
+// where credentials are kept, the config file), not installed (OpenAI's install script), or
+// installing / updating (steps and output). The system has no Codex of its own: the script puts
+// OpenAI's standalone Codex in the home, and the same script updates it.
 import QtQuick
 import QtQuick.Layouts
 import com.rungic.design
@@ -8,14 +10,15 @@ import com.rungic.voiceassistant
 
 SettingsFrame {
     id: page
-    title: install.running ? i18nc("@title", "Install Codex") : "Codex"
+    title: install.running ? (install.updating ? i18nc("@title", "Update Codex") : i18nc("@title", "Install Codex")) : "Codex"
     property var setup: ({})
     readonly property var codex: setup.codex || {}
-    property string method: "package"
+    readonly property var update: codex.update || {}
     // The installation under way: InstallCodex events.
     QtObject {
         id: install
         property bool running: false
+        property bool updating: false
         property string step: ""
         property string log: ""
         property string error: ""
@@ -32,6 +35,7 @@ SettingsFrame {
         function onReplied(method, json) { if (method === "Setup") page.setup = JSON.parse(json) }
         function onEvent(json) {
             const e = JSON.parse(json)
+            if (e.type === "codex-update") { AgentClient.request("Setup"); return }
             if (e.type !== "install") return
             if (e.line) install.log = (install.log + e.line + "\n").split("\n").slice(-40).join("\n")
             if (e.step) install.step = e.step
@@ -102,7 +106,13 @@ SettingsFrame {
             Layout.leftMargin: Theme.groupMargin
             Layout.rightMargin: Theme.groupMargin
             visible: page.codex.installed === true
-            ListRow { text: i18nc("@label", "Version"); value: page.codex.version || "" }
+            ListRow {
+                text: i18nc("@label", "Version")
+                value: page.codex.version || ""
+                subtitle: page.update.available ? i18nc("@info %1 is a version", "Version %1 is out", page.update.latest)
+                    : page.update.checked && !page.update.error ? i18nc("@info", "The latest stable release") : ""
+                dot: page.update.available ? "positive" : ""
+            }
             ListRow {
                 text: i18nc("@label how Codex is signed in", "Sign-in")
                 value: !page.setup.account ? i18nc("@info", "Not signed in") : page.setup.account.type === "apiKey" ? "API Key"
@@ -128,32 +138,33 @@ SettingsFrame {
             Layout.leftMargin: Theme.groupMargin
             Layout.rightMargin: Theme.groupMargin
             visible: page.codex.installed === true
-            ListRow { text: i18nc("@action:button", "Check again"); interactive: true; onClicked: AgentClient.request("Setup") }
+            ListRow {
+                text: i18nc("@action:button", "Check for updates")
+                subtitle: page.update.error ? i18nc("@info %1 is the reason", "Couldn't check: %1", page.update.error) : ""
+                interactive: true
+                onClicked: { AgentClient.request("CheckCodexUpdate", [JSON.stringify({ force: true })]); AgentClient.request("Setup") }
+            }
         }
 
-        // Not installed: how.
+        // Not installed: OpenAI's script, the only way (the system has no Codex of its own, docs/99).
         SectionLabel { Layout.fillWidth: true; text: i18nc("@title:group", "How to install"); visible: page.codex.installed === false }
         ListGroup {
             Layout.fillWidth: true
             Layout.leftMargin: Theme.groupMargin
             Layout.rightMargin: Theme.groupMargin
             visible: page.codex.installed === false
-            Accessible.role: Accessible.List
-            Accessible.name: i18nc("@title:group", "How to install")
             ListRow {
-                text: i18nc("@option:radio", "System package (recommended)")
-                subtitle: i18nc("@info %1 is a command", "%1 · Updates with the system", "apt install rungic-codex")
-                interactive: true
-                leading: RadioMark { on: page.method === "package" }
-                onClicked: page.method = "package"
-            }
-            ListRow {
-                text: i18nc("@option:radio", "Official install script")
+                text: i18nc("@info", "OpenAI's official install script")
                 subtitle: "curl -fsSL https://chatgpt.com/codex/install.sh | sh"
-                interactive: true
-                leading: RadioMark { on: page.method === "script" }
-                onClicked: page.method = "script"
             }
+        }
+        Note {
+            Layout.fillWidth: true
+            Layout.leftMargin: Theme.gutter
+            Layout.rightMargin: Theme.gutter
+            Layout.topMargin: Theme.spaceM
+            visible: page.codex.installed === false
+            text: i18nc("@info", "Codex goes into your home folder (~/.codex), the latest stable release. When a newer one is out, you can update it here.")
         }
     }
 
@@ -165,7 +176,7 @@ SettingsFrame {
         Layout.topMargin: 16
         visible: install.running
         spacing: 12
-        ShineText { Layout.fillWidth: true; pixelSize: Theme.heroSize; text: i18nc("@info:status", "Installing Codex…") }
+        ShineText { Layout.fillWidth: true; pixelSize: Theme.heroSize; text: install.updating ? i18nc("@info:status", "Updating Codex…") : i18nc("@info:status", "Installing Codex…") }
         Progress { Layout.fillWidth: true }
         Text { text: i18nc("@info", "About a minute left. You can leave this page."); font.family: Theme.fontFamily; font.pixelSize: Theme.labelSize; color: Theme.dim }
     }
@@ -214,19 +225,29 @@ SettingsFrame {
     }
     Item { implicitHeight: 20 }
 
+    function runInstaller(updating) {
+        install.running = true
+        install.updating = updating
+        install.error = ""
+        install.log = ""
+        install.step = "download"
+        AgentClient.request("InstallCodex", ["script"])
+    }
+
     footer: [
+        PrimaryButton {
+            Layout.fillWidth: true
+            visible: page.codex.installed === true && page.update.available === true && !install.running
+            iconName: "download"
+            text: i18nc("@action:button %1 is a version", "Update to %1", page.update.latest || "")
+            onClicked: page.runInstaller(true)
+        },
         PrimaryButton {
             Layout.fillWidth: true
             visible: page.codex.installed === false && !install.running
             iconName: "download"
             text: i18nc("@action:button", "Install Codex")
-            onClicked: {
-                install.running = true
-                install.error = ""
-                install.log = ""
-                install.step = "download"
-                AgentClient.request("InstallCodex", [page.method])
-            }
+            onClicked: page.runInstaller(false)
         },
         SecondaryButton {
             Layout.fillWidth: true

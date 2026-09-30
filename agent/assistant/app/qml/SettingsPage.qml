@@ -32,7 +32,11 @@ SettingsFrame {
             if (method === "Setup") page.setup = JSON.parse(json)
             else if (method === "Models" || method === "SetAgentModel") { const r = JSON.parse(json); if (r.models !== undefined) page.models = r }
         }
-        function onEvent(json) { const e = JSON.parse(json); if (e.type === "agent-model") page.models = e }
+        function onEvent(json) {
+            const e = JSON.parse(json)
+            if (e.type === "agent-model") page.models = e
+            else if (e.type === "codex-update") AgentClient.request("Setup")
+        }
     }
     readonly property var codex: setup.codex || {}
     readonly property var key: setup.key || {}
@@ -52,7 +56,9 @@ SettingsFrame {
         ListRow {
             text: "Codex"
             dot: page.setup.codex ? (page.codex.installed ? "positive" : "negative") : ""
-            value: !page.setup.codex ? "" : page.codex.installed ? i18nc("@info Codex", "Installed") : i18nc("@info Codex", "Not installed")
+            value: !page.setup.codex ? "" : !page.codex.installed ? i18nc("@info Codex", "Not installed")
+                : page.codex.update && page.codex.update.available ? i18nc("@info Codex; %1 is a version", "Update to %1", page.codex.update.latest)
+                : i18nc("@info Codex", "Installed")
             accessory: "chevron"
             onClicked: page.push("CodexPage.qml")
         }

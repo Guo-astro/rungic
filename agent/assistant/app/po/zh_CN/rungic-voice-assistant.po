@@ -589,32 +589,13 @@ msgctxt "@label"
 msgid "Config file"
 msgstr "配置文件"
 
-#: qml/CodexPage.qml:131
-msgctxt "@action:button"
-msgid "Check again"
-msgstr "重新检测"
-
 #: qml/CodexPage.qml:135 qml/CodexPage.qml:142
 msgctxt "@title:group"
 msgid "How to install"
 msgstr "安装方式"
 
-#: qml/CodexPage.qml:144
-msgctxt "@option:radio"
-msgid "System package (recommended)"
-msgstr "系统软件包（推荐）"
-
 #: qml/CodexPage.qml:145
 #, kde-format
-msgctxt "@info %1 is a command"
-msgid "%1 · Updates with the system"
-msgstr "%1 · 与系统一起更新"
-
-#: qml/CodexPage.qml:151
-msgctxt "@option:radio"
-msgid "Official install script"
-msgstr "官方安装脚本"
-
 #: qml/CodexPage.qml:168
 msgctxt "@info:status"
 msgid "Installing Codex…"
@@ -1178,3 +1159,44 @@ msgstr "强度越高，Agent 想得越久：回答更慢，占用的额度也更
 msgctxt "@info a step of an agent turn; %1 and %2 are model names"
 msgid "Continued on %1 instead of %2"
 msgstr "改由 %1 继续（原为 %2）"
+
+#: qml/CodexPage.qml qml/SettingsPage.qml (docs/99)
+msgctxt "@title"
+msgid "Update Codex"
+msgstr "更新 Codex"
+
+msgctxt "@info:status"
+msgid "Updating Codex…"
+msgstr "正在更新 Codex…"
+
+msgctxt "@info %1 is a version"
+msgid "Version %1 is out"
+msgstr "%1 已发布"
+
+msgctxt "@info"
+msgid "The latest stable release"
+msgstr "已是最新的正式版"
+
+msgctxt "@action:button"
+msgid "Check for updates"
+msgstr "检查更新"
+
+msgctxt "@info %1 is the reason"
+msgid "Couldn't check: %1"
+msgstr "检查失败：%1"
+
+msgctxt "@info"
+msgid "OpenAI's official install script"
+msgstr "OpenAI 官方安装脚本"
+
+msgctxt "@info"
+msgid "Codex goes into your home folder (~/.codex), the latest stable release. When a newer one is out, you can update it here."
+msgstr "Codex 会装到你的用户目录（~/.codex），装的是最新的正式版。有新版本时，可以在这里更新。"
+
+msgctxt "@action:button %1 is a version"
+msgid "Update to %1"
+msgstr "更新到 %1"
+
+msgctxt "@info Codex; %1 is a version"
+msgid "Update to %1"
+msgstr "可更新到 %1"

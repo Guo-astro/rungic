@@ -71,7 +71,7 @@ Item {
             // Codex restarted (a new key or sign-in) or the whole service did: this conversation
             // is opened again, and a turn that was running shows as ended.
             if (e.type === "agent-restarted") { if (page.conversationId) AgentClient.openConversation(page.conversationId); return }
-            if (e.type === "preferences" || e.type === "account" || e.type === "install" || e.type === "agent-model") return
+            if (e.type === "preferences" || e.type === "account" || e.type === "install" || e.type === "agent-model" || e.type === "codex-update") return
             chat.apply(e, true)
             if (e.type !== "state") Qt.callLater(view.stickToEnd)
         }
