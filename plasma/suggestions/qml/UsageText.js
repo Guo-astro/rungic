@@ -11,4 +11,4 @@ function reset(w, now) {
     if (mins <= 0) return "重置时间已到，等待更新"
     return (mins >= 60 ? Math.floor(mins / 60) + " 小时 " : "") + (mins % 60) + " 分钟后重置"
 }
-function token(data) { return "本机已记录 " + number(data.recordedTokens) + (data.recordedTokens === undefined || data.recordedTokens === null ? "" : " token") }
+function token(data) { return data.recordedTokens === undefined || data.recordedTokens === null ? "尚未收到用量记录" : "本机已记录 " + number(data.recordedTokens) + " token" }

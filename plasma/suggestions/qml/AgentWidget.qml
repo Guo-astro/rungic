@@ -14,8 +14,8 @@ Item {
     property double now: Date.now() / 1000
     UsageClient { id: usage }
     SuggestionsClient { id: navigation }
-    readonly property var data: usage.data
-    readonly property var windows: data.windows || []
+    readonly property var usageData: usage.data
+    readonly property var windows: usageData.windows || []
     Timer { interval: 60000; repeat: true; running: widget.activeView; onTriggered: { widget.now = Date.now() / 1000; usage.refresh() } }
     onActiveViewChanged: if (activeView) usage.refresh()
     Rectangle {
@@ -30,7 +30,7 @@ Item {
                 background: null
                 contentItem: ColumnLayout {
                     spacing: 4
-                    PixelAgent { Layout.alignment: Qt.AlignHCenter; animate: widget.activeView; working: widget.data.activity === "working" }
+                    PixelAgent { Layout.alignment: Qt.AlignHCenter; animate: widget.activeView; working: widget.usageData.activity === "working" }
                     Text { text: "Codex"; color: Theme.text; font.pixelSize: 11; Layout.alignment: Qt.AlignHCenter }
                 }
             }
@@ -41,10 +41,10 @@ Item {
                 background: Rectangle { radius: 10; color: parent.down ? Theme.hover : "transparent" }
                 contentItem: ColumnLayout {
                     spacing: 4
-                    Text { text: (({working: "正在处理", ready: "就绪", offline: "未连接"})[widget.data.activity] || "连接中") + " · " + UsageText.mode(widget.data); color: Theme.dim; font.pixelSize: 11; Layout.fillWidth: true; elide: Text.ElideRight }
-                    Text { text: UsageText.token(widget.data); color: Theme.text; font.pixelSize: 13; font.weight: Font.DemiBold; Layout.fillWidth: true; elide: Text.ElideRight }
+                    Text { text: (({working: "正在处理", ready: "就绪", offline: "未连接"})[widget.usageData.activity] || "连接中") + " · " + UsageText.mode(widget.usageData); color: Theme.dim; font.pixelSize: 11; Layout.fillWidth: true; elide: Text.ElideRight }
+                    Text { text: UsageText.token(widget.usageData); color: Theme.text; font.pixelSize: 13; font.weight: Font.DemiBold; Layout.fillWidth: true; elide: Text.ElideRight }
                     Text {
-                        text: widget.data.error ? "用量暂未更新 · 查看详情" : widget.windows.length ? "已用 " + widget.windows[0].usedPercent + "% · " + UsageText.reset(widget.windows[0], widget.now) : widget.data.authMode === "apiKey" ? "按量使用 · 无订阅重置时间" : "查看账户用量与额度"
+                        text: widget.usageData.error ? "用量暂未更新 · 查看详情" : widget.windows.length ? "已用 " + widget.windows[0].usedPercent + "% · " + UsageText.reset(widget.windows[0], widget.now) : widget.usageData.authMode === "apiKey" ? "按量使用 · 无订阅重置时间" : "查看账户用量与额度"
                         color: Theme.dim; font.pixelSize: 10; Layout.fillWidth: true; wrapMode: Text.Wrap; maximumLineCount: 2; elide: Text.ElideRight
                     }
                 }

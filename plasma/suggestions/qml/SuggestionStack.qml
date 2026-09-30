@@ -11,7 +11,7 @@ QQC2.AbstractButton {
     readonly property int count: item.count || 1
     readonly property string title: item.displayTitle || item.title || "建议"
     readonly property string certainty: ({confirmed: "已确认", suspected: "疑似原因", unknown: "原因待确认"})[item.confidence] || ""
-    implicitHeight: body.implicitHeight + 32 + (count > 1 ? 10 : 0)
+    implicitHeight: count > 1 ? 226 : 206
     Accessible.name: title + (count > 1 ? "，" + count + " 条相关记录" : "") + "，查看建议"
     background: Item {
         Rectangle { visible: card.count > 2; x: 12; y: 10; width: parent.width - 24; height: parent.height - 10; radius: 20; color: Theme.background; opacity: 0.5; border.color: Theme.line }
@@ -20,7 +20,7 @@ QQC2.AbstractButton {
     }
     contentItem: ColumnLayout {
         id: body
-        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 16 }
+        anchors { fill: parent; margins: 16; bottomMargin: card.count > 1 ? 26 : 16 }
         spacing: 7
         RowLayout {
             Layout.fillWidth: true
