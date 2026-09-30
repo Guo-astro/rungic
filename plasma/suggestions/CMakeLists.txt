@@ -28,6 +28,8 @@ qt_add_executable(rungic-agent-usage-claude-code claude_code_main.cpp)
 target_link_libraries(rungic-agent-usage-claude-code PRIVATE caremodel)
 install(TARGETS rungic-agent-usage-claude-code DESTINATION libexec)
 install(FILES agent-usage/claude-code.json DESTINATION share/rungic/agent-usage/providers)
+# The Claude Spark mark, Anthropic's trademark, unmodified, to identify Claude (provenance/agent-usage-icons-20260930).
+install(FILES agent-usage/icons/claude-code.svg DESTINATION share/rungic/agent-usage/icons)
 install(TARGETS rungicsuggestions LIBRARY DESTINATION "${QT6_INSTALL_QML}/com/rungic/suggestions")
 install(FILES "${module_dir}/qmldir" "${module_dir}/rungicsuggestions.qmltypes" DESTINATION "${QT6_INSTALL_QML}/com/rungic/suggestions")
 install(DIRECTORY applet/ DESTINATION share/plasma/plasmoids/com.rungic.suggestions)

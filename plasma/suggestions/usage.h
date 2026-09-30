@@ -11,6 +11,7 @@ struct UsageProvider {
     QString id, name, vendor, file;
     QString service, path, interface, method; // a D-Bus source ...
     QStringList command;                       // ... or a reader run without a shell
+    QString iconLight, iconDark;               // the agent's own mark: existing SVG/PNG files, or empty
     int timeout = 0;                           // ms
     int order = 100;
     bool optional = false;                     // shown only once its source says it is available

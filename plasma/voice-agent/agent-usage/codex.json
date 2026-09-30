@@ -4,6 +4,10 @@
   "name": "Codex",
   "vendor": "OpenAI",
   "order": 10,
+  "icon": {
+    "light": "/usr/share/rungic/agent-usage/icons/codex-light.svg",
+    "dark": "/usr/share/rungic/agent-usage/icons/codex-dark.svg"
+  },
   "dbus": {
     "service": "com.rungic.VoiceAgent",
     "path": "/com/rungic/VoiceAgent",

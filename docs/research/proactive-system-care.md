@@ -426,3 +426,11 @@ ARM64 C++ 24 项通过。40 事项 / 39 组的真实服务集成分别执行普�
 通用部署 smoke 8 项首遍通过、无 flaky；本次直接调用默认 smoke 包含了 `camera.frames`（此项并非堆叠功能验收，也不能记为跳过），后续此类桌面验收应显式排除摄像头。手势验收完成后，建议服务与桌面近期 warning 日志无条目；SSH socket enabled/active，`dpkg --audit` 无输出。既有 313 个翻译文件缺失仍在，changed_files=0、release_mismatch=0；没有将 integrity drift 记作整机完整性通过。继续保留原 rootfs 快照，另存 `state.before-stack-swipe.json`。
 
 证据：`.work/experiments/stack-swipe/{integration-final.log,deploy.log,device.log,final-check.log,journal.log}`；截图 `real-first.png`、`real-second.png`、`fixture-current-detail.png`、`fixture-group-detail.png`、`fixture-third.png`、`fixture-groups-scrolled.png`、`native-edit.png`、`native-drawer.png`、`final-home.png`。部署记录 `.work/deploy/20260930-112856-20260930.13/`。本轮验收限桌面卡片交互，未实施历史崩溃修复或向上游提交 PR。
+
+## 2026-09-30：Agent 用量改为通用提供方接口
+
+`AgentUsage` 升为 schema 2：`{schema, primary, updatedAt, providers[]}`，每个 Agent 一个提供方对象（状态、账户类型、模型、本机/当日/账户 token、额度窗口、stale/error），契约之外的字段丢弃。Agent 由描述文件 `<数据目录>/rungic/agent-usage/providers/<id>.json` 声明，来源为 D-Bus 方法或不经 shell 的读取命令；系统目录由拥有适配器的包安装，用户目录可添加或覆盖。新增 D-Bus `RecordTokens(provider, json)`、`ProviderChanged(provider)`；账本按提供方与账户分区，schema 1 迁移到 `codex` 且不重复计数。Codex 描述文件随 `rungic-voice-agent` 安装，VoiceAgent `Usage` 直接返回提供方对象并推送 token；旧事件转换保留一个发布周期。另加 Claude Code 读取器：token 来自其会话记录（格式为内部格式，按 ccusage 方式去重，自有账本），额度只来自文档化的 statusline `rate_limits`，未文档化的 OAuth 用量端点不采用。
+
+每个 Agent 带自己的标志（描述文件 `icon`，Claude Spark 来自 Anthropic 资料包、未修改；Codex 为本项目原创像素标志）。
+
+验证范围：Python 51 项、ARM64 C++ 34 项、构建容器私有总线上的服务集成通过；**未部署到手机，未做实机验收**。设计、调研来源（文档/未文档化区分、版本与许可证）、测试与验收办法见 [95 篇](95-agent-usage-providers.md)。

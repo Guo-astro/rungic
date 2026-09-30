@@ -5,6 +5,9 @@
   "vendor": "Anthropic",
   "order": 20,
   "optional": true,
+  "icon": {
+    "light": "/usr/share/rungic/agent-usage/icons/claude-code.svg"
+  },
   "command": ["/usr/libexec/rungic-agent-usage-claude-code", "--json"],
   "timeoutSeconds": 20
 }

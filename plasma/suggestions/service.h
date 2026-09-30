@@ -51,6 +51,7 @@ private:
     QHash<QString, UsageFetch> usageFetches;
     qint64 usageWatched = 0, providersLoaded = 0;
     QStringList usageDescriptorErrors;
+    QSet<QString> usagePushers; // providers that called RecordTokens/ProviderChanged themselves
     QString feedPath, knowledgePath, statePath;
     QTimer scanTimer;
     bool scanning = false;

@@ -209,4 +209,6 @@ USB G100 已部署 `20260930.12`：suggestions `0.452`、voice-agent `0.453`、d
 
 用量链：固定 Codex 0.156.1 的只读账户/额度 RPC 与 token 事件 → 现有 VoiceAgent 桥 → C++ `Care::Usage` 账户分区、累计高水位与持久化 → D-Bus `AgentUsage/UsageChanged` → 独立 widget 与 APP 专页。API Key 只展示本机收到的实际 Codex token，订阅额度和重置由服务端提供；不纳入 Realtime、不等同账单，不把重置倒计时结束当作已用额度清零。真实 Luna 请求、累计保存和服务重启不重复计数通过；订阅展示使用固定协议与隔离替身验收，未切换实机登录。`.11` 完成 8 项 smoke 首遍通过；`.12` 只补桥接账户归属边界并重启 Agent，按范围复验真实用量。完整证据与各阶段限制见 [主动建议记录](proactive-system-care.md)。
 
+2026-09-30 用量接口通用化（未部署）：Agent → 描述文件 `rungic/agent-usage/providers/<id>.json`（D-Bus 方法或读取命令）→ C++ `Care::Usage` 按提供方与账户分区 → `AgentUsage` schema 2（`providers[]` 与 `primary`）/`RecordTokens`/`ProviderChanged`/`UsageChanged` → widget 与用量页。Codex 通过 VoiceAgent `Usage` 与 `RecordTokens` 接入；Claude Code 读取器只从会话记录计 token、从文档化 statusline 取额度。新增 Agent 只需安装描述文件与适配器，服务和组件不改代码。离线与构建机集成测试通过，实机未验收；详见 [95 篇](95-agent-usage-providers.md)。
+
 2026-09-30 堆叠手势更新：USB G100 `20260930.13` / suggestions **0.461**，其他组件保持 `.12` 基线。桌面堆叠内上滑下一张、下滑上一张，提供页码、跟手动画、短拖动/首尾回弹；标题与间隙承担外层组列表滚动，手势归属在按下时固定。当前成员按 ID 保持，刷新/动画期间不跳卡，移除当前项回到剩余第一项。点正面进入当前记录，顶部数量进入组列表；只对停稳可见的成员回写展示回执。部署后明确重新加载建议服务、桌面和助理 UI。24 项 C++、40 项事项的指针/QML 集成，以及真实两张、隔离三张/多组、刷新/移除、正确跳转与回执、快速连续滑动、原生长按编辑和壁纸抽屉实测通过。临时数据与环境覆盖已清除，原结果/计划/提醒保留；完整证据和默认 smoke 范围说明见 [主动建议记录](proactive-system-care.md)。

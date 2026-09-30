@@ -88,6 +88,7 @@ void Suggestions::RefreshAgentUsage() {
     for (const auto &p : usage.providers()) refreshUsage(p, false);
 }
 void Suggestions::ProviderChanged(const QString &id) {
+    if (calledFromDBus()) usagePushers.insert(id);
     for (const auto &p : usage.providers()) {
         if (p.id != id) continue;
         if (QDateTime::currentSecsSinceEpoch() - usageWatched < UsageWatchWindow) refreshUsage(p, true);
@@ -95,6 +96,7 @@ void Suggestions::ProviderChanged(const QString &id) {
     }
 }
 void Suggestions::RecordTokens(const QString &provider, const QString &json) {
+    if (calledFromDBus()) usagePushers.insert(provider);
     if (usage.record(provider, QJsonDocument::fromJson(json.toUtf8()).object(), QDateTime::currentSecsSinceEpoch())) Q_EMIT UsageChanged();
 }
 void Suggestions::refreshUsage(const Care::UsageProvider &p, bool force) {
@@ -341,13 +343,15 @@ QString Suggestions::Act(const QString &id, const QString &action, const QString
 void Suggestions::AgentEvent(const QString &json) {
     const auto e = QJsonDocument::fromJson(json.toUtf8()).object();
     // Compatibility for one release (remove after 2026-10): a voice agent from before RecordTokens and
-    // ProviderChanged only signals its Codex usage. Repeats are harmless: counts are high-water marks.
-    if (e["type"] == "usage-changed") { usage.identity("codex", e["accountKey"].toString()); Q_EMIT UsageChanged(); }
+    // ProviderChanged only signals its Codex usage. Once it calls those itself, its events are not read
+    // twice; a repeat would be harmless anyway (counts are high-water marks).
+    const bool legacy = !usagePushers.contains("codex");
+    if (legacy && e["type"] == "usage-changed") { usage.identity("codex", e["accountKey"].toString()); Q_EMIT UsageChanged(); }
     if (e["type"] == "token-usage") {
-        if (usage.record("codex", Care::codexTokenEvent(e), QDateTime::currentSecsSinceEpoch())) Q_EMIT UsageChanged();
+        if (legacy && usage.record("codex", Care::codexTokenEvent(e), QDateTime::currentSecsSinceEpoch())) Q_EMIT UsageChanged();
         return;
     }
-    if (QStringList{"account", "usage-changed", "agent-started", "agent-finished", "agent-restarted"}.contains(e["type"].toString()))
+    if (legacy && QStringList{"account", "usage-changed", "agent-started", "agent-finished", "agent-restarted"}.contains(e["type"].toString()))
         ProviderChanged("codex");
     const auto id = e["suggestion"].toString(), taskId = e["suggestionTask"].toString();
     QJsonObject event;

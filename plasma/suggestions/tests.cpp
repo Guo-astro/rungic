@@ -207,12 +207,34 @@ private Q_SLOTS:
         const auto text = QJsonDocument(p).toJson();
         for (const auto *leak : {"secret", "someone", "Spoofed", "cost", "dancing", "tokenEvents"}) QVERIFY2(!text.contains(leak), leak);
         const auto keys = p.keys();
-        QCOMPARE(QSet<QString>(keys.begin(), keys.end()), (QSet<QString>{"id", "name", "vendor", "status", "account", "model", "tokens", "limits", "updatedAt", "stale", "error"}));
+        QCOMPARE(QSet<QString>(keys.begin(), keys.end()), (QSet<QString>{"id", "name", "vendor", "icon", "status", "account", "model", "tokens", "limits", "updatedAt", "stale", "error"}));
         QCOMPARE(p["name"].toString(), "A"); QCOMPARE(p["status"].toString(), "ready");
         QCOMPARE(p["account"].toObject().keys(), (QStringList{"kind", "label", "plan"}));
         QCOMPARE(p["tokens"].toObject()["account"].toInteger(), 12); QVERIFY(p["tokens"].toObject()["device"].isNull());
         QCOMPARE(p["limits"].toArray().size(), 1);
         QCOMPARE(p["limits"].toArray()[0].toObject().keys(), (QStringList{"expired", "id", "label", "resetsAt", "usedPercent", "windowMinutes"}));
+    }
+    void usageIconsArePathsThatExist() {
+        QTemporaryDir d;
+        write(d.path() + "/mark.svg", "<svg xmlns=\"http://www.w3.org/2000/svg\"/>");
+        write(d.path() + "/mark.txt", "not an image");
+        const auto descriptor = [&d](const QJsonValue &icon) {
+            return QJsonObject{{"schema", 1}, {"id", "a"}, {"name", "A"}, {"command", QJsonArray{"/bin/true"}}, {"icon", icon}};
+        };
+        Care::UsageProvider p;
+        QCOMPARE(Care::validateUsageProvider(descriptor(QJsonObject{{"light", d.path() + "/mark.svg"}, {"dark", d.path() + "/missing.svg"}}), "a.json", &p), QString());
+        QCOMPARE(p.iconLight, d.path() + "/mark.svg"); QVERIFY(p.iconDark.isEmpty());
+        Care::Usage u(""); u.setProviders({p});
+        QCOMPARE(shown(u.view(1), "a")["icon"].toObject(), (QJsonObject{{"light", d.path() + "/mark.svg"}}));
+        QCOMPARE(Care::validateUsageProvider(descriptor(QJsonObject{{"light", d.path() + "/mark.svg"}, {"dark", d.path() + "/mark.svg"}}), "a.json", &p), QString());
+        u.setProviders({p}); QCOMPARE(shown(u.view(1), "a")["icon"].toObject()["dark"].toString(), d.path() + "/mark.svg");
+        // Missing, relative, not an image, or only a dark variant: no icon, the agent itself stays.
+        for (const auto &bad : {QJsonValue(QJsonObject{{"light", d.path() + "/missing.svg"}}), QJsonValue(QJsonObject{{"light", "mark.svg"}}),
+                                QJsonValue(QJsonObject{{"light", d.path() + "/mark.txt"}}), QJsonValue(QJsonObject{{"dark", d.path() + "/mark.svg"}}),
+                                QJsonValue(d.path() + "/mark.svg")}) {
+            QCOMPARE(Care::validateUsageProvider(descriptor(bad), "a.json", &p), QString());
+            u.setProviders({p}); QVERIFY(shown(u.view(1), "a")["icon"].isNull());
+        }
     }
     void usageAdapterLedgerTokensPassThrough() {
         Care::Usage u(""); u.setProviders({provider("reader")});

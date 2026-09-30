@@ -57,6 +57,13 @@ QJsonObject sanitized(const QJsonObject &in) {
     return out;
 }
 QString day(qint64 now) { return QDateTime::fromSecsSinceEpoch(now).date().toString(Qt::ISODate); }
+// An icon file the widget can load as it is: absolute, present, small, SVG or PNG. Anything else is
+// dropped (the widget then draws a letter tile), never a reason to drop the agent.
+QString icon(const QJsonValue &v) {
+    const QFileInfo info(v.toString());
+    if (!v.isString() || !QDir::isAbsolutePath(v.toString()) || !info.isFile() || !info.isReadable() || info.size() > 1024 * 1024) return {};
+    return QStringList{"svg", "png"}.contains(info.suffix().toLower()) ? info.absoluteFilePath() : QString();
+}
 }
 
 QString validateUsageProvider(const QJsonObject &d, const QString &fileName, UsageProvider *out) {
@@ -94,6 +101,9 @@ QString validateUsageProvider(const QJsonObject &d, const QString &fileName, Usa
     if (p.order < 0 || p.order > 1000) return "order";
     if (d.contains("optional") && !d["optional"].isBool()) return "optional";
     p.optional = d["optional"].toBool();
+    const auto mark = d["icon"].toObject();
+    p.iconLight = icon(mark["light"]);
+    if (!p.iconLight.isEmpty()) p.iconDark = icon(mark["dark"]);
     if (out) *out = p;
     return {};
 }
@@ -213,7 +223,13 @@ QJsonObject Usage::provider(const UsageProvider &p, const State &s, qint64 now) 
         w["expired"] = !w["resetsAt"].isNull() && w["resetsAt"].toInteger() <= now; // waits for a fresh read, never zeroed here
         limits.append(w);
     }
-    return {{"id", p.id}, {"name", p.name}, {"vendor", p.vendor}, {"status", s.status},
+    QJsonValue mark = QJsonValue::Null;
+    if (!p.iconLight.isEmpty()) {
+        QJsonObject paths{{"light", p.iconLight}};
+        if (!p.iconDark.isEmpty()) paths["dark"] = p.iconDark;
+        mark = paths;
+    }
+    return {{"id", p.id}, {"name", p.name}, {"vendor", p.vendor}, {"icon", mark}, {"status", s.status},
             {"account", s.current.contains("account") ? s.current["account"] : QJsonObject{{"kind", "none"}, {"label", ""}, {"plan", ""}}},
             {"model", s.current["model"].toString()}, {"tokens", tokens}, {"limits", limits}, {"updatedAt", s.refreshed},
             {"stale", !s.refreshed || now - s.refreshed > 180 || s.failed}, {"error", s.problem.isEmpty() ? saveProblem : s.problem}};
