@@ -6,6 +6,7 @@ class Usage {
 public:
     explicit Usage(QString path);
     void snapshot(const QJsonObject &data, qint64 now);
+    void identity(const QString &key);
     void token(const QJsonObject &event, qint64 now);
     QJsonObject view(qint64 now) const;
     void error(const QString &message) { problem = message; }

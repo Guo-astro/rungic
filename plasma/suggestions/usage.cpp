@@ -5,7 +5,7 @@
 #include <utility>
 namespace Care {
 Usage::Usage(QString p) : path(std::move(p)) {
-    const auto stored = readObject(path);
+    const auto stored = path.isEmpty() ? QJsonObject{} : readObject(path);
     accounts = stored["accounts"].toObject();
     // An account must be verified this session before showing any cached values.
 }
@@ -13,10 +13,18 @@ void Usage::save() {
     QString error;
     if (!writeObject(path, {{"schema", 1}, {"accounts", accounts}}, &error)) problem = "用量记录未保存：" + error;
 }
+void Usage::identity(const QString &key) {
+    if (key == accountKey) return;
+    accountKey = key; current = {}; refreshed = 0; problem.clear();
+}
 void Usage::snapshot(const QJsonObject &data, qint64 now) {
-    accountKey = data["accountKey"].toString();
-    current = data; current.remove("accountKey"); current.remove("tokens");
-    problem = data["usageError"].toString(); refreshed = now;
+    identity(data["accountKey"].toString());
+    auto next = data;
+    if (!data["usageError"].toString().isEmpty()) {
+        for (const auto &key : {"rateLimits", "accountUsage"}) if (!next.contains(key)) next[key] = current[key];
+    }
+    current = next; current.remove("accountKey"); current.remove("tokens");
+    problem = data["usageError"].toString(); if (problem.isEmpty()) refreshed = now;
     for (const auto &v : data["tokens"].toArray()) token(v.toObject(), now);
 }
 void Usage::token(const QJsonObject &event, qint64 now) {

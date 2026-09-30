@@ -1371,7 +1371,7 @@ class VoiceAgent:
             self.usage_tokens[(event.get('accountKey'), event.get('threadId'))] = event
             self.emit_raw(event)
         elif method in ('account/rateLimits/updated', 'account/updated'):
-            self.emit_raw({'type': 'usage-changed'})
+            self.emit_raw({'type': 'usage-changed', 'accountKey': self.usage_identity()})
         elif params.get('threadId') and params['threadId'] != self.thread_id:
             return
         elif method == 'thread/realtime/outputAudio/delta':

@@ -41,7 +41,7 @@ Item {
                 background: Rectangle { radius: 10; color: parent.down ? Theme.hover : "transparent" }
                 contentItem: ColumnLayout {
                     spacing: 4
-                    Text { text: (widget.data.activity === "working" ? "正在处理" : "就绪") + " · " + UsageText.mode(widget.data); color: Theme.dim; font.pixelSize: 11; Layout.fillWidth: true; elide: Text.ElideRight }
+                    Text { text: (({working: "正在处理", ready: "就绪", offline: "未连接"})[widget.data.activity] || "连接中") + " · " + UsageText.mode(widget.data); color: Theme.dim; font.pixelSize: 11; Layout.fillWidth: true; elide: Text.ElideRight }
                     Text { text: UsageText.token(widget.data); color: Theme.text; font.pixelSize: 13; font.weight: Font.DemiBold; Layout.fillWidth: true; elide: Text.ElideRight }
                     Text {
                         text: widget.data.error ? "用量暂未更新 · 查看详情" : widget.windows.length ? "已用 " + widget.windows[0].usedPercent + "% · " + UsageText.reset(widget.windows[0], widget.now) : widget.data.authMode === "apiKey" ? "按量使用 · 无订阅重置时间" : "查看账户用量与额度"

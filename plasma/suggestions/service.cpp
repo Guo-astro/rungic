@@ -235,6 +235,7 @@ QString Suggestions::Act(const QString &id, const QString &action, const QString
 }
 void Suggestions::AgentEvent(const QString &json) {
     const auto e = QJsonDocument::fromJson(json.toUtf8()).object();
+    if (e["type"] == "usage-changed") { usage.identity(e["accountKey"].toString()); Q_EMIT UsageChanged(); }
     if (e["type"] == "token-usage") {
         usage.token(e, QDateTime::currentSecsSinceEpoch()); Q_EMIT UsageChanged(); return;
     }
