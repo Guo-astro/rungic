@@ -17,6 +17,7 @@ class UsageBridgeTests(unittest.TestCase):
         self.agent.agent_busy = False
         self.agent.usage_identity = Mock(return_value='opaque-a')
         self.agent.usage_tokens = {}
+        self.agent.usage_accounts = {}
         self.agent.server = Mock()
         self.agent.thread_id = 'active'
         self.agent.emit_raw = Mock()
@@ -55,4 +56,12 @@ class UsageBridgeTests(unittest.TestCase):
     def test_tokens_from_another_account_never_return(self):
         self.agent.server.call.return_value = {'account': {'type': 'apiKey'}}
         self.agent.usage_tokens = {'x': {'accountKey': 'opaque-b'}}
+        self.assertEqual(self.agent.usage()['tokens'], [])
+
+    def test_late_usage_keeps_account_from_turn_start(self):
+        self.agent.usage_accounts[('other', 'old-turn')] = 'opaque-old'
+        self.agent.on_notification('thread/tokenUsage/updated', {'threadId': 'other', 'turnId': 'old-turn',
+                                    'tokenUsage': {'total': {'totalTokens': 300}, 'last': {'totalTokens': 100}}})
+        self.assertEqual(self.agent.emit_raw.call_args.args[0]['accountKey'], 'opaque-old')
+        self.agent.server.call.return_value = {'account': {'type': 'apiKey'}}
         self.assertEqual(self.agent.usage()['tokens'], [])

@@ -535,6 +535,7 @@ class VoiceAgent:
     def __init__(self, emit):
         Gst.init(None)
         self.usage_tokens = {}
+        self.usage_accounts = {}
         self.emit_raw = emit
         self.store = Store()
         # It was titled "语音助手" before it became "主对话" beside "新对话".
@@ -1366,8 +1367,11 @@ class VoiceAgent:
         return result
 
     def on_notification(self, method, params):
+        if method == 'turn/started':
+            self.usage_accounts[(params.get('threadId'), (params.get('turn') or {}).get('id'))] = self.usage_identity()
         if method == 'thread/tokenUsage/updated':
-            event = {'type': 'token-usage', 'accountKey': self.usage_identity(), **params}
+            identity = self.usage_accounts.get((params.get('threadId'), params.get('turnId')), self.usage_identity())
+            event = {'type': 'token-usage', 'accountKey': identity, **params}
             self.usage_tokens[(event.get('accountKey'), event.get('threadId'))] = event
             self.emit_raw(event)
         elif method in ('account/rateLimits/updated', 'account/updated'):
