@@ -22,7 +22,7 @@ RowLayout {
         Layout.fillWidth: true
         font.family: Theme.fontFamily
         font.pixelSize: Theme.labelSize
-        lineHeight: 19
+        lineHeight: Theme.labelLine
         lineHeightMode: Text.FixedHeight
         wrapMode: Text.Wrap
         color: parent.tone === "negative" ? Theme.negative : parent.tone === "positive" ? Theme.positive : Theme.dim

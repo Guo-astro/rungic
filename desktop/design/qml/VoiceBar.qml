@@ -27,15 +27,15 @@ Rectangle {
     states: [
         State { name: "idle"; PropertyChanges { bar.color: Theme.fill; bar.ink: Theme.text; bar.barHeight: Theme.field } },
         State { name: "pressed"; PropertyChanges { bar.color: Theme.fill2; bar.ink: Theme.text; bar.barHeight: Theme.field } },
-        State { name: "hot"; PropertyChanges { bar.color: Theme.strong; bar.ink: Theme.strongInk; bar.barHeight: 64 } },
-        State { name: "cancel"; PropertyChanges { bar.color: Theme.fill2; bar.ink: Theme.dim; bar.barHeight: 64 } },
+        State { name: "hot"; PropertyChanges { bar.color: Theme.strong; bar.ink: Theme.strongInk; bar.barHeight: Theme.fieldHot } },
+        State { name: "cancel"; PropertyChanges { bar.color: Theme.fill2; bar.ink: Theme.dim; bar.barHeight: Theme.fieldHot } },
         State { name: "handsFree"; PropertyChanges { bar.color: Theme.fill; bar.ink: Theme.text; bar.barHeight: Theme.field } },
         State { name: "disabled"; PropertyChanges { bar.color: Theme.fill; bar.ink: Theme.dim; bar.barHeight: Theme.field } }
     ]
     implicitHeight: barHeight
     radius: Theme.radiusField
-    Behavior on color { ColorAnimation { duration: 150 } }
-    Behavior on barHeight { NumberAnimation { duration: 150; easing.type: Easing.Bezier; easing.bezierCurve: Theme.easing } }
+    Behavior on color { ColorAnimation { duration: Theme.brisk } }
+    Behavior on barHeight { NumberAnimation { duration: Theme.brisk; easing.type: Easing.Bezier; easing.bezierCurve: Theme.easing } }
     MouseArea {
         id: holdArea
         anchors.fill: parent
@@ -49,7 +49,7 @@ Rectangle {
     RowLayout {
         id: row
         anchors.fill: parent
-        anchors.margins: 6
+        anchors.margins: Theme.inset
         spacing: 0
     }
 }

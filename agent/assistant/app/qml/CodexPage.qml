@@ -64,8 +64,8 @@ SettingsFrame {
                     anchors.centerIn: parent
                     name: page.codex.installed ? "check" : "terminal"
                     color: page.codex.installed ? Theme.positive : Theme.text
-                    implicitWidth: 32
-                    implicitHeight: 32
+                    implicitWidth: Theme.iconHero
+                    implicitHeight: Theme.iconHero
                 }
             }
             Text {

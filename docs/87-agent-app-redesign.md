@@ -4,7 +4,7 @@
 
 ## 设计系统库：`com.rungic.design`（包 `rungic-design`）
 
-- 位置：`plasma/design/`。它是一个 QML 模块（一个插件库），安装到 Qt 的 QML 目录（`/usr/lib/aarch64-linux-gnu/qt6/qml/com/rungic/design/`），任何应用都可以 `import com.rungic.design`。
+- 位置：`desktop/design/`（原记为 `plasma/design/`，目录已迁移）。它是一个 QML 模块（一个插件库），安装到 Qt 的 QML 目录（`/usr/lib/aarch64-linux-gnu/qt6/qml/com/rungic/design/`），任何应用都可以 `import com.rungic.design`。
 - 助手应用只在运行时导入它，构建时不链接。原因：打包工具的 `build_depends` 只从 Ubuntu 软件源安装，装不了本项目自己的包。
 - 应用的 C++ 部分需要知道深浅色时，通过 `engine.singletonInstance("com.rungic.design", "Theme")` 取 `dark` 属性，并按名字连接它的信号。
 - 内容：
@@ -50,7 +50,52 @@
   - 修掉的问题：取消聆听后误显示“正在处理”。原因是服务先发 listen-cancelled、再发状态变化，浮层把后者当成了“说完等回复”。
   - 松开后、转写回来之前，是单独的 sending 视图，显示“正在识别…”。
 
-## 应用（`plasma/voice-agent/app`）
+## 设计系统的层级与基础画板（2026-09-30）
+
+- **起因**：用户问 Colors、Typography、Dimensions、Icons、Components 是否都仔细设计过。核对后发现没有：
+  - 画布“Agent · App 设计”原来只有 23 个页面画板（浅色、深色各一份）和共用的 `chat.css`，没有基础画板，也没有接入设计系统。
+  - 颜色：浅色 `faint` 在 fill 上对比度只有 2.8:1；关闭的开关，轨道和底色对比约 1.2:1；深色 `negative` 在 fill 上 4.4:1，不到 4.5:1。
+  - 文字与尺寸：画板里用了 9 种字号、11 种行高、20 多种间距、14 种圆角；图标线宽有 1.5 到 2.4 六种。
+  - 组件：画布里只画了按下状态，没有禁用和焦点状态。各状态是后来在 QML 的 Gallery 里补上的。
+- **用户要求**：补齐基础画板，并把整理结果回写 Theme.qml。
+- **Theme.qml 的层级**（画板直接从这个文件读取数值，改动时两边一起改）：
+  - **颜色**：每个文字色在 background、side、fill、fill2 四种底色上都不低于 4.5:1；`faint` 不低于 3:1，只作标记，不作文字。
+    - 调整的值：浅色 `dim` #5f6b77 → #5e6975，`link` #2272a8 → #206da3，`positive` #1b7a44 → #1b7743，`faint` #8a939c → #7a838b；深色 `negative` #e0606d → #ec7480。
+    - 新增 `negativeInk`（危险底上的图标）：浅色白，深色 #141618，替换 HoldTarget 里写死的 `#ffffff`。深色下，白色在新的 `negative` 上只有 2.9:1。
+  - **文字**：7 个字号，各配固定行高：24/32、20/30、16/26、15/22、14/20、13/18、12/16，另有等宽 12/18。字重只用 400、500、600。新增 `*Line`、`calloutSize` 和 `weight*`。
+  - **间距**：2、4、8、12、16、20、24、32、48（`spaceXxs` 到 `space4xl`）。`inset` = (field − touch) / 2 = 6，不算一级。
+  - **圆角**：2、8、12、16、20，胶囊和圆形取高度的一半。
+    - `radiusItem` 10 → 12，`radiusInput` 14 → 12。
+    - TextBar 26 → `radiusField` 28。
+  - **尺寸**：`controlCompact` 32、`controlS` 36、`touch` 44、`controlM` 48、`controlL` 52、`field` 56、`fieldHot` 64、`tile` 84。
+  - **图标**：14、16、18、20、22、26、32（`iconXs` 到 `iconHero`）；线宽一律 1.7。
+  - **状态与动效**：`disabledOpacity` 0.4、`pressScale` 0.94、`pressScaleWide` 0.98、`pressShade` 0.18、`focusWidth` 与 `focusGap` 均为 2；时长 100、150（新增 `brisk`）、200、250 ms。
+- **随之改动的控件**：
+  - Toggle：关闭时圆钮的边改为 `faint`（原为 14% 黑），时长用 `brisk`。
+  - HoldTarget：图标色用 `negativeInk`。
+  - VoiceBar：高度用 `fieldHot`，内边距用 `inset`。
+  - TextBar：圆角 28。
+  - Note：行高 18。
+  - BottomSheet：间距 14 → 12。
+  - CodexPage：状态圆里的图标用 `iconHero`。
+  - `RungicVoiceAssistantLight.colors`：链接、焦点、次要文字同步为新值。
+- **画布**：
+  - 新增页面“基础”，含颜色、文字、图标、尺寸与动效、组件（浅色）、组件（深色）六张画板。组件画板画出每个控件在 QML `states` 里的全部状态，另加焦点环。
+  - `chat.css` 的颜色改为取自 Theme.qml，并加入 `is-*` 强制状态类（对应 `forcedState`）；新增 `system.css`，只供基础画板排版。
+  - 46 张页面画板统一图标线宽 1.7，并按新层级调整了图标尺寸、行高和输入栏圆角。
+- **验证**（离线，未上机）：
+  - 用 PySide6 在 K8（x86_64）上离线渲染状态总览，浅色、深色各一遍，逐段对比改动前后：开关圆钮的边清楚了，深色取消目标的图标为 #141618，其余只有颜色和圆角的预期变化。渲染时用的是替身：SystemTheme 与 DesignI18n 是桩实现，控件样式为 Basic。
+  - 基础画板用 Chromium 本地渲染，检查布局并量出高度。
+  - **实机（G100 S）**：`rungic-design`、`rungic-voice-agent` 和 `rungic-plasma-diagnostics` 以开发覆盖装上（docs/97）。
+    - 截图方式：以桌面用户身份运行 `rungic-design-gallery --section <节> --shot`，平台用 `QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software`，不在屏幕上开窗口。21 节 × 浅深两种主题，共 42 张，见 `.work/verify/20260930-design-gallery/`。
+    - 结果与离线渲染一致：关闭的开关圆钮有 faint 边；深色取消目标的 × 为深色；危险色、输入框的聚焦和出错边、禁用 40% 都正确。
+    - Thumbnail 和 LivePicture 的示例图在截图里是空的。改动前的代码在 software 后端下同样如此（`MultiEffect` 遮罩在 software 后端下不绘制），所以不是回退；带图的状态没能用截图验证。
+- **没做的**：
+  - 焦点环只在设计和 token 里定义，控件还没有画焦点状态。
+  - 控件里其余写死的数字（与层级数值相同的）没有逐个换成 token。
+  - 画板 SetInstall 里仍画着 npm 安装方式，而实现里没有提供 npm。
+
+## 应用（`agent/assistant/app`，原 `plasma/voice-agent/app`）
 
 - **主界面**：
   - 顶栏：对话列表、标题、新对话。

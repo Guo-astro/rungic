@@ -35,7 +35,7 @@ Rectangle {
         anchors.rightMargin: Theme.gutter
         anchors.topMargin: 10
         anchors.bottomMargin: 16
-        spacing: 14
+        spacing: Theme.spaceM
         Rectangle {
             Layout.alignment: Qt.AlignHCenter
             Layout.preferredWidth: 36

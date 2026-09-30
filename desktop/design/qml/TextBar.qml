@@ -9,7 +9,7 @@ Rectangle {
     id: bar
     default property alias content: column.data
     implicitHeight: column.implicitHeight + 12
-    radius: 26
+    radius: Theme.radiusField
     color: Theme.fill
     border.width: 1.5
     border.color: Theme.strong

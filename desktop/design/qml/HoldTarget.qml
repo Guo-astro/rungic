@@ -23,7 +23,7 @@ ColumnLayout {
         State { name: "idle"; PropertyChanges { holdTarget.fill: Theme.fill; holdTarget.ink: Theme.text; holdTarget.labelInk: Theme.dim; holdTarget.grow: 1 } },
         State { name: "active"; PropertyChanges {
             holdTarget.fill: holdTarget.edit ? Theme.strong : Theme.negative
-            holdTarget.ink: holdTarget.edit ? Theme.strongInk : "#ffffff"
+            holdTarget.ink: holdTarget.edit ? Theme.strongInk : Theme.negativeInk
             holdTarget.labelInk: Theme.text
             holdTarget.grow: 1.25 } }
     ]
@@ -35,14 +35,14 @@ ColumnLayout {
         radius: 30
         scale: holdTarget.grow
         color: holdTarget.fill
-        Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.Bezier; easing.bezierCurve: Theme.easing } }
-        Behavior on color { ColorAnimation { duration: 150 } }
+        Behavior on scale { NumberAnimation { duration: Theme.brisk; easing.type: Easing.Bezier; easing.bezierCurve: Theme.easing } }
+        Behavior on color { ColorAnimation { duration: Theme.brisk } }
         Icon {
             anchors.centerIn: parent
             name: holdTarget.iconName
             color: holdTarget.ink
-            implicitWidth: 26
-            implicitHeight: 26
+            implicitWidth: Theme.iconXl
+            implicitHeight: Theme.iconXl
         }
     }
     Text {
