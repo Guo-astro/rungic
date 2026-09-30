@@ -338,7 +338,8 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         worker.execute(() -> {
             try {
                 if (isDestroyed() || generation!=surfaceGeneration || !holder.getSurface().isValid()) return;
-                FirstBootState install=FirstBootState.read(new File("/product/etc/rungic/seed.env"),
+                FirstBootState install=FirstBootState.readSource(new File(getFilesDir(),"rungic-install-source.properties"),
+                    new File("/product/etc/rungic/seed.env"),
                     new File(getFilesDir(),"rungic-install.properties"));
                 if(!install.ready) {
                     runOnUiThread(() -> {
@@ -701,7 +702,11 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         if (!p.waitFor(action.equals("account-prepare")?240:90, TimeUnit.SECONDS)) {
             p.destroy(); throw new IOException(controlTimeout); }
         reader.join(2000);
-        if (p.exitValue() != 0) throw new IOException(out.toString("UTF-8"));
+        if (p.exitValue() != 0) {
+            String details=out.toString("UTF-8").trim();
+            throw new IOException("Control " + action + " failed (exit " + p.exitValue() + ")"
+                + (details.isEmpty()?"":": " + details));
+        }
         return out.toString("UTF-8");
     }
 

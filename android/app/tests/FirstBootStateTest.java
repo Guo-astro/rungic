@@ -11,6 +11,15 @@ public final class FirstBootStateTest {
         Path root=Files.createTempDirectory(Paths.get(args[0]),"firstboot-state-");
         Path seed=root.resolve("seed.env"), status=root.resolve("status");
         require(FirstBootState.read(seed.toFile(),status.toFile()).ready);
+        Path standalone=root.resolve("standalone.env");
+        write(standalone,"RELEASE_ID=standalone-new\n");
+        require(!FirstBootState.readSource(standalone.toFile(),seed.toFile(),status.toFile()).ready);
+        write(status,"schema=2\nrelease=standalone-new\nstate=ready\nphase=complete\n");
+        require(FirstBootState.readSource(standalone.toFile(),seed.toFile(),status.toFile()).ready);
+        write(standalone,"");
+        require(!FirstBootState.readSource(standalone.toFile(),seed.toFile(),status.toFile()).ready);
+        Files.delete(standalone);
+        Files.delete(status);
         write(seed,"RELEASE_ID='release-new'\n");
         require(!FirstBootState.read(seed.toFile(),status.toFile()).ready);
         write(status,"release=release-old\nstate=ready\n");

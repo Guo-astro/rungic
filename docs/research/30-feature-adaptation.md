@@ -1,5 +1,11 @@
 # Phosh 功能逐项适配记录
 
+2026-09-30 X70 新镜像复验：OS `20260930.15`、独立载荷 `.7`、APK 2.27。修复 APK umask 0077 导致 cgroup 0700，以及 Android 音频持久化 PID 被其他应用复用的两个独立冷启动故障；全新账户 UI、连续三轮整机重启首次打开、9 项 smoke 全部通过。此前 `.5` 第三轮失败仍保留证据；用户选择最终空白账户，由其自行配置。固定产物、日志与验收边界见 [93 篇](../93-x70-independent-image-revalidation.md)。
+
+2026-09-30 X70 重刷补验：原厂 Android 分区、GKI 和 Magisk 引导实际刷入并清数据，再从无 Rungic/Termux 的底座独立安装；账户、桌面/触摸、SSH 和首轮重启已走通；末轮首次打开失败、检查后重试恢复，稳定性仍待定位。首次会话的五个迁移程序崩溃定位到桌面前误用 Wayland，`desktop/session` 对迁移命令局部使用 offscreen；另修正 CI2 的旧 APT 版本锁遗留。原载荷与后续修补包分别记录，Magisk 仍需安装完整管理器和修复环境，详见 [92 篇](../92-x70-android-base-end-to-end.md)。
+
+2026-09-30 X70 独立安装补充：`standalone.py` 绑定可信载荷和实际底座；root 控制器读取 `/data/adb/rungic-install/active.env`，APK 读取私有来源声明与 release 状态。安装/挂载完成后才准备账户。旧 product 引导经 Magisk 模块转发，已做重启核验；账户、桌面、SSH 与测试边界见 [91 篇](../91-x70-independent-install.md)。
+
 2026-09-29 MacBook无外部网络直连桌面评估：G100只读查询确认支持monitor声明，但在用无线模块的monitor发送回调为空，原版filin不能直接通过内置网卡实现AWDL双向直连。本地专用热点可作为无互联网基线，尚未做Mac互通验收。来源、精确固件与二进制证据见[直连研究](mac-offline-desktop-link.md)。
 
 > 历史研究记录：Phosh 专属实现已于2026-09-23移除。本篇保留共享硬件接口与研究结论；当前代码见 `shared/`、`native/plasma/`、`plasma/`，现行集成见 [40篇](../40-plasma-mobile-integration.md)。旧Phosh路径和已删除的原始日志不再作为可执行入口。

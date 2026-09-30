@@ -32,11 +32,43 @@ stop_private() {
         kill -TERM "$pid" 2>/dev/null || true
         sleep 1
         if private_pid; then kill -KILL "$pid" 2>/dev/null || true; fi
+        remaining=5
+        while private_pid; do
+            [ "$remaining" -gt 0 ] || { echo 'Private audio daemon did not stop' >&2; return 1; }
+            sleep 1
+            remaining=$((remaining-1))
+        done
     fi
+}
+clear_stale_pid() {
+    # This runtime lives on /data and survives Android reboots. A recycled PID
+    # may belong to another app; PulseAudio cannot inspect it from the Termux
+    # UID and conservatively refuses to start. Validate as root under lock 7.
+    [ -f "$STATE/runtime/pid" ] || return 0
+    old_pid=$(cat "$STATE/runtime/pid") || return 1
+    case "$old_pid" in
+        ''|*[!0-9]*) : ;;
+        *)
+            if [ -d "/proc/$old_pid" ]; then
+                # Fail closed if a live process cannot be inspected.
+                # An exited daemon can briefly remain as a zombie until its
+                # parent reaps it; it has no executable or live audio socket.
+                if ! readlink "/proc/$old_pid/exe" >/dev/null 2>&1; then
+                    grep -q '^State:[[:space:]]*Z' "/proc/$old_pid/status" 2>/dev/null || return 1
+                fi
+                if private_pid; then
+                    echo 'Private audio daemon is still running' >&2
+                    return 1
+                fi
+            fi
+            ;;
+    esac
+    rm "$STATE/runtime/pid"
 }
 ensure_audio() {
     if ! healthy; then
-        stop_private
+        stop_private || return 1
+        clear_stale_pid || return 1
         cp "$BASE/android-audio.pa" "$STATE/default.pa"
         chown "$uid:$uid" "$STATE/default.pa"
         chmod 600 "$STATE/default.pa"

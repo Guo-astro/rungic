@@ -43,7 +43,10 @@ printf '%s\n' 'export WAYLAND_DISPLAY=wayland-0' >> "$XDG_RUNTIME_DIR/rungic-ses
 # migrations (rungic-plasma-config, rungic.upd) before KWin reads its configuration; kded
 # would run them only after KWin has started.
 /usr/libexec/rungic-rebrand-user up || true
-/usr/lib/aarch64-linux-gnu/libexec/kf6/kconf_update || true
+# Upstream migrations include QGuiApplication helpers. KWin has not started yet,
+# so they must not inherit the session's Wayland platform (docs/92). Keep this
+# override local: the desktop and the imported user environment still use Wayland.
+QT_QPA_PLATFORM=offscreen /usr/lib/aarch64-linux-gnu/libexec/kf6/kconf_update || true
 # Repair stale bootstrap menu caches before the shell reads them.
 kbuildsycoca6 --noincremental
 # The GPU settings into the user manager before any unit of the session starts: startplasma

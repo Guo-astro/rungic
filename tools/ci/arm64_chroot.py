@@ -52,6 +52,11 @@ def main():
         # ARM64 ELF e_machine is 0x00b7. The F flag keeps QEMU open across chroot.
         rule = b":rungic-aarch64:M:18:\xb7\x00::" + os.fsencode(qemu) + b":F\n"
         (Path(mountdir) / "register").write_bytes(rule)
+        # A sanitized image tree has an empty /dev. Package scripts need actual
+        # devices: redirecting to a missing /dev/null silently creates a file.
+        # This bind lives only in our private mount namespace and is not imaged.
+        run("mount", "--rbind", "/dev", str(rootfs / "dev"))
+        mounted.append(str(rootfs / "dev"))
         run("mount", "-t", "proc", "proc", str(rootfs / "proc"))
         mounted.append(str(rootfs / "proc"))
         return subprocess.run(["chroot", str(rootfs), *command],

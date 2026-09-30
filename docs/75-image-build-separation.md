@@ -2,7 +2,7 @@
 
 ## 2026-09-30：Rungic 独立安装的三段式目标
 
-用户明确调整方向：不再追求将 Android 与 Rungic 合并为完整镜像一次刷入，**Rungic 安装成为单独步骤**。以下为当前目标；后面的 2026-09-27 方案保留为历史设计，旧整包的实机结论见 [80 篇](80-g100-image-installation-retrospective.md)。本次调整的是交付契约与执行指南，尚未实现新的独立首装安装器。
+用户明确调整方向：不再追求将 Android 与 Rungic 合并为完整镜像一次刷入，**Rungic 安装成为单独步骤**。以下为当前目标；后面的 2026-09-27 方案保留为历史设计，旧整包的实机结论见 [80 篇](80-g100-image-installation-retrospective.md)。独立 USB/ADB 首装入口及 X70 复用底座验收见 [91 篇](91-x70-independent-install.md)，实际重刷 Android、清数据后的独立安装见 [92 篇](92-x70-android-base-end-to-end.md)；通用用户自助安装与完整镜像升级仍待实现。
 
 | 阶段 | 交付内容 | 何时执行 |
 | --- | --- | --- |
@@ -18,12 +18,13 @@ CI1 的解锁或机型特定底座准备可能清数据，仍须事先备份。C
 
 - 已有：固定内核配方、rootfs 构建器、APK 与宿主种子构建、版本化 APT 发布/部署/回滚、rootfs 快照及账户/安装状态契约。
 - 已有但属于旧路径：`assemble_product.py` 将 rootfs/宿主载荷放入 product，`assemble_release.py` 组装 Android 分区包，`flash_release.py` 执行整包刷写。它们继续用于明确指定的历史复现和恢复，不是新的独立安装器。
-- 待实现：独立载荷打包/校验入口、对已启动 Android 的安装通路、普通 APK 安装与权限/JNI验收、完整 rootfs 的安全替换及宿主版本联动恢复。现有 `rungic-firstboot.sh` 固定从 `/product/etc/rungic` 读取种子，依赖预装应用并按首次安装逻辑展开，不能直接改一个目录就当作完整升级器。
+- 新增：`tools/ci/standalone.py pack/verify/install/status`，可信摘要、精确设备/boot 核验、ADB APK 更新安装、root-owned 独立载荷和 release 就绪门槛。`rungic-firstboot.sh` 可消费显式载荷目录；Magisk 兼容模块阻止旧 product 种子在重启时重新接管。X70 已验证复用底座及重刷后无预装 Rungic/Termux 底座上的独立安装及账户进入；重启首次打开仍有一次失败，边界和首启缺陷见 91、92 篇。
+- 待实现/验收：用户自助安装、CI1 Magisk 离线就绪、通用完整 rootfs 安全替换及宿主/用户数据联动恢复。独立首装命令拒绝覆盖已有 runtime，不是升级器。
 - 现有 `rungic_release.py deploy/rollback` 服务于已安装 Rungic 的 APT 更新；它不是空白设备首装器，也不等于任意完整 rootfs 替换流程。
 
 独立首装从“底座已就绪、没有 Rungic 安装和账户”开始验收：传输/校验载荷 → 安装与挂载准备 → 真实 loading → 账户配置 → Plasma 实际显示。此处的全新 Rungic 状态不要求恢复 Android 出厂设置。升级须验证账户、文件、Agent 登录状态和 Android 数据保留；失败恢复须包含匹配的宿主、配置及数据迁移边界，不能仅把 rootfs 换回去就认定恢复成功。中断重试、首装、升级和恢复分别留证。
 
-本轮只完成源码预装策略与文档/Skill 调整，没有重新制作镜像或操作设备；G100 旧整包 `.5` 的清数据成功仍有效，但不能证明新独立安装已通过。
+最初方案调整只涉及源码与文档；随后 X70 的新镜像构建、独立安装及重启实测另记于 91 篇。G100 旧整包 `.5` 的清数据成功仍按原验收范围保留。
 
 ## 历史方案：2026-09-27
 

@@ -17,6 +17,7 @@
 | rootfs 镜像 | `tools/ci/build_rootfs_image.py` | 接收已准备的 root 树和 release，生成 ext4/压缩种子、包锁及报告；检查 `system/ubuntu-excluded-packages.txt` 和 Emoji Selector 排除规则，自身不是完整包下载器 |
 | APK | `android/build-apk.sh`、`tools/ci/apk-builder.Dockerfile` | Android 入口构建；保持指定开发签名身份，不混入其他凭据 |
 | 宿主种子 | `tools/ci/build_host_seed.py` | 输入 runtime、rootfs-tree、repo、lxc/plasma enter 二进制与 `--cast-jar`（`shared/android/rungic-cast/build.sh` 产物）；投屏组件为可选能力，首启安装失败只记日志 |
+| 独立首装 | `tools/ci/standalone.py pack/verify/install/status` | USB/ADB 开发入口，要求精确 serial/端口、可信 manifest SHA 和匹配的 boot；拒绝覆盖已有 runtime，仅重试同一载荷。X70 复用及重刷底座范围见 91、92 篇 |
 | 旧整包：纯净 product | `tools/ci/clean_product.py` | EROFS + product/preinstall 的命名、xattr 和 SKU 策略假设 |
 | 旧整包：完整 product | `tools/ci/assemble_product.py` | 加入 APK/JNI、种子、首启及权限；输入必须与 spec/容量匹配 |
 | 旧整包：Magisk 引导 | `tools/ci/inject_magisk_seed.py` | 在已正确修补的 init_boot 中注入 bootstrap，不负责通用 root 修补 |
@@ -26,7 +27,7 @@
 
 ## 独立安装入口的当前缺口
 
-`rungic_release.py deploy/rollback` 已支持既有 Rungic 的版本化 APT 更新。尚无通用的“兼容 Android 上首次安装完整 Rungic”或完整 rootfs 替换入口。APK、rootfs 与宿主种子构建器可复用，但 `rungic-firstboot.sh` 固定消费 product 种子并依赖预装应用；需先拆出可信载荷输入、普通 APK 权限/JNI检查、安装状态与恢复机制，验证后才能作为新 CI3。不能用下面的旧 `flash.sh` 代替独立安装。
+`rungic_release.py deploy/rollback` 服务于既有 Rungic 的版本化 APT 更新；`standalone.py` 服务于兼容底座上的独立首装。后者在 X70 复用了已存在的 Termux/prefix 和 product 基础 APK，验证普通 ADB 更新安装、空白 runtime/账户及重启接管。随后实际重刷 Android、清数据后，在没有旧 product 应用的纯底座安装普通 Rungic/Termux、全新 prefix 和 runtime，见 [92 篇](../../../../docs/92-x70-android-base-end-to-end.md)。用户自助入口、Magisk 离线就绪、完整 rootfs 升级与通用回滚仍待验。工具没有自动迁移既有用户数据，不能绕过已有 runtime 的拒绝检查。详细参数和备份边界见 [91 篇](../../../../docs/91-x70-independent-install.md)。
 
 ## 历史整包：必须重新核对的 G100 假设
 

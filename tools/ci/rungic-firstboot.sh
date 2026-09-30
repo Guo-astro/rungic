@@ -1,18 +1,22 @@
 #!/system/bin/sh
 # Magisk service.d invokes this after Android boot completion.
-# All sources live on the immutable product image; /data writes are resumable.
+# Sources are either a verified root-owned independent payload or legacy product.
 set -eu
 set -o pipefail
 umask 077
 export PATH=/data/adb/magisk:/system/bin:/system/xbin
-seed=/product/etc/rungic
+seed=${1:-/product/etc/rungic}
+# A managed standalone installation owns the runtime. Never replay an old ROM seed.
+if [ "$seed" = /product/etc/rungic ] && [ -f /data/adb/rungic-install/active.env ]; then
+    exit 0
+fi
 . "$seed/seed.env"
 mkdir -p /data/adb
 # Android's shell closes high-numbered descriptors when executing toybox flock.
 # Magisk's BusyBox accepts a lock path and keeps the descriptor in its child.
 if [ "${RUNGIC_FIRSTBOOT_LOCKED:-}" != 1 ]; then
     export RUNGIC_FIRSTBOOT_LOCKED=1
-    exec /data/adb/magisk/busybox flock -n /data/adb/rungic-firstboot.lock /system/bin/sh "$0"
+    exec /data/adb/magisk/busybox flock -n /data/adb/rungic-firstboot.lock /system/bin/sh "$0" "$seed"
 fi
 exec >>/data/adb/rungic-firstboot.log 2>&1
 echo "$(date -Iseconds) starting Rungic seed $RELEASE_ID"
@@ -46,10 +50,12 @@ fi
 failure_code=unknown
 phase=verify
 provision_mounted=0
+provision_bind_mounts=
 finished=0
 finish_exit() {
     code=$?
     trap - EXIT
+    for entry in $provision_bind_mounts; do umount "$provision/$entry" 2>/dev/null || true; done
     if [ "$provision_mounted" = 1 ]; then
         umount "$provision" 2>/dev/null || true
         /data/adb/rungic-plasma/rootfs-image detach >/dev/null 2>&1 || true
@@ -151,7 +157,7 @@ else
     # Conservative reservation for a complete image; no reliance on sparse support.
     free_kib=$(df -k "$images" | tail -n 1 | awk '{print $4}')
     case "$free_kib" in ''|*[!0-9]*) die 'free space check unavailable' ;; esac
-    [ "$free_kib" -ge "$((ROOTFS_BYTES / 1024 + 524288))" ] || { failure_code=space; die 'insufficient image reserve'; }
+    awk -v free="$free_kib" -v bytes="$ROOTFS_BYTES" 'BEGIN { exit !(free >= bytes / 1024 + 524288) }' || { failure_code=space; die 'insufficient image reserve'; }
     rm -f "$image.part"
     gzip -dc "$seed/rootfs.img.gz" |
         "$seed/rungic-sparse-write" "$image.part" "$ROOTFS_BYTES" || die 'rootfs decompression'
@@ -169,7 +175,16 @@ mkdir -p "$provision"
 root_device=$(/data/adb/rungic-plasma/rootfs-image attach) || die 'rootfs mapper attach'
 mount -t ext4 -o noatime "$root_device" "$provision" || die 'rootfs provision mount'
 provision_mounted=1
+for entry in dev proc sys; do
+    mount --bind "/$entry" "$provision/$entry" || die "rootfs provision $entry"
+    provision_bind_mounts="$entry $provision_bind_mounts"
+done
 mkdir -p "$provision/var/log/plasma" "$provision/etc/profile.d"
+# Host keys are device identity: image builds remove them, installation generates them.
+# Do this before systemd/socket activation can accept connections.
+chroot "$provision" /usr/bin/ssh-keygen -A || die 'SSH host key generation'
+chroot "$provision" /usr/bin/systemctl unmask ssh.socket ssh.service || die 'SSH unmask'
+chroot "$provision" /usr/bin/systemctl enable ssh.socket || die 'SSH automatic access'
 if [ -n "$PHONE_HTTP_PROXY" ]; then
     cat > "$provision/etc/profile.d/proxy.sh" <<EOF
 export http_proxy=$PHONE_HTTP_PROXY
@@ -180,6 +195,10 @@ EOF
     chmod 0644 "$provision/etc/profile.d/proxy.sh"
 fi
 sync
+for entry in $provision_bind_mounts; do
+    umount "$provision/$entry" || die "rootfs provision $entry unmount"
+done
+provision_bind_mounts=
 umount "$provision" || die 'rootfs provision unmount'
 provision_mounted=0
 /data/adb/rungic-plasma/rootfs-image detach || die 'rootfs mapper detach'
@@ -217,6 +236,7 @@ fi
 echo "$RELEASE_ID" > "$marker.tmp"
 mv "$marker.tmp" "$marker"
 sync
+failure_code=none
 publish ready complete
 finished=1
 echo "$(date -Iseconds) Rungic seed complete"

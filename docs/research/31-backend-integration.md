@@ -1,5 +1,11 @@
 # Phosh 与 Android 后端的连接：架构、研究过程和维护方法
 
+2026-09-30 X70 新镜像复验：OS `20260930.15`、独立载荷 `.7`、APK 2.27。修复 APK umask 0077 导致 cgroup 0700，以及 Android 音频持久化 PID 被其他应用复用的两个独立冷启动故障；全新账户 UI、连续三轮整机重启首次打开、9 项 smoke 全部通过。此前 `.5` 第三轮失败仍保留证据；用户选择最终空白账户，由其自行配置。固定产物、日志与验收边界见 [93 篇](../93-x70-independent-image-revalidation.md)。
+
+2026-09-30 X70 重刷补验：原厂 Android 分区、GKI 和 Magisk 引导实际刷入并清数据，再从无 Rungic/Termux 的底座独立安装；账户、桌面/触摸、SSH 和首轮重启已走通；末轮首次打开失败、检查后重试恢复，稳定性仍待定位。首次会话的五个迁移程序崩溃定位到桌面前误用 Wayland，`desktop/session` 对迁移命令局部使用 offscreen；另修正 CI2 的旧 APT 版本锁遗留。原载荷与后续修补包分别记录，Magisk 仍需安装完整管理器和修复环境，详见 [92 篇](../92-x70-android-base-end-to-end.md)。
+
+2026-09-30 X70 独立安装补充：`standalone.py` 绑定可信载荷和实际底座；root 控制器读取 `/data/adb/rungic-install/active.env`，APK 读取私有来源声明与 release 状态。安装/挂载完成后才准备账户。旧 product 引导经 Magisk 模块转发，已做重启核验；账户、桌面、SSH 与测试边界见 [91 篇](../91-x70-independent-install.md)。
+
 2026-09-29 MacBook直连研究：连接层（本地热点/AWDL候选）与桌面串流分离，采集和编码优先复用KWin/PipeWire及共享MediaCodec桥。G100现有无线模块monitor的标准发送回调缺失，原版filin不能直接使用；只读能力与在用模块Build ID/重定位证据见[接口与选型记录](mac-offline-desktop-link.md)。本轮未实现或部署，外部网络独立的发现/信令、远程观看降速与硬编拥塞控制仍待验。
 
 > 改名说明（2026-09-26）：Rungic改名B阶段之后，容器内的`moto-*`包、程序、单元、路径，`MOTO_*`变量和`dev.moto.*`名称改为`rungic-*`、`RUNGIC_*`、`com.rungic.*`；Android侧的名称在C阶段（2026-09-27）改为APK `com.rungic.plasma`、`/data/adb/rungic-*`（镜像在`/data/adb/rungic-lxc/images/`）、容器中的`/var/lib/rungic-{host,cores,apt}`、`rungic-gpu-alloc`、`rungic-cast`、`debug.rungic.*`、dm `rungic-root`与SELinux `rungic_image`。对照与边界见[70篇](../70-rungic-rebrand.md)。下文按时间记录的内容保留当时的名称。

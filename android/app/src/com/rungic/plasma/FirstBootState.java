@@ -31,6 +31,11 @@ final class FirstBootState {
     static FirstBootState read(File seed, File status) {
         return read(seed,status,System.currentTimeMillis());
     }
+    static FirstBootState readSource(File standalone, File legacy, File status) {
+        // A root-published local descriptor takes precedence over an old product seed.
+        // An unreadable or incomplete descriptor must block, not fall back to legacy ready.
+        return read(standalone.exists() ? standalone : legacy, status);
+    }
     static FirstBootState read(File seed, File status,long now) {
         if(!seed.exists())return new FirstBootState(true,false,false,false,Message.NONE,Reason.STANDALONE,"","","","");
         try {

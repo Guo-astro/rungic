@@ -34,7 +34,7 @@ description: 本项目三段式构建与独立安装：按机型和固件准备 
 
 ## CI3：Rungic 独立安装与升级
 
-目标是在已准备的兼容 Android 底座上，单独交付并安装 Rungic。**统一的独立首装包/安装器尚未实现并验收**；现有入口与缺口以 [工具地图](references/tool-map.md) 为准，不把旧 `flash.sh` 当作独立安装器。
+目标是在已准备的兼容 Android 底座上，单独交付并安装 Rungic。已有 `tools/ci/standalone.py` 的开发用 USB/ADB 首装入口，X70 现有兼容底座上的实测见 [91 篇](../../../docs/91-x70-independent-install.md)。无旧 product 应用的底座首装、实际 Android 清数据刷写及发现的问题另见 [92 篇](../../../docs/92-x70-android-base-end-to-end.md)。新镜像的冷启动故障定位、三轮重启及 9 项 smoke 见 [93 篇](../../../docs/93-x70-independent-image-revalidation.md)。用户自助安装、Magisk 离线就绪与通用完整镜像升级仍待验；入口与缺口以 [工具地图](references/tool-map.md) 为准，不把旧 `flash.sh` 当作独立安装器。
 
 - 独立交付范围：CI2 rootfs、需要的 Rungic APK/JNI、LXC/宿主桥运行时、版本/协议/摘要、安装器及恢复说明。Android OEM 分区和 GKI 是外部前提，不重复塞进日常 Rungic 发布包。
 - 安装前核验实际固件/内核能力、root 授权、SELinux、架构、后端/宿主协议、APK 签名、容量和现有安装状态。选择本次已验证的传输入口；USB/ADB 可以是开发安装入口，不能提前宣称已实现用户自助安装。

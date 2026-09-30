@@ -14,8 +14,10 @@ action=${1:-status}
 # Account setup must not enter that partially installed environment.
 case "$action" in
   account-status|account-prepare|account-setup|start|restart-session)
-    if [ -f /product/etc/rungic/seed.env ]; then
-      expected_release=$(sed -n 's/^RELEASE_ID=//p' /product/etc/rungic/seed.env | tr -d "\"'")
+    install_source=/data/adb/rungic-install/active.env
+    [ -f "$install_source" ] || install_source=/product/etc/rungic/seed.env
+    if [ -f "$install_source" ]; then
+      expected_release=$(sed -n 's/^RELEASE_ID=//p' "$install_source" | tr -d "\"'")
       installed_release=$(cat /data/adb/rungic-firstboot.complete 2>/dev/null) || installed_release=
       if [ -z "$expected_release" ] || [ "$installed_release" != "$expected_release" ]; then
         echo 'Rungic 正在完成首次安装，请稍候再打开；若持续未完成，请检查首次安装日志。' >&2
@@ -158,7 +160,11 @@ start_container() {
         set -- "$@" -s "lxc.mount.entry=/var/lib/lxc/plasma/state/${pair%%:*} ${pair#*:} none bind,create=dir 0 0"
       done
     fi
-    "$ENTER" /usr/bin/lxc-start -n plasma -d -l INFO -o /var/log/lxc/plasma.log "$@" 9>&-
+    # Android apps inherit umask 077. LXC 6 creates its payload cgroup with
+    # mkdir(0755), so that mask makes the container's cgroup root inaccessible
+    # to systemd --user. Scope the normal system mask to the container launcher;
+    # retain the caller's private mask for controller files and credentials.
+    (umask 022; "$ENTER" /usr/bin/lxc-start -n plasma -d -l INFO -o /var/log/lxc/plasma.log "$@" 9>&-)
 }
 case "$action" in
   account-status)
@@ -212,6 +218,8 @@ case "$action" in
     exec am start --user 0 -n com.rungic.plasma/.MainActivity
     ;;
   start|restart-session|stop)
+    startup_phase=control-lock
+    trap 'startup_result=$?; if [ "$startup_result" -ne 0 ]; then echo "Rungic control failed: action=$action phase=$startup_phase exit=$startup_result" >&2; fi' EXIT
     exec 9>"$BASE/control.lock"
     # Surface recreation and explicit restarts can overlap; serialize them.
     flock 9 9>&9
@@ -224,25 +232,32 @@ case "$action" in
       echo 'Plasma Mobile stopped'
       exit 0
     fi
+    startup_phase=android-audio
     "$BASE/android-audio" start 9>&-
+    startup_phase=android-clipboard
     "$BASE/android-clipboard" start 9>&-
+    startup_phase=android-calls
     "$BASE/android-calls" start 9>&-
     # The container binds /storage/emulated/0/Plasma when it starts. After an Android
     # userspace restart vold remounts storage and that bind goes stale; only a
     # container restart recreates it (rungic-plasma-shared otherwise fails forever).
+    startup_phase=shared-storage
     if running && ! attach /bin/sh -c 'test -r /mnt/android-shared/.' 9>&-; then
       echo 'Android storage was remounted; restarting the Plasma container' >&2
       "$ENTER" /usr/bin/lxc-stop -n plasma -t 15 9>&- || true
     fi
     old_pids=
     if [ "$action" = restart-session ] && running; then
+      startup_phase=session-restart
       # The old compositor and shell take a moment to exit: readiness must see new ones.
       old_pids=$(attach /bin/sh -c 'echo $(pidof kwin_wayland) $(pidof plasmashell)' 9>&-) || old_pids=
       attach /bin/sh -c 'systemctl restart rungic-plasma-session.service' 9>&-
     fi
     if ! running; then
+      startup_phase=container-start
       start_container
     fi
+    startup_phase=desktop-ready
     ready=0
     for i in $(seq 1 60); do
       pids=$(attach /bin/sh -c 'test -f /run/user/1000/rungic-session.env && k=$(pidof kwin_wayland) && p=$(pidof plasmashell) && echo $k $p' 9>&-) || pids=

@@ -4,7 +4,7 @@
 
 ## 当前目标与历史实现
 
-2026-09-30 起默认验收“已准备底座上的独立 Rungic 首装”，Android 不全清；升级另验证用户数据保留与恢复。下列 product/Magisk 播种脚本是旧整包实现，尚未变成独立安装器。可复用其状态、锁、校验、挂载和账户门槛，但必须另行实现并验证独立载荷输入、APK 安装/授权和升级路径。历史清数据故障用于排障参考，不把重刷作为独立安装的默认步骤。
+2026-09-30 起默认验收“已准备底座上的独立 Rungic 首装”，Android 不全清；升级另验证用户数据保留与恢复。`standalone.py` 已复用状态、锁、校验、挂载和账户门槛，提供显式独立载荷与 USB/ADB 首装；X70 实测边界见 91 篇。无旧预装应用底座的实际刷写与独立安装见 92 篇；升级和 Magisk 离线就绪仍待验。旧 init_boot 可能每次覆盖 service.d，须核验 Magisk product 转发模块重启后实际生效。生成 SSH 密钥的临时 chroot 要准备 dev/proc/sys，并在成功及失败时清理。历史清数据故障用于排障参考，不把重刷作为独立安装的默认步骤。
 
 ## 实现入口
 
@@ -38,10 +38,14 @@
 | Termux usr 已存在 | 应用曾提前生成空目录 | 仅允许 rmdir 删除空目录；非空或符号链接不能盲目清除 |
 | rootfs 展开异常/容量暴涨 | toybox 的 sparse 支持与帮助不一致 | 使用已验证写入器，核验完整镜像摘要与实际占用 |
 | 容器再次启动失败 | loop autoclear 后留下失效 dm 映射 | 检查现有 rootfs attach 的重建逻辑，不在使用中的映射上盲目删除 |
+| APK 冷启动后 user@1000 报 init.scope Permission denied | APK umask 0077 传到 LXC，payload cgroup 被创建为 0700 | 核对 APK umask 与 cgroup 实际模式；只在 lxc-start 子 shell 设置 022，见 93 篇；ADB root 手动启动可能掩盖故障 |
+| android-audio 阶段失败、PulseAudio 假定 daemon 已运行 | `/data` 上旧 PID 文件跨重启保留，PID 被其他 Android 进程复用，Termux 无权辨别 | root 在私有控制锁内核验 UID/exe/配置，清理失效 PID；只停止自身 daemon，不杀复用 PID 的应用；见 93 篇 |
 | ADB 没设备 | 端口、USB/Wi-Fi、授权或模式变化 | 核对 server/序列号和 USB 状态；不能直接判定 bootloop |
 | fastboot 长时间无输出 | 模式转换/传输耗时、日志缓冲或实际失联 | 流式日志和有界等待，超时停止；恢复后重新核验，禁止循环重刷 |
 
 Magisk 31 禁止向实机守护进程提交可能返回 SQL NULL 的查询，按项目 39 篇处理。root 多命令走已验证的 shell stdin 通道，二进制备份使用无 PTY 的传输；不得把权限/转义问题误判为设备缺能力。
+
+无 PTY 仍不能保证二进制输出干净：X70 的 `adb exec-out su -c 'tar -czf - …'` 曾将 tar 的 socket 警告混入压缩流，命令返回 0 而归档 CRC 错误。刷写前备份优先先写手机文件、计算摘要，再 `adb pull`；核对两端 SHA、归档可读性和关键文件摘要后才允许清数据。详见 [92 篇](../../../../docs/92-x70-android-base-end-to-end.md)。
 
 ## 回归证据如何使用
 
