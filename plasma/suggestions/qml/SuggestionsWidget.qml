@@ -105,6 +105,7 @@ Item {
         if (deckState !== "cards" || !currentCard.id) return
         const item = task(currentCard)
         if (part === "secondary") { if (!item) client.dismissCard(currentCard.id); return }
+        if (openingId !== "") return   // a second tap while the first opens would start a second conversation
         client.presentCard(currentCard.id, true)
         if (item && item.conversation) { client.conversation(item.conversation); return }
         openingId = currentCard.id

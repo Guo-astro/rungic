@@ -414,6 +414,9 @@ void Suggestions::startCard(const QString &id, const std::function<void(const QJ
     const auto items = model.list();
     const auto card = briefing.card(id, items);
     if (card.isEmpty()) { done({{"error", i18n("This suggestion is no longer current.")}}); return; }
+    if (cardConversations.contains(id)) { done({{"conversation", cardConversations.value(id)}}); return; }
+    if (cardOpening.contains(id)) { cardOpening[id].append(done); return; }
+    cardOpening[id] = {done};
     QJsonArray findings;
     for (const auto &r : card["refs"].toArray()) {
         if (findings.size() >= 20) break;
@@ -432,10 +435,11 @@ void Suggestions::startCard(const QString &id, const std::function<void(const QJ
     auto message = QDBusMessage::createMethodCall(Voice, VoicePath, Voice, "OpenBriefingCard");
     message.setArguments({encoded(context)});
     auto *w = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(message, 60000), this);
-    connect(w, &QDBusPendingCallWatcher::finished, this, [w, done] {
+    connect(w, &QDBusPendingCallWatcher::finished, this, [this, w, id] {
         QDBusPendingReply<QString> reply = *w; w->deleteLater();
-        if (reply.isError()) done({{"error", reply.error().message()}});
-        else done(QJsonDocument::fromJson(reply.value().toUtf8()).object());
+        const auto r = reply.isError() ? QJsonObject{{"error", reply.error().message()}} : QJsonDocument::fromJson(reply.value().toUtf8()).object();
+        if (!r["conversation"].toString().isEmpty()) cardConversations[id] = r["conversation"].toString();
+        for (const auto &waiting : cardOpening.take(id)) waiting(r);
     });
 }
 QString Suggestions::OpenCard(const QString &id) {

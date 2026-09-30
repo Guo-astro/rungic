@@ -56,6 +56,9 @@ private:
     bool saveBriefing();
     bool backgroundCuration() const;
     void startCard(const QString &id, const std::function<void(const QJsonObject &)> &done);
+    // A card opens one conversation: later taps return to it, taps while it opens share the result.
+    QHash<QString, QString> cardConversations;
+    QHash<QString, QList<std::function<void(const QJsonObject &)>>> cardOpening;
     void launchConversation(const QString &conversation, const QString &token);
     Care::Model model;
     Care::Briefing briefing;
