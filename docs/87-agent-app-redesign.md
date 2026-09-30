@@ -87,7 +87,7 @@
   - 用 PySide6 在 K8（x86_64）上离线渲染状态总览，浅色、深色各一遍，逐段对比改动前后：开关圆钮的边清楚了，深色取消目标的图标为 #141618，其余只有颜色和圆角的预期变化。渲染时用的是替身：SystemTheme 与 DesignI18n 是桩实现，控件样式为 Basic。
   - 基础画板用 Chromium 本地渲染，检查布局并量出高度。
   - **实机（G100 S）**：`rungic-design`、`rungic-voice-agent` 和 `rungic-plasma-diagnostics` 以开发覆盖装上（docs/97）。
-    - 截图方式：以桌面用户身份运行 `rungic-design-gallery --section <节> --shot`，平台用 `QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software`，不在屏幕上开窗口。21 节 × 浅深两种主题，共 42 张，见 `.work/verify/20260930-design-gallery/`。
+    - 截图方式（现为 `tools/design_gallery.py phone`；本机离线渲染为 `design_gallery.py local`）：以桌面用户身份运行 `rungic-design-gallery --section <节> --shot`，平台用 `QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software`，不在屏幕上开窗口。21 节 × 浅深两种主题，共 42 张，见 `.work/verify/20260930-design-gallery/`。
     - 结果与离线渲染一致：关闭的开关圆钮有 faint 边；深色取消目标的 × 为深色；危险色、输入框的聚焦和出错边、禁用 40% 都正确。
     - Thumbnail 和 LivePicture 的示例图在截图里是空的。改动前的代码在 software 后端下同样如此（`MultiEffect` 遮罩在 software 后端下不绘制），所以不是回退；带图的状态没能用截图验证。
 - **没做的**：

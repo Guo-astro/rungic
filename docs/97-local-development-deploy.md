@@ -98,4 +98,39 @@ python3 tools/rungic_dev.py reset [rungic-design]                     # 回到�
   - `apt list --upgradable` 里没有 rungic 包；
   - `apt-get -s dist-upgrade` 不动任何 rungic 包，也就是 Discover 不会提示把它们换回去。
 - **完整性**：新版 `rungic-integrity` 随 diagnostics 覆盖一起装上，`release.dev` 列出了基线和 3 个覆盖。`summary.state` 仍为 drift，唯一的项是部署前就有的未归属文件 `/usr/lib/rungic-cua/rungic_cua/keyring.py`（docs/96）。
-- **还没实测**：`reset`，以及正式发布部署时清除覆盖。这两条路径只有代码和离线测试。
+- **还没实测**：`reset`。
+
+## 事故：离线测试删掉了手机上的开发覆盖（2026-09-30）
+
+- **现象**：正式部署 20260930.10 时，记录里没有 `dev-overlay` 这一步。可是部署前 `record` 那一步，设备上装的还是开发元包，而开发覆盖的源、pin 和仓库已经不在了。
+- **排查**：
+  - dpkg、apt 的历史里只有两次安装；
+  - rootfs 快照的 commit 是 snapshot-origin 丢弃 COW，保留当前状态；
+  - 容器启动脚本不碰 `/etc/apt`；
+  - 对手机单独调用 `clear_device()`，它能正确找到并删除覆盖文件。
+- **原因**：
+  - `tools/test_rungic_release.py` 的部署测试替换了 `rungic_release` 模块里的 `run`；
+  - 新加入部署流程的 `rungic_dev.clear_device()` 用的是 `rungic_device.run`，没有被替换；
+  - `run-tests.sh` 跑到“安装后出错并回滚”那个用例时，这一步在真手机上执行了，删掉了开发覆盖。
+- **影响**：从跑测试到正式部署的这段时间里，开发版本的包还装着，但没有对应的 pin，Discover 可能会提示把它们换回发布版本。正式部署按精确版本装好了发布，最终状态正确。
+- **修复**：
+  - `rungic_release.deploy` 把自己的 `run` 传给 `clear_device(runner)`；
+  - `tools/conftest.py` 给 `tools/` 下的所有测试加了一道保护：替换掉 `rungic_device._run`，任何测试一旦走到 adb 就直接失败；
+  - 部署测试里也加了同样的保护。
+  - 用修复前的代码跑，这个用例失败；修复后全套 231 个测试通过。
+- **结果**：发布部署时“清除开发覆盖”这一步仍然没有在实机上走通过。它的代码路径由离线测试覆盖。
+
+## 发布 20260930.10（2026-09-30）
+
+- **提交**：8bde518（设计系统的层级）、723d23d（开发覆盖）。
+- **构建**：在 Mac mini 上重建了 3 个 stale 的包，`rungic-design`、`rungic-plasma-diagnostics`、`rungic-voice-agent`，版本都是 0.514。发布元包 `20260930.10` 固定 70 个包。
+- **部署到 G100 S**：
+  - 按用户选择，先 commit 了 .9 的快照；
+  - 部署在后台运行，没有加客户端超时，结果 `ok`；
+  - 过程：拍快照，同步 11 个文件，装好 4 个包（基线是开发覆盖 `20260930.9+dev20260930t133300`），写 71 条 pin，重启 rungic-voice-agent，冒烟验收通过；
+  - 记录在 `.work/deploy/20260930-230919-20260930.10/`。
+- **完整性**：drift，只有部署前就有的 `keyring.py` 这一项。
+- **部署后**：
+  - `rungic_dev.py status`：已安装和基线都是 20260930.10，覆盖为空，没有覆盖文件；
+  - `tools/design_gallery.py phone` 截的 Toggle 和 HoldTarget 两节正常；
+  - `.10` 的快照保留，等用户接受后再执行 `rungic_release.py commit`。
