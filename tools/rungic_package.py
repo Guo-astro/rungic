@@ -263,7 +263,9 @@ def record(pkg, version, deb, tree):
     BUILDS.write_text(json.dumps(data, indent=1, sort_keys=True) + '\n')
 
 
-def build_host(pkg, tree):
+def build_host(pkg, tree, dev=None):
+    """dev: {'version': ..., 'dest': Path} for a development build (tools/rungic_dev.py): the working
+    tree as it is, that version, the .deb in dest; nothing goes to the release pool or its records."""
     epoch = git('log', '-1', '--format=%ct')
     work = Path(tempfile.mkdtemp(dir=WORKSPACE / '.work/cache', prefix=f"{pkg['name']}-"))
     try:
@@ -275,7 +277,7 @@ def build_host(pkg, tree):
             # silently read an old installed/vendor tree in place of their pinned upstream.
             source = work / 'src'
             source.mkdir()
-            with tarfile.open(stage_sources(pkg)) as archive:
+            with tarfile.open(stage_sources(pkg, worktree=bool(dev))) as archive:
                 archive.extractall(source, filter='tar')
             env['SRC'] = str(source)
         subprocess.run(['sh', '-eu', str(pkg['dir'] / 'build.sh')], cwd=WORKSPACE, env=env, check=True)
@@ -297,6 +299,11 @@ def build_host(pkg, tree):
                            check=True, capture_output=True, env=env)
             return tmp.read_bytes()
 
+        if dev:
+            pack(dev['version'])
+            target = dev['dest'] / f"{pkg['name']}_{dev['version']}_{pkg['architecture']}.deb"
+            shutil.copy2(tmp, target)
+            return target
         # 0.<commit count>, unless the pool has that version with other contents: then +bN.
         base = f"0.{git('rev-list', '--count', 'HEAD')}"
         existing = rungic_release.pool_debs().get(pkg['name'], {}).get(base)
@@ -313,16 +320,19 @@ def build_host(pkg, tree):
         shutil.rmtree(work)
 
 
-def stage_sources(pkg):
+def stage_sources(pkg, worktree=False):
     """The tracked files of the package's paths (symlinks resolved, so shared files come along) as a
-    tar for the phone. Only tracked files: local build trees never reach a package build."""
+    tar for the phone. Only tracked files: local build trees never reach a package build. worktree
+    (development builds) adds the new files git does not ignore, so work not yet added builds too."""
     archive = WORKSPACE / f".work/cache/{pkg['name']}-src.tar"
     paths = sorted(set(pkg['paths']) | {str(pkg['dir'].relative_to(WORKSPACE))})
-    files = subprocess.run(['git', 'ls-files', '-z', '--', *paths], cwd=WORKSPACE, capture_output=True,
-                           check=True).stdout.decode().split('\0')
+    extra = ['--others', '--exclude-standard'] if worktree else []
+    files = subprocess.run(['git', 'ls-files', '-z', '--cached', *extra, '--', *paths], cwd=WORKSPACE,
+                           capture_output=True, check=True).stdout.decode().split('\0')
     with tarfile.open(archive, 'w', dereference=True) as tar:
         for name in filter(None, files):
-            tar.add(WORKSPACE / name, arcname=name, recursive=False)
+            if (WORKSPACE / name).exists() or (WORKSPACE / name).is_symlink():   # a deleted, unstaged file is gone
+                tar.add(WORKSPACE / name, arcname=name, recursive=False)
         for name in pkg.get('upstream', []):
             import pq
             tree = pq.source(name, WORKSPACE / f".work/cache/{pkg['name']}-upstream/{name}")
@@ -331,7 +341,8 @@ def stage_sources(pkg):
     return archive
 
 
-def build_device(pkg, tree, jobs=4):
+def build_device(pkg, tree, jobs=4, dev=None):
+    """dev: as for build_host."""
     host = build_on_device.host
     run = lambda script, level='container', timeout=120, check=True: host.run(script, timeout, check)
     name = pkg['name']
@@ -351,7 +362,7 @@ def build_device(pkg, tree, jobs=4):
                 'DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends '
                 + ' '.join(pkg['build_depends']), 'container', timeout=3600)
     run(f'rm -rf {base}/src {base}/root', 'container', timeout=600)
-    host.put_tar(stage_sources(pkg), f'{base}/src')
+    host.put_tar(stage_sources(pkg, worktree=bool(dev)), f'{base}/src')
     work = WORKSPACE / f'.work/cache/{name}-device'
     shutil.rmtree(work, ignore_errors=True)
     (work / 'DEBIAN').mkdir(parents=True)
@@ -432,7 +443,7 @@ du -sk --exclude=DEBIAN "$DESTDIR" | cut -f1 > size.txt
         raise SystemExit(f'{name}: build on {host.name} failed\n{result.stdout[-4000:]}{result.stderr[-1000:]}')
     shlibs = run(f'cat {base}/shlibs.txt', 'container').stdout.strip()
     # Control file with the version, built here, then the .deb on the phone.
-    version = next_version(name)
+    version = dev['version'] if dev else next_version(name)
     ctl = WORKSPACE / f'.work/cache/{name}-control'
     fake = WORKSPACE / f'.work/cache/{name}-ctlroot'
     shutil.rmtree(fake, ignore_errors=True)
@@ -462,11 +473,14 @@ mkdir -p dbgsym/DEBIAN && printf '%s' {shlex.quote(dbg_control)} > dbgsym/DEBIAN
 dpkg-deb --root-owner-group -Zxz --build dbgsym {dbg_name} >/dev/null''', 'container', timeout=1800, check=False)
     if made.returncode == 0:
         debs.append(dbg_name)
+    dest = dev['dest'] if dev else rungic_release.POOL
     for deb in debs:
         local = WORKSPACE / f'.work/cache/{deb}'
         host.get(f'{base}/{deb}', local)
-        shutil.move(local, rungic_release.POOL / deb)
-    target = rungic_release.POOL / deb_name
+        shutil.move(local, dest / deb)
+    target = dest / deb_name
+    if dev:
+        return target
     record(pkg, version, target, tree)
     return target
 

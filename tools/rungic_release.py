@@ -212,7 +212,8 @@ def next_version():
     return f'{today}.{max(taken, default=0) + 1}'
 
 
-def build_meta(version, deps, info):
+def build_meta(version, deps, info, dest=None):
+    """The release metapackage; dest: another directory than the pool (development overlays)."""
     root = Path(tempfile.mkdtemp(dir=WORKSPACE / '.work/cache'))
     root.chmod(0o755)   # dpkg-deb refuses mkdtemp's 0700
     try:
@@ -235,7 +236,7 @@ Description: Rungic: release {version}
  Pins every package of this project's release {version} (git {info["commit"][:12]}).
  See docs/61-delivery-diagnostics-plan.md.
 ''')
-        target = POOL / f'{META}_{version}_all.deb'
+        target = (dest or POOL) / f'{META}_{version}_all.deb'
         built = subprocess.run(['dpkg-deb', '--root-owner-group', '-Zxz', '--build', str(root), str(target)],
                                capture_output=True, text=True)
         if built.returncode:
@@ -245,9 +246,11 @@ Description: Rungic: release {version}
         shutil.rmtree(root)
 
 
-def index():
+def index(pool=None, label='rungic'):
     """Flat repository index: Packages(.gz,.xz) and Release with origin and label rungic (the pin of
-    system/config/etc/apt/preferences.d/rungic; moto / moto-plasma before the Rungic rename)."""
+    system/config/etc/apt/preferences.d/rungic; moto / moto-plasma before the Rungic rename).
+    pool and label: the development overlay's repository (tools/rungic_dev.py, label rungic-dev)."""
+    POOL = pool or globals()['POOL']
     POOL.mkdir(parents=True, exist_ok=True)
     archive = ['apt-ftparchive']
     if not shutil.which('apt-ftparchive'):
@@ -262,10 +265,10 @@ def index():
     (POOL / 'Packages').write_bytes(packages)
     (POOL / 'Packages.gz').write_bytes(gzip.compress(packages, mtime=0))
     (POOL / 'Packages.xz').write_bytes(lzma.compress(packages))
-    release = subprocess.run([*archive, '-o', 'APT::FTPArchive::Release::Origin=rungic',
-                              '-o', 'APT::FTPArchive::Release::Label=rungic',
-                              '-o', 'APT::FTPArchive::Release::Suite=rungic',
-                              '-o', 'APT::FTPArchive::Release::Codename=rungic', 'release', '.'],
+    release = subprocess.run([*archive, '-o', f'APT::FTPArchive::Release::Origin={label}',
+                              '-o', f'APT::FTPArchive::Release::Label={label}',
+                              '-o', f'APT::FTPArchive::Release::Suite={label}',
+                              '-o', f'APT::FTPArchive::Release::Codename={label}', 'release', '.'],
                              cwd=POOL, capture_output=True, check=True).stdout
     (POOL / 'Release').write_bytes(release)
 
@@ -389,8 +392,10 @@ def integrity_summary():
     return report
 
 
-def sync_repo():
-    """Mirror .work/apt/repo to /var/lib/rungic-apt: push missing .debs, replace the index."""
+def sync_repo(pool=None, device_repo=None):
+    """Mirror .work/apt/repo to /var/lib/rungic-apt: push missing .debs, replace the index.
+    pool and device_repo: the development overlay's repositories (tools/rungic_dev.py)."""
+    POOL, DEVICE_REPO = pool or globals()['POOL'], device_repo or globals()['DEVICE_REPO']
     listing = run(f'mkdir -p {DEVICE_REPO} && cd {DEVICE_REPO} && ls -1', 'container').stdout.split()
     local = {p.name for p in POOL.iterdir() if p.is_file()}
     send = sorted((local - set(listing)) | {'Packages', 'Packages.gz', 'Packages.xz', 'Release'})
@@ -772,6 +777,12 @@ def deploy(version=None, restart='auto', acceptance='smoke', record_label=None, 
         # The installed release's exact versions win from now on; a failed install kept the previous pins.
         pin_release(info)
         step('pins', packages=len(info['packages']) + 1)
+        # A development overlay (tools/rungic_dev.py, docs/97) the release replaced: its source and pins
+        # would make its builds the candidates again. Kept when the install fails, with its packages.
+        import rungic_dev
+        overlay = rungic_dev.clear_device()
+        if overlay:
+            step('dev-overlay', cleared=overlay)
         # The Android side names paths inside the container: it follows a successful install,
         # so a failed one leaves both sides at the previous release.
         android = [] if keep_android else sync_android(info, record)
@@ -907,6 +918,9 @@ def status():
     built = releases()
     return {
         'installed_release': version,
+        # A development overlay on the release (tools/rungic_dev.py, docs/97).
+        'dev_overlay': ({'base': info['dev']['base'], 'overrides': {n: o['version'] for n, o in
+                         info['dev']['overrides'].items()}} if (info or {}).get('dev') else None),
         'commit': (info or {}).get('commit'),
         'built': (info or {}).get('built'),
         'latest_in_repository': built[-1]['version'] if built else None,

@@ -93,6 +93,8 @@ GENERATED = [
     '/usr/share/fonts/X11/*/encodings.dir', '/usr/bin/wechat',
     # The installed release's exact pins, written by each deploy (tools/rungic_release.py, docs/61).
     '/etc/apt/preferences.d/rungic-release',
+    # A development overlay's source and pins (tools/rungic_dev.py, docs/97): reported under 'release'.
+    '/etc/apt/preferences.d/rungic-dev', '/etc/apt/sources.list.d/rungic-dev.sources',
     # screen's postinst (the file says so).
     '/usr/lib/systemd/system/screen-cleanup.service', '/etc/tmpfiles.d/screen-cleanup.conf',
 ]
@@ -233,8 +235,12 @@ def check_release(packages, deps):
         return {'installed': False}
     mismatch = [{'package': p, 'want': v, 'have': packages.get(p)} for p, v in sorted(deps.items())
                 if packages.get(p) != v]
+    # A development overlay (tools/rungic_dev.py, docs/97): the release it stands on and its overrides.
+    dev = (info or {}).get('dev')
+    overlay = {'base': dev.get('base'), 'overrides': {n: o.get('version') for n, o in dev.get('overrides', {}).items()}} \
+        if isinstance(dev, dict) else None
     return {'installed': 'rungic-release' in packages, 'version': packages.get('rungic-release'),
-            'info': info, 'mismatch': mismatch}
+            'info': info, 'mismatch': mismatch, 'dev': overlay}
 
 
 def owned_paths():
@@ -479,10 +485,12 @@ def main():
         'units_not_enabled': len(report['units']),
         'user_overrides': len(report['user_overrides']),
     }
-    development = bool(report['diversions']['project'])
+    overlay = report['release'].get('dev')
+    development = bool(report['diversions']['project']) or bool(overlay)
     state = 'drift' if any(drift.values()) else 'development' if development else 'clean'
     report['summary'] = {'state': state, 'development': development,
-                         'project_diversions': len(report['diversions']['project']), **drift}
+                         'project_diversions': len(report['diversions']['project']),
+                         'dev_overrides': len((overlay or {}).get('overrides', {})), **drift}
     if args.json:
         json.dump(report, sys.stdout, ensure_ascii=False, indent=1)
         print()
@@ -506,6 +514,10 @@ def main():
             print(f"rebuilt  {r['package']} {r['version']} [{r['protected_by'] or '-'}]{flag}")
         for m in report['release'].get('mismatch', []):
             print(f"release  {m['package']}: want {m['want']}, have {m['have']}")
+        if report['release'].get('dev'):
+            print(f"dev      overlay on release {report['release']['dev']['base']} (tools/rungic_dev.py)")
+            for name, version in sorted(report['release']['dev']['overrides'].items()):
+                print(f'dev      {name} {version}')
         for top in ('usr', 'etc'):
             for p in report['unowned'][top]:
                 print(f'unowned  {p}')
