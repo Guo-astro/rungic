@@ -48,3 +48,15 @@
 - G100 S 上的 `rungic-plasma` 和容器内的 `/usr/libexec/rungic-plasma-session` 是为这次验证直接替换的。后者属于 `rungic-plasma-session` 软件包，直接替换后完整性检查会报告它被改过；要随下一次打包发布正式下发。部署前的原文件在 `device-backup/`。
 - 最终 smoke 9/9 通过（`.work/acceptance/unreleased/20260930-202509/`）。OCR 模型和 prefs 已从备份恢复，标签按目录的完整 MLS 类别重新 `chcon`。
 - 还没做的：Android 低内存时真实杀死 APK 的场景（这次用 `am force-stop` 近似），以及卸载后重装导致 uid 变化的场景。
+
+## 发布 20260930.9（2026-09-30）
+
+- 构建：在 Mac mini（ARM64，系统代理 Surge 127.0.0.1:6152）上重建了 17 个 stale 的项目包，版本 0.510，另外 2 个包本来就是最新，共 19 个。stale 是因为自上次构建以来打包路径的内容变了（e7f7f50 拆分目录等）。`rungic-plasma-session_0.510` 中的会话脚本与 `desktop/session` 的 SHA 一致。发布元包 `20260930.9` 固定 70 个包，对应提交 be86132；APK 升为 2.28（versionCode 76），单独发布。
+- 部署到 G100 S：按用户选择，先对上次部署保留的 `.8` snapshot 执行 `rungic_release.py commit`，再部署。**主机侧部署进程在 sync 之后被我设的 590 秒客户端超时杀掉了**（snapshot、settled 和经 Wi-Fi 同步 37 个包已用掉约 9 分钟）。手机上的 apt 在 `systemd-run` 临时单元里独立跑完：dpkg 设置完全部包，`rungic-release (20260930.9)` 为最后一步，term.log 中没有 `Errors were encountered`，`dpkg --audit` 干净，70 个包的版本与发布一致；但该单元以 100 退出，最可能是写最后的输出时管道已断。
+- 补完：用 `rungic_release.py` 自身的函数按 `deploy()` 的顺序补完其余步骤，写入同一部署记录 `.work/deploy/20260930-212112-20260930.9/`，结果标为 `ok (resumed after a client timeout)`。补完脚本在验收失败时不会自动回滚 snapshot，而是交给用户决定；实际验收通过，没有用到。
+  - Android 侧：更新了 `rungic-plasma`、`rootfs.sepolicy.rule`、`rootfs-mount-hook`；
+  - 服务：重启了 bridges 的 3 个服务和 suggestions 的定时器，并重启了会话；
+  - 完整性：只剩部署前就有的 `/usr/lib/rungic-cua/rungic_cua/keyring.py` 不属于任何包；
+  - smoke 9/9。
+- 安装 APK 2.28 后重新打开，smoke 9/9（`.work/acceptance/20260930.9/20260930-213913/`）。`.9` 的 snapshot 仍保留，接受后再执行 `rungic_release.py commit`。
+- **教训**：经 Wi-Fi 部署整套发布会超过 10 分钟，不要给 `rungic_release.py deploy` 套短超时，要放在后台运行。
