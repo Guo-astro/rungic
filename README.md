@@ -132,6 +132,55 @@ Rungic is under active development and in private preview. Still being polished:
 - The call agent, which makes and answers phone calls for you, is still being tested.
 - Vulkan desktop rendering flickers on this GPU family, so the desktop uses OpenGL ES for now.
 
+## Skills
+
+Skills are reusable instructions that an agent reads to carry out a task. This repository includes two:
+
+| Skill | Where to use it | What it does |
+|---|---|---|
+| [`rungic-three-stage-image`](.agents/skills/rungic-three-stage-image/SKILL.md) | Codex working in this repository | Builds the device's GKI kernel, the RungicOS Linux image and the complete flash package. Covers individual stages, device bring-up, installation and acceptance. |
+| [`rungic-phone-desktop`](plasma/voice-agent/skills/rungic-phone-desktop/SKILL.md) | The assistant running on the phone | Operates desktop apps and windows, controls phone functions, casts to a TV and handles supported call workflows. |
+
+The desktop skill ships with the assistant. Its editable copy lives at `~/.codex/skills/rungic-phone-desktop/` on the phone; changes you make there are preserved when the package updates.
+
+### Choose what to build and install
+
+Invoke `$rungic-three-stage-image` in Codex from the repository root, and specify the device/firmware [spec](profiles/devices/), the work you want done and whether installation is included. The same skill supports the full workflow or a selected stage:
+
+| Your goal | Build scope and output | Installation path |
+|---|---|---|
+| **Build a complete phone release** | **CI1 → CI2 → CI3:** GKI/boot, RungicOS rootfs, then the device flash package with Android partitions, APK, first-boot components, checksums and installer. | Use the generated package's installer for the matching device. Complete-release acceptance includes a wiped install, account setup and reaching Plasma. |
+| **Build the kernel only** | **CI1:** the spec's pinned kernel sources, configuration and patches; produces GKI/boot and ABI/module-trust reports. | Use the target device's verified boot/flash procedure and validate the candidate on that device. |
+| **Build the Linux system image only** | **CI2:** install the selected package release in a clean ARM64 root tree; produce ext4 rootfs, compressed seed, package lock and report. | Feed it into a matching device installation package. For updates to an existing installation, use the package-update path below. |
+| **Assemble a package from existing builds** | **CI3:** reuse verified kernel/rootfs artifacts and the exact OEM firmware inputs; assemble and check the device package. | Use the generated installer. Existing artifacts must match the selected spec and their recorded checksums. |
+| **Update desktop or Agent components on an installed phone** | Build the changed packages and a versioned APT release; keep the compatible kernel and Android base. | Deploy through [`rungic_release.py`](tools/rungic_release.py), reload affected services/UI and run the relevant acceptance checks. |
+
+Example requests for Codex — replace the placeholders with your chosen inputs:
+
+```text
+Use $rungic-three-stage-image to build a complete Rungic flash package
+for <device-spec>. Deliver the package, checksums and offline validation report.
+
+Use $rungic-three-stage-image to run CI1 only for <device-spec>.
+Build the kernel/boot candidate and check its OEM module compatibility.
+
+Use $rungic-three-stage-image to run CI2 only for <device-spec>, using
+<package-release>. Produce a clean RungicOS rootfs image and package lock.
+
+Use $rungic-three-stage-image to run CI3 for <device-spec>, reusing
+<verified-kernel-artifacts> and <verified-rootfs-artifacts>.
+
+Use $rungic-three-stage-image to install <prepared-release> on
+<device-serial>. A full wipe is intended. Verify first boot and account
+setup through to the Plasma desktop.
+```
+
+For installation, name the exact artifact and target device/serial, and state whether a full wipe is intended. A build-only request produces artifacts; it does not flash the phone. Kernel and rootfs stages can be rebuilt independently when the existing components remain compatible. The Linux rootfs shares Android's kernel and is a container filesystem image, not an Android `system.img`.
+
+For incremental work, a request such as “Build and deploy the updated suggestion widget to my existing Rungic installation on `<device-serial>`, then verify its desktop interactions” selects the package-update path. Project packages use [`rungic_package.py`](tools/rungic_package.py); modified upstream packages use [`build_on_device.py`](tools/build_on_device.py).
+
+These skills guide the existing build tools; the complete process still involves several tools and device-specific inputs. In particular, [`build_rootfs_image.py`](tools/ci/build_rootfs_image.py) packages an already prepared root tree and checks its package versions. See the [tool map](.agents/skills/rungic-three-stage-image/references/tool-map.md) for stage entry points, [new-device guide](.agents/skills/rungic-three-stage-image/references/device-onboarding.md) for adaptation, and [first-boot guide](.agents/skills/rungic-three-stage-image/references/first-boot.md) for installation and recovery. The [G100 acceptance record](docs/80-g100-image-installation-retrospective.md) documents the verified full-install path; other device/firmware combinations need their own validation. These detailed engineering guides are currently in Chinese.
+
 ## Learn more
 
 - [Developer guide and documentation index](docs/README.md): repository layout, development entry points, and the design and acceptance documents for each capability
