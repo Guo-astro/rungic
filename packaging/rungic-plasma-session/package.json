@@ -6,6 +6,7 @@
   "paths": [
     "system/init",
     "desktop/session",
+    "desktop/login-environment.py",
     "system/user-dirs",
     "system/shared-storage",
     "desktop/kwin",

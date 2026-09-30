@@ -1,6 +1,7 @@
 # rungic-plasma-session
 install -Dm755 "$SRC/system/init" "$DESTDIR/usr/sbin/rungic-plasma-init"
 install -Dm755 "$SRC/desktop/session" "$DESTDIR/usr/libexec/rungic-plasma-session"
+install -Dm755 "$SRC/desktop/login-environment.py" "$DESTDIR/usr/libexec/rungic-login-environment"
 install -Dm755 "$SRC/system/user-dirs" "$DESTDIR/usr/libexec/rungic-user-dirs"
 install -Dm755 "$SRC/system/shared-storage" "$DESTDIR/usr/libexec/rungic-plasma-shared"
 install -Dm755 "$SRC/desktop/kwin" "$DESTDIR/usr/libexec/rungic-plasma-kwin"

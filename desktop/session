@@ -20,6 +20,14 @@ export PULSE_COOKIE=/var/lib/rungic-host/audio-cookie
 [ ! -f /etc/profile.d/proxy.sh ] || . /etc/profile.d/proxy.sh
 [ ! -f /etc/plasma/gpu-env ] || . /etc/plasma/gpu-env
 unset DISPLAY WAYLAND_DISPLAY
+# The login environment, as SDDM or GDM would give it by starting the session through the user's
+# login shell (docs/100): PATH from /etc/profile and ~/.profile with ~/.local/bin and ~/bin always on
+# it, and the user's own exports in their login files. Measured in child shells, so a failing or
+# hanging profile leaves the session as it was; the session's own settings stay its own.
+RUNGIC_LOGIN_VARS=
+if login_env=$(/usr/libexec/rungic-login-environment 2>/dev/null); then
+    eval "$login_env"
+fi
 while [ ! -S /mnt/android-wayland/wayland-0 ]; do sleep 1; done
 mkdir -p "$HOME/.config"
 # plasmashell turns one failed OpenGL start into a permanent software renderer for every Qt Quick
@@ -37,7 +45,7 @@ fi
 # Android owns device locking: /etc/xdg/kscreenlockerrc (rungic-plasma-config) fixes
 # Autolock and LockOnResume off for every user (docs/61).
 umask 077
-env | python3 -c 'import sys,shlex; print("".join("export "+k+"="+shlex.quote(v)+"\n" for k,v in (line.rstrip("\n").split("=",1) for line in sys.stdin) if k in ("HOME","XDG_RUNTIME_DIR","DBUS_SESSION_BUS_ADDRESS","XDG_SESSION_TYPE","XDG_CURRENT_DESKTOP","XDG_SESSION_DESKTOP","XDG_MENU_PREFIX","LANG","QT_QPA_PLATFORM","QT_QUICK_BACKEND","GDK_BACKEND","MOZ_ENABLE_WAYLAND","MESA_LOADER_DRIVER_OVERRIDE","FD_KGSL_ENABLE_DMABUF","VK_DRIVER_FILES","FLATPAK_GL_DRIVERS","QSG_RHI_BACKEND","GSK_RENDERER","PULSE_SERVER","PULSE_COOKIE","http_proxy","https_proxy","HTTP_PROXY","HTTPS_PROXY","no_proxy")))' > "$XDG_RUNTIME_DIR/rungic-session.env"
+env | python3 -c 'import sys,shlex; print("".join("export "+k+"="+shlex.quote(v)+"\n" for k,v in (line.rstrip("\n").split("=",1) for line in sys.stdin) if k in ("HOME","PATH","XDG_RUNTIME_DIR","DBUS_SESSION_BUS_ADDRESS","XDG_SESSION_TYPE","XDG_CURRENT_DESKTOP","XDG_SESSION_DESKTOP","XDG_MENU_PREFIX","LANG","QT_QPA_PLATFORM","QT_QUICK_BACKEND","GDK_BACKEND","MOZ_ENABLE_WAYLAND","MESA_LOADER_DRIVER_OVERRIDE","FD_KGSL_ENABLE_DMABUF","VK_DRIVER_FILES","FLATPAK_GL_DRIVERS","QSG_RHI_BACKEND","GSK_RENDERER","PULSE_SERVER","PULSE_COOKIE","http_proxy","https_proxy","HTTP_PROXY","HTTPS_PROXY","no_proxy")))' > "$XDG_RUNTIME_DIR/rungic-session.env"
 printf '%s\n' 'export WAYLAND_DISPLAY=wayland-0' >> "$XDG_RUNTIME_DIR/rungic-session.env"
 # The user's settings across the Rungic rename (docs/70), then the project's one-time user
 # migrations (rungic-plasma-config, rungic.upd) before KWin reads its configuration; kded
@@ -51,8 +59,10 @@ QT_QPA_PLATFORM=offscreen /usr/lib/aarch64-linux-gnu/libexec/kf6/kconf_update ||
 kbuildsycoca6 --noincremental
 # The GPU settings into the user manager before any unit of the session starts: startplasma
 # imports its environment too, but a unit (re)started earlier would run without them.
+# The login PATH and the user's login exports too, for units and programs systemd starts.
+# shellcheck disable=SC2086
 systemctl --user import-environment MESA_LOADER_DRIVER_OVERRIDE FD_KGSL_ENABLE_DMABUF VK_DRIVER_FILES \
-    QSG_RHI_BACKEND GSK_RENDERER QT_QUICK_BACKEND KWIN_COMPOSE FLATPAK_GL_DRIVERS 2>/dev/null || true
+    QSG_RHI_BACKEND GSK_RENDERER QT_QUICK_BACKEND KWIN_COMPOSE FLATPAK_GL_DRIVERS PATH $RUNGIC_LOGIN_VARS 2>/dev/null || true
 # A restart of this unit stops its main process, but the previous session's startplasma-wayland
 # lives on in its logind scope for a moment. When it quits it puts the user manager's environment
 # back as it was before that session (plasma-workspace cleanupPlasmaEnvironment); quitting after
