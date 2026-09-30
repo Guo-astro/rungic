@@ -946,3 +946,7 @@ msgstr "还没有用量记录。"
 
 msgid "Sign in to see usage and limits."
 msgstr "登录后可以看到用量和额度。"
+
+msgctxt "@info Qt time format"
+msgid "HH:mm"
+msgstr "HH:mm"

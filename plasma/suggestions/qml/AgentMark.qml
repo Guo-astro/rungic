@@ -15,6 +15,7 @@ Item {
     opacity: muted ? 0.4 : 1
     readonly property string path: icon ? ((Theme.dark && icon.dark) ? icon.dark : (icon.light || "")) : ""
     Image {
+        id: picture
         anchors.fill: parent
         visible: mark.path !== "" && status === Image.Ready
         source: mark.path ? "file://" + mark.path : ""
@@ -24,7 +25,7 @@ Item {
     }
     Rectangle {
         anchors.fill: parent
-        visible: mark.path === ""
+        visible: !picture.visible   // no mark shipped, or its file is missing
         radius: 6
         color: Theme.fill
         border.width: 1

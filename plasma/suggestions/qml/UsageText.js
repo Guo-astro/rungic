@@ -28,7 +28,7 @@ function compact(l10n, value) {
     if (value === undefined || value === null) return "–"
     const n = Number(value), zh = Qt.locale().name.startsWith("zh")
     const scaled = (v, unit) => l10n.i18nc("@info a compact number: %1 the value, %2 its unit", "%1%2",
-                                            Number(v).toLocaleString(Qt.locale(), "f", v < 10 ? 1 : 0).replace(/[.,]0$/, ""), unit)
+                                            Number(v).toLocaleString(Qt.locale(), "f", v < 100 ? 1 : 0).replace(/[.,]0$/, ""), unit)
     if (zh) return n < 10000 ? Number(n).toLocaleString(Qt.locale(), "f", 0) : n < 1e8 ? scaled(n / 1e4, "万") : scaled(n / 1e8, "亿")
     if (n < 1000) return Number(n).toLocaleString(Qt.locale(), "f", 0)
     return n < 1e6 ? scaled(n / 1e3, "K") : n < 1e9 ? scaled(n / 1e6, "M") : scaled(n / 1e9, "B")

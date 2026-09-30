@@ -63,7 +63,7 @@ Item {
     readonly property string rightText: {
         if (!provider.id || compact || nextProvider) return ""
         if (stale && provider.updatedAt)
-            return l10n.i18nc("@info %1 a time", "Last read %1", new Date(provider.updatedAt * 1000).toLocaleTimeString(Qt.locale(), Locale.ShortFormat))
+            return l10n.i18nc("@info %1 a time", "Last read %1", new Date(provider.updatedAt * 1000).toLocaleString(Qt.locale(), l10n.i18nc("@info Qt time format", "HH:mm")))
         if (body === "meters" && tokens.today != null) return l10n.i18nc("@info tokens: %1 a compact number", "%1 today", UsageText.compact(l10n, tokens.today))
         if (body === "stats" && (provider.account || {}).kind === "api-key") return (provider.account || {}).label || "API Key"
         return ""
