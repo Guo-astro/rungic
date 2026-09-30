@@ -4,6 +4,7 @@ import QtQuick.Window
 import QtQuick.Layouts
 import QtQuick.Controls as QQC2
 import com.rungic.design
+import org.kde.ki18n
 import com.rungic.suggestions
 import "UsageText.js" as UsageText
 
@@ -11,6 +12,7 @@ QQC2.ScrollView {
     id: view
     clip: true
     property double now: Date.now() / 1000
+    KI18nContext { id: l10n; translationDomain: "rungic-suggestions" }
     UsageClient { id: usage }
     readonly property var usageData: usage.data
     Timer { interval: 60000; running: view.visible && view.Window.active; repeat: true; onTriggered: { view.now = Date.now() / 1000; usage.refresh() } }
@@ -21,27 +23,27 @@ QQC2.ScrollView {
             PixelAgent { animate: view.visible && view.Window.active; working: view.usageData.activity === "working" }
             ColumnLayout {
                 Text { text: "Codex"; color: Theme.text; font.pixelSize: 24; font.weight: Font.DemiBold }
-                Text { text: UsageText.mode(view.usageData) + " · " + (view.usageData.model || "模型尚未读取"); color: Theme.dim; font.pixelSize: 12 }
+                Text { text: UsageText.mode(l10n, view.usageData) + " · " + (view.usageData.model || l10n.i18n("Model not read yet")); color: Theme.dim; font.pixelSize: 12 }
             }
             Item { Layout.fillWidth: true }
-            PillButton { text: "刷新"; onClicked: { view.now = Date.now() / 1000; usage.refresh() } }
+            PillButton { text: l10n.i18n("Refresh"); onClicked: { view.now = Date.now() / 1000; usage.refresh() } }
         }
-        Text { text: UsageText.token(view.usageData); color: Theme.text; font.pixelSize: 22; wrapMode: Text.Wrap; Layout.fillWidth: true; Layout.leftMargin: 20; Layout.rightMargin: 20 }
-        Text { text: "今日记录 " + UsageText.number(view.usageData.todayRecordedTokens) + " token。仅统计此账户通过本机助理收到的 Codex 回合用量；不包含语音消耗，也不是账户账单。"; color: Theme.dim; font.pixelSize: 13; wrapMode: Text.Wrap; Layout.fillWidth: true; Layout.leftMargin: 20; Layout.rightMargin: 20 }
-        Text { visible: view.usageData.authMode === "apiKey"; text: "API Key 按量使用，未提供订阅额度和重置时间。"; color: Theme.dim; font.pixelSize: 14; wrapMode: Text.Wrap; Layout.fillWidth: true; Layout.margins: 20 }
-        Text { visible: view.usageData.authMode === "chatgpt"; text: "账户累计 token：" + UsageText.number(((view.usageData.accountUsage || {}).summary || {}).lifetimeTokens); color: Theme.text; font.pixelSize: 16; Layout.fillWidth: true; Layout.margins: 20 }
+        Text { text: UsageText.token(l10n, view.usageData); color: Theme.text; font.pixelSize: 22; wrapMode: Text.Wrap; Layout.fillWidth: true; Layout.leftMargin: 20; Layout.rightMargin: 20 }
+        Text { text: l10n.i18n("Recorded today: %1 tokens. Counts only the Codex turns this account ran through the assistant on this device; it leaves out voice and is not the account's bill.", UsageText.number(l10n, view.usageData.todayRecordedTokens)); color: Theme.dim; font.pixelSize: 13; wrapMode: Text.Wrap; Layout.fillWidth: true; Layout.leftMargin: 20; Layout.rightMargin: 20 }
+        Text { visible: view.usageData.authMode === "apiKey"; text: l10n.i18n("An API key is billed as you go; it has no subscription limits or reset times."); color: Theme.dim; font.pixelSize: 14; wrapMode: Text.Wrap; Layout.fillWidth: true; Layout.margins: 20 }
+        Text { visible: view.usageData.authMode === "chatgpt"; text: l10n.i18n("Account tokens to date: %1", UsageText.number(l10n, ((view.usageData.accountUsage || {}).summary || {}).lifetimeTokens)); color: Theme.text; font.pixelSize: 16; Layout.fillWidth: true; Layout.margins: 20 }
         Repeater {
             model: view.usageData.windows || []
             ColumnLayout {
                 required property var modelData
                 Layout.fillWidth: true; Layout.leftMargin: 20; Layout.rightMargin: 20; spacing: 8
-                Text { text: modelData.bucket + " · " + UsageText.windowName(modelData); font.pixelSize: 16; color: Theme.text; Layout.fillWidth: true; wrapMode: Text.Wrap }
-                Text { text: (view.usageData.stale || modelData.expired ? "上次读取：" : "") + "已用 " + modelData.usedPercent + "%"; font.pixelSize: 14; color: Theme.dim }
+                Text { text: modelData.bucket + " · " + UsageText.windowName(l10n, modelData); font.pixelSize: 16; color: Theme.text; Layout.fillWidth: true; wrapMode: Text.Wrap }
+                Text { text: (view.usageData.stale || modelData.expired ? l10n.i18n("Last read: %1% used", modelData.usedPercent) : l10n.i18n("%1% used", modelData.usedPercent)); font.pixelSize: 14; color: Theme.dim }
                 QQC2.ProgressBar { Layout.fillWidth: true; value: Math.min(1, Math.max(0, modelData.usedPercent / 100)) }
-                Text { text: UsageText.reset(modelData, view.now); color: Theme.dim; font.pixelSize: 13; Layout.fillWidth: true; wrapMode: Text.Wrap }
+                Text { text: UsageText.reset(l10n, modelData, view.now); color: Theme.dim; font.pixelSize: 13; Layout.fillWidth: true; wrapMode: Text.Wrap }
             }
         }
         Text { visible: !!view.usageData.error; text: view.usageData.error || ""; color: Theme.negative; Layout.fillWidth: true; Layout.margins: 20; wrapMode: Text.Wrap }
-        Text { text: view.usageData.updatedAt ? "上次读取 " + new Date(view.usageData.updatedAt * 1000).toLocaleString(Qt.locale("zh_CN"), "M/d HH:mm") : "等待用量数据"; color: Theme.dim; font.pixelSize: 12; Layout.margins: 20 }
+        Text { text: view.usageData.updatedAt ? l10n.i18n("Last read %1", new Date(view.usageData.updatedAt * 1000).toLocaleString(Qt.locale(), Locale.ShortFormat)) : l10n.i18n("Waiting for usage data"); color: Theme.dim; font.pixelSize: 12; Layout.margins: 20 }
     }
 }

@@ -2,7 +2,7 @@
 // What the agent is doing this moment, on the task card (docs/89): an icon for the kind of
 // step, the step in plain words and how long it has run, the last line it printed, and a
 // bar when it says how far it is.
-// States: thinking (between steps: "想下一步", shining), working (a step, no measure of how
+// States: thinking (between steps: "Planning the next step", shining), working (a step, no measure of how
 // far), progress (a step with a fraction done: the bar).
 import QtQuick
 import QtQuick.Layouts
@@ -35,7 +35,9 @@ Rectangle {
     radius: Theme.radiusInput
     color: Theme.fill
     Accessible.role: Accessible.StaticText
-    Accessible.name: (text || "想下一步") + (detail ? "，" + detail : "")
+    readonly property string thinkingText: DesignI18n.i18nc("@info:status the agent between two steps", "Planning the next step")
+    Accessible.name: detail ? DesignI18n.i18nc("@info accessible name: %1 the step, %2 the last line it printed", "%1, %2", text || thinkingText, detail)
+        : text || thinkingText
 
     ColumnLayout {
         id: column
@@ -63,12 +65,13 @@ Rectangle {
             ShineText {
                 Layout.fillWidth: true
                 visible: card.shining
-                text: "想下一步"
+                text: card.thinkingText
                 pixelSize: Theme.metaSize
             }
             Text {
                 visible: !card.shining && card.seconds >= 3
-                text: card.seconds < 60 ? card.seconds + " 秒" : Math.floor(card.seconds / 60) + " 分 " + (card.seconds % 60) + " 秒"
+                text: card.seconds < 60 ? DesignI18n.i18nc("@info a short duration", "%1s", card.seconds)
+                    : DesignI18n.i18nc("@info a short duration", "%1m %2s", Math.floor(card.seconds / 60), card.seconds % 60)
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.labelSize
                 color: Theme.dim

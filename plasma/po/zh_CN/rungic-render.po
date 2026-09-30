@@ -1,0 +1,38 @@
+# Simplified Chinese translation of rungic-render (Rungic).
+# SPDX-License-Identifier: MIT
+msgid ""
+msgstr ""
+"Project-Id-Version: rungic-render\n"
+"PO-Revision-Date: 2026-09-30 00:00+0000\n"
+"Last-Translator: Rungic\n"
+"Language-Team: Chinese Simplified\n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: plasma/config/usr/lib/blender/scripts/modules/rungic_render.py
+msgid "Blender is starting the render"
+msgstr "Blender 开始渲染"
+
+#: plasma/config/usr/lib/blender/scripts/modules/rungic_render.py
+msgid "Render preview"
+msgstr "渲染预览"
+
+#: plasma/config/usr/lib/blender/scripts/modules/rungic_render.py
+msgid "Blender is rendering"
+msgstr "Blender 渲染中"
+
+#: plasma/config/usr/lib/blender/scripts/modules/rungic_render.py
+msgid "Blender render finished"
+msgstr "Blender 渲染完成"
+
+#: plasma/config/usr/lib/blender/scripts/modules/rungic_render.py
+msgid "Blender render failed"
+msgstr "Blender 渲染出错"
+
+#: plasma/config/usr/lib/blender/scripts/modules/rungic_render.py
+#, python-brace-format
+msgid "Blender render · {done}/{total} samples"
+msgstr "Blender 渲染 · {done}/{total} 采样"

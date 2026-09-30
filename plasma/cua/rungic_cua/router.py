@@ -33,7 +33,8 @@ WHERE_TOOL = {
                     "window or the TV; the user watches and may use it too). 'workspace': your own workspace (the "
                     "assistant's screen), which the user's phone never shows by itself. 'auto' (the default): the "
                     "user's desktop while desktop mode is on or the TV shows the desktop, else your workspace. Set it "
-                    "when the user says where to work (\"在我的桌面上\", \"在助理屏上\"); it holds for this "
+                    "when the user says where to work (\"on my desktop\", \"on the assistant's screen\", \"在我的桌面上\", "
+                    "\"在助理屏上\"); it holds for this "
                     "conversation. Without `target` it only says where you work now and why."),
     'inputSchema': {'type': 'object', 'properties': {
         'target': {'type': 'string', 'enum': ['auto', 'desktop', 'workspace']}}},

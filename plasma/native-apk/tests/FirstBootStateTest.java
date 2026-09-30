@@ -18,7 +18,7 @@ public final class FirstBootStateTest {
         for(String phase:new String[]{"verify","runtime","rootfs","configure","storage","finish"}) {
             write(status,"release=release-new\nstate=installing\nphase="+phase+"\n");
             FirstBootState state=FirstBootState.read(seed.toFile(),status.toFile());
-            require(!state.ready && !state.failed && !state.message.isEmpty());
+            require(!state.ready && !state.failed && state.message!=FirstBootState.Message.NONE && state.reason==null);
         }
         write(status,"release=release-new\nstate=failed\n");
         require(FirstBootState.read(seed.toFile(),status.toFile()).failed);
@@ -30,14 +30,16 @@ public final class FirstBootStateTest {
         require(!FirstBootState.read(seed.toFile(),status.toFile()).ready);
         write(status,"schema=2\nrelease=release-new\nstate=failed\nerror=checksum\nphase=verify\n");
         FirstBootState corrupt=FirstBootState.read(seed.toFile(),status.toFile());
-        require(corrupt.failed && corrupt.message.contains("重启不会修复") && !corrupt.ready);
+        require(corrupt.failed && corrupt.message==FirstBootState.Message.FAILED_CHECKSUM && !corrupt.ready);
         write(status,"schema=2\nrelease=release-new\nstate=waiting\nphase=storage\n");
         require(FirstBootState.read(seed.toFile(),status.toFile()).attention);
         write(status,"schema=2\nrelease=release-new\nstate=installing\nphase=rootfs\n");
-        require(FirstBootState.read(seed.toFile(),status.toFile(),status.toFile().lastModified()+181000).attention);
+        FirstBootState stale=FirstBootState.read(seed.toFile(),status.toFile(),status.toFile().lastModified()+181000);
+        require(stale.attention && stale.stale && stale.message==FirstBootState.Message.ROOTFS);
         require(!FirstBootState.read(seed.toFile(),status.toFile(),status.toFile().lastModified()).attention);
         write(status,"schema=999\nrelease=release-new\nstate=ready\n");
-        require(!FirstBootState.read(seed.toFile(),status.toFile()).ready);
+        FirstBootState future=FirstBootState.read(seed.toFile(),status.toFile());
+        require(!future.ready && future.message==FirstBootState.Message.WAITING && future.reason==FirstBootState.Reason.SCHEMA_UNSUPPORTED);
         write(status,"schema=2\nrelease=release-new\nstate=ready\nphase=complete\n");
         require(FirstBootState.read(seed.toFile(),status.toFile()).ready);
         System.out.println("PASS readiness, v1/v2, unknown schema, stale state, user action, checksum failure and malformed input");

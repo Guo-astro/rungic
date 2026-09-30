@@ -8,7 +8,7 @@ import com.rungic.voiceassistant
 
 SettingsFrame {
     id: page
-    title: install.running ? "安装 Codex" : "Codex"
+    title: install.running ? i18nc("@title", "Install Codex") : "Codex"
     property var setup: ({})
     readonly property var codex: setup.codex || {}
     property string method: "package"
@@ -20,7 +20,10 @@ SettingsFrame {
         property string log: ""
         property string error: ""
     }
-    readonly property var steps: [["download", "下载安装程序"], ["install", "安装 Codex"], ["check", "检查能否运行"], ["connect", "连接 OpenAI"]]
+    readonly property var steps: [["download", i18nc("@info an installation step", "Download the installer")],
+                                  ["install", i18nc("@info an installation step", "Install Codex")],
+                                  ["check", i18nc("@info an installation step", "Check that it runs")],
+                                  ["connect", i18nc("@info an installation step", "Connect to OpenAI")]]
     function stepIndex(name) { return steps.findIndex(s => s[0] === name) }
 
     Component.onCompleted: AgentClient.request("Setup")
@@ -34,7 +37,7 @@ SettingsFrame {
             if (e.step) install.step = e.step
             if (e.state === "done" || e.state === "failed" || e.state === "cancelled") {
                 install.running = false
-                install.error = e.state === "failed" ? (e.error || "安装没有完成") : ""
+                install.error = e.state === "failed" ? (e.error || i18nc("@info", "The installation didn't finish")) : ""
                 AgentClient.request("Setup")
             }
         }
@@ -67,7 +70,8 @@ SettingsFrame {
             }
             Text {
                 Layout.alignment: Qt.AlignHCenter
-                text: page.codex.installed ? (page.codex.runs === false ? "Codex 运行不了" : "Codex 已就绪") : "还没有安装 Codex"
+                text: page.codex.installed ? (page.codex.runs === false ? i18nc("@title", "Codex can't run") : i18nc("@title", "Codex is ready"))
+                    : i18nc("@title", "Codex isn't installed yet")
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.heroSize
                 font.weight: Font.DemiBold
@@ -76,8 +80,8 @@ SettingsFrame {
             Text {
                 Layout.fillWidth: true
                 horizontalAlignment: Text.AlignHCenter
-                text: page.codex.installed ? "Agent 用它在手机上执行命令、操作应用。"
-                    : "Agent 靠 Codex 在手机上执行命令、操作应用。装好后就能让它替你做事。"
+                text: page.codex.installed ? i18nc("@info", "The Agent uses it to run commands and use apps on the phone.")
+                    : i18nc("@info", "The Agent relies on Codex to run commands and use apps on the phone. Install it, and the Agent can get things done for you.")
                 wrapMode: Text.Wrap
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.metaSize
@@ -98,19 +102,20 @@ SettingsFrame {
             Layout.leftMargin: Theme.groupMargin
             Layout.rightMargin: Theme.groupMargin
             visible: page.codex.installed === true
-            ListRow { text: "版本"; value: page.codex.version || "" }
+            ListRow { text: i18nc("@label", "Version"); value: page.codex.version || "" }
             ListRow {
-                text: "登录方式"
-                value: !page.setup.account ? "未登录" : page.setup.account.type === "apiKey" ? "API Key" : "ChatGPT 账号"
+                text: i18nc("@label how Codex is signed in", "Sign-in")
+                value: !page.setup.account ? i18nc("@info", "Not signed in") : page.setup.account.type === "apiKey" ? "API Key"
+                    : i18nc("@info how Codex is signed in", "ChatGPT account")
                 accessory: "chevron"
                 onClicked: page.push("KeyPage.qml")
             }
             ListRow {
-                text: "凭据保存在"
-                value: page.setup.credentials === "keyring" ? "系统钥匙串" : "本机文件"
+                text: i18nc("@label", "Credentials kept in")
+                value: page.setup.credentials === "keyring" ? i18nc("@info where credentials are kept", "System keyring") : i18nc("@info where credentials are kept", "A file on the phone")
             }
             ListRow {
-                text: "配置文件"
+                text: i18nc("@label", "Config file")
                 value: "~/.codex/config.toml"
                 valueMono: true
                 accessory: "external"
@@ -123,27 +128,27 @@ SettingsFrame {
             Layout.leftMargin: Theme.groupMargin
             Layout.rightMargin: Theme.groupMargin
             visible: page.codex.installed === true
-            ListRow { text: "重新检测"; interactive: true; onClicked: AgentClient.request("Setup") }
+            ListRow { text: i18nc("@action:button", "Check again"); interactive: true; onClicked: AgentClient.request("Setup") }
         }
 
         // Not installed: how.
-        SectionLabel { Layout.fillWidth: true; text: "安装方式"; visible: page.codex.installed === false }
+        SectionLabel { Layout.fillWidth: true; text: i18nc("@title:group", "How to install"); visible: page.codex.installed === false }
         ListGroup {
             Layout.fillWidth: true
             Layout.leftMargin: Theme.groupMargin
             Layout.rightMargin: Theme.groupMargin
             visible: page.codex.installed === false
             Accessible.role: Accessible.List
-            Accessible.name: "安装方式"
+            Accessible.name: i18nc("@title:group", "How to install")
             ListRow {
-                text: "系统软件包（推荐）"
-                subtitle: "apt install rungic-codex · 与系统一起更新"
+                text: i18nc("@option:radio", "System package (recommended)")
+                subtitle: i18nc("@info %1 is a command", "%1 · Updates with the system", "apt install rungic-codex")
                 interactive: true
                 leading: RadioMark { on: page.method === "package" }
                 onClicked: page.method = "package"
             }
             ListRow {
-                text: "官方安装脚本"
+                text: i18nc("@option:radio", "Official install script")
                 subtitle: "curl -fsSL https://chatgpt.com/codex/install.sh | sh"
                 interactive: true
                 leading: RadioMark { on: page.method === "script" }
@@ -160,9 +165,9 @@ SettingsFrame {
         Layout.topMargin: 16
         visible: install.running
         spacing: 12
-        ShineText { Layout.fillWidth: true; pixelSize: Theme.heroSize; text: "正在安装 Codex…" }
+        ShineText { Layout.fillWidth: true; pixelSize: Theme.heroSize; text: i18nc("@info:status", "Installing Codex…") }
         Progress { Layout.fillWidth: true }
-        Text { text: "大约还要 1 分钟，可以先离开这页"; font.family: Theme.fontFamily; font.pixelSize: Theme.labelSize; color: Theme.dim }
+        Text { text: i18nc("@info", "About a minute left. You can leave this page."); font.family: Theme.fontFamily; font.pixelSize: Theme.labelSize; color: Theme.dim }
     }
     Item { implicitHeight: 16; visible: install.running }
     ListGroup {
@@ -191,7 +196,7 @@ SettingsFrame {
             }
         }
     }
-    SectionLabel { Layout.fillWidth: true; text: "详细输出"; visible: install.running && install.log !== "" }
+    SectionLabel { Layout.fillWidth: true; text: i18nc("@title:group the installer's output", "Details"); visible: install.running && install.log !== "" }
     Text {
         Layout.fillWidth: true
         Layout.leftMargin: Theme.groupMargin
@@ -214,7 +219,7 @@ SettingsFrame {
             Layout.fillWidth: true
             visible: page.codex.installed === false && !install.running
             iconName: "download"
-            text: "安装 Codex"
+            text: i18nc("@action:button", "Install Codex")
             onClicked: {
                 install.running = true
                 install.error = ""
@@ -226,13 +231,13 @@ SettingsFrame {
         SecondaryButton {
             Layout.fillWidth: true
             visible: page.codex.installed === false && !install.running
-            text: "稍后再说"
+            text: i18nc("@action:button", "Not now")
             onClicked: page.back()
         },
         SecondaryButton {
             Layout.fillWidth: true
             visible: install.running
-            text: "取消安装"
+            text: i18nc("@action:button", "Cancel installation")
             onClicked: AgentClient.request("CancelInstall")
         }
     ]

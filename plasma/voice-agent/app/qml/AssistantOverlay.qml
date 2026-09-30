@@ -3,7 +3,7 @@
 // up from the bottom, listening at once; it shows the one assistant conversation.
 //
 // It is in exactly one view at a time (`view`), each with its own content in the sheet:
-//   listen   what is being said (or "请说"), the voice bar held (the wave, the time)
+//   listen   what is being said (or "Speak now"), the voice bar held (the wave, the time)
 //   sending  released: what was said is on its way, not yet transcribed
 //   work     what was asked, the agent's progress shining, stop
 //   answer   the latest turn as in the app (pulled up: the whole conversation)
@@ -12,7 +12,7 @@
 // A press lifted before anything was said keeps listening hands-free until speech ends; a
 // tap then sends at once. Tap the backdrop or swipe the sheet down to dismiss: listening is
 // dropped and a spoken reply stops, agent work goes on and its result brings the sheet back.
-// "长按 Home 呼出" off in the app's settings: holding Home does nothing here.
+// "Hold Home to open" off in the app's settings: holding Home does nothing here.
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Window
@@ -51,7 +51,7 @@ Window {
             callId = e.callId || ""
             callLive = true; callPhase = "agent"; callStatus = "connecting"
             callConversation = e.conversation || win.conversation
-            callContact = e.contact || "电话"; callStarted = 0; callNote = ""
+            callContact = e.contact || i18nc("@info a call without a contact name", "Call"); callStarted = 0; callNote = ""
             callCanMonitor = e.independentMonitor !== false
             callDetails = false; shown = false; hideTimer.stop()
             Overlay.present(screenName)
@@ -92,12 +92,12 @@ Window {
     property string screenName: ""
     property bool shown: false
     onShownChanged: AgentClient.setWatching(shown)          // docs/89: the voice says less while shown
-    Binding { target: AgentClient; property: "conversation"; value: win.conversation }   // 朗读 goes to it (docs/89)
+    Binding { target: AgentClient; property: "conversation"; value: win.conversation }   // Read aloud goes to it (docs/89)
     property string conversation: ""          // the assistant's conversation id
     property bool holding: false              // Home or the sheet's bar is held
     property real micLevel: -90
     property bool expanded: false             // the sheet pulled up: the whole conversation
-    property bool homeHold: true              // the app's "长按 Home 呼出"
+    property bool homeHold: true              // the app's "Hold Home to open"
     readonly property bool listening: chat.phase === "listening" || holding
 
     // The current turn (refreshTurn): entries from `floor` on are this turn's.
@@ -346,7 +346,7 @@ Window {
         Text {
             Layout.fillWidth: true
             visible: win.view === "listen"
-            text: win.newTurn && win.userText ? win.userText : "请说"
+            text: win.newTurn && win.userText ? win.userText : i18nc("@info:status the overlay listening, nothing said yet", "Speak now")
             wrapMode: Text.Wrap
             font.family: Theme.fontFamily
             font.pixelSize: Theme.liveSize
@@ -366,14 +366,16 @@ Window {
         ShineText {
             Layout.fillWidth: true
             visible: win.view === "sending"
-            text: "正在识别…"
+            text: i18nc("@info:status what was said is being transcribed", "Transcribing…")
         }
         ShineText {
             Layout.fillWidth: true
             visible: win.view === "work"
-            text: chat.phase === "speaking" ? "正在回答"
-                : "正在处理" + (win.hasWork && win.newTurn ? " · " + Math.max(0, Math.round(win.now - win.workStarted)) + " 秒"
-                                + (win.workStep ? " · " + win.workStep : "") : "")
+            text: chat.phase === "speaking" ? i18nc("@info:status the assistant speaks its answer", "Answering")
+                : !(win.hasWork && win.newTurn) ? i18nc("@info:status the agent at work", "Working")
+                : i18nc("@info:status the agent at work; %1 is how long", "Working · %1",
+                        i18nc("@info a short duration", "%1s", Math.max(0, Math.round(win.now - win.workStarted))))
+                  + (win.workStep ? " · " + win.workStep : "")
         }
 
         // answer: the latest turn (pulled up: all of it), as in the app.
@@ -407,7 +409,7 @@ Window {
         Text {
             Layout.alignment: Qt.AlignHCenter
             visible: win.view === "answer" && chat.entries.count === 0
-            text: "有什么可以帮你？"
+            text: i18nc("@title a new conversation", "How can I help?")
             font.family: Theme.fontFamily
             font.pixelSize: Theme.liveSize
             font.weight: Font.DemiBold
@@ -432,7 +434,7 @@ Window {
             IconButton {
                 visible: win.view !== "listen"
                 iconName: "open-in-app"
-                text: "在应用中查看"
+                text: i18nc("@action:button", "Open in app")
                 tint: bar.ink
                 onClicked: { Overlay.openInApp(win.conversation); win.dismiss() }
             }
@@ -460,7 +462,8 @@ Window {
                 visible: win.view !== "listen"
                 Layout.fillWidth: true
                 horizontalAlignment: Text.AlignHCenter
-                text: win.view === "work" ? "按住补充说明" : win.view === "sending" ? "按住说话" : "按住继续说"
+                text: win.view === "work" ? i18nc("@info the bar while the agent works", "Hold to add more")
+                    : win.view === "sending" ? i18nc("@info the voice bar", "Hold to talk") : i18nc("@info the voice bar after an answer", "Hold to keep talking")
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.bodySize
                 font.weight: Font.DemiBold
@@ -470,13 +473,13 @@ Window {
             CircleButton {
                 visible: win.view !== "listen" && (chat.agentBusy || chat.phase === "speaking")
                 iconName: "stop"
-                text: "停止"
+                text: i18nc("@action:button stop the task or the answer", "Stop")
                 onClicked: AgentClient.stopTask()
             }
             IconButton {
                 visible: win.view !== "listen" && !(chat.agentBusy || chat.phase === "speaking")
                 iconName: "close"
-                text: "关闭"
+                text: i18nc("@action:button", "Close")
                 tint: bar.ink
                 onClicked: win.dismiss()
             }
@@ -487,8 +490,8 @@ Window {
             visible: text !== ""
             horizontalAlignment: Text.AlignHCenter
             text: win.view !== "listen" ? ""
-                : win.holding ? "正在听 · 松开 Home 发送 · 手指滑开取消"
-                : chat.handsFree ? "说完自动发送 · 轻点结束" : ""
+                : win.holding ? i18nc("@info while Home is held", "Listening · Release Home to send · Slide away to cancel")
+                : chat.handsFree ? i18nc("@info hands-free listening", "Sends when you stop talking · Tap to finish") : ""
             font.family: Theme.fontFamily
             font.pixelSize: Theme.footSize
             color: Theme.dim
@@ -549,9 +552,13 @@ Window {
                             color: Theme.dim
                             font.pixelSize: 12
                             elide: Text.ElideRight
-                            text: win.callPhase === "user" ? "你在通话"
-                                : ({connecting: "准备中", dialing: "拨号中", ringing: "等待接通", connected: "助理通话中",
-                                    ongoing: "通话中", "hanging-up": "正在挂断", "hangup-failed": "请检查电话"})[win.callStatus] || "通话中"
+                            text: win.callPhase === "user" ? i18nc("@info:status the call panel: the user talks on the call", "You're on the call")
+                                : ({connecting: i18nc("@info:status a call", "Preparing"), dialing: i18nc("@info:status a call", "Dialing"),
+                                    ringing: i18nc("@info:status a call, waiting to be answered", "Ringing"),
+                                    connected: i18nc("@info:status a call", "Assistant on the call"),
+                                    ongoing: i18nc("@info:status a call", "On a call"), "hanging-up": i18nc("@info:status a call", "Hanging up"),
+                                    "hangup-failed": i18nc("@info:status the call could not be hung up", "Check your phone")})[win.callStatus]
+                                  || i18nc("@info:status a call", "On a call")
                         }
                         Text {
                             visible: win.callStarted > 0
@@ -564,7 +571,7 @@ Window {
                     }
                 }
                 QQC2.Button {
-                    text: "挂断"
+                    text: i18nc("@action:button end the call", "Hang up")
                     onClicked: win.callCommand("hang-up")
                 }
             }
@@ -581,16 +588,16 @@ Window {
             RowLayout {
                 visible: win.callDetails
                 QQC2.Button {
-                    text: "我来接"
+                    text: i18nc("@action:button the user takes the call over from the assistant", "Take over")
                     enabled: win.callPhase === "agent"
                     onClicked: win.callCommand("take-over")
                 }
                 QQC2.Button {
-                    text: "通话记录"
+                    text: i18nc("@action:button open the call's conversation", "Call log")
                     onClicked: Overlay.openInApp(win.callConversation)
                 }
                 QQC2.Button {
-                    text: "收起"
+                    text: i18nc("@action:button fold the call panel", "Minimize")
                     onClicked: win.callDetails = false
                 }
             }
@@ -598,7 +605,7 @@ Window {
                 id: callText
                 Layout.fillWidth: true
                 visible: win.callDetails && win.callPhase === "agent"
-                placeholderText: "私下给助理的文字指令"
+                placeholderText: i18nc("@info:placeholder", "Private instruction for the assistant")
                 onAccepted: {
                     if (!text.trim()) return
                     win.callCommand("instruct", {text: text})
@@ -607,7 +614,7 @@ Window {
             }
             Text {
                 visible: win.callDetails
-                text: "拖动可移动 · 点按可收起"
+                text: i18nc("@info the call panel", "Drag to move · Tap to minimize")
                 color: Theme.dim
                 font.pixelSize: 12
             }

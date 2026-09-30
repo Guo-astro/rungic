@@ -4,6 +4,12 @@ lib=$DESTDIR/usr/lib/rungic-cua
 mkdir -p "$lib"
 cp -r "$SRC/upstream/arc-cua/src/arc_cua" "$C/rungic_cua" "$lib/"
 install -Dm755 "$C/rungic-cua" "$DESTDIR/usr/bin/rungic-cua"
+# Captions and questions in the desktop's language (rungic_cua.i18n): po/<lang>/rungic-cua.po.
+for po in "$C"/po/*/rungic-cua.po; do
+    lang=$(basename "$(dirname "$po")")
+    mkdir -p "$DESTDIR/usr/share/locale/$lang/LC_MESSAGES"
+    msgfmt -c --check-format -o "$DESTDIR/usr/share/locale/$lang/LC_MESSAGES/rungic-cua.mo" "$po"
+done
 # KWin grants ScreenShot2 to this executable's desktop file only (docs/64).
 mkdir -p "$DESTDIR/usr/libexec"
 cc -O2 -g1 -Wall -o "$DESTDIR/usr/libexec/rungic-screenshot" "$C/screenshot/rungic-screenshot.c" \

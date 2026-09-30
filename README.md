@@ -8,7 +8,7 @@
   <img src="docs/images/readme/demo.gif" width="300" alt="Asked for a rocket, the assistant plans the work, builds the model in Blender on its own screen, renders it and hands back the picture and the file">
 </p>
 
-<p align="center"><sub>“Make a little rocket in Blender and render it for me.” The whole task took 2½ minutes; shown here sped up.</sub></p>
+<p align="center"><sub>“Make a little rocket in Blender and render it for me.” The whole task took about 2½ minutes; shown here sped up.</sub></p>
 
 Rungic turns a phone into a real computer. It opens to the KDE Plasma desktop and runs desktop software such as Firefox, Blender, Krita and VS Code. Connect a TV and it becomes a desktop PC.
 
@@ -127,7 +127,7 @@ The assistant has two parts: a realtime voice model talks with you, and an agent
 
 Rungic is under active development and in private preview. Still being polished:
 
-- The assistant speaks Chinese and its interface is in Chinese for now.
+- The interface follows the desktop's language (English and Chinese so far), and the assistant answers in the language you speak to it. Account setup and some technical documents are still in Chinese.
 - Larger tasks, such as modelling in 3D, take the assistant about two minutes; work to speed this up is under way.
 - The call agent, which makes and answers phone calls for you, is still being tested.
 - Vulkan desktop rendering flickers on this GPU family, so the desktop uses OpenGL ES for now.

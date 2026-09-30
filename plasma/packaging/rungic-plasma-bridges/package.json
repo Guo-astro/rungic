@@ -6,10 +6,13 @@
   "paths": [
     "plasma/device-panel.py",
     "plasma/com.rungic.Platform.desktop",
+    "plasma/po/zh_CN/rungic-platform.po",
+    "plasma/po/zh_CN/rungic-render.po",
     "shared/platform",
     "shared/media/media-bridge.py",
     "shared/media/audio-route.py",
     "shared/media/camera-source.cpp",
+    "shared/po",
     "plasma/rungic-plasma-network.service",
     "plasma/rungic-plasma-bluetooth.service",
     "plasma/rungic-plasma-modem.service",
@@ -22,7 +25,8 @@
     "libjson-glib-dev",
     "libyuv-dev",
     "pkgconf",
-    "g++"
+    "g++",
+    "gettext"
   ],
   "description": "Plasma Mobile on Android: Android bridges\nThe Android device panel, clipboard, Wi-Fi and network for NetworkManager clients,\nBluetooth for BlueZ clients (bluedevil), the mobile network\nfor ModemManager clients, the\nmicrophone and camera bridge (PipeWire camera sources from Android frames) and the\naudio route switch.",
   "units": {

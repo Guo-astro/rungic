@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// "投屏到": the TV picker the cast tile opens on the phone screen (docs/58). Scans while
+// "Cast to": the TV picker the cast tile opens on the phone screen (docs/58). Scans while
 // open, merges each TV's Wi-Fi Display entries (rungic-cast "receivers") and connects the
 // TV tapped. While casting it shows the TV in use, the TVs seen lately (Android cannot
 // scan during a session) and disconnects; tapping another TV switches to it.
@@ -45,7 +45,7 @@ Window {
     height: screen ? screen.height : 800
     visible: false
     color: "transparent"
-    title: "投屏到"
+    title: i18n("Cast to")
 
     LayerShell.Window.scope: "rungic-cast-picker"
     LayerShell.Window.anchors: LayerShell.Window.AnchorTop | LayerShell.Window.AnchorBottom
@@ -93,9 +93,9 @@ Window {
     // Merge a rungic-cast result into the list; a scan's available receivers become "found".
     function merge(result, fromScan) {
         if (result.error) {
-            if (result.code === "wifi-unavailable") error = "请先开启 Wi-Fi";
-            else if (result.code === "component-missing") error = "投屏组件未就绪";
-            else error = "搜索失败，可在 Android 投屏设置中查看";
+            if (result.code === "wifi-unavailable") error = i18n("Turn on Wi-Fi first");
+            else if (result.code === "component-missing") error = i18n("Casting isn't ready yet");
+            else error = i18n("Search failed. Check Android's cast settings.");
             return;
         }
         if (result.connection) { connectionPhase = result.connection.phase; elapsedSeconds = result.connection.elapsed_seconds; }
@@ -133,8 +133,8 @@ Window {
                 // A cancel (disconnect) ends the connect with an error too: say nothing then.
                 if (result.code !== "cancelled" && visible && !cancelled) {
                     error = result.code === "timeout"
-                        ? "没有连上“" + name + "”，接收端未能完成网络连接和协商，请重试"
-                        : "连接“" + name + "”失败";
+                        ? i18n("Couldn't connect to “%1”: the receiver didn't finish joining the network and negotiating. Try again.", name)
+                        : i18n("Couldn't connect to “%1”", name);
                 }
                 cancelled = false;
                 return;
@@ -164,12 +164,14 @@ Window {
                                          && receivers.filter(r => r.found).length === 0
 
     readonly property string statusLine: {
-        if (connectingTo) return (connectionPhase === "negotiating" ? "正在协商" : "等待接收端联网") + " · " + elapsedSeconds + " 秒";
-        if (reconnecting) return "电视断开，正在重连…";
-        if (casting) return "正在投屏到 " + (current.length ? current[0].name : tvName);
-        if (scanning) return "正在搜索附近的电视…";
-        if (nothingFound) return "附近没有找到电视";
-        return "搜索已结束";
+        if (connectingTo) return connectionPhase === "negotiating"
+            ? i18np("Negotiating · %1 second", "Negotiating · %1 seconds", elapsedSeconds)
+            : i18np("Waiting for the receiver to join the network · %1 second", "Waiting for the receiver to join the network · %1 seconds", elapsedSeconds);
+        if (reconnecting) return i18n("TV disconnected, reconnecting…");
+        if (casting) return i18n("Casting to %1", current.length ? current[0].name : tvName);
+        if (scanning) return i18n("Looking for TVs nearby…");
+        if (nothingFound) return i18n("No TVs found nearby");
+        return i18n("Search finished");
     }
 
     Timer {
@@ -245,7 +247,7 @@ Window {
                         Layout.fillWidth: true
                         spacing: Kirigami.Units.smallSpacing
                         Kirigami.Heading {
-                            text: picker.casting || picker.reconnecting ? "投屏设备" : "投屏到"
+                            text: picker.casting || picker.reconnecting ? i18n("Cast device") : i18n("Cast to")
                             level: 2
                             font.weight: Font.Bold
                         }
@@ -269,20 +271,20 @@ Window {
                     QQC2.ToolButton {
                         icon.name: "window-close-symbolic"
                         display: QQC2.AbstractButton.IconOnly
-                        text: "关闭"
-                        Accessible.name: "关闭"
+                        text: i18n("Close")
+                        Accessible.name: i18n("Close")
                         implicitWidth: Kirigami.Units.gridUnit * 2.75
                         implicitHeight: implicitWidth
                         onClicked: picker.close()
                     }
                 }
 
-                SectionLabel { text: "正在使用"; visible: picker.current.length > 0 }
+                SectionLabel { text: i18n("In use"); visible: picker.current.length > 0 }
                 Repeater {
                     model: picker.current
                     delegate: ReceiverRow {
                         receiver: modelData
-                        subtitle: picker.reconnecting ? "正在重连…" : "正在投屏"
+                        subtitle: picker.reconnecting ? i18n("Reconnecting…") : i18n("Casting")
                         emphasized: true
                         enabled: false // nothing to do on the TV in use
                         trailingIcon: picker.reconnecting ? "" : "checkmark"
@@ -290,16 +292,16 @@ Window {
                     }
                 }
 
-                SectionLabel { text: "上次使用"; visible: picker.lastUsed.length > 0 }
+                SectionLabel { text: i18n("Last used"); visible: picker.lastUsed.length > 0 }
                 Repeater {
                     model: picker.lastUsed
                     delegate: ReceiverRow {
                         receiver: modelData
-                        subtitle: picker.connectingTo === modelData.name ? "正在连接…接收端切换网络可能需要两分钟"
-                            : modelData.busy ? "忙碌中 · 正被其他设备使用"
-                            : modelData.found ? "上次使用 · 可连接"
-                            : picker.scanning ? "上次使用 · 正在查找…"
-                            : picker.casting ? "上次使用" : "上次使用 · 暂未找到，仍可尝试连接"
+                        subtitle: picker.connectingTo === modelData.name ? i18n("Connecting… The receiver can take up to two minutes to switch networks")
+                            : modelData.busy ? i18n("Busy · In use by another device")
+                            : modelData.found ? i18n("Last used · Available")
+                            : picker.scanning ? i18n("Last used · Looking…")
+                            : picker.casting ? i18n("Last used") : i18n("Last used · Not found yet, you can still try connecting")
                         emphasized: picker.connectingTo === modelData.name
                         busyIndicator: emphasized
                         enabled: !picker.connectingTo && !modelData.busy
@@ -308,16 +310,16 @@ Window {
                 }
 
                 SectionLabel {
-                    text: picker.casting || picker.reconnecting ? "最近发现的设备" : "附近的设备"
+                    text: picker.casting || picker.reconnecting ? i18n("Recently found devices") : i18n("Nearby devices")
                     visible: picker.others.length > 0
                 }
                 Repeater {
                     model: picker.others
                     delegate: ReceiverRow {
                         receiver: modelData
-                        subtitle: picker.connectingTo === modelData.name ? "正在连接…接收端切换网络可能需要两分钟"
-                            : modelData.busy ? "忙碌中 · 正被其他设备使用"
-                            : modelData.found ? "可连接" : "最近发现"
+                        subtitle: picker.connectingTo === modelData.name ? i18n("Connecting… The receiver can take up to two minutes to switch networks")
+                            : modelData.busy ? i18n("Busy · In use by another device")
+                            : modelData.found ? i18n("Available") : i18n("Recently found")
                         emphasized: picker.connectingTo === modelData.name
                         busyIndicator: emphasized
                         enabled: !picker.connectingTo && !modelData.busy
@@ -340,7 +342,7 @@ Window {
                     }
                     Kirigami.Heading {
                         Layout.alignment: Qt.AlignHCenter
-                        text: "附近没有找到电视"
+                        text: i18n("No TVs found nearby")
                         level: 3
                     }
                 }
@@ -348,12 +350,12 @@ Window {
                 Note {
                     visible: !picker.casting && !picker.reconnecting
                     text: picker.nothingFound
-                        ? "1. 在电视上打开“无线投屏”，停在等待连接的画面\n2. 电视进入屏保后无法被搜到，先按遥控器唤醒\n3. 手机的 Wi-Fi 保持打开，并尽量靠近电视"
-                        : "找不到电视？请让电视停在“无线投屏”的等待画面，电视进入屏保后无法被搜到。"
+                        ? i18n("1. Open screen mirroring on the TV and leave it on the waiting screen\n2. A TV in its screensaver can't be found, so wake it with the remote first\n3. Keep the phone's Wi-Fi on and stay close to the TV")
+                        : i18n("Can't find your TV? Leave it on the screen mirroring waiting screen. A TV in its screensaver can't be found.")
                 }
                 Note {
                     visible: picker.casting || picker.reconnecting
-                    text: "投屏时无法搜索新电视。换到另一台电视时，会先断开当前电视，新电视出现画面前会中断几秒，桌面上打开的应用不受影响。"
+                    text: i18n("You can't search for new TVs while casting. Switching to another TV disconnects the current one first, so the picture pauses for a few seconds until the new TV shows it. Apps open on the desktop keep running.")
                 }
 
                 QQC2.Label {
@@ -379,14 +381,14 @@ Window {
                         Layout.fillWidth: true
                         Layout.preferredHeight: Kirigami.Units.gridUnit * 3
                         visible: picker.connectingTo !== ""
-                        text: "取消连接"
+                        text: i18n("Cancel")
                         onClicked: picker.cancelConnect()
                     }
                     QQC2.Button {
                         Layout.fillWidth: true
                         Layout.preferredHeight: Kirigami.Units.gridUnit * 3
                         visible: !picker.scanning && !picker.connectingTo && !picker.casting && !picker.reconnecting
-                        text: "重新搜索"
+                        text: i18n("Search again")
                         icon.name: "view-refresh"
                         highlighted: picker.nothingFound
                         onClicked: picker.rescan()
@@ -395,7 +397,7 @@ Window {
                         Layout.fillWidth: true
                         Layout.preferredHeight: Kirigami.Units.gridUnit * 3
                         visible: (picker.casting || picker.reconnecting) && !picker.connectingTo
-                        text: picker.reconnecting ? "停止重连" : "断开投屏"
+                        text: picker.reconnecting ? i18n("Stop reconnecting") : i18n("Stop casting")
                         icon.name: picker.reconnecting ? "dialog-cancel" : "network-disconnect"
                         palette.buttonText: Kirigami.Theme.negativeTextColor
                         onClicked: picker.disconnect()
@@ -403,7 +405,7 @@ Window {
                     QQC2.ToolButton {
                         Layout.alignment: Qt.AlignLeft
                         Layout.preferredHeight: Kirigami.Units.gridUnit * 2.75
-                        text: "Android 投屏设置"
+                        text: i18n("Android cast settings")
                         icon.name: "external-link-symbolic"
                         onClicked: {
                             picker.runner("settings", () => {});
@@ -453,7 +455,7 @@ Window {
         implicitHeight: Kirigami.Units.gridUnit * 4.25
         leftPadding: Kirigami.Units.gridUnit * 1.25
         rightPadding: Kirigami.Units.gridUnit * 1.25
-        Accessible.name: receiver.name + "，" + subtitle
+        Accessible.name: i18nc("@info:whatsthis TV name, then its state", "%1, %2", receiver.name, subtitle)
         onClicked: activated()
 
         contentItem: RowLayout {

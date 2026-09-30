@@ -43,8 +43,11 @@ if [ "$task_apk_ocr" != none ]; then
 fi
 cd "$task_root/plasma/native-apk"
 "$task_bt/aapt2" compile --dir res -o "$task_build/resources.zip"
-"$task_bt/aapt2" link -o "$task_build/resources.apk" -I "$task_jar" --manifest AndroidManifest.xml -A "$task_build/assets" -0 tflite "$task_build/resources.zip"
-mapfile -t task_sources < <(find src -name '*.java')
+# res/values (English) and res/values-zh-rCN; --java writes R.java for getString(R.string.…).
+rm -rf "$task_build/gen"; mkdir -p "$task_build/gen"
+"$task_bt/aapt2" link -o "$task_build/resources.apk" -I "$task_jar" --manifest AndroidManifest.xml -A "$task_build/assets" -0 tflite \
+    --java "$task_build/gen" "$task_build/resources.zip"
+mapfile -t task_sources < <(find src "$task_build/gen" -name '*.java')
 javac -encoding UTF-8 -source 8 -target 8 -classpath "$task_jar" -d "$task_build/classes" "${task_sources[@]}"
 mapfile -t task_classes < <(find "$task_build/classes" -name '*.class')
 "$task_bt/d8" --lib "$task_jar" --min-api 30 --output "$task_build/dex" "${task_classes[@]}"

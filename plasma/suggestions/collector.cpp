@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "collector.h"
 #include "model.h"
+#include <KLazyLocalizedString>
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
@@ -17,6 +18,18 @@ static Output run(const QString &program, const QStringList &args, int timeout =
     return {p.readAllStandardOutput().left(1024 * 1024), p.exitStatus() == QProcess::NormalExit && p.exitCode() == 0};
 }
 static void add(QJsonArray &items, QJsonObject o, const QString &source) { o["source"] = source; items.append(o); }
+// The system half runs as root from a timer, outside the desktop session and its language. Texts
+// stay untranslated messages (text and arguments; "l10n" for title and body) that the user's
+// service renders in the desktop language (Care::localized); title and body hold this process's.
+static QJsonObject message(const KLazyLocalizedString &text, const QStringList &args = {}) {
+    return {{"text", QString::fromUtf8(text.untranslatedText())}, {"args", QJsonArray::fromStringList(args)}};
+}
+static QJsonObject localizedObservation(const QString &key, const QJsonObject &title, const QJsonObject &body,
+                                        const QString &kind, int severity, const QJsonObject &evidence) {
+    auto o = observation(key, translated(title), translated(body), kind, severity, evidence);
+    o["l10n"] = QJsonObject{{"title", title}, {"body", body}};
+    return o;
+}
 QStringList runningProcesses() {
     QStringList result;
     for (const auto &pid : QDir("/proc").entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
@@ -58,31 +71,32 @@ QJsonObject collectSystem(const QString &kb, const QString &cores) {
         }
         for (auto it = groups.begin(); it != groups.end(); ++it) {
             const auto e = it.value().toObject();
-            auto o = observation("crash:" + it.key(), e.value("package").toString() + " 出现意外退出",
-                QString("最近保留了 %1 份相同签名的报告。可以让 Agent 检查原因，尚未确定根因。").arg(e.value("reports").toInt()), "fault", 1, e);
+            auto o = localizedObservation("crash:" + it.key(), message(kli18n("%1 quit unexpectedly"), {e.value("package").toString()}),
+                message(kli18n("Reports with the same signature kept recently: %1. Agent can look into the cause; the root cause isn't known yet."),
+                        {QString::number(e.value("reports").toInt())}), "fault", 1, e);
             o["process"] = e.value("process");
             add(items, o, "crashes");
         }
         sources.append("crashes");
-    } else coverage.append("崩溃目录暂不可读");
+    } else coverage.append(message(kli18n("The crash reports folder can't be read right now.")));
 
     for (const QString mount : {QString("/"), QString("/home")}) {
         QStorageInfo disk(mount);
         if (!disk.isValid() || !disk.isReady()) continue;
         const auto source = "storage:" + mount; sources.append(source);
         if (disk.bytesAvailable() < 1024LL * 1024 * 1024 && disk.bytesAvailable() * 100 < disk.bytesTotal() * 5) {
-            add(items, observation(source, mount == "/" ? "系统存储空间不足" : "用户存储空间不足",
-                "剩余空间不足，可能影响保存或软件更新。可以检查占用并准备清理建议。", "fault", 2,
+            add(items, localizedObservation(source, mount == "/" ? message(kli18n("System storage is almost full")) : message(kli18n("Your storage is almost full")),
+                message(kli18n("Low free space can stop files from saving and software from updating. Agent can check what's using it and suggest what to clean up.")), "fault", 2,
                 {{"availableBytes", disk.bytesAvailable()}, {"totalBytes", disk.bytesTotal()}, {"mount", mount}}), source);
         }
     }
     const auto audit = run("dpkg", {"--audit"});
     if (audit.ok) {
         sources.append("packages-audit");
-        if (!audit.text.trimmed().isEmpty()) add(items, observation("packages-audit", "软件安装尚未完整结束",
-            "软件包管理器报告了未完成的安装状态。Agent 可以先检查恢复办法。", "fault", 1,
+        if (!audit.text.trimmed().isEmpty()) add(items, localizedObservation("packages-audit", message(kli18n("A software installation didn't finish")),
+            message(kli18n("The package manager reports an unfinished installation. Agent can look for a way to recover first.")), "fault", 1,
             {{"check", "dpkg --audit"}, {"digest", fingerprint(QString::fromUtf8(audit.text))}}), "packages-audit");
-    } else coverage.append("软件包完整性检查未完成");
+    } else coverage.append(message(kli18n("The package integrity check didn't finish.")));
 
     const auto failed = run("systemctl", {"--failed", "--no-legend", "--plain", "--no-pager"});
     if (failed.ok) {
@@ -90,10 +104,11 @@ QJsonObject collectSystem(const QString &kb, const QString &cores) {
         for (const auto &line : QString::fromUtf8(failed.text).split('\n', Qt::SkipEmptyParts)) {
             const auto unit = line.simplified().section(' ', 0, 0);
             if (!unit.endsWith(".service") || unit.startsWith("rungic-suggestions")) continue;
-            add(items, observation("system-service:" + unit, "系统服务需要检查", unit + " 运行失败，可以先检查影响与恢复办法。", "fault", 1,
+            add(items, localizedObservation("system-service:" + unit, message(kli18n("A system service needs checking")),
+                message(kli18n("%1 failed. Check what it affects and how to recover."), {unit}), "fault", 1,
                 {{"unit", unit}, {"state", "failed"}, {"scope", "system"}}), "system-services");
         }
-    } else coverage.append("系统服务检查未完成");
+    } else coverage.append(message(kli18n("The system services check didn't finish.")));
     QStringList errors;
     const auto entries = knowledge(kb, &errors);
     if (packages.ok && errors.isEmpty()) {
@@ -115,7 +130,7 @@ QJsonObject collectSystem(const QString &kb, const QString &cores) {
             o["knowledge"] = e.value("id"); o["upstreamProject"] = e.value("upstreamProject");
             add(items, o, "compatibility");
         }
-    } else coverage.append("兼容性目录或软件清单未完成校验");
+    } else coverage.append(message(kli18n("The compatibility catalog or the package list couldn't be verified.")));
     for (const auto &error : errors) coverage.append(error);
     return {{"schema", 1}, {"generated", now}, {"items", items}, {"sources", sources},
             {"coverage", coverage}, {"release", release}};
@@ -128,11 +143,11 @@ QJsonObject collectUser() {
         for (const auto &line : QString::fromUtf8(failed.text).split('\n', Qt::SkipEmptyParts)) {
             auto unit = line.simplified().section(' ', 0, 0);
             if (!unit.endsWith(".service") || unit.startsWith("rungic-suggestions")) continue;
-            add(items, observation("service:" + unit, "后台服务需要检查",
-                unit + " 启动失败，可以让 Agent 查看它是否影响正在使用的功能。", "fault", 1,
+            add(items, localizedObservation("service:" + unit, message(kli18n("A background service needs checking")),
+                message(kli18n("%1 failed to start. Agent can check whether it affects what you're using."), {unit}), "fault", 1,
                 {{"unit", unit}, {"state", "failed"}}), "user-services");
         }
-    } else coverage.append("用户服务检查暂不可用");
+    } else coverage.append(message(kli18n("The user services check isn't available right now.")));
     return {{"items", items}, {"sources", sources}, {"coverage", coverage}};
 }
 }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// A row of the side panel: a conversation, "新对话", "设置".
+// A row of the side panel: a conversation, "New Chat", "Settings".
 // States: normal, pressed, current (the open conversation), disabled.
 import QtQuick
 import QtQuick.Layouts

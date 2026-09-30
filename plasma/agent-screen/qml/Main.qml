@@ -246,11 +246,11 @@ Window {
             state: root.captionState === "" ? "hidden" : root.captionState
             states: [
                 State { name: "hidden"; PropertyChanges { caption.shown: false } },
-                State { name: "working"; PropertyChanges { caption.shown: true; caption.dot: "#63d471"; caption.label: agent.activityText || "正在操作" } },
-                State { name: "done"; PropertyChanges { caption.shown: true; caption.dot: "#8ab4f8"; caption.label: agent.activityText ? "完成 · " + agent.activityText : "完成" } },
-                State { name: "question"; PropertyChanges { caption.shown: true; caption.dot: "#e0a83c"; caption.label: "需要你回答" + (agent.activityText ? " · " + agent.activityText : "") } },
-                State { name: "failed"; PropertyChanges { caption.shown: true; caption.dot: "#e0606d"; caption.label: "没做成" + (agent.activityText ? " · " + agent.activityText : "") } },
-                State { name: "stopped"; PropertyChanges { caption.shown: true; caption.dot: "#a1a9b1"; caption.label: "已停止" } }
+                State { name: "working"; PropertyChanges { caption.shown: true; caption.dot: "#63d471"; caption.label: agent.activityText || i18nc("@info:status the agent is at work on this screen", "Working") } },
+                State { name: "done"; PropertyChanges { caption.shown: true; caption.dot: "#8ab4f8"; caption.label: agent.activityText ? i18nc("@info:status %1 is what the agent did", "Done · %1", agent.activityText) : i18nc("@info:status", "Done") } },
+                State { name: "question"; PropertyChanges { caption.shown: true; caption.dot: "#e0a83c"; caption.label: agent.activityText ? i18nc("@info:status %1 is the agent's question", "Needs your answer · %1", agent.activityText) : i18nc("@info:status", "Needs your answer") } },
+                State { name: "failed"; PropertyChanges { caption.shown: true; caption.dot: "#e0606d"; caption.label: agent.activityText ? i18nc("@info:status %1 is what the agent tried", "Didn't work · %1", agent.activityText) : i18nc("@info:status", "Didn't work") } },
+                State { name: "stopped"; PropertyChanges { caption.shown: true; caption.dot: "#a1a9b1"; caption.label: i18nc("@info:status", "Stopped") } }
             ]
             Row {
                 id: captionRow
@@ -295,7 +295,7 @@ Window {
             Text {
                 id: nameText
                 anchors.centerIn: parent
-                text: agent.workspace > 0 ? "助理屏" : "桌面"
+                text: agent.workspace > 0 ? i18nc("@label name of the agent's screen", "Assistant Screen") : i18nc("@label name of the user's second screen", "Desktop")
                 color: "white"
                 font.pixelSize: 12
             }

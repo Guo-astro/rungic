@@ -1,0 +1,594 @@
+# Simplified Chinese translation of the Rungic suggestions service, applet and QML module.
+# SPDX-License-Identifier: GPL-2.0-or-later
+msgid ""
+msgstr ""
+"Project-Id-Version: rungic-suggestions\n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+msgid "Reconnecting to the suggestions service"
+msgstr "建议服务正在重新连接"
+
+msgid "%1 quit unexpectedly"
+msgstr "%1 出现意外退出"
+
+msgid "Reports with the same signature kept recently: %1. Agent can look into the cause; the root cause isn't known yet."
+msgstr "最近保留了 %1 份相同签名的报告。可以让 Agent 检查原因，尚未确定根因。"
+
+msgid "The crash reports folder can't be read right now."
+msgstr "崩溃目录暂不可读"
+
+msgid "System storage is almost full"
+msgstr "系统存储空间不足"
+
+msgid "Your storage is almost full"
+msgstr "用户存储空间不足"
+
+msgid "Low free space can stop files from saving and software from updating. Agent can check what's using it and suggest what to clean up."
+msgstr "剩余空间不足，可能影响保存或软件更新。可以检查占用并准备清理建议。"
+
+msgid "A software installation didn't finish"
+msgstr "软件安装尚未完整结束"
+
+msgid "The package manager reports an unfinished installation. Agent can look for a way to recover first."
+msgstr "软件包管理器报告了未完成的安装状态。Agent 可以先检查恢复办法。"
+
+msgid "The package integrity check didn't finish."
+msgstr "软件包完整性检查未完成"
+
+msgid "A system service needs checking"
+msgstr "系统服务需要检查"
+
+msgid "%1 failed. Check what it affects and how to recover."
+msgstr "%1 运行失败，可以先检查影响与恢复办法。"
+
+msgid "The system services check didn't finish."
+msgstr "系统服务检查未完成"
+
+msgid "The compatibility catalog or the package list couldn't be verified."
+msgstr "兼容性目录或软件清单未完成校验"
+
+msgid "A background service needs checking"
+msgstr "后台服务需要检查"
+
+msgid "%1 failed to start. Agent can check whether it affects what you're using."
+msgstr "%1 启动失败，可以让 Agent 查看它是否影响正在使用的功能。"
+
+msgid "The user services check isn't available right now."
+msgstr "用户服务检查暂不可用"
+
+msgid "The suggestions record is damaged or from an unsupported version; the original file was kept."
+msgstr "建议记录损坏或版本不支持，已保留原文件"
+
+msgid "Couldn't back up the old suggestions record, so it wasn't migrated."
+msgstr "无法备份原建议记录，未迁移"
+
+msgid "The old “when the app closes” condition can't be checked reliably. The suggestion stays pending; choose a reminder time again."
+msgstr "原应用退出条件无法可靠核验，已保留待处理，请重新选择提醒时间"
+
+msgid "The problem came back. Your earlier record and reminder choice are kept."
+msgstr "问题再次出现，保留此前记录与提醒选择"
+
+msgid "The latest check no longer matches this. That doesn't confirm the root cause is fixed."
+msgstr "复查不再匹配此项；不代表根因已确认修复"
+
+msgid "This suggestion no longer exists."
+msgstr "建议已不存在"
+
+msgid "Invalid plan status."
+msgstr "无效的方案状态"
+
+msgid "A plan ready to apply must include the exact changes, how to verify them and how to roll back."
+msgstr "可应用方案必须包含具体变更、验证及回退办法"
+
+msgid "The current evidence no longer matches. Check again first."
+msgstr "当前证据不再匹配，请先复查"
+
+msgid "This suggestion already has a task. Check its progress or stop it first."
+msgstr "该建议已有任务，先查看进度或停止"
+
+msgid "The diagnostics are out of date. Refresh and try again."
+msgstr "诊断信息已过期，请刷新后重试"
+
+msgid "The plan or its evidence has changed. Review the current plan and confirm it again."
+msgstr "方案或适用证据已变化，请重新查看并确认当前方案"
+
+msgid "Connecting to Agent"
+msgstr "正在连接 Agent"
+
+msgid "Agent is working on it"
+msgstr "Agent 正在处理"
+
+msgid "Done. See the result and next steps."
+msgstr "处理已结束，查看结果与下一步"
+
+msgid "Stopped. You can open the original conversation."
+msgstr "处理已停止，可查看原对话"
+
+msgid "Stop the task in progress first."
+msgstr "请先停止正在进行的处理"
+
+msgid "The app instance can't be identified reliably. Choose a reminder time instead."
+msgstr "缺少可靠的应用实例身份，请选择时间提醒"
+
+msgid "This item is archived."
+msgstr "该项已归档"
+
+msgid "Kept in your suggestions. Pick it up any time."
+msgstr "保留在建议中，随时可以继续"
+
+msgid "Choose a reminder time within the next year."
+msgstr "请选择未来一年内的提醒时间"
+
+msgctxt "reminder date and time, QDateTime::toString format"
+msgid "MMM d, HH:mm"
+msgstr "M月d日 HH:mm"
+
+msgctxt "@info reminder note, %1 is the date and time"
+msgid "Reminder: %1"
+msgstr "%1 提醒"
+
+msgid "Reminders are off. You can turn them back on any time."
+msgstr "已停止提醒，可随时恢复"
+
+msgid "Back in your suggestions."
+msgstr "已恢复到建议列表"
+
+msgid "Unsupported action."
+msgstr "不支持的操作"
+
+msgid "It's the time you chose to deal with this."
+msgstr "已到你约定的处理时间"
+
+msgid "Checking on the earlier task's progress"
+msgstr "正在核对原任务进度"
+
+msgid "Stopped"
+msgstr "处理已停止"
+
+msgid "The earlier task is no longer running. Check the saved result before deciding whether to retry."
+msgstr "原任务已不在运行，请查看已保存结果后决定是否重试"
+
+msgid "System diagnostics haven't updated yet. Existing suggestions are kept; due reminders wait until they do."
+msgstr "系统诊断尚未更新，保留已有建议；暂不触发过期提醒"
+
+msgid "1 suggestion to look at, now or later."
+msgid_plural "%1 suggestions to look at, now or later."
+msgstr[0] "有 %1 项建议可查看，也可以稍后处理。"
+
+msgid "View suggestions"
+msgstr "查看建议"
+
+msgid "Later"
+msgstr "稍后"
+
+msgid "Couldn't save the task approval, so nothing was started."
+msgstr "无法保存任务授权，未开始执行"
+
+msgid "No investigation is running."
+msgstr "当前没有正在运行的调查"
+
+msgid "The stop request wasn't confirmed: %1"
+msgstr "停止请求未确认：%1"
+
+msgid "Stop requested. Waiting for Agent to confirm."
+msgstr "已请求停止，等待 Agent 确认"
+
+msgid "The task was replaced, so the current record wasn't overwritten."
+msgstr "任务已被替代，未覆盖当前记录"
+
+msgid "Invalid upstream status."
+msgstr "无效的上游状态"
+
+msgid "This status needs an HTTPS upstream link that can be checked."
+msgstr "该状态需要可核对的 HTTPS 上游链接"
+
+msgid "Recorded by the maintainer; the upstream wasn't checked automatically."
+msgstr "维护端记录，未自动核验远端"
+
+msgid "There is nothing to update in the record."
+msgstr "没有可更新的处理记录"
+
+msgid "Internal feedback material. Add a minimal reproduction, expected and actual results and tests; a maintainer submits it after checking the target project's rules."
+msgstr "内部反馈准备材料；需补充最小复现、预期/实际结果和测试，核对目标项目规则后由维护者提交"
+
+msgid "Minimal reproduction"
+msgstr "最小复现"
+
+msgid "Independent verification"
+msgstr "独立验证"
+
+msgid "Maintainer review"
+msgstr "维护者审阅"
+
+msgid "Feedback material was saved on this device. Nothing has been sent."
+msgstr "已生成本地反馈材料，尚未对外发送"
+
+msgid "A desktop component quit unexpectedly"
+msgstr "桌面组件曾意外退出"
+
+msgid "Suggestion"
+msgstr "建议"
+
+msgid "not yet confirmed"
+msgstr "待核实"
+
+msgid "%1 crash report saved. Component version: %2"
+msgid_plural "%1 crash reports saved. Component version: %2"
+msgstr[0] "已保存 %1 份异常记录。相关组件版本：%2"
+
+msgid "The package version matches; how it behaves on this device still needs checking."
+msgstr "版本匹配，需复核本机实际表现"
+
+msgid "A service failed; its actual impact still needs checking."
+msgstr "检测到服务运行失败，需要确认实际影响。"
+
+msgid "From diagnostics on this device; checked again before anything is done."
+msgstr "来自本机诊断，处理前会重新核对。"
+
+msgid "In progress"
+msgstr "正在处理"
+
+msgid "Needs your review"
+msgstr "需要你查看"
+
+msgid "Scheduled"
+msgstr "已安排"
+
+msgid "Archived"
+msgstr "已归档"
+
+msgid "Muted"
+msgstr "不再提醒"
+
+msgid "Problem"
+msgstr "使用问题"
+
+msgid "Improvement"
+msgstr "改善建议"
+
+msgid "Suggestion options"
+msgstr "建议选项"
+
+msgid "Show details"
+msgstr "查看详情"
+
+msgid "Keep for later"
+msgstr "保留待处理"
+
+msgid "Don't remind me about this"
+msgstr "不再提醒这个问题"
+
+msgid "Prepare feedback"
+msgstr "准备反馈材料"
+
+msgid "A plan is ready to review and apply"
+msgstr "方案已准备，可核对后应用"
+
+msgid "No plan can be applied right now"
+msgstr "当前暂无可应用方案"
+
+msgid "Still needs investigation"
+msgstr "仍需调查"
+
+msgid "Plan status: %1"
+msgstr "方案状态：%1"
+
+msgid "Plan: %1"
+msgstr "方案：%1"
+
+msgid "Verification: %1"
+msgstr "验证：%1"
+
+msgid "Rollback: %1"
+msgstr "回退：%1"
+
+msgid "Basis: %1"
+msgstr "判断依据：%1"
+
+msgid "View progress"
+msgstr "查看进度"
+
+msgid "Restore"
+msgstr "恢复建议"
+
+msgid "View result"
+msgstr "查看处理结果"
+
+msgid "Ask Agent to check"
+msgstr "让 Agent 检查"
+
+msgid "Stop"
+msgstr "停止"
+
+msgid "Got it, archive"
+msgstr "已阅，归档结果"
+
+msgid "Apply this plan"
+msgstr "应用上述方案"
+
+msgid "Agent got the request. You can leave this page; the result will stay in your suggestions."
+msgstr "Agent 已接到检查请求，可离开此页面，结果会留在建议中。"
+
+msgid "Today"
+msgstr "今天"
+
+msgid "Suggestions"
+msgstr "建议"
+
+msgctxt "today's date on the home feed, Qt date format"
+msgid "dddd, MMMM d"
+msgstr "M月d日 dddd"
+
+msgctxt "@info %1 is today's date"
+msgid "%1 · Looking out for how your phone is doing"
+msgstr "%1 · 为你留意手机的使用情况"
+
+msgid "Problems found, suggested improvements and their progress all stay here."
+msgstr "发现的问题、改善建议和处理进展，都保留在这里。"
+
+msgid "Pending"
+msgstr "待处理"
+
+msgid "History"
+msgstr "历史"
+
+msgid "Refresh"
+msgstr "刷新"
+
+msgid "Checking again. System diagnostics update every minute."
+msgstr "正在复查，系统诊断每分钟更新。"
+
+msgid "No history yet"
+msgstr "还没有历史记录"
+
+msgid "Nothing needs your attention right now"
+msgstr "暂时没有需要处理的建议"
+
+msgid "Some checks haven't finished yet. Refresh later to see them."
+msgstr "部分检查暂未完成，可稍后刷新查看。"
+
+msgid "New findings will appear here as cards."
+msgstr "有新的发现时，卡片会出现在这里。"
+
+msgid "When should we come back to this?"
+msgstr "什么时候再处理？"
+
+msgid "This only schedules a reminder. No software is changed automatically."
+msgstr "只安排提醒，不会自动修改软件。"
+
+msgid "Remind me in an hour"
+msgstr "一小时后提醒"
+
+msgid "Remind me tomorrow at 10:00"
+msgstr "明天 10:00 提醒"
+
+msgid "Cancel"
+msgstr "取消"
+
+msgid "Apply the fix"
+msgstr "应用修复方案"
+
+msgid "Apply"
+msgstr "应用"
+
+msgid "The plan or its evidence has changed. Cancel, review the current plan, then decide whether to apply it."
+msgstr "方案或适用证据已变化。请取消后查看当前方案，再决定是否应用。"
+
+msgid "Agent will carry out the plan shown and verify the result. Any steps that close apps or restart follow the plan."
+msgstr "Agent 将按已展示的方案执行，并验证结果。涉及的关闭应用或重启步骤以方案为准。"
+
+msgid "Agent Suggestions widget"
+msgstr "Agent 建议小组件"
+
+msgid "Agent Suggestions"
+msgstr "Agent 建议"
+
+msgid "%1 item  ›"
+msgid_plural "%1 items  ›"
+msgstr[0] "%1 项  ›"
+
+msgid "View  ›"
+msgstr "查看  ›"
+
+msgid "Open Agent Suggestions"
+msgstr "打开 Agent 建议"
+
+msgctxt "@action %1 is a suggestion's title"
+msgid "%1, view suggestion"
+msgstr "%1，查看建议"
+
+msgid "Result ready"
+msgstr "有处理结果"
+
+msgid "For later"
+msgstr "稍后处理"
+
+msgid "Ask Agent to check, or leave it for later."
+msgstr "可以让 Agent 检查，或留待稍后处理。"
+
+msgid "No suggestions right now"
+msgstr "暂时没有待处理建议"
+
+msgid "Some checks haven't finished. See Agent for details."
+msgstr "部分检查尚未完成，可以在 Agent 中查看。"
+
+msgid "New findings will show up here."
+msgstr "有新发现时会留在这里。"
+
+msgid "confidence must be confirmed, suspected or unknown."
+msgstr "结论确定程度必须为 confirmed/suspected/unknown"
+
+msgid "Hide details"
+msgstr "收起详情"
+
+msgid "Show the full investigation"
+msgstr "查看完整调查"
+
+msgid "All suggestions"
+msgstr "全部建议"
+
+msgid "Each related record keeps its own evidence and findings; being grouped doesn't mean they share a root cause."
+msgstr "相关记录分别保留证据和调查结论；同组不代表相同根因。"
+
+msgid "no records yet"
+msgstr "尚无记录"
+
+msgid "Not signed in"
+msgstr "未登录"
+
+msgid "Connecting"
+msgstr "正在连接"
+
+msgid "Usage window"
+msgstr "额度窗口"
+
+msgid "%1-day limit"
+msgid_plural "%1-day limit"
+msgstr[0] "%1 天额度"
+
+msgid "%1-hour limit"
+msgid_plural "%1-hour limit"
+msgstr[0] "%1 小时额度"
+
+msgid "%1-minute limit"
+msgid_plural "%1-minute limit"
+msgstr[0] "%1 分钟额度"
+
+msgid "No reset time given"
+msgstr "未提供重置时间"
+
+msgid "Reset time reached, waiting for an update"
+msgstr "重置时间已到，等待更新"
+
+msgctxt "@info %1 hours and %2 minutes"
+msgid "Resets in %1 h %2 min"
+msgstr "%1 小时 %2 分钟后重置"
+
+msgctxt "@info"
+msgid "Resets in %1 min"
+msgstr "%1 分钟后重置"
+
+msgid "No usage recorded yet"
+msgstr "尚未收到用量记录"
+
+msgid "%1 tokens recorded on this device"
+msgstr "本机已记录 %1 token"
+
+msgid "Open the Codex assistant"
+msgstr "打开 Codex 助理"
+
+msgid "View Agent usage"
+msgstr "查看 Agent 用量"
+
+msgid "Working"
+msgstr "正在处理"
+
+msgid "Ready"
+msgstr "就绪"
+
+msgid "Not connected"
+msgstr "未连接"
+
+msgid "Usage not updated yet · View details"
+msgstr "用量暂未更新 · 查看详情"
+
+msgctxt "@info %1 percent used, %2 when it resets"
+msgid "%1% used · %2"
+msgstr "已用 %1% · %2"
+
+msgid "Pay as you go · no subscription reset"
+msgstr "按量使用 · 无订阅重置时间"
+
+msgid "View account usage and limits"
+msgstr "查看账户用量与额度"
+
+msgid "Model not read yet"
+msgstr "模型尚未读取"
+
+msgid "Recorded today: %1 tokens. Counts only the Codex turns this account ran through the assistant on this device; it leaves out voice and is not the account's bill."
+msgstr "今日记录 %1 token。仅统计此账户通过本机助理收到的 Codex 回合用量；不包含语音消耗，也不是账户账单。"
+
+msgid "An API key is billed as you go; it has no subscription limits or reset times."
+msgstr "API Key 按量使用，未提供订阅额度和重置时间。"
+
+msgid "Account tokens to date: %1"
+msgstr "账户累计 token：%1"
+
+msgid "Last read: %1% used"
+msgstr "上次读取：已用 %1%"
+
+msgid "%1% used"
+msgstr "已用 %1%"
+
+msgid "Last read %1"
+msgstr "上次读取 %1"
+
+msgid "Waiting for usage data"
+msgstr "等待用量数据"
+
+msgid "Confirmed"
+msgstr "已确认"
+
+msgid "Suspected cause"
+msgstr "疑似原因"
+
+msgid "Cause not yet known"
+msgstr "原因待确认"
+
+msgid "%2, %1 related record, view suggestion"
+msgid_plural "%2, %1 related records, view suggestion"
+msgstr[0] "%2，%1 条相关记录，查看建议"
+
+msgid "%1 related record"
+msgid_plural "%1 related records"
+msgstr[0] "%1 条相关记录"
+
+msgid "%1 report"
+msgid_plural "%1 reports"
+msgstr[0] "%1 份报告"
+
+msgid "Investigating"
+msgstr "正在调查"
+
+msgctxt "@info a card that is a usage suggestion"
+msgid "Suggestion"
+msgstr "使用建议"
+
+msgid "One finding: "
+msgstr "一条调查结论："
+
+msgid "Waiting for its actual impact to be checked."
+msgstr "等待检查实际影响。"
+
+msgid "See each investigation and its progress"
+msgstr "查看各次调查与处理进度"
+
+msgid "The usage service isn't connected yet"
+msgstr "用量服务暂未连接"
+
+msgid "Agent usage is unavailable right now; try again later"
+msgstr "Agent 用量暂时不可用，稍后重试"
+
+msgid "The usage record wasn't saved: %1"
+msgstr "用量记录未保存：%1"
+
+msgid "%2, %1 related record, card %3 of %1, view suggestion"
+msgid_plural "%2, %1 related records, card %3 of %1, view suggestion"
+msgstr[0] "%2，%1 条相关记录，第 %3 / %1 张，查看建议"
+
+msgid "%1 record in all  ›"
+msgid_plural "%1 records in all  ›"
+msgstr[0] "共 %1 条记录  ›"
+
+msgid "↑ Swipe up for the next · Tap for details"
+msgstr "↑ 上滑切换 · 点击查看详情"
+
+msgid "↓ Swipe down for the previous · Tap for details"
+msgstr "↓ 下滑查看上一张 · 点击查看详情"
+
+msgid "↑↓ Swipe to switch · Tap for details"
+msgstr "↑↓ 滑动切换 · 点击查看详情"

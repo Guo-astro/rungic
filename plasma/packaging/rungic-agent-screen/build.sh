@@ -15,6 +15,7 @@ ln -sf rungic-agent-screen "$DESTDIR/usr/bin/rungic-desktop-mode"
 for app in AgentScreen DesktopMode; do
     install -Dm644 "$A/com.rungic.$app.desktop" "$DESTDIR/usr/share/applications/com.rungic.$app.desktop"
 done
+# Its window's catalog and the quick setting's (plasma_<plugin id>) come with cmake --install (po/).
 # One tile: desktop mode. The assistant's screen shows itself when the agent works there.
 q=$DESTDIR/usr/share/plasma/quicksettings/com.rungic.quicksetting.desktopmode
 install -Dm644 "$A/quicksetting/metadata.json" "$q/metadata.json"

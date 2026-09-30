@@ -1,0 +1,69 @@
+# Simplified Chinese translation of plasma_com.rungic.quicksetting.record (Rungic).
+# SPDX-License-Identifier: GPL-2.0-or-later
+msgid ""
+msgstr ""
+"Project-Id-Version: plasma_com.rungic.quicksetting.record\n"
+"PO-Revision-Date: 2026-09-30 00:00+0000\n"
+"Last-Translator: Rungic\n"
+"Language-Team: Chinese Simplified\n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+
+#: quicksetting/contents/ui/main.qml
+msgctxt "@label screen name in a recording's file name"
+msgid "Phone"
+msgstr "手机"
+
+#: quicksetting/contents/ui/main.qml
+msgctxt "@label screen name in a recording's file name, %1 its number"
+msgid "External %1"
+msgstr "外屏 %1"
+
+#: quicksetting/contents/ui/main.qml
+msgctxt "@label screen name in a recording's file name"
+msgid "External"
+msgstr "外屏"
+
+#: recordutil.cpp
+msgid "Screen recording saved"
+msgstr "录屏已保存"
+
+#: recordutil.cpp
+msgid "Screen recording failed"
+msgstr "录屏失败"
+
+#: recordutil.cpp
+msgid "The recording didn't finish. Check the free space and the hardware bridge."
+msgstr "录制未完成，请检查可用空间及硬件桥接。"
+
+#: recordutil.cpp
+msgid "Saving…"
+msgstr "正在保存…"
+
+#: recordutil.cpp
+msgid "Recording…"
+msgstr "正在录屏…"
+
+#: recordutil.cpp
+msgid "Record Screen"
+msgstr "录屏"
+
+#: recordutil.cpp
+msgid "Wait while the file is written"
+msgstr "请等待文件写入"
+
+#: recordutil.cpp
+msgid "Tap to stop recording"
+msgstr "点击结束录屏"
+
+#: recordutil.cpp
+msgid "Tap to record · Hold for quality and sound"
+msgstr "点击录制 · 长按设置画质与声音"
+
+#: recordutil.cpp
+msgid "Saving the recording timed out. The temporary file is kept for recovery."
+msgstr "保存录屏超时，保留临时文件供恢复。"

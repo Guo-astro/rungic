@@ -10,6 +10,7 @@ import uuid
 
 from call_proxy import CallProxy
 from cellular_audio import PCMPlayer, request
+from voice_i18n import _
 
 
 def confirmed_ended(status, call_id):
@@ -40,9 +41,9 @@ class CellularCall(CallProxy):
     def _start_media(self):
         status = request('status')
         if not status.get('audioCapable'):
-            raise RuntimeError('本机尚不支持系统通话音频接口')
+            raise RuntimeError(_("This phone doesn't support the system call audio interface yet"))
         if status.get('phoneState') or status.get('calls'):
-            raise RuntimeError('手机已有通话，请先结束当前通话')
+            raise RuntimeError(_('The phone is already in a call; end it first'))
         self.player = PCMPlayer()
 
     def _capture_remote(self):
@@ -50,11 +51,11 @@ class CellularCall(CallProxy):
 
     def dial(self):
         if not (self.active and self.ready.is_set()) or self.ending:
-            raise RuntimeError('Realtime 尚未就绪，未拨号')
+            raise RuntimeError(_('Realtime is not ready; nothing was dialed'))
         self.emit({'type': 'call-state', 'state': 'dialing'}, keep=False)
         result = request('dial', number=self.number, account=self.account, requestId=self.request_id)
         if not result.get('accepted'):
-            raise RuntimeError('重复的拨号请求已被阻止')
+            raise RuntimeError(_('A repeated dial request was blocked'))
         threading.Thread(target=self._watch, daemon=True).start()
         return {'dialed': True, 'requestId': self.request_id, 'confirmed_by': 'Android Telecom accepted'}
 
@@ -75,7 +76,7 @@ class CellularCall(CallProxy):
                         self.call_id = candidates[0]['id']
                         self.emit({'type': 'call-state', 'state': 'ringing'}, keep=False)
                     elif time.monotonic() > deadline:
-                        raise RuntimeError('未能识别已拨出的电话，请在系统电话中查看')
+                        raise RuntimeError(_("Couldn't identify the outgoing call; check the system phone app"))
                 call = next((c for c in calls if c['id'] == self.call_id), None)
                 if self.call_id:
                     if confirmed_ended(status, self.call_id):
@@ -83,10 +84,10 @@ class CellularCall(CallProxy):
                         return
                     # A transient bridge failure is not proof that the phone hung up.
                     if status.get('available') is False:
-                        raise RuntimeError('系统通话服务失去连接')
+                        raise RuntimeError(_('Lost the connection to the system call service'))
                     misses = misses + 1 if call is None else 0
                     if misses >= 2:
-                        raise RuntimeError('通话标识已改变，已停止代理，请从系统电话查看')
+                        raise RuntimeError(_('The call ID changed, so the assistant stopped; check the system phone app'))
                     if call and call['state'] == 4 and self.phase == 'agent' and not self._audio_opened:
                         self.player.open(self.call_id, self._remote, self._audio_failed)
                         self._audio_opened = True
@@ -97,7 +98,8 @@ class CellularCall(CallProxy):
                         try:
                             request('show-linux', id=self.call_id)
                         except Exception:
-                            self.emit({'type': 'call-note', 'text': '电话继续中，可手动返回 Rungic 查看通话条。'})
+                            self.emit({'type': 'call-note',
+                                       'text': _('The call goes on; return to Rungic to see the call bar.')})
                         threading.Thread(target=self._answered, daemon=True).start()
                 time.sleep(.5)
         except Exception as error:
@@ -109,7 +111,8 @@ class CellularCall(CallProxy):
 
     def _audio_failed(self):
         if self.active and not self.hanging:
-            self.emit({'type': 'call-error', 'text': '通话音频已断开，已交回系统电话；不会自动重拨。'})
+            self.emit({'type': 'call-error', 'text': _("The call audio was cut off; the call is back in the system "
+                                                       "phone app. It won't be redialed automatically.")})
             self.take_over()
 
     def _closed(self):
@@ -141,7 +144,8 @@ class CellularCall(CallProxy):
             time.sleep(1)
 
     def set_monitor(self, on):
-        self.emit({'type': 'call-note', 'text': '本机通话使用系统听筒；尚未提供独立旁听开关。'})
+        self.emit({'type': 'call-note',
+                   'text': _("Phone calls use the system earpiece; there's no separate listen-in switch yet.")})
 
     def hang_up(self):
         if self.hanging or self.phase == 'ended':
@@ -159,7 +163,7 @@ class CellularCall(CallProxy):
                 if self.phase == 'ended':
                     return
                 if not self.call_id:
-                    raise RuntimeError('电话状态尚不可用，请从系统电话挂断')
+                    raise RuntimeError(_("The call state isn't available yet; hang up in the system phone app"))
                 request('hangup', id=self.call_id)
                 while time.monotonic() < until:
                     status = request('status')
@@ -167,7 +171,7 @@ class CellularCall(CallProxy):
                         super(CellularCall, self).stop('hung up')
                         return
                     time.sleep(.25)
-                raise RuntimeError('系统尚未确认挂断，请从系统电话检查')
+                raise RuntimeError(_("The system hasn't confirmed the hang-up; check the system phone app"))
             except Exception as error:
                 self.emit({'type': 'call-error', 'text': str(error)})
                 self.emit({'type': 'call-state', 'state': 'hangup-failed'}, keep=False)
@@ -178,5 +182,5 @@ class CellularCall(CallProxy):
 
     def dtmf(self, digit):
         if not self.call_id:
-            raise RuntimeError('电话尚未接通')
+            raise RuntimeError(_("The call isn't connected yet"))
         return request('dtmf', id=self.call_id, digit=digit)

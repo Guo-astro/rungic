@@ -5,6 +5,7 @@ import QtQuick.Layouts
 import QtQuick.Controls as QQC2
 import com.rungic.design
 import com.rungic.suggestions
+import org.kde.ki18n
 
 Item {
     id: widget
@@ -46,13 +47,14 @@ Item {
             else list.contentY = list.originY + Math.max(0, Math.min(offset, list.contentHeight - list.height))
         })
     }
+    KI18nContext { id: l10n; translationDomain: "rungic-suggestions" }
     SuggestionsClient { id: client }
     PresentationTracker { view: list; suggestionsClient: client; active: widget.activeView && !pointer.pressed && !widget.stackMoving }
     onActiveViewChanged: client.watching(activeView)
     Component.onCompleted: { rebuild(); client.watching(activeView) }
     Component.onDestruction: client.watching(false)
     Accessible.role: Accessible.Grouping
-    Accessible.name: "Agent 建议小组件"
+    Accessible.name: l10n.i18n("Agent Suggestions widget")
 
     // The desktop and wallpaper remain the surrounding surface. Only individual
     // cards have a background; neither the widget nor its scrolling viewport does.
@@ -63,7 +65,7 @@ Item {
         RowLayout {
             Layout.fillWidth: true
             Text {
-                text: "Agent 建议"
+                text: l10n.i18n("Agent Suggestions")
                 color: "white"
                 font.pixelSize: 15
                 font.weight: Font.DemiBold
@@ -73,10 +75,10 @@ Item {
                 MouseArea { id: titleTap; anchors.fill: parent; onClicked: client.open() }
             }
             QQC2.AbstractButton {
-                text: widget.pending.length ? widget.pending.length + " 项  ›" : "查看  ›"
+                text: widget.pending.length ? l10n.i18np("%1 item  ›", "%1 items  ›", widget.pending.length) : l10n.i18n("View  ›")
                 implicitWidth: label.implicitWidth + 20
                 implicitHeight: 30
-                Accessible.name: "打开 Agent 建议"
+                Accessible.name: l10n.i18n("Open Agent Suggestions")
                 contentItem: Text { id: label; text: parent.text; color: "white"; font.pixelSize: 13; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignHCenter; style: Text.Raised; styleColor: "#70000000" }
                 background: Rectangle { radius: 15; color: parent.down ? "#50000000" : "#20000000" }
                 onClicked: client.open()
@@ -122,8 +124,8 @@ Item {
                 width: list.width; height: 106; radius: 22; color: Theme.background
                 ColumnLayout {
                     anchors.fill: parent; anchors.margins: 18; spacing: 7
-                    Text { text: "暂时没有待处理建议"; color: Theme.text; font.pixelSize: 16; Layout.fillWidth: true; wrapMode: Text.Wrap }
-                    Text { text: client.error || (client.coverage.length ? "部分检查尚未完成，可以在 Agent 中查看。" : "有新发现时会留在这里。" ); color: Theme.dim; font.pixelSize: 12; Layout.fillWidth: true; wrapMode: Text.Wrap }
+                    Text { text: l10n.i18n("No suggestions right now"); color: Theme.text; font.pixelSize: 16; Layout.fillWidth: true; wrapMode: Text.Wrap }
+                    Text { text: client.error || (client.coverage.length ? l10n.i18n("Some checks haven't finished. See Agent for details.") : l10n.i18n("New findings will show up here.")); color: Theme.dim; font.pixelSize: 12; Layout.fillWidth: true; wrapMode: Text.Wrap }
                 }
             }
         }

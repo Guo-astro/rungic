@@ -22,17 +22,17 @@ QS.QuickSetting {
     property int requestSerial: 0
     property var callbacks: ({})
 
-    text: "投屏"
+    text: i18n("Cast")
     icon: "video-television"
     enabled: casting || reconnecting || picker.connectingTo !== ""
     settingsCommand: "rungic-cast settings"
     // Short: a tile shows one line.
     status: {
-        if (picker.connectingTo) return "正在连接…";
-        if (reconnecting) return "电视断开，正在重连…";
+        if (picker.connectingTo) return i18n("Connecting…");
+        if (reconnecting) return i18n("TV disconnected, reconnecting…");
         if (error) return error;
-        if (casting) return tvName || "已连接";
-        return "点按选择电视";
+        if (casting) return tvName || i18n("Connected");
+        return i18n("Tap to choose a TV");
     }
 
     // Runs rungic-cast; the callback gets its JSON (or {error}). Status results also update the tile.
@@ -97,12 +97,12 @@ QS.QuickSetting {
             try {
                 result = JSON.parse(data["stdout"]);
             } catch (e) {
-                result = { error: (data["stderr"] || "rungic-cast 没有返回结果").trim() };
+                result = { error: (data["stderr"] || i18n("rungic-cast returned no result")).trim() };
             }
             if (result.error) {
                 console.warn("rungic-cast: " + result.error);
-                if (result.code === "component-missing") root.error = "投屏组件未就绪";
-                else if (result.code === "unsupported") root.error = "系统不支持无线投屏";
+                if (result.code === "component-missing") root.error = i18n("Casting isn't ready yet");
+                else if (result.code === "unsupported") root.error = i18n("This device doesn't support wireless casting");
             }
             if (result.active_state !== undefined) {
                 root.apply(result);

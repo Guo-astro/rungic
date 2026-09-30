@@ -44,7 +44,7 @@ QtObject {
     readonly property int headingSize: 24        // empty-state heading, weight 600
     readonly property int heroSize: 20           // status headings in settings
     readonly property int liveSize: 20           // the live transcript while holding
-    readonly property int metaSize: 14           // "已处理 2 步", buttons
+    readonly property int metaSize: 14           // "Worked through 2 steps", buttons
     readonly property int labelSize: 13          // group labels, subtitles, notes
     readonly property int footSize: 12           // the hint under the composer
 

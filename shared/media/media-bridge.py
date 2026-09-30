@@ -3,12 +3,13 @@
 
 PulseAudio remains the audio server; PipeWire exports Camera Video/Source nodes.
 The default sink follows Android's routing (a cast screen while casting); the
-android_phone sink always plays on the phone itself (docs/59). "Linux 扬声器"
-and "Linux 麦克风" are virtual devices for software that listens and speaks in
+android_phone sink always plays on the phone itself (docs/59). "Linux Speaker"
+and "Linux Microphone" are virtual devices for software that listens and speaks in
 place of a person, e.g. an assistant taking part in a call (docs/62).
 Capture sockets are private to the Android app and never listen on TCP.
 """
 import fcntl
+import gettext
 import json
 import logging
 import os
@@ -22,6 +23,9 @@ import time
 from pathlib import Path
 
 import rungic_host_watch
+
+# Device names in the session's language: po/zh_CN/rungic-shared.po, installed by rungic-plasma-bridges.
+_ = gettext.translation('rungic-shared', fallback=True).gettext
 
 RUNTIME = Path(os.environ['XDG_RUNTIME_DIR'])
 FIFO = RUNTIME / 'rungic-microphone.pcm'
@@ -43,6 +47,14 @@ CHANGED = threading.Event()      # the audio server reported a device or stream 
 HOST_CHANGED = threading.Event()  # the app reported a change of what it shows or permits (capture)
 WAKE = threading.Event()
 RECHECK = 30   # seconds between checks of the audio server without an event
+
+
+def described(key, name):
+    """A module's properties argument naming the device. A description with a space needs the
+    whole property list quoted for the module argument parser ('...="Linux Speaker"'); without
+    it loading fails. Quotes inside a translated name would break that quoting."""
+    name = name.replace('"', '').replace("'", '')
+    return f'{key}=\'device.description="{name}"\''
 
 
 def pactl(*args):
@@ -297,7 +309,7 @@ def ensure_phone_sink():
         raise OSError('Phone output path is not a FIFO')
     module = pactl('load-module', 'module-pipe-sink', 'sink_name=' + PHONE_SINK,
                    'file=' + str(PHONE_FIFO), 'format=s16le', 'rate=48000', 'channels=2',
-                   'sink_properties=device.description=手机本机')
+                   described('sink_properties', _('This Phone')))
     os.chmod(PHONE_FIFO, 0o600)
     LOG.info('phone output sink ready (module %s)', module)
     return 'IDLE'
@@ -313,18 +325,16 @@ def ensure_linux_devices():
     sources = [line.split('\t')[1] for line in pactl('list', 'short', 'sources').splitlines() if '\t' in line]
     if 'android' not in sinks or (LINUX_SPEAKER in sinks and LINUX_MIC_INPUT in sinks and LINUX_MIC in sources):
         return
-    # A description with a space needs the whole property list quoted for the
-    # module argument parser ('...="Linux 扬声器"'); without it loading fails.
     if LINUX_SPEAKER not in sinks:
         pactl('load-module', 'module-null-sink', 'sink_name=' + LINUX_SPEAKER, 'rate=48000', 'channels=2',
-              'sink_properties=\'device.description="Linux 扬声器"\'')
+              described('sink_properties', _('Linux Speaker')))
     if LINUX_MIC_INPUT not in sinks:
         pactl('load-module', 'module-null-sink', 'sink_name=' + LINUX_MIC_INPUT, 'rate=48000', 'channels=1',
-              'channel_map=mono', 'sink_properties=\'device.description="Linux 麦克风输入"\'')
+              'channel_map=mono', described('sink_properties', _('Linux Microphone Input')))
     if LINUX_MIC not in sources:
         pactl('load-module', 'module-remap-source', 'master=' + LINUX_MIC_INPUT + '.monitor',
               'source_name=' + LINUX_MIC, 'rate=48000', 'channels=1', 'channel_map=mono',
-              'source_properties=\'device.description="Linux 麦克风"\'')
+              described('source_properties', _('Linux Microphone')))
     ours = (LINUX_SPEAKER, LINUX_MIC_INPUT, LINUX_MIC, LINUX_SPEAKER + '.monitor', LINUX_MIC_INPUT + '.monitor')
     if pactl('get-default-sink') in ours:
         pactl('set-default-sink', 'android')

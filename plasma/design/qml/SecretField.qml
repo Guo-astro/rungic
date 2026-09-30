@@ -54,7 +54,7 @@ Rectangle {
             forcedState: box.visualState === "disabled" ? "disabled" : ""
             small: true
             iconName: box.revealed ? "eye-off" : "eye"
-            text: box.revealed ? "隐藏密钥" : "显示密钥"
+            text: box.revealed ? DesignI18n.i18nc("@action:button", "Hide key") : DesignI18n.i18nc("@action:button", "Show key")
             onClicked: box.revealed = !box.revealed
         }
     }

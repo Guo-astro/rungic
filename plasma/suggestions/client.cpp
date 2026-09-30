@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "client.h"
+#include <KLocalizedString>
 #include <QDBusConnection>
 #include <QDBusInterface>
 #include <QDBusPendingCallWatcher>
@@ -22,7 +23,7 @@ SuggestionsClient::SuggestionsClient(QObject *parent) : QObject(parent),
     QDBusConnection::sessionBus().connect(BusName, BusPath, BusName, "Changed", this, SLOT(onChanged()));
     connect(&m_watcher, &QDBusServiceWatcher::serviceOwnerChanged, this,
         [this](const QString &, const QString &, const QString &owner) {
-            if (owner.isEmpty()) { m_error = "建议服务正在重新连接"; Q_EMIT changed(); }
+            if (owner.isEmpty()) { m_error = i18n("Reconnecting to the suggestions service"); Q_EMIT changed(); }
             else { refresh(); watching(m_watching); }
         });
     QTimer::singleShot(0, this, &SuggestionsClient::refresh);
@@ -98,7 +99,7 @@ void UsageClient::refresh() {
     auto *w = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(request, 5000), this);
     connect(w, &QDBusPendingCallWatcher::finished, this, [this, w] {
         QDBusPendingReply<QString> reply = *w; w->deleteLater(); m_pending = false;
-        if (reply.isError()) { m_data["error"] = "用量服务暂未连接"; m_data["stale"] = true; }
+        if (reply.isError()) { m_data["error"] = i18n("The usage service isn't connected yet"); m_data["stale"] = true; }
         else m_data = QJsonDocument::fromJson(reply.value().toUtf8()).object().toVariantMap();
         Q_EMIT changed();
     });

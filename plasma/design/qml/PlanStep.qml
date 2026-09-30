@@ -29,7 +29,9 @@ Item {
     implicitWidth: row.implicitWidth
     implicitHeight: Math.max(26, label.implicitHeight + 6)
     Accessible.role: Accessible.StaticText
-    Accessible.name: text + (visualState === "done" ? "，已完成" : visualState === "active" ? "，进行中" : "，未开始")
+    Accessible.name: visualState === "done" ? DesignI18n.i18nc("@info accessible name of a plan step", "%1, done", text)
+        : visualState === "active" ? DesignI18n.i18nc("@info accessible name of a plan step", "%1, in progress", text)
+        : DesignI18n.i18nc("@info accessible name of a plan step", "%1, not started", text)
 
     RowLayout {
         id: row

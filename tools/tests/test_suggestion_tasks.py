@@ -14,7 +14,7 @@ node = next(n for n in ast.parse(source.read_text()).body if isinstance(n, ast.C
 node.body = [n for n in node.body if isinstance(n, ast.FunctionDef) and n.name in
              {'investigate_suggestion', 'suggestion_task', 'stop_suggestion', 'emit'}]
 connection = Mock()
-namespace = {'json': json, 're': re, 'time': time,
+namespace = {'json': json, 're': re, 'time': time, '_': lambda message: message,
              'Gio': types.SimpleNamespace(bus_get_sync=lambda *a: connection, BusType=types.SimpleNamespace(SESSION=0), DBusCallFlags=types.SimpleNamespace(NONE=0)),
              'GLib': types.SimpleNamespace(Variant=lambda *a: a, VariantType=types.SimpleNamespace(new=lambda v: v))}
 exec(compile(ast.Module(body=[node], type_ignores=[]), str(source), 'exec'), namespace)

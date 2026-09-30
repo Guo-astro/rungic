@@ -2,6 +2,7 @@
 #include "service.h"
 #include "collector.h"
 #include "layout.h"
+#include <KLocalizedString>
 #include <QCoreApplication>
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
@@ -17,6 +18,7 @@
 int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
     app.setApplicationName("rungic-suggestions");
+    KLocalizedString::setApplicationDomain("rungic-suggestions");
     const auto args = app.arguments();
     if (args.contains("--setup-widget")) {
         if (QDBusConnection::sessionBus().interface()->isServiceRegistered("org.kde.plasmashell")) return 1;

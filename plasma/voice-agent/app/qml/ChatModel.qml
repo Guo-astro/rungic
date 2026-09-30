@@ -6,7 +6,10 @@ import QtQuick
 QtObject {
     id: root
     readonly property ListModel entries: ListModel {}
-    property string title: "新对话"
+    // In words to show (the service puts its own titles in the desktop's language). `untitled`:
+    // not named yet, the first message names it; the service says so (never a title compared).
+    property string title: ""
+    property bool untitled: true
     property string conversation: ""
     // Session state (the "state" events).
     property string phase: "connecting"
@@ -38,6 +41,9 @@ QtObject {
             }
         }
     }
+
+    // A title to show: a conversation not opened yet has none.
+    function titleText(title) { return title || i18nc("@title a conversation not named yet", "New conversation") }
 
     function entry(fields) {
         return Object.assign({ kind: "", role: "", text: "", itemId: "", command: "", output: "",
@@ -173,7 +179,7 @@ QtObject {
                                                       output: e.attachments && e.attachments.length ? JSON.stringify(e.attachments) : "" })
                     }
                 }
-                if (root.title === "新对话") root.title = e.text.slice(0, 20)
+                if (root.untitled) { root.title = e.text.slice(0, 20); root.untitled = false }
             } else if (liveIndex >= 0) {
                 // Streamed as a bubble (before any agent work began): it stays one.
                 entries.setProperty(liveIndex, "kind", "message")
@@ -196,7 +202,7 @@ QtObject {
                 entries.setProperty(root.workAt, "status", "stopped")
                 entries.setProperty(root.workAt, "finished", root.lastTime || e.time || Date.now() / 1000)
             }
-            // The acknowledgement before it ("好的，我来…") stays a bubble: it was shown
+            // The acknowledgement before it ("OK, I'll…") stays a bubble: it was shown
             // before anyone knew work would follow, and nothing on screen should vanish.
             entries.append(entry({ kind: "work", status: "running", started: e.time || Date.now() / 1000 }))
             root.workAt = entries.count - 1
@@ -220,7 +226,7 @@ QtObject {
             break
         case "task-stopped":
             if (root.workAt >= 0 && root.workOpen) entries.setProperty(root.workAt, "status", "stopped")
-            else entries.append(entry({ kind: "marker", text: "已停止" }))
+            else entries.append(entry({ kind: "marker", text: i18nc("@info a mark in the thread: the task was stopped", "Stopped") }))
             break
         case "agent-message":
             if (root.workAt < 0) {
@@ -367,7 +373,8 @@ QtObject {
 
     // A conversation opened (history replayed, nothing running any more).
     function load(opened) {
-        root.title = opened.title
+        root.title = opened.title || ""
+        root.untitled = opened.untitled === true || !opened.title
         root.conversation = opened.conversation || ""
         root.inCall = false; root.callPhase = ""; root.callMonitor = false; root.callCanMonitor = true
         entries.clear()

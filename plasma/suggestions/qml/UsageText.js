@@ -1,14 +1,15 @@
 .pragma library
-function number(value) { return value === undefined || value === null ? "尚无记录" : Number(value).toLocaleString(Qt.locale("zh_CN"), "f", 0) }
-function mode(data) { return ({apiKey: "API Key", chatgpt: "ChatGPT", none: "未登录"})[data.authMode] || "正在连接" }
-function windowName(w) {
+// Shared by AgentWidget and AgentUsageDetails; `l10n` is the caller's KI18nContext (rungic-suggestions).
+function number(l10n, value) { return value === undefined || value === null ? l10n.i18n("no records yet") : Number(value).toLocaleString(Qt.locale(), "f", 0) }
+function mode(l10n, data) { return ({apiKey: "API Key", chatgpt: "ChatGPT", none: l10n.i18n("Not signed in")})[data.authMode] || l10n.i18n("Connecting") }
+function windowName(l10n, w) {
     const m = w.windowDurationMins
-    return !m ? "额度窗口" : m >= 1440 ? (m / 1440) + " 天额度" : m >= 60 ? (m / 60) + " 小时额度" : m + " 分钟额度"
+    return !m ? l10n.i18n("Usage window") : m >= 1440 ? l10n.i18np("%1-day limit", "%1-day limit", m / 1440) : m >= 60 ? l10n.i18np("%1-hour limit", "%1-hour limit", m / 60) : l10n.i18np("%1-minute limit", "%1-minute limit", m)
 }
-function reset(w, now) {
-    if (!w.resetsAt) return "未提供重置时间"
+function reset(l10n, w, now) {
+    if (!w.resetsAt) return l10n.i18n("No reset time given")
     const mins = Math.ceil((w.resetsAt - now) / 60)
-    if (mins <= 0) return "重置时间已到，等待更新"
-    return (mins >= 60 ? Math.floor(mins / 60) + " 小时 " : "") + (mins % 60) + " 分钟后重置"
+    if (mins <= 0) return l10n.i18n("Reset time reached, waiting for an update")
+    return mins >= 60 ? l10n.i18nc("@info %1 hours and %2 minutes", "Resets in %1 h %2 min", Math.floor(mins / 60), mins % 60) : l10n.i18nc("@info", "Resets in %1 min", mins)
 }
-function token(data) { return data.recordedTokens === undefined || data.recordedTokens === null ? "尚未收到用量记录" : "本机已记录 " + number(data.recordedTokens) + " token" }
+function token(l10n, data) { return data.recordedTokens === undefined || data.recordedTokens === null ? l10n.i18n("No usage recorded yet") : l10n.i18n("%1 tokens recorded on this device", number(l10n, data.recordedTokens)) }

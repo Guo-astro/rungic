@@ -1,10 +1,12 @@
 [Desktop Entry]
 Type=Application
-Name=语音助手
-Name[en]=Voice Assistant
-Comment=按住说话，让助手操作这部手机
+Name=Voice Assistant
+Name[zh_CN]=语音助手
+Comment=Hold to talk, and the assistant uses this phone for you
+Comment[zh_CN]=按住说话，让助手操作这部手机
 Exec=rungic-voice-assistant
 Icon=audio-input-microphone
 Categories=Utility;
-Keywords=voice;agent;codex;语音;助手;
+Keywords=voice;agent;codex;assistant;
+Keywords[zh_CN]=voice;agent;codex;语音;助手;
 StartupWMClass=rungic-voice-assistant

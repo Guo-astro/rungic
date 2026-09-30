@@ -46,10 +46,10 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         @Override public void run() {
             if(isDestroyed() || !started || frameGeneration!=surfaceGeneration) { awaitingFrame=false; return; }
             if(NativeBridge.isPhoneFrameReady(frameTicket)) {
-                awaitingFrame=false; loading.setVisibility(View.GONE); notifyState("Rungic 正在运行");
+                awaitingFrame=false; loading.setVisibility(View.GONE); notifyState(getString(R.string.state_running));
             } else if(android.os.SystemClock.uptimeMillis()>frameDeadline) {
                 awaitingFrame=false; NativeBridge.cancelPhoneFrame(frameTicket);
-                showProblem("桌面正在运行，但尚未确认显示画面。请重新检查显示状态。", "显示确认超时；未使用旧帧或投屏帧放行。", true);
+                showProblem(getString(R.string.display_unconfirmed), getString(R.string.display_unconfirmed_details), true);
             } else display.postDelayed(this,100);
         }
     };
@@ -64,6 +64,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        controlTimeout = getString(R.string.control_timeout);
         if (getDisplay() != null && getDisplay().getDisplayId() != android.view.Display.DEFAULT_DISPLAY) {
             // Launched on a cast display (input focus had moved there): the desktop's
             // host window belongs on the phone; the TV gets its own window (docs/58).
@@ -95,7 +96,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
             display.removeCallbacks(installPoll);
             if(display.getHolder().getSurface().isValid())surfaceCreated(display.getHolder());
         },() -> moveTaskToBack(true));
-        loading.show("正在准备 Rungic","请稍候…",true,false,"");
+        loading.show(getString(R.string.state_preparing),getString(R.string.please_wait),true,false,"");
         frame.addView(loading,new FrameLayout.LayoutParams(-1,-1));
         setContentView(frame);
         castTest = new CastTest(this, frame);
@@ -149,7 +150,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
             { resizeDisplay(l,t,r,b); captureDisplayInsets(display.getRootWindowInsets()); });
         display.requestApplyInsets();
         display.requestFocus();
-        notifyState("正在准备 Rungic");
+        notifyState(getString(R.string.state_preparing));
     }
 
     @Override public void onDestroy() {
@@ -342,9 +343,10 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
                 if(!install.ready) {
                     runOnUiThread(() -> {
                         if(isDestroyed() || generation!=surfaceGeneration)return;
-                        loading.show(install.failed?"系统准备需要处理":"正在准备 Rungic",install.message,
-                            !install.failed && !install.attention,true,install.details);
-                        notifyState(install.failed?"Rungic 准备需要处理":"正在准备 Rungic");
+                        loading.show(getString(install.failed?R.string.setup_attention_title:R.string.state_preparing),
+                            StartupScreen.message(this,install),!install.failed && !install.attention,true,
+                            StartupScreen.details(this,install));
+                        notifyState(getString(install.failed?R.string.state_setup_attention:R.string.state_preparing));
                         display.removeCallbacks(installPoll);
                         if(started)display.postDelayed(installPoll,2000);
                     });
@@ -357,19 +359,19 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
                     if(account.optBoolean("pending",false)) {
                         runOnUiThread(()->{
                             if(isDestroyed() || generation!=surfaceGeneration)return;
-                            showLoading("账户仍在设置中，请稍候，无需重复提交。");
+                            showLoading(getString(R.string.account_pending));
                             display.removeCallbacks(installPoll);
                             if(started)display.postDelayed(installPoll,2000);
                         }); return;
                     }
                     accountReady=account.optBoolean("configured",false);
                     if (!accountReady) {
-                        runOnUiThread(() -> showLoading("正在准备账户环境，请稍候…"));
+                        runOnUiThread(() -> showLoading(getString(R.string.account_preparing)));
                         control("account-prepare");
                         accountPromptShowing=true;
                         runOnUiThread(() -> {
                             if(isDestroyed() || generation!=surfaceGeneration) { accountPromptShowing=false; return; }
-                            notifyState("Rungic 等待设置账户");
+                            notifyState(getString(R.string.state_account));
                             AccountSetup.show(this,worker,payload -> {
                                 try { control("account-setup",payload); }
                                 catch(Exception failure) {
@@ -382,13 +384,13 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
                                 display.post(installPoll);
                             },failure -> {
                                 accountPromptShowing=false;
-                                showProblem("账户设置尚未完成。请先重新检查环境与账户状态，再继续设置。", "账户操作未完成；不会自动重复提交密码。", true);
+                                showProblem(getString(R.string.account_incomplete), getString(R.string.account_incomplete_details), true);
                             });
                         });
                         return;
                     }
                 }
-                runOnUiThread(() -> showLoading("正在启动桌面…"));
+                runOnUiThread(() -> showLoading(getString(R.string.starting_desktop)));
                 KeyboardAssets.ensure(getApplicationContext());
                 new File(getFilesDir(), "tmp").mkdirs();
                 platform.start();
@@ -427,7 +429,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
                     if(isDestroyed() || generation!=surfaceGeneration) {
                         NativeBridge.cancelPhoneFrame(ticket); return;
                     }
-                    showLoading("正在等待桌面画面…");
+                    showLoading(getString(R.string.waiting_frame));
                     frameTicket=ticket; frameGeneration=generation;
                     frameDeadline=android.os.SystemClock.uptimeMillis()+60000;
                     awaitingFrame=true;
@@ -437,7 +439,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
                 Log.e("RungicWayland", "Start failed", e);
                 runOnUiThread(() -> {
                     if(!isDestroyed() && generation==surfaceGeneration)
-                        showProblem("暂时无法进入 Rungic。请重新检查系统准备状态。", "启动或挂载检查未完成。诊断日志包含具体原因。", true);
+                        showProblem(getString(R.string.start_failed), getString(R.string.start_failed_details), true);
                 });
             } finally {
                 startupBusy.set(false);
@@ -451,11 +453,11 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     }
     private void showLoading(String message) {
         if(isDestroyed())return;
-        loading.show("正在准备 Rungic",message,true,false,""); notifyState("正在准备 Rungic");
+        loading.show(getString(R.string.state_preparing),message,true,false,""); notifyState(getString(R.string.state_preparing));
     }
     private void showProblem(String message,String details,boolean retry) {
         if(isDestroyed())return;
-        loading.show("需要处理",message,false,retry,details); notifyState("Rungic 需要处理");
+        loading.show(getString(R.string.attention_title),message,false,retry,details); notifyState(getString(R.string.state_attention));
     }
 
     private void resizeDisplay(int l,int t,int r,int b) {
@@ -677,6 +679,9 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         pacer.stop(); worker.execute(() -> { if(initialized)NativeBridge.suspendRendering(); });
     }
 
+    /** Shown when a control request times out (the Toast of a menu action); set in onCreate. */
+    private static volatile String controlTimeout = "System setup timed out";
+
     private static String control(String action) throws Exception {
         return control(action,null);
     }
@@ -694,7 +699,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
             byte[] data = new byte[4096]; int n; while ((n = in.read(data)) != -1) if (out.size() < 16384) out.write(data,0,n);
         } catch (IOException ignored) {} }); reader.start();
         if (!p.waitFor(action.equals("account-prepare")?240:90, TimeUnit.SECONDS)) {
-            p.destroy(); throw new IOException("系统准备超时，请稍后重试并检查安装状态"); }
+            p.destroy(); throw new IOException(controlTimeout); }
         reader.join(2000);
         if (p.exitValue() != 0) throw new IOException(out.toString("UTF-8"));
         return out.toString("UTF-8");
@@ -754,13 +759,15 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
                     NativeBridge.sendKeyEvent(KeyEvent.KEYCODE_DPAD_LEFT,false);
                 } finally { NativeBridge.sendKeyEvent(KeyEvent.KEYCODE_ALT_LEFT,false); }
             } catch(Exception e) {
-                runOnUiThread(() -> Toast.makeText(this,"暂时无法向桌面发送返回操作",Toast.LENGTH_SHORT).show());
+                runOnUiThread(() -> Toast.makeText(this,R.string.back_failed,Toast.LENGTH_SHORT).show());
             }
         });
     }
 
     private void showDesktopMenu() {
-        new AlertDialog.Builder(this).setTitle("Rungic").setItems(new String[]{"继续使用", "回到 Rungic 桌面", "Android 键盘", "切换到 Android（会话继续运行）", "麦克风与相机权限", "关闭 Rungic 会话", "显示流畅度"}, (d, i) -> {
+        new AlertDialog.Builder(this).setTitle("Rungic").setItems(new String[]{getString(R.string.menu_continue), getString(R.string.menu_home),
+                getString(R.string.menu_keyboard), getString(R.string.menu_switch), getString(R.string.menu_permissions),
+                getString(R.string.menu_stop), getString(R.string.menu_refresh)}, (d, i) -> {
             if (i == 1 && initialized) worker.execute(() -> {
                 try { control("home"); }
                 catch (Exception e) { runOnUiThread(() -> Toast.makeText(this, e.getMessage(), Toast.LENGTH_LONG).show()); }
@@ -768,23 +775,23 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
             if (i == 2) setAndroidKeyboard(true);
             if (i == 3) moveTaskToBack(true);
             if (i == 4) capture.requestPermissionsFromUser();
-            if (i == 5) new AlertDialog.Builder(this).setTitle("关闭 Rungic 会话？")
-                .setMessage("这会结束正在运行的 Linux 应用，请先保存文件。切换到 Android 可以让会话继续运行。")
-                .setNegativeButton("取消",null).setPositiveButton("关闭会话",(dialog,which)->worker.execute(() -> { try { control("stop"); NativeBridge.releaseWaylandConnection(); initialized=false;
+            if (i == 5) new AlertDialog.Builder(this).setTitle(R.string.stop_title)
+                .setMessage(R.string.stop_message)
+                .setNegativeButton(R.string.action_cancel,null).setPositiveButton(R.string.stop_confirm,(dialog,which)->worker.execute(() -> { try { control("stop"); NativeBridge.releaseWaylandConnection(); initialized=false;
                 runOnUiThread(() -> { stopService(new Intent(this, DesktopService.class)); finish(); });
-            } catch(Exception e) { runOnUiThread(() -> Toast.makeText(this, "暂时无法关闭会话，请稍后重试", Toast.LENGTH_LONG).show()); } })).show();
+            } catch(Exception e) { runOnUiThread(() -> Toast.makeText(this, R.string.stop_failed, Toast.LENGTH_LONG).show()); } })).show();
             if(i==6) {
                 org.json.JSONArray rates=pacer.supportedRates();
-                String[] labels=new String[rates.length()+1];labels[0]="自动";
+                String[] labels=new String[rates.length()+1];labels[0]=getString(R.string.auto);
                 int checked=0;
                 for(int n=0;n<rates.length();n++) {
                     labels[n+1]=rates.optInt(n)+" Hz";
                     if(rates.optInt(n)==pacer.policy())checked=n+1;
                 }
-                new AlertDialog.Builder(this).setTitle("刷新率")
+                new AlertDialog.Builder(this).setTitle(R.string.refresh_title)
                     .setSingleChoiceItems(labels,checked,(choice,which)->{
                         pacer.setPolicy(which==0?0:rates.optInt(which-1));choice.dismiss();
-                    }).setNegativeButton("取消",null).show();
+                    }).setNegativeButton(R.string.action_cancel,null).show();
             }
         }).show();
     }

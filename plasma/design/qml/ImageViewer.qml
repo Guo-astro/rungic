@@ -64,7 +64,7 @@ T.Popup {
         Text {
             anchors.centerIn: picture
             visible: viewer.problem
-            text: "图片打不开"
+            text: DesignI18n.i18nc("@info", "Can't open this image")
             font.family: Theme.fontFamily
             font.pixelSize: Theme.bodySize
             color: "#a1a9b1"
@@ -77,7 +77,7 @@ T.Popup {
                 id: closeButton
                 anchors { left: parent.left; leftMargin: 6; verticalCenter: parent.verticalCenter }
                 iconName: "close"
-                text: "关闭"
+                text: DesignI18n.i18nc("@action:button", "Close")
                 tint: "#fcfcfc"
                 onClicked: viewer.close()
             }
@@ -94,7 +94,7 @@ T.Popup {
                 id: openButton
                 anchors { right: parent.right; rightMargin: 6; verticalCenter: parent.verticalCenter }
                 iconName: "external"
-                text: "用其他应用打开"
+                text: DesignI18n.i18nc("@action:button", "Open in another app")
                 tint: "#fcfcfc"
                 enabled: !viewer.problem
                 onClicked: viewer.openExternally(viewer.source)

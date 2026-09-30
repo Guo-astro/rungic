@@ -2,6 +2,7 @@
 #include "usage.h"
 #include <QDateTime>
 #include <QFileInfo>
+#include <KLocalizedString>
 #include <utility>
 namespace Care {
 Usage::Usage(QString p) : path(std::move(p)) {
@@ -11,7 +12,7 @@ Usage::Usage(QString p) : path(std::move(p)) {
 }
 void Usage::save() {
     QString error;
-    if (!writeObject(path, {{"schema", 1}, {"accounts", accounts}}, &error)) problem = "用量记录未保存：" + error;
+    if (!writeObject(path, {{"schema", 1}, {"accounts", accounts}}, &error)) problem = i18n("The usage record wasn't saved: %1", error);
 }
 void Usage::identity(const QString &key) {
     if (key == accountKey) return;

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// A place to slide to while holding to talk: 取消 (×) or 转文字 (文). Grows and fills
+// A place to slide to while holding to talk: Cancel (×) or To Text (文). Grows and fills
 // when the finger is over it.
 // States: idle, active (the finger is over it: red for cancel, strong for "to text").
 import QtQuick

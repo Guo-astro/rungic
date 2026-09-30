@@ -31,6 +31,7 @@ from pathlib import Path
 from PIL import Image
 
 from . import activity
+from .i18n import _, language_name
 from .portal import BTN_LEFT, BTN_RIGHT, KEYSYMS
 
 logger = logging.getLogger('rungic-cua.luna')
@@ -67,11 +68,18 @@ sound (周凯文 for 周楷雯). Search contacts by the name's pinyin without to
 then take the person whose name sounds the same. If two different people fit, or none, stop and ask.
 - Do only what the task asks. Send, pay, delete or change accounts only when the task says so \
 explicitly (the user has confirmed it). Never type passwords; if one is needed, stop and ask.
-- With every batch of actions, also write one short phrase in Simplified Chinese (at most 15 \
-characters) saying what the batch does, e.g. 打开“文件”菜单 or 在搜索框输入 zhoukaiwen. The user sees it \
-as a live caption on the screen they watch.
+- With every batch of actions, also write one short phrase saying what the batch does, in the \
+language the task is written in; when the task is an instruction written in English by the system, \
+in the desktop's language (below). A few words: at most 15 characters in Chinese, e.g. Open the File \
+menu, 打开“文件”菜单 or 在搜索框输入 zhoukaiwen. The user sees it as a live caption on the screen they \
+watch.
 - When you stop, reply with one short message that begins with DONE, ASK or FAILED: DONE and what the \
 screen now shows about the task; ASK and the one question only the user can answer; FAILED and why."""
+
+
+def instructions() -> str:
+    """INSTRUCTIONS and the desktop's language (for the captions), as the session has it now."""
+    return f"{INSTRUCTIONS}\n\nThe desktop's language: {language_name()}."
 
 
 class Aborted(RuntimeError):
@@ -295,10 +303,10 @@ class ComputerUse:
         started = time.monotonic()
         steps: list[dict] = []
         caption_task = task.strip().splitlines()[0] if task.strip() else ''
-        activity.report('看一下屏幕', task=caption_task)
+        activity.report(_('Look at the screen'), task=caption_task)
         self.screen.whole = False
-        image_url, _, _ = self.screen.capture()
-        body = {'model': MODEL, 'tools': TOOLS, 'instructions': INSTRUCTIONS,
+        image_url, _image, _changed = self.screen.capture()
+        body = {'model': MODEL, 'tools': TOOLS, 'instructions': instructions(),
                 'reasoning': {'effort': EFFORT}, 'truncation': 'auto',
                 'input': [{'role': 'user', 'content': [
                     {'type': 'input_text', 'text': f'{task}\n\n{self.screen.note()}'},
@@ -332,7 +340,7 @@ class ComputerUse:
             call = calls[0] if calls else None
             if call and call.get('pending_safety_checks'):
                 # The API wants the user to confirm this action; we cannot ask mid-run.
-                activity.report('需要你确认', state='question', task=caption_task)
+                activity.report(_('Needs your confirmation'), state='question', task=caption_task)
                 return {'outcome': 'question', 'question': '; '.join(c.get('message', '') for c in call['pending_safety_checks']),
                         'safety_checks': call['pending_safety_checks'], 'steps': steps, 'elapsed_s': elapsed()}
             if call:
@@ -340,13 +348,14 @@ class ComputerUse:
                 actions = call.get('actions') or ([call['action']] if call.get('action') else [])
                 # The caption the user watches (docs/88): the model's phrase, else what the batch does.
                 shown = [a for a in actions if a.get('type') != 'screenshot'] or actions
-                activity.report(text or (activity.describe(shown[0]) if shown else '看一下屏幕'), task=caption_task)
+                activity.report(text or (activity.describe(shown[0]) if shown else _('Look at the screen')),
+                                task=caption_task)
                 for action in actions:
                     if gate is not None and action.get('type') != 'screenshot':
                         gate.wait(timeout_s)
                     if ABORT_FILE.exists():
                         ABORT_FILE.unlink(missing_ok=True)
-                        activity.report('已停止', state='stopped', task=caption_task)
+                        activity.report(_('Stopped'), state='stopped', task=caption_task)
                         return {'outcome': 'stopped', 'steps': steps, 'elapsed_s': elapsed()}
                     try:
                         done_actions.append(self.execute(action))
@@ -358,13 +367,13 @@ class ComputerUse:
                         return {'outcome': 'signalled', 'steps': steps, 'elapsed_s': elapsed()}
                 steps.append({'actions': done_actions, 'note': text} if text else {'actions': done_actions})
             if len(steps) >= max_steps or time.monotonic() - started > timeout_s:
-                activity.report('没有在限定步数内完成', state='failed', task=caption_task)
+                activity.report(_("Didn't finish within the step limit"), state='failed', task=caption_task)
                 return {'outcome': 'unfinished', 'note': f'stopped after {len(steps)} steps', 'steps': steps,
                         'elapsed_s': elapsed()}
             if not call:
                 # Only view_whole_screen was called: after the first request the API takes images only
                 # as computer_call_output, so the model asks for the screenshot next.
-                body = {'model': MODEL, 'tools': TOOLS, 'instructions': INSTRUCTIONS, 'reasoning': {'effort': EFFORT},
+                body = {'model': MODEL, 'tools': TOOLS, 'instructions': instructions(), 'reasoning': {'effort': EFFORT},
                         'truncation': 'auto', 'previous_response_id': response['id'], 'input': follow}
                 continue
             time.sleep(SETTLE_S)
@@ -379,7 +388,7 @@ class ComputerUse:
                 items.insert(0, {'type': 'computer_call_output', 'call_id': call['call_id'], 'output': screenshot})
                 if changed:
                     items.append({'role': 'user', 'content': [{'type': 'input_text', 'text': self.screen.note()}]})
-            body = {'model': MODEL, 'tools': TOOLS, 'instructions': INSTRUCTIONS,
+            body = {'model': MODEL, 'tools': TOOLS, 'instructions': instructions(),
                     'reasoning': {'effort': EFFORT}, 'truncation': 'auto', 'previous_response_id': response['id'],
                     'input': items}
 

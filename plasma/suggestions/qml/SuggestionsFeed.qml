@@ -5,6 +5,7 @@ import QtQuick.Layouts
 import QtQuick.Controls as QQC2
 import com.rungic.design
 import com.rungic.suggestions
+import org.kde.ki18n
 
 Rectangle {
     id: feed
@@ -20,6 +21,7 @@ Rectangle {
     property bool populated: false
     property bool positioned: false
     color: Theme.side
+    KI18nContext { id: l10n; translationDomain: "rungic-suggestions" }
     SuggestionsClient { id: client }
     PresentationTracker { view: list; suggestionsClient: client; active: feed.activeView && !snooze.visible && !applyDialog.visible; selectedId: feed.selectedId }
     readonly property var clientItems: [client.items, client.groups, client.historyGroups]
@@ -70,7 +72,7 @@ Rectangle {
                 if (action === "apply") { applyDialog.failureMessage = result.error; applyDialog.open() }
             }
             else if (result.message) feed.message = result.message
-            else if (action === "investigate") feed.message = "Agent 已接到检查请求，可离开此页面，结果会留在建议中。"
+            else if (action === "investigate") feed.message = l10n.i18n("Agent got the request. You can leave this page; the result will stay in your suggestions.")
         }
     }
     ListView {
@@ -97,20 +99,22 @@ Rectangle {
             Item { implicitHeight: feed.home ? 14 : 0 }
             RowLayout {
                 Layout.fillWidth: true; Layout.leftMargin: 22; Layout.rightMargin: 22
-                Text { text: feed.home ? "今天" : "建议"; font.pixelSize: feed.home ? 32 : 26; font.weight: Font.DemiBold; color: Theme.text; Layout.fillWidth: true }
-                PillButton { text: feed.selectedId ? "全部建议" : "Agent"; onClicked: { if (feed.selectedId) feed.selectedId = ""; else client.openAgent() } }
+                Text { text: feed.home ? l10n.i18n("Today") : l10n.i18n("Suggestions"); font.pixelSize: feed.home ? 32 : 26; font.weight: Font.DemiBold; color: Theme.text; Layout.fillWidth: true }
+                PillButton { text: feed.selectedId ? l10n.i18n("All suggestions") : "Agent"; onClicked: { if (feed.selectedId) feed.selectedId = ""; else client.openAgent() } }
             }
             Text {
                 Layout.leftMargin: 22; Layout.rightMargin: 22; Layout.fillWidth: true
-                text: feed.groupDetail ? "相关记录分别保留证据和调查结论；同组不代表相同根因。" : feed.home ? new Date().toLocaleDateString(Qt.locale("zh_CN"), "M月d日 dddd") + " · 为你留意手机的使用情况" : "发现的问题、改善建议和处理进展，都保留在这里。"
+                text: feed.groupDetail ? l10n.i18n("Each related record keeps its own evidence and findings; being grouped doesn't mean they share a root cause.")
+                    : feed.home ? l10n.i18nc("@info %1 is today's date", "%1 · Looking out for how your phone is doing", new Date().toLocaleDateString(Qt.locale(), l10n.i18nc("today's date on the home feed, Qt date format", "dddd, MMMM d")))
+                    : l10n.i18n("Problems found, suggested improvements and their progress all stay here.")
                 font.pixelSize: 13; color: Theme.dim; wrapMode: Text.Wrap
             }
             RowLayout {
                 Layout.leftMargin: 20; Layout.rightMargin: 20
-                PillButton { text: "待处理"; checked: !feed.history; onClicked: feed.history = false }
-                PillButton { text: "历史"; checked: feed.history; onClicked: feed.history = true }
+                PillButton { text: l10n.i18n("Pending"); checked: !feed.history; onClicked: feed.history = false }
+                PillButton { text: l10n.i18n("History"); checked: feed.history; onClicked: feed.history = true }
                 Item { Layout.fillWidth: true }
-                PillButton { text: "刷新"; enabled: !client.busy; onClicked: { client.scan(); feed.message = "正在复查，系统诊断每分钟更新。" } }
+                PillButton { text: l10n.i18n("Refresh"); enabled: !client.busy; onClicked: { client.scan(); feed.message = l10n.i18n("Checking again. System diagnostics update every minute.") } }
             }
             Text {
                 Layout.fillWidth: true; Layout.leftMargin: 22; Layout.rightMargin: 22
@@ -123,8 +127,8 @@ Rectangle {
                 implicitHeight: 150; radius: 20; color: Theme.background; border.color: Theme.line
                 ColumnLayout {
                     anchors { fill: parent; margins: 22 }
-                    Text { text: feed.history ? "还没有历史记录" : "暂时没有需要处理的建议"; color: Theme.text; font.pixelSize: 18; wrapMode: Text.Wrap; Layout.fillWidth: true }
-                    Text { text: client.coverage.length ? "部分检查暂未完成，可稍后刷新查看。" : "有新的发现时，卡片会出现在这里。"; color: Theme.dim; font.pixelSize: 14; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                    Text { text: feed.history ? l10n.i18n("No history yet") : l10n.i18n("Nothing needs your attention right now"); color: Theme.text; font.pixelSize: 18; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                    Text { text: client.coverage.length ? l10n.i18n("Some checks haven't finished yet. Refresh later to see them.") : l10n.i18n("New findings will appear here as cards."); color: Theme.dim; font.pixelSize: 14; wrapMode: Text.Wrap; Layout.fillWidth: true }
                 }
             }
             Text {
@@ -173,12 +177,12 @@ Rectangle {
         background: Rectangle { color: Theme.background; radius: 20; border.color: Theme.line }
         contentItem: ColumnLayout {
             spacing: 12
-            Text { text: "什么时候再处理？"; color: Theme.text; font.pixelSize: 20; font.weight: Font.DemiBold }
-            Text { Layout.fillWidth: true; text: "只安排提醒，不会自动修改软件。"; color: Theme.dim; font.pixelSize: 13; wrapMode: Text.Wrap }
-            QQC2.Button { Layout.fillWidth: true; text: "保留待处理"; onClicked: { client.act(feed.pendingItem.id, "later"); snooze.close() } }
-            QQC2.Button { Layout.fillWidth: true; text: "一小时后提醒"; onClicked: { client.act(feed.pendingItem.id, "snooze", { at: Math.floor(Date.now() / 1000) + 3600 }); snooze.close() } }
-            QQC2.Button { Layout.fillWidth: true; text: "明天 10:00 提醒"; onClicked: { client.act(feed.pendingItem.id, "snooze", { at: client.tomorrow(10) }); snooze.close() } }
-            QQC2.Button { Layout.fillWidth: true; text: "取消"; onClicked: snooze.close() }
+            Text { text: l10n.i18n("When should we come back to this?"); color: Theme.text; font.pixelSize: 20; font.weight: Font.DemiBold }
+            Text { Layout.fillWidth: true; text: l10n.i18n("This only schedules a reminder. No software is changed automatically."); color: Theme.dim; font.pixelSize: 13; wrapMode: Text.Wrap }
+            QQC2.Button { Layout.fillWidth: true; text: l10n.i18n("Keep for later"); onClicked: { client.act(feed.pendingItem.id, "later"); snooze.close() } }
+            QQC2.Button { Layout.fillWidth: true; text: l10n.i18n("Remind me in an hour"); onClicked: { client.act(feed.pendingItem.id, "snooze", { at: Math.floor(Date.now() / 1000) + 3600 }); snooze.close() } }
+            QQC2.Button { Layout.fillWidth: true; text: l10n.i18n("Remind me tomorrow at 10:00"); onClicked: { client.act(feed.pendingItem.id, "snooze", { at: client.tomorrow(10) }); snooze.close() } }
+            QQC2.Button { Layout.fillWidth: true; text: l10n.i18n("Cancel"); onClicked: snooze.close() }
         }
     }
     QQC2.Dialog {
@@ -187,14 +191,14 @@ Rectangle {
         anchors.centerIn: parent
         width: Math.min(340, feed.width - 24)
         height: Math.min(500, feed.height - 40)
-        title: "应用修复方案"
+        title: l10n.i18n("Apply the fix")
         property string failureMessage: ""
         readonly property bool outdated: !!feed.pendingItem.id && !client.items.some(i => i.id === feed.pendingItem.id && i.canApply && i.planRevision === feed.pendingItem.planRevision)
         function updateButtons() {
             const ok = standardButton(QQC2.Dialog.Ok)
-            if (ok) { ok.enabled = !outdated && !client.busy; ok.text = "应用" }
+            if (ok) { ok.enabled = !outdated && !client.busy; ok.text = l10n.i18n("Apply") }
             const cancel = standardButton(QQC2.Dialog.Cancel)
-            if (cancel) cancel.text = "取消"
+            if (cancel) cancel.text = l10n.i18n("Cancel")
         }
         onOpened: updateButtons()
         onOutdatedChanged: updateButtons()
@@ -206,7 +210,7 @@ Rectangle {
             Text {
                 Layout.fillWidth: true
                 visible: applyDialog.outdated || !!applyDialog.failureMessage
-                text: applyDialog.outdated ? "方案或适用证据已变化。请取消后查看当前方案，再决定是否应用。" : applyDialog.failureMessage
+                text: applyDialog.outdated ? l10n.i18n("The plan or its evidence has changed. Cancel, review the current plan, then decide whether to apply it.") : applyDialog.failureMessage
                 textFormat: Text.PlainText; wrapMode: Text.Wrap; color: Theme.negative; font.pixelSize: 14
                 Accessible.role: Accessible.StaticText
                 Accessible.name: text
@@ -216,7 +220,7 @@ Rectangle {
                 clip: true
                 Text {
                     width: applyDialog.availableWidth
-                    text: "Agent 将按已展示的方案执行，并验证结果。涉及的关闭应用或重启步骤以方案为准。\n\n" + (feed.pendingItem.plan || "")
+                    text: l10n.i18n("Agent will carry out the plan shown and verify the result. Any steps that close apps or restart follow the plan.") + "\n\n" + (feed.pendingItem.plan || "")
                     textFormat: Text.PlainText; wrapMode: Text.Wrap; color: Theme.text; font.pixelSize: 14
                 }
             }

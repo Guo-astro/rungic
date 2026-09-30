@@ -12,6 +12,10 @@ QString validateKnowledge(const QJsonObject &entry);
 QJsonArray knowledge(const QString &directory, QStringList *errors = nullptr);
 QJsonObject observation(const QString &key, const QString &title, const QString &body,
                         const QString &kind, int severity, const QJsonObject &evidence);
+// A message recorded untranslated ({"text", "args"}) in the reader's language; other values as they are.
+QString translated(const QJsonValue &message);
+// An observation with its "l10n" messages rendered into title and body.
+QJsonObject localized(QJsonObject observation);
 
 class Model {
 public:

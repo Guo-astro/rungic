@@ -20,14 +20,14 @@ QS.QuickSetting {
     property bool busy: false
     property string error: ""
 
-    text: "桌面模式"
+    text: i18nc("@title quick setting", "Desktop Mode")
     icon: "computer"
     enabled: on
     status: {
-        if (busy) return on ? "正在关闭…" : "正在打开…";
+        if (busy) return on ? i18nc("@info:status", "Turning off…") : i18nc("@info:status", "Turning on…");
         if (error) return error;
-        if (!on) return "关闭";
-        return onTv ? "在电视上" : fullscreen ? "全屏" : "浮窗";
+        if (!on) return i18nc("@info:status desktop mode is off", "Off");
+        return onTv ? i18nc("@info:status shown on the TV", "On the TV") : fullscreen ? i18nc("@info:status", "Full screen") : i18nc("@info:status shown in a floating window", "Floating window");
     }
 
     function run(command) {
@@ -67,12 +67,12 @@ QS.QuickSetting {
             try {
                 result = JSON.parse(data["stdout"]);
             } catch (e) {
-                result = { error: (data["stderr"] || root.program + " 没有返回结果").trim() };
+                result = { error: (data["stderr"] || root.program + " returned no result").trim() };
             }
             if (command === "toggle") root.busy = false;
             if (result.error) {
                 console.warn(root.program + " " + command + ": " + result.error);
-                root.error = "操作失败";
+                root.error = i18nc("@info:status", "Something went wrong");
                 return;
             }
             root.on = !!result.enabled;

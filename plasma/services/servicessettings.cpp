@@ -6,6 +6,7 @@
 
 #include <KAuth/Action>
 #include <KAuth/ExecuteJob>
+#include <KLocalizedString>
 #include <KPluginFactory>
 #include <KQuickConfigModule>
 #include <KUser>
@@ -40,6 +41,20 @@ QStringList strings(const QJsonValue &value)
         result << item.toString();
     }
     return result;
+}
+
+// The name, summary and warning of each group in service-policy.json are English messages of
+// this KCM's catalog (po/zh_CN/kcm_rungic_services.po, the entries marked "#: policy.json").
+QString translated(const QJsonValue &value)
+{
+    const auto text = value.toString();
+    return text.isEmpty() ? text : i18n(text.toUtf8().constData());
+}
+
+// A user service, as listed on the page.
+QString userUnit(const QString &unit)
+{
+    return i18nc("@item a systemd user service", "%1 (user)", unit);
 }
 
 QString run(const QString &program, const QStringList &args)
@@ -114,7 +129,7 @@ public:
         if (file.open(QIODevice::ReadOnly)) {
             policy = QJsonDocument::fromJson(file.readAll()).object().value(u"groups"_s).toArray();
         } else {
-            setError(u"找不到服务清单 %1"_s.arg(POLICY));
+            setError(i18n("Cannot find the service list %1", POLICY));
         }
         QStringList systemUnits, userUnits;
         QSet<QString> listed;
@@ -139,6 +154,7 @@ public:
             const auto start = strings(group.value(u"start"_s));
             int masked = 0, total = 0, active = 0, enabled = 0, missing = 0;
             QStringList units, userRun;
+            bool hasUser = false;
             for (const auto &unit : strings(group.value(u"user"_s))) {
                 if (start.isEmpty() || start.contains(unit)) {
                     userRun << unit;
@@ -148,7 +164,8 @@ public:
                 for (const auto &unit : strings(group.value(scope))) {
                     const auto state = scope == u"system" ? systemState.value(unit) : userState.value(unit);
                     ++total;
-                    units << (scope == u"user" ? unit + u"（用户）"_s : unit);
+                    units << (scope == u"user" ? userUnit(unit) : unit);
+                    hasUser |= scope == u"user";
                     if (isMask(u"/etc/systemd/%1/%2"_s.arg(scope, unit))) {
                         ++masked;
                     }
@@ -167,24 +184,28 @@ public:
             bool on;
             if (disabledKind) {
                 on = enabled > 0 && masked == 0;
-                status = masked ? u"已屏蔽"_s : active ? u"运行中"_s : on ? u"已开启，未运行"_s : u"已关闭"_s;
+                status = masked ? i18nc("@info:status", "Masked")
+                    : active   ? i18nc("@info:status", "Running")
+                    : on       ? i18nc("@info:status", "On, not running")
+                               : i18nc("@info:status", "Off");
             } else {
                 on = masked == 0;
-                status = masked == total ? u"已屏蔽"_s
-                    : masked                ? u"部分屏蔽"_s
-                    : missing == total      ? u"已允许（未安装）"_s
-                    : active                ? u"已允许，运行中"_s
-                                            : u"已允许，未运行"_s;
+                status = masked == total ? i18nc("@info:status", "Masked")
+                    : masked                ? i18nc("@info:status", "Partly masked")
+                    : missing == total      ? i18nc("@info:status", "Allowed (not installed)")
+                    : active                ? i18nc("@info:status", "Allowed, running")
+                                            : i18nc("@info:status", "Allowed, not running");
             }
             m_groups << QVariantMap{
                 {u"id"_s, group.value(u"id"_s).toString()},
-                {u"name"_s, group.value(u"name"_s).toString()},
-                {u"summary"_s, group.value(u"summary"_s).toString()},
-                {u"warning"_s, group.value(u"warning"_s).toString()},
+                {u"name"_s, translated(group.value(u"name"_s))},
+                {u"summary"_s, translated(group.value(u"summary"_s))},
+                {u"warning"_s, translated(group.value(u"warning"_s))},
                 {u"risk"_s, group.value(u"risk"_s).toString()},
                 {u"evidence"_s, group.value(u"evidence"_s).toString()},
                 {u"kind"_s, disabledKind ? u"optional"_s : u"masked"_s},
                 {u"units"_s, units},
+                {u"user"_s, hasUser},
                 // An optional group's user services start or stop with the switch, in this session too.
                 {u"userRun"_s, disabledKind ? userRun : QStringList()},
                 {u"on"_s, on},
@@ -194,7 +215,7 @@ public:
 
         m_distributionMasks = masksIn(u"/usr/lib/systemd/system"_s);
         for (const auto &unit : masksIn(u"/usr/lib/systemd/user"_s)) {
-            m_distributionMasks << unit + u"（用户）"_s;
+            m_distributionMasks << userUnit(unit);
         }
         m_otherMasks.clear();
         for (const auto &scope : {u"system"_s, u"user"_s}) {
@@ -233,10 +254,7 @@ public:
         for (const auto &value : std::as_const(m_groups)) {
             const auto map = value.toMap();
             if (map.value(u"id"_s) == group) {
-                const auto units = map.value(u"units"_s).toStringList();
-                user = std::any_of(units.cbegin(), units.cend(), [](const QString &unit) {
-                    return unit.endsWith(u"（用户）"_s);
-                });
+                user = map.value(u"user"_s).toBool();
                 userRun = map.value(u"userRun"_s).toStringList();
             }
         }

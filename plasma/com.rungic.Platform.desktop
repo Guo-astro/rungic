@@ -1,7 +1,9 @@
 [Desktop Entry]
 Type=Application
-Name=Android 设备
-Comment=手机状态、亮度与 Android 系统设置
+Name=Android Device
+Name[zh_CN]=Android 设备
+Comment=Phone status, brightness and Android system settings
+Comment[zh_CN]=手机状态、亮度与 Android 系统设置
 Exec=/usr/bin/rungic-platform
 Icon=phone-symbolic
 Terminal=false

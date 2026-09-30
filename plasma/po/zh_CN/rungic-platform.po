@@ -1,0 +1,269 @@
+# Simplified Chinese translation of rungic-platform (Rungic).
+# SPDX-License-Identifier: GPL-2.0-or-later
+msgid ""
+msgstr ""
+"Project-Id-Version: rungic-platform\n"
+"PO-Revision-Date: 2026-09-30 00:00+0000\n"
+"Last-Translator: Rungic\n"
+"Language-Team: Chinese Simplified\n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: plasma/device-panel.py
+msgid "The Android host sent a response that is too large"
+msgstr "宿主响应过大"
+
+#: plasma/device-panel.py
+msgid "Android Device"
+msgstr "Android 设备"
+
+#: plasma/device-panel.py
+msgid "Device"
+msgstr "设备"
+
+#: plasma/device-panel.py
+msgid "Phone and Linux"
+msgstr "手机与 Linux"
+
+#: plasma/device-panel.py
+msgid "Phone model"
+msgstr "手机型号"
+
+#: plasma/device-panel.py
+msgid "Time zone"
+msgstr "时区"
+
+#: plasma/device-panel.py
+msgid "Network"
+msgstr "网络"
+
+#: plasma/device-panel.py
+msgid "Android manages network connections"
+msgstr "网络连接由 Android 管理"
+
+#: plasma/device-panel.py
+msgid "Connection"
+msgstr "连接状态"
+
+#: plasma/device-panel.py
+msgid "IP address"
+msgstr "IP 地址"
+
+#: plasma/device-panel.py
+msgid "Wi-Fi link"
+msgstr "Wi-Fi 链路"
+
+#: plasma/device-panel.py
+msgid "Manage networks"
+msgstr "管理网络"
+
+#: plasma/device-panel.py
+msgid "Display"
+msgstr "显示"
+
+#: plasma/device-panel.py
+msgid "Android may limit refresh rate requests to save power or manage heat"
+msgstr "Android 的刷新率请求受系统省电与温控策略约束"
+
+#: plasma/device-panel.py
+msgid "Supported refresh rates"
+msgstr "支持的刷新率"
+
+#: plasma/device-panel.py
+msgid "Current display and frame rate"
+msgstr "当前显示与画面提交"
+
+#: plasma/device-panel.py
+msgid "Screen orientation"
+msgstr "屏幕方向"
+
+#: plasma/device-panel.py
+msgid "Follow Android"
+msgstr "跟随 Android"
+
+#: plasma/device-panel.py
+msgid "Portrait"
+msgstr "竖屏"
+
+#: plasma/device-panel.py
+msgid "Landscape"
+msgstr "横屏"
+
+#: plasma/device-panel.py
+msgid "Brightness follows Android"
+msgstr "亮度跟随 Android"
+
+#: plasma/device-panel.py
+msgid "Desktop window brightness"
+msgstr "桌面窗口亮度"
+
+#: plasma/device-panel.py
+msgid "Android display settings"
+msgstr "Android 显示设置"
+
+#: plasma/device-panel.py
+msgid "Battery"
+msgstr "电池"
+
+#: plasma/device-panel.py
+msgid "Charge and temperature"
+msgstr "电量与温度"
+
+#: plasma/device-panel.py
+msgid "Charging status"
+msgstr "充电状态"
+
+#: plasma/device-panel.py
+msgid "Charging"
+msgstr "充电中"
+
+#: plasma/device-panel.py
+msgid "Memory"
+msgstr "内存"
+
+#: plasma/device-panel.py
+msgid "Limits the memory the Linux desktop can use. Above the limit, Linux reclaims memory or closes programs itself instead of pushing out Android’s VPN and other apps; with a very low limit, large programs may be closed."
+msgstr "限制 Linux 桌面可用的内存。超出时由 Linux 自己回收或关闭程序，不会挤掉 Android 的 VPN 和其他应用；上限太低时大型程序可能被关闭。"
+
+#: plasma/device-panel.py
+msgid "Linux memory in use"
+msgstr "Linux 已用内存"
+
+#: plasma/device-panel.py
+msgid "Memory limit"
+msgstr "内存上限"
+
+#: plasma/device-panel.py
+msgid "Minimum · 2 GB"
+msgstr "最低 · 2 GB"
+
+#: plasma/device-panel.py
+msgid "4 GB (default)"
+msgstr "4 GB（默认）"
+
+#: plasma/device-panel.py
+msgid "No limit"
+msgstr "无上限"
+
+#: plasma/device-panel.py
+msgid "System settings"
+msgstr "系统设置"
+
+#: plasma/device-panel.py
+msgid "Sound and output devices"
+msgstr "声音与输出设备"
+
+#: plasma/device-panel.py
+msgid "Bluetooth devices"
+msgstr "蓝牙设备"
+
+#: plasma/device-panel.py
+msgid "Date and time zone"
+msgstr "日期与时区"
+
+#: plasma/device-panel.py
+msgid "Location settings"
+msgstr "定位设置"
+
+#: plasma/device-panel.py
+msgid "Test vibration"
+msgstr "测试震动"
+
+#: plasma/device-panel.py
+msgid "Connecting to Android…"
+msgstr "正在连接 Android…"
+
+#: plasma/device-panel.py
+msgid "Loading…"
+msgstr "读取中…"
+
+#: plasma/device-panel.py
+msgid "Mobile network"
+msgstr "移动网络"
+
+#: plasma/device-panel.py
+msgid "Ethernet"
+msgstr "以太网"
+
+#: plasma/device-panel.py
+msgid "Other"
+msgstr "其他"
+
+#: plasma/device-panel.py
+msgid "Not connected"
+msgstr "未连接"
+
+#: plasma/device-panel.py
+msgid " · Online"
+msgstr " · 已联网"
+
+#: plasma/device-panel.py
+msgid " · Internet not verified"
+msgstr " · 未验证互联网"
+
+#: plasma/device-panel.py
+msgid "None"
+msgstr "无"
+
+#: plasma/device-panel.py
+msgid "See the network name in Android"
+msgstr "网络名称请在 Android 中查看"
+
+#: plasma/device-panel.py
+#, python-brace-format
+msgid "Link speed {speed} Mbps"
+msgstr "协商速率 {speed} Mbps"
+
+#: plasma/device-panel.py
+msgid "Not connected to Wi-Fi"
+msgstr "未连接 Wi-Fi"
+
+#: plasma/device-panel.py
+msgid "Status unknown"
+msgstr "状态未知"
+
+#: plasma/device-panel.py
+msgid "Discharging"
+msgstr "正在放电"
+
+#: plasma/device-panel.py
+msgid "Charging paused"
+msgstr "暂停充电"
+
+#: plasma/device-panel.py
+msgid "Fully charged"
+msgstr "电量已满"
+
+#: plasma/device-panel.py
+msgid "Unknown"
+msgstr "未知"
+
+#: plasma/device-panel.py
+msgid " · Plugged in"
+msgstr " · 已连接电源"
+
+#: plasma/device-panel.py
+msgid " · Not plugged in"
+msgstr " · 未连接电源"
+
+#: plasma/device-panel.py
+#, python-brace-format
+msgid "Android reports {reported:.0f} Hz\nDesktop submits {submitted:.1f} fps"
+msgstr "Android 报告 {reported:.0f} Hz\n桌面提交 {submitted:.1f} 帧/秒"
+
+#: plasma/device-panel.py
+msgctxt "memory limit"
+msgid "none"
+msgstr "无上限"
+
+#: plasma/device-panel.py
+#, python-brace-format
+msgid "{usage} MB · limit {limit} · peak {peak} MB (of {total} MB)"
+msgstr "{usage} MB · 上限 {limit} · 峰值 {peak} MB（共 {total} MB）"
+
+#: plasma/device-panel.py
+msgid "Update the Android side (Rungic APK 2.5) to show this"
+msgstr "需要更新 Android 端（Rungic APK 2.5）"

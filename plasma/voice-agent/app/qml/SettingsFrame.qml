@@ -23,7 +23,7 @@ Rectangle {
         IconButton {
             anchors { left: parent.left; leftMargin: 6; verticalCenter: parent.verticalCenter }
             iconName: "back"
-            text: "返回"
+            text: i18nc("@action:button", "Back")
             onClicked: frame.back()
         }
         Text {

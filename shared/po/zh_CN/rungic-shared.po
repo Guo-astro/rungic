@@ -1,0 +1,44 @@
+# Simplified Chinese for the user-visible texts of Rungic's shared bridges (shared/).
+# Installed by rungic-plasma-bridges as /usr/share/locale/zh_CN/LC_MESSAGES/rungic-shared.mo.
+# Update the entries from the sources:
+#   xgettext -o - -L Python shared/media/media-bridge.py
+#   xgettext -o - -L C++ -k -ktr shared/media/camera-source.cpp
+msgid ""
+msgstr ""
+"Project-Id-Version: rungic-shared\n"
+"PO-Revision-Date: 2026-09-30 00:00+0800\n"
+"Last-Translator: Rungic\n"
+"Language-Team: Chinese (simplified)\n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#. PulseAudio sink that always plays on the phone, also while casting.
+#: shared/media/media-bridge.py
+msgid "This Phone"
+msgstr "手机本机"
+
+#. Virtual output for software that listens to an application (docs/62).
+#: shared/media/media-bridge.py
+msgid "Linux Speaker"
+msgstr "Linux 扬声器"
+
+#: shared/media/media-bridge.py
+msgid "Linux Microphone Input"
+msgstr "Linux 麦克风输入"
+
+#. Virtual microphone for software that speaks into an application (docs/62).
+#: shared/media/media-bridge.py
+msgid "Linux Microphone"
+msgstr "Linux 麦克风"
+
+#. PipeWire camera node names.
+#: shared/media/camera-source.cpp
+msgid "Android Front Camera"
+msgstr "Android 前置相机"
+
+#: shared/media/camera-source.cpp
+msgid "Android Rear Camera"
+msgstr "Android 后置相机"

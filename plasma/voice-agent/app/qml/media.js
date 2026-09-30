@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Pictures and files an answer points at (docs/88). Codex answers in Markdown and points at
-// files on this phone by path: ![说明](</home/…/a.png>) for a picture, [名字](/home/…/b.blend)
+// files on this phone by path: ![caption](</home/…/a.png>) for a picture, [name](/home/…/b.blend)
 // for a file. A text view cannot load a bare path (it resolves against the app's own qrc base),
 // so the pictures come out of the text and are shown as Thumbnails, and local links get file://
 // URLs that open. parse(text, home) → { text, images: [{url, name}], files: [{url, name}] };

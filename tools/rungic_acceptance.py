@@ -702,11 +702,11 @@ def screen_recording(ctx, seconds=4):
     try:
         _home()
         _quick_settings()
-        _tap_label('^录屏$')
+        _tap_label('^(录屏|Record Screen)$')   # the tile in the desktop's language
         began = time.monotonic()
         time.sleep(seconds + 1)
         _quick_settings()
-        _tap_label('^正在录屏')           # the tile while recording: "正在录屏… / 点击结束录屏"
+        _tap_label('^(正在录屏|Recording)')   # the tile while recording, in either language
         elapsed = time.monotonic() - began   # opening the quick settings takes a while over AT-SPI
         text = wait_for(lambda: (lambda r: r if r.returncode == 0 and float(r.stdout.split('\n')[1]) >= started - 2
                                  else None)(user(PROBE_RECORDING)), timeout=30, interval=2)

@@ -15,6 +15,8 @@ One TurnState per Codex turn, fed from the app-server's notifications:
 
 snapshot() is what the chat shows (the task card); facts() is what the voice may say, in tenses
 it cannot confuse: done, now, next. Nothing here talks to anyone; the voice agent decides when.
+The card's words are in the desktop's language (voice_i18n); facts() is for the voice model, in
+English around them (it speaks the user's language).
 """
 from __future__ import annotations
 
@@ -23,40 +25,47 @@ import re
 import shlex
 import time
 
+from voice_i18n import _, ngettext
+
 ANSI = re.compile(r'\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07]*\x07')
 PERCENT = re.compile(r'(?<![\d.])(\d{1,3}(?:\.\d+)?)\s?%')
 COUNTED = re.compile(r'(?i)\b(sample|tile|frame|step|chunk|file|item|part|epoch|batch)s?\b\D{0,4}(\d+)\s*/\s*(\d+)')
 SHELL = re.compile(r"^/bin/(?:ba)?sh -lc (['\"])([\s\S]*)\1$")
 
 # Programs by what they do for the user. The first match of the command's program wins.
+# (The words are looked up when shown: N_ only marks them for the catalog.)
+def N_(message: str) -> str:
+    return message
+
+
 PROGRAMS = [
-    ({'blender'}, '运行 Blender'),
-    ({'pkcon', 'apt', 'apt-get', 'dpkg', 'aptitude'}, '安装或查询软件包'),
-    ({'flatpak'}, '安装或管理 Flatpak 应用'),
-    ({'pip', 'pip3', 'uv', 'pipx'}, '安装 Python 包'),
-    ({'npm', 'pnpm', 'yarn', 'npx', 'node'}, '运行 Node.js'),
-    ({'make', 'cmake', 'ninja', 'cargo', 'gcc', 'g++', 'clang', 'meson', 'go'}, '编译'),
+    ({'blender'}, N_('Run Blender')),
+    ({'pkcon', 'apt', 'apt-get', 'dpkg', 'aptitude'}, N_('Install or look up packages')),
+    ({'flatpak'}, N_('Install or manage Flatpak apps')),
+    ({'pip', 'pip3', 'uv', 'pipx'}, N_('Install Python packages')),
+    ({'npm', 'pnpm', 'yarn', 'npx', 'node'}, N_('Run Node.js')),
+    ({'make', 'cmake', 'ninja', 'cargo', 'gcc', 'g++', 'clang', 'meson', 'go'}, N_('Build')),
     ({'git'}, 'Git'),
-    ({'curl', 'wget', 'aria2c'}, '访问网络'),
-    ({'ffmpeg', 'ffprobe'}, '处理音视频'),
-    ({'convert', 'magick', 'identify'}, '处理图片'),
-    ({'spectacle', 'rungic-screenshot'}, '截图'),
-    ({'rungic-cast'}, '投屏'),
-    ({'rungic-platform'}, '调用手机功能'),
-    ({'rungic-agent-screen'}, '开关助理屏'),
-    ({'rungic-desktop-mode'}, '开关桌面模式'),
-    ({'rungic-cua'}, '操作桌面'),
-    ({'journalctl', 'dmesg', 'coredumpctl'}, '查看日志'),
-    ({'systemctl'}, '查看或管理系统服务'),
-    ({'df', 'du', 'free', 'upower', 'lscpu', 'uptime'}, '查看设备状态'),
-    ({'ls', 'find', 'fd', 'tree'}, '查找文件'),
-    ({'cat', 'head', 'tail', 'less', 'bat', 'nl', 'wc'}, '查看文件'),
-    ({'grep', 'rg', 'ag'}, '搜索文本'),
-    ({'file', 'stat', 'sha256sum', 'md5sum'}, '检查文件'),
-    ({'rm', 'rmdir', 'trash', 'gio'}, '删除或整理文件'),
-    ({'cp', 'mv', 'mkdir', 'ln', 'touch', 'tar', 'unzip', 'zip'}, '整理文件'),
-    ({'sleep'}, '等待'),
-    ({'kill', 'pkill', 'killall'}, '结束进程'),
+    ({'curl', 'wget', 'aria2c'}, N_('Access the network')),
+    ({'ffmpeg', 'ffprobe'}, N_('Process audio and video')),
+    ({'convert', 'magick', 'identify'}, N_('Process images')),
+    ({'spectacle', 'rungic-screenshot'}, N_('Take a screenshot')),
+    ({'rungic-cast'}, N_('Cast the screen')),
+    ({'rungic-platform'}, N_('Use phone functions')),
+    ({'rungic-agent-screen'}, N_("Turn the assistant's screen on or off")),
+    ({'rungic-desktop-mode'}, N_('Turn desktop mode on or off')),
+    ({'rungic-cua'}, N_('Operate the desktop')),
+    ({'journalctl', 'dmesg', 'coredumpctl'}, N_('Read logs')),
+    ({'systemctl'}, N_('Check or manage system services')),
+    ({'df', 'du', 'free', 'upower', 'lscpu', 'uptime'}, N_('Check the device status')),
+    ({'ls', 'find', 'fd', 'tree'}, N_('Find files')),
+    ({'cat', 'head', 'tail', 'less', 'bat', 'nl', 'wc'}, N_('Read files')),
+    ({'grep', 'rg', 'ag'}, N_('Search text')),
+    ({'file', 'stat', 'sha256sum', 'md5sum'}, N_('Check files')),
+    ({'rm', 'rmdir', 'trash', 'gio'}, N_('Delete or tidy up files')),
+    ({'cp', 'mv', 'mkdir', 'ln', 'touch', 'tar', 'unzip', 'zip'}, N_('Tidy up files')),
+    ({'sleep'}, N_('Wait')),
+    ({'kill', 'pkill', 'killall'}, N_('End processes')),
 ]
 PYTHON = {'python', 'python3'}
 SHELL_WORDS = {'cd', 'export', 'set', 'source', '.', 'env', 'sudo', 'nice', 'timeout', 'time', 'nohup', 'exec'}
@@ -87,34 +96,38 @@ def first_program(command: str) -> tuple[str, list[str]]:
 
 
 def describe_command(command: str, actions: list | None = None) -> str:
-    """What a command does, in a few words of Simplified Chinese."""
+    """What a command does, in a few words of the desktop's language."""
     for action in actions or []:
         kind = action.get('type')
         if kind == 'read':
-            return f"读取 {action.get('name') or os.path.basename(str(action.get('path') or ''))}"
+            return _('Read {name}').format(name=action.get('name') or os.path.basename(str(action.get('path') or '')))
         if kind == 'listFiles':
             path = action.get('path')
-            return f'查看 {os.path.basename(str(path).rstrip("/")) or path} 里的文件' if path else '查看文件列表'
+            if not path:
+                return _('List files')
+            return _('List the files in {folder}').format(folder=os.path.basename(str(path).rstrip('/')) or path)
         if kind == 'search':
             query = action.get('query')
-            return f'搜索“{query}”' if query else '搜索文件'
+            return _('Search for “{query}”').format(query=query) if query else _('Search files')
     program, args = first_program(unwrap(command))
     if program in PYTHON:
         script = next((a for a in args if a.endswith('.py')), '')
         if '-m' in args and args.index('-m') + 1 < len(args):
-            return f"运行 Python 模块 {args[args.index('-m') + 1]}"
-        return f'运行 Python 脚本 {os.path.basename(script)}' if script else '运行 Python'
+            return _('Run the Python module {module}').format(module=args[args.index('-m') + 1])
+        return _('Run the Python script {script}').format(script=os.path.basename(script)) if script else _('Run Python')
     if program == 'blender':
         script = next((a for a in args if a.endswith('.py')), '')
         background = '-b' in args or '--background' in args
-        what = '在后台运行 Blender' if background else '运行 Blender'
-        return f'{what}（{os.path.basename(script)}）' if script else what
+        if script:
+            what = _('Run Blender in the background ({script})') if background else _('Run Blender ({script})')
+            return what.format(script=os.path.basename(script))
+        return _('Run Blender in the background') if background else _('Run Blender')
     if program == 'git' and args:
         return f'Git {args[0]}'
     for names, text in PROGRAMS:
         if program in names:
-            return text
-    return f'运行 {program}' if program else '运行命令'
+            return _(text)
+    return _('Run {program}').format(program=program) if program else _('Run a command')
 
 
 def last_line(text: str) -> str:
@@ -155,10 +168,17 @@ def describe_files(changes: list) -> tuple[str, list[dict]]:
         added, removed = count_lines(change.get('diff') or '')
         files.append({'path': change.get('path', ''), 'kind': kind, 'added': added, 'removed': removed})
     if not files:
-        return '修改文件', files
-    verb = {'add': '新建', 'delete': '删除'}.get(files[0]['kind'], '修改')
-    name = os.path.basename(files[0]['path'])
-    return (f'{verb} {name}' if len(files) == 1 else f'{verb} {name} 等 {len(files)} 个文件'), files
+        return _('Change files'), files
+    kind, name, count = files[0]['kind'], os.path.basename(files[0]['path']), len(files)
+    if count == 1:
+        text = {'add': _('Create {name}'), 'delete': _('Delete {name}')}.get(kind, _('Edit {name}'))
+    elif kind == 'add':
+        text = ngettext('Create {name} and others ({count} file)', 'Create {name} and others ({count} files)', count)
+    elif kind == 'delete':
+        text = ngettext('Delete {name} and others ({count} file)', 'Delete {name} and others ({count} files)', count)
+    else:
+        text = ngettext('Edit {name} and others ({count} file)', 'Edit {name} and others ({count} files)', count)
+    return text.format(name=name, count=count), files
 
 
 class TurnState:
@@ -204,17 +224,23 @@ class TurnState:
                     total['removed'] += f['removed']
         elif kind == 'mcpToolCall':
             tool = item.get('tool', '')
-            text = '在助理屏上操作' if tool.startswith('desktop_') else f'使用工具 {tool}'
+            if tool.startswith('desktop_'):
+                text = _("Work on the assistant's screen")
+            else:
+                text = _('Use the tool {tool}').format(tool=tool)
             activity = 'screen' if tool.startswith('desktop_') else 'tool'
         elif kind == 'webSearch':
             query = item.get('query') or ''
-            text, activity = (f'上网搜索“{query}”' if query else '上网搜索'), 'search'
+            text = _('Search the web for “{query}”').format(query=query) if query else _('Search the web')
+            activity = 'search'
         elif kind == 'imageView':
-            text, activity = f"查看图片 {os.path.basename(item.get('path') or '')}".strip(), 'look'
+            picture = os.path.basename(item.get('path') or '')
+            text = _('Look at the picture {name}').format(name=picture) if picture else _('Look at a picture')
+            activity = 'look'
         elif kind == 'imageGeneration':
-            text, activity = '生成图片', 'image'
+            text, activity = _('Generate a picture'), 'image'
         elif kind == 'sleep':
-            text, activity = '等待', 'wait'
+            text, activity = _('Wait'), 'wait'
         else:
             return False
         # Reasoning is not a step: between steps the card says it is thinking by itself.
@@ -251,7 +277,8 @@ class TurnState:
             added = sum(f['added'] for f in files)
             removed = sum(f['removed'] for f in files)
             self.current['text'] = text
-            self.current['detail'] = f'+{added} −{removed} 行' if added or removed else ''
+            lines = ngettext('+{added} −{removed} line', '+{added} −{removed} lines', added + removed)
+            self.current['detail'] = lines.format(added=added, removed=removed) if added or removed else ''
             return True
         return False
 
@@ -296,33 +323,35 @@ class TurnState:
                 'files': [{'path': p, **f} for p, f in self.files.items()]}
 
     def facts(self, now: float | None = None) -> str:
-        """What the voice may say, by tense: done, now, next. Only facts; an intention says so."""
+        """What the voice may say, by tense: done, now, next. Only facts; an intention says so.
+        For the voice model: English labels around the card's words (prompts/realtime.md)."""
         now = now if now is not None else time.time()
-        lines = [f'已用时 {round(now - self.started)} 秒，任务仍在进行。']
+        lines = [f'Time so far: {round(now - self.started)} s; the task is still running.']
         if self.plan:
             done = [p['step'] for p in self.plan if p['status'] == 'completed']
             doing = [p['step'] for p in self.plan if p['status'] == 'inProgress']
             todo = [p['step'] for p in self.plan if p['status'] == 'pending']
-            lines.append(f'计划共 {len(self.plan)} 步。')
+            lines.append(f'The plan has {len(self.plan)} steps.')
             if done:
-                lines.append('已完成：' + '；'.join(done))
+                lines.append('Done: ' + '; '.join(done))
             if doing:
-                lines.append('进行中：' + '；'.join(doing))
+                lines.append('In progress: ' + '; '.join(doing))
             if todo:
-                lines.append('还没开始：' + '；'.join(todo[:3]))
+                lines.append('Not started yet: ' + '; '.join(todo[:3]))
         if self.current:
             detail = self.current.get('detail') or ''
             progress = self.current.get('progress')
-            extra = [f"{round(now - self.current['since'])} 秒"]
+            extra = [f"{round(now - self.current['since'])} s"]
             if progress is not None:
-                extra.append(f'约 {round(progress * 100)}%')
+                extra.append(f'about {round(progress * 100)}%')
             if detail and self.current.get('kind') == 'screen':
                 extra.append(detail)
-            lines.append(f"此刻正在：{self.current['text']}（{'，'.join(extra)}）")
+            lines.append(f"Now: {self.current['text']} ({', '.join(extra)})")
         elif self.recent:
-            lines.append(f"刚做完：{self.recent[-1]['text']}")
+            lines.append(f"Just finished: {self.recent[-1]['text']}")
         if self.preview and not self.preview['done'] and self.preview.get('progress') is not None:
-            lines.append(f"渲染进度：{self.preview['text']}（约 {round(self.preview['progress'] * 100)}%，画面正在逐步变清晰）")
+            lines.append(f"Render progress: {self.preview['text']} (about {round(self.preview['progress'] * 100)}%, "
+                         'the picture is getting clearer pass by pass)')
         if self.intent and now - self.intent_at < 60:
-            lines.append(f'接下来打算：{self.intent}（这是打算，还没做完）')
+            lines.append(f'Intends next: {self.intent} (an intention, not done yet)')
         return '\n'.join(lines)

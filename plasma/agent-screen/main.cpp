@@ -2,6 +2,8 @@
 // window on the phone of desktop mode (the user's second desktop screen) or of the assistant's
 // screen (the agent's workspace N). Started by rungic-desktop-mode or rungic-agent-screen once its
 // screen is on; quits when it is turned off. Each has a desktop file of its own (its grants).
+#include <KLocalizedQmlContext>
+#include <KLocalizedString>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -24,7 +26,10 @@ int main(int argc, char *argv[])
 
     AgentScreen agent(workspace);
     Floater floater;
+    // Texts follow the Plasma language (catalog rungic-agent-screen, po/).
+    KLocalizedString::setApplicationDomain("rungic-agent-screen");
     QQmlApplicationEngine engine;
+    KLocalization::setupLocalizedContext(&engine);
     engine.rootContext()->setContextProperty(QStringLiteral("agent"), &agent);
     engine.rootContext()->setContextProperty(QStringLiteral("floater"), &floater);
     engine.loadFromModule("com.rungic.agentscreen", "Main");

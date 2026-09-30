@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// 设置 (docs/87): Codex and the OpenAI API key, voice, appearance, about.
+// Settings (docs/87): Codex and the OpenAI API key, voice, appearance, about.
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as QQC2
@@ -8,10 +8,12 @@ import com.rungic.voiceassistant
 
 SettingsFrame {
     id: page
-    title: "设置"
+    title: i18nc("@title", "Settings")
     property var setup: ({})
     readonly property var settings: QQC2.ApplicationWindow.window ? QQC2.ApplicationWindow.window.settings : null
     property bool choosingTheme: false
+    readonly property var themeNames: [["system", i18nc("@item the app's theme", "System")], ["light", i18nc("@item the app's theme", "Light")],
+                                       ["dark", i18nc("@item the app's theme", "Dark")]]
 
     Component.onCompleted: AgentClient.request("Setup")
     onVisibleChanged: if (visible) AgentClient.request("Setup")
@@ -37,14 +39,14 @@ SettingsFrame {
         ListRow {
             text: "Codex"
             dot: page.setup.codex ? (page.codex.installed ? "positive" : "negative") : ""
-            value: !page.setup.codex ? "" : page.codex.installed ? "已安装" : "未安装"
+            value: !page.setup.codex ? "" : page.codex.installed ? i18nc("@info Codex", "Installed") : i18nc("@info Codex", "Not installed")
             accessory: "chevron"
             onClicked: page.push("CodexPage.qml")
         }
-        ListRow { text: "Agent 用量"; accessory: "chevron"; onClicked: page.push("UsagePage.qml") }
+        ListRow { text: i18nc("@title", "Agent Usage"); accessory: "chevron"; onClicked: page.push("UsagePage.qml") }
         ListRow {
             text: "OpenAI API Key"
-            value: page.key.set ? page.key.masked : (page.setup.key ? "未设置" : "")
+            value: page.key.set ? page.key.masked : (page.setup.key ? i18nc("@info the API key", "Not set") : "")
             valueMono: page.key.set === true
             dot: page.setup.key && !page.key.set ? "negative" : ""
             accessory: "chevron"
@@ -52,58 +54,58 @@ SettingsFrame {
         }
     }
 
-    SectionLabel { Layout.fillWidth: true; text: "语音" }
+    SectionLabel { Layout.fillWidth: true; text: i18nc("@title:group", "Voice") }
     ListGroup {
         Layout.fillWidth: true
         Layout.leftMargin: Theme.groupMargin
         Layout.rightMargin: Theme.groupMargin
         ListRow {
-            text: "长按 Home 呼出"
+            text: i18nc("@option:check", "Hold Home to open")
             onClicked: homeToggle.toggle()
             trailing: Toggle {
                 id: homeToggle
-                text: "长按 Home 呼出"
+                text: i18nc("@option:check", "Hold Home to open")
                 checked: page.prefs.homeHold !== false
                 onToggled: page.prefer("homeHold", checked)
             }
         }
         ListRow {
-            text: "朗读回答"
+            text: i18nc("@option:check", "Read answers aloud")
             onClicked: speakToggle.toggle()
             trailing: Toggle {
                 id: speakToggle
-                text: "朗读回答"
+                text: i18nc("@option:check", "Read answers aloud")
                 checked: page.prefs.speak !== false
                 onToggled: page.prefer("speak", checked)
             }
         }
         ListRow {
-            text: "免提时说完自动发送"
-            subtitle: "停顿约 1 秒后发送"
+            text: i18nc("@option:check", "Auto-send in hands-free mode")
+            subtitle: i18nc("@info", "Sends after a pause of about a second")
             onClicked: autoToggle.toggle()
             trailing: Toggle {
                 id: autoToggle
-                text: "免提时说完自动发送"
+                text: i18nc("@option:check", "Auto-send in hands-free mode")
                 checked: page.prefs.handsFreeAutoSend !== false
                 onToggled: page.prefer("handsFreeAutoSend", checked)
             }
         }
     }
 
-    SectionLabel { Layout.fillWidth: true; text: "外观" }
+    SectionLabel { Layout.fillWidth: true; text: i18nc("@title:group", "Appearance") }
     ListGroup {
         Layout.fillWidth: true
         Layout.leftMargin: Theme.groupMargin
         Layout.rightMargin: Theme.groupMargin
         ListRow {
-            readonly property var names: ({ system: "跟随系统", light: "浅色", dark: "深色" })
-            text: "主题"
-            value: page.settings ? names[page.settings.theme] || "跟随系统" : ""
+            readonly property var names: ({ system: page.themeNames[0][1], light: page.themeNames[1][1], dark: page.themeNames[2][1] })
+            text: i18nc("@label", "Theme")
+            value: page.settings ? names[page.settings.theme] || names.system : ""
             accessory: "chevron"
             onClicked: page.choosingTheme = !page.choosingTheme
         }
         Repeater {
-            model: page.choosingTheme ? [["system", "跟随系统"], ["light", "浅色"], ["dark", "深色"]] : []
+            model: page.choosingTheme ? page.themeNames : []
             ListRow {
                 required property var modelData
                 text: modelData[1]
@@ -114,26 +116,28 @@ SettingsFrame {
         }
     }
 
-    SectionLabel { Layout.fillWidth: true; text: "关于" }
+    SectionLabel { Layout.fillWidth: true; text: i18nc("@title:group", "About") }
     ListGroup {
         Layout.fillWidth: true
         Layout.leftMargin: Theme.groupMargin
         Layout.rightMargin: Theme.groupMargin
-        ListRow { text: "版本"; value: page.setup.version || "" }
-        ListRow { text: "隐私说明"; accessory: "chevron"; onClicked: page.push(privacy) }
+        ListRow { text: i18nc("@label", "Version"); value: page.setup.version || "" }
+        ListRow { text: i18nc("@action:button", "Privacy"); accessory: "chevron"; onClicked: page.push(privacy) }
     }
     Item { implicitHeight: 24 }
 
     Component {
         id: privacy
         SettingsFrame {
-            title: "隐私说明"
+            title: i18nc("@title", "Privacy")
             Repeater {
                 model: [
-                    "你按住说话时，声音才会离开手机：它经你设置的代理发到 OpenAI，由语音模型听懂并回答。松开前滑到 × 取消，这段声音就不会发出。",
-                    "Agent 通过 Codex 在这台手机上执行命令、操作应用。它看到的屏幕内容和命令结果会发给 OpenAI 用来决定下一步。",
-                    "对话记录只保存在这台手机上（~/.local/share/rungic-voice-agent），删除对话会一并删除记录。",
-                    "OpenAI API Key 明文保存在本机的配置文件里（~/.config/rungic-voice-agent，只有你这个用户能读），只用来调用 OpenAI。以你身份运行的程序（包括 Agent）都能读到它。"
+                    i18nc("@info privacy", "Your voice leaves the phone only while you hold to talk: it goes through the proxy you set up to OpenAI, where a voice model understands it and answers. Slide onto × before you let go to cancel, and it is never sent."),
+                    i18nc("@info privacy", "The Agent runs commands and uses apps on this phone through Codex. What it sees on the screen and the results of its commands are sent to OpenAI to decide the next step."),
+                    i18nc("@info privacy; %1 is a folder", "Conversations are kept only on this phone (%1). Deleting a conversation deletes its history too.",
+                          "~/.local/share/rungic-voice-agent"),
+                    i18nc("@info privacy; %1 is a folder", "Your OpenAI API key is kept in plain text in a config file on this phone (%1, readable only by your user) and is used only to call OpenAI. Programs running as you, including the Agent, can read it.",
+                          "~/.config/rungic-voice-agent")
                 ]
                 Text {
                     required property string modelData

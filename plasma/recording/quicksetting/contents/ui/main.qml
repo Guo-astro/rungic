@@ -26,9 +26,11 @@ QS.QuickSetting {
 
     function captureLabel(name, index) {
         if (name === Screen.name) {
-            return "手机";
+            return i18nc("@label screen name in a recording's file name", "Phone");
         }
-        return root.captureScreens.length > 2 ? "外屏 " + index : "外屏";
+        return root.captureScreens.length > 2
+            ? i18nc("@label screen name in a recording's file name, %1 its number", "External %1", index)
+            : i18nc("@label screen name in a recording's file name", "External");
     }
 
     function stopCapture() {
