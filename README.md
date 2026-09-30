@@ -4,6 +4,41 @@ Rungic是运行在Android手机上的AgentOS：Ubuntu容器中的Plasma Mobile�
 
 2026-09-23按用户要求停止维护Phosh。共享媒体/网络/剪贴板实现保留在`shared/`；本次仅整理本地项目，没有卸载或更改手机中的系统。
 
+## Agent能力
+
+Rungic的核心是系统级AI助理：用户用语音或文字交代任务，助理在Linux桌面上实际操作应用完成它，并让用户随时看到它在做什么。
+
+| 能力 | 说明 | 文档 |
+|---|---|---|
+| 语音对话 | 长按Home呼出；GPT Realtime负责对话和语音播报，Codex在后台执行任务 | [59](docs/59-voice-agent.md)、[67](docs/67-home-assistant.md) |
+| 看得见的工作 | 聊天式界面（“主对话”与其他对话）；任务计划清单、按步骤的语音播报、回答里直接展示图片和文件 | [87](docs/87-agent-app-redesign.md)–[89](docs/89-agent-progress.md) |
+| 操作桌面应用 | 按无障碍树（AT-SPI）和虚拟输入操作控件；GPT-6 Luna看画面决定点哪里；手机GPU做OCR | [60](docs/60-computer-use.md)、[64](docs/64-goal-computer-use.md)、[68](docs/68-luna-computer-use.md) |
+| 助理屏（工作区） | 助理自己的桌面：独立KWin、私有D-Bus和无障碍总线、自己的Xwayland，显示在手机浮窗或电视上，不碰用户正在用的屏幕 | [65](docs/65-agent-screen.md)、[research/91](docs/research/91-agent-workspaces.md) |
+| 工作位置 | 用户开着桌面模式或投屏时在用户桌面上工作，否则在助理屏；用户可以直接指定 | [research/91](docs/research/91-agent-workspaces.md) |
+| 单实例应用切换 | 微信、Telegram等按需切到助理屏；关闭用户正在用的实例前先征得同意 | [research/91](docs/research/91-agent-workspaces.md) |
+| 手机能力 | 亮度、剪贴板、方向、振动、网络与显示信息、Android设置面板（`rungic-platform`）；投屏、截图 | [59](docs/59-voice-agent.md) |
+| 通话与语音代发 | 替用户打电话、接电话；在聊天应用里发语音消息 | [63](docs/63-call-proxy.md) |
+| 主动建议 | 采集故障和软件适配问题，结合兼容性知识库在Folio主屏小组件里给出建议，用户委托后由助理调查和处理 | [主动建议](docs/research/proactive-system-care.md) |
+| 可改的指令 | 行为准则和技能放在用户目录（`~/.config/rungic-voice-agent/prompts`、`~/.codex/skills`），改动随时生效；需要密码或会改变结果的绕路先问用户 | [59](docs/59-voice-agent.md) |
+| 原生诊断 | 合并日志、崩溃符号化、证据快照、按控件操作，以MCP工具供开发Agent调用 | [55](docs/55-agent-native-debugging.md) |
+
+## 系统特性
+
+| 领域 | 特性 | 文档 |
+|---|---|---|
+| 底座 | Android 16上用LXC运行Ubuntu 26.04 ARM64（glibc），Magisk提供root；`~/Shared`即Android共享存储 | [38](docs/38-plasma-mobile.md)、[40](docs/40-plasma-mobile-integration.md)、[69](docs/69-filesystem-capabilities.md) |
+| 桌面 | 官方Plasma Mobile 6.6.5，KWin 6.6.6加Android宿主后端；Rime中文输入、录屏、边缘返回 | [40](docs/40-plasma-mobile-integration.md)、[41](docs/41-plasma-rime-input.md)、[72](docs/72-kwin-android-host-isolation.md) |
+| 显示 | 零拷贝呈现与显式同步、UBWC压缩输出；触摸时请求120Hz；原生分辨率与显示大小策略 | [49](docs/49-plasma-performance.md)、[57](docs/57-zero-copy-explicit-sync.md)、[85](docs/85-phone-display-size-policy.md) |
+| 第二块屏 | 桌面模式（完整桌面在手机浮窗里）；自研Miracast发送端投屏到电视，手机当触控板和键盘 | [65](docs/65-agent-screen.md)、[66](docs/66-pointer-gestures.md)、[84](docs/84-miracast-source.md) |
+| GPU | Mesa KGSL（freedreno GL/GLES、Turnip Vulkan 1.4）；X11应用经Xwayland的glamor和DRI3用GPU；Flatpak自带GL扩展，`--device=dri`带上KGSL | [51](docs/51-plasma-vulkan-benchmark.md)、[research/93](docs/research/93-xwayland-kgsl-gpu.md)、[research/94](docs/research/94-mesa-base.md) |
+| 音视频 | 系统级扬声器与麦克风；摄像头经libcamera/PipeWire；H.264/HEVC/VP9硬解、H.264硬编；屏幕共享portal | [48](docs/48-plasma-media-pipelines.md)、[62](docs/62-linux-virtual-audio.md) |
+| 系统服务 | 双向剪贴板与剪贴板历史；Wi-Fi、蓝牙、蜂窝状态接Android；SSH自动开启；容器内rootless Docker | [83](docs/83-service-policy.md)、[85](docs/85-lxc-rootless-docker.md)、[剪贴板历史](docs/research/clipboard-history.md) |
+| 应用 | Firefox（WebGL、硬解视频）、Blender（Vulkan视口）、Krita 6、Telegram、VS Code、微信；Discover与`pkgcli`安装，系统弹密码框 | [36](docs/36-firefox-input-fix.md)、[45](docs/45-plasma-app-store.md)、[90](docs/90-blender-vulkan-incident.md) |
+| 交付 | 上游组件以固定版本加补丁队列维护；本地APT仓库与发布元包，部署后自动验收，按包回退 | [61](docs/61-delivery-diagnostics-plan.md)、[71](docs/71-upstream-patch-queue.md)、[73](docs/73-reduce-upstream-changes.md) |
+| 刷机包 | GKI、rootfs、一键包三段式构建；G100清数据刷入后进入Plasma，X70 Air Pro在接入中 | [75](docs/75-image-build-separation.md)、[80](docs/80-g100-image-installation-retrospective.md)、[83](docs/83-x70-air-pro-onboarding.md) |
+
+各项的验收边界以对应文档为准。已知限制：Turnip在KGSL上的Wayland呈现会闪屏，桌面仍用GLES（[56](docs/56-kwin-vulkan-quantification.md)）；Mesa仍基于社区分支，换到上游的尝试已退回（[research/94](docs/research/94-mesa-base.md)）。
+
 ## 工作区
 
 | 目录 | 内容 |
@@ -11,7 +46,7 @@ Rungic是运行在Android手机上的AgentOS：Ubuntu容器中的Plasma Mobile�
 | `plasma/` | KDE与Android APK适配、会话配置、构建脚本 |
 | `native/plasma/` | Rust/Smithay原生Wayland后端 |
 | `packages/` | 已迁为补丁队列的上游组件：固定上游来源加DEP-3补丁（[71篇](docs/71-upstream-patch-queue.md)） |
-| `vendor/` | 尚未迁移的上游组件（Mesa、Qt、libcamera等）的完整源码，已包含本机适配 |
+| `vendor/` | 仍直接跟踪的外来树（`native/plasma/`、`plasma/firefox-mobile/`）的来源记录与审计豁免 |
 | `shared/` | Linux媒体、网络、剪贴板与GPU公共接口 |
 | `tools/` | 管理、ROM、构建辅助和诊断工具 |
 | `kernel/`、`lxc/`、`cutout/` | 内核、容器与设备相关配置 |
@@ -25,12 +60,12 @@ Rungic是运行在Android手机上的AgentOS：Ubuntu容器中的Plasma Mobile�
 
 ## 当前状态与入口
 
-- 原厂Android16 + Magisk31，全局SELinux Enforcing；LXC与Docker已部署。历史v3完整刷机包尚未整合当前全部容器/桌面修改。
+- 原厂Android16 + Magisk31，全局SELinux Enforcing；LXC已部署，Docker改在容器内以rootless运行（[85篇](docs/85-lxc-rootless-docker.md)）。三段式刷机包已在G100清数据刷入验证（[80篇](docs/80-g100-image-installation-retrospective.md)）。
 - Plasma独立APK和Ubuntu容器已运行；原生1080×2400与30/60/90/120Hz/自动策略已接入。正式KWin继续使用GLES，Vulkan对照与限制见[51篇](docs/51-plasma-vulkan-benchmark.md)，KWin原生Vulkan收益量化见[56篇](docs/56-kwin-vulkan-quantification.md)。
 - 媒体和显示尚有剩余验收项，以[48篇](docs/48-plasma-media-pipelines.md)、[50篇](docs/50-plasma-display-settings.md)为准，不把安装成功等同于完整验收。
 - 设备管理：`python3 tools/rungic_plasma.py status`。开发环境：`source tools/work-env.sh`。APK构建：`bash plasma/build-apk.sh`，产物写入`.work/`。
 - 图形和后端架构见[40篇](docs/40-plasma-mobile-integration.md)及[共享桥说明](shared/README.md)。全新机器构建仍需准备SDK/NDK及部分依赖。
-- 远程源码核对和多机协作见[53篇](docs/53-remote-system-development.md)。已迁移的上游组件在`packages/`中以补丁队列维护（`tools/pq.py`），其余组件直接修改[Vendor源码](vendor/README.md)；历史patch不再重复应用。
+- 远程源码核对和多机协作见[53篇](docs/53-remote-system-development.md)。修改过的上游组件（KWin、Mesa、Xwayland、flatpak等）都在`packages/`中以补丁队列维护（`tools/pq.py`），构建用`tools/build_on_device.py`；只有`native/plasma/`、`plasma/firefox-mobile/`仍直接跟踪（[Vendor说明](vendor/README.md)）。
 
 Vendor适配应放在哪一层、哪些可以抽离到共享后端，见[54篇架构评审](docs/54-vendor-adaptation-boundaries.md)。
 
@@ -114,3 +149,21 @@ Vendor适配应放在哪一层、哪些可以抽离到共享后端，见[54篇�
 | [75-image-build-separation.md](docs/75-image-build-separation.md) | Android 固件、RungicOS rootfs、内核构建拆分与跨设备兼容契约 |
 | [76-g100-memory-audit.md](docs/76-g100-memory-audit.md) | XT2533-4 G100 当前 Android 内存占用的实机审计 |
 | [77-g100-three-ci-assessment.md](docs/77-g100-three-ci-assessment.md) | 通用三条镜像 CI、G100 首个设备 spec、runner 分工与缓存清理 |
+| [79-g100-ci-execution.md](docs/79-g100-ci-execution.md) | G100 三段镜像 CI 首轮执行记录 |
+| [80-g100-image-installation-retrospective.md](docs/80-g100-image-installation-retrospective.md) | G100 完整镜像实施复盘：遇到的问题与最佳解决路径 |
+| [81-end-to-end-user-experience.md](docs/81-end-to-end-user-experience.md) | Rungic 用户全流程 UX 审查与改进方案 |
+| [82-first-run-ux-refactor.md](docs/82-first-run-ux-refactor.md) | 首启 UX 重构：第一批实施 |
+| [83-service-policy.md](docs/83-service-policy.md) | 系统服务页与可选 SSH 登录 |
+| [83-x70-air-pro-onboarding.md](docs/83-x70-air-pro-onboarding.md) | X70 Air Pro / vantage 首轮接入 |
+| [84-miracast-source.md](docs/84-miracast-source.md) | 自研Miracast发送端：不依赖厂商投屏组件 |
+| [85-lxc-rootless-docker.md](docs/85-lxc-rootless-docker.md) | Plasma容器内的rootless Docker：试验记录与打包方案 |
+| [85-phone-display-size-policy.md](docs/85-phone-display-size-policy.md) | 手机显示大小策略与实现 |
+| [86-x70-miracast-assessment.md](docs/86-x70-miracast-assessment.md) | X70 Air Pro Miracast 完善评估 |
+| [87-agent-app-redesign.md](docs/87-agent-app-redesign.md) | Agent 助手第三版：聊天式界面与独立的设计系统库（2026-09-29） |
+| [88-agent-visible-work.md](docs/88-agent-visible-work.md) | Agent 的工作要让用户看得见：对话里的图片、助理屏字幕、手机能力（2026-09-29） |
+| [89-agent-progress.md](docs/89-agent-progress.md) | Agent 工作时的进度：任务状态、按事件的语音汇报、对话归属（2026-09-29） |
+| [90-blender-vulkan-incident.md](docs/90-blender-vulkan-incident.md) | Blender 渲染事故与默认 CPU 渲染（2026-09-29） |
+| [91-agent-workspaces.md](docs/research/91-agent-workspaces.md) | 工作空间：Agent 各自独立的 GUI 空间（方案，2026-09-29） |
+| [92-agent-task-speed.md](docs/research/92-agent-task-speed.md) | Agent 做 Blender 这类任务为什么慢，业界怎么提速（调研，2026-09-30） |
+| [93-xwayland-kgsl-gpu.md](docs/research/93-xwayland-kgsl-gpu.md) | X11 应用在 KGSL 上用 GPU：Xwayland 的几种做法（2026-09-30） |
+| [94-mesa-base.md](docs/research/94-mesa-base.md) | Mesa 的底座：lfdevs 分支，还是上游加我们自己的补丁（调研，2026-09-30） |
