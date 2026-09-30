@@ -172,6 +172,21 @@ Rungic exposes two **MCP (Model Context Protocol) servers**, alongside command-l
 
 For MCP startup examples, the current tool inventory, D-Bus methods, session requirements and integration limits, see the [Agent Ready interface reference](docs/agent-ready-interfaces.md). Low-level screenshot/action tools can use the connecting agent's own reasoning; the bundled `desktop_goal` helper has its own configured model backend. Display/input separation does not isolate the agent from files owned by the same Linux user.
 
+## Integrations
+
+**Bring your agent, keep your workflow.** Rungic can provide the Linux desktop, apps, files and phone interfaces, while another project provides the conversations, agent runtime or collaboration space. You can use its Android or web client alongside Rungic, or connect its execution tools to the Rungic desktop.
+
+These are integration paths to build on; the four combinations below have not yet been validated end to end on Rungic.
+
+| Project | What it brings | How to combine it with Rungic |
+|---|---|---|
+| [Lorca](https://github.com/egoist/lorca) | Encrypted agent conversations, bot orchestration and paired devices | Use its Android client to talk to a paired runner. A further integration could run its Linux CLI inside Rungic and give bots access to the desktop tools; Lorca's phone client itself is not a runner. |
+| [OpenMuse](https://github.com/CopilotKit/openmuse) | A personal-agent app built with CopilotKit and AG-UI, with visible tasks, browser work and files | Use its Android or web UI alongside Rungic. A tool adapter could extend its agent workflows to Rungic's graphical apps and local files; its existing browser/terminal workspace is a separate backend. |
+| [OpenClaw](https://openclaw.ai/) | A personal assistant reachable through messaging apps, with tools and skills | Connect its runtime to Rungic's desktop MCP and wrap phone commands in a skill or tool, so requests from your preferred chat can act on the phone's Linux desktop. See its [MCP integration documentation](https://docs.openclaw.ai/tools/mcp). |
+| [Raft](https://github.com/botiverse/raft-source) | A shared workspace where people and persistent agents collaborate through channels, threads and tasks | Use its web client on Rungic. Integrating its machine daemon/computer runtime could make Rungic an execution machine for workspace agents, with access to local apps and project files. |
+
+Running an agent locally requires checking its ARM64 dependencies and runtime requirements. Connecting one running elsewhere requires a bridge to Rungic's local tools; the desktop MCP currently uses stdio. Bringing its progress, suggestions and usage into Rungic's assistant and widgets requires a separate adapter. Start with the [system interface reference](docs/agent-ready-interfaces.md) and [agent integration map](docs/README.md#integrating-another-agent).
+
 ## Status
 
 Rungic is under active development and in private preview. Still being polished:
