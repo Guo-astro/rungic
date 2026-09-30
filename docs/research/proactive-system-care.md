@@ -374,7 +374,7 @@ USB 精确序列号 `ZY32M9MRVP`，开发主机 mibook/x86_64、系统代理 non
 
 新增证据：`.work/experiments/proactive-refactor/{build-stale.log,integration-stale.log,deploy-stale.log,visible-device.log,final-check.log,final-home.png}`，最终部署记录 `.work/deploy/20260930-023503-20260930.10/`。完整弹窗验证见前述 `confirmation-final.log`；真实模型调查与服务重启恢复见 `luna.log`。本轮验证的是主动建议基础链、任务恢复与确认边界；不等于已修复历史崩溃、为全部软件接通硬件加速或完成外部 PR 提交。可靠应用退出条件、Android 提醒、远端 PR 自动同步及全新账户/整包安装不在本次完成范围。
 
-## 2026-09-30：同类堆叠与独立 Agent 用量组件（实现与验收进行中）
+## 2026-09-30：同类堆叠与独立 Agent 用量组件
 
 用户要求同类卡片堆叠、正面展示调查结论，并新增独立 Agent 小组件。底层仍保留按崩溃签名/包/版本划分的事项；展示分组只合并同包同版本的崩溃，不能据此认定根因相同。组入口只确认正面代表事项的展示，组内隐藏事件、调查、预约和原对话保持独立。结构化 `conclusion/nextStep/confidence` 供调查写回，旧记录回退到现有报告首段，不在桌面刷新时调用模型；不能由结论文字推导可执行方案。
 
@@ -383,3 +383,21 @@ USB 精确序列号 `ZY32M9MRVP`，开发主机 mibook/x86_64、系统代理 non
 [Codex App Server 官方协议](https://learn.chatgpt.com/docs/app-server) 提供 `thread/tokenUsage/updated`、`account/read`、`account/rateLimits/read` 和 `account/usage/read`。本机现场核对 G100 `ZY32M9MRVP` / ADB 5038、Codex **0.156.1**（仓库固定 SHA、Apache-2.0）：通过该已安装二进制生成 JSON schema，确认窗口含 `usedPercent/windowDurationMins/resetsAt`，账户用量有 nullable summary/daily buckets，token 事件有 thread/turn 与 total/last breakdown。不是只凭最新文档推断已装版本。订阅账户读取真实额度与重置；API Key 不伪造订阅额度。会话 total 用作累计高水位、last 仅作为首次观测基数，不把同一回合内的多次模型请求重复或遗漏累计。按账户不可逆指纹分区，本地统计注明仅本机收到的 Codex 用量，排除 Realtime，不等同账单。
 
 用量聚合、持久化及服务在 C++；现有 Python Codex 桥仅转发事件及只读 RPC，未新增 Python 生产服务。组件和 APP 共用相同只读数据契约，不另起 Codex 或模型请求。重置时间到达只标记等待刷新，不能本地把已用额度清零。用户点击用量进入 APP 专页，像素图标进入 Agent。代理/构建机器现场核验仍为 mibook/x86_64、系统代理 none、Mac mini ARM64/Surge 6152；手机代理 192.168.5.45:6152。
+
+### 组件与数据验收
+
+`20260930.11` 部署 suggestions **0.452**、voice-agent **0.451**，8 项 smoke 首遍通过，无 flaky；camera 按范围跳过。真实手机的两条历史桌面崩溃显示为一个堆叠，下方独立 `com.rungic.agent` 位于空闲一行网格，底部四图标和壁纸空间保留。实际点按堆叠进入两条独立调查，完整报告按钮可展开；用量入口打开 APP 专页，像素图标返回对话，同一 Agent PID 保持。旧记录补入基于原报告的简短结论：桌面设置迁移辅助程序的具体身份/根因未确认；另一条是显示模式切换的已知缺陷线索，本机已有补丁但尚未确认本次根因。没有改写原报告、计划、对话或应用修复。
+
+ARM64 C++ **24 项**（含初始化/清理）通过：同类分组与不同对象隔离、隐藏成员回执、结论不隐式开启应用、重复 token 事件/同回合多次请求/重启/账户分区、nullable 额度与重置到期等。Python **33 项**通过，包含旧建议/通话及只读用量桥接、API Key 不请求订阅额度、账户变化拒绝旧快照、迟到事件绑定启动账户。真实服务与替身 Codex 的 40 事项 / 39 组集成、五种 QML 预览（建议 widget、APP 列表、订阅 Agent widget、额度详情、API Key widget）通过；没有把替身额度视为真实订阅账户验收。
+
+G100 的真实 GPT-6 Luna / API Key 请求不调用工具，只回复验收文字，返回 **15,771 token**（输入 15,748、输出 23）。本机累计从无记录变为 15,771，重启建议服务、从桥接重读相同事件后数值保持，未重复计算。测试对话已删除，原对话恢复，统计文件 `agent-usage.json` 权限 0600；API Key 显示无订阅重置时间。没有为了填满界面切换用户的登录方式。
+
+首轮渲染发现卡片页脚溢出和 QML 默认 data 属性覆盖，均已修正并复测；APP 新入口的 QML 标点、D-Bus 构造编译错误也在部署前修正。首个手机检查用普通 Text 的 AT-SPI 名称断言失败，实际分组已打开，后改用可访问的两个事项面板与动作并核对截图验证，未把测试工具的盲区作为成功依据。
+
+证据在 `.work/experiments/widget-stacks/`：`integration-layout.log`、五种 `preview-*.png`、`deploy.log`、`device-ui.log`、`device-home.png`、`device-group.png`、`device-investigation.png`、`device-usage.png`、`real-usage.log`、`summary-backfill.json`、`final-check.log`。继续保留最早 rootfs 回退快照，本轮另备份 `state.before-stacks.json` 与桌面布局；没有修改用户未跟踪的 GTK 研究文档。
+
+### 最终桥接补验：20260930.12
+
+最终部署 suggestions **0.452**、voice-agent **0.453**，仅补齐旧任务迟到 token 事件仍归属启动时账户的边界。Python 33 项回归通过；此增量未重复整套 smoke，完整 smoke 以 `.11` 为准。重启 Agent 后再次执行真实 Luna 只读回复验收，新增 **15,772 token**（输入 15,748、输出 24），累计从 15,771 变为 **31,543**；重启建议服务重读事件后不重复计数。临时对话删除、原对话恢复，最终无运行任务。账户仍为 API Key / GPT-6 Luna，用量文件 0600，API Key 不展示虚构的订阅重置。订阅账户额度与重置仅完成固定协议和隔离替身验证，未在真实订阅登录上验收。
+
+最终桌面截图人工核对：一个堆叠、两条独立调查、独立像素 Agent 组件显示 31,543 token，壁纸留白和底部四图标保留。SSH socket enabled/active，`dpkg --audit` 无输出。部署记录 `.work/deploy/20260930-102514-20260930.12/`；新增证据 `.work/experiments/widget-stacks/{deploy-account.log,real-usage-final.log,final-check-final.log,final-home.png}`。
