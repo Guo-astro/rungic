@@ -55,8 +55,13 @@ def open_drawer(timeout=SETTLE_TIMEOUT):
     width, height = map(int, sizes[-1])
     # Start within the desktop. At some scales y=2000 is already in the
     # navigation panel and the shell never receives the drawer gesture.
-    run(f'input swipe {width // 2} {int(height * .70)} '
-        f'{width // 2} {int(height * .25)} 350', 'shell')
+    handles = rungic_agent.ui_find('plasmashell', role='button', name='^打开应用抽屉$')
+    if handles:
+        rungic_agent.ui_tap('plasmashell', handles[0]['path'])
+    else:
+        # Older Folio releases use the whole home page for the drawer gesture.
+        run(f'input swipe {width // 2} {int(height * .70)} '
+            f'{width // 2} {int(height * .25)} 350', 'shell')
     previous, deadline = None, time.monotonic() + timeout
     while time.monotonic() < deadline:
         time.sleep(0.3)

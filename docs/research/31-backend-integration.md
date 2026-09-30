@@ -553,3 +553,14 @@ Agent可直接调用的设备诊断、崩溃现场、统一追踪（perfetto + K
 2026-09-29 模式列表修正：声明兼容的候选不再直接作为可用选项。胶囊只显示当前一致的模式和在相同发送端/接收端能力下完成准确切换检查的模式；失败项排除、软件或能力变化使旧记录失效，无未验证/试用入口。此前将编码器/API参数支持等同投屏实际输出，导致1920×1200等无效项仍可选，已修正。见 [视频模式记录](miracast-video-modes.md)。
 
 2026-09-29 胶囊交互统一：APK 2.22/70 用胶囊内的共享 BottomSheet 替换模式选择的 Android AlertDialog，设备选择复用同一容器。选中后点击应用才切换，取消/返回/遮罩/下拉回到胶囊；返回优先关闭浮层。G100/UGREEN 实测交互及1080p30→60应用通过，模式过滤与 root 后端保持不变。证据、实现边界与回退 APK 见 [视频模式记录](miracast-video-modes.md)。
+
+
+## 2026-09-30：主动建议与原生桌面小组件
+
+新增 C++ `rungic-suggestions`，通过会话 D-Bus `com.rungic.Suggestions` 共享账本。Agent 建议页与原生 Plasma Applet `com.rungic.suggestions` 读取同一记录；小组件位于 Folio 上方网格，独立卡片之间及组件下方留出壁纸空间，保留原底部固定图标、原应用抽屉和桌面编辑。此前替换整个主屏的 0015 补丁已撤回。升级只在没有收藏配置时补默认图标，保留已有布局与用户删除组件的选择。
+
+采集链：dpkg/存储/systemd/既有 coredump 摘要 → root 定时采集 JSON → 用户服务去重/调度/持久化 → QML 卡片 → 用户委托 VoiceAgent 原对话。根采集输出 `/var/lib/rungic-suggestions/observations.json`，用户账本 `~/.local/share/rungic-suggestions/state.json`；60 秒更新，过期数据不触发预约提醒。知识库 `/usr/share/rungic/compatibility/` 随包安装，严格匹配版本。D-Bus `List/Get/Act/Update/Feedback/Knowledge/SetVisible/Refresh` 与 `Changed`；VoiceAgent 的 `InvestigateSuggestion/ApplySuggestion/StopSuggestion` 用稳定事项 ID 关联 conversation。调查、确认应用、提醒分别处理；上游材料保存在本机，上游合入不等于本机解决。
+
+USB G100 已部署 `20260930.7`：suggestions `0.404`、voice-agent `0.399`、design `0.393`、Plasma Mobile `6.6.5-0ubuntu0.1+rungic8`。8 项 smoke 首遍通过、无 flaky，camera 按范围跳过；既有 313 个翻译文件 integrity drift 仍在，release 版本 mismatch 为空。实机点按两张卡分别进入对应详情，后台同一 Agent 实例可被激活，标题数量入口打开列表，预约通知可从计算器前台跳入对应详情。隔离测试账本的 14 项列表在组件内上滑实际移动、未触发抽屉；壁纸区域上滑仍打开原抽屉。临时数据已清除，真实账本保留。
+
+开发环境按授权保持 GPT-6 Luna + API Key，用户服务配置持久化，Codex device-code 入口保留。真实调查已回写结果，但根因仍未知；未应用系统修复、逐应用证明硬件加速或向上游发 PR。Android 提醒及远端 PR 自动同步尚未覆盖。来源、迁移边界、测试中的失败与修正、回退快照和实机证据见 [主动建议记录](proactive-system-care.md)。

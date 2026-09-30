@@ -124,6 +124,15 @@ def _home():
     import ui_launch_check as ui
     run(f'{rungic_device.PLASMA} hide-keyboard', 'root', check=False)
     for _ in range(2):
+        # Folio toggles the drawer if Home is pressed while already at page zero.
+        # The suggestions handle positively identifies the new home screen.
+        if rungic_agent.ui_find('plasmashell', role='button', name='^打开应用抽屉$'):
+            break
+        # Native Folio home has no custom handle. Home toggles its drawer, so do
+        # not press it when the desktop is already focused and search is closed.
+        if any(w['active'] and w['resource_class'] == 'plasmashell' for w in rungic_agent.ui_windows()) \
+                and not rungic_agent.ui_find('plasmashell', role='text', name='Search'):
+            break
         ui.press('Home')
         time.sleep(0.8)
 

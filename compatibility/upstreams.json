@@ -1,0 +1,6 @@
+{
+  "mesa": {"repository": "https://gitlab.freedesktop.org/mesa/mesa", "rules": "https://docs.mesa3d.org/submittingpatches.html", "reviewed": "2026-09-29", "submission": "human-only", "publicText": "human-authored", "aiDisclosure": "required-as-specified"},
+  "qt": {"repository": "https://code.qt.io/qt/qtmultimedia.git", "rules": "https://wiki.qt.io/Qt_Contribution_Guidelines", "submission": "review-current-rules", "publicText": "review-current-rules"},
+  "kde": {"repository": "https://invent.kde.org/plasma/plasma-mobile", "rules": "https://community.kde.org/Policies/Commit_Policy", "submission": "review-current-rules", "publicText": "review-current-rules"},
+  "blender": {"repository": "https://projects.blender.org/blender/blender", "rules": "https://developer.blender.org/docs/handbook/contributing/", "submission": "review-current-rules", "publicText": "review-current-rules"}
+}

@@ -17,6 +17,7 @@ SideDrawer {
     signal openRequested(string id, string title)
     signal newRequested()
     signal settingsRequested()
+    signal suggestionsRequested()
     signal deleted(string id)
 
     function refresh() { AgentClient.listConversations() }
@@ -78,10 +79,14 @@ SideDrawer {
             current: drawer.main !== null && drawer.main.id === drawer.current
             onClicked: drawer.openRequested(drawer.main.id, "主对话")
         }
+        NavItem {
+            iconName: "alert"
+            text: "建议"
+            onClicked: drawer.suggestionsRequested()
+        }
         SectionLabel {
             Layout.fillWidth: true
             text: "其他对话"
-            // Above the days' labels: the conversations of the list.
             color: Theme.text
             font.weight: Font.Medium
             topPadding: 18

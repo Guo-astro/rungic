@@ -244,6 +244,7 @@ Item {
         onOpenRequested: (id, title) => { drawer.close(); page.open(id, title) }
         onNewRequested: { drawer.close(); page.newConversation() }
         onSettingsRequested: { drawer.close(); page.Window.window.openSettings() }
+        onSuggestionsRequested: { drawer.close(); page.Window.window.openSuggestions("") }
         onDeleted: id => { if (id === page.conversationId) page.newConversation() }
     }
 

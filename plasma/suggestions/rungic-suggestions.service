@@ -1,0 +1,16 @@
+[Unit]
+Description=Rungic suggestions and scheduled follow-up
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=dbus
+BusName=com.rungic.Suggestions
+ExecStart=/usr/bin/rungic-suggestions --service
+Restart=on-failure
+RestartSec=5
+MemoryMax=192M
+LimitCORE=0
+
+[Install]
+WantedBy=graphical-session.target

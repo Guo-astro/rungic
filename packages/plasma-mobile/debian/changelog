@@ -1,3 +1,17 @@
+plasma-mobile (6.6.5-0ubuntu0.1+rungic8) resolute; urgency=medium
+
+  * Restore Folio's wallpaper, native widget grid, favourites and gestures.
+    Agent suggestions are provided as a separate standard Plasma widget.
+
+ -- Rungic <noreply@rungic.invalid>  Wed, 30 Sep 2026 01:05:00 +0800
+
+plasma-mobile (6.6.5-0ubuntu0.1+rungic7) resolute; urgency=medium
+
+  * Replace the phone home content with the shared Agent suggestion feed;
+    preserve Folio application drawer and a dedicated bottom swipe handle.
+
+ -- Rungic <noreply@rungic.invalid>  Wed, 30 Sep 2026 00:10:00 +0800
+
 plasma-mobile (6.6.5-0ubuntu0.1+rungic6) resolute; urgency=medium
 
   * Keep Klipper's shared in-process history manager alive in the phone
