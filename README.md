@@ -14,6 +14,12 @@ Rungic turns a phone into a real computer. It opens to the KDE Plasma desktop an
 
 It also comes with an AI assistant that can see, speak and act. Tell it what you need, and it opens the apps and gets the job done while you watch.
 
+## Still your Android phone
+
+Rungic is an app. Install the APK, tap its icon, and the Linux desktop opens.
+
+You don't give anything up for it. Android is not wiped or replaced: your apps, calls, messages, photos and accounts stay where they are, and you can switch back to them at any time. The desktop and Android run side by side, sharing the clipboard and your photos, videos and downloads.
+
 ## Just say it
 
 <table>
