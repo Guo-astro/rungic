@@ -13,7 +13,7 @@ ApplicationWindow {
     property string initialTheme: "system"
     property string section: ""
     width: 4 * 380 + 5 * 20
-    height: 1760
+    height: 2480
     visible: true
     color: Theme.dark ? "#1e2822" : "#6d8a74"
     Component.onCompleted: Theme.mode = initialTheme
@@ -41,12 +41,29 @@ ApplicationWindow {
         body: "Codex couldn’t sort them just now: its usage limit is reached until 14:47. You can still ask it to go through them.",
         action: { label: "Ask Agent to look" } })
     readonly property var sorted: ({ generatedAt: now - 600, source: "agent" })
+    readonly property var codexIcon: ({ light: "/usr/share/rungic/agent-usage/icons/codex-light.svg", dark: "/usr/share/rungic/agent-usage/icons/codex-dark.svg" })
+    readonly property var claudeIcon: ({ light: "/usr/share/rungic/agent-usage/icons/claude-code.svg" })
+    function codex(extra) {
+        return Object.assign({ id: "codex", name: "Codex", icon: codexIcon, status: "ready", updatedAt: now - 60, stale: false,
+            account: { kind: "subscription", label: "ChatGPT" }, tokens: { today: 67421, device: 67421, account: 2199075350 },
+            limits: [{ id: "codex.primary", windowMinutes: 300, usedPercent: 3, resetsAt: now + 9300 },
+                     { id: "codex.secondary", windowMinutes: 10080, usedPercent: 23, resetsAt: now + 3 * 86400 + 3600 }] }, extra || {})
+    }
+    function claude(extra) {
+        return Object.assign({ id: "claude-code", name: "Claude Code", icon: claudeIcon, status: "ready", updatedAt: now - 60, stale: false,
+            account: { kind: "subscription", label: "Claude" }, tokens: { today: 1200000, device: 5400000 },
+            limits: [{ id: "claude.5h", windowMinutes: 300, usedPercent: 41, resetsAt: now + 9300 },
+                     { id: "claude.7d", windowMinutes: 10080, usedPercent: 18, resetsAt: now + 3 * 86400 + 3600 }] }, extra || {})
+    }
 
     ScrollView {
         anchors.fill: parent
         contentWidth: availableWidth
+        ColumnLayout {
+        width: gallery.width
+        spacing: 40
         GridLayout {
-            width: gallery.width
+            Layout.preferredWidth: gallery.width
             columns: 4
             columnSpacing: 20
             rowSpacing: 24
@@ -85,6 +102,46 @@ ApplicationWindow {
                     }
                 }
             }
+        }
+        GridLayout {
+            Layout.preferredWidth: gallery.width
+            columns: 4
+            columnSpacing: 20
+            rowSpacing: 24
+            Repeater {
+                model: [
+                    { label: "usage · subscription", providers: [gallery.codex()] },
+                    { label: "usage · working", providers: [gallery.codex({ status: "working" })] },
+                    { label: "usage · near a limit", providers: [gallery.codex({ limits: [{ windowMinutes: 300, usedPercent: 86, resetsAt: gallery.now + 2520 }, { windowMinutes: 10080, usedPercent: 61, resetsAt: gallery.now + 3 * 86400 }] })] },
+                    { label: "usage · used up", providers: [gallery.codex({ limits: [{ windowMinutes: 300, usedPercent: 100, resetsAt: gallery.now + 2520 }, { windowMinutes: 10080, usedPercent: 70, resetsAt: gallery.now + 3 * 86400 }] })] },
+                    { label: "usage · Claude Code", providers: [gallery.claude()] },
+                    { label: "usage · API key, no limits", providers: [gallery.claude({ account: { kind: "api-key", label: "API Key" }, limits: [], tokens: { today: 67421, device: 2300000 } })] },
+                    { label: "usage · two agents", providers: [gallery.codex(), gallery.claude()] },
+                    { label: "usage · extremes", providers: [gallery.codex({ tokens: { today: 2200000000 }, limits: [{ windowMinutes: 300, usedPercent: 99.6, resetsAt: gallery.now + 17940 }, { windowMinutes: 10080, usedPercent: 100, resetsAt: gallery.now + 6 * 86400 }] })] },
+                    { label: "usage · signed out", providers: [gallery.codex({ status: "signed-out", limits: [], tokens: {}, account: { kind: "none" } })] },
+                    { label: "usage · first load", providers: [gallery.codex({ status: "connecting", limits: [], tokens: {}, updatedAt: 0 })] },
+                    { label: "usage · offline, last values", providers: [gallery.codex({ status: "offline", stale: true, updatedAt: gallery.now - 5400 })] },
+                    { label: "usage · no agent", providers: [] },
+                    { label: "usage · 2×1", providers: [gallery.codex()], width: 160 },
+                    { label: "usage · 2×1 used up", providers: [gallery.codex({ limits: [{ windowMinutes: 300, usedPercent: 100, resetsAt: gallery.now + 2520 }] })], width: 160 },
+                    { label: "usage · 2×1 API key", providers: [gallery.claude({ account: { kind: "api-key" }, limits: [], tokens: { today: 67421, device: 2300000 } })], width: 160 },
+                    { label: "usage · 2×1 two agents", providers: [gallery.codex(), gallery.claude()], width: 160 }
+                ]
+                ColumnLayout {
+                    required property var modelData
+                    Layout.alignment: Qt.AlignTop
+                    spacing: 8
+                    Label { text: modelData.label; color: "white"; font.pixelSize: 13; font.weight: Font.DemiBold }
+                    AgentWidget {
+                        Layout.preferredWidth: modelData.width || 340
+                        Layout.preferredHeight: 100
+                        Layout.leftMargin: 20
+                        forcedProviders: modelData.providers
+                        forcedNow: gallery.now
+                    }
+                }
+            }
+        }
         }
     }
 }

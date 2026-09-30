@@ -33,6 +33,8 @@ install(FILES agent-usage/icons/claude-code.svg DESTINATION share/rungic/agent-u
 install(TARGETS rungicsuggestions LIBRARY DESTINATION "${QT6_INSTALL_QML}/com/rungic/suggestions")
 install(FILES "${module_dir}/qmldir" "${module_dir}/rungicsuggestions.qmltypes" DESTINATION "${QT6_INSTALL_QML}/com/rungic/suggestions")
 install(DIRECTORY applet/ DESTINATION share/plasma/plasmoids/com.rungic.suggestions)
+# The widgets' icons in Add Widgets.
+install(FILES icons/rungic-agent-suggestions.svg icons/rungic-agent-usage.svg DESTINATION share/icons/hicolor/scalable/apps)
 install(DIRECTORY agent-applet/ DESTINATION share/plasma/plasmoids/com.rungic.agent)
 ki18n_install(po)
 enable_testing()

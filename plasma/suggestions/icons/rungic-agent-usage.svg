@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <!-- Agent Usage: a gauge, part used. Rungic artwork, GPL-2.0-or-later. -->
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="#ffffff"/>
+  <path d="M14 42a18 18 0 0 1 36 0" fill="none" stroke="#e8e9ea" stroke-width="6" stroke-linecap="round"/>
+  <path d="M14 42a18 18 0 0 1 27.5-15.3" fill="none" stroke="#2272a8" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="32" cy="42" r="3.5" fill="#232629"/>
+  <rect x="18" y="49" width="28" height="3" rx="1.5" fill="#232629" fill-opacity="0.3"/>
+</svg>

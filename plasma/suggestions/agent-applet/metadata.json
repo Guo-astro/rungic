@@ -1,11 +1,11 @@
 {
     "KPlugin": {
         "Id": "com.rungic.agent",
-        "Name": "Agent Status",
-        "Name[zh_CN]": "Agent 状态",
-        "Description": "Notices problems for you to deal with when it suits you; in sync with Agent's status page",
-        "Description[zh_CN]": "留意使用问题，择机处理；与 Agent 状态页同步",
-        "Icon": "utilities-terminal",
+        "Name": "Agent Usage",
+        "Name[zh_CN]": "Agent 用量",
+        "Description": "How much of each agent's limits you have used, and whether it is working",
+        "Description[zh_CN]": "各个 Agent 的额度用了多少，以及它是否在工作",
+        "Icon": "rungic-agent-usage",
         "Category": "Utilities",
         "License": "GPL-2.0-or-later",
         "Authors": [

@@ -10,9 +10,9 @@ PlasmoidItem {
     Plasmoid.backgroundHints: PlasmaCore.Types.NoBackground
     preferredRepresentation: fullRepresentation
     fullRepresentation: AgentWidget {
-        Layout.minimumWidth: 250
-        Layout.minimumHeight: 105
+        Layout.minimumWidth: 160
+        Layout.minimumHeight: 90
         Layout.preferredWidth: 340
-        Layout.preferredHeight: 126
+        Layout.preferredHeight: 100
     }
 }

@@ -71,6 +71,7 @@ class CurationTests(unittest.TestCase):
         self.agent.curation_lock = threading.Lock()
         self.agent.usage_accounts = {}
         self.agent.usage_identity = Mock(return_value='opaque')
+        self.agent.usage_push = Mock()  # the usage service is not part of these tests
         self.agent.thread_id = 'the-users-conversation'
         self.agent.emit = Mock(); self.agent.emit_raw = Mock()
         self.agent.store = Mock()

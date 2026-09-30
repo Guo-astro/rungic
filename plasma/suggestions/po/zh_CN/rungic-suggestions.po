@@ -796,3 +796,153 @@ msgctxt "@info %2 the agent's name, %1 minutes"
 msgid "%2 is on it · %1 min"
 msgid_plural "%2 is on it · %1 min"
 msgstr[0] "%2 正在处理 · %1 分钟"
+
+msgctxt "@action %1 an agent's name"
+msgid "Switch to %1"
+msgstr "切换到 %1"
+
+msgctxt "@info %1 an agent's name"
+msgid "Can’t reach %1 right now."
+msgstr "暂时连不上 %1。"
+
+msgctxt "@action"
+msgid "Set one up in Agent ›"
+msgstr "在 Agent 应用里设置 ›"
+
+msgctxt "@action"
+msgid "Sign in ›"
+msgstr "去登录 ›"
+
+msgctxt "@info %1 a time"
+msgid "Last read %1"
+msgstr "上次读取 %1"
+
+msgctxt "@info Qt date format: weekday and time"
+msgid "ddd HH:mm"
+msgstr "ddd HH:mm"
+
+msgctxt "@info a compact number: %1 the value, %2 its unit"
+msgid "%1%2"
+msgstr "%1%2"
+
+msgctxt "@info a duration"
+msgid "%1 min"
+msgid_plural "%1 min"
+msgstr[0] "%1 分钟"
+
+msgctxt "@info a duration: %1 hours, %2 minutes"
+msgid "%1h %2m"
+msgstr "%1 小时 %2 分"
+
+msgctxt "@info a usage limit without a known length"
+msgid "Limit"
+msgstr "额度"
+
+msgctxt "@info a usage limit"
+msgid "Used up"
+msgstr "已用完"
+
+msgctxt "@info agent status"
+msgid "Connecting…"
+msgstr "正在连接…"
+
+msgctxt "@info agent status"
+msgid "Couldn’t update"
+msgstr "未能更新"
+
+msgctxt "@info agent status"
+msgid "Offline"
+msgstr "离线"
+
+msgctxt "@info agent status"
+msgid "Ready"
+msgstr "就绪"
+
+msgctxt "@info agent status"
+msgid "Signed out"
+msgstr "未登录"
+
+msgctxt "@info agent status"
+msgid "Working"
+msgstr "正在工作"
+
+msgctxt "@info percent"
+msgid "%1%"
+msgstr "%1%"
+
+msgctxt "@info tokens used"
+msgid "This device"
+msgstr "本机累计"
+
+msgctxt "@info tokens used"
+msgid "Today"
+msgstr "今天"
+
+msgctxt "@info tokens: %1 a compact number"
+msgid "%1 today"
+msgstr "今天 %1"
+
+msgctxt "@info usage limit window"
+msgid "%1-day"
+msgid_plural "%1-day"
+msgstr[0] "%1 天"
+
+msgctxt "@info usage limit window"
+msgid "%1-hour"
+msgid_plural "%1-hour"
+msgstr[0] "%1 小时"
+
+msgctxt "@info usage limit window"
+msgid "%1-minute"
+msgid_plural "%1-minute"
+msgstr[0] "%1 分钟"
+
+msgctxt "@info usage limit window"
+msgid "Daily"
+msgstr "每天"
+
+msgctxt "@info usage limit window"
+msgid "Weekly"
+msgstr "每周"
+
+msgctxt "@info usage limit"
+msgid "No reset time given"
+msgstr "未提供重置时间"
+
+msgctxt "@info usage limit"
+msgid "Resetting now"
+msgstr "正在重置"
+
+msgctxt "@info usage limit: %1 a duration"
+msgid "Back in %1"
+msgstr "%1后恢复"
+
+msgctxt "@info usage limit: %1 a duration"
+msgid "Resets in %1"
+msgstr "%1后重置"
+
+msgctxt "@info usage limit: %1 a weekday and time"
+msgid "Back %1"
+msgstr "%1 恢复"
+
+msgctxt "@info usage limit: %1 a weekday and time"
+msgid "Resets %1"
+msgstr "%1 重置"
+
+msgid "Still reading the Claude Code history; the counts aren't complete yet"
+msgstr "仍在读取 Claude Code 的历史记录，数字还不完整"
+
+msgid "The Claude Code usage record wasn't saved: %1"
+msgstr "Claude Code 用量记录未保存：%1"
+
+msgid "Agent Usage"
+msgstr "Agent 用量"
+
+msgid "No agent is connected yet."
+msgstr "还没有连接任何 Agent。"
+
+msgid "No usage recorded yet."
+msgstr "还没有用量记录。"
+
+msgid "Sign in to see usage and limits."
+msgstr "登录后可以看到用量和额度。"

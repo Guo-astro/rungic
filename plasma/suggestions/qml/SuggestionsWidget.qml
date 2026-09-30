@@ -23,8 +23,10 @@ Item {
     property var forcedItems: null
     property int forcedIndex: -1
     property real forcedOffset: 0
+    // The voice agent's Codex backend sorts the cards; its provider descriptor ships the mark.
     property string agentName: "Codex"
-    property var agentIcon: ({})
+    property var agentIcon: ({ light: "/usr/share/rungic/agent-usage/icons/codex-light.svg",
+                               dark: "/usr/share/rungic/agent-usage/icons/codex-dark.svg" })
 
     readonly property bool live: forcedCards === null && forcedState === ""
     readonly property var cards: forcedCards !== null ? forcedCards : client.cards

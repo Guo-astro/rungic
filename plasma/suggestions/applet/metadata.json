@@ -3,15 +3,22 @@
         "Id": "com.rungic.suggestions",
         "Name": "Agent Suggestions",
         "Name[zh_CN]": "Agent 建议",
-        "Description": "Notices problems for you to deal with when it suits you; in sync with Agent's suggestions page",
-        "Description[zh_CN]": "留意使用问题，择机处理；与 Agent 建议页同步",
-        "Icon": "dialog-information",
+        "Description": "A few cards Agent picks for you: what on this phone needs a look now",
+        "Description[zh_CN]": "Agent 为你挑出的几张卡片：这台手机现在值得一看的事",
+        "Icon": "rungic-agent-suggestions",
         "Category": "Utilities",
         "License": "GPL-2.0-or-later",
-        "Authors": [{"Name": "Rungic"}],
+        "Authors": [
+            {
+                "Name": "Rungic"
+            }
+        ],
         "Version": "1.0"
     },
     "KPackageStructure": "Plasma/Applet",
     "X-Plasma-API-Minimum-Version": "6.0",
-    "X-Plasma-FormFactors": ["desktop", "mediacenter"]
+    "X-Plasma-FormFactors": [
+        "desktop",
+        "mediacenter"
+    ]
 }

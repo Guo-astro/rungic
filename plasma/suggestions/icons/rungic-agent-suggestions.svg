@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <!-- Agent Suggestions: a stack of cards, the top one with a highlight. Rungic artwork, GPL-2.0-or-later. -->
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="#ffffff"/>
+  <rect x="18" y="13" width="28" height="30" rx="6" fill="#e8e9ea"/>
+  <rect x="14" y="17" width="36" height="30" rx="7" fill="#f2f3f4"/>
+  <rect x="9.75" y="21.75" width="44.5" height="31.5" rx="8" fill="#ffffff" stroke="#232629" stroke-opacity="0.22" stroke-width="1.5"/>
+  <rect x="16" y="28" width="15" height="6" rx="3" fill="#2272a8"/>
+  <rect x="16" y="39" width="30" height="3" rx="1.5" fill="#232629" fill-opacity="0.55"/>
+  <rect x="16" y="45" width="21" height="3" rx="1.5" fill="#232629" fill-opacity="0.3"/>
+</svg>
