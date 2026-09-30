@@ -37,3 +37,8 @@ rootfs 与 host seed 都包含账户环境，须分别检查，不能只修其�
 ## 投屏 JAR 与桌面接口同步
 
 X70 `.7` 曾误复用旧 host-v2 JAR，Android 搜到电视但新版界面缺 `receivers` 而显示空列表（docs/86、93）。构建必须使用 `shared/android/rungic-cast/build.sh` 生成 JAR 和同目录 `rungic-cast.build.json`；部署、host seed、CI3 pack 按当前源码与 JAR 摘要检查来源。缺少侧文件或输入过期须重建，不能手写证明或绕过校验。桌面包同步更新，运行时检查 `protocol_version: 1` 与 `receivers`。基础 smoke 不含投屏，另从手机快捷设置验证真实接收器列表；电视画面和声音分别验收。
+
+
+## 按输入指纹复用组件
+
+用户于 2026-09-30 明确要求按版本/输入哈希决定复用，不按组件类别一刀切。通用入口 `tools/build_artifact.py`：当前源码、补丁、依赖产物及其输入指纹、工具链、目标、参数和命令共同形成缓存键；同键仍逐个核对输出 SHA。缺记录、输入不匹配、构建期间变化或产物损坏不能当作缓存命中。新 `standalone.py pack` 必须传 `--build-plan`，输出 schema 2 的组件构建清单；旧包的摘要验证不等于新来源验证。二进制基线可明确锁定，但不能补造其原始源码证明。工具、配方字段、8 阶段实测与尚未迁移的直接构建入口见 [94 篇](../../../../docs/94-build-fingerprints.md)。

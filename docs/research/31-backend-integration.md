@@ -1,5 +1,7 @@
 # Phosh 与 Android 后端的连接：架构、研究过程和维护方法
 
+2026-09-30 构建与部署身份：新的独立包 manifest schema 2 绑定组件输入指纹、依赖关系及 APK/rootfs/host seed/稀疏写入器摘要；pack 核对当前期望配方，verify 核对随包记录与文件。G100 已用该路径部署 OS `20260930.17` 并通过保留账户及重启检查，设备保留 `/usr/share/rungic/build/payload-build-manifest.json` 供追溯。旧上游二进制基线仍作为显式依赖，不能被追认为源码构建证明；实现、适用入口和验收边界见 [94 篇](../94-build-fingerprints.md)。
+
 2026-09-30 X70 投屏搜索修复：旧镜像 JAR 返回 `displays`，新版桌面需要 `receivers`，实际发现被显示为空。配套升级 root helper 与桌面包后，手机实际列表可见 TCL/UGREEN；增加协议检查和构建来源校验，并修复空态居中。此轮仅验证发现与 UI，没有重建 `.7` 镜像或重验电视画面/声音，证据与边界见 [86 篇](../86-x70-miracast-assessment.md)。
 
 2026-09-30 X70 新镜像复验：OS `20260930.15`、独立载荷 `.7`、APK 2.27。修复 APK umask 0077 导致 cgroup 0700，以及 Android 音频持久化 PID 被其他应用复用的两个独立冷启动故障；全新账户 UI、连续三轮整机重启首次打开、9 项 smoke 全部通过。此前 `.5` 第三轮失败仍保留证据；用户选择最终空白账户，由其自行配置。固定产物、日志与验收边界见 [93 篇](../93-x70-independent-image-revalidation.md)。

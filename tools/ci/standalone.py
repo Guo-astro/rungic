@@ -18,6 +18,7 @@ import sys
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 import cast_payload
+import build_artifact
 FILES = {'rootfs.img.gz', 'host-seed.tar.gz', 'rungic.apk', 'termux.apk',
          'termux-prefix.tar.gz', 'rungic-sparse-write', 'firstboot.sh', 'service.sh',
          'boot-dispatch.sh', 'seed.env', 'device-spec.json', 'rootfs-report.json', 'host-seed-report.json',
@@ -54,16 +55,56 @@ def verify(folder, expected=None):
     if expected and digest(manifest_file) != expected:
         raise ValueError('manifest digest differs from trusted input')
     m = read(manifest_file)
-    if m.get('schema') != 1 or m.get('kind') != 'rungic-standalone':
+    if m.get('schema') not in (1, 2) or m.get('kind') != 'rungic-standalone':
         raise ValueError('unsupported standalone manifest')
     valid_id(m['release'])
-    if set(m['files']) != FILES:
+    if set(m['files']) != FILES | ({'build-manifest.json'} if m['schema'] == 2 else set()):
         raise ValueError('payload file inventory mismatch')
     for name, entry in m['files'].items():
         p = folder / name
         if p.is_symlink() or not p.is_file() or p.stat().st_size != entry['bytes'] or digest(p) != entry['sha256']:
             raise ValueError(f'payload verification failed: {name}')
+    if m['schema'] == 2:
+        validate_build_manifest(read(folder / 'build-manifest.json'), m['files'])
     return m
+
+
+def validate_build_manifest(manifest, files):
+    if manifest.get('schema') != 1 or not manifest.get('components'):
+        raise ValueError('missing component build fingerprints')
+    for record in manifest['components'].values():
+        build_artifact.validate_record(record)
+    fingerprints = {record['input_sha256']: record for record in manifest['components'].values()}
+    for record in manifest['components'].values():
+        for dependency in record['inputs']['dependencies'].values():
+            if 'input_sha256' in dependency:
+                parent = fingerprints.get(dependency['input_sha256'])
+                if parent is None or not any(output['sha256'] == dependency.get('file_sha256') for output in parent['outputs'].values()):
+                    raise ValueError('component dependency build is missing or mismatched')
+    bindings = manifest.get('bindings', {})
+    if set(bindings) != {'rootfs.img.gz', 'host-seed.tar.gz', 'rungic.apk', 'rungic-sparse-write'}:
+        raise ValueError('missing primary artifact build bindings')
+    for name, binding in bindings.items():
+        record = manifest['components'][binding['component']]
+        artifact = record['outputs'][binding['output']]
+        if artifact != files[name]:
+            raise ValueError(f'build record does not match payload: {name}')
+
+
+def collect_build_manifest(plan_file, files):
+    """Verify each expected recipe before packaging; archive portable records."""
+    plan = read(plan_file)
+    records = {}
+    for name, entry in plan['components'].items():
+        expected = build_artifact.inputs(read(entry['recipe']))
+        record = build_artifact.verify(entry['directory'], expected)
+        if record['component'] != name:
+            raise ValueError('component name differs from build plan')
+        records[name] = record
+    result = {'schema': 1, 'components': records, 'bindings': plan['bindings'],
+              'binary_inputs_policy': 'Pinned binary dependencies are recorded as inputs, not source cache hits.'}
+    validate_build_manifest(result, files)
+    return result
 
 
 def validate_cast_host(host):
@@ -109,7 +150,9 @@ def pack(args):
                'device-spec.json': args.spec, 'rootfs-report.json': args.rootfs_report,
                'host-seed-report.json': args.host_report, 'kernel-report.json': args.kernel_report,
                'packages.lock.tsv': args.package_lock, 'release.json': args.package_release}
+    build_manifest = collect_build_manifest(args.build_plan, {name: {'sha256': digest(path), 'bytes': path.stat().st_size} for name, path in sources.items()})
     out.mkdir(parents=True)
+    write(out / 'build-manifest.json', build_manifest)
     for name, path in sources.items():
         subprocess.run(['cp', '--reflink=auto', str(path), str(out / name)], check=True)
     env = {'RELEASE_ID': args.release_id, 'HOST_SEED_SHA256': digest(out / 'host-seed.tar.gz'),
@@ -120,7 +163,7 @@ def pack(args):
            'SPARSE_WRITE_SHA256': digest(out / 'rungic-sparse-write'),
            'PHONE_HTTP_PROXY': spec['deployment']['phone_http_proxy']}
     (out / 'seed.env').write_text(''.join(f'{k}={shlex.quote(v)}\n' for k, v in env.items()))
-    m = {'schema': 1, 'kind': 'rungic-standalone', 'release': args.release_id,
+    m = {'schema': 2, 'kind': 'rungic-standalone', 'release': args.release_id,
          'source_commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
          'source_dirty': bool(subprocess.check_output(['git', 'diff', '--name-only'], text=True).strip()),
          'fingerprint': spec['identity']['fingerprint'], 'product': spec['identity']['product'],
@@ -128,7 +171,7 @@ def pack(args):
          'boot_sha256': kernel['boot_sha256'], 'boot_bytes': kernel['boot_bytes'],
          'rootfs_bytes': root['rootfs_bytes'], 'minimum_battery_percent': spec['release_requirements']['minimum_battery_percent'],
          'package_release': root['release_version'],
-         'files': {n: {'bytes': (out / n).stat().st_size, 'sha256': digest(out / n)} for n in sorted(FILES)}}
+         'files': {n: {'bytes': (out / n).stat().st_size, 'sha256': digest(out / n)} for n in sorted(FILES | {'build-manifest.json'})}}
     write(out / 'manifest.json', m)
     verify(out)
     print(json.dumps({'folder': str(out), 'manifest_sha256': digest(out / 'manifest.json')}))
@@ -257,6 +300,7 @@ def main():
     for name in ('spec', 'rootfs-gz', 'rootfs-report', 'host-seed', 'host-report', 'kernel-report', 'package-lock', 'package-release', 'apk', 'deps', 'output'):
         b.add_argument('--' + name, type=Path, required=True)
     b.add_argument('--release-id', required=True)
+    b.add_argument('--build-plan', type=Path, required=True, help='expected component recipes, cache directories and primary artifact bindings')
     v = sub.add_parser('verify'); v.add_argument('payload', type=Path)
     for action in ('install', 'status'):
         d = sub.add_parser(action)

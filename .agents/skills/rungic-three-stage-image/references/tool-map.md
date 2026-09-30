@@ -8,6 +8,7 @@
 | --- | --- | --- |
 | 原厂提取/验证 | `tools/prepare_g100_stock.py`、`tools/verify_g100_stock.py` | 默认 portov；新设备用已审核 `--identity`、`--expected-fingerprint`、`--logical-partitions`，仍须核对格式 |
 | 设备/输入预检 | `tools/ci/preflight.py` | v1 spec、已核验 OEM manifest/verification；要求已授权 ADB 和匹配的原机状态，不是纯 bootloader 安装前提 |
+| 组件指纹与缓存 | `tools/build_artifact.py` | 输入指纹与产物摘要双重检查；新独立包必须带 build plan，范围与二进制基线边界见 94 篇 |
 | 上游配方 | `packages/*/recipe.json`、`tools/pq.py` | prepare/export 补丁队列；遵循当前 CLI |
 | GKI 构建依据 | `packages/gki-android15-6.6/recipe.json`、`packages/gki-android16-6.12/recipe.json`、`kernel/targets/gki/`、`kernel/README.md` | 按目标选固定来源、manifest、fragment 与符号表；不能跨内核代际直接复用补丁结论 |
 | ABI | `tools/ci/module_abi.py` | 支持 legacy/extended modversions；比较 symvers 与 OEM 模块，保留未覆盖引用的范围 |
