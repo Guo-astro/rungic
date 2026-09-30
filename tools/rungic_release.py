@@ -317,7 +317,7 @@ def build(version=None, allow_dirty=False, note='', coupled_override=None):
     info = {'version': version, 'commit': commit, 'dirty': dirty, 'built': datetime.datetime.now().isoformat(
         timespec='seconds'), 'note': note, 'packages': deps, 'coupled': sorted(coupled),
         'android': android_manifest(s), 'session_restart': s.get('session_restart', []),
-        'service_restart': s.get('service_restart', {})}
+        'service_restart': s.get('service_restart', {}), 'user_restart': s.get('user_restart', {})}
     meta = build_meta(version, deps, info)
     index()
     RELEASES.mkdir(parents=True, exist_ok=True)
@@ -582,6 +582,27 @@ def restart_session():
     return result.returncode == 0, (result.stdout + result.stderr).strip()
 
 
+def restart_user_services(spec, before, after):
+    """Restart the running desktop-user units of changed packages (plasmashell last: it loads the
+    others' QML plugins and applets) and quit running instances of listed programs. Units that are
+    not running stay as they are. None when nothing applies."""
+    items = []
+    for pkg, names in spec.items():
+        if before.get(pkg) != after.get(pkg):
+            items += [n for n in names if n not in items]
+    if not items:
+        return None
+    units = sorted((n for n in items if n.endswith('.service')), key=lambda n: n == 'plasma-plasmashell.service')
+    programs = [n for n in items if n.startswith('/')]
+    script = ('for u in ' + ' '.join(shlex.quote(u) for u in units) + '; do systemctl --user is-active -q "$u" || continue; '
+              'systemctl --user restart "$u" && echo "$u restarted" || echo "$u FAILED"; done; '
+              + ''.join(f'pkill -xf {shlex.quote(p)} && echo {shlex.quote(p + " quit")}; ' for p in programs) + 'true')
+    result = run('u=$(getent passwd 1000 | cut -d: -f1); '
+                 f'runuser -u "$u" -- /usr/bin/rungic-plasma-user-exec sh -c {shlex.quote(script)}',
+                 'container', timeout=240, check=False)
+    return (result.stdout + result.stderr).strip()[-800:]
+
+
 def restart_container():
     outputs = []
     for action in ('stop', 'start'):
@@ -785,6 +806,14 @@ def deploy(version=None, restart='auto', acceptance='smoke', record_label=None, 
             ok, text = restart_container() if whole else restart_session()
             step('restart', ok=ok, container=whole, output=text[-500:])
             installed_at = time.time()
+        elif restart != 'never':
+            # A lighter restart than the session's: the desktop user's services of changed packages,
+            # so plasmashell and the assistant load the new QML and code at once (docs/61).
+            # A release from before this setting (a rollback target) uses the current one.
+            spec = info.get('user_restart') or json.loads(SPEC.read_text()).get('user_restart', {})
+            user_units = restart_user_services(spec, before, after)
+            if user_units is not None:
+                step('user-services', output=user_units)
         # 6 verify
         integrity_after = integrity_summary()
         (record / 'integrity-after.json').write_text(json.dumps(integrity_after, indent=1, ensure_ascii=False) + '\n')
