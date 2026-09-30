@@ -1048,3 +1048,7 @@ msgstr "对话记录只保存在这台手机上（%1），删除对话会一并�
 msgctxt "@info privacy; %1 is a folder"
 msgid "Your OpenAI API key is kept in plain text in a config file on this phone (%1, readable only by your user) and is used only to call OpenAI. Programs running as you, including the Agent, can read it."
 msgstr "OpenAI API Key 明文保存在本机的配置文件里（%1，只有你这个用户能读），只用来调用 OpenAI。以你身份运行的程序（包括 Agent）都能读到它。"
+
+msgctxt "@title"
+msgid "Agent Usage"
+msgstr "Agent 用量"

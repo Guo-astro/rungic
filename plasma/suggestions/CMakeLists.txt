@@ -11,7 +11,7 @@ qt_policy(SET QTP0004 NEW)
 # One catalog (po/<lang>/rungic-suggestions.po) for the service, its model and the QML module, which
 # plasmashell and the voice assistant load: i18n() in C++ never falls back to the host's domain.
 add_compile_definitions(TRANSLATION_DOMAIN="rungic-suggestions")
-add_library(caremodel STATIC model.cpp model.h collector.cpp collector.h layout.cpp layout.h)
+add_library(caremodel STATIC model.cpp model.h usage.cpp usage.h collector.cpp collector.h layout.cpp layout.h)
 target_link_libraries(caremodel PUBLIC Qt6::Core KF6::ConfigCore KF6::I18n)
 qt_add_executable(rungic-suggestions main.cpp service.cpp service.h)
 target_link_libraries(rungic-suggestions PRIVATE caremodel Qt6::DBus Qt6::Concurrent)
@@ -20,12 +20,13 @@ qt_add_qml_module(rungicsuggestions
     URI com.rungic.suggestions VERSION 1.0
     PLUGIN_TARGET rungicsuggestions OUTPUT_DIRECTORY "${module_dir}"
     SOURCES client.cpp client.h
-    QML_FILES qml/PresentationTracker.qml qml/SuggestionCard.qml qml/SuggestionsFeed.qml qml/SuggestionsWidget.qml)
+    QML_FILES qml/UsageText.js qml/PixelAgent.qml qml/AgentWidget.qml qml/AgentUsageDetails.qml qml/SuggestionStack.qml qml/PresentationTracker.qml qml/SuggestionCard.qml qml/SuggestionsFeed.qml qml/SuggestionsWidget.qml)
 target_link_libraries(rungicsuggestions PRIVATE Qt6::Core Qt6::DBus Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 KF6::WindowSystem KF6::I18n)
 install(TARGETS rungic-suggestions DESTINATION bin)
 install(TARGETS rungicsuggestions LIBRARY DESTINATION "${QT6_INSTALL_QML}/com/rungic/suggestions")
 install(FILES "${module_dir}/qmldir" "${module_dir}/rungicsuggestions.qmltypes" DESTINATION "${QT6_INSTALL_QML}/com/rungic/suggestions")
 install(DIRECTORY applet/ DESTINATION share/plasma/plasmoids/com.rungic.suggestions)
+install(DIRECTORY agent-applet/ DESTINATION share/plasma/plasmoids/com.rungic.agent)
 ki18n_install(po)
 enable_testing()
 qt_add_executable(care-tests tests.cpp)

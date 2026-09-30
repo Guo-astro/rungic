@@ -11,6 +11,7 @@ Rectangle {
     id: feed
     property bool home: false
     property string selectedId: ""
+    readonly property bool groupDetail: selectedId.startsWith("group:")
     property bool activeView: visible && Window.active
     property bool history: false
     property string message: ""
@@ -23,7 +24,7 @@ Rectangle {
     KI18nContext { id: l10n; translationDomain: "rungic-suggestions" }
     SuggestionsClient { id: client }
     PresentationTracker { view: list; suggestionsClient: client; active: feed.activeView && !snooze.visible && !applyDialog.visible; selectedId: feed.selectedId }
-    readonly property var clientItems: client.items
+    readonly property var clientItems: [client.items, client.groups, client.historyGroups]
     onClientItemsChanged: {
         if (list.moving) pendingRefresh = true
         else rebuild()
@@ -41,7 +42,8 @@ Rectangle {
         const atBeginning = !populated || list.contentY <= list.originY + 1
         const y = list.contentY - list.originY
         populated = client.items.length > 0
-        shown = client.items.filter(i => history ? ["resolved", "dismissed"].includes(i.state) : !["resolved", "dismissed"].includes(i.state))
+        const items = client.items.filter(i => history ? ["resolved", "dismissed"].includes(i.state) : !["resolved", "dismissed"].includes(i.state))
+        shown = groupDetail ? items.filter(i => i.groupId === selectedId) : selectedId ? items : (history ? client.historyGroups : client.groups)
         pendingRefresh = false
         Qt.callLater(() => {
             if (selectedId && !positioned && client.items.some(i => i.id === selectedId)) {
@@ -98,11 +100,12 @@ Rectangle {
             RowLayout {
                 Layout.fillWidth: true; Layout.leftMargin: 22; Layout.rightMargin: 22
                 Text { text: feed.home ? l10n.i18n("Today") : l10n.i18n("Suggestions"); font.pixelSize: feed.home ? 32 : 26; font.weight: Font.DemiBold; color: Theme.text; Layout.fillWidth: true }
-                PillButton { text: "Agent"; onClicked: client.open() }
+                PillButton { text: feed.selectedId ? l10n.i18n("All suggestions") : "Agent"; onClicked: { if (feed.selectedId) feed.selectedId = ""; else client.openAgent() } }
             }
             Text {
                 Layout.leftMargin: 22; Layout.rightMargin: 22; Layout.fillWidth: true
-                text: feed.home ? l10n.i18nc("@info %1 is today's date", "%1 · Looking out for how your phone is doing", new Date().toLocaleDateString(Qt.locale(), l10n.i18nc("today's date on the home feed, Qt date format", "dddd, MMMM d")))
+                text: feed.groupDetail ? l10n.i18n("Each related record keeps its own evidence and findings; being grouped doesn't mean they share a root cause.")
+                    : feed.home ? l10n.i18nc("@info %1 is today's date", "%1 · Looking out for how your phone is doing", new Date().toLocaleDateString(Qt.locale(), l10n.i18nc("today's date on the home feed, Qt date format", "dddd, MMMM d")))
                     : l10n.i18n("Problems found, suggested improvements and their progress all stay here.")
                 font.pixelSize: 13; color: Theme.dim; wrapMode: Text.Wrap
             }
@@ -137,11 +140,20 @@ Rectangle {
         }
         delegate: Item {
             required property var modelData
-            readonly property var suggestionRecord: modelData
+            readonly property var suggestionRecord: modelData.members ? modelData.members[0] : modelData
             width: list.width
-            height: card.height
+            height: modelData.members ? stackCard.height : card.height
+            SuggestionStack {
+                id: stackCard
+                visible: !!parent.modelData.members
+                item: parent.modelData
+                width: Math.min(list.width - 32, 680)
+                anchors.horizontalCenter: parent.horizontalCenter
+                onClicked: { feed.selectedId = item.id; feed.beginning() }
+            }
             SuggestionCard {
             id: card
+            visible: !parent.modelData.members
             item: parent.modelData
             width: Math.min(list.width - 32, 680)
             anchors.horizontalCenter: parent.horizontalCenter

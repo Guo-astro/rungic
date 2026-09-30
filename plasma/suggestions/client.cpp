@@ -40,6 +40,8 @@ void SuggestionsClient::call(const QString &method, const QVariantList &args, co
         const auto result = QJsonDocument::fromJson(reply.value().toUtf8()).object();
         m_error = result.value("error").toString();
         if (method == "List" && m_error.isEmpty()) {
+            m_groups = result.value("groups").toArray().toVariantList();
+            m_historyGroups = result.value("historyGroups").toArray().toVariantList();
             m_items = result.value("items").toArray().toVariantList(); m_coverage.clear();
             for (const auto &v : result.value("coverage").toArray()) m_coverage.append(v.toString());
         } else Q_EMIT replied(id, action, result.toVariantMap());
@@ -70,6 +72,7 @@ void SuggestionsClient::launch(const QStringList &arguments) {
     else start({});
 }
 void SuggestionsClient::open(const QString &id) { launch({"--suggestion", id}); }
+void SuggestionsClient::openAgent(bool usage) { launch({usage ? "--usage" : "--agent"}); }
 void SuggestionsClient::conversation(const QString &id) { if (!id.isEmpty()) launch({"--conversation", id}); }
 void SuggestionsClient::watching(bool visible) {
     m_watching = visible;
@@ -83,4 +86,21 @@ void SuggestionsClient::present(const QVariantList &receipts, bool opened) {
 }
 double SuggestionsClient::tomorrow(int hour) const {
     return QDateTime(QDate::currentDate().addDays(1), QTime(qBound(0, hour, 23), 0)).toSecsSinceEpoch();
+}
+
+UsageClient::UsageClient(QObject *parent) : QObject(parent) {
+    QDBusConnection::sessionBus().connect(BusName, BusPath, BusName, "UsageChanged", this, SLOT(onUsageChanged()));
+    QTimer::singleShot(0, this, &UsageClient::refresh);
+}
+void UsageClient::refresh() {
+    if (m_pending) return;
+    m_pending = true;
+    auto request = QDBusMessage::createMethodCall(BusName, BusPath, BusName, "AgentUsage");
+    auto *w = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(request, 5000), this);
+    connect(w, &QDBusPendingCallWatcher::finished, this, [this, w] {
+        QDBusPendingReply<QString> reply = *w; w->deleteLater(); m_pending = false;
+        if (reply.isError()) { m_data["error"] = i18n("The usage service isn't connected yet"); m_data["stale"] = true; }
+        else m_data = QJsonDocument::fromJson(reply.value().toUtf8()).object().toVariantMap();
+        Q_EMIT changed();
+    });
 }

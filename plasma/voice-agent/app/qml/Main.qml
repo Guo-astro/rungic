@@ -13,6 +13,7 @@ QQC2.ApplicationWindow {
     id: root
     // --conversation ID: open straight in that conversation (the overlay's "open in app").
     property string initialConversation: ""
+    property string initialPage: ""
     property bool initialSuggestions: false
     property string initialSuggestion: ""
     title: "Agent"
@@ -50,6 +51,10 @@ QQC2.ApplicationWindow {
         stack.push(Qt.resolvedUrl(page || "SettingsPage.qml"))
     }
     function back() { if (stack.depth > 1) stack.pop() }
+    function openAgentPage(page) {
+        while (stack.depth > 1) stack.pop(null)
+        if (page === "usage") stack.push(Qt.resolvedUrl("UsagePage.qml"))
+    }
     function openSuggestions(id) {
         while (stack.depth > 1) stack.pop(null)
         stack.push(Qt.resolvedUrl("SuggestionsPage.qml"), { suggestionId: id || "" })
@@ -63,6 +68,7 @@ QQC2.ApplicationWindow {
     Component.onCompleted: {
         AgentClient.setWatching(watching)
         if (initialConversation) openConversation(initialConversation)
+        if (initialPage) openAgentPage(initialPage)
         if (initialSuggestions) openSuggestions(initialSuggestion)
     }
 

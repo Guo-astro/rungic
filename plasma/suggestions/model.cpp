@@ -10,6 +10,7 @@
 #include <QSaveFile>
 #include <QSet>
 #include <QUuid>
+#include <QRegularExpression>
 #include <algorithm>
 
 namespace Care {
@@ -90,6 +91,21 @@ static void nextDelivery(QJsonObject &o, const QString &reason) {
     o["deliveryRevision"] = o["deliveryRevision"].toInteger() + 1;
     o["deliveryReason"] = reason;
 }
+static QString plainSummary(QString text) {
+    text = text.section("\n\n", 0, 0).trimmed();
+    text.remove(QRegularExpression("[*`#]"));
+    return text.simplified();
+}
+static QString groupKey(const QJsonObject &o) {
+    const auto e = o["evidence"].toObject();
+    const auto package = e["package"].toString();
+    if (o["source"] == "crashes" && !package.isEmpty())
+        return "group:" + fingerprint("crashes:" + package + ':' + e["version"].toString());
+    // Only explicit shared responsibility is grouped; unrelated faults stay separate.
+    if (o["source"] == "compatibility" && !package.isEmpty())
+        return "group:" + fingerprint("compatibility:" + package + ':' + o["kind"].toString());
+    return "group:" + o["id"].toString();
+}
 static QJsonObject projected(QJsonObject o) {
     if (o.isEmpty()) return o;
     const auto task = o["task"].toObject();
@@ -104,6 +120,13 @@ static QJsonObject projected(QJsonObject o) {
     o["canApply"] = o["issueState"] == "observed" && !activeTask(o) && o["planStatus"] == "ready"
         && o["planEvidence"] == evidenceRevision(o) && !o["plan"].toString().trimmed().isEmpty()
         && !o["verification"].toString().trimmed().isEmpty() && !o["rollback"].toString().trimmed().isEmpty();
+    o["groupId"] = groupKey(o);
+    const auto e = o["evidence"].toObject();
+    o["displayTitle"] = e["package"] == "plasma-workspace" ? i18n("A desktop component quit unexpectedly") : o["title"].toString();
+    auto summary = o["conclusion"].toString().trimmed();
+    if (summary.isEmpty()) summary = plainSummary(o["result"].toString());
+    if (summary.isEmpty()) summary = o["body"].toString();
+    o["summary"] = summary;
     o["notified"] = o["notifiedRevision"].toInteger() >= o["deliveryRevision"].toInteger();
     o["seen"] = o["openedRevision"].toInteger() >= o["deliveryRevision"].toInteger();
     return o;
@@ -169,6 +192,32 @@ QJsonArray Model::list() const {
     });
     QJsonArray result; for (const auto &o : sorted) result.append(o); return result;
 }
+QJsonArray Model::groups(bool history) const {
+    QJsonArray groups;
+    QHash<QString, int> indexes;
+    for (const auto &v : list()) {
+        const auto item = v.toObject();
+        const bool archived = item["state"] == "resolved" || item["state"] == "dismissed";
+        if (history != archived) continue;
+        const auto key = item["groupId"].toString();
+        if (!indexes.contains(key)) {
+            indexes[key] = groups.size();
+            auto group = item;
+            group["id"] = key;
+            group["representativeId"] = item["id"];
+            group["members"] = QJsonArray();
+            group["reports"] = 0;
+            groups.append(group);
+        }
+        const int index = indexes.value(key);
+        auto group = groups[index].toObject();
+        auto members = group["members"].toArray(); members.append(item);
+        group["members"] = members; group["count"] = members.size();
+        group["reports"] = group["reports"].toInt() + qMax(1, item["evidence"].toObject()["reports"].toInt());
+        groups[index] = group;
+    }
+    return groups;
+}
 bool Model::observe(QJsonObject incoming, qint64 now) {
     const auto id = incoming["id"].toString(); if (id.isEmpty()) return false;
     auto o = items.value(id).toObject(); const bool fresh = o.isEmpty(), recurrent = o["issueState"] == "absent";
@@ -224,8 +273,14 @@ QJsonObject Model::updatePlan(const QString &id, const QJsonObject &fields) {
     for (const auto &key : {"plan", "verification", "rollback", "planStatus"}) if (fields.contains(key)) planChanged = true;
     auto status = fields["planStatus"].toString("needs_investigation");
     if (!QStringList{"needs_investigation", "unavailable", "ready"}.contains(status)) return {{"error", i18n("Invalid plan status.")}};
-    for (const auto &key : {"result", "plan", "verification", "rollback"})
+    for (const auto &key : {"result", "plan", "verification", "rollback", "conclusion", "nextStep", "confidence"})
         if (fields.contains(key)) o[key] = fields[key].toString().left(16000);
+    if (fields.contains("confidence") && !QStringList{"confirmed", "suspected", "unknown"}.contains(fields["confidence"].toString()))
+        return {{"error", i18n("confidence must be confirmed, suspected or unknown.")}};
+    if (fields.contains("conclusion")) o["conclusion"] = fields["conclusion"].toString().left(220);
+    if (fields.contains("nextStep")) o["nextStep"] = fields["nextStep"].toString().left(100);
+    // Updating a legacy result must not leave an older structured conclusion on top.
+    if (fields.contains("result") && !fields.contains("conclusion")) o.remove("conclusion");
     if (planChanged) {
         if (status == "ready" && (o["plan"].toString().trimmed().isEmpty() || o["verification"].toString().trimmed().isEmpty() || o["rollback"].toString().trimmed().isEmpty()))
             return {{"error", i18n("A plan ready to apply must include the exact changes, how to verify them and how to roll back.")}};

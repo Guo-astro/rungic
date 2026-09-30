@@ -43,6 +43,7 @@ SettingsFrame {
             accessory: "chevron"
             onClicked: page.push("CodexPage.qml")
         }
+        ListRow { text: i18nc("@title", "Agent Usage"); accessory: "chevron"; onClicked: page.push("UsagePage.qml") }
         ListRow {
             text: "OpenAI API Key"
             value: page.key.set ? page.key.masked : (page.setup.key ? i18nc("@info the API key", "Not set") : "")

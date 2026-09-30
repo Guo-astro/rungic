@@ -14,7 +14,7 @@ Item {
     property bool activeView: visible && Window.active
     property var pending: []
     property bool refreshPending: false
-    readonly property var clientItems: client.items
+    readonly property var clientItems: client.groups
     onClientItemsChanged: {
         if (list && (list.moving || pointer.pressed)) refreshPending = true
         else rebuild()
@@ -23,7 +23,7 @@ Item {
         if (!list) return
         const top = list.atYBeginning
         const offset = list.contentY - list.originY
-        pending = client.items.filter(i => !["resolved", "dismissed"].includes(i.state))
+        pending = client.groups
         refreshPending = false
         Qt.callLater(() => {
             if (top) list.positionViewAtBeginning()
@@ -88,45 +88,14 @@ Item {
                 background: null
                 contentItem: Rectangle { radius: 2; color: "#90ffffff" }
             }
-            delegate: QQC2.AbstractButton {
+            delegate: SuggestionStack {
                 id: card
                 required property var modelData
-                readonly property var suggestionRecord: modelData
+                item: modelData
+                readonly property var suggestionRecord: modelData.members[0]
                 width: list.width
-                height: 139
-                readonly property var evidence: modelData.evidence || ({})
-                readonly property string title: evidence.package === "plasma-workspace" ? l10n.i18n("A desktop component quit unexpectedly") : (modelData.title || l10n.i18n("Suggestion"))
-                Accessible.name: l10n.i18nc("@action %1 is a suggestion's title", "%1, view suggestion", title)
                 onClicked: client.open(modelData.id)
-                background: Rectangle {
-                    radius: 22
-                    color: card.down || (pointer.pressed && !pointer.dragged && pointer.pressId === card.modelData.id) ? Theme.hover : Theme.background
-                    border.width: 1
-                    border.color: Theme.line
-                }
-                contentItem: ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: 16
-                    spacing: 7
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Icon { name: card.modelData.kind === "fault" ? "alert" : "compose"; color: Theme.link; implicitWidth: 15; implicitHeight: 15 }
-                        Text {
-                            text: ({working: l10n.i18n("In progress"), attention: l10n.i18n("Result ready"), snoozed: l10n.i18n("For later")})[card.modelData.state] || (card.modelData.kind === "fault" ? l10n.i18n("Problem") : l10n.i18n("Improvement"))
-                            font.pixelSize: 11; color: Theme.dim
-                            Layout.fillWidth: true
-                        }
-                        Text { text: "›"; font.pixelSize: 18; color: Theme.dim }
-                    }
-                    Text { text: card.title; textFormat: Text.PlainText; Layout.fillWidth: true; color: Theme.text; font.pixelSize: 16; font.weight: Font.DemiBold; maximumLineCount: 1; elide: Text.ElideRight }
-                    Text {
-                        text: card.modelData.note || card.modelData.body || l10n.i18n("Ask Agent to check, or leave it for later.")
-                        textFormat: Text.PlainText
-                        Layout.fillWidth: true; Layout.fillHeight: true
-                        font.pixelSize: 12; lineHeight: 1.2; color: Theme.dim
-                        wrapMode: Text.Wrap; maximumLineCount: 2; elide: Text.ElideRight
-                    }
-                }
+                pressedFeedback: pointer.pressed && !pointer.dragged && pointer.pressId === modelData.id
             }
             Rectangle {
                 visible: widget.pending.length === 0

@@ -16,7 +16,7 @@ qt_add_executable(rungic-voice-assistant main.cpp agentclient.cpp agentclient.h 
 qt_add_qml_module(rungic-voice-assistant URI com.rungic.voiceassistant VERSION 1.0
     QML_FILES qml/Main.qml qml/ChatPage.qml qml/ChatEntry.qml qml/Composer.qml qml/ConversationDrawer.qml
               qml/SettingsFrame.qml qml/SettingsPage.qml qml/CodexPage.qml qml/KeyPage.qml
-              qml/ChatModel.qml qml/AssistantOverlay.qml qml/SuggestionsPage.qml qml/media.js)
+              qml/ChatModel.qml qml/AssistantOverlay.qml qml/UsagePage.qml qml/SuggestionsPage.qml qml/media.js)
 target_link_libraries(rungic-voice-assistant PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::DBus
     LayerShellQt::Interface KF6::WindowSystem KF6::ColorScheme KF6::ConfigCore KF6::I18n KF6::I18nQml)
 install(TARGETS rungic-voice-assistant DESTINATION bin)

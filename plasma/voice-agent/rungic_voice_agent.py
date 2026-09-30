@@ -25,6 +25,7 @@ import hashlib
 import io
 import itertools
 import json
+import hashlib
 import math
 import os
 from pathlib import Path
@@ -136,6 +137,7 @@ INTERFACE = '''
     <method name="SendText"><arg type="s" direction="in"/><arg type="s" direction="in"/></method>
     <method name="TalkToText"><arg type="s" direction="out"/></method>
     <method name="ReadAloud"><arg type="s" direction="in"/></method>
+    <method name="Usage"><arg type="s" direction="out"/></method>
     <method name="Setup"><arg type="s" direction="out"/></method>
     <method name="SetApiKey"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
     <method name="TestApiKey"><arg type="s" direction="out"/></method>
@@ -586,6 +588,8 @@ class Endpointer:
 class VoiceAgent:
     def __init__(self, emit):
         Gst.init(None)
+        self.usage_tokens = {}
+        self.usage_accounts = {}
         self.emit_raw = emit
         self.store = Store()
         # The main conversation was titled "语音助手", then "主对话", before it was marked
@@ -1393,10 +1397,51 @@ class VoiceAgent:
             log('appendSpeech', error)
 
     # ---- codex events (reader thread) -----------------------------------------------
+    @staticmethod
+    def usage_identity():
+        # Never publish a key, token or email. Partition local accounting by login identity.
+        try:
+            auth = json.loads((Path.home() / '.codex/auth.json').read_text())
+            identity = auth.get('OPENAI_API_KEY') or (auth.get('tokens') or {}).get('account_id')
+            return hashlib.sha256(str(identity).encode()).hexdigest() if identity else ''
+        except (OSError, ValueError):
+            return ''
+
+    def usage(self):
+        identity = self.usage_identity()
+        result = {'accountKey': identity, 'model': AGENT_MODEL,
+                  'activity': 'working' if self.agent_busy else 'ready', 'authMode': 'none'}
+        server = self.server
+        if not server:
+            result['activity'] = 'offline'
+            return result
+        account = server.call('account/read', {'refreshToken': False}, timeout=5).get('account') or {}
+        result['authMode'] = account.get('type', 'none')
+        result['plan'] = account.get('planType', '')
+        if result['authMode'] == 'chatgpt':
+            try:
+                result['rateLimits'] = server.call('account/rateLimits/read', {'excludeResetCreditDetails': True}, timeout=10)
+                result['accountUsage'] = server.call('account/usage/read', {}, timeout=10)
+            except Exception:
+                result['usageError'] = _('Account usage has not updated yet')
+        if identity != self.usage_identity() or server is not self.server:
+            raise RuntimeError(_('The account changed; read it again in a moment'))
+        result['tokens'] = [v for v in list(self.usage_tokens.values()) if v['accountKey'] == identity]
+        return result
+
     def on_notification(self, method, params):
-        if params.get('threadId') not in (None, self.thread_id):
+        if method == 'turn/started':
+            self.usage_accounts[(params.get('threadId'), (params.get('turn') or {}).get('id'))] = self.usage_identity()
+        if method == 'thread/tokenUsage/updated':
+            identity = self.usage_accounts.get((params.get('threadId'), params.get('turnId')), self.usage_identity())
+            event = {'type': 'token-usage', 'accountKey': identity, **params}
+            self.usage_tokens[(event.get('accountKey'), event.get('threadId'))] = event
+            self.emit_raw(event)
+        elif method in ('account/rateLimits/updated', 'account/updated'):
+            self.emit_raw({'type': 'usage-changed', 'accountKey': self.usage_identity()})
+        elif params.get('threadId') and params['threadId'] != self.thread_id:
             return
-        if method == 'thread/realtime/outputAudio/delta':
+        elif method == 'thread/realtime/outputAudio/delta':
             GLib.idle_add(self.play, params['audio'])
         elif method == 'thread/realtime/started':
             self.realtime = True
@@ -1855,7 +1900,10 @@ class VoiceAgent:
                       'read-only diagnostics and avoid heavy probes. When done, state the facts, the impact, the '
                       'proposed plan, how to verify it and how to roll it back; do not present a finished '
                       'investigation as a fix. You may run rungic-suggestions update {suggestion} to update the text '
-                      'fields result/plan/verification/rollback, with taskId={task}. planStatus must be set '
+                      'fields result/plan/verification/rollback, with taskId={task}. Also set conclusion (at most 220 '
+                      'characters: what you found and how sure you are), nextStep (at most 100 characters: the '
+                      'user\'s next step) and confidence (confirmed, suspected or unknown); do not just write that the '
+                      'investigation is done, and do not present a guess as a conclusion. planStatus must be set '
                       'explicitly to needs_investigation (still to investigate), unavailable (no plan for now) or '
                       'ready (a concrete plan ready to apply). Mark it ready only when the conditions, the exact '
                       'changes, the verification and the rollback are all clear; too little evidence, or no change '
@@ -2335,6 +2383,8 @@ class Service:
                     result = json.dumps({'text': agent.talk_to_text()}, ensure_ascii=False)
                 elif method == 'ReadAloud':
                     agent.read_aloud(args[0])
+                elif method == 'Usage':
+                    result = json.dumps(agent.usage(), ensure_ascii=False)
                 elif method == 'Setup':
                     result = json.dumps(agent.setup(), ensure_ascii=False)
                 elif method == 'SetApiKey':

@@ -418,3 +418,160 @@ msgstr "部分检查尚未完成，可以在 Agent 中查看。"
 
 msgid "New findings will show up here."
 msgstr "有新发现时会留在这里。"
+
+msgid "confidence must be confirmed, suspected or unknown."
+msgstr "结论确定程度必须为 confirmed/suspected/unknown"
+
+msgid "Hide details"
+msgstr "收起详情"
+
+msgid "Show the full investigation"
+msgstr "查看完整调查"
+
+msgid "All suggestions"
+msgstr "全部建议"
+
+msgid "Each related record keeps its own evidence and findings; being grouped doesn't mean they share a root cause."
+msgstr "相关记录分别保留证据和调查结论；同组不代表相同根因。"
+
+msgid "no records yet"
+msgstr "尚无记录"
+
+msgid "Not signed in"
+msgstr "未登录"
+
+msgid "Connecting"
+msgstr "正在连接"
+
+msgid "Usage window"
+msgstr "额度窗口"
+
+msgid "%1-day limit"
+msgid_plural "%1-day limit"
+msgstr[0] "%1 天额度"
+
+msgid "%1-hour limit"
+msgid_plural "%1-hour limit"
+msgstr[0] "%1 小时额度"
+
+msgid "%1-minute limit"
+msgid_plural "%1-minute limit"
+msgstr[0] "%1 分钟额度"
+
+msgid "No reset time given"
+msgstr "未提供重置时间"
+
+msgid "Reset time reached, waiting for an update"
+msgstr "重置时间已到，等待更新"
+
+msgctxt "@info %1 hours and %2 minutes"
+msgid "Resets in %1 h %2 min"
+msgstr "%1 小时 %2 分钟后重置"
+
+msgctxt "@info"
+msgid "Resets in %1 min"
+msgstr "%1 分钟后重置"
+
+msgid "No usage recorded yet"
+msgstr "尚未收到用量记录"
+
+msgid "%1 tokens recorded on this device"
+msgstr "本机已记录 %1 token"
+
+msgid "Open the Codex assistant"
+msgstr "打开 Codex 助理"
+
+msgid "View Agent usage"
+msgstr "查看 Agent 用量"
+
+msgid "Working"
+msgstr "正在处理"
+
+msgid "Ready"
+msgstr "就绪"
+
+msgid "Not connected"
+msgstr "未连接"
+
+msgid "Usage not updated yet · View details"
+msgstr "用量暂未更新 · 查看详情"
+
+msgctxt "@info %1 percent used, %2 when it resets"
+msgid "%1% used · %2"
+msgstr "已用 %1% · %2"
+
+msgid "Pay as you go · no subscription reset"
+msgstr "按量使用 · 无订阅重置时间"
+
+msgid "View account usage and limits"
+msgstr "查看账户用量与额度"
+
+msgid "Model not read yet"
+msgstr "模型尚未读取"
+
+msgid "Recorded today: %1 tokens. Counts only the Codex turns this account ran through the assistant on this device; it leaves out voice and is not the account's bill."
+msgstr "今日记录 %1 token。仅统计此账户通过本机助理收到的 Codex 回合用量；不包含语音消耗，也不是账户账单。"
+
+msgid "An API key is billed as you go; it has no subscription limits or reset times."
+msgstr "API Key 按量使用，未提供订阅额度和重置时间。"
+
+msgid "Account tokens to date: %1"
+msgstr "账户累计 token：%1"
+
+msgid "Last read: %1% used"
+msgstr "上次读取：已用 %1%"
+
+msgid "%1% used"
+msgstr "已用 %1%"
+
+msgid "Last read %1"
+msgstr "上次读取 %1"
+
+msgid "Waiting for usage data"
+msgstr "等待用量数据"
+
+msgid "Confirmed"
+msgstr "已确认"
+
+msgid "Suspected cause"
+msgstr "疑似原因"
+
+msgid "Cause not yet known"
+msgstr "原因待确认"
+
+msgid "%2, %1 related record, view suggestion"
+msgid_plural "%2, %1 related records, view suggestion"
+msgstr[0] "%2，%1 条相关记录，查看建议"
+
+msgid "%1 related record"
+msgid_plural "%1 related records"
+msgstr[0] "%1 条相关记录"
+
+msgid "%1 report"
+msgid_plural "%1 reports"
+msgstr[0] "%1 份报告"
+
+msgid "Investigating"
+msgstr "正在调查"
+
+msgctxt "@info a card that is a usage suggestion"
+msgid "Suggestion"
+msgstr "使用建议"
+
+msgid "One finding: "
+msgstr "一条调查结论："
+
+msgid "Waiting for its actual impact to be checked."
+msgstr "等待检查实际影响。"
+
+msgid "See each investigation and its progress"
+msgstr "查看各次调查与处理进度"
+
+msgid "The usage service isn't connected yet"
+msgstr "用量服务暂未连接"
+
+msgid "Agent usage is unavailable right now; try again later"
+msgstr "Agent 用量暂时不可用，稍后重试"
+
+msgid "The usage record wasn't saved: %1"
+msgstr "用量记录未保存：%1"

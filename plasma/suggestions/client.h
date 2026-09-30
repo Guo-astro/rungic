@@ -9,12 +9,16 @@ class SuggestionsClient : public QObject {
     Q_OBJECT
     QML_ELEMENT
     Q_PROPERTY(QVariantList items READ items NOTIFY changed)
+    Q_PROPERTY(QVariantList groups READ groups NOTIFY changed)
+    Q_PROPERTY(QVariantList historyGroups READ historyGroups NOTIFY changed)
     Q_PROPERTY(QStringList coverage READ coverage NOTIFY changed)
     Q_PROPERTY(QString error READ error NOTIFY changed)
     Q_PROPERTY(bool busy READ busy NOTIFY changed)
 public:
     explicit SuggestionsClient(QObject *parent = nullptr);
     QVariantList items() const { return m_items; }
+    QVariantList groups() const { return m_groups; }
+    QVariantList historyGroups() const { return m_historyGroups; }
     QStringList coverage() const { return m_coverage; }
     QString error() const { return m_error; }
     bool busy() const { return m_busy; }
@@ -22,6 +26,7 @@ public:
     Q_INVOKABLE void refresh();
     Q_INVOKABLE void scan();
     Q_INVOKABLE void open(const QString &id = {});
+    Q_INVOKABLE void openAgent(bool usage = false);
     Q_INVOKABLE void conversation(const QString &id);
     Q_INVOKABLE void watching(bool visible);
     Q_INVOKABLE void present(const QVariantList &receipts, bool opened);
@@ -33,10 +38,27 @@ private:
     Q_SLOT void onChanged();
     void call(const QString &method, const QVariantList &args, const QString &id = {}, const QString &action = {});
     void launch(const QStringList &arguments);
-    QVariantList m_items;
+    QVariantList m_items, m_groups, m_historyGroups;
     QStringList m_coverage;
     QString m_error;
     bool m_busy = false;
     bool m_watching = false;
     QDBusServiceWatcher m_watcher;
+};
+
+class UsageClient : public QObject {
+    Q_OBJECT
+    QML_ELEMENT
+    Q_PROPERTY(QVariantMap data READ data NOTIFY changed)
+public:
+    explicit UsageClient(QObject *parent = nullptr);
+    QVariantMap data() const { return m_data; }
+    Q_INVOKABLE void refresh();
+Q_SIGNALS:
+    void changed();
+private Q_SLOTS:
+    void onUsageChanged() { refresh(); }
+private:
+    QVariantMap m_data;
+    bool m_pending = false;
 };

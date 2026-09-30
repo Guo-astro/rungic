@@ -9,7 +9,7 @@
 #include <QSet>
 #include <functional>
 
-bool Care::setupWidget(const QString &path, const QStringList &launchers) {
+static bool setupOne(const QString &path, const QStringList &launchers, const QString &plugin, const QString &versionKey, int height, const QString &backupSuffix) {
     // Before plasmashell starts, never while its in-memory layout is live.
     // Fresh accounts without a containment can use the widget picker; the next
     // session also has a containment to initialize here.
@@ -29,23 +29,23 @@ bool Care::setupWidget(const QString &path, const QStringList &launchers) {
         if (desktop.readEntry("plugin", QString()) != "org.kde.plasma.mobile.homescreen.folio") continue;
         auto folio = desktop.group("Folio");
         auto migration = desktop.group("Rungic");
-        if (migration.readEntry("suggestionsWidgetVersion", 0) >= 1) continue;
+        if (migration.readEntry(versionKey, 0) >= 1) continue;
         auto applets = desktop.group("Applets");
         for (const auto &id : applets.groupList()) {
-            if (applets.group(id).readEntry("plugin", QString()) == "com.rungic.suggestions") {
-                migration.writeEntry("suggestionsWidgetVersion", 1);
+            if (applets.group(id).readEntry("plugin", QString()) == plugin) {
+                migration.writeEntry(versionKey, 1);
                 return config.sync(); // An existing manually placed widget wins.
             }
         }
         const int columns = folio.readEntry("homeScreenColumns", 4);
         const int rows = folio.readEntry("homeScreenRows", 5);
-        if (columns < 3 || rows < 3) return true;
+        if (columns < 3 || rows < height) return true;
         QJsonParseError error;
         const auto document = QJsonDocument::fromJson(folio.readEntry("pages", QStringLiteral("[[]]")).toUtf8(), &error);
         if (error.error != QJsonParseError::NoError || !document.isArray()) return false;
         auto pages = document.array();
         if (pages.isEmpty()) pages.append(QJsonArray());
-        const int width = qMin(columns, 4), height = 3;
+        const int width = qMin(columns, 4);
         int targetPage = -1, targetRow = 0;
         for (int page = 0; page < pages.size() && targetPage < 0; ++page) {
             if (!pages[page].isArray()) return false;
@@ -66,7 +66,7 @@ bool Care::setupWidget(const QString &path, const QStringList &launchers) {
             }
         }
         if (targetPage < 0) { targetPage = pages.size(); pages.append(QJsonArray()); }
-        const QString backup = path + ".before-rungic-suggestions-widget";
+        const QString backup = path + backupSuffix;
         if (!QFile::exists(backup) && !QFile::copy(path, backup)) return false;
         const int id = ++maximumId;
         auto page = pages[targetPage].toArray();
@@ -74,7 +74,7 @@ bool Care::setupWidget(const QString &path, const QStringList &launchers) {
                                 {"gridWidth", width}, {"gridHeight", height}});
         pages[targetPage] = page;
         auto applet = applets.group(QString::number(id));
-        applet.writeEntry("plugin", QStringLiteral("com.rungic.suggestions"));
+        applet.writeEntry("plugin", plugin);
         applet.writeEntry("immutability", 1);
         folio.writeEntry("pages", QString::fromUtf8(QJsonDocument(pages).toJson(QJsonDocument::Compact)));
         // Seed an absent setting only. Explicitly empty or customized favourites
@@ -85,8 +85,13 @@ bool Care::setupWidget(const QString &path, const QStringList &launchers) {
                 favorites.append(QJsonObject{{"type", "application"}, {"storageId", launcher}});
             folio.writeEntry("favorites", QString::fromUtf8(QJsonDocument(favorites).toJson(QJsonDocument::Compact)));
         }
-        migration.writeEntry("suggestionsWidgetVersion", 1);
+        migration.writeEntry(versionKey, 1);
         return config.sync();
     }
     return true;
+}
+
+bool Care::setupWidget(const QString &path, const QStringList &launchers) {
+    return setupOne(path, launchers, "com.rungic.suggestions", "suggestionsWidgetVersion", 3, ".before-rungic-suggestions-widget")
+        && setupOne(path, {}, "com.rungic.agent", "agentWidgetVersion", 1, ".before-rungic-agent-widget");
 }

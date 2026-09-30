@@ -13,7 +13,7 @@ Rectangle {
     readonly property var evidence: item.evidence || ({})
     // This module runs inside plasmashell and the voice assistant: its own catalog, not theirs.
     KI18nContext { id: l10n; translationDomain: "rungic-suggestions" }
-    readonly property string displayTitle: evidence.package === "plasma-workspace" ? l10n.i18n("A desktop component quit unexpectedly") : (item.title || l10n.i18n("Suggestion"))
+    readonly property string displayTitle: item.displayTitle || item.title || l10n.i18n("Suggestion")
     // evidence.scope is recorded data (collector.cpp); its one known value is shown translated.
     readonly property string basis: evidence.reports ? l10n.i18np("%1 crash report saved. Component version: %2", "%1 crash reports saved. Component version: %2", evidence.reports, evidence.version || l10n.i18n("not yet confirmed"))
         : evidence.scope === "版本匹配，需复核本机实际表现" ? l10n.i18n("The package version matches; how it behaves on this device still needs checking.")
@@ -49,8 +49,10 @@ Rectangle {
             }
         }
         Text { Layout.fillWidth: true; text: card.displayTitle; textFormat: Text.PlainText; wrapMode: Text.Wrap; font.pixelSize: 19; font.weight: Font.DemiBold; color: Theme.text }
-        Text { Layout.fillWidth: true; text: card.item.body || ""; textFormat: Text.PlainText; wrapMode: Text.Wrap; font.pixelSize: 14; lineHeight: 1.35; color: Theme.dim }
-        Text { Layout.fillWidth: true; visible: !!card.item.note; text: card.item.note || ""; textFormat: Text.PlainText; wrapMode: Text.Wrap; font.pixelSize: 12; color: Theme.link }
+        Text { Layout.fillWidth: true; text: card.item.summary || card.item.body || ""; textFormat: Text.PlainText; wrapMode: Text.Wrap; font.pixelSize: 14; lineHeight: 1.35; color: Theme.dim }
+        Text { Layout.fillWidth: true; visible: card.stateName === "working" && !!card.item.note; text: card.item.note || ""; textFormat: Text.PlainText; wrapMode: Text.Wrap; font.pixelSize: 12; color: Theme.link }
+        Text { Layout.fillWidth: true; visible: !!card.item.nextStep; text: card.item.nextStep || ""; textFormat: Text.PlainText; wrapMode: Text.Wrap; color: Theme.link; font.pixelSize: 13 }
+        PillButton { text: card.expanded ? l10n.i18n("Hide details") : l10n.i18n("Show the full investigation"); onClicked: card.expanded = !card.expanded }
         Text {
             Layout.fillWidth: true
             visible: card.expanded

@@ -34,6 +34,14 @@ public:
     }
 
 public Q_SLOTS:
+    Q_SCRIPTABLE void OpenPage(const QString &page, const QString &token) {
+        KWindowSystem::setCurrentXdgActivationToken(token);
+        const auto roots = m_engine->rootObjects();
+        auto *window = roots.isEmpty() ? nullptr : qobject_cast<QQuickWindow *>(roots.constFirst());
+        if (!window) return;
+        QMetaObject::invokeMethod(window, "openAgentPage", Q_ARG(QVariant, page));
+        window->showNormal(); window->raise(); KWindowSystem::activateWindow(window);
+    }
     Q_SCRIPTABLE void OpenActivated(bool suggestions, const QString &id, const QString &token)
     {
         KWindowSystem::setCurrentXdgActivationToken(token);
@@ -110,6 +118,7 @@ int main(int argc, char *argv[])
     const QString conversation = at >= 0 && at + 1 < args.size() ? args.at(at + 1) : QString();
     const qsizetype suggestionAt = args.indexOf(QStringLiteral("--suggestion"));
     const bool suggestions = suggestionAt >= 0;
+    const QString page = args.contains("--usage") ? "usage" : args.contains("--agent") ? "agent" : "";
     const QString suggestion = suggestions ? args.value(suggestionAt + 1) : QString();
     auto bus = QDBusConnection::sessionBus();
 
@@ -136,6 +145,10 @@ int main(int argc, char *argv[])
         QDBusMessage open = QDBusMessage::createMethodCall(QStringLiteral("com.rungic.VoiceAssistantApp"), QStringLiteral("/App"),
                                                            QStringLiteral("com.rungic.VoiceAssistantApp"), QStringLiteral("OpenActivated"));
         open.setArguments({suggestions, suggestions ? suggestion : conversation, activationToken});
+        if (!page.isEmpty()) {
+            open = QDBusMessage::createMethodCall("com.rungic.VoiceAssistantApp", "/App", "com.rungic.VoiceAssistantApp", "OpenPage");
+            open.setArguments({page, activationToken});
+        }
         bus.call(open);
         return 0;
     }
@@ -159,7 +172,7 @@ int main(int argc, char *argv[])
         QObject::connect(theme, SIGNAL(darkChanged()), new SchemeRelay(applyScheme, &app), SLOT(apply()));
     }
     engine.setInitialProperties({{QStringLiteral("initialConversation"), conversation},
-                                 {QStringLiteral("initialSuggestions"), suggestions}, {QStringLiteral("initialSuggestion"), suggestion}});
+                                 {QStringLiteral("initialPage"), page}, {QStringLiteral("initialSuggestions"), suggestions}, {QStringLiteral("initialSuggestion"), suggestion}});
     engine.loadFromModule("com.rungic.voiceassistant", "Main");
     bus.registerObject(QStringLiteral("/App"), new AppInstance(&engine), QDBusConnection::ExportScriptableSlots);
     return app.exec();

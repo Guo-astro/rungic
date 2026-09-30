@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 #include "model.h"
+#include "usage.h"
 #include <QObject>
 #include <QDBusContext>
 #include <QTimer>
@@ -14,6 +15,8 @@ public:
     bool ready = false;
 public Q_SLOTS:
     QString List();
+    QString AgentUsage();
+    void RefreshAgentUsage();
     QString Get(const QString &id);
     QString Act(const QString &id, const QString &action, const QString &json);
     QString Update(const QString &id, const QString &json);
@@ -28,12 +31,16 @@ public Q_SLOTS:
     void NotificationClosed(uint notification, uint reason);
 Q_SIGNALS:
     void Changed();
+    void UsageChanged();
 private:
     bool publish();
     void recover();
     void notify();
     void open(const QString &id, const QString &token = {});
     Care::Model model;
+    Care::Usage usage;
+    bool usageRefreshing = false;
+    qint64 usageAttempt = 0;
     QString feedPath, knowledgePath, statePath;
     QTimer scanTimer;
     bool scanning = false;
