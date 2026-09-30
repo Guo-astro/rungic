@@ -592,3 +592,79 @@ msgstr "↓ 下滑查看上一张 · 点击查看详情"
 
 msgid "↑↓ Swipe to switch · Tap for details"
 msgstr "↑↓ 滑动切换 · 点击查看详情"
+
+# Curated briefing (docs/research/96)
+msgctxt "@action suggestion card"
+msgid "Ask Agent about it"
+msgstr "问问 Agent"
+
+msgctxt "@title suggestion card"
+msgid "%1 finding to look at"
+msgid_plural "%1 findings to look at"
+msgstr[0] "有 %1 项发现待查看"
+
+msgctxt "@info suggestion card, %1 lists a few findings"
+msgid "Including %1. Agent can go through them with you."
+msgstr "包括%1。Agent 可以和你逐一看看。"
+
+msgctxt "list separator"
+msgid ", "
+msgstr "、"
+
+msgctxt "@info suggestion card"
+msgid "Agent can go through them with you and tell you which ones matter."
+msgstr "Agent 可以和你逐一看看，告诉你哪些值得处理。"
+
+msgctxt "@action suggestion card"
+msgid "Go through them with Agent"
+msgstr "和 Agent 一起看看"
+
+msgctxt "@info suggestion card"
+msgid "Agent can look into it with you."
+msgstr "Agent 可以和你一起看看。"
+
+msgctxt "@info suggestion card"
+msgid "Agent finished looking into this. See what it found."
+msgstr "Agent 已查看完毕，看看它发现了什么。"
+
+msgctxt "@title suggestion card, %1 is what was investigated"
+msgid "Result: %1"
+msgstr "结果：%1"
+
+msgctxt "@action suggestion card"
+msgid "See the result"
+msgstr "查看结果"
+
+msgid "1 more suggestion to look at."
+msgid_plural "%1 more suggestions to look at."
+msgstr[0] "另有 %1 条建议待查看。"
+
+msgid "Not now"
+msgstr "暂不"
+
+msgid "Agent has already sorted your suggestions many times today. Try again later."
+msgstr "Agent 今天已多次整理建议，请稍后再试。"
+
+msgid "Codex isn't installed or isn't running, so Agent didn't sort these suggestions."
+msgstr "Codex 未安装或未运行，这些建议未经 Agent 整理。"
+
+msgid "Agent isn't signed in, so it didn't sort these suggestions."
+msgstr "Agent 尚未登录，这些建议未经整理。"
+
+msgid "Agent's usage limit is reached, so it didn't sort these suggestions."
+msgstr "Agent 已达用量上限，这些建议未经整理。"
+
+msgid "Agent was busy, so it didn't sort these suggestions."
+msgstr "Agent 正忙，这些建议未经整理。"
+
+msgid "Agent took too long, so it didn't sort these suggestions."
+msgstr "Agent 响应超时，这些建议未经整理。"
+
+msgid "Agent's answer couldn't be used, so it didn't sort these suggestions."
+msgstr "Agent 的整理结果无法使用，这些建议未经整理。"
+
+msgid "Agent couldn't sort these suggestions right now."
+msgstr "Agent 暂时无法整理这些建议。"
+
+msgid "This suggestion is no longer current."
+msgstr "这条建议已不是最新状态。"

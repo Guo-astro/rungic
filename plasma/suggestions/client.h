@@ -14,8 +14,25 @@ class SuggestionsClient : public QObject {
     Q_PROPERTY(QStringList coverage READ coverage NOTIFY changed)
     Q_PROPERTY(QString error READ error NOTIFY changed)
     Q_PROPERTY(bool busy READ busy NOTIFY changed)
+    // The curated briefing (docs/research/96): at most 5 cards, in order. A card: id, title, body,
+    // kind (attention|issues|improvement|result|followup), priority, refs (ledger ids), count,
+    // action {label}, notify, origin (agent|service). Plain text: show with Text.PlainText.
+    Q_PROPERTY(QVariantList cards READ cards NOTIFY changed)
+    // revision, generatedAt, source (agent|fallback), basisRevision, curating, error,
+    // backgroundCuration, pending, nextCuration.
+    Q_PROPERTY(QVariantMap briefing READ briefing NOTIFY changed)
 public:
     explicit SuggestionsClient(QObject *parent = nullptr);
+    QVariantList cards() const { return m_cards; }
+    QVariantMap briefing() const { return m_briefing; }
+    // Opens a new Agent conversation about the card (its findings presented in the chat).
+    Q_INVOKABLE void openCard(const QString &id);
+    // "Not now": hidden until one of its records changes materially.
+    Q_INVOKABLE void dismissCard(const QString &id);
+    // Asks the Agent to sort the suggestions again now (also when background curation is off).
+    Q_INVOKABLE void curate();
+    // The card was on screen (opened: tapped), so its records aren't notified again.
+    Q_INVOKABLE void presentCard(const QString &id, bool opened = false);
     QVariantList items() const { return m_items; }
     QVariantList groups() const { return m_groups; }
     QVariantList historyGroups() const { return m_historyGroups; }
@@ -38,7 +55,8 @@ private:
     Q_SLOT void onChanged();
     void call(const QString &method, const QVariantList &args, const QString &id = {}, const QString &action = {});
     void launch(const QStringList &arguments);
-    QVariantList m_items, m_groups, m_historyGroups;
+    QVariantList m_items, m_groups, m_historyGroups, m_cards;
+    QVariantMap m_briefing;
     QStringList m_coverage;
     QString m_error;
     bool m_busy = false;

@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
+#include "briefing.h"
 #include "model.h"
 #include "usage.h"
 #include <QObject>
 #include <QDBusContext>
 #include <QTimer>
 #include <QSet>
+#include <functional>
 
 class Suggestions : public QObject, protected QDBusContext {
     Q_OBJECT
@@ -29,6 +31,13 @@ public Q_SLOTS:
     void NotificationAction(uint notification, const QString &action);
     void NotificationToken(uint notification, const QString &token);
     void NotificationClosed(uint notification, uint reason);
+    // The curated briefing (docs/research/96).
+    QString Briefing();
+    QString Curate();
+    QString OpenCard(const QString &id);
+    QString DismissCard(const QString &id);
+    void CardPresented(const QString &id, bool opened);
+    void SetBackgroundCuration(bool enabled);
 Q_SIGNALS:
     void Changed();
     void UsageChanged();
@@ -37,7 +46,17 @@ private:
     void recover();
     void notify();
     void open(const QString &id, const QString &token = {});
+    void syncBriefing();
+    void scheduleCuration();
+    QString curate(bool manual);
+    void finishCuration(const QJsonObject &reply, const QString &error);
+    bool saveBriefing();
+    bool backgroundCuration() const;
+    void startCard(const QString &id, const std::function<void(const QJsonObject &)> &done);
+    void launchConversation(const QString &conversation, const QString &token);
     Care::Model model;
+    Care::Briefing briefing;
+    QTimer curationTimer;
     Care::Usage usage;
     bool usageRefreshing = false;
     qint64 usageAttempt = 0;

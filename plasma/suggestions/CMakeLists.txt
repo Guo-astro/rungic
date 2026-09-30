@@ -11,7 +11,7 @@ qt_policy(SET QTP0004 NEW)
 # One catalog (po/<lang>/rungic-suggestions.po) for the service, its model and the QML module, which
 # plasmashell and the voice assistant load: i18n() in C++ never falls back to the host's domain.
 add_compile_definitions(TRANSLATION_DOMAIN="rungic-suggestions")
-add_library(caremodel STATIC model.cpp model.h usage.cpp usage.h collector.cpp collector.h layout.cpp layout.h)
+add_library(caremodel STATIC model.cpp model.h briefing.cpp briefing.h usage.cpp usage.h collector.cpp collector.h layout.cpp layout.h)
 target_link_libraries(caremodel PUBLIC Qt6::Core KF6::ConfigCore KF6::I18n)
 qt_add_executable(rungic-suggestions main.cpp service.cpp service.h)
 target_link_libraries(rungic-suggestions PRIVATE caremodel Qt6::DBus Qt6::Concurrent)

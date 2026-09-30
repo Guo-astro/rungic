@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "model.h"
+#include "briefing.h"
 #include "layout.h"
 #include "usage.h"
 #include <KConfig>
 #include <KConfigGroup>
+#include <QDir>
 #include <QFile>
+#include <QJsonDocument>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -278,6 +281,154 @@ private Q_SLOTS:
         QTemporaryDir d; QFile f(d.path() + "/state.json"); QVERIFY(f.open(QIODevice::WriteOnly)); f.write("broken"); f.close();
         Care::Model m(f.fileName()); QString error; QVERIFY(!m.load(&error)); QVERIFY(!error.isEmpty());
         QVERIFY(f.open(QIODevice::ReadOnly)); QCOMPARE(f.readAll(), QByteArray("broken"));
+    }
+    // ---- briefing (docs/research/96) ----
+    static QJsonObject card(const QString &ref, const QString &title = "Crashes to go through", const QString &kind = "issues") {
+        return {{"title", title}, {"body", "Several apps quit unexpectedly this week."}, {"kind", kind}, {"priority", 50},
+                {"refs", QJsonArray{ref}}, {"action", QJsonObject{{"label", "Go through them"}, {"prompt", "List them"}}}, {"notify", false}};
+    }
+    void curatedOutputIsValidatedStrictly() {
+        Care::Model m(""); const auto a = item("a"), b = item("b");
+        m.observe(a, 100); m.observe(b, 100);
+        const auto ia = a["id"].toString(), ib = b["id"].toString();
+        auto extra = card(ia); extra["exec"] = "rm -rf /"; extra["id"] = "chosen-by-model";
+        auto multi = card(ia, "Two"); multi["refs"] = QJsonArray{ia, ib, ia};
+        QJsonArray cards{extra, multi, card("missing"), card(ib, QString(61, 'x')), card(ib, "Unknown kind", "advert"), card(ia, "Duplicate")};
+        auto longBody = card(ib, "Long body"); longBody["body"] = QString(161, 'y'); cards.append(longBody);
+        auto noAction = card(ib, "No action"); noAction.remove("action"); cards.append(noAction);
+        auto badPriority = card(ib, "Priority"); badPriority["priority"] = 101; cards.append(badPriority);
+        auto fraction = card(ib, "Fraction"); fraction["priority"] = 1.5; cards.append(fraction);
+        auto mixed = card(ib, "Mixed"); mixed["refs"] = QJsonArray{ib, "missing"}; cards.append(mixed);
+        auto control = card(ib, QStringLiteral("Line break‮eht")); cards.append(control);
+        QStringList dropped;
+        const auto valid = Care::Briefing::validate(QJsonObject{{"cards", cards}}, m.list(), &dropped);
+        QCOMPARE(valid.size(), 3);
+        QVERIFY(!valid[0].toObject().contains("exec"));
+        QVERIFY(valid[0].toObject()["id"].toString().startsWith("agent:"));
+        QCOMPARE(valid[1].toObject()["refs"].toArray().size(), 2); // duplicates within refs removed
+        QCOMPARE(valid[2].toObject()["title"].toString(), QStringLiteral("Line break eht")); // no bidi/line controls
+        QVERIFY(dropped.contains("refs") && dropped.contains("text") && dropped.contains("kind") && dropped.contains("duplicate")
+                && dropped.contains("action") && dropped.contains("priority"));
+        QJsonArray many;
+        const QStringList kinds{"attention", "issues", "improvement", "result", "followup", "issues", "attention"};
+        for (int i = 0; i < 7; ++i) many.append(card(i % 2 ? ia : ib, QString("Card %1").arg(i), kinds[i]));
+        dropped.clear();
+        QCOMPARE(Care::Briefing::validate(QJsonObject{{"cards", many}}, m.list(), &dropped).size(), 5);
+        QVERIFY(dropped.contains("count"));
+        QVERIFY(Care::Briefing::validate(QJsonArray{card(ia)}, m.list()).isEmpty()); // not an object
+        Care::Briefing br("");
+        QVERIFY(!br.applyAgent(QJsonObject{{"cards", QJsonArray{card("missing")}}}, m.list(), 200));
+        QVERIFY(br.applyAgent(QJsonObject{{"cards", QJsonArray{}}}, m.list(), 200)); // nothing needs the user: allowed
+        QCOMPARE(br.source(), "agent");
+    }
+    void curationTriggersOnlyOnMaterialChanges() {
+        using namespace Care::BriefingLimits;
+        Care::Model m(""); Care::Briefing br(""); auto a = item("a");
+        a["evidence"] = QJsonObject{{"package", "app"}, {"reports", 1}};
+        QVERIFY(!br.observe(m.list(), 50)); QCOMPARE(br.nextRun(50), 0); // nothing at all: no curation
+        m.observe(a, 100);
+        QVERIFY(br.observe(m.list(), 100)); QCOMPARE(br.nextRun(100), 100 + Debounce);
+        m.observe(a, 160); QVERIFY(!br.observe(m.list(), 160)); // seen again: not material
+        a["body"] = "reworded"; m.observe(a, 170); QVERIFY(!br.observe(m.list(), 170));
+        a["evidence"] = QJsonObject{{"package", "app"}, {"reports", 2}}; m.observe(a, 180); QVERIFY(!br.observe(m.list(), 180));
+        a["evidence"] = QJsonObject{{"package", "app"}, {"reports", 3}}; m.observe(a, 190); QVERIFY(br.observe(m.list(), 190)); // threshold
+        QCOMPARE(br.nextRun(190), 190 + Debounce); // debounce restarts with each change
+        br.begin(m.list(), 400); QCOMPARE(br.nextRun(400), 0);
+        m.observe(item("b"), 410); QVERIFY(br.observe(m.list(), 410));
+        QCOMPARE(br.nextRun(410), 400 + MinInterval);
+        // A task result that waits for the user shortens the interval.
+        const auto id = a["id"].toString();
+        m.observe(a, 415); QVERIFY(!br.observe(m.list(), 415));
+        const auto task = m.beginTask(id, "investigate", {}, 420)["task"].toObject()["id"].toString();
+        QVERIFY(!task.isEmpty());
+        m.taskEvent(id, task, {{"type", "finished"}}, 430);
+        QVERIFY(br.observe(m.list(), 430)); QCOMPARE(br.nextRun(430), 400 + MinIntervalUrgent);
+        br.begin(m.list(), 1000);
+        m.reconcile("crashes", {}, 1100); QVERIFY(br.observe(m.list(), 1100)); // resolved is material
+        // Daily cap: the 13th curation waits until the first one of the window is 24 h old.
+        Care::Briefing capped(""); qint64 t = 10000;
+        for (int i = 0; i < DailyCap; ++i, t += 60) capped.begin(m.list(), t);
+        QVERIFY(capped.capped(t));
+        m.observe(item("c"), t); QVERIFY(capped.observe(m.list(), t));
+        QCOMPARE(capped.nextRun(t), 10000 + 86400);
+        QVERIFY(!capped.capped(10000 + 86400));
+    }
+    void fallbackSummarisesFindingsAndResults() {
+        Care::Model m(""); QStringList ids;
+        for (const auto key : {"a", "b", "c", "d"}) { const auto o = item(key); m.observe(o, 100); ids.append(o["id"].toString()); }
+        const auto task = m.beginTask(ids[3], "investigate", {}, 101)["task"].toObject()["id"].toString();
+        m.updatePlan(ids[3], {{"conclusion", "Caused by an outdated driver, not confirmed"}});
+        m.taskEvent(ids[3], task, {{"type", "finished"}}, 102);
+        Care::Briefing br(""); br.applyFallback(m.list(), 103, "unavailable");
+        const auto cards = br.cards(m.list());
+        QCOMPARE(cards.size(), 2);
+        const auto result = cards[0].toObject(), summary = cards[1].toObject();
+        QCOMPARE(result["kind"].toString(), "result"); QCOMPARE(result["refs"].toArray(), QJsonArray{ids[3]});
+        QCOMPARE(result["body"].toString(), "Caused by an outdated driver, not confirmed");
+        QCOMPARE(summary["kind"].toString(), "issues"); QCOMPARE(summary["count"].toInt(), 3);
+        QVERIFY(summary["title"].toString().contains("3"));
+        QVERIFY(summary["body"].toString().size() <= Care::BriefingLimits::BodyMax);
+        const auto view = br.view(m.list(), true, 104);
+        QCOMPARE(view["source"].toString(), "fallback"); QCOMPARE(view["error"].toString(), "unavailable");
+        QVERIFY(!view["cards"].toArray()[0].toObject()["action"].toObject().contains("prompt"));
+    }
+    void agentCardsStayAndUnseenFindingsGetServiceCards() {
+        Care::Model m(""); const auto a = item("a"), b = item("b"), c = item("c");
+        m.observe(a, 100); m.observe(b, 100);
+        Care::Briefing br(""); br.observe(m.list(), 100); br.begin(m.list(), 300);
+        QVERIFY(br.applyAgent(QJsonObject{{"cards", QJsonArray{card(a["id"].toString())}}}, m.list(), 310));
+        QCOMPARE(br.cards(m.list()).size(), 1); // b was seen and left out by the Agent: it stays out
+        m.observe(c, 320); br.observe(m.list(), 320);
+        const auto cards = br.cards(m.list());
+        QCOMPARE(cards.size(), 2);
+        QJsonObject service;
+        for (const auto &v : cards) if (v.toObject()["origin"] == "service") service = v.toObject();
+        QCOMPARE(service["refs"].toArray(), QJsonArray{c["id"]});
+    }
+    void dismissedCardStaysHiddenUntilMaterialChange() {
+        Care::Model m(""); auto a = item("a"); m.observe(a, 100);
+        Care::Briefing br(""); br.observe(m.list(), 100);
+        const auto id = br.cards(m.list())[0].toObject()["id"].toString();
+        QVERIFY(br.dismiss(id, m.list(), 110));
+        QVERIFY(br.cards(m.list()).isEmpty());
+        a["body"] = "seen again"; m.observe(a, 200); br.observe(m.list(), 200);
+        QVERIFY(br.cards(m.list()).isEmpty());
+        m.reconcile("crashes", {}, 300); br.observe(m.list(), 300);
+        m.observe(a, 400); br.observe(m.list(), 400); // it came back: a material change
+        QCOMPARE(br.cards(m.list()).size(), 1);
+        QVERIFY(!br.dismiss("fallback:none", m.list(), 410));
+    }
+    void feedbackReachesTheNextCurationInput() {
+        Care::Model m(""); const auto a = item("a"), b = item("b"); m.observe(a, 100); m.observe(b, 100);
+        Care::Briefing br(""); br.begin(m.list(), 100);
+        br.applyAgent(QJsonObject{{"cards", QJsonArray{card(a["id"].toString(), "Crash A"), card(b["id"].toString(), "Crash B", "attention")}}}, m.list(), 110);
+        const auto cards = br.cards(m.list());
+        QVERIFY(br.dismiss(cards[0].toObject()["id"].toString(), m.list(), 120));
+        QVERIFY(br.opened(cards[1].toObject()["id"].toString(), m.list(), 130));
+        const auto input = br.input(m.list(), 140);
+        const auto feedback = input["feedback"].toArray();
+        QCOMPARE(feedback.size(), 2);
+        QCOMPARE(feedback[0].toObject()["action"].toString(), "dismissed");
+        QCOMPARE(feedback[1].toObject()["action"].toString(), "opened");
+        QCOMPARE(input["currentCards"].toArray().size(), 2);
+        bool flagged = false;
+        for (const auto &v : input["items"].toArray()) if (v.toObject()["dismissedByUser"].toBool()) flagged = true;
+        QVERIFY(flagged);
+        QVERIFY(br.input(m.list(), 140 + 15 * 86400)["feedback"].toArray().isEmpty()); // bounded in time
+    }
+    void curationInputIsRedacted() {
+        Care::Model m(""); const auto home = QDir::homePath();
+        auto o = Care::observation("svc", "Failed: " + home + "/Documents/tax-2026.pdf", "raw body with details", "fault", 1,
+            {{"unit", "sync@jane.doe@example.com.service"}, {"report", "/var/lib/crash/123"}, {"log", "Sep 30 raw log line secret-token"},
+             {"package", "app"}, {"reports", 4}});
+        o["source"] = "user-services"; m.observe(o, 100);
+        m.updatePlan(o["id"].toString(), {{"result", "full report with raw log line"}, {"conclusion", "Config at /home/other/.config/app broke"}});
+        Care::Briefing br("");
+        const auto text = QString::fromUtf8(QJsonDocument(br.input(m.list(), 200)).toJson());
+        QVERIFY(!text.contains(home + "/")); QVERIFY(!text.contains("tax-2026")); QVERIFY(!text.contains("/home/other"));
+        QVERIFY(!text.contains("example.com")); QVERIFY(!text.contains("raw log line")); QVERIFY(!text.contains("secret-token"));
+        QVERIFY(!text.contains("/var/lib/crash")); QVERIFY(!text.contains("raw body"));
+        QVERIFY(text.contains("\"evidence_reports\": 4")); QVERIFY(text.contains("<private path>"));
     }
     void knowledgeRequiresEvidenceAndCannotExecute() {
         QJsonObject e{{"schema", 1}, {"id", "test"}, {"title", "test"}, {"kind", "policy"}, {"status", "verified"},

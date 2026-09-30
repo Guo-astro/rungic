@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "service.h"
 #include "collector.h"
+#include <KConfigGroup>
 #include <KLocalizedString>
+#include <KSharedConfig>
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
 #include <QDBusInterface>
@@ -23,13 +25,18 @@ static QString encoded(const QJsonObject &o) { return QString::fromUtf8(QJsonDoc
 static QString failure(const QString &s) { return encoded({{"error", s}}); }
 static constexpr auto Voice = "com.rungic.VoiceAgent";
 static constexpr auto VoicePath = "/com/rungic/VoiceAgent";
+// A curation is one short Codex turn (the voice agent bounds it at 90 s); the call waits a bit longer.
+static constexpr int CurationCallTimeout = 150000;
 
 Suggestions::Suggestions(const QString &state, const QString &feed, const QString &kb, QObject *parent)
-    : QObject(parent), model(state), usage(QFileInfo(state).absolutePath() + "/agent-usage.json"), feedPath(feed), knowledgePath(kb), statePath(state) {
+    : QObject(parent), model(state), briefing(QFileInfo(state).absolutePath() + "/briefing.json"), usage(QFileInfo(state).absolutePath() + "/agent-usage.json"), feedPath(feed), knowledgePath(kb), statePath(state) {
     QString error;
     ready = model.load(&error);
     if (!ready) { qCritical("%s", qPrintable(error)); return; }
     model.recoverTasks();
+    briefing.load();
+    curationTimer.setSingleShot(true);
+    connect(&curationTimer, &QTimer::timeout, this, [this] { curate(false); });
     auto bus = QDBusConnection::sessionBus();
     bus.connect(Voice, VoicePath, Voice, "Event", this, SLOT(AgentEvent(QString)));
     bus.connect("org.freedesktop.Notifications", "/org/freedesktop/Notifications", "org.freedesktop.Notifications",
@@ -67,7 +74,11 @@ void Suggestions::RefreshAgentUsage() {
         Q_EMIT UsageChanged();
     });
 }
-QString Suggestions::List() { return encoded({{"items", model.list()}, {"groups", model.groups()}, {"historyGroups", model.groups(true)}, {"coverage", coverage}, {"schema", 2}}); }
+QString Suggestions::List() {
+    const auto items = model.list();
+    return encoded({{"items", items}, {"groups", model.groups()}, {"historyGroups", model.groups(true)}, {"coverage", coverage}, {"schema", 2},
+                    {"briefing", briefing.view(items, backgroundCuration(), QDateTime::currentSecsSinceEpoch())}});
+}
 QString Suggestions::Get(const QString &id) { return encoded(model.get(id)); }
 QString Suggestions::Knowledge() {
     QStringList errors; const auto entries = Care::knowledge(knowledgePath, &errors);
@@ -81,6 +92,7 @@ void Suggestions::SetVisible(bool visible) {
 bool Suggestions::publish() {
     QString error;
     if (!model.save(&error)) { qCritical("suggestions save: %s", qPrintable(error)); return false; }
+    syncBriefing();
     Q_EMIT Changed(); return true;
 }
 void Suggestions::Presented(const QString &json, bool opened) {
@@ -162,32 +174,196 @@ void Suggestions::NotificationClosed(uint id, uint) {
 }
 void Suggestions::NotificationAction(uint id, const QString &action) {
     if (!notifications.contains(id)) return;
-    if (action == "default") open(notifications.value(id), notificationTokens.take(id));
-    else if (action == "later") Act(notifications.value(id), "later", "{}");
+    const auto card = notifications.value(id);
+    if (action == "default") {
+        const auto token = notificationTokens.take(id);
+        startCard(card, [this, token](const QJsonObject &r) {
+            // Without a conversation (Agent busy or not set up) the suggestions open instead.
+            if (r.contains("conversation")) launchConversation(r["conversation"].toString(), token);
+            else open({}, token);
+        });
+    } else if (action == "later") DismissCard(card);
 }
 void Suggestions::notify() {
-    // Per-item, revision-bound presentation receipts replace whole-window suppression.
-    if (notifying) return;
-    // Ordinary opportunities are delivered by the home feed. Only urgent or user-scheduled
-    // work notifies outside it. No inferred "free time", sound or bypass of DND.
-    const auto candidate = model.notification(QDateTime::currentSecsSinceEpoch(), false, false);
-    if (candidate.isEmpty()) return;
-    const auto item = candidate.value("item").toObject();
-    const auto id = item.value("id").toString();
+    // Notifications are about briefing cards, never single ledger records (docs/research/96).
+    // A card's records keep the ledger's rules: revision-bound receipts (once per material
+    // change), freshness, urgency or a user-scheduled reminder, one ordinary digest a day, no
+    // sound, no bypass of DND. The curator's `notify` only stands for "a good moment" (`safe`).
+    if (notifying || briefing.curating) return;
+    const auto now = QDateTime::currentSecsSinceEpoch();
+    QJsonObject card; QJsonArray receipts; int count = 0;
+    for (const auto &v : briefing.cards(model.list())) {
+        const auto c = v.toObject();
+        const auto candidate = model.notification(now, c["notify"].toBool(), false);
+        const auto refs = c["refs"].toArray();
+        QJsonArray mine;
+        for (const auto &r : candidate["receipts"].toArray()) if (refs.contains(r.toObject()["id"])) mine.append(r);
+        if (mine.isEmpty()) continue;
+        if (card.isEmpty()) { card = c; receipts = mine; }
+        ++count;
+    }
+    if (card.isEmpty()) return;
+    const auto id = card["id"].toString();
     QVariantMap hints{{"desktop-entry", "com.rungic.VoiceAssistant"}, {"suppress-sound", true}, {"urgency", uchar(1)}};
     auto message = QDBusMessage::createMethodCall("org.freedesktop.Notifications", "/org/freedesktop/Notifications",
                                                  "org.freedesktop.Notifications", "Notify");
-    message.setArguments({"Agent", uint(0), "dialog-information", item.value("title").toString(),
-        i18np("1 suggestion to look at, now or later.", "%1 suggestions to look at, now or later.", candidate.value("ids").toArray().size()),
-        QStringList{"default", i18n("View suggestions"), "later", i18n("Later")}, hints, 10000});
+    auto body = card["body"].toString();
+    if (count > 1) body += '\n' + i18np("1 more suggestion to look at.", "%1 more suggestions to look at.", count - 1);
+    message.setArguments({"Agent", uint(0), "dialog-information", card["title"].toString(), body,
+        QStringList{"default", card["action"].toObject()["label"].toString(), "later", i18n("Not now")}, hints, 10000});
     notifying = true;
     auto *w = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(message, 3000), this);
-    connect(w, &QDBusPendingCallWatcher::finished, this, [this, w, id, candidate] {
+    connect(w, &QDBusPendingCallWatcher::finished, this, [this, w, id, receipts] {
         QDBusPendingReply<uint> reply = *w; w->deleteLater(); notifying = false;
         if (reply.isError()) return;
         notifications[reply.value()] = id;
-        model.notifiedReceipts(candidate["receipts"].toArray(), QDateTime::currentSecsSinceEpoch()); publish();
+        model.notifiedReceipts(receipts, QDateTime::currentSecsSinceEpoch()); publish();
     });
+}
+bool Suggestions::backgroundCuration() const {
+    // ~/.config/rungic-suggestionsrc, [Briefing] BackgroundCuration=false: no background curation.
+    // Nothing is sent then unless the user asks (Curate); the deterministic cards are shown.
+    auto config = KSharedConfig::openConfig(QStringLiteral("rungic-suggestionsrc"), KConfig::SimpleConfig);
+    config->reparseConfiguration();
+    return config->group(QStringLiteral("Briefing")).readEntry("BackgroundCuration", true);
+}
+void Suggestions::SetBackgroundCuration(bool enabled) {
+    auto config = KSharedConfig::openConfig(QStringLiteral("rungic-suggestionsrc"), KConfig::SimpleConfig);
+    config->group(QStringLiteral("Briefing")).writeEntry("BackgroundCuration", enabled);
+    config->sync();
+    scheduleCuration(); Q_EMIT Changed();
+}
+bool Suggestions::saveBriefing() {
+    QString error;
+    if (!briefing.save(&error)) { qCritical("briefing save: %s", qPrintable(error)); return false; }
+    return true;
+}
+void Suggestions::syncBriefing() {
+    if (briefing.observe(model.list(), QDateTime::currentSecsSinceEpoch())) saveBriefing();
+    scheduleCuration();
+}
+void Suggestions::scheduleCuration() {
+    const auto now = QDateTime::currentSecsSinceEpoch();
+    const auto next = briefing.curating || !backgroundCuration() ? 0 : briefing.nextRun(now);
+    if (!next) { curationTimer.stop(); return; }
+    curationTimer.start(int(qBound<qint64>(0, next - now, 86400) * 1000 + 500));
+}
+QString Suggestions::Briefing() {
+    return encoded(briefing.view(model.list(), backgroundCuration(), QDateTime::currentSecsSinceEpoch()));
+}
+QString Suggestions::Curate() { return curate(true); }
+QString Suggestions::curate(bool manual) {
+    const auto now = QDateTime::currentSecsSinceEpoch();
+    if (briefing.curating) return Briefing();
+    const auto next = briefing.nextRun(now);
+    if (!manual && (!backgroundCuration() || !next || next > now)) { scheduleCuration(); return Briefing(); }
+    if (briefing.capped(now)) {
+        scheduleCuration();
+        return manual ? failure(i18n("Agent has already sorted your suggestions many times today. Try again later.")) : Briefing();
+    }
+    const auto items = model.list();
+    const auto input = briefing.input(items, now);
+    briefing.begin(items, now);
+    if (input["items"].toArray().isEmpty()) {
+        // Nothing open: no request is sent.
+        briefing.applyFallback(items, now);
+        saveBriefing(); scheduleCuration(); Q_EMIT Changed(); return Briefing();
+    }
+    saveBriefing(); Q_EMIT Changed();
+    auto message = QDBusMessage::createMethodCall(Voice, VoicePath, Voice, "Curate");
+    message.setArguments({encoded(input)});
+    auto *w = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(message, CurationCallTimeout), this);
+    connect(w, &QDBusPendingCallWatcher::finished, this, [this, w] {
+        QDBusPendingReply<QString> reply = *w; w->deleteLater();
+        if (reply.isError()) finishCuration({}, reply.error().message());
+        else finishCuration(QJsonDocument::fromJson(reply.value().toUtf8()).object(), {});
+    });
+    return Briefing();
+}
+static QString curationError(const QString &raw) {
+    // The voice agent starts its errors with a reason code (rungic_voice_agent.py, curate).
+    const auto code = raw.section(':', 0, 0).trimmed();
+    if (code == "unavailable") return i18n("Codex isn't installed or isn't running, so Agent didn't sort these suggestions.");
+    if (code == "signed-out") return i18n("Agent isn't signed in, so it didn't sort these suggestions.");
+    if (code == "limit") return i18n("Agent's usage limit is reached, so it didn't sort these suggestions.");
+    if (code == "busy") return i18n("Agent was busy, so it didn't sort these suggestions.");
+    if (code == "timeout") return i18n("Agent took too long, so it didn't sort these suggestions.");
+    if (code == "invalid") return i18n("Agent's answer couldn't be used, so it didn't sort these suggestions.");
+    return i18n("Agent couldn't sort these suggestions right now.");
+}
+void Suggestions::finishCuration(const QJsonObject &reply, const QString &error) {
+    const auto now = QDateTime::currentSecsSinceEpoch();
+    const auto items = model.list();
+    QStringList dropped;
+    if (!error.isEmpty()) briefing.applyFallback(items, now, curationError(error));
+    else if (!briefing.applyAgent(reply, items, now, &dropped)) briefing.applyFallback(items, now, curationError("invalid"));
+    if (!dropped.isEmpty()) qWarning("briefing: dropped %lld curated card(s): %s", qlonglong(dropped.size()), qPrintable(dropped.join(',')));
+    if (!error.isEmpty()) qWarning("briefing: curation failed: %s", qPrintable(error));
+    saveBriefing();
+    syncBriefing();   // changes made during the curation schedule the next one
+    Q_EMIT Changed();
+    notify();
+}
+void Suggestions::startCard(const QString &id, const std::function<void(const QJsonObject &)> &done) {
+    const auto now = QDateTime::currentSecsSinceEpoch();
+    const auto items = model.list();
+    const auto card = briefing.card(id, items);
+    if (card.isEmpty()) { done({{"error", i18n("This suggestion is no longer current.")}}); return; }
+    QJsonArray findings;
+    for (const auto &r : card["refs"].toArray()) {
+        if (findings.size() >= 20) break;
+        const auto o = model.get(r.toString());
+        if (!o.isEmpty()) findings.append(Care::Briefing::redacted(o));
+    }
+    // The card's text and the curator's note are data for the Agent, not instructions: the voice
+    // agent wraps them in its own fixed request (rungic_voice_agent.py, open_briefing_card).
+    const auto action = card["action"].toObject();
+    const QJsonObject context{{"card", QJsonObject{{"id", id}, {"title", card["title"]}, {"body", card["body"]}, {"kind", card["kind"]},
+        {"label", action["label"]}, {"note", action["prompt"]}, {"origin", card["origin"]}, {"count", card["count"]}}},
+        {"findings", findings}, {"omitted", qMax(0, int(card["refs"].toArray().size()) - int(findings.size()))}};
+    briefing.opened(id, items, now); saveBriefing();
+    for (const auto &r : card["refs"].toArray()) model.present(r.toString(), model.get(r.toString())["deliveryRevision"].toInteger(), true, now);
+    publish();
+    auto message = QDBusMessage::createMethodCall(Voice, VoicePath, Voice, "OpenBriefingCard");
+    message.setArguments({encoded(context)});
+    auto *w = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(message, 60000), this);
+    connect(w, &QDBusPendingCallWatcher::finished, this, [w, done] {
+        QDBusPendingReply<QString> reply = *w; w->deleteLater();
+        if (reply.isError()) done({{"error", reply.error().message()}});
+        else done(QJsonDocument::fromJson(reply.value().toUtf8()).object());
+    });
+}
+QString Suggestions::OpenCard(const QString &id) {
+    if (!calledFromDBus()) return failure(i18n("This suggestion is no longer current."));
+    setDelayedReply(true);
+    const auto request = message();
+    startCard(id, [request](const QJsonObject &r) { QDBusConnection::sessionBus().send(request.createReply(encoded(r))); });
+    return {};
+}
+void Suggestions::launchConversation(const QString &conversation, const QString &token) {
+    QProcess process;
+    auto environment = QProcessEnvironment::systemEnvironment();
+    environment.remove("XDG_ACTIVATION_TOKEN");
+    if (!token.isEmpty()) environment.insert("XDG_ACTIVATION_TOKEN", token);
+    process.setProcessEnvironment(environment);
+    process.setProgram("/usr/bin/rungic-voice-assistant");
+    process.setArguments({"--conversation", conversation});
+    process.startDetached();
+}
+QString Suggestions::DismissCard(const QString &id) {
+    if (!briefing.dismiss(id, model.list(), QDateTime::currentSecsSinceEpoch())) return failure(i18n("This suggestion is no longer current."));
+    saveBriefing(); Q_EMIT Changed();
+    return Briefing();
+}
+void Suggestions::CardPresented(const QString &id, bool opened) {
+    // A card seen on the desktop or in the app counts as seen for its records' current revisions,
+    // so they aren't notified again (Model::notification).
+    const auto now = QDateTime::currentSecsSinceEpoch();
+    const auto card = briefing.card(id, model.list());
+    bool changed = false;
+    for (const auto &r : card["refs"].toArray())
+        changed |= model.present(r.toString(), model.get(r.toString())["deliveryRevision"].toInteger(), opened, now);
+    if (changed) publish();
 }
 QString Suggestions::Act(const QString &id, const QString &action, const QString &json) {
     const auto o = model.get(id);

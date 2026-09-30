@@ -492,3 +492,9 @@ msgstr "账户用量暂未更新"
 
 msgid "The account changed; read it again in a moment"
 msgstr "账户已变化，稍后重新读取"
+
+msgid "Invalid suggestion card"
+msgstr "无效的建议卡片"
+
+msgid "Busy with another task or a call; open this suggestion again later"
+msgstr "正在处理其他任务或通话，请稍后再打开这条建议"

@@ -63,8 +63,13 @@ int main(int argc, char **argv) {
     else if (command == "act") { method = "Act"; params = {args.value(2), args.value(3), args.value(4, "{}")}; }
     else if (command == "knowledge") method = "Knowledge";
     else if (command == "refresh") method = "Refresh";
+    else if (command == "briefing") method = "Briefing";
+    else if (command == "curate") method = "Curate";
+    else if (command == "open-card") { method = "OpenCard"; params = {args.value(2)}; }
+    else if (command == "dismiss-card") { method = "DismissCard"; params = {args.value(2)}; }
     else if (command != "list") {
-        fprintf(stderr, "Usage: rungic-suggestions list|get ID|act ID ACTION [JSON]|update ID JSON|feedback ID|knowledge|refresh\n"); return 2;
+        fprintf(stderr, "Usage: rungic-suggestions list|get ID|act ID ACTION [JSON]|update ID JSON|feedback ID|knowledge|refresh|"
+                        "briefing|curate|open-card CARD|dismiss-card CARD\n"); return 2;
     }
     const auto reply = service.callWithArgumentList(QDBus::Block, method, params);
     if (reply.type() == QDBusMessage::ErrorMessage) { fprintf(stderr, "%s\n", qPrintable(reply.errorMessage())); return 1; }

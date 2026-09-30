@@ -33,7 +33,7 @@ void SuggestionsClient::call(const QString &method, const QVariantList &args, co
     m_busy = true; Q_EMIT changed();
     auto message = QDBusMessage::createMethodCall(BusName, BusPath, BusName, method);
     message.setArguments(args);
-    auto *w = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(message), this);
+    auto *w = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(message, method == "OpenCard" ? 70000 : -1), this);
     connect(w, &QDBusPendingCallWatcher::finished, this, [this, w, method, id, action] {
         QDBusPendingReply<QString> reply = *w; w->deleteLater(); m_busy = false;
         if (reply.isError()) { m_error = reply.error().message(); Q_EMIT changed(); return; }
@@ -43,8 +43,14 @@ void SuggestionsClient::call(const QString &method, const QVariantList &args, co
             m_groups = result.value("groups").toArray().toVariantList();
             m_historyGroups = result.value("historyGroups").toArray().toVariantList();
             m_items = result.value("items").toArray().toVariantList(); m_coverage.clear();
+            auto briefing = result.value("briefing").toObject();
+            m_cards = briefing.take("cards").toArray().toVariantList();
+            m_briefing = briefing.toVariantMap();
             for (const auto &v : result.value("coverage").toArray()) m_coverage.append(v.toString());
-        } else Q_EMIT replied(id, action, result.toVariantMap());
+        } else {
+            if (method == "OpenCard" && result.contains("conversation")) conversation(result.value("conversation").toString());
+            Q_EMIT replied(id, action, result.toVariantMap());
+        }
         Q_EMIT changed();
     });
 }
@@ -55,6 +61,13 @@ void SuggestionsClient::scan() {
 }
 void SuggestionsClient::act(const QString &id, const QString &action, const QVariantMap &args) {
     call("Act", {id, action, QString::fromUtf8(QJsonDocument(QJsonObject::fromVariantMap(args)).toJson(QJsonDocument::Compact))}, id, action);
+}
+void SuggestionsClient::openCard(const QString &id) { call("OpenCard", {id}, id, "openCard"); }
+void SuggestionsClient::dismissCard(const QString &id) { call("DismissCard", {id}, id, "dismissCard"); }
+void SuggestionsClient::curate() { call("Curate", {}, {}, "curate"); }
+void SuggestionsClient::presentCard(const QString &id, bool opened) {
+    auto message = QDBusMessage::createMethodCall(BusName, BusPath, BusName, "CardPresented");
+    message.setArguments({id, opened}); QDBusConnection::sessionBus().asyncCall(message);
 }
 void SuggestionsClient::launch(const QStringList &arguments) {
     const auto start = [arguments](const QString &token) {

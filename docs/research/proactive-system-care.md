@@ -426,3 +426,18 @@ ARM64 C++ 24 项通过。40 事项 / 39 组的真实服务集成分别执行普�
 通用部署 smoke 8 项首遍通过、无 flaky；本次直接调用默认 smoke 包含了 `camera.frames`（此项并非堆叠功能验收，也不能记为跳过），后续此类桌面验收应显式排除摄像头。手势验收完成后，建议服务与桌面近期 warning 日志无条目；SSH socket enabled/active，`dpkg --audit` 无输出。既有 313 个翻译文件缺失仍在，changed_files=0、release_mismatch=0；没有将 integrity drift 记作整机完整性通过。继续保留原 rootfs 快照，另存 `state.before-stack-swipe.json`。
 
 证据：`.work/experiments/stack-swipe/{integration-final.log,deploy.log,device.log,final-check.log,journal.log}`；截图 `real-first.png`、`real-second.png`、`fixture-current-detail.png`、`fixture-group-detail.png`、`fixture-third.png`、`fixture-groups-scrolled.png`、`native-edit.png`、`native-drawer.png`、`final-home.png`。部署记录 `.work/deploy/20260930-112856-20260930.13/`。本轮验收限桌面卡片交互，未实施历史崩溃修复或向上游提交 PR。
+
+## 2026-09-30：Agent 策展简报取代逐记录卡片
+
+用户明确否定“教条式”的逐签名/逐规则卡片：由 Agent 根据当前最需要注意的少数事情决定展示哪些卡片；很多不同崩溃时给一张“发现了一些崩溃，要一起看看吗？”，点开进入对话，由 Agent 在聊天里逐项介绍并讨论处理办法；卡片为堆叠（一次一张、滑动看下一张）。用户选择有新发现时后台自动策展、限频、只发脱敏摘要，Agent 不可用时显示一张回退卡片。
+
+**本节取代前文“呈现位置与卡片内容”、同类堆叠和桌面堆叠中“账本记录/分组 1:1 成卡”的呈现方式，以及逐记录通知。** 前文的账本、生命周期、任务、方案确认、提醒与迁移仍然有效；历史记录保留不删。
+
+- 账本（schema 2）继续是事实存储，不再直接展示给用户；新增简报层 `Care::Briefing`（`briefing.json`，≤5 张有序卡片，`source: agent|fallback`，卡片 `refs` 指向账本记录），严格校验模型输出。
+- 实质变化（新记录、复发/升级、问题消失、报告数跨阈值、任务结果待查看）触发策展：防抖 2 分钟、最小间隔 1 小时（结果待查看或严重故障 10 分钟）、24 小时最多 12 次；无变化不发送。APP 可手动重新策展。
+- 策展由 VoiceAgent 在不进会话列表的 ephemeral、只读、低推理 Codex 回合中完成，使用 `turn/start.outputSchema` 严格 JSON；不可用/未登录/超限/超时/无效输出时回退为确定性卡片（一张汇总 + 每个待查看结果一张）。
+- 打开卡片开新对话：首条用户消息是卡片按钮文字，卡片与记录的脱敏详情作为 developer 消息交给 Agent，要求首条回复逐项介绍并询问用户；打开或“暂不”都不授权修改。“暂不”隐藏到其记录实质变化，反馈进入下次策展输入。
+- 通知改为按卡片决策，沿用原修订回执、新鲜度、每日摘要上限和不响铃规则；卡片的 `notify` 只相当于“合适时机”。
+- 后台策展可用 `~/.config/rungic-suggestionsrc` 的 `[Briefing] BackgroundCuration=false` 关闭。
+
+接口、JSON 形状、常量、Codex 0.156.1 协议源码核验、同类产品（iOS Smart Stack、Pixel At a Glance、Google Discover）比较、隐私与成本见 [96 篇](96-agent-curated-briefing.md)。本轮只有离线验证（C++ QtTest 与替身 app-server 的 Python 测试、Mac mini ARM64 构建），未部署手机，未做真实模型策展、通知和卡片堆叠 UI 验收；QML 仍显示旧的分组卡，新的堆叠界面由后续 UI 工作接入 `SuggestionsClient.cards/briefing`。
