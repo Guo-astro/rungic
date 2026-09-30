@@ -1,0 +1,35 @@
+From: clawd20130 <clawd20130@gmail.com>
+Date: Wed, 30 Sep 2026 01:04:00 +0900
+Subject: run: --device=dri gives the Adreno KGSL GPU and the system DMA-BUF
+ heap
+
+On an Android kernel the Adreno GPU is /dev/kgsl-3d0 (Qualcomm KGSL); there is no /dev/dri at all.
+Mesa's freedreno and turnip open it directly (-Dfreedreno-kmds=kgsl), and allocate buffers shared
+with the compositor from /dev/dma_heap/system. An app with --device=dri got neither, so its GL fell
+back to the CPU; only --device=all apps reached the GPU. Bind both when they exist, like the Mali
+and NVIDIA nodes. Only the system heap: Android's other heaps (secure, carveouts) stay out.
+
+Forwarded: no
+Last-Update: 2026-09-30
+X-Rungic-Status: Pending [not planned for upstream: the device list of an Android-container setup]
+X-Rungic-Tests: L3:flatpak.dri-kgsl (a --device=dri Flatpak app sees /dev/kgsl-3d0 and renders on FD710)
+X-Rungic-Docs: docs/49
+---
+ common/flatpak-run.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/common/flatpak-run.c b/common/flatpak-run.c
+index 7d46dd6..676c4e6 100644
+--- a/common/flatpak-run.c
++++ b/common/flatpak-run.c
+@@ -409,6 +409,10 @@ flatpak_run_add_environment_args (FlatpakBwrap    *bwrap,
+             /* nvidia OpenCL/CUDA */
+             "/dev/nvidia-uvm",
+             "/dev/nvidia-uvm-tools",
++            /* Adreno on an Android kernel (KGSL, no DRM): the GPU, and the
++             * heap Mesa allocates shared (dma-buf) buffers from */
++            "/dev/kgsl-3d0",
++            "/dev/dma_heap/system",
+           };
+ 
+           for (i = 0; i < G_N_ELEMENTS (dri_devices); i++)

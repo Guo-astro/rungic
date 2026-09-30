@@ -1,0 +1,10 @@
+#!/bin/sh
+# The accessibility bus of an agent workspace (docs/research/91), started by the workspace's own
+# session bus. at-spi-bus-launcher puts its socket at $XDG_RUNTIME_DIR/at-spi/bus, the path the
+# user's session uses too: a workspace's launcher took that socket over, and the user's own
+# applications could no longer register for accessibility (the assistant and the acceptance
+# checks read the phone's screen through it). A runtime directory of the workspace's own.
+set -eu
+dir=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/rungic-workspace-${RUNGIC_WORKSPACE:?}-a11y
+mkdir -p -m 700 "$dir"
+XDG_RUNTIME_DIR=$dir exec /usr/libexec/at-spi-bus-launcher "$@"

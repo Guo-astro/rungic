@@ -163,6 +163,35 @@ APK1.7/versionCode8新增菜单“显示流畅度”：默认流畅优先，在�
 
 剩余的开销主要在 Telegram 主线程，占大核 24–42%。Telegram 的界面用 Qt Widgets 在 CPU 上光栅化，再交给 GL 合成。它的动画节拍是 8 ms（lib_ui `universalDuration: 120`），并不限制在 60 Hz。这部分属于应用自身，没有再改。
 
+### `--device=dri` 与 KGSL，没有 GPU 时的兜底（2026-09-30）
+
+起因：助理装的 Flathub Krita 5.3.3 只有 `--device=dri`。
+
+- **沙盒里没有 GPU**：容器没有 `/dev/dri`，所以 `--device=dri` 什么都不给。
+- **兜底反而崩溃**：Krita 一启动就段错误（139），助理于是给它加了 `LIBGL_ALWAYS_SOFTWARE=1`，画布从此一直用 softpipe。
+
+原因（实测加源码）：
+- **崩溃**：
+  - core 显示崩在扩展 `libgallium` 的 `drisw_init_screen+0x38`：`screen->swrast_loader` 为空。
+  - 来源是 lfdevs 分支从 termux-packages 引入的改动（`b355d4d41a86`）：`dri3_x11_connect()` 在拿不到 DRI3 设备时也返回成功。这是为了让 zink 继续走 kopper，但其他驱动因此带着 DRI3 的加载接口创建了软件屏幕。
+  - 上游 Mesa 在这里返回失败，之后由 `eglInitialize` 改用软件渲染重试。
+- **卡住**：给了 `/dev/kgsl-3d0` 之后，X11 GL 程序又会一直卡住。分支的 `x11_dri3_open()` 在环境变量为 `kgsl` 时自己打开 KGSL，却不先检查 X 服务器有没有 DRI3；缓冲随后仍要经 DRI3 请求交给服务器，于是客户端一直等。本机工作区的 Xwayland 没有 DRI3，见 research/93。
+
+修改：
+- `packages/flatpak`（新补丁队列，Ubuntu 1.16.6-1，`rungic/dri-kgsl-dma-heap.patch`）：`--device=dri` 在节点存在时也绑定 `/dev/kgsl-3d0` 和 `/dev/dma_heap/system`。只带 system 堆，Android 的其他堆（安全堆等）仍在沙盒外。
+- `packages/mesa`：
+  - `egl-x11-dri3-fallback-software.patch`：只有 zink 在没有 DRI3 设备时继续，其他驱动照上游返回失败，退到软件渲染。
+  - `x11-kgsl-needs-dri3.patch`：先确认服务器有 DRI3，才本地打开 KGSL。
+- 以上 Mesa 补丁已进入 Flatpak GL 扩展 `rungic-flatpak-gl` 0.399。系统 Mesa 尚未重建：X11 程序在容器里直接运行时仍走原来的路径。
+
+验收（实机，2026-09-30）：
+- 补丁版 flatpak 1.16.6-1+rungic1 下，Krita 沙盒里能看到 `/dev/kgsl-3d0` 和 `/dev/dma_heap/system`。
+- Flatpak Krita 5.3.3，去掉 `LIBGL_ALWAYS_SOFTWARE`：
+  - `--device=dri` 和 `--nodevice=dri` 两种情况下，`krita --version` 都正常退出（exit 0），没有崩溃，也没有卡住，都退到 softpipe。
+  - 修改前分别是崩溃（139）和卡住（超过 2 分钟，主线程在等 X 服务器的回复）。
+- 走原生 Wayland 的 Flatpak 应用（Telegram、VS Code）走 EGL Wayland 路径，本次修改不涉及，这次没有重测。
+- 只走 X11 的 Flatpak 应用要真正用上 GPU，还要等 Xwayland 有 DRI3（research/93）。
+
 ### Qt Flatpak 应用始终开着无障碍（未修改）
 
 - Telegram 顶部一直显示 “Telegram is working in Screen Reader”。

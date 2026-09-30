@@ -246,3 +246,17 @@ Agent 2  KWin#2 ──── │ 显示源 agent-2               │  电视 / �
 - 工作区启动的 Kalk 进入 `app-rungic-ws1-org.kde.kalk-….scope`，显示仍是 `wayland-ws-1`。
 - 测试后两块屏幕都已关闭，用户主屏幕正常。
 - 未测：电视在显示桌面时的路由（需要电视在场）。实测中，关闭桌面模式时 KDED 会弹出“显示器已移除”通知，这是桌面模式开关原本就有的提示。
+
+## 无障碍总线被工作区抢走（2026-09-30，已修复）
+
+- **现象**：发布验收的 `input.text` 失败，报 `AT-SPI: Couldn't connect to accessibility bus`。手机上同时有两套 at-spi：一套是用户会话的（`at-spi-dbus-bus.service`），一套是工作区私有总线按需启动的。
+- **原因**：两者都是用同一个 `XDG_RUNTIME_DIR` 启动的 `at-spi-bus-launcher`，socket 都在 `/run/user/1000/at-spi/bus`，后启动的会抢走这个路径。工作区一重启，用户会话里的程序就注册不到无障碍总线。助理读手机屏幕控件、验收脚本都依赖它。
+- **修复**：
+  - 工作区的 dbus-daemon 改用自己的配置 `/usr/share/rungic-workspace/dbus-1/session.conf`：在标准会话配置之前加一个服务目录。
+  - 这个目录里的 `org.a11y.Bus` 由 `rungic-workspace-a11y` 启动 launcher，运行时目录改为 `$XDG_RUNTIME_DIR/rungic-workspace-N-a11y`。
+  - 同时发现 `plasma/workspace` 原来不在任何包里（是手工部署的），现在并入 `rungic-agent-screen`（0.415，发布 20260930.3）。
+- **实测**：
+  - 两条总线分开：工作区为 `/run/user/1000/rungic-workspace-1-a11y/at-spi/bus`，用户会话为 `/run/user/1000/at-spi/bus`。
+  - 已经连在失效总线上的 Qt 程序不会自己重连，切换 `IsEnabled` 也没用，需要重启：本次重启了 plasmashell。
+  - 冒烟验收 9/9 通过。
+

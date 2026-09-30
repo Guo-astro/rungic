@@ -1,0 +1,15 @@
+{
+ "comment": "Pinned upstream of the flatpak source package (docs/71, docs/73): Ubuntu's 1.16.6-1 (resolute, synced from Debian); packages/flatpak/debian replaces its debian/ (Ubuntu's packaging plus our patches under debian/patches/rungic). Our patch gives --device=dri the Adreno KGSL GPU node and the DMA-BUF heaps (docs/49).",
+ "kind": "ubuntu",
+ "source": "flatpak",
+ "version": "1.16.6-1",
+ "series": "resolute",
+ "upstream": "https://github.com/flatpak/flatpak",
+ "licenses": "LGPL-2.1-or-later; see COPYING and debian/copyright",
+ "files": {
+  "flatpak_1.16.6-1.dsc": "2c55d0e3cc9323fa65de536a4c2df038ccb91b6dc240aae5a60355d7bbb8dc9f",
+  "flatpak_1.16.6.orig.tar.xz": "1e63e7f3fe44b602f34d92a6fe46fd8a3bc6be9460c03c2681e57976c658eec3",
+  "flatpak_1.16.6-1.debian.tar.xz": "ad6f22b458bc8256327860ddaedc16647c2335cbe7ee3ab6f63393ccea22c761"
+ },
+ "fetch": "https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/flatpak/1.16.6-1/{file}"
+}

@@ -27,3 +27,6 @@ install(FILES com.rungic.WorkspaceInput.desktop com.rungic.WorkspaceStream.deskt
 install(PROGRAMS rungic-workspace rungic-workspace-env rungic-user DESTINATION bin)
 install(FILES rungic-workspace@.service DESTINATION lib/systemd/user)
 install(FILES defaults/kwinrc DESTINATION share/rungic-workspace/defaults)
+install(PROGRAMS rungic-workspace-a11y DESTINATION libexec)
+install(FILES dbus/session.conf DESTINATION share/rungic-workspace/dbus-1)
+install(FILES dbus/org.a11y.Bus.service DESTINATION share/rungic-workspace/dbus-1/services)
