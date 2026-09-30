@@ -14,7 +14,7 @@
 | 模块信任 | `tools/ci/restore_module_trust.py` | 核验基线与证书、输出报告；证书恢复方法不对任意 Image 自动成立 |
 | ARM64 包 | `tools/build_on_device.py`、`tools/rungic_release.py` | 固定配方构建、collect 和版本化包集合；仓库快照成熟度见 77 篇 |
 | ARM64 rootfs 安装环境 | `tools/ci/arm64_chroot.py`、`tools/ci/rootfs.Dockerfile` | QEMU/真 chroot、宿主 Python 环境隔离；检查 runner 的 namespaces、binfmt 和容量 |
-| rootfs 镜像 | `tools/ci/build_rootfs_image.py` | 接收已准备的 root 树和 release，生成 ext4/压缩种子、包锁及报告；自身不是完整包下载器 |
+| rootfs 镜像 | `tools/ci/build_rootfs_image.py` | 接收已准备的 root 树和 release，生成 ext4/压缩种子、包锁及报告；检查 `system/ubuntu-excluded-packages.txt` 和 Emoji Selector 排除规则，自身不是完整包下载器 |
 | APK | `android/build-apk.sh`、`tools/ci/apk-builder.Dockerfile` | Android 入口构建；保持指定开发签名身份，不混入其他凭据 |
 | 宿主种子 | `tools/ci/build_host_seed.py` | 输入 runtime、rootfs-tree、repo、lxc/plasma enter 二进制与 `--cast-jar`（`shared/android/rungic-cast/build.sh` 产物）；投屏组件为可选能力，首启安装失败只记日志 |
 | 纯净 product | `tools/ci/clean_product.py` | EROFS + product/preinstall 的命名、xattr 和 SKU 策略假设 |
@@ -40,6 +40,8 @@
 ## 参数化使用示例
 
 以下变量须先绑定到本次核验过的输入，不提供旧设备序列号或固件默认值。先从仓库根目录 `source tools/work-env.sh`，让开发缓存留在 `.work/`。可用各工具 `--help` 查看当前参数。
+
+复用旧 root 树时，先在构建 chroot 中移除 `system/ubuntu-excluded-packages.txt` 所列包并安装本次 release 的 `rungic-plasma-config`，再制作镜像；不要只更新正向安装清单。2026-09-30 的预装调整及验证范围见 [75 篇](../../../../docs/75-image-build-separation.md#2026-09-30预装应用调整)。
 
 ```bash
 python3 tools/ci/preflight.py "$device_spec" "$stock_dir" \

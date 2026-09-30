@@ -92,3 +92,21 @@ VINTF 可用于 Android framework/vendor/HAL 的原有兼容检查；它不描�
 - 源码/许可证：Linux 内核源码及补丁按其 GPL-2.0 许可核对；AOSP 构建工具、mmdebstrap、Ubuntu 包分别保留各自来源和许可清单。Motorola 原厂分区镜像是单独的 OEM 输入；公开发布权未核实，不能默认随通用源码或公开镜像发布。当前私有仓库只跟踪配方/补丁/来源记录，生成物继续留在 `.work/`。
 
 本方案的首个可审查里程碑是：选定一款手机的固定固件基线，CI 从锁定源码重建候选 GKI，产生可比较的 ABI/模块报告与 boot 候选；同一设备的检测报告区分原机事实和候选内核结果。下一里程碑才是离线 rootfs 与清数据后首启播种；这两项未通过之前不发布“完整一键刷入”包。`portov` 当前只有原厂镜像主机侧核验，尚无自编 GKI 或 RungicOS 实机结果。
+
+
+## 2026-09-30：预装应用调整
+
+用户要求移除 Haruna、Marknote、KleverNotes、Journald Browser、Emoji Selector 和 Angelfish。前五个独立包（不含 Emoji Selector）从 `system/ubuntu-packages.txt` 及开发机的显式安装清单移除；`system/ubuntu-excluded-packages.txt` 记录镜像排除集合。用户日后仍可自行安装这些独立应用，不设置 APT 禁装策略。
+
+本地实际包清单表明 Emoji Selector 的程序和菜单属于 `plasma-desktop`，全局快捷键入口属于 `plasma-desktop-data`（6.6.6）。不能因此卸载桌面。`rungic-plasma-config` 安装 `zz-rungic-apps`，使用 [dpkg 标准 path-exclude](https://manpages.debian.org/trixie/dpkg/dpkg.1.en.html) 排除三个精确路径：`/usr/bin/plasma-emojier`、`/usr/share/applications/org.kde.plasma.emojier.desktop`、`/usr/share/kglobalaccel/org.kde.plasma.emojier.desktop`。配置包 postinst 同时清理此前已安装的这三个文件；桌面、Emoji 字体及共享资源保留。现有完整性检查已识别 dpkg 路径排除规则。
+
+复用旧构建 root 树时，先在 `tools/ci/arm64_chroot.py` 提供的构建 chroot 内模拟并执行以下命令；只用于待发行模板，不在开发宿主直接执行，也不自动操作手机：
+
+```sh
+apt-get --simulate purge haruna marknote klevernotes kjournaldbrowser angelfish
+apt-get purge -y haruna marknote klevernotes kjournaldbrowser angelfish
+```
+
+同时构建并安装新版本 `rungic-plasma-config`，更新 release 锁定的版本后再生成 rootfs。`build_rootfs_image.py` 会拒绝仍包含被排除软件包、缺少排除规则或留有 Emoji Selector 入口的输入树。它不会在镜像生成时偷偷卸包，也不会改写旧发行镜像。
+
+离线验证：18 项测试及 204 项子检查通过；基于现有 ARM64 root 树的 APT 模拟仅移除指定五包；配置 DEB 构建通过。一次性无网络容器验证真实 postinst 清除旧 Emoji Selector 入口，随后 fixture 包解包遵守排除规则且保留其他文件；测试容器缺 KDE 配置依赖，因此该项仅验证维护脚本与 dpkg 文件过滤，不等于完整依赖/桌面验收。日志在 `.work/preinstalled-apps-20260930/`。现有 `20260928.7` 镜像和实机未更新，新预装集合将在下一次重建镜像时生效。

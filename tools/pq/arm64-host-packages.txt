@@ -6,7 +6,6 @@
 # debug symbols, Firefox (Mozilla's archive) and what Ubuntu's archive does not carry (wechat,
 # qtspeech6-speechd-plugin). Refresh with the phone's `apt-mark showmanual` after adding packages there.
 accountsservice
-angelfish
 apt-config-icons-hidpi
 arianna
 at-spi2-core
@@ -61,7 +60,6 @@ gstreamer1.0-plugins-good
 gstreamer1.0-plugins-ugly
 gstreamer1.0-tools
 gzip
-haruna
 hostname
 hunspell-en-us
 hwdata
@@ -70,8 +68,6 @@ kclock
 kde-spectacle
 kio-extras
 kirigami-addons-dev
-kjournaldbrowser
-klevernotes
 knighttime-dev
 koko
 kontrast
@@ -257,7 +253,6 @@ make
 maliit-inputcontext-qt5
 maliit-keyboard
 marble-maps
-marknote
 mesa-libgallium
 mesa-vulkan-drivers
 meson

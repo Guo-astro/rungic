@@ -1,0 +1,5 @@
+# Emoji Selector is bundled with plasma-desktop / plasma-desktop-data.
+# Keep the desktop and shared emoji resources; omit the standalone app.
+path-exclude=/usr/bin/plasma-emojier
+path-exclude=/usr/share/applications/org.kde.plasma.emojier.desktop
+path-exclude=/usr/share/kglobalaccel/org.kde.plasma.emojier.desktop

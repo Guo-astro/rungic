@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from arm64_chroot import guest_environment
-from build_rootfs_image import check_home_layout, check_fresh_account
+from build_rootfs_image import check_home_layout, check_fresh_account, check_preinstalled_apps
 
 class RootfsIsolationTests(unittest.TestCase):
     def setUp(self):
@@ -17,6 +17,34 @@ class RootfsIsolationTests(unittest.TestCase):
         (self.root / 'etc').mkdir()
         (self.root / 'etc/passwd').write_text('root:x:0:0::/root:/bin/sh\nrungic:x:1000:1000::/home/rungic:/bin/sh\n')
         (self.root / 'etc/shadow').write_text('root:*:0::::::\nrungic:!:0::::::\n')
+
+    def seed_app_policy(self):
+        config = Path('etc/dpkg/dpkg.cfg.d/zz-rungic-apps')
+        path = self.root / config
+        path.parent.mkdir(parents=True)
+        source = Path(__file__).resolve().parents[2] / 'system/config' / config
+        path.write_text(source.read_text())
+
+    def test_preinstalled_apps_keeps_desktop_and_emoji_fonts(self):
+        self.seed_app_policy()
+        check_preinstalled_apps(self.root, {'plasma-desktop': (), 'fonts-noto-color-emoji': ()})
+
+    def test_reused_root_with_removed_apps_rejected(self):
+        for name in ('angelfish', 'haruna', 'kjournaldbrowser', 'klevernotes', 'marknote'):
+            with self.subTest(package=name), self.assertRaisesRegex(ValueError, name):
+                check_preinstalled_apps(self.root, {name + ':arm64': ()})
+
+    def test_old_config_without_app_policy_rejected(self):
+        with self.assertRaisesRegex(ValueError, 'exclusion rules missing'):
+            check_preinstalled_apps(self.root, {})
+
+    def test_leftover_emoji_shortcut_rejected_even_if_broken(self):
+        self.seed_app_policy()
+        shortcut = self.root / 'usr/share/kglobalaccel/org.kde.plasma.emojier.desktop'
+        shortcut.parent.mkdir(parents=True)
+        shortcut.symlink_to('/nonexistent-emoji-entry')
+        with self.assertRaisesRegex(ValueError, 'excluded app files remain'):
+            check_preinstalled_apps(self.root, {})
 
     def test_clean_identity(self):
         self.seed_accounts()
