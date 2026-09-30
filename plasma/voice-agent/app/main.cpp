@@ -139,7 +139,8 @@ int main(int argc, char *argv[])
                                                            QStringLiteral("com.rungic.VoiceAssistantApp"), QStringLiteral("OpenActivated"));
         open.setArguments({suggestions, suggestions ? suggestion : conversation, activationToken});
         if (!page.isEmpty()) {
-            open.setMember("OpenPage"); open.setArguments({page, activationToken});
+            open = QDBusMessage::createMethodCall("com.rungic.VoiceAssistantApp", "/App", "com.rungic.VoiceAssistantApp", "OpenPage");
+            open.setArguments({page, activationToken});
         }
         bus.call(open);
         return 0;
