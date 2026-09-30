@@ -159,8 +159,8 @@
 ## 测试与构建（已验证）
 
 - Python：`PYTHONPYCACHEPREFIX=.work/cache/python .work/venv/bin/python3 -m pytest -q tools/tests plasma/voice-agent`（等同于 `source tools/work-env.sh` 后运行）→ **51 passed、18 subtests passed**。`test_agent_usage.py` 覆盖 API Key 不请求订阅额度、订阅窗口映射、读取失败不伪造、signed-out/offline/working、账户切换丢弃旧回复、后台线程 token 推送、迟到事件保持回合开始时的账户、描述文件与 D-Bus 接口一致、描述文件的标志就是各包安装的文件且哈希与来源记录一致。
-- C++（Mac mini 构建容器，Ubuntu 26.04 aarch64，Qt 6.10.2）：`python3 tools/rungic_package.py build rungic-suggestions rungic-voice-agent`，两个包分别以 `0.473`、`0.474` 构建成功；`care-tests` **34 passed**（含 QtTest 的初始化/清理；改写原 2 项用量测试并新增 10 项：标志路径校验、描述文件的系统/用户目录与无效文件、多提供方视图与排序、primary 选择、按提供方的账户隔离、按提供方的 stale/error/offline、丢弃未知字段、schema 1 迁移与旧事件转换、适配器自带 token、Claude Code 记录去重/增量/半行/清理后保留/时间预算续读、statusline 额度与过期）。
-- 集成（同一构建容器，`dbus-run-session` 私有总线，未碰手机）：真实 `rungic-suggestions --service` 加载 5 个描述文件（1 个无效被跳过），第一次 `usage` 全部为 `connecting`；数秒后 Codex 因 VoiceAgent 不在总线显示 `offline`，Claude Code 读取器从测试记录给出 `device 1168 / today 1115`，命令型替身的邮箱等字段被丢弃并成为 `working` 的 primary，`RecordTokens` 记账 900，2 秒超时的读取器显示本地化错误。测试服务已结束，临时目录已删除。
+- C++（Mac mini 构建容器，Ubuntu 26.04 aarch64，Qt 6.10.2）：`python3 tools/rungic_package.py build rungic-suggestions rungic-voice-agent`，最终提交两个包均以 `0.475` 构建成功（包内含读取器、两个描述文件和三个标志文件，已用 `dpkg-deb -c` 核对）；`care-tests` 另在构建容器的独立临时目录重新编译运行；`care-tests` **34 passed**（含 QtTest 的初始化/清理；改写原 2 项用量测试并新增 10 项：标志路径校验、描述文件的系统/用户目录与无效文件、多提供方视图与排序、primary 选择、按提供方的账户隔离、按提供方的 stale/error/offline、丢弃未知字段、schema 1 迁移与旧事件转换、适配器自带 token、Claude Code 记录去重/增量/半行/清理后保留/时间预算续读、statusline 额度与过期）。
+- 集成（同一构建容器，`dbus-run-session` 私有总线，未碰手机）：真实 `rungic-suggestions --service` 加载 5 个描述文件（1 个无效被跳过），第一次 `usage` 全部为 `connecting`；数秒后 Codex 因 VoiceAgent 不在总线显示 `offline`，Claude Code 读取器从测试记录给出 `device 1168 / today 1115`，命令型替身的邮箱等字段被丢弃并成为 `working` 的 primary，`RecordTokens` 记账 900，2 秒超时的读取器显示本地化错误。加入标志后在独立临时目录重跑：Claude Code 的 `icon.light` 指向存在的 SVG，Codex 描述文件引用的图标在该容器中不存在，`icon` 为 `null`，提供方照常显示。测试服务均已结束，临时目录已删除。
 - 未验证：手机上的部署、真实 Codex 订阅账户、真实 Claude Code 使用（手机未安装 Claude Code，也不安装）；zh_CN 新增条目只经构建时 `ki18n_install` 编译。
 
 ## 实机验收办法（待做）
