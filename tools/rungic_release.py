@@ -780,7 +780,7 @@ def deploy(version=None, restart='auto', acceptance='smoke', record_label=None, 
         # A development overlay (tools/rungic_dev.py, docs/97) the release replaced: its source and pins
         # would make its builds the candidates again. Kept when the install fails, with its packages.
         import rungic_dev
-        overlay = rungic_dev.clear_device()
+        overlay = rungic_dev.clear_device(run)
         if overlay:
             step('dev-overlay', cleared=overlay)
         # The Android side names paths inside the container: it follows a successful install,

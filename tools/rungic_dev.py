@@ -102,13 +102,18 @@ EOF
 apt-get -q update {APT_DEV} >/dev/null'''
 
 
-def clear_device():
-    """Remove an overlay's source, pins and repository (before a release is installed over it, or on a
-    reset). The files removed, or None when there was no overlay."""
-    text = run(f'''for f in {SOURCE} {PINS} {DEVICE_REPO}; do [ -e "$f" ] && echo "$f"; done
+CLEAR_SCRIPT = f'''for f in {SOURCE} {PINS} {DEVICE_REPO}; do [ -e "$f" ] && echo "$f"; done
 rm -rf {SOURCE} {PINS} {DEVICE_REPO}
-rm -f /var/lib/apt/lists/_var_lib_rungic-apt-dev_* 2>/dev/null; true''', 'container', check=False).stdout.split()
-    return text or None
+rm -f /var/lib/apt/lists/_var_lib_rungic-apt-dev_* 2>/dev/null; true'''
+
+
+def clear_device(runner=None):
+    """Remove an overlay's source, pins and repository (after a release was installed over it, or on a
+    reset). The files removed, or None when there was no overlay. runner: the caller's run, so that
+    its tests' stand-in catches it (rungic_release.deploy passes its own: a test once cleared the
+    real phone's overlay through this function, docs/97)."""
+    result = (runner or run)(CLEAR_SCRIPT, 'container', check=False)
+    return (getattr(result, 'stdout', '') or '').split() or None
 
 
 def policy(names):

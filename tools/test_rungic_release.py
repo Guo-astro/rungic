@@ -120,6 +120,15 @@ class DeployFailureTests(unittest.TestCase):
             p = patch.object(rungic_release, name, value)
             p.start()
             self.addCleanup(p.stop)
+        # Nothing may reach the phone: every device command goes through rungic_device._run (a test
+        # once cleared the real phone's development overlay through an unstubbed path, docs/97).
+        import rungic_device
+
+        def no_device(*args, **kwargs):
+            raise AssertionError(f'an offline test reached the device: {args[:1]}')
+        p = patch.object(rungic_device, '_run', no_device)
+        p.start()
+        self.addCleanup(p.stop)
         import rungic_acceptance
         p = patch.object(rungic_acceptance, 'session_ready', lambda ctx: {'passed': True})
         p.start()
