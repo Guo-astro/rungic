@@ -575,3 +575,20 @@ msgstr "Agent 用量暂时不可用，稍后重试"
 
 msgid "The usage record wasn't saved: %1"
 msgstr "用量记录未保存：%1"
+
+msgid "%2, %1 related record, card %3 of %1, view suggestion"
+msgid_plural "%2, %1 related records, card %3 of %1, view suggestion"
+msgstr[0] "%2，%1 条相关记录，第 %3 / %1 张，查看建议"
+
+msgid "%1 record in all  ›"
+msgid_plural "%1 records in all  ›"
+msgstr[0] "共 %1 条记录  ›"
+
+msgid "↑ Swipe up for the next · Tap for details"
+msgstr "↑ 上滑切换 · 点击查看详情"
+
+msgid "↓ Swipe down for the previous · Tap for details"
+msgstr "↓ 下滑查看上一张 · 点击查看详情"
+
+msgid "↑↓ Swipe to switch · Tap for details"
+msgstr "↑↓ 滑动切换 · 点击查看详情"

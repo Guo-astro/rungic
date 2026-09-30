@@ -401,3 +401,28 @@ G100 的真实 GPT-6 Luna / API Key 请求不调用工具，只回复验收文�
 最终部署 suggestions **0.452**、voice-agent **0.453**，仅补齐旧任务迟到 token 事件仍归属启动时账户的边界。Python 33 项回归通过；此增量未重复整套 smoke，完整 smoke 以 `.11` 为准。重启 Agent 后再次执行真实 Luna 只读回复验收，新增 **15,772 token**（输入 15,748、输出 24），累计从 15,771 变为 **31,543**；重启建议服务重读事件后不重复计数。临时对话删除、原对话恢复，最终无运行任务。账户仍为 API Key / GPT-6 Luna，用量文件 0600，API Key 不展示虚构的订阅重置。订阅账户额度与重置仅完成固定协议和隔离替身验证，未在真实订阅登录上验收。
 
 最终桌面截图人工核对：一个堆叠、两条独立调查、独立像素 Agent 组件显示 31,543 token，壁纸留白和底部四图标保留。SSH socket enabled/active，`dpkg --audit` 无输出。部署记录 `.work/deploy/20260930-102514-20260930.12/`；新增证据 `.work/experiments/widget-stacks/{deploy-account.log,real-usage-final.log,final-check-final.log,final-home.png}`。
+
+## 2026-09-30：桌面堆叠内滑动切换
+
+此前只有视觉叠层，`SuggestionsWidget` 始终展示 `members[0]`，拖动只改变外层列表偏移；两条记录并为一组后列表无溢出，所以上滑没有可见响应。此前列表滚动验收不能覆盖堆叠内切换。
+
+复用核验：继续使用固定 Plasma Mobile 6.6.5 / LGPL-2.0-or-later 的 `WidgetContainer`、`WidgetDelegate` 和 `components/mobileshell/components/swipearea.cpp`，实读本地补丁队列源码；SwipeArea 尊重 keepMouseGrab/keepTouchGrab，WidgetContainer 根据移动阈值取消原生长按计时。比较 Qt 的 [SwipeView](https://doc.qt.io/qt-6/qml-qtquick-controls-swipeview.html) 与现有 [MouseArea](https://doc.qt.io/qt-6/qml-qtquick-mousearea.html)：独立嵌套 SwipeView 仍有已复现的父级抢手势和同方向列表竞争，因此保留已验收的 preventStealing 接管入口，复用 Qt NumberAnimation 做双卡跟手切换，不新增 Folio 补丁。Qt 文档页面当前为 6.11，运行/构建基线仍为 6.10.2，接口是否可用以该版本实际编译与运行验收为准。本项目新增 QML 沿用 GPL-2.0-or-later。
+
+卡片内拖动切换组内成员，标题/间隙拖动滚动组列表；起手时固定目标，首尾回弹不把手势传给抽屉。按记录 ID 保持当前成员，后台刷新延后至拖动/动画结束；当前成员消失时回到剩余第一项。点正面打开该条详情，点卡片顶部“共 N 条记录”打开组。只有停稳且实际可见的成员产生展示回执。实机验收见下节。
+
+### 堆叠手势验收：20260930.13
+
+USB G100 `ZY32M9MRVP` / ADB 5038，现场核验开发机 mibook/x86_64、系统代理 none，构建端 Mac mini/ARM64、Surge 6152；手机仍为 `portov`、aarch64、192.168.5.69，容器代理 192.168.5.45:6152。部署 suggestions **0.461**，voice-agent **0.453**、design **0.393**、Plasma Mobile **6.6.5-0ubuntu0.1+rungic8** 保留。包更新的自动重启集合未包含 suggestions，故部署后明确重启建议服务、plasmashell 和助理 UI，核验实际加载新 QML 后才做以下手势测试；未重启 Codex 后端或改变登录方式。
+
+ARM64 C++ 24 项通过。40 事项 / 39 组的真实服务集成分别执行普通 widget、带真实 QTest pointer 的 widget 和 APP 列表预览，均无 QML warning。指针测试覆盖上下切换、短拖动回弹、首尾边界、外层偏移不随堆叠切换、标题拖动滚动组列表；静态堆叠仅正面 1 项获得回执，实际翻阅后两项分别获得回执，均没有 opened 回执。首轮测试因 QObject 树找不到视觉 delegate、复用跨刷新销毁的测试指针而失败，改为按 visual parent 查找并在刷新后重新获取；QTest 合成时间戳不等于真实时间，短拖动测试改为实际等待。另修复按压态原有的未定义 `Theme.hover`，使用已有 `Theme.fill2`，最终重跑通过。
+
+实机使用 Android input 注入实际触摸，而非直接调用切换函数：
+
+- 两条真实历史记录可上滑到第二张、下滑回第一张；短慢拖动回弹，首尾继续拖动不切走组件、不打开抽屉。截图逐张核对页码与对应调查结论。
+- 隔离账本有 13 项、11 组，其中第一组 3 张。上滑逐张查看；后台更新导致重排后仍保留当前记录 ID；点当前卡片使该记录获得 opened 回执，未查看的第三张没有 displayed/opened 回执。点“共 N 条记录”进入组列表；移除当前第三张后落到剩余两张的第一张，没有空白或越界。
+- 标题连续上滑可浏览其他组，不误打开 APP 或抽屉。长按出现原生调整边框和 Options，退出编辑后壁纸上滑打开原应用抽屉。快速连续上滑/下滑均保持有效页码，未出现误点击或手势逃逸。
+- 清除临时账本与用户服务环境覆盖后，原有全部事项、调查报告、结论、计划、任务、对话和提醒逐字段比对保留，账本权限 0600；无运行/恢复中任务。最终桌面保留独立 Agent 组件、壁纸留白和底部四图标。
+
+通用部署 smoke 8 项首遍通过、无 flaky；本次直接调用默认 smoke 包含了 `camera.frames`（此项并非堆叠功能验收，也不能记为跳过），后续此类桌面验收应显式排除摄像头。手势验收完成后，建议服务与桌面近期 warning 日志无条目；SSH socket enabled/active，`dpkg --audit` 无输出。既有 313 个翻译文件缺失仍在，changed_files=0、release_mismatch=0；没有将 integrity drift 记作整机完整性通过。继续保留原 rootfs 快照，另存 `state.before-stack-swipe.json`。
+
+证据：`.work/experiments/stack-swipe/{integration-final.log,deploy.log,device.log,final-check.log,journal.log}`；截图 `real-first.png`、`real-second.png`、`fixture-current-detail.png`、`fixture-group-detail.png`、`fixture-third.png`、`fixture-groups-scrolled.png`、`native-edit.png`、`native-drawer.png`、`final-home.png`。部署记录 `.work/deploy/20260930-112856-20260930.13/`。本轮验收限桌面卡片交互，未实施历史崩溃修复或向上游提交 PR。
