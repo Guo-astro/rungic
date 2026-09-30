@@ -99,8 +99,17 @@ void UsageClient::refresh() {
     auto *w = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(request, 5000), this);
     connect(w, &QDBusPendingCallWatcher::finished, this, [this, w] {
         QDBusPendingReply<QString> reply = *w; w->deleteLater(); m_pending = false;
-        if (reply.isError()) { m_data["error"] = i18n("The usage service isn't connected yet"); m_data["stale"] = true; }
-        else m_data = QJsonDocument::fromJson(reply.value().toUtf8()).object().toVariantMap();
+        if (reply.isError()) {
+            QVariantList stale;
+            for (auto provider : providers()) { auto p = provider.toMap(); p["stale"] = true; stale.append(p); }
+            m_data["providers"] = stale;
+            m_data["error"] = i18n("The usage service isn't connected yet");
+        } else m_data = QJsonDocument::fromJson(reply.value().toUtf8()).object().toVariantMap();
         Q_EMIT changed();
     });
+}
+QVariantMap UsageClient::primary() const {
+    const auto id = m_data.value("primary").toString();
+    for (const auto &provider : providers()) if (provider.toMap().value("id") == id) return provider.toMap();
+    return {};
 }

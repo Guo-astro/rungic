@@ -46,13 +46,20 @@ private:
     QDBusServiceWatcher m_watcher;
 };
 
+// AgentUsage (schema 2, docs/research/95): `data` is the whole reply, `providers` its agents in order
+// and `primary` the one to show first ({} when there is none). A lost service keeps the last values,
+// marks them stale and sets data.error.
 class UsageClient : public QObject {
     Q_OBJECT
     QML_ELEMENT
     Q_PROPERTY(QVariantMap data READ data NOTIFY changed)
+    Q_PROPERTY(QVariantList providers READ providers NOTIFY changed)
+    Q_PROPERTY(QVariantMap primary READ primary NOTIFY changed)
 public:
     explicit UsageClient(QObject *parent = nullptr);
     QVariantMap data() const { return m_data; }
+    QVariantList providers() const { return m_data.value("providers").toList(); }
+    QVariantMap primary() const;
     Q_INVOKABLE void refresh();
 Q_SIGNALS:
     void changed();

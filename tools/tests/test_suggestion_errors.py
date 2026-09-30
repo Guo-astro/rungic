@@ -17,7 +17,7 @@ exec(compile(ast.Module(body=[node], type_ignores=[]), str(source), 'exec'), nam
 class SuggestionErrorTests(unittest.TestCase):
     def agent(self):
         a = namespace['VoiceAgent']()
-        a.thread_id = 'thread'; a.emit = Mock(); a.set_state = Mock()
+        a.thread_id = 'thread'; a.emit = Mock(); a.set_state = Mock(); a.usage_push = Mock()
         a.turn = None; a.turn_lock = threading.Lock()
         return a
 

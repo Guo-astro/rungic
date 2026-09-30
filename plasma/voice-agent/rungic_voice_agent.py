@@ -1407,38 +1407,91 @@ class VoiceAgent:
         except (OSError, ValueError):
             return ''
 
+    @staticmethod
+    def usage_limits(read):
+        """Codex `account/rateLimits/read` as the desktop's limits (docs/research/95)."""
+        buckets = read.get('rateLimitsByLimitId') or {}
+        if not buckets and isinstance(read.get('rateLimits'), dict):
+            buckets = {'codex': read['rateLimits']}
+        limits = []
+        for limit_id, bucket in buckets.items():
+            for field in ('primary', 'secondary'):
+                window = (bucket or {}).get(field) or {}
+                if not isinstance(window.get('usedPercent'), (int, float)):
+                    continue
+                limits.append({'id': f'{limit_id}.{field}', 'label': bucket.get('limitName') or limit_id,
+                               'windowMinutes': window.get('windowDurationMins'),
+                               'usedPercent': window['usedPercent'], 'resetsAt': window.get('resetsAt')})
+        return limits
+
     def usage(self):
+        """The Codex provider of the desktop's agent usage (com.rungic.Suggestions AgentUsage, schema 2).
+
+        Read-only: the account kind, subscription windows and account total come from Codex's own
+        RPCs; tokens seen on this device are pushed as they happen (RecordTokens) and repeated here
+        for a usage service that restarted. Never a key, token or email."""
         identity = self.usage_identity()
-        result = {'accountKey': identity, 'model': AGENT_MODEL,
-                  'activity': 'working' if self.agent_busy else 'ready', 'authMode': 'none'}
+        result = {'accountKey': identity, 'model': AGENT_MODEL, 'status': 'working' if self.agent_busy else 'ready',
+                  'account': {'kind': 'none', 'label': '', 'plan': ''}}
         server = self.server
         if not server:
-            result['activity'] = 'offline'
+            result['status'] = 'offline'
             return result
         account = server.call('account/read', {'refreshToken': False}, timeout=5).get('account') or {}
-        result['authMode'] = account.get('type', 'none')
-        result['plan'] = account.get('planType', '')
-        if result['authMode'] == 'chatgpt':
+        kind = {'chatgpt': 'subscription', 'apiKey': 'api-key'}.get(account.get('type'), 'none')
+        result['account'] = {'kind': kind, 'label': {'subscription': 'ChatGPT', 'api-key': 'API Key'}.get(kind, ''),
+                             'plan': account.get('planType') or ''}
+        if kind == 'none':
+            result['status'] = 'signed-out'
+        if kind == 'subscription':
+            # An API key has no subscription windows: none are asked for, none are invented.
             try:
-                result['rateLimits'] = server.call('account/rateLimits/read', {'excludeResetCreditDetails': True}, timeout=10)
-                result['accountUsage'] = server.call('account/usage/read', {}, timeout=10)
+                result['limits'] = self.usage_limits(
+                    server.call('account/rateLimits/read', {'excludeResetCreditDetails': True}, timeout=10) or {})
+                summary = (server.call('account/usage/read', {}, timeout=10) or {}).get('summary') or {}
+                result['tokens'] = {'account': summary.get('lifetimeTokens')}
             except Exception:
-                result['usageError'] = _('Account usage has not updated yet')
+                result.pop('limits', None)
+                result['error'] = _('Account usage has not updated yet')
         if identity != self.usage_identity() or server is not self.server:
             raise RuntimeError(_('The account changed; read it again in a moment'))
-        result['tokens'] = [v for v in list(self.usage_tokens.values()) if v['accountKey'] == identity]
+        result['tokenEvents'] = [v for v in list(self.usage_tokens.values()) if v['accountKey'] == identity]
         return result
+
+    def usage_push(self, method, *args):
+        """Tell the desktop's usage service (com.rungic.Suggestions) now, without waiting for it."""
+        def done(connection, result):
+            try:
+                connection.call_finish(result)
+            except GLib.Error as error:
+                log('usage', method, error.message)
+
+        def send():
+            try:
+                Gio.bus_get_sync(Gio.BusType.SESSION, None).call(
+                    'com.rungic.Suggestions', '/com/rungic/Suggestions', 'com.rungic.Suggestions', method,
+                    GLib.Variant('(' + 's' * len(args) + ')', args), None, Gio.DBusCallFlags.NONE, 5000, None, done)
+            except GLib.Error as error:
+                log('usage', method, error.message)
+            return False
+        GLib.idle_add(send)
 
     def on_notification(self, method, params):
         if method == 'turn/started':
             self.usage_accounts[(params.get('threadId'), (params.get('turn') or {}).get('id'))] = self.usage_identity()
+        if method in ('turn/started', 'turn/completed', 'account/rateLimits/updated', 'account/updated',
+                      'account/login/completed'):
+            self.usage_push('ProviderChanged', 'codex')  # working/ready, account or limits changed
         if method == 'thread/tokenUsage/updated':
             identity = self.usage_accounts.get((params.get('threadId'), params.get('turnId')), self.usage_identity())
-            event = {'type': 'token-usage', 'accountKey': identity, **params}
-            self.usage_tokens[(event.get('accountKey'), event.get('threadId'))] = event
-            self.emit_raw(event)
+            usage = params.get('tokenUsage') or {}
+            # Cumulative per thread: the service counts only the growth (docs/research/95).
+            event = {'accountKey': identity, 'session': params.get('threadId') or '', 'turn': params.get('turnId') or '',
+                     'total': (usage.get('total') or {}).get('totalTokens'), 'last': (usage.get('last') or {}).get('totalTokens')}
+            self.usage_tokens[(identity, event['session'])] = event
+            self.usage_push('RecordTokens', 'codex', json.dumps(event))
         elif method in ('account/rateLimits/updated', 'account/updated'):
-            self.emit_raw({'type': 'usage-changed', 'accountKey': self.usage_identity()})
+            pass  # told above
         elif params.get('threadId') and params['threadId'] != self.thread_id:
             return
         elif method == 'thread/realtime/outputAudio/delta':

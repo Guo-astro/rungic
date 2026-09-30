@@ -12,7 +12,9 @@ for po in "$V"/po/*/rungic-voice-agent.po; do
     mkdir -p "$DESTDIR/usr/share/locale/$lang/LC_MESSAGES"
     msgfmt -c --check-format -o "$DESTDIR/usr/share/locale/$lang/LC_MESSAGES/rungic-voice-agent.mo" "$po"
 done
-install -Dm644 "$V/task_state.py" "$DESTDIR/usr/lib/rungic-voice-agent/task_state.py"
+# Codex in the desktop's agent usage (docs/research/95): the usage service reads this agent's Usage method.
+install -Dm644 "$V/agent-usage/codex.json" "$DESTDIR/usr/share/rungic/agent-usage/providers/codex.json"
+install -Dm644 "$V/task_state.py""$DESTDIR/usr/lib/rungic-voice-agent/task_state.py"
 for f in "$V"/prompts/*.md; do install -Dm644 "$f" "$DESTDIR/usr/share/rungic-voice-agent/prompts/$(basename "$f")"; done
 for f in "$V"/skills/rungic-phone-desktop/*.md; do
     install -Dm644 "$f" "$DESTDIR/usr/share/rungic-voice-agent/skills/rungic-phone-desktop/$(basename "$f")"

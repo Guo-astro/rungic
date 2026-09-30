@@ -2,17 +2,40 @@
 #include "model.h"
 #include "layout.h"
 #include "usage.h"
+#include "claude_code.h"
 #include <KConfig>
 #include <KConfigGroup>
 #include <QFile>
 #include <QTemporaryDir>
 #include <QtTest>
+#include <QDir>
+#include <QFileInfo>
+#include <QJsonDocument>
+#include <QSet>
+#include <time.h>
 
 class CareTests : public QObject {
     Q_OBJECT
     static QJsonObject item(QString key = "crash:1", QString source = "crashes") {
         auto o = Care::observation(key, "应用退出", "原因待核实", "fault", 1, {{"signature", "abc"}});
         o["source"] = source; return o;
+    }
+    // ---- Agent usage (docs/research/95) ----
+    static Care::UsageProvider provider(const QString &id, int order = 100, bool optional = false) {
+        Care::UsageProvider p; p.id = id; p.name = id.toUpper(); p.vendor = "V"; p.order = order; p.optional = optional;
+        p.service = "com.example." + id; p.path = "/usage"; p.interface = "com.example.Usage"; p.method = "Usage";
+        return p;
+    }
+    static QJsonObject token(const QString &account, const QString &session, qint64 total, qint64 last) {
+        return {{"accountKey", account}, {"session", session}, {"turn", "turn"}, {"total", total}, {"last", last}};
+    }
+    static QJsonObject shown(const QJsonObject &view, const QString &id) {
+        for (const auto &v : view["providers"].toArray()) if (v.toObject()["id"] == id) return v.toObject();
+        return {};
+    }
+    static void write(const QString &path, const QByteArray &bytes) {
+        QDir().mkpath(QFileInfo(path).absolutePath());
+        QFile f(path); QVERIFY(f.open(QIODevice::WriteOnly)); f.write(bytes);
     }
 private Q_SLOTS:
     void groupedCrashesKeepIndependentRecordsAndReceipts() {
@@ -39,36 +62,228 @@ private Q_SLOTS:
         QVERIFY(m.updatePlan(id, {{"confidence", "guaranteed"}}).contains("error"));
         r = m.updatePlan(id, {{"result", "New investigation"}}); QCOMPARE(r["summary"].toString(), "New investigation");
     }
+    // ---- Agent usage (docs/research/95) ----
+    void initTestCase() { qputenv("TZ", "UTC"); tzset(); }
     void usageDeduplicatesRequestsRestartsAndAccounts() {
         QTemporaryDir d; const auto path = d.path() + "/usage.json";
-        Care::Usage u(path);
-        const auto snapshot = QJsonObject{{"accountKey", "account-a"}, {"authMode", "apiKey"}};
-        u.snapshot(snapshot, 100);
-        auto event = QJsonObject{{"accountKey", "account-a"}, {"threadId", "thread"}, {"turnId", "turn"},
-            {"tokenUsage", QJsonObject{{"total", QJsonObject{{"totalTokens", 1200}}}, {"last", QJsonObject{{"totalTokens", 200}}}}}};
-        u.token(event, 101); u.token(event, 102);
-        QCOMPARE(u.view(102)["recordedTokens"].toInteger(), 200); // resumed history is not counted
-        event["tokenUsage"] = QJsonObject{{"total", QJsonObject{{"totalTokens", 1700}}}, {"last", QJsonObject{{"totalTokens", 500}}}};
-        u.token(event, 103); QCOMPARE(u.view(103)["recordedTokens"].toInteger(), 700); // same turn, second model request
-        Care::Usage restarted(path); QVERIFY(restarted.view(104)["recordedTokens"].isNull());
-        restarted.snapshot(snapshot, 105); restarted.token(event, 106); QCOMPARE(restarted.view(106)["recordedTokens"].toInteger(), 700);
-        restarted.snapshot({{"accountKey", "account-b"}, {"authMode", "apiKey"}}, 107);
-        QVERIFY(restarted.view(107)["recordedTokens"].isNull());
-        event["accountKey"] = "account-b"; restarted.token(event, 108);
-        QCOMPARE(restarted.view(108)["recordedTokens"].toInteger(), 500);
-        restarted.snapshot(snapshot, 109); QCOMPARE(restarted.view(109)["recordedTokens"].toInteger(), 700);
+        Care::Usage u(path); u.setProviders({provider("codex")});
+        const QJsonObject snapshot{{"accountKey", "account-a"}, {"account", QJsonObject{{"kind", "api-key"}}}};
+        u.snapshot("codex", snapshot, 100);
+        auto event = token("account-a", "thread", 1200, 200);
+        u.record("codex", event, 101); u.record("codex", event, 102);
+        auto device = [](const QJsonObject &view) { return shown(view, "codex")["tokens"].toObject()["device"]; };
+        QCOMPARE(device(u.view(102)).toInteger(), 200); // resumed history is not counted
+        event = token("account-a", "thread", 1700, 500);
+        u.record("codex", event, 103); QCOMPARE(device(u.view(103)).toInteger(), 700); // same turn, second model request
+        Care::Usage restarted(path); restarted.setProviders({provider("codex")});
+        QVERIFY(device(restarted.view(104)).isNull()); // not shown before the account is confirmed again
+        restarted.snapshot("codex", snapshot, 105); restarted.record("codex", event, 106);
+        QCOMPARE(device(restarted.view(106)).toInteger(), 700);
+        QCOMPARE(shown(restarted.view(106), "codex")["tokens"].toObject()["today"].toInteger(), 700);
+        restarted.snapshot("codex", {{"accountKey", "account-b"}}, 107);
+        QVERIFY(device(restarted.view(107)).isNull());
+        restarted.record("codex", token("account-b", "thread", 1700, 500), 108);
+        QCOMPARE(device(restarted.view(108)).toInteger(), 500);
+        restarted.snapshot("codex", snapshot, 109); QCOMPARE(device(restarted.view(109)).toInteger(), 700);
+        QCOMPARE(Care::readObject(path)["schema"].toInt(), 2);
+    }
+    void usageLedgerMigratesSchemaOneAndLegacyEvents() {
+        QTemporaryDir d; const auto path = d.path() + "/usage.json";
+        const QJsonObject account{{"turns", QJsonObject{{Care::fingerprint("thread"), QJsonObject{{"tokens", 1000}}}}}, {"total", 400}, {"days", QJsonObject{}}};
+        QVERIFY(Care::writeObject(path, {{"schema", 1}, {"accounts", QJsonObject{{"a", account}}}}));
+        Care::Usage u(path); u.setProviders({provider("codex")});
+        u.snapshot("codex", {{"accountKey", "a"}}, 100);
+        const QJsonObject legacy{{"type", "token-usage"}, {"accountKey", "a"}, {"threadId", "thread"}, {"turnId", "t"},
+            {"tokenUsage", QJsonObject{{"total", QJsonObject{{"totalTokens", 1100}}}, {"last", QJsonObject{{"totalTokens", 100}}}}}};
+        QVERIFY(u.record("codex", Care::codexTokenEvent(legacy), 101));
+        QCOMPARE(shown(u.view(101), "codex")["tokens"].toObject()["device"].toInteger(), 500);
+        QVERIFY(!u.record("codex", Care::codexTokenEvent(legacy), 102));
+        QVERIFY(!u.record("undeclared", token("a", "s", 10, 0), 103)); // no descriptor, no record
     }
     void usageQuotaIsNullableAndResetDoesNotInventFreshData() {
-        Care::Usage u("");
-        const QJsonObject limits{{"rateLimits", QJsonObject{{"primary", QJsonObject{{"usedPercent", 75}, {"windowDurationMins", 300}, {"resetsAt", 200}}}}}};
-        u.snapshot({{"accountKey", "a"}, {"authMode", "chatgpt"}, {"rateLimits", limits}}, 100);
-        auto v = u.view(101); QCOMPARE(v["windows"].toArray().size(), 1);
-        QVERIFY(!v["windows"].toArray()[0].toObject()["expired"].toBool());
-        QVERIFY(u.view(201)["windows"].toArray()[0].toObject()["expired"].toBool());
-        QVERIFY(u.view(301)["stale"].toBool());
-        u.snapshot({{"authMode", "apiKey"}, {"rateLimits", limits}}, 302);
-        QVERIFY(u.view(302)["windows"].toArray().isEmpty());
-        u.snapshot({{"authMode", "none"}}, 303); QVERIFY(u.view(303)["recordedTokens"].isNull());
+        Care::Usage u(""); u.setProviders({provider("codex")});
+        const QJsonArray limits{QJsonObject{{"id", "codex.primary"}, {"label", "codex"}, {"usedPercent", 75}, {"windowMinutes", 300}, {"resetsAt", 200}}};
+        u.snapshot("codex", {{"accountKey", "a"}, {"account", QJsonObject{{"kind", "subscription"}, {"label", "ChatGPT"}}}, {"limits", limits}}, 100);
+        auto p = shown(u.view(101), "codex"); QCOMPARE(p["limits"].toArray().size(), 1);
+        QVERIFY(!p["limits"].toArray()[0].toObject()["expired"].toBool());
+        QCOMPARE(p["limits"].toArray()[0].toObject()["windowMinutes"].toInt(), 300);
+        QVERIFY(shown(u.view(201), "codex")["limits"].toArray()[0].toObject()["expired"].toBool());
+        QVERIFY(shown(u.view(301), "codex")["stale"].toBool());
+        // A partial read keeps the last limits and says so.
+        u.snapshot("codex", {{"accountKey", "a"}, {"error", "not updated"}}, 302);
+        p = shown(u.view(302), "codex");
+        QCOMPARE(p["limits"].toArray().size(), 1); QVERIFY(p["stale"].toBool()); QCOMPARE(p["error"].toString(), "not updated");
+        u.snapshot("codex", {{"accountKey", "a"}, {"account", QJsonObject{{"kind", "api-key"}}}}, 303);
+        QVERIFY(shown(u.view(303), "codex")["limits"].toArray().isEmpty());
+        u.snapshot("codex", {{"status", "signed-out"}}, 304);
+        p = shown(u.view(304), "codex");
+        QVERIFY(p["tokens"].toObject()["device"].isNull()); QCOMPARE(p["status"].toString(), "signed-out");
+        QCOMPARE(p["account"].toObject()["kind"].toString(), "none");
+    }
+    void usageDescriptorsLoadFromSystemAndUserDirectories() {
+        QTemporaryDir d; const auto system = d.path() + "/system", user = d.path() + "/user";
+        write(system + "/codex.json", R"({"schema":1,"id":"codex","name":"Codex","vendor":"OpenAI","order":10,
+            "dbus":{"service":"com.rungic.VoiceAgent","path":"/com/rungic/VoiceAgent","interface":"com.rungic.VoiceAgent","method":"Usage"}})");
+        write(system + "/reader.json", R"({"schema":1,"id":"reader","name":"Reader","command":["/usr/libexec/reader","--json"],"optional":true})");
+        write(system + "/broken.json", "{not json");
+        write(system + "/both.json", R"({"schema":1,"id":"both","name":"B","command":["/bin/x"],"dbus":{"service":"a.b","path":"/","interface":"a.b"}})");
+        write(system + "/relative.json", R"({"schema":1,"id":"relative","name":"R","command":["reader"]})");
+        write(system + "/misnamed.json", R"({"schema":1,"id":"other","name":"M","command":["/bin/x"]})");
+        write(system + "/Bad-Id.json", R"({"schema":1,"id":"Bad-Id","name":"M","command":["/bin/x"]})");
+        write(system + "/nosource.json", R"({"schema":1,"id":"nosource","name":"N"})");
+        write(system + "/badpath.json", R"({"schema":1,"id":"badpath","name":"N","dbus":{"service":"a.b","path":"relative","interface":"a.b"}})");
+        write(user + "/reader.json", R"({"schema":1,"id":"reader","name":"My reader","command":["/home/u/bin/reader"],"order":5})");
+        write(user + "/mine.json", R"({"schema":1,"id":"mine","name":"Mine","command":["/home/u/bin/mine"],"future":"ignored"})");
+        QStringList errors;
+        const auto list = Care::usageProviders({system, user, d.path() + "/missing"}, &errors);
+        QStringList ids; for (const auto &p : list) ids.append(p.id);
+        QCOMPARE(ids, (QStringList{"reader", "codex", "mine"})); // by order, then id
+        QCOMPARE(errors.size(), 7);
+        QCOMPARE(list[0].name, "My reader"); QVERIFY(list[0].file.startsWith(user)); QVERIFY(!list[0].optional);
+        QCOMPARE(list[0].timeout, 10000); QCOMPARE(list[0].command, (QStringList{"/home/u/bin/reader"}));
+        QVERIFY(list[1].dbus()); QCOMPARE(list[1].timeout, 35000); QCOMPARE(list[1].service, "com.rungic.VoiceAgent");
+        // The descriptors this repository ships load.
+        for (const auto *file : {"/../agent-usage/claude-code.json", "/../../voice-agent/agent-usage/codex.json"}) {
+            const QString path = QStringLiteral(CARE_TESTDATA) + file;
+            if (!QFile::exists(path)) continue; // the voice agent's tree is not part of this package's build
+            QCOMPARE(Care::validateUsageProvider(Care::readObject(path), QFileInfo(path).fileName()), QString());
+        }
+    }
+    void usageViewOrdersProvidersAndChoosesPrimary() {
+        Care::Usage u(""); u.setProviders({provider("a", 10), provider("b", 20), provider("c", 30, true)});
+        auto v = u.view(100);
+        QCOMPARE(v["schema"].toInt(), 2); QCOMPARE(v["providers"].toArray().size(), 2); // optional c not seen yet
+        QCOMPARE(v["primary"].toString(), "a"); // nothing active: the first
+        QCOMPARE(shown(v, "a")["status"].toString(), "connecting"); QVERIFY(shown(v, "a")["stale"].toBool());
+        QCOMPARE(shown(v, "a")["name"].toString(), "A"); QCOMPARE(shown(v, "a")["vendor"].toString(), "V");
+        u.snapshot("a", {{"accountKey", "k"}}, 101); u.snapshot("b", {{"accountKey", "k"}}, 101);
+        u.record("b", token("k", "s", 50, 50), 102);
+        QCOMPARE(u.view(103)["primary"].toString(), "b"); // most recently active
+        u.snapshot("a", {{"accountKey", "k"}, {"status", "working"}}, 90);
+        QCOMPARE(u.view(104)["primary"].toString(), "a"); // working wins
+        u.snapshot("c", {{"status", "ready"}, {"lastActive", 500}}, 105);
+        v = u.view(106);
+        QCOMPARE(v["providers"].toArray().size(), 3); QCOMPARE(v["providers"].toArray()[2].toObject()["id"].toString(), "c");
+        QCOMPARE(v["primary"].toString(), "a");
+        u.snapshot("a", {{"accountKey", "k"}, {"status", "ready"}}, 107);
+        QCOMPARE(u.view(108)["primary"].toString(), "c");
+        QCOMPARE(u.view(108)["updatedAt"].toInteger(), 107);
+        u.snapshot("c", {{"available", false}}, 109);
+        QCOMPARE(u.view(110)["providers"].toArray().size(), 2); // its agent isn't used here
+        Care::Usage none(""); QCOMPARE(none.view(1)["primary"].toString(), QString());
+    }
+    void usageAccountsAreIsolatedPerProvider() {
+        Care::Usage u(""); u.setProviders({provider("a"), provider("b")});
+        u.snapshot("a", {{"accountKey", "same"}}, 100); u.snapshot("b", {{"accountKey", "same"}}, 100);
+        u.record("a", token("same", "s", 300, 300), 101);
+        auto v = u.view(102);
+        QCOMPARE(shown(v, "a")["tokens"].toObject()["device"].toInteger(), 300);
+        QVERIFY(shown(v, "b")["tokens"].toObject()["device"].isNull()); // the same key under another agent is not shared
+        u.record("b", token("same", "s", 300, 300), 103); // the same session id under another agent counts separately
+        QCOMPARE(shown(u.view(104), "b")["tokens"].toObject()["device"].toInteger(), 300);
+        QCOMPARE(shown(u.view(104), "a")["tokens"].toObject()["device"].toInteger(), 300);
+    }
+    void usageStaleAndErrorArePerProvider() {
+        Care::Usage u(""); u.setProviders({provider("a"), provider("b")});
+        u.snapshot("a", {{"accountKey", "k"}}, 100); u.snapshot("b", {{"accountKey", "k"}}, 100);
+        u.failure("b", "B is unavailable");
+        auto v = u.view(101);
+        QVERIFY(!shown(v, "a")["stale"].toBool()); QCOMPARE(shown(v, "a")["error"].toString(), QString());
+        QVERIFY(shown(v, "b")["stale"].toBool()); QCOMPARE(shown(v, "b")["status"].toString(), "error");
+        QCOMPARE(shown(v, "b")["error"].toString(), "B is unavailable");
+        u.failure("a", {}, true);
+        QCOMPARE(shown(u.view(102), "a")["status"].toString(), "offline"); QVERIFY(shown(u.view(102), "a")["stale"].toBool());
+        u.snapshot("b", {{"accountKey", "k"}}, 103);
+        QVERIFY(!shown(u.view(104), "b")["stale"].toBool()); QCOMPARE(shown(u.view(104), "b")["status"].toString(), "ready");
+    }
+    void usageDropsUnknownFields() {
+        Care::Usage u(""); u.setProviders({provider("a")});
+        u.snapshot("a", {{"accountKey", "secret-key"}, {"email", "someone@example.com"}, {"name", "Spoofed"}, {"id", "other"},
+            {"status", "dancing"}, {"model", "m"}, {"tokenEvents", QJsonArray{}},
+            {"account", QJsonObject{{"kind", "subscription"}, {"label", "L"}, {"plan", "p"}, {"token", "sk-secret"}}},
+            {"tokens", QJsonObject{{"account", 12}, {"device", -3}, {"cost", 5}}},
+            {"limits", QJsonArray{QJsonObject{{"id", "x"}, {"usedPercent", 5}, {"secret", "y"}}, QJsonObject{{"id", "no-percent"}}}}}, 100);
+        const auto p = shown(u.view(101), "a");
+        const auto text = QJsonDocument(p).toJson();
+        for (const auto *leak : {"secret", "someone", "Spoofed", "cost", "dancing", "tokenEvents"}) QVERIFY2(!text.contains(leak), leak);
+        const auto keys = p.keys();
+        QCOMPARE(QSet<QString>(keys.begin(), keys.end()), (QSet<QString>{"id", "name", "vendor", "status", "account", "model", "tokens", "limits", "updatedAt", "stale", "error"}));
+        QCOMPARE(p["name"].toString(), "A"); QCOMPARE(p["status"].toString(), "ready");
+        QCOMPARE(p["account"].toObject().keys(), (QStringList{"kind", "label", "plan"}));
+        QCOMPARE(p["tokens"].toObject()["account"].toInteger(), 12); QVERIFY(p["tokens"].toObject()["device"].isNull());
+        QCOMPARE(p["limits"].toArray().size(), 1);
+        QCOMPARE(p["limits"].toArray()[0].toObject().keys(), (QStringList{"expired", "id", "label", "resetsAt", "usedPercent", "windowMinutes"}));
+    }
+    void usageAdapterLedgerTokensPassThrough() {
+        Care::Usage u(""); u.setProviders({provider("reader")});
+        u.snapshot("reader", {{"tokens", QJsonObject{{"device", 1375}, {"today", 1322}}}}, 100);
+        const auto t = shown(u.view(101), "reader")["tokens"].toObject();
+        QCOMPARE(t["device"].toInteger(), 1375); QCOMPARE(t["today"].toInteger(), 1322); QVERIFY(t["account"].isNull());
+    }
+    void claudeCodeTranscriptsCountEachMessageOnce() {
+        QTemporaryDir d; const auto root = d.path() + "/claude";
+        const QString fixture = QStringLiteral(CARE_TESTDATA) + "/claude-code/projects/-home-u-proj";
+        for (const auto *file : {"/s1.jsonl", "/s2.jsonl", "/s1/subagents/agent-x.jsonl"}) {
+            QFile f(fixture + file); QVERIFY(f.open(QIODevice::ReadOnly));
+            write(root + "/projects/-home-u-proj" + file, f.readAll());
+        }
+        const Care::ClaudeCode::Paths paths{{root}, d.path() + "/ledger.json", d.path() + "/statusline.json"};
+        const auto now = QDateTime::fromString("2026-09-30T12:00:00Z", Qt::ISODate).toSecsSinceEpoch();
+        auto r = Care::ClaudeCode::read(paths, now);
+        // msg_A (1115, in two files) + msg_B (53, yesterday) + msg_C (7) + subagent msg_D (200)
+        QCOMPARE(r["tokens"].toObject()["device"].toInteger(), 1375);
+        QCOMPARE(r["tokens"].toObject()["today"].toInteger(), 1322);
+        QCOMPARE(r["model"].toString(), "claude-sonnet-5"); QCOMPARE(r["status"].toString(), "ready");
+        QCOMPARE(r["lastActive"].toInteger(), QDateTime::fromString("2026-09-30T02:00:00Z", Qt::ISODate).toSecsSinceEpoch());
+        QVERIFY(!r.contains("limits")); QVERIFY(!r.contains("error")); QVERIFY(!r.contains("account"));
+        QCOMPARE(Care::ClaudeCode::read(paths, now)["tokens"].toObject()["device"].toInteger(), 1375); // no recount
+        QFile s1(root + "/projects/-home-u-proj/s1.jsonl"); QVERIFY(s1.open(QIODevice::Append));
+        s1.write(R"({"type":"assistant","message":{"id":"msg_E","usage":{"input_tokens":400,"output_tokens)"); s1.flush();
+        QCOMPARE(Care::ClaudeCode::read(paths, now)["tokens"].toObject()["device"].toInteger(), 1375); // half a line waits
+        s1.write(R"(":600}},"requestId":"req_E","timestamp":"2026-09-30T11:00:00.000Z","sessionId":"s1","uuid":"a9"})" "\n"); s1.close();
+        QCOMPARE(Care::ClaudeCode::read(paths, now)["tokens"].toObject()["device"].toInteger(), 2375);
+        const auto during = QDateTime::fromString("2026-09-30T11:01:00Z", Qt::ISODate).toSecsSinceEpoch();
+        QCOMPARE(Care::ClaudeCode::read(paths, during)["status"].toString(), "working"); // a response a minute ago
+        QVERIFY(QFile::remove(root + "/projects/-home-u-proj/s2.jsonl")); // Claude Code's cleanup
+        r = Care::ClaudeCode::read(paths, now + 86400);
+        QCOMPARE(r["tokens"].toObject()["device"].toInteger(), 2375); QCOMPARE(r["tokens"].toObject()["today"].toInteger(), 0);
+        QCOMPARE(r["status"].toString(), "ready");
+        QVERIFY(!(QFileInfo(paths.ledger).permissions() & (QFile::ReadGroup | QFile::ReadOther)));
+        // A first read cut short by its time budget continues next time instead of starting over.
+        const Care::ClaudeCode::Paths fresh{{root}, d.path() + "/fresh.json", d.path() + "/statusline.json"};
+        r = Care::ClaudeCode::read(fresh, now, 0);
+        QVERIFY(!r["error"].toString().isEmpty());
+        QCOMPARE(Care::ClaudeCode::read(fresh, now)["tokens"].toObject()["device"].toInteger(), 2368); // s2 (msg_C) is gone
+        QCOMPARE(Care::ClaudeCode::lineTokens(QJsonObject{{"message", QJsonObject{{"usage", QJsonObject{{"input_tokens", 1},
+            {"cache_creation_input_tokens", 9}, {"cache_creation", QJsonObject{{"ephemeral_5m_input_tokens", 2}, {"ephemeral_1h_input_tokens", 3}}}}}}}}), 6);
+        const Care::ClaudeCode::Paths nothing{{d.path() + "/none"}, d.path() + "/n.json", d.path() + "/ns.json"};
+        QCOMPARE(Care::ClaudeCode::read(nothing, now), (QJsonObject{{"available", false}}));
+    }
+    void claudeCodeLimitsOnlyFromTheDocumentedStatusline() {
+        QTemporaryDir d;
+        const Care::ClaudeCode::Paths paths{{d.path() + "/none"}, d.path() + "/ledger.json", d.path() + "/statusline.json"};
+        QFile f(QStringLiteral(CARE_TESTDATA) + "/claude-code/statusline.json"); QVERIFY(f.open(QIODevice::ReadOnly));
+        const auto input = f.readAll();
+        const qint64 now = 1738420000;
+        QCOMPARE(Care::ClaudeCode::statusline(input, paths, now), "Opus · 5h 24% · 7d 41%");
+        const auto kept = QString::fromUtf8(QJsonDocument(Care::readObject(paths.statusline)).toJson());
+        QVERIFY(!kept.contains("transcript_path") && !kept.contains("cost") && !kept.contains("/home/u"));
+        auto r = Care::ClaudeCode::read(paths, now + 60);
+        QVERIFY(!r.contains("tokens")); QCOMPARE(r["model"].toString(), "claude-opus-5-5");
+        QCOMPARE(r["account"].toObject()["kind"].toString(), "subscription");
+        const auto limits = r["limits"].toArray(); QCOMPARE(limits.size(), 2);
+        QCOMPARE(limits[0].toObject()["windowMinutes"].toInt(), 300); QCOMPARE(limits[0].toObject()["usedPercent"].toDouble(), 23.5);
+        QCOMPARE(limits[0].toObject()["resetsAt"].toInteger(), 1738425600); QCOMPARE(limits[1].toObject()["windowMinutes"].toInt(), 10080);
+        // A new session's input before its first response has no rate_limits: the last ones stay.
+        auto next = QJsonDocument::fromJson(input).object(); next.remove("rate_limits");
+        Care::ClaudeCode::statusline(QJsonDocument(next).toJson(), paths, now + 120);
+        QCOMPARE(Care::ClaudeCode::read(paths, now + 180)["limits"].toArray().size(), 2);
+        QVERIFY(!Care::ClaudeCode::read(paths, now + 3721).contains("limits")); // an hour without a new reading
+        // A window Claude Code dropped (reset) goes; a malformed percentage (claude-code#52326) is not kept.
+        next["rate_limits"] = QJsonObject{{"seven_day", QJsonObject{{"used_percentage", 1738857600}, {"resets_at", 1738857600}}}};
+        Care::ClaudeCode::statusline(QJsonDocument(next).toJson(), paths, now + 4000);
+        QVERIFY(Care::ClaudeCode::read(paths, now + 4001)["limits"].toArray().isEmpty());
+        QCOMPARE(Care::ClaudeCode::statusline("not json", paths, now), QString());
     }
     void staleReferencesNeverCreateRecords() {
         QTemporaryDir d; const auto path = d.path() + "/state.json";

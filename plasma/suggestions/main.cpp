@@ -2,6 +2,7 @@
 #include "service.h"
 #include "collector.h"
 #include "layout.h"
+#include "usage.h"
 #include <KLocalizedString>
 #include <QCoreApplication>
 #include <QDBusConnection>
@@ -10,6 +11,7 @@
 #include <QDBusReply>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QLockFile>
 #include <QStandardPaths>
@@ -45,6 +47,15 @@ int main(int argc, char **argv) {
         for (const auto &e : errors) fprintf(stderr, "%s\n", qPrintable(e));
         printf("%lld entries\n", qlonglong(entries.size())); return errors.isEmpty() ? 0 : 1;
     }
+    if (args.value(1) == "--validate-usage-providers") {
+        // Build check for the descriptors a package ships (docs/research/95): every file must load.
+        int invalid = 0;
+        for (const auto &file : args.mid(2)) {
+            const auto problem = Care::validateUsageProvider(Care::readObject(file), QFileInfo(file).fileName());
+            if (!problem.isEmpty()) { fprintf(stderr, "%s: %s\n", qPrintable(file), qPrintable(problem)); ++invalid; }
+        }
+        return invalid || args.size() < 3 ? 1 : 0;
+    }
     auto bus = QDBusConnection::sessionBus();
     if (args.contains("--service")) {
         QDir().mkpath(stateDir);
@@ -62,9 +73,10 @@ int main(int argc, char **argv) {
     else if (command == "update") { method = "Update"; params = {args.value(2), args.value(3)}; }
     else if (command == "act") { method = "Act"; params = {args.value(2), args.value(3), args.value(4, "{}")}; }
     else if (command == "knowledge") method = "Knowledge";
+    else if (command == "usage") method = "AgentUsage";
     else if (command == "refresh") method = "Refresh";
     else if (command != "list") {
-        fprintf(stderr, "Usage: rungic-suggestions list|get ID|act ID ACTION [JSON]|update ID JSON|feedback ID|knowledge|refresh\n"); return 2;
+        fprintf(stderr, "Usage: rungic-suggestions list|get ID|act ID ACTION [JSON]|update ID JSON|feedback ID|knowledge|usage|refresh\n"); return 2;
     }
     const auto reply = service.callWithArgumentList(QDBus::Block, method, params);
     if (reply.type() == QDBusMessage::ErrorMessage) { fprintf(stderr, "%s\n", qPrintable(reply.errorMessage())); return 1; }

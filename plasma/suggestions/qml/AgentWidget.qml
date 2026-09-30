@@ -16,8 +16,10 @@ Item {
     KI18nContext { id: l10n; translationDomain: "rungic-suggestions" }
     UsageClient { id: usage }
     SuggestionsClient { id: navigation }
-    readonly property var usageData: usage.data
-    readonly property var windows: usageData.windows || []
+    // The provider to show first (AgentUsage schema 2); the widget's full redesign is separate.
+    readonly property var usageData: usage.primary
+    readonly property var windows: usageData.limits || []
+    readonly property string agentName: usageData.name || "Agent"
     Timer { interval: 60000; repeat: true; running: widget.activeView; onTriggered: { widget.now = Date.now() / 1000; usage.refresh() } }
     onActiveViewChanged: if (activeView) usage.refresh()
     Rectangle {
@@ -27,13 +29,13 @@ Item {
             anchors.fill: parent; anchors.margins: 12; spacing: 12
             QQC2.AbstractButton {
                 implicitWidth: 54; implicitHeight: 66
-                Accessible.name: l10n.i18n("Open the Codex assistant")
+                Accessible.name: l10n.i18n("Open the %1 assistant", widget.agentName)
                 onClicked: navigation.openAgent()
                 background: null
                 contentItem: ColumnLayout {
                     spacing: 4
-                    PixelAgent { Layout.alignment: Qt.AlignHCenter; animate: widget.activeView; working: widget.usageData.activity === "working" }
-                    Text { text: "Codex"; color: Theme.text; font.pixelSize: 11; Layout.alignment: Qt.AlignHCenter }
+                    PixelAgent { Layout.alignment: Qt.AlignHCenter; animate: widget.activeView; working: widget.usageData.status === "working" }
+                    Text { text: widget.agentName; color: Theme.text; font.pixelSize: 11; Layout.alignment: Qt.AlignHCenter }
                 }
             }
             QQC2.AbstractButton {
@@ -43,10 +45,10 @@ Item {
                 background: Rectangle { radius: 10; color: parent.down ? Theme.hover : "transparent" }
                 contentItem: ColumnLayout {
                     spacing: 4
-                    Text { text: (({working: l10n.i18n("Working"), ready: l10n.i18n("Ready"), offline: l10n.i18n("Not connected")})[widget.usageData.activity] || l10n.i18n("Connecting")) + " · " + UsageText.mode(l10n, widget.usageData); color: Theme.dim; font.pixelSize: 11; Layout.fillWidth: true; elide: Text.ElideRight }
+                    Text { text: UsageText.status(l10n, widget.usageData) + " · " + UsageText.mode(l10n, widget.usageData); color: Theme.dim; font.pixelSize: 11; Layout.fillWidth: true; elide: Text.ElideRight }
                     Text { text: UsageText.token(l10n, widget.usageData); color: Theme.text; font.pixelSize: 13; font.weight: Font.DemiBold; Layout.fillWidth: true; elide: Text.ElideRight }
                     Text {
-                        text: widget.usageData.error ? l10n.i18n("Usage not updated yet · View details") : widget.windows.length ? l10n.i18nc("@info %1 percent used, %2 when it resets", "%1% used · %2", widget.windows[0].usedPercent, UsageText.reset(l10n, widget.windows[0], widget.now)) : widget.usageData.authMode === "apiKey" ? l10n.i18n("Pay as you go · no subscription reset") : l10n.i18n("View account usage and limits")
+                        text: widget.usageData.error || usage.data.error ? l10n.i18n("Usage not updated yet · View details") : widget.windows.length ? l10n.i18nc("@info %1 percent used, %2 when it resets", "%1% used · %2", widget.windows[0].usedPercent, UsageText.reset(l10n, widget.windows[0], widget.now)) : (widget.usageData.account || {}).kind === "api-key" ? l10n.i18n("Pay as you go · no subscription reset") : l10n.i18n("View account usage and limits")
                         color: Theme.dim; font.pixelSize: 10; Layout.fillWidth: true; wrapMode: Text.Wrap; maximumLineCount: 2; elide: Text.ElideRight
                     }
                 }

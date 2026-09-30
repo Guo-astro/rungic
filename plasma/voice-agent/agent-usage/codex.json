@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "id": "codex",
+  "name": "Codex",
+  "vendor": "OpenAI",
+  "order": 10,
+  "dbus": {
+    "service": "com.rungic.VoiceAgent",
+    "path": "/com/rungic/VoiceAgent",
+    "interface": "com.rungic.VoiceAgent",
+    "method": "Usage"
+  },
+  "timeoutSeconds": 35
+}

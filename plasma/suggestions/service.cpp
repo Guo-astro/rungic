@@ -16,6 +16,9 @@
 #include <QJsonDocument>
 #include <QProcess>
 #include <QProcessEnvironment>
+#include <QStandardPaths>
+#include <QTimer>
+#include <memory>
 #include <QUrl>
 #include <QtConcurrent>
 
@@ -30,6 +33,7 @@ Suggestions::Suggestions(const QString &state, const QString &feed, const QStrin
     ready = model.load(&error);
     if (!ready) { qCritical("%s", qPrintable(error)); return; }
     model.recoverTasks();
+    loadUsageProviders(QDateTime::currentSecsSinceEpoch());
     auto bus = QDBusConnection::sessionBus();
     bus.connect(Voice, VoicePath, Voice, "Event", this, SLOT(AgentEvent(QString)));
     bus.connect("org.freedesktop.Notifications", "/org/freedesktop/Notifications", "org.freedesktop.Notifications",
@@ -41,6 +45,11 @@ Suggestions::Suggestions(const QString &state, const QString &feed, const QStrin
     connect(bus.interface(), &QDBusConnectionInterface::serviceOwnerChanged, this,
             [this](const QString &name, const QString &, const QString &owner) {
                 if (owner.isEmpty()) visibleClients.remove(name);
+                for (const auto &p : usage.providers()) {
+                    if (!p.dbus() || p.service != name) continue;
+                    if (owner.isEmpty()) { usage.failure(p.id, {}, true); Q_EMIT UsageChanged(); }
+                    else ProviderChanged(p.id);
+                }
                 if (name == Voice) {
                     if (owner.isEmpty()) { model.recoverTasks(); publish(); }
                     else recover();
@@ -50,22 +59,116 @@ Suggestions::Suggestions(const QString &state, const QString &feed, const QStrin
     connect(&scanTimer, &QTimer::timeout, this, &Suggestions::Refresh);
     scanTimer.start(); QTimer::singleShot(0, this, &Suggestions::Refresh);
 }
+// Agent usage (docs/research/95): each provider's source is read only while someone looks at the
+// usage (AgentUsage calls within the last few minutes), at most every 30 s unless it says it changed.
+static constexpr qint64 UsageInterval = 30, UsageWatchWindow = 180, UsageReplyLimit = 1024 * 1024;
+void Suggestions::loadUsageProviders(qint64 now) {
+    providersLoaded = now;
+    QStringList directories;
+    const auto override = qEnvironmentVariable("RUNGIC_AGENT_USAGE_PROVIDERS");
+    if (!override.isEmpty()) directories = override.split(':', Qt::SkipEmptyParts);
+    else {
+        // XDG_DATA_DIRS lowest precedence first (/usr/share), the user's own ~/.local/share last.
+        const auto locations = QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation);
+        for (auto it = locations.crbegin(); it != locations.crend(); ++it) directories.append(*it + "/rungic/agent-usage/providers");
+    }
+    QStringList errors;
+    usage.setProviders(Care::usageProviders(directories, &errors));
+    if (errors != usageDescriptorErrors) for (const auto &e : errors) qWarning("agent usage descriptor ignored: %s", qPrintable(e));
+    usageDescriptorErrors = errors;
+}
 QString Suggestions::AgentUsage() {
     RefreshAgentUsage();
     return encoded(usage.view(QDateTime::currentSecsSinceEpoch()));
 }
 void Suggestions::RefreshAgentUsage() {
     const auto now = QDateTime::currentSecsSinceEpoch();
-    if (usageRefreshing || now - usageAttempt < 30) return;
-    usageRefreshing = true; usageAttempt = now;
-    auto request = QDBusMessage::createMethodCall(Voice, VoicePath, Voice, "Usage");
-    auto *w = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(request, 35000), this);
-    connect(w, &QDBusPendingCallWatcher::finished, this, [this, w] {
-        QDBusPendingReply<QString> reply = *w; w->deleteLater(); usageRefreshing = false;
-        if (reply.isError()) usage.error(i18n("Agent usage is unavailable right now; try again later"));
-        else usage.snapshot(QJsonDocument::fromJson(reply.value().toUtf8()).object(), QDateTime::currentSecsSinceEpoch());
-        Q_EMIT UsageChanged();
+    usageWatched = now;
+    if (now - providersLoaded >= UsageInterval) loadUsageProviders(now); // packages add and remove adapters
+    for (const auto &p : usage.providers()) refreshUsage(p, false);
+}
+void Suggestions::ProviderChanged(const QString &id) {
+    for (const auto &p : usage.providers()) {
+        if (p.id != id) continue;
+        if (QDateTime::currentSecsSinceEpoch() - usageWatched < UsageWatchWindow) refreshUsage(p, true);
+        else usageFetches[id].dirty = true; // read first thing when someone looks again
+    }
+}
+void Suggestions::RecordTokens(const QString &provider, const QString &json) {
+    if (usage.record(provider, QJsonDocument::fromJson(json.toUtf8()).object(), QDateTime::currentSecsSinceEpoch())) Q_EMIT UsageChanged();
+}
+void Suggestions::refreshUsage(const Care::UsageProvider &p, bool force) {
+    auto &f = usageFetches[p.id];
+    const auto now = QDateTime::currentSecsSinceEpoch();
+    if (force) f.dirty = true;
+    if (f.running) return; // read again when this one finishes
+    if (!f.dirty && now - f.attempt < UsageInterval) return;
+    if (now - f.attempt < 2) {
+        QTimer::singleShot(2000, this, [this, id = p.id] {
+            for (const auto &q : usage.providers()) if (q.id == id) refreshUsage(q, false);
+        });
+        return;
+    }
+    f.running = true; f.dirty = false; f.attempt = now;
+    readUsage(p);
+}
+void Suggestions::usageDone(const Care::UsageProvider &p) {
+    auto &f = usageFetches[p.id];
+    f.running = false;
+    Q_EMIT UsageChanged();
+    if (f.dirty && QDateTime::currentSecsSinceEpoch() - usageWatched < UsageWatchWindow) refreshUsage(p, false);
+}
+void Suggestions::accept(const Care::UsageProvider &p, const QByteArray &reply) {
+    QJsonParseError error{};
+    const auto document = QJsonDocument::fromJson(reply, &error);
+    if (error.error != QJsonParseError::NoError || !document.isObject()) usage.failure(p.id, i18n("%1 returned usage that can't be read", p.name));
+    else usage.snapshot(p.id, document.object(), QDateTime::currentSecsSinceEpoch());
+}
+void Suggestions::readUsage(const Care::UsageProvider &p) {
+    if (p.dbus()) {
+        auto request = QDBusMessage::createMethodCall(p.service, p.path, p.interface, p.method);
+        request.setAutoStartService(false); // not running is "offline", not a reason to start an agent
+        auto *w = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(request, p.timeout), this);
+        connect(w, &QDBusPendingCallWatcher::finished, this, [this, w, p] {
+            QDBusPendingReply<QString> reply = *w; w->deleteLater();
+            if (!reply.isError()) accept(p, reply.value().toUtf8());
+            else if (reply.error().type() == QDBusError::ServiceUnknown || reply.error().name() == "org.freedesktop.DBus.Error.NameHasNoOwner")
+                usage.failure(p.id, {}, true);
+            else usage.failure(p.id, i18n("%1 usage is unavailable right now; try again later", p.name));
+            usageDone(p);
+        });
+        return;
+    }
+    // A reader: no shell, no input, bounded output and time.
+    auto *process = new QProcess(this);
+    process->setProgram(p.command.first());
+    process->setArguments(p.command.mid(1));
+    process->setStandardInputFile(QProcess::nullDevice());
+    process->setStandardErrorFile(QProcess::nullDevice());
+    struct Run { QByteArray output; bool done = false, late = false; };
+    auto run = std::make_shared<Run>();
+    const auto finish = [this, process, p, run](const QString &problem) {
+        if (run->done) return;
+        run->done = true;
+        if (problem.isEmpty()) accept(p, run->output); else usage.failure(p.id, problem);
+        process->deleteLater();
+        usageDone(p);
+    };
+    connect(process, &QProcess::readyReadStandardOutput, this, [process, run] {
+        run->output += process->readAllStandardOutput();
+        if (run->output.size() > UsageReplyLimit) process->kill();
     });
+    connect(process, &QProcess::finished, this, [process, p, run, finish](int code, QProcess::ExitStatus status) {
+        run->output += process->readAllStandardOutput();
+        if (run->late) finish(i18n("The usage reader for %1 didn't answer in time", p.name));
+        else if (status != QProcess::NormalExit || code != 0 || run->output.size() > UsageReplyLimit) finish(i18n("The usage reader for %1 failed", p.name));
+        else finish({});
+    });
+    connect(process, &QProcess::errorOccurred, this, [p, finish](QProcess::ProcessError e) {
+        if (e == QProcess::FailedToStart) finish(i18n("The usage reader for %1 isn't installed", p.name));
+    });
+    QTimer::singleShot(p.timeout, process, [process, run] { run->late = true; process->kill(); });
+    process->start();
 }
 QString Suggestions::List() { return encoded({{"items", model.list()}, {"groups", model.groups()}, {"historyGroups", model.groups(true)}, {"coverage", coverage}, {"schema", 2}}); }
 QString Suggestions::Get(const QString &id) { return encoded(model.get(id)); }
@@ -237,13 +340,15 @@ QString Suggestions::Act(const QString &id, const QString &action, const QString
 }
 void Suggestions::AgentEvent(const QString &json) {
     const auto e = QJsonDocument::fromJson(json.toUtf8()).object();
-    if (e["type"] == "usage-changed") { usage.identity(e["accountKey"].toString()); Q_EMIT UsageChanged(); }
+    // Compatibility for one release (remove after 2026-10): a voice agent from before RecordTokens and
+    // ProviderChanged only signals its Codex usage. Repeats are harmless: counts are high-water marks.
+    if (e["type"] == "usage-changed") { usage.identity("codex", e["accountKey"].toString()); Q_EMIT UsageChanged(); }
     if (e["type"] == "token-usage") {
-        usage.token(e, QDateTime::currentSecsSinceEpoch()); Q_EMIT UsageChanged(); return;
+        if (usage.record("codex", Care::codexTokenEvent(e), QDateTime::currentSecsSinceEpoch())) Q_EMIT UsageChanged();
+        return;
     }
-    if (QStringList{"account", "usage-changed", "agent-started", "agent-finished", "agent-restarted"}.contains(e["type"].toString())) {
-        usageAttempt = 0; RefreshAgentUsage();
-    }
+    if (QStringList{"account", "usage-changed", "agent-started", "agent-finished", "agent-restarted"}.contains(e["type"].toString()))
+        ProviderChanged("codex");
     const auto id = e["suggestion"].toString(), taskId = e["suggestionTask"].toString();
     QJsonObject event;
     const auto type = e["type"].toString();

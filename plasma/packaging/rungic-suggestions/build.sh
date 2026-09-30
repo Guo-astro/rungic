@@ -3,6 +3,7 @@ cmake -S "$S" -B "$S/build" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PR
 cmake --build "$S/build" -j"${JOBS:-4}"
 ctest --test-dir "$S/build" --output-on-failure
 RUNGIC_COMPATIBILITY="$SRC/compatibility/entries" "$S/build/rungic-suggestions" --validate-knowledge
+"$S/build/rungic-suggestions" --validate-usage-providers "$S"/agent-usage/*.json
 DESTDIR="$DESTDIR" cmake --install "$S/build"
 install -Dm644 "$S/rungic-suggestions.service" "$DESTDIR/usr/lib/systemd/user/rungic-suggestions.service"
 install -Dm644 "$S/com.rungic.Suggestions.service" "$DESTDIR/usr/share/dbus-1/services/com.rungic.Suggestions.service"
