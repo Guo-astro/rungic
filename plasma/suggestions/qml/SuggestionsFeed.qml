@@ -10,6 +10,7 @@ Rectangle {
     id: feed
     property bool home: false
     property string selectedId: ""
+    readonly property bool groupDetail: selectedId.startsWith("group:")
     property bool activeView: visible && Window.active
     property bool history: false
     property string message: ""
@@ -21,7 +22,7 @@ Rectangle {
     color: Theme.side
     SuggestionsClient { id: client }
     PresentationTracker { view: list; suggestionsClient: client; active: feed.activeView && !snooze.visible && !applyDialog.visible; selectedId: feed.selectedId }
-    readonly property var clientItems: client.items
+    readonly property var clientItems: [client.items, client.groups, client.historyGroups]
     onClientItemsChanged: {
         if (list.moving) pendingRefresh = true
         else rebuild()
@@ -39,7 +40,8 @@ Rectangle {
         const atBeginning = !populated || list.contentY <= list.originY + 1
         const y = list.contentY - list.originY
         populated = client.items.length > 0
-        shown = client.items.filter(i => history ? ["resolved", "dismissed"].includes(i.state) : !["resolved", "dismissed"].includes(i.state))
+        const items = client.items.filter(i => history ? ["resolved", "dismissed"].includes(i.state) : !["resolved", "dismissed"].includes(i.state))
+        shown = groupDetail ? items.filter(i => i.groupId === selectedId) : selectedId ? items : (history ? client.historyGroups : client.groups)
         pendingRefresh = false
         Qt.callLater(() => {
             if (selectedId && !positioned && client.items.some(i => i.id === selectedId)) {
@@ -96,11 +98,11 @@ Rectangle {
             RowLayout {
                 Layout.fillWidth: true; Layout.leftMargin: 22; Layout.rightMargin: 22
                 Text { text: feed.home ? "今天" : "建议"; font.pixelSize: feed.home ? 32 : 26; font.weight: Font.DemiBold; color: Theme.text; Layout.fillWidth: true }
-                PillButton { text: "Agent"; onClicked: client.open() }
+                PillButton { text: feed.selectedId ? "全部建议" : "Agent"; onClicked: { if (feed.selectedId) feed.selectedId = ""; else client.openAgent() } }
             }
             Text {
                 Layout.leftMargin: 22; Layout.rightMargin: 22; Layout.fillWidth: true
-                text: feed.home ? new Date().toLocaleDateString(Qt.locale("zh_CN"), "M月d日 dddd") + " · 为你留意手机的使用情况" : "发现的问题、改善建议和处理进展，都保留在这里。"
+                text: feed.groupDetail ? "相关记录分别保留证据和调查结论；同组不代表相同根因。" : feed.home ? new Date().toLocaleDateString(Qt.locale("zh_CN"), "M月d日 dddd") + " · 为你留意手机的使用情况" : "发现的问题、改善建议和处理进展，都保留在这里。"
                 font.pixelSize: 13; color: Theme.dim; wrapMode: Text.Wrap
             }
             RowLayout {
@@ -134,11 +136,20 @@ Rectangle {
         }
         delegate: Item {
             required property var modelData
-            readonly property var suggestionRecord: modelData
+            readonly property var suggestionRecord: modelData.members ? modelData.members[0] : modelData
             width: list.width
-            height: card.height
+            height: modelData.members ? stackCard.height : card.height
+            SuggestionStack {
+                id: stackCard
+                visible: !!parent.modelData.members
+                item: parent.modelData
+                width: Math.min(list.width - 32, 680)
+                anchors.horizontalCenter: parent.horizontalCenter
+                onClicked: { feed.selectedId = item.id; feed.beginning() }
+            }
             SuggestionCard {
             id: card
+            visible: !parent.modelData.members
             item: parent.modelData
             width: Math.min(list.width - 32, 680)
             anchors.horizontalCenter: parent.horizontalCenter

@@ -13,7 +13,7 @@ Item {
     property bool activeView: visible && Window.active
     property var pending: []
     property bool refreshPending: false
-    readonly property var clientItems: client.items
+    readonly property var clientItems: client.groups
     onClientItemsChanged: {
         if (list && (list.moving || pointer.pressed)) refreshPending = true
         else rebuild()
@@ -22,7 +22,7 @@ Item {
         if (!list) return
         const top = list.atYBeginning
         const offset = list.contentY - list.originY
-        pending = client.items.filter(i => !["resolved", "dismissed"].includes(i.state))
+        pending = client.groups
         refreshPending = false
         Qt.callLater(() => {
             if (top) list.positionViewAtBeginning()
@@ -86,45 +86,14 @@ Item {
                 background: null
                 contentItem: Rectangle { radius: 2; color: "#90ffffff" }
             }
-            delegate: QQC2.AbstractButton {
+            delegate: SuggestionStack {
                 id: card
                 required property var modelData
-                readonly property var suggestionRecord: modelData
+                item: modelData
+                readonly property var suggestionRecord: modelData.members[0]
                 width: list.width
-                height: 139
-                readonly property var evidence: modelData.evidence || ({})
-                readonly property string title: evidence.package === "plasma-workspace" ? "桌面组件曾意外退出" : (modelData.title || "建议")
-                Accessible.name: title + "，查看建议"
                 onClicked: client.open(modelData.id)
-                background: Rectangle {
-                    radius: 22
-                    color: card.down || (pointer.pressed && !pointer.dragged && pointer.pressId === card.modelData.id) ? Theme.hover : Theme.background
-                    border.width: 1
-                    border.color: Theme.line
-                }
-                contentItem: ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: 16
-                    spacing: 7
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Icon { name: card.modelData.kind === "fault" ? "alert" : "compose"; color: Theme.link; implicitWidth: 15; implicitHeight: 15 }
-                        Text {
-                            text: ({working: "正在处理", attention: "有处理结果", snoozed: "稍后处理"})[card.modelData.state] || (card.modelData.kind === "fault" ? "使用问题" : "改善建议")
-                            font.pixelSize: 11; color: Theme.dim
-                            Layout.fillWidth: true
-                        }
-                        Text { text: "›"; font.pixelSize: 18; color: Theme.dim }
-                    }
-                    Text { text: card.title; textFormat: Text.PlainText; Layout.fillWidth: true; color: Theme.text; font.pixelSize: 16; font.weight: Font.DemiBold; maximumLineCount: 1; elide: Text.ElideRight }
-                    Text {
-                        text: card.modelData.note || card.modelData.body || "可以让 Agent 检查，或留待稍后处理。"
-                        textFormat: Text.PlainText
-                        Layout.fillWidth: true; Layout.fillHeight: true
-                        font.pixelSize: 12; lineHeight: 1.2; color: Theme.dim
-                        wrapMode: Text.Wrap; maximumLineCount: 2; elide: Text.ElideRight
-                    }
-                }
+                pressedFeedback: pointer.pressed && !pointer.dragged && pointer.pressId === modelData.id
             }
             Rectangle {
                 visible: widget.pending.length === 0

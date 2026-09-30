@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "model.h"
 #include "layout.h"
+#include "usage.h"
 #include <KConfig>
 #include <KConfigGroup>
 #include <QFile>
@@ -14,6 +15,61 @@ class CareTests : public QObject {
         o["source"] = source; return o;
     }
 private Q_SLOTS:
+    void groupedCrashesKeepIndependentRecordsAndReceipts() {
+        Care::Model m(""); auto a = item("a"), b = item("b"), c = item("other");
+        const auto first = a["id"].toString(), second = b["id"].toString();
+        for (auto *o : {&a, &b}) (*o)["evidence"] = QJsonObject{{"package", "desktop"}, {"version", "1"}, {"reports", 2}};
+        c["evidence"] = QJsonObject{{"package", "player"}, {"version", "1"}};
+        m.observe(a, 100); m.observe(b, 101); m.observe(c, 102);
+        m.updatePlan(second, {{"result", "Missing evidence, cause unconfirmed.\n\nDetails"}});
+        const auto groups = m.groups(); QCOMPARE(groups.size(), 2);
+        QJsonObject group;
+        for (const auto &v : groups) if (v.toObject()["count"].toInt() == 2) group = v.toObject();
+        QCOMPARE(group["reports"].toInt(), 4); QCOMPARE(group["summary"].toString(), "Missing evidence, cause unconfirmed.");
+        QCOMPARE(group["representativeId"].toString(), second);
+        m.present(second, 1, false, 200); QVERIFY(!m.get(first).contains("displayedRevision"));
+        m.act(second, "dismiss", {}, 201);
+        QCOMPARE(m.groups(true).size(), 1); QCOMPARE(m.groups().size(), 2);
+        QCOMPARE(m.list().size(), 3);
+    }
+    void structuredSummaryDoesNotMakeAPlanExecutable() {
+        Care::Model m(""); const auto o = item(); const auto id = o["id"].toString(); m.observe(o, 100);
+        auto r = m.updatePlan(id, {{"conclusion", "Possibly a known bug, not confirmed"}, {"confidence", "suspected"}, {"nextStep", "Observe"}});
+        QCOMPARE(r["summary"].toString(), "Possibly a known bug, not confirmed"); QVERIFY(!r["canApply"].toBool());
+        QVERIFY(m.updatePlan(id, {{"confidence", "guaranteed"}}).contains("error"));
+        r = m.updatePlan(id, {{"result", "New investigation"}}); QCOMPARE(r["summary"].toString(), "New investigation");
+    }
+    void usageDeduplicatesRequestsRestartsAndAccounts() {
+        QTemporaryDir d; const auto path = d.path() + "/usage.json";
+        Care::Usage u(path);
+        const auto snapshot = QJsonObject{{"accountKey", "account-a"}, {"authMode", "apiKey"}};
+        u.snapshot(snapshot, 100);
+        auto event = QJsonObject{{"accountKey", "account-a"}, {"threadId", "thread"}, {"turnId", "turn"},
+            {"tokenUsage", QJsonObject{{"total", QJsonObject{{"totalTokens", 1200}}}, {"last", QJsonObject{{"totalTokens", 200}}}}}};
+        u.token(event, 101); u.token(event, 102);
+        QCOMPARE(u.view(102)["recordedTokens"].toInteger(), 200); // resumed history is not counted
+        event["tokenUsage"] = QJsonObject{{"total", QJsonObject{{"totalTokens", 1700}}}, {"last", QJsonObject{{"totalTokens", 500}}}};
+        u.token(event, 103); QCOMPARE(u.view(103)["recordedTokens"].toInteger(), 700); // same turn, second model request
+        Care::Usage restarted(path); QVERIFY(restarted.view(104)["recordedTokens"].isNull());
+        restarted.snapshot(snapshot, 105); restarted.token(event, 106); QCOMPARE(restarted.view(106)["recordedTokens"].toInteger(), 700);
+        restarted.snapshot({{"accountKey", "account-b"}, {"authMode", "apiKey"}}, 107);
+        QVERIFY(restarted.view(107)["recordedTokens"].isNull());
+        event["accountKey"] = "account-b"; restarted.token(event, 108);
+        QCOMPARE(restarted.view(108)["recordedTokens"].toInteger(), 500);
+        restarted.snapshot(snapshot, 109); QCOMPARE(restarted.view(109)["recordedTokens"].toInteger(), 700);
+    }
+    void usageQuotaIsNullableAndResetDoesNotInventFreshData() {
+        Care::Usage u("");
+        const QJsonObject limits{{"rateLimits", QJsonObject{{"primary", QJsonObject{{"usedPercent", 75}, {"windowDurationMins", 300}, {"resetsAt", 200}}}}}};
+        u.snapshot({{"accountKey", "a"}, {"authMode", "chatgpt"}, {"rateLimits", limits}}, 100);
+        auto v = u.view(101); QCOMPARE(v["windows"].toArray().size(), 1);
+        QVERIFY(!v["windows"].toArray()[0].toObject()["expired"].toBool());
+        QVERIFY(u.view(201)["windows"].toArray()[0].toObject()["expired"].toBool());
+        QVERIFY(u.view(301)["stale"].toBool());
+        u.snapshot({{"authMode", "apiKey"}, {"rateLimits", limits}}, 302);
+        QVERIFY(u.view(302)["windows"].toArray().isEmpty());
+        u.snapshot({{"authMode", "none"}}, 303); QVERIFY(u.view(303)["recordedTokens"].isNull());
+    }
     void staleReferencesNeverCreateRecords() {
         QTemporaryDir d; const auto path = d.path() + "/state.json";
         QVERIFY(Care::writeObject(path, {{"schema", 2}, {"items", QJsonObject{{"stale", QJsonValue::Null}}}}));
@@ -45,7 +101,7 @@ private Q_SLOTS:
             auto folio = desktop.group("Folio");
             QCOMPARE(folio.readEntry("favorites", QString()), QStringLiteral("[]"));
             auto pages = QJsonDocument::fromJson(folio.readEntry("pages", QString()).toUtf8()).array();
-            auto items = pages[0].toArray(); QCOMPARE(items.size(), 2);
+            auto items = pages[0].toArray(); QCOMPARE(items.size(), 3);
             QCOMPARE(items[0].toObject()["storageId"].toString(), QStringLiteral("existing.desktop"));
             QCOMPARE(items[1].toObject()["row"].toInt(), 1);
             QCOMPARE(items[1].toObject()["id"].toInt(), 100);

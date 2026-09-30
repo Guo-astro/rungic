@@ -373,3 +373,13 @@ USB 精确序列号 `ZY32M9MRVP`，开发主机 mibook/x86_64、系统代理 non
 最终桌面截图人工核对：上方两张真实结果卡、组件下方壁纸留白和底部四个收藏图标均正常。SSH socket enabled/active，开发环境仍为 GPT-6 Luna + API Key，`dpkg --audit` 无输出。release mismatch 为空；既有 313 个翻译文件缺失仍记为 integrity drift，没有宣称整机完整性全通过。原 rootfs 回退快照未覆盖。
 
 新增证据：`.work/experiments/proactive-refactor/{build-stale.log,integration-stale.log,deploy-stale.log,visible-device.log,final-check.log,final-home.png}`，最终部署记录 `.work/deploy/20260930-023503-20260930.10/`。完整弹窗验证见前述 `confirmation-final.log`；真实模型调查与服务重启恢复见 `luna.log`。本轮验证的是主动建议基础链、任务恢复与确认边界；不等于已修复历史崩溃、为全部软件接通硬件加速或完成外部 PR 提交。可靠应用退出条件、Android 提醒、远端 PR 自动同步及全新账户/整包安装不在本次完成范围。
+
+## 2026-09-30：同类堆叠与独立 Agent 用量组件（实现与验收进行中）
+
+用户要求同类卡片堆叠、正面展示调查结论，并新增独立 Agent 小组件。底层仍保留按崩溃签名/包/版本划分的事项；展示分组只合并同包同版本的崩溃，不能据此认定根因相同。组入口只确认正面代表事项的展示，组内隐藏事件、调查、预约和原对话保持独立。结构化 `conclusion/nextStep/confidence` 供调查写回，旧记录回退到现有报告首段，不在桌面刷新时调用模型；不能由结论文字推导可执行方案。
+
+复用来源：原生 Folio 6.6.5 的 Applet 与网格接口沿用前述源码核验，新增 `com.rungic.agent` 为独立 applet，通过空闲网格迁移放置，保留已有组件和收藏，不覆盖已删除选择。像素图标由本项目 QML 几何绘制，GPL-2.0-or-later，无外来图片素材。
+
+[Codex App Server 官方协议](https://learn.chatgpt.com/docs/app-server) 提供 `thread/tokenUsage/updated`、`account/read`、`account/rateLimits/read` 和 `account/usage/read`。本机现场核对 G100 `ZY32M9MRVP` / ADB 5038、Codex **0.156.1**（仓库固定 SHA、Apache-2.0）：通过该已安装二进制生成 JSON schema，确认窗口含 `usedPercent/windowDurationMins/resetsAt`，账户用量有 nullable summary/daily buckets，token 事件有 thread/turn 与 total/last breakdown。不是只凭最新文档推断已装版本。订阅账户读取真实额度与重置；API Key 不伪造订阅额度。会话 total 用作累计高水位、last 仅作为首次观测基数，不把同一回合内的多次模型请求重复或遗漏累计。按账户不可逆指纹分区，本地统计注明仅本机收到的 Codex 用量，排除 Realtime，不等同账单。
+
+用量聚合、持久化及服务在 C++；现有 Python Codex 桥仅转发事件及只读 RPC，未新增 Python 生产服务。组件和 APP 共用相同只读数据契约，不另起 Codex 或模型请求。重置时间到达只标记等待刷新，不能本地把已用额度清零。用户点击用量进入 APP 专页，像素图标进入 Agent。代理/构建机器现场核验仍为 mibook/x86_64、系统代理 none、Mac mini ARM64/Surge 6152；手机代理 192.168.5.45:6152。

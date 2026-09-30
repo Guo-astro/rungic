@@ -20,6 +20,7 @@ public:
     bool save(QString *error = nullptr) const;
     QJsonObject get(const QString &id) const;
     QJsonArray list() const;
+    QJsonArray groups(bool history = false) const;
     bool observe(QJsonObject item, qint64 now);
     void reconcile(const QString &source, const QStringList &present, qint64 now);
     QJsonObject act(const QString &id, const QString &action, const QJsonObject &args, qint64 now);

@@ -25,6 +25,7 @@ import hashlib
 import io
 import itertools
 import json
+import hashlib
 import math
 import os
 from pathlib import Path
@@ -131,6 +132,7 @@ INTERFACE = '''
     <method name="SendText"><arg type="s" direction="in"/><arg type="s" direction="in"/></method>
     <method name="TalkToText"><arg type="s" direction="out"/></method>
     <method name="ReadAloud"><arg type="s" direction="in"/></method>
+    <method name="Usage"><arg type="s" direction="out"/></method>
     <method name="Setup"><arg type="s" direction="out"/></method>
     <method name="SetApiKey"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
     <method name="TestApiKey"><arg type="s" direction="out"/></method>
@@ -532,6 +534,7 @@ class Endpointer:
 class VoiceAgent:
     def __init__(self, emit):
         Gst.init(None)
+        self.usage_tokens = {}
         self.emit_raw = emit
         self.store = Store()
         # It was titled "语音助手" before it became "主对话" beside "新对话".
@@ -1330,10 +1333,48 @@ class VoiceAgent:
             log('appendSpeech', error)
 
     # ---- codex events (reader thread) -----------------------------------------------
+    @staticmethod
+    def usage_identity():
+        # Never publish a key, token or email. Partition local accounting by login identity.
+        try:
+            auth = json.loads((Path.home() / '.codex/auth.json').read_text())
+            identity = auth.get('OPENAI_API_KEY') or (auth.get('tokens') or {}).get('account_id')
+            return hashlib.sha256(str(identity).encode()).hexdigest() if identity else ''
+        except (OSError, ValueError):
+            return ''
+
+    def usage(self):
+        identity = self.usage_identity()
+        result = {'accountKey': identity, 'model': AGENT_MODEL,
+                  'activity': 'working' if self.agent_busy else 'ready', 'authMode': 'none'}
+        server = self.server
+        if not server:
+            result['activity'] = 'offline'
+            return result
+        account = server.call('account/read', {'refreshToken': False}, timeout=5).get('account') or {}
+        result['authMode'] = account.get('type', 'none')
+        result['plan'] = account.get('planType', '')
+        if result['authMode'] == 'chatgpt':
+            try:
+                result['rateLimits'] = server.call('account/rateLimits/read', {'excludeResetCreditDetails': True}, timeout=10)
+                result['accountUsage'] = server.call('account/usage/read', {}, timeout=10)
+            except Exception:
+                result['usageError'] = '账户用量暂未更新'
+        if identity != self.usage_identity() or server is not self.server:
+            raise RuntimeError('账户已变化，稍后重新读取')
+        result['tokens'] = [v for v in list(self.usage_tokens.values()) if v['accountKey'] == identity]
+        return result
+
     def on_notification(self, method, params):
-        if params.get('threadId') not in (None, self.thread_id):
+        if method == 'thread/tokenUsage/updated':
+            event = {'type': 'token-usage', 'accountKey': self.usage_identity(), **params}
+            self.usage_tokens[(event.get('accountKey'), event.get('threadId'))] = event
+            self.emit_raw(event)
+        elif method in ('account/rateLimits/updated', 'account/updated'):
+            self.emit_raw({'type': 'usage-changed'})
+        elif params.get('threadId') and params['threadId'] != self.thread_id:
             return
-        if method == 'thread/realtime/outputAudio/delta':
+        elif method == 'thread/realtime/outputAudio/delta':
             GLib.idle_add(self.play, params['audio'])
         elif method == 'thread/realtime/started':
             self.realtime = True
@@ -1784,6 +1825,7 @@ class VoiceAgent:
                     '完成后说明事实、影响、建议方案、验证和回退办法；不要把调查完成说成修复成功。'
                     '可以用 rungic-suggestions update ' + suggestion_id +
                     ' 更新 result/plan/verification/rollback 文字字段，并带 taskId=' + task_id + '。'
+                    '同时更新 conclusion（220 字以内，说明发现及不确定性）、nextStep（100 字以内，用户下一步）、confidence（confirmed/suspected/unknown）；不要只写调查完成，不要把推测写成定论。'
                     'planStatus 必须明确填写 needs_investigation（待调查）、unavailable（暂无方案）或 ready（已准备好具体可应用方案）。'
                     '只有适用条件、具体变更、验证和回退均明确时才标 ready；证据不足、暂不修改不属于 ready。'
                     '需要用户决定时在本对话中明确说明。\n\n' + json.dumps(item, ensure_ascii=False))
@@ -2257,6 +2299,8 @@ class Service:
                     result = json.dumps({'text': agent.talk_to_text()}, ensure_ascii=False)
                 elif method == 'ReadAloud':
                     agent.read_aloud(args[0])
+                elif method == 'Usage':
+                    result = json.dumps(agent.usage(), ensure_ascii=False)
                 elif method == 'Setup':
                     result = json.dumps(agent.setup(), ensure_ascii=False)
                 elif method == 'SetApiKey':

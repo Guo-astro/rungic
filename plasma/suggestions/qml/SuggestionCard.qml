@@ -10,7 +10,7 @@ Rectangle {
     property bool expanded: false
     signal action(string name, var args)
     readonly property var evidence: item.evidence || ({})
-    readonly property string displayTitle: evidence.package === "plasma-workspace" ? "桌面组件曾意外退出" : (item.title || "建议")
+    readonly property string displayTitle: item.displayTitle || item.title || "建议"
     readonly property string basis: evidence.reports ? "已保存 " + evidence.reports + " 份异常记录。相关组件版本：" + (evidence.version || "待核实")
         : evidence.scope || (evidence.unit ? "检测到服务运行失败，需要确认实际影响。" : "来自本机诊断，处理前会重新核对。")
     readonly property string stateName: item.state || "new"
@@ -44,8 +44,10 @@ Rectangle {
             }
         }
         Text { Layout.fillWidth: true; text: card.displayTitle; textFormat: Text.PlainText; wrapMode: Text.Wrap; font.pixelSize: 19; font.weight: Font.DemiBold; color: Theme.text }
-        Text { Layout.fillWidth: true; text: card.item.body || ""; textFormat: Text.PlainText; wrapMode: Text.Wrap; font.pixelSize: 14; lineHeight: 1.35; color: Theme.dim }
-        Text { Layout.fillWidth: true; visible: !!card.item.note; text: card.item.note || ""; textFormat: Text.PlainText; wrapMode: Text.Wrap; font.pixelSize: 12; color: Theme.link }
+        Text { Layout.fillWidth: true; text: card.item.summary || card.item.body || ""; textFormat: Text.PlainText; wrapMode: Text.Wrap; font.pixelSize: 14; lineHeight: 1.35; color: Theme.dim }
+        Text { Layout.fillWidth: true; visible: card.stateName === "working" && !!card.item.note; text: card.item.note || ""; textFormat: Text.PlainText; wrapMode: Text.Wrap; font.pixelSize: 12; color: Theme.link }
+        Text { Layout.fillWidth: true; visible: !!card.item.nextStep; text: card.item.nextStep || ""; textFormat: Text.PlainText; wrapMode: Text.Wrap; color: Theme.link; font.pixelSize: 13 }
+        PillButton { text: card.expanded ? "收起详情" : "查看完整调查"; onClicked: card.expanded = !card.expanded }
         Text {
             Layout.fillWidth: true
             visible: card.expanded

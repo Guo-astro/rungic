@@ -24,7 +24,7 @@ static constexpr auto Voice = "com.rungic.VoiceAgent";
 static constexpr auto VoicePath = "/com/rungic/VoiceAgent";
 
 Suggestions::Suggestions(const QString &state, const QString &feed, const QString &kb, QObject *parent)
-    : QObject(parent), model(state), feedPath(feed), knowledgePath(kb), statePath(state) {
+    : QObject(parent), model(state), usage(QFileInfo(state).absolutePath() + "/agent-usage.json"), feedPath(feed), knowledgePath(kb), statePath(state) {
     QString error;
     ready = model.load(&error);
     if (!ready) { qCritical("%s", qPrintable(error)); return; }
@@ -49,7 +49,24 @@ Suggestions::Suggestions(const QString &state, const QString &feed, const QStrin
     connect(&scanTimer, &QTimer::timeout, this, &Suggestions::Refresh);
     scanTimer.start(); QTimer::singleShot(0, this, &Suggestions::Refresh);
 }
-QString Suggestions::List() { return encoded({{"items", model.list()}, {"coverage", coverage}, {"schema", 2}}); }
+QString Suggestions::AgentUsage() {
+    RefreshAgentUsage();
+    return encoded(usage.view(QDateTime::currentSecsSinceEpoch()));
+}
+void Suggestions::RefreshAgentUsage() {
+    const auto now = QDateTime::currentSecsSinceEpoch();
+    if (usageRefreshing || now - usageAttempt < 30) return;
+    usageRefreshing = true; usageAttempt = now;
+    auto request = QDBusMessage::createMethodCall(Voice, VoicePath, Voice, "Usage");
+    auto *w = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(request, 35000), this);
+    connect(w, &QDBusPendingCallWatcher::finished, this, [this, w] {
+        QDBusPendingReply<QString> reply = *w; w->deleteLater(); usageRefreshing = false;
+        if (reply.isError()) usage.error("Agent 用量暂时不可用，稍后重试");
+        else usage.snapshot(QJsonDocument::fromJson(reply.value().toUtf8()).object(), QDateTime::currentSecsSinceEpoch());
+        Q_EMIT UsageChanged();
+    });
+}
+QString Suggestions::List() { return encoded({{"items", model.list()}, {"groups", model.groups()}, {"historyGroups", model.groups(true)}, {"coverage", coverage}, {"schema", 2}}); }
 QString Suggestions::Get(const QString &id) { return encoded(model.get(id)); }
 QString Suggestions::Knowledge() {
     QStringList errors; const auto entries = Care::knowledge(knowledgePath, &errors);
@@ -218,6 +235,12 @@ QString Suggestions::Act(const QString &id, const QString &action, const QString
 }
 void Suggestions::AgentEvent(const QString &json) {
     const auto e = QJsonDocument::fromJson(json.toUtf8()).object();
+    if (e["type"] == "token-usage") {
+        usage.token(e, QDateTime::currentSecsSinceEpoch()); Q_EMIT UsageChanged(); return;
+    }
+    if (QStringList{"account", "usage-changed", "agent-started", "agent-finished", "agent-restarted"}.contains(e["type"].toString())) {
+        usageAttempt = 0; RefreshAgentUsage();
+    }
     const auto id = e["suggestion"].toString(), taskId = e["suggestionTask"].toString();
     QJsonObject event;
     const auto type = e["type"].toString();
@@ -235,7 +258,7 @@ QString Suggestions::Update(const QString &id, const QString &json) {
     if (input.contains("taskId") && input["taskId"] != model.get(id)["task"].toObject()["id"])
         return failure("任务已被替代，未覆盖当前记录");
     QJsonObject fields;
-    for (const auto &key : {"result", "plan", "verification", "rollback", "planStatus"}) {
+    for (const auto &key : {"result", "plan", "verification", "rollback", "planStatus", "conclusion", "nextStep", "confidence"}) {
         if (input.contains(key)) fields[key] = input.value(key).toString().left(16000);
     }
     if (input.contains("upstream")) {
