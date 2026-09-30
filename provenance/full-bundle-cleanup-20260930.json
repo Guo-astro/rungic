@@ -1,0 +1,21 @@
+{
+  "date": "2026-09-30",
+  "reason": "User requested removing legacy complete Android/Rungic flash bundles before testing independent Rungic installation",
+  "removed_bundles": [
+    ".work/ci/runs/portov-20260927-86c6642d/release/portov-20260927.1",
+    ".work/ci/runs/portov-20260927-86c6642d/release/portov-20260927.1-final",
+    ".work/ci/runs/portov-20260927-86c6642d/release/portov-20260928.1",
+    ".work/ci/runs/portov-20260927-86c6642d/release/portov-20260928.3",
+    ".work/ci/runs/portov-20260927-86c6642d/release/portov-20260928.5",
+    ".work/ci/runs/vantage-20260928-density/release/vantage-20260928.3",
+    ".work/ci/runs/vantage-20260928-onboarding/release/vantage-20260928.1",
+    ".work/ci/runs/vantage-20260928-onboarding/release/vantage-20260928.2"
+  ],
+  "freed_bytes": 122818367488,
+  "before_free_bytes": 92581998592,
+  "after_free_bytes": 215400366080,
+  "evidence_archive": ".work/audits/full-bundle-cleanup-20260930/metadata/",
+  "inventory": ".work/audits/full-bundle-cleanup-20260930/result.json",
+  "preserved": "Independent rootfs, host seeds, dependencies, OEM stock sources and run-level evidence remain in their original locations",
+  "recovery": "Final portov .5 and vantage .3 boot/init_boot/vbmeta artifacts retained with archived reports; full product/super bundle is no longer available"
+}
