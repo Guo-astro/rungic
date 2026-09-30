@@ -133,4 +133,4 @@ python3 tools/rungic_dev.py reset [rungic-design]                     # 回到�
 - **部署后**：
   - `rungic_dev.py status`：已安装和基线都是 20260930.10，覆盖为空，没有覆盖文件；
   - `tools/design_gallery.py phone` 截的 Toggle 和 HoldTarget 两节正常；
-  - `.10` 的快照保留，等用户接受后再执行 `rungic_release.py commit`。
+  - 用户接受 `.10` 后，执行了 `rungic_release.py commit`：快照已丢弃，容器重新启动并就绪（native Wayland）。
