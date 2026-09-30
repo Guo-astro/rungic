@@ -20,7 +20,7 @@ qt_add_qml_module(rungicsuggestions
     URI com.rungic.suggestions VERSION 1.0
     PLUGIN_TARGET rungicsuggestions OUTPUT_DIRECTORY "${module_dir}"
     SOURCES client.cpp client.h
-    QML_FILES qml/UsageText.js qml/PixelAgent.qml qml/AgentWidget.qml qml/AgentUsageDetails.qml qml/SuggestionStack.qml qml/DesktopStack.qml qml/PresentationTracker.qml qml/SuggestionCard.qml qml/SuggestionsFeed.qml qml/SuggestionsWidget.qml)
+    QML_FILES qml/UsageText.js qml/PixelAgent.qml qml/AgentWidget.qml qml/AgentUsageDetails.qml qml/SuggestionStack.qml qml/AgentMark.qml qml/BriefingCard.qml qml/WidgetGallery.qml qml/PresentationTracker.qml qml/SuggestionCard.qml qml/SuggestionsFeed.qml qml/SuggestionsWidget.qml)
 target_link_libraries(rungicsuggestions PRIVATE Qt6::Core Qt6::DBus Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 KF6::WindowSystem KF6::I18n)
 install(TARGETS rungic-suggestions DESTINATION bin)
 install(TARGETS rungicsuggestions LIBRARY DESTINATION "${QT6_INSTALL_QML}/com/rungic/suggestions")
@@ -32,5 +32,10 @@ enable_testing()
 qt_add_executable(care-tests tests.cpp)
 target_link_libraries(care-tests PRIVATE caremodel Qt6::Test)
 add_test(NAME care-model COMMAND care-tests)
+# The widgets in every state (docs/87's gallery, for the home screen): offscreen screenshots with
+# QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software rungic-suggestions-gallery --shot FILE.
+qt_add_executable(rungic-suggestions-gallery gallery.cpp)
+target_link_libraries(rungic-suggestions-gallery PRIVATE Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2)
+install(TARGETS rungic-suggestions-gallery DESTINATION bin)
 qt_add_executable(care-preview preview.cpp)
 target_link_libraries(care-preview PRIVATE Qt6::Test Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2)

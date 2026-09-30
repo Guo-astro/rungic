@@ -668,3 +668,113 @@ msgstr "Agent 暂时无法整理这些建议。"
 
 msgid "This suggestion is no longer current."
 msgstr "这条建议已不是最新状态。"
+
+msgctxt "@action:button hide this card until something changes"
+msgid "Not now"
+msgstr "先不看"
+
+msgctxt "@info kind of card"
+msgid "Needs a look"
+msgstr "值得一看"
+
+msgctxt "@info kind of card"
+msgid "Could be better"
+msgstr "可以更好"
+
+msgctxt "@info kind of card"
+msgid "Result ready"
+msgstr "有结果了"
+
+msgctxt "@info kind of card"
+msgid "Follow-up"
+msgstr "后续"
+
+msgctxt "@info kind of card"
+msgid "Suggestion"
+msgstr "建议"
+
+msgctxt "@action:button"
+msgid "View progress"
+msgstr "查看进展"
+
+msgctxt "@action:button"
+msgid "Later"
+msgstr "稍后"
+
+msgctxt "@action:button"
+msgid "See all records"
+msgstr "查看全部记录"
+
+msgctxt "@info"
+msgid "All clear"
+msgstr "一切正常"
+
+msgid "Nothing needs your attention"
+msgstr "暂时没有需要你处理的事"
+
+msgctxt "@info %1 the agent's name"
+msgid "%1 keeps an eye on this phone in the background and puts anything worth your time here."
+msgstr "%1 会在后台留意这台手机，值得你看的事会放在这里。"
+
+msgctxt "@info"
+msgid "Getting started"
+msgstr "刚刚开始"
+
+msgctxt "@info %1 the agent's name"
+msgid "%1 is getting to know this phone"
+msgstr "%1 正在熟悉这台手机"
+
+msgid "It looks at crashes, services and apps in the background. Anything worth your time will show up here."
+msgstr "它会在后台留意崩溃、服务和应用，值得你看的事会出现在这里。"
+
+msgctxt "@info"
+msgid "Reconnecting…"
+msgstr "正在重新连接…"
+
+msgid "Can’t reach Agent Suggestions"
+msgstr "暂时连不上 Agent 建议"
+
+msgid "The suggestion service is restarting. Your cards come back by themselves; nothing is lost."
+msgstr "建议服务正在重启，卡片会自己回来，什么都不会丢。"
+
+msgctxt "@info accessible: %1 position, %2 count, %3 title"
+msgid "Card %1 of %2: %3."
+msgstr "第 %1 张，共 %2 张：%3。"
+
+msgid "Swipe up for the next card."
+msgstr "上滑看下一张。"
+
+msgctxt "@info position in the stack: %1 of %2"
+msgid "%1 of %2"
+msgstr "%1 / %2"
+
+msgctxt "@info relative time"
+msgid "just now"
+msgstr "刚刚"
+
+msgctxt "@info relative time"
+msgid "%1 min ago"
+msgid_plural "%1 min ago"
+msgstr[0] "%1 分钟前"
+
+msgctxt "@info relative time"
+msgid "%1 h ago"
+msgid_plural "%1 h ago"
+msgstr[0] "%1 小时前"
+
+msgctxt "@info the agent is choosing the cards again"
+msgid "Sorting new findings…"
+msgstr "正在整理新发现…"
+
+msgctxt "@info %1 the agent's name"
+msgid "%1 unavailable"
+msgstr "%1 暂不可用"
+
+msgctxt "@info %1 relative time"
+msgid "Checked %1"
+msgstr "%1检查过"
+
+msgctxt "@info %2 the agent's name, %1 minutes"
+msgid "%2 is on it · %1 min"
+msgid_plural "%2 is on it · %1 min"
+msgstr[0] "%2 正在处理 · %1 分钟"

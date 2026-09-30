@@ -41,7 +41,14 @@ import QtQuick.Controls
 import com.rungic.suggestions
 ApplicationWindow {
     width: 360; height: 740; visible: true; color: "#355d50"
-    SuggestionsWidget { x: 16; y: 30; width: 328; height: 340 }
+    // Fixed cards: the pointer test must not depend on what the service holds.
+    SuggestionsWidget {
+        objectName: "suggestionsWidget"
+        x: 10; y: 30; width: 340; height: 330
+        forcedBriefing: ({ generatedAt: Date.now() / 1000 - 600, source: "agent" })
+        forcedCards: [1, 2, 3].map(n => ({ id: "card" + n, kind: "issues", refs: [], title: "Card " + n,
+                                           body: "Sample card for the pointer test.", action: { label: "Open" } }))
+    }
 }
 )" : R"(
 import QtQuick
@@ -57,30 +64,15 @@ ApplicationWindow {
         auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
         if (app.arguments().size() > 1 && !window->grabWindow().save(app.arguments().at(1))) failed = true;
         if (agent || usage) { app.exit(failed ? 1 : 0); return; }
-        auto *list = window->findChild<QQuickItem *>(widget ? "suggestionsWidgetList" : "suggestionsFeed");
-        if (!list || !list->property("atYBeginning").toBool()) {
-            qWarning() << "preview beginning" << (list ? list->property("contentY") : QVariant())
-                       << (list ? list->property("originY") : QVariant());
-            failed = true;
-        }
-        if (widget && list && app.arguments().contains("--swipe-test")) {
-            auto findStack = [&]() -> QQuickItem * {
-                auto *content = qvariant_cast<QQuickItem *>(list->property("contentItem"));
-                if (content) for (auto *child : content->childItems())
-                    if (child->objectName() == "desktopSuggestionStack" && child->property("count").toInt() > 1) return child;
-                return nullptr;
-            };
-            auto *stack = findStack();
+        if (widget) {
+            auto *deck = window->findChild<QQuickItem *>("suggestionsWidget");
             auto require = [&](bool ok, const char *label) {
                 if (!ok) { qWarning() << "swipe test:" << label; failed = true; }
             };
-            require(stack && stack->property("count").toInt() > 1, "fixture stack");
-            if (stack) {
-                const auto offset = list->property("contentY").toDouble();
-                auto swipe = [&](int distance, int duration = 180, int settle = 250) {
-                    stack = findStack();
-                    Q_ASSERT(stack);
-                    const QPoint from = stack->mapToScene(QPointF(stack->width() / 2, stack->height() / 2)).toPoint();
+            require(deck, "widget");
+            if (deck && app.arguments().contains("--swipe-test")) {
+                auto swipe = [&](int distance, int duration = 180, int settle = 350) {
+                    const QPoint from = deck->mapToScene(QPointF(deck->width() / 2, deck->height() / 2)).toPoint();
                     QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, from);
                     for (int n = 1; n <= 6; ++n) {
                         QTest::qWait(duration / 6);
@@ -88,34 +80,31 @@ ApplicationWindow {
                     }
                     QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, from + QPoint(0, distance));
                     QTest::qWait(settle);
-                    stack = findStack();
-                    Q_ASSERT(stack);
                 };
-                swipe(90); // First-card boundary: keep the pointer, spring back.
-                require(stack->property("currentIndex").toInt() == 0, "first boundary");
+                const auto current = [&] { return deck->property("current").toInt(); };
+                swipe(90);
+                require(current() == 0, "first card: a pull down springs back");
                 swipe(-22, 360);
-                require(stack->property("currentIndex").toInt() == 0, "short drag snaps back");
-                swipe(-100);
-                require(stack->property("currentIndex").toInt() == 1, "up selects second");
-                require(qFuzzyIsNull(stack->property("dragOffset").toDouble()), "animation settles");
-                require(list->property("contentY").toDouble() == offset, "stack does not scroll list");
-                QTest::qWait(1600); // Only the now-visible member may receive a receipt.
-                swipe(-100);
-                require(stack->property("currentIndex").toInt() == 1, "last boundary");
-                swipe(100);
-                require(stack->property("currentIndex").toInt() == 0, "down selects previous");
-                // A header drag scrolls the groups rather than changing the stack.
-                auto *pointer = window->findChild<QQuickItem *>("suggestionsWidgetPointer");
-                const QPoint from = pointer->mapToScene(QPointF(80, 22)).toPoint();
-                QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, from);
-                QTest::mouseMove(window, from - QPoint(0, 100), 180);
-                QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, from - QPoint(0, 100));
-                QTest::qWait(250);
-                require(list->property("contentY").toDouble() > offset + 50, "header scrolls groups");
-                if (!failed) qInfo() << "PASS actual pointer stack switching, bounds, snap-back, header scrolling";
+                require(current() == 0, "a short drag snaps back");
+                swipe(-120);
+                require(current() == 1, "swipe up shows the second card");
+                require(qFuzzyIsNull(deck->property("dragOffset").toDouble()), "the animation settles");
+                swipe(-120);
+                swipe(-120);
+                require(current() == 2, "the last card stays at the end");
+                swipe(120);
+                require(current() == 1, "swipe down shows the previous card");
+                if (!failed) qInfo() << "PASS pager swipe, bounds, snap-back";
             }
+            app.exit(failed ? 1 : 0);
+            return;
         }
-        if (widget && list && list->height() > window->height() / 2) failed = true;
+        auto *list = window->findChild<QQuickItem *>("suggestionsFeed");
+        if (!list || !list->property("atYBeginning").toBool()) {
+            qWarning() << "preview beginning" << (list ? list->property("contentY") : QVariant())
+                       << (list ? list->property("originY") : QVariant());
+            failed = true;
+        }
         if (list && list->property("count").toInt() > 10) {
             QMetaObject::invokeMethod(list, "positionViewAtEnd");
             QTimer::singleShot(300, &app, [&, list, window] {
