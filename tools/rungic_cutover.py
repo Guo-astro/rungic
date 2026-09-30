@@ -14,7 +14,7 @@ run on the new layout until phase D. Directory renames stay on one f2fs (O(1)). 
 recorded in .work/cutover/<time>-<action>/cutover.json; files that `up` replaces or retires are kept on
 the phone in /data/adb/rungic-cutover/ (as `down` needs them) until phase D.
 
-Needs: tools/build_enter.sh plasma and lxc, shared/android/rungic-cast/build.sh, plasma/build-apk.sh.
+Needs: tools/build_enter.sh plasma and lxc, shared/android/rungic-cast/build.sh, android/build-apk.sh.
 Magisk's su grant for the new APK is written with `magisk --sqlite "INSERT OR REPLACE ..."`, which returns
 no rows (docs/39: never a query that can return SQL NULL on Magisk 31.0).
 """
@@ -35,7 +35,7 @@ KEEP = '/data/adb/rungic-cutover'           # files `up` retired or replaced, fo
 TERMUX_LXC = '/data/data/com.termux/files/usr/bin/lxc'
 LXC = '/runtime/var/lib/lxc'
 # The directory renames, and inside them the image directory (toybox losetup: paths under 64 bytes,
-# plasma/rootfs-image) and the state directories the container binds.
+# system/rootfs-image) and the state directories the container binds.
 MOVES = [
     ('/data/adb/moto-plasma', '/data/adb/rungic-plasma'),
     ('/data/adb/moto-lxc', '/data/adb/rungic-lxc'),
@@ -54,14 +54,14 @@ RETIRED = [
 BUILD = WORKSPACE / '.work/build'
 # (source, path on the phone, mode); a file that exists is copied to KEEP first.
 INSTALL = [
-    ('plasma/rungic-plasma', '/data/adb/rungic-plasma/rungic-plasma', '755'),
+    ('system/rungic-plasma', '/data/adb/rungic-plasma/rungic-plasma', '755'),
     (BUILD / 'android/rungic-plasma-enter', '/data/adb/rungic-plasma/rungic-plasma-enter', '755'),
-    ('plasma/android-audio', '/data/adb/rungic-plasma/android-audio', '755'),
-    ('plasma/android-audio.pa', '/data/adb/rungic-plasma/android-audio.pa', '644'),
-    ('plasma/rootfs-image', '/data/adb/rungic-plasma/rootfs-image', '755'),
-    ('plasma/rootfs.sepolicy.rule', '/data/adb/rungic-plasma/rootfs.sepolicy.rule', '644'),
-    ('plasma/rootfs-mount-hook', '/data/adb/rungic-plasma/rootfs-mount-hook', '755'),
-    ('plasma/plasma.config', f'/data/adb/rungic-lxc{LXC}/plasma/config', '644'),
+    ('system/android-audio', '/data/adb/rungic-plasma/android-audio', '755'),
+    ('system/android-audio.pa', '/data/adb/rungic-plasma/android-audio.pa', '644'),
+    ('system/rootfs-image', '/data/adb/rungic-plasma/rootfs-image', '755'),
+    ('system/rootfs.sepolicy.rule', '/data/adb/rungic-plasma/rootfs.sepolicy.rule', '644'),
+    ('system/rootfs-mount-hook', '/data/adb/rungic-plasma/rootfs-mount-hook', '755'),
+    ('system/plasma.config', f'/data/adb/rungic-lxc{LXC}/plasma/config', '644'),
     ('lxc/rungic-lxc', '/data/adb/rungic-lxc/rungic-lxc', '755'),
     (BUILD / 'android/rungic-lxc-enter', '/data/adb/rungic-lxc/rungic-lxc-enter', '700'),
     ('lxc/alpine.config', f'/data/adb/rungic-lxc{LXC}/alpine/config', '664'),
@@ -204,7 +204,7 @@ def up(apk):
         raise SystemExit('the Android side already has the Rungic layout')
     apk = Path(apk)
     if not apk.exists():
-        raise SystemExit(f'no APK at {apk}: plasma/build-apk.sh')
+        raise SystemExit(f'no APK at {apk}: android/build-apk.sh')
     recorder = Record('up')
     before = status()
     recorder.save('before.json', json.dumps(before, indent=1, ensure_ascii=False) + '\n')

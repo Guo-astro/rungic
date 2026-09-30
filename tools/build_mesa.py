@@ -4,8 +4,8 @@
 
   build_mesa.py [--host phone|macmini]
                            meson build (build_on_device.py mesa targets, options from
-                           plasma/mesa-meson-options), install into a stage, assemble the
-                           packages with plasma/package-mesa.py, collect them into the release pool
+                           desktop/mesa-meson-options), install into a stage, assemble the
+                           packages with desktop/package-mesa.py, collect them into the release pool
 
 The version is the first entry of packages/mesa/debian/changelog. The build runs where
 build_on_device.py builds (--host, default $RUNGIC_BUILD_HOST, else macmini); its log is build.log.
@@ -40,7 +40,7 @@ def main():
     commit = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=WORKSPACE, capture_output=True, text=True).stdout.strip()
     step(name, 'targets', timeout=3600)
     step(name, 'wait', timeout=4 * 3600)
-    script = host.put(WORKSPACE / 'plasma/package-mesa.py', f'{BASE}/package-mesa.py', '755')
+    script = host.put(WORKSPACE / 'desktop/package-mesa.py', f'{BASE}/package-mesa.py', '755')
     print(host.run(f'''set -e
 rm -rf {BASE}/stage {BASE}/*.deb {BASE}/debs
 DESTDIR={BASE}/stage meson install -C {BASE}/build >/dev/null

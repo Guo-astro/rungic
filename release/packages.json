@@ -1,0 +1,282 @@
+{
+  "comment": "What a release of the Plasma container consists of (docs/61). tools/rungic_release.py builds rungic-release with an exact dependency on every package listed here; the .debs themselves are build output in .work/apt/pool. 'rebuilt' are Ubuntu packages rebuilt from their patch queues in packages/ (+rungicN, the version from the changelog), or with source \"ubuntu\" Ubuntu's own build at the version given (distribution builds remain pinned to their exact versions); 'project' are this repository's own packages (packaging, built by tools/rungic_package.py; their versions come from .work/apt/project-builds.json and must be current for the commit); 'coupled' are Ubuntu packages pinned to the version installed when the release is built, because files of theirs are diverted or their private ABI is used by code that is not rebuilt with them yet. 'android' are files outside the container that a release installs (backed up by deploy for rollback); the APK is versioned separately. 'service_restart' are system services deploy restarts (when enabled) after their package changed: maintainer scripts only enable them.",
+  "rebuilt": {
+    "kwin": {
+      "source": "packages/kwin",
+      "packages": [
+        "kwin-common",
+        "kwin-data",
+        "kwin-dev",
+        "kwin-wayland",
+        "libkwin6"
+      ]
+    },
+    "mesa": {
+      "source": "packages/mesa",
+      "packages": [
+        "libegl-mesa0",
+        "libgbm-dev",
+        "libgbm1",
+        "libgl1-mesa-dri",
+        "libglx-mesa0",
+        "mesa-libgallium",
+        "mesa-vulkan-drivers"
+      ]
+    },
+    "kscreen": {
+      "source": "packages/kscreen",
+      "packages": [
+        "kscreen"
+      ]
+    },
+    "libcamera": {
+      "source": "packages/libcamera",
+      "packages": [
+        "gstreamer1.0-libcamera",
+        "libcamera-dev",
+        "libcamera0.7"
+      ]
+    },
+    "qtmultimedia": {
+      "source": "packages/qt6-multimedia",
+      "packages": [
+        "libqt6multimedia6",
+        "libqt6multimediawidgets6",
+        "libqt6spatialaudio6",
+        "qml6-module-qtmultimedia",
+        "qml6-module-qtquick3d-spatialaudio",
+        "qt6-multimedia-dev"
+      ]
+    },
+    "plasma-camera": {
+      "source": "packages/plasma-camera",
+      "packages": [
+        "plasma-camera"
+      ]
+    },
+    "plasma-mobile": {
+      "source": "packages/plasma-mobile",
+      "packages": [
+        "plasma-mobile",
+        "plasma-mobile-tweaks"
+      ],
+      "version": "6.6.5-0ubuntu0.1+rungic7"
+    },
+    "plasma-settings": {
+      "source": "packages/plasma-settings",
+      "packages": [
+        "plasma-settings"
+      ]
+    },
+    "kf6-bluez-qt": {
+      "source": "packages/kf6-bluez-qt",
+      "packages": [
+        "libkf6bluezqt6",
+        "libkf6bluezqt-data",
+        "libkf6bluezqt-dev",
+        "qml6-module-org-kde-bluezqt"
+      ]
+    },
+    "powerdevil": {
+      "source": "packages/powerdevil",
+      "packages": [
+        "powerdevil",
+        "powerdevil-data",
+        "libpowerdevilcore2"
+      ]
+    },
+    "kwayland": {
+      "source": "packages/kwayland",
+      "packages": [
+        "libkwaylandclient6",
+        "kwayland6-data",
+        "kwayland-dev"
+      ]
+    },
+    "plasma-keyboard": {
+      "source": "packages/plasma-keyboard",
+      "packages": [
+        "plasma-keyboard"
+      ]
+    },
+    "xdg-desktop-portal-kde": {
+      "source": "packages/xdg-desktop-portal-kde",
+      "packages": [
+        "xdg-desktop-portal-kde"
+      ]
+    },
+    "wl-clipboard": {
+      "source": "packages/wl-clipboard",
+      "packages": [
+        "wl-clipboard"
+      ]
+    },
+    "flatpak": {
+      "source": "packages/flatpak",
+      "packages": [
+        "flatpak",
+        "libflatpak0"
+      ]
+    },
+    "xwayland": {
+      "source": "packages/xwayland",
+      "packages": [
+        "xwayland"
+      ]
+    },
+    "gst-plugins-base1.0": {
+      "source": "packages/gst-plugins-base1.0",
+      "packages": [
+        "libgstreamer-plugins-base1.0-0",
+        "gstreamer1.0-plugins-base",
+        "gstreamer1.0-gl",
+        "libgstreamer-gl1.0-0",
+        "gir1.2-gst-plugins-base-1.0",
+        "libgstreamer-plugins-base1.0-dev"
+      ]
+    }
+  },
+  "project": {
+    "rungic-plasma-config": {
+      "source": "packaging/rungic-plasma-config"
+    },
+    "rungic-plasma-services": {
+      "source": "packaging/rungic-plasma-services"
+    },
+    "rungic-plasma-session": {
+      "source": "packaging/rungic-plasma-session"
+    },
+    "rungic-plasma-bridges": {
+      "source": "packaging/rungic-plasma-bridges"
+    },
+    "rungic-plasma-input": {
+      "source": "packaging/rungic-plasma-input"
+    },
+    "rungic-plasma-recording": {
+      "source": "packaging/rungic-plasma-recording"
+    },
+    "rungic-plasma-diagnostics": {
+      "source": "packaging/rungic-plasma-diagnostics"
+    },
+    "rungic-design": {
+      "source": "packaging/rungic-design"
+    },
+    "rungic-voice-agent": {
+      "source": "packaging/rungic-voice-agent"
+    },
+    "rungic-cua": {
+      "source": "packaging/rungic-cua"
+    },
+    "rungic-agent-screen": {
+      "source": "packaging/rungic-agent-screen"
+    },
+    "rungic-cast": {
+      "source": "packaging/rungic-cast"
+    },
+    "rungic-codex": {
+      "source": "packaging/rungic-codex"
+    },
+    "rungic-codec": {
+      "source": "packaging/rungic-codec"
+    },
+    "rungic-docker": {
+      "source": "packaging/rungic-docker"
+    },
+    "rungic-firefox": {
+      "source": "packaging/rungic-firefox"
+    },
+    "rungic-snapshot": {
+      "source": "packaging/rungic-snapshot"
+    },
+    "rungic-flatpak-gl": {
+      "source": "packaging/rungic-flatpak-gl"
+    },
+    "rungic-suggestions": {
+      "source": "packaging/rungic-suggestions"
+    }
+  },
+  "coupled": [
+    "plasma-workspace",
+    "libplasma7",
+    "libplasmaquick7"
+  ],
+  "session_restart": [
+    "libkf6bluezqt6",
+    "libkwaylandclient6",
+    "kwin-*",
+    "libkwin6",
+    "mesa-*",
+    "libegl-mesa0",
+    "libgbm1",
+    "libgl1-mesa-dri",
+    "libglx-mesa0",
+    "plasma-mobile",
+    "plasma-workspace",
+    "libplasma7",
+    "libplasmaquick7",
+    "plasma-keyboard",
+    "xdg-desktop-portal-kde",
+    "libqt6multimedia6",
+    "rungic-plasma-session",
+    "rungic-plasma-bridges",
+    "rungic-plasma-input",
+    "rungic-plasma-config"
+  ],
+  "service_restart": {
+    "rungic-plasma-bridges": [
+      "rungic-plasma-network.service",
+      "rungic-plasma-bluetooth.service",
+      "rungic-plasma-modem.service"
+    ],
+    "rungic-suggestions": [
+      "rungic-suggestions-collect.timer"
+    ]
+  },
+  "android": [
+    {
+      "source": "system/rungic-plasma",
+      "path": "/data/adb/rungic-plasma/rungic-plasma",
+      "mode": "755"
+    },
+    {
+      "source": "system/android-audio",
+      "path": "/data/adb/rungic-plasma/android-audio",
+      "mode": "755"
+    },
+    {
+      "source": "system/android-audio.pa",
+      "path": "/data/adb/rungic-plasma/android-audio.pa",
+      "mode": "644"
+    },
+    {
+      "source": "system/android-calls",
+      "path": "/data/adb/rungic-plasma/android-calls",
+      "mode": "0755"
+    },
+    {
+      "source": "system/android-clipboard",
+      "path": "/data/adb/rungic-plasma/android-clipboard",
+      "mode": "755"
+    },
+    {
+      "source": "system/plasma.config",
+      "path": "/data/adb/rungic-lxc/runtime/var/lib/lxc/plasma/config",
+      "mode": "644"
+    },
+    {
+      "source": "system/rootfs-image",
+      "path": "/data/adb/rungic-plasma/rootfs-image",
+      "mode": "755"
+    },
+    {
+      "source": "system/rootfs.sepolicy.rule",
+      "path": "/data/adb/rungic-plasma/rootfs.sepolicy.rule",
+      "mode": "644"
+    },
+    {
+      "source": "system/rootfs-mount-hook",
+      "path": "/data/adb/rungic-plasma/rootfs-mount-hook",
+      "mode": "755"
+    }
+  ]
+}

@@ -6,9 +6,9 @@
 
 - `tools/rungic-magisk-bootstrap.rc` / `.sh`：当前 Magisk 离线引导。
 - `tools/ci/rungic-firstboot-service.sh` / `rungic-firstboot.sh`：部署、锁、状态、载荷校验与完成标记。
-- `plasma/rungic-plasma`：公共控制入口、release 门槛、`start_container` 和 `account-prepare`。
-- `plasma/android-audio`：共用目录准备与音频服务。
-- `tools/rungic_plasma_enter.c`：控制环境挂载；`plasma/native-apk` 中 `FirstBootState.java`、`MainActivity.java`、`AccountSetup.java`：等待状态、启动与账户表单。
+- `system/rungic-plasma`：公共控制入口、release 门槛、`start_container` 和 `account-prepare`。
+- `system/android-audio`：共用目录准备与音频服务。
+- `tools/rungic_plasma_enter.c`：控制环境挂载；`android/app` 中 `FirstBootState.java`、`MainActivity.java`、`AccountSetup.java`：等待状态、启动与账户表单。
 
 改动前追踪整条实际调用链，先修最低公共准备层，避免分别给账户和桌面入口打补丁。
 
@@ -29,7 +29,7 @@
 | 清数据后 Recovery，已有数据能启动 | G100 旧引导违反安全初始化时序；失败的具体加密调用未证实 | 保留日志，固定其他输入对照 init_boot，核对 root 生命周期；不要反复擦除并猜测数据损坏 |
 | 账户页报 bind audio/shared 不存在 | 音频目录初始化遗漏已定位；共享目录首次竞争缺少直接现场 | 先查部署 release/完成状态，再查真实存储、公共目录与挂载链；失败发生在账户助手前不要求用户换密码 |
 | 合法用户名显示不可用，但系统没有该账户 | X70 镜像曾带入宿主 Python 缓存，提前占用了同名 home | 分别查 passwd 与 home 内容及来源；在 `arm64_chroot.py` 隔离宿主环境，并由 rootfs/host 两端构建检查拒绝污染；不能删除未经核对的用户目录 |
-| 照片等应用报告 Pictures 不存在 | 首装没有统一准备 XDG 目录 | 复用 `plasma/user-dirs`，在真实 Shared 挂载后由账户准备/会话公共入口调用，保留已有目录；不要给每个 App 单独建目录 |
+| 照片等应用报告 Pictures 不存在 | 首装没有统一准备 XDG 目录 | 复用 `system/user-dirs`，在真实 Shared 挂载后由账户准备/会话公共入口调用，保留已有目录；不要给每个 App 单独建目录 |
 | 预装 APK 缺 libc++_shared | 压缩 JNI 库未随 product/app 安装 | 在组包中生成对应 lib/arm64 并核对标签；普通 pm install 修好只算诊断 |
 | Termux usr 已存在 | 应用曾提前生成空目录 | 仅允许 rmdir 删除空目录；非空或符号链接不能盲目清除 |
 | rootfs 展开异常/容量暴涨 | toybox 的 sparse 支持与帮助不一致 | 使用已验证写入器，核验完整镜像摘要与实际占用 |

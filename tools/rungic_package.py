@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
-"""Build this project's own Debian packages (rungic-*) from plasma/packaging/<name>/ (docs/61).
+"""Build this project's own Debian packages (rungic-*) from packaging/<name>/ (docs/61).
 
 Each package directory holds:
   package.json  name, architecture (all|arm64), build (host|device), paths (repository paths
@@ -50,7 +50,7 @@ import build_on_device
 from rungic_device import WORKSPACE
 import rungic_release
 
-PACKAGING = WORKSPACE / 'plasma/packaging'
+PACKAGING = WORKSPACE / 'packaging'
 BUILDS = rungic_release.APT / 'project-builds.json'
 DEVICE_BASE = '/root/rungic-packages'
 MAINTAINER = 'range-dev <noreply@localhost>'
@@ -270,6 +270,14 @@ def build_host(pkg, tree):
         root = work / 'root'
         (root / 'DEBIAN').mkdir(parents=True)
         env = dict(os.environ, DESTDIR=str(root), SRC=str(WORKSPACE), SOURCE_DATE_EPOCH=epoch, LC_ALL='C.UTF-8')
+        if pkg.get('upstream'):
+            # Use the same staged, patched inputs as device builds. Host packages must not
+            # silently read an old installed/vendor tree in place of their pinned upstream.
+            source = work / 'src'
+            source.mkdir()
+            with tarfile.open(stage_sources(pkg)) as archive:
+                archive.extractall(source, filter='tar')
+            env['SRC'] = str(source)
         subprocess.run(['sh', '-eu', str(pkg['dir'] / 'build.sh')], cwd=WORKSPACE, env=env, check=True)
         maintainer_scripts(pkg, root)
         if unit_list(pkg):

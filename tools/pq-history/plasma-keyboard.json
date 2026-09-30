@@ -7,7 +7,7 @@
  "steps": [
   {
    "name": "context-change-queued",
-   "patch": "plasma/keyboard-focus.patch",
+   "patch": "desktop/patches/keyboard-focus.patch",
    "author_name": "kevinzhow",
    "author_email": "kevinzhow@local",
    "date": "2026-09-23T20:28:24+08:00",
@@ -23,7 +23,7 @@
   },
   {
    "name": "language-popup-lifetime",
-   "patch": "plasma/keyboard-popup.patch",
+   "patch": "desktop/patches/keyboard-popup.patch",
    "author_name": "kevinzhow",
    "author_email": "kevinzhow@local",
    "date": "2026-09-23T20:28:24+08:00",

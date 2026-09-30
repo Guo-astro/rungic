@@ -1,5 +1,5 @@
 {
- "comment": "Pinned upstream of arc-cua (docs/71, docs/73), whose arc_cua package rungic-cua ships. No release tarballs: pinned by commit, checked by its tree hash. No changes; our Linux backend is plasma/cua.",
+ "comment": "Pinned upstream of arc-cua (docs/71, docs/73), whose arc_cua package rungic-cua ships. No release tarballs: pinned by commit, checked by its tree hash. No changes; our Linux backend is agent/computer-use.",
  "kind": "git",
  "source": "arc-cua",
  "version": "0.1.0",

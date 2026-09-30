@@ -10,19 +10,54 @@ Phosh was dropped on 2026-09-23. The shared media, network and clipboard impleme
 
 ## Agent capabilities and their documents
 
+Agent Ready is a system capability, independent of the selected agent. The bundled Codex assistant demonstrates an end-to-end integration. The table below describes that implementation and the services it uses; it is not a requirement to use Codex or a claim that every replacement agent is already integrated.
+
 | Capability | What it does | Documents |
 |---|---|---|
 | Voice conversation | Hold Home to call it; GPT Realtime talks and reads results aloud, Codex runs the task in the background | [59](59-voice-agent.md), [67](67-home-assistant.md) |
 | Visible work | Chat interface (the main conversation and others); a task plan checklist, spoken step updates, pictures and files right in the answer | [87](87-agent-app-redesign.md)–[89](89-agent-progress.md) |
-| Operating desktop apps | Controls through the accessibility tree (AT-SPI) and virtual input; GPT-6 Luna decides where to click from the picture; OCR on the phone's GPU | [60](60-computer-use.md), [64](64-goal-computer-use.md), [68](68-luna-computer-use.md) |
-| Assistant's screen (workspace) | A desktop of the assistant's own: its own KWin, private D-Bus and accessibility buses, its own Xwayland; shown in a floating window or on the TV, never touching the screen the user is on | [65](65-agent-screen.md), [research/91](research/91-agent-workspaces.md) |
+| Operating desktop apps | Desktop MCP tools for screenshots, input, windows and launching; the default goal helper uses GPT-6 Luna screenshot reasoning. AT-SPI/OCR is an alternate path, not a prerequisite for the default mode | [60](60-computer-use.md), [64](64-goal-computer-use.md), [68](68-luna-computer-use.md) |
+| Assistant's screen (workspace) | A desktop of the assistant's own: its own KWin, private D-Bus and accessibility buses, its own Xwayland; shown in a floating window or on the TV. Display/input separation under the same Linux account, not a filesystem security sandbox | [65](65-agent-screen.md), [research/91](research/91-agent-workspaces.md) |
 | Where it works | On the user's desktop while desktop mode or casting is on, otherwise on its own screen; the user can say which | [research/91](research/91-agent-workspaces.md) |
 | Single-instance apps | WeChat, Telegram and similar apps move to the assistant's screen when needed; the user is asked before an instance they use is closed | [research/91](research/91-agent-workspaces.md) |
 | Phone functions | Brightness, clipboard, orientation, vibration, network and display information, Android settings panels (`rungic-platform`); casting, screenshots | [59](59-voice-agent.md) |
-| Calls and voice messages | Makes and answers phone calls for the user; sends voice messages in chat apps | [63](63-call-proxy.md) |
-| Proactive suggestions | Collects faults and software compatibility problems, matches them against a compatibility knowledge base, and shows suggestions in a Folio home-screen widget; the assistant investigates when the user hands one over | [Proactive suggestions](research/proactive-system-care.md) |
+| Calls and voice messages | Capability-dependent call and chat-app voice workflows; the call agent remains under testing, and accepting a dial request is not proof that a call connected | [63](63-call-proxy.md) |
+| Proactive suggestions | Local fault collection and version-scoped compatibility matching; grouped, swipeable Folio widgets; reminders, investigation reports, revision-bound repair approval and persistent task state | [Proactive suggestions](research/proactive-system-care.md), [Knowledge](../compatibility/README.md) |
+| Agent widget | Separate pixel-art widget; observed Codex token usage and account-supplied quota/reset data, with links into the assistant. API-key and subscription modes are distinguished | [Proactive suggestions](research/proactive-system-care.md) |
 | Editable instructions | The guidelines and skills live in the user's home (`~/.config/rungic-voice-agent/prompts`, `~/.codex/skills`) and apply as soon as they change; a password or a detour that changes the outcome is asked about first | [59](59-voice-agent.md) |
 | Native diagnostics | Merged logs, crash symbolization, evidence snapshots and control-level UI actions as MCP tools for development agents | [55](55-agent-native-debugging.md) |
+
+## Integrating another agent
+
+Users can run another compatible agent in the Linux environment and connect it to the tools it supports. Reusing system tools and replacing the bundled assistant's complete experience are different integration scopes: voice, chat progress, suggestion execution and usage currently have explicit Codex/assistant connections that need adaptation.
+
+| Layer | Reusable interface and source | What a replacement must provide |
+|---|---|---|
+| Desktop operation | [Desktop MCP server](../agent/computer-use/rungic_cua/server.py): `desktop_screenshot`, `desktop_act`, window and launch tools, plus `desktop_goal` | MCP client configuration and workspace routing. The current goal helper uses a configured Luna backend; an agent can instead reason over screenshots and call the action tools itself |
+| Phone and casting | `rungic-platform --request` structured commands and `rungic-cast`; contracts in the [phone desktop skill](../agent/assistant/skills/rungic-phone-desktop/SKILL.md) | Command invocation, result/error handling and capability checks before operations |
+| Files, software and authorization | Linux tools, shared Android storage, PackageKit/`pkgcli` and polkit; [filesystem boundaries](69-filesystem-capabilities.md), [app installation](45-plasma-app-store.md) | Respect filesystem capabilities and use the user's system authentication flow for privileged operations |
+| Suggestions and knowledge | [C++ service](../agent/suggestions/service.h), `com.rungic.Suggestions` D-Bus methods and `rungic-suggestions` CLI; [versioned knowledge data](../compatibility/README.md) | Consume issue evidence, report investigation and repair state, and preserve plan/evidence revision checks. Current issue opening and task handoff target the bundled voice assistant and need rerouting |
+| Conversation and execution | [Voice/task bridge](../agent/assistant/rungic_voice_agent.py), currently speaking Codex `app-server` JSON-RPC | Map the replacement's sessions, start/stop, progress, results and errors into the assistant UI and voice flow |
+| Usage display | [Usage collector](../agent/suggestions/usage.cpp) and `AgentUsage`/`UsageChanged` | Account identity, timestamped usage and any provider-supplied quota/reset windows. Local token observations are not a billing total and do not include realtime voice usage |
+| Development and delivery | [Development MCP server](../tools/rungic_agent_mcp.py), [diagnostics](55-agent-native-debugging.md), [build skill](../.agents/skills/rungic-three-stage-image/SKILL.md) and versioned package tools | Development-host/device access and the applicable build, deployment and acceptance workflow; these are not automatically granted to a phone-side assistant |
+
+The bundled agent runs with the desktop user's access, and its Codex task settings currently use `danger-full-access` with `approvalPolicy=never`. Instructions to confirm destructive actions are behavioral policy; the workspace is not an agent sandbox. Package authorization and the suggestion service's revision-bound approval are separate mechanisms. Replacing the agent therefore includes reviewing its permissions and confirmation behavior, not just changing a model name.
+
+An integration should be accepted through observable outcomes: launch an app on the selected desktop, perform an action, return a usable file, report and stop a task, investigate a suggestion without applying a repair, reject stale repair approval, and show unavailable usage honestly. Confirm the user's password dialog stays on the user's desktop and that the agent's input targets the intended workspace. Existing Codex acceptance does not establish these behaviors for another agent.
+
+## Proactive system care: implemented scope
+
+The service records observations separately from agent tasks and user reminders. Its current collectors cover recent Linux coredumps, failed system/user services, unfinished package operations, low disk space and verified compatibility entries matching installed versions and optional environment fields. Missing or stale evidence is a coverage gap, not a clean bill of health. It is not a general detector for all Android faults or all missing hardware acceleration.
+
+The user-facing path is **observation → grouped suggestion → user handoff → investigation → confirmed repair plan → verification**. Repeated evidence updates an existing issue; related cards can share a swipeable stack without asserting a shared root cause. Cards and group controls open the corresponding app views. The Folio widgets preserve the native home screen, its favorites and app drawer; the usage widget is separate.
+
+The ledger persists issue, task and reminder state across restarts. Users can defer, schedule a reminder or dismiss suggestions. Notification selection respects inhibition, evidence freshness, presentation history and throttling; it does not implement an “after this app exits” trigger. Investigation reports carry a conclusion, confidence and next action. A repair approval captures the exact plan and evidence revision; task completion alone does not resolve the issue.
+
+The [compatibility knowledge base](../compatibility/README.md) is reviewed data, not executable repair scripts. `verified` entries can generate suggestions; `research` and `superseded` entries cannot. `policy` entries preserve intentional choices and do not generate optimization prompts. Shared backend fixes belong at the common system layer where possible; component changes remain in the repository's pinned upstream and patch-queue workflow.
+
+Upstream cooperation currently provides project metadata, local facts export and manually recorded issue/PR state. `rungic-suggestions feedback ID` produces local material; it does not upload it or open a PR. A requested contribution still needs reproduction, a scoped patch, validation and the upstream project's contribution procedure. Automatic submission/status synchronization is not implemented, and an upstream merge does not resolve an installed-device issue without deployment and verification.
+
+Acceptance evidence and historical revisions are in the [system-care record](research/proactive-system-care.md). It includes G100 validation of grouping, vertical swipes, current-card navigation and task recovery. API-key usage was tested live; subscription quota/reset presentation used fixtures. These scopes should be kept separate when extending the implementation.
 
 ## System features and their documents
 
@@ -45,33 +80,36 @@ The acceptance scope of each item is in its documents. Known limits: Turnip's Wa
 
 | Directory | Contents |
 |---|---|
-| `plasma/` | KDE and Android APK integration, session configuration, build scripts |
-| `native/plasma/` | The native Wayland backend in Rust (Smithay) |
-| `packages/` | Upstream components kept as patch queues: a pinned upstream plus DEP-3 patches ([71](71-upstream-patch-queue.md)) |
-| `vendor/` | Provenance and audit exceptions for the foreign trees still tracked directly (`native/plasma/`, `plasma/firefox-mobile/`) |
+| `android/` | Android host APK (`app/`), our Rust host modules (`host/`), and Android build scripts |
+| `agent/` | Assistant app and voice/task bridge, computer-use tools, Codex integration, suggestions, agent screen and workspaces |
+| `desktop/` | Plasma session integration, UI components, casting, recording, input, desktop hardware controls and benchmarks |
+| `system/` | Container startup, accounts, rootfs management, Android bridge scripts, system defaults and diagnostics |
+| `packaging/` | Build definitions and maintainer scripts for Rungic's own packages |
+| `release/` | Release package selection, service restart policy and acceptance scenarios |
+| `packages/` | Pinned upstream sources and DEP-3 patches, including the Android host, Smithay, Winit, KDE and Firefox mobile configuration ([71](71-upstream-patch-queue.md), [migration completion](73-reduce-upstream-changes.md#remaining-source-trees-migrated-2026-09-30)) |
 | `shared/` | Common Linux interfaces for media, network, clipboard and GPU |
 | `tools/` | Management, ROM, build and diagnostic tools |
-| `kernel/`, `lxc/`, `cutout/` | Kernel, container and device configuration |
+| `kernel/`, `lxc/` | Kernel and container configuration |
 | `docs/` | Implementation documents; `research/` keeps reusable findings |
 | `benchmarks/` | Selected raw performance data and analyses |
-| `provenance/` | Upstream sources, versions and checksums |
+| `provenance/` | Upstream origin records, versions, checksums, migration evidence and exact-hash audit exceptions |
 | `signing/development/` | The development APK signing identity, synced at the user's request |
 | `.work/` | Not synced: downloads, dependencies, caches, logs, media, packages and other keys |
 
-Boundaries and migration notes: [repository scope](52-git-repository-scope.md). The remote is the private repository [kevinzhow/RungicCore](https://github.com/kevinzhow/RungicCore) (renamed from `kevinzhow/range-dev` on 2026-09-28), default branch `main`. The documents contain device identities and network configuration and are not redacted for publication.
+Boundaries and migration notes: [repository scope](52-git-repository-scope.md). The remote is the private repository [kevinzhow/Rungic](https://github.com/kevinzhow/Rungic), default branch `main`. The documents contain device identities and network configuration and are not redacted for publication. The former `plasma/` source directory was split by responsibility; installed paths, service names and the Android application ID retain their existing names. The obsolete GSI-only `cutout/` overlay was removed; current cutout handling reads Android's display metadata.
 
 ## Status and entry points
 
 - Stock Android 16 with Magisk 31, SELinux enforcing. LXC is deployed; Docker runs rootless inside the container ([85](85-lxc-rootless-docker.md)). The three-stage flash package has been verified with a wiped install on the G100 ([80](80-g100-image-installation-retrospective.md)).
 - The Plasma APK and the Ubuntu container run at the native 1080×2400 with 30/60/90/120 Hz and automatic refresh policies. KWin stays on GLES; the Vulkan comparison and its limits are in [51](51-plasma-vulkan-benchmark.md), the value of a native Vulkan KWin in [56](56-kwin-vulkan-quantification.md).
 - Media and display still have open acceptance items; see [48](48-plasma-media-pipelines.md) and [50](50-plasma-display-settings.md). An installation that succeeds is not a completed acceptance.
-- Device management: `python3 tools/rungic_plasma.py status`. Development environment: `source tools/work-env.sh`. APK build: `bash plasma/build-apk.sh`, output under `.work/`.
+- Device management: `python3 tools/rungic_plasma.py status`. Development environment: `source tools/work-env.sh`. APK build: `bash android/build-apk.sh`, output under `.work/`.
 - Graphics and backend architecture: [40](40-plasma-mobile-integration.md) and the [shared bridges](../shared/README.md). A fresh build machine still needs the SDK/NDK and some dependencies.
-- Remote source checks and multi-machine work: [53](53-remote-system-development.md). Modified upstream components (KWin, Mesa, Xwayland, flatpak and others) are patch queues in `packages/` (`tools/pq.py`), built with `tools/build_on_device.py`; only `native/plasma/` and `plasma/firefox-mobile/` are tracked directly ([vendor notes](../vendor/README.md)).
+- Remote source checks and multi-machine work: [53](53-remote-system-development.md). Upstream modifications live in `packages/` and are edited through `tools/pq.py prepare/export`. Linux upstream packages use `tools/build_on_device.py`. For Android, `tools/prepare_android_host.py` assembles the host and its Smithay/Winit dependencies under `.work/`, then `android/build-native-core.sh` cross-compiles the library. Firefox mobile configuration is prepared from its recipe by `tools/rungic_package.py`. No directly tracked upstream source-tree exceptions remain; see [73](73-reduce-upstream-changes.md#remaining-source-trees-migrated-2026-09-30).
 
 Which layer a vendor adaptation belongs in, and what can move to a shared backend: [54](54-vendor-adaptation-boundaries.md).
 
-Delivery, acceptance and diagnostics: [61](61-delivery-diagnostics-plan.md). Every file this project puts on the container's rootfs comes from a package (`plasma/packaging`, patch queues and vendor rebuilds), deployed through the local APT repository and the release metapackage (`tools/rungic_release.py deploy|rollback|status`), followed by automatic acceptance (`tools/rungic_acceptance.py`); `rungic-integrity` checks for drift. The rootfs is an ext4 image (`plasma/rootfs-image`); deployment can take a dm-snapshot first and return to it when acceptance fails. `/home`, crash reports and the local repository are not rolled back with it.
+Delivery, acceptance and diagnostics: [61](61-delivery-diagnostics-plan.md). Every file this project puts on the container's rootfs comes from a package (`packaging`, patch queues and vendor rebuilds), deployed through the local APT repository and the release metapackage (`tools/rungic_release.py deploy|rollback|status`), followed by automatic acceptance (`tools/rungic_acceptance.py`); `rungic-integrity` checks for drift. The rootfs is an ext4 image (`system/rootfs-image`); deployment can take a dm-snapshot first and return to it when acceptance fails. `/home`, crash reports and the local repository are not rolled back with it.
 
 How Android system images, the RungicOS rootfs and kernel builds are split across phones, with device capability probing and release gates: [75](75-image-build-separation.md).
 

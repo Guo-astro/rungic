@@ -6,7 +6,7 @@ import types
 import unittest
 from unittest.mock import Mock
 root = Path(__file__).resolve().parents[2]
-source = root / 'plasma/voice-agent/rungic_voice_agent.py'
+source = root / 'agent/assistant/rungic_voice_agent.py'
 tree = ast.parse(source.read_text())
 node = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'VoiceAgent')
 node.body = [n for n in node.body if isinstance(n, ast.FunctionDef) and n.name in {'usage', 'usage_limits', 'on_notification'}]
@@ -113,7 +113,7 @@ class UsageBridgeTests(unittest.TestCase):
 
 class DescriptorTests(unittest.TestCase):
     def test_codex_descriptor_names_the_agents_usage_method(self):
-        d = json.loads((root / 'plasma/voice-agent/agent-usage/codex.json').read_text())
+        d = json.loads((root / 'agent/assistant/agent-usage/codex.json').read_text())
         self.assertEqual((d['schema'], d['id']), (1, 'codex'))
         interface = ast.literal_eval(next(n.value for n in tree.body if isinstance(n, ast.Assign)
                                           and getattr(n.targets[0], 'id', '') == 'INTERFACE'))
@@ -123,20 +123,20 @@ class DescriptorTests(unittest.TestCase):
                   and isinstance(n.targets[0], ast.Name) and isinstance(n.value, ast.Constant)}
         self.assertEqual(d['dbus']['service'], consts['BUS_NAME'])
         self.assertEqual(d['dbus']['path'], consts['OBJECT_PATH'])
-        build = (root / 'plasma/packaging/rungic-voice-agent/build.sh').read_text()
+        build = (root / 'packaging/rungic-voice-agent/build.sh').read_text()
         self.assertIn('/usr/share/rungic/agent-usage/providers/codex.json', build)
         self.assertIn('"$V"/agent-usage/icons/*.svg', build)
 
     def test_shipped_icons_are_the_files_their_packages_install(self):
         # Each descriptor's icon must be a file its package installs to /usr/share/rungic/agent-usage/icons.
-        for descriptor, icons in (('plasma/voice-agent/agent-usage/codex.json', 'plasma/voice-agent/agent-usage/icons'),
-                                  ('plasma/suggestions/agent-usage/claude-code.json', 'plasma/suggestions/agent-usage/icons')):
+        for descriptor, icons in (('agent/assistant/agent-usage/codex.json', 'agent/assistant/agent-usage/icons'),
+                                  ('agent/suggestions/agent-usage/claude-code.json', 'agent/suggestions/agent-usage/icons')):
             icon = json.loads((root / descriptor).read_text())['icon']
             self.assertIn('light', icon)
             for path in icon.values():
                 self.assertTrue(path.startswith('/usr/share/rungic/agent-usage/icons/'), path)
                 self.assertTrue((root / icons / Path(path).name).read_text().lstrip().startswith('<svg'), path)
-        cmake = (root / 'plasma/suggestions/CMakeLists.txt').read_text()
+        cmake = (root / 'agent/suggestions/CMakeLists.txt').read_text()
         self.assertIn('install(FILES agent-usage/icons/claude-code.svg DESTINATION share/rungic/agent-usage/icons)', cmake)
         sources = json.loads((root / 'provenance/agent-usage-icons-20260930/sources.json').read_text())['files']
         import hashlib

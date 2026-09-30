@@ -1,0 +1,27 @@
+Version=6
+# One-time per-user migrations of this project (docs/61). kded runs them at
+# session start and records them in ~/.config/kconf_updaterc.
+
+# The legacy fixed-3x display migration is retired. KWin owns default generation and
+# preserves existing user choices, including 3x. Never guess whether 3x was user-selected.
+
+# Quick setting tiles of cast and the assistant's screen, next to their
+# neighbours (formerly done by the cast and agent-screen install scripts).
+Id=rungic-quicksettings-v1
+Script=rungic-quicksettings.sh,sh
+
+# The per-user Firefox launcher override is replaced by rungic-firefox's
+# /usr/bin/firefox wrapper.
+Id=rungic-firefox-launcher-v1
+Script=rungic-firefox-launcher.sh,sh
+
+# Settings naming the programs' old /usr/local paths (kwinrc input method, the
+# per-user portal override). desktop/session runs kconf_update before KWin
+# starts, so KWin already reads the new input method path.
+Id=rungic-usr-paths-v1
+Script=rungic-usr-paths.sh,sh
+
+# The recording tile is this project's own quick setting; plasma-mobile's moves to the
+# disabled list (docs/73).
+Id=rungic-recording-quicksetting-v1
+Script=rungic-recording-quicksetting.sh,sh

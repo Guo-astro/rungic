@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'plasma/cua'))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'agent/computer-use'))
 from rungic_cua import router  # noqa: E402
 
 

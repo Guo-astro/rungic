@@ -1,0 +1,82 @@
+From: Rungic <noreply@rungic.invalid>
+Date: Wed, 30 Sep 2026 12:34:40 +0800
+Subject: Agent workspaces: a KWin of the agent's own on the Android host,
+ shown in the float, fullscreen or on the TV (docs/research/91)
+
+Preserve the deployed implementation during the source/patch migration.
+
+Origin: vendor, RungicCore commit:24a34289ebf0ae4203adb279227a8ef6ef40dd20
+Forwarded: no
+Last-Update: 2026-09-30
+X-Rungic-Status: Inappropriate; Android host integration
+X-Rungic-Tests: L0:source-replay; L1:android-cross-build (host); runtime scope in docs/73
+X-Rungic-Docs: docs/73; docs/49; docs/research/91
+---
+ src/wayland/output/handlers.rs |  4 ++++
+ src/wayland/output/mod.rs      | 29 +++++++++++++++++++++++++++--
+ 2 files changed, 31 insertions(+), 2 deletions(-)
+
+diff --git a/src/wayland/output/handlers.rs b/src/wayland/output/handlers.rs
+index 7ae1290..7e1e026 100644
+--- a/src/wayland/output/handlers.rs
++++ b/src/wayland/output/handlers.rs
+@@ -26,6 +26,10 @@ where
+     D: CompositorHandler,
+     D: 'static,
+ {
++    fn can_view(&self, client: &Client) -> bool {
++        self.viewer.as_ref().is_none_or(|viewer| viewer(client))
++    }
++
+     fn bind(
+         &self,
+         state: &mut D,
+diff --git a/src/wayland/output/mod.rs b/src/wayland/output/mod.rs
+index 4a457a8..f92747c 100644
+--- a/src/wayland/output/mod.rs
++++ b/src/wayland/output/mod.rs
+@@ -105,9 +105,16 @@ pub struct OutputManagerState {
+ }
+ 
+ /// Internal data of a wl_output global
+-#[derive(Debug)]
+ pub struct WlOutputData {
+     output: Output,
++    /// Which clients see this global (Rungic: an output only its workspace sees, docs/research/91).
++    viewer: Option<std::sync::Arc<dyn Fn(&wayland_server::Client) -> bool + Send + Sync>>,
++}
++
++impl std::fmt::Debug for WlOutputData {
++    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
++        f.debug_struct("WlOutputData").field("output", &self.output).field("filtered", &self.viewer.is_some()).finish()
++    }
+ }
+ 
+ /// Events initiated by the clients interacting with outputs
+@@ -214,7 +221,25 @@ impl Output {
+     {
+         info!(output = self.name(), "Creating new wl_output");
+         self.inner.0.lock().unwrap().handle = Some(display.backend_handle().downgrade());
+-        display.create_global::<D, WlOutput, _>(4, WlOutputData { output: self.clone() })
++        display.create_global::<D, WlOutput, _>(4, WlOutputData { output: self.clone(), viewer: None })
++    }
++
++    /// Create a new output global that only the clients `viewer` accepts see.
++    pub fn create_global_for<D>(
++        &self,
++        display: &DisplayHandle,
++        viewer: impl Fn(&wayland_server::Client) -> bool + Send + Sync + 'static,
++    ) -> GlobalId
++    where
++        D: GlobalDispatch<WlOutput, WlOutputData>,
++        D: 'static,
++    {
++        info!(output = self.name(), "Creating new wl_output for some clients");
++        self.inner.0.lock().unwrap().handle = Some(display.backend_handle().downgrade());
++        display.create_global::<D, WlOutput, _>(
++            4,
++            WlOutputData { output: self.clone(), viewer: Some(std::sync::Arc::new(viewer)) },
++        )
+     }
+ 
+     /// Attempt to retrieve a [`Output`] from an existing resource

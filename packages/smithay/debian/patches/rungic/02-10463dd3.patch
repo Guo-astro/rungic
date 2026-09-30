@@ -1,0 +1,66 @@
+From: Rungic <noreply@rungic.invalid>
+Date: Wed, 30 Sep 2026 12:34:39 +0800
+Subject: Host input: text-input without an IME client,
+ correct Android key codes
+
+Preserve the deployed implementation during the source/patch migration.
+
+Origin: vendor, RungicCore commit:10463dd342ed57327ef96cda282db35f7a4daaf1
+Forwarded: no
+Last-Update: 2026-09-30
+X-Rungic-Status: Inappropriate; Android host integration
+X-Rungic-Tests: L0:source-replay; L1:android-cross-build (host); runtime scope in docs/73
+X-Rungic-Docs: docs/73; docs/49; docs/research/91
+---
+ src/wayland/seat/keyboard.rs                |  4 +++-
+ src/wayland/text_input/text_input_handle.rs | 14 +++++++++-----
+ 2 files changed, 12 insertions(+), 6 deletions(-)
+
+diff --git a/src/wayland/seat/keyboard.rs b/src/wayland/seat/keyboard.rs
+index d58dcc3..50bd23a 100644
+--- a/src/wayland/seat/keyboard.rs
++++ b/src/wayland/seat/keyboard.rs
+@@ -277,8 +277,10 @@ impl<D: SeatHandler + 'static> KeyboardTarget<D> for WlSurface {
+ 
+         if input_method.has_instance() {
+             input_method.deactivate_input_method(state);
+-            text_input.leave();
+         }
++        // Moto: leave (which also clears the active instance) with or without an
++        // input-method client, symmetric with enter.
++        text_input.leave();
+ 
+         text_input.set_focus(None);
+     }
+diff --git a/src/wayland/text_input/text_input_handle.rs b/src/wayland/text_input/text_input_handle.rs
+index c5034dc..064563e 100644
+--- a/src/wayland/text_input/text_input_handle.rs
++++ b/src/wayland/text_input/text_input_handle.rs
+@@ -224,11 +224,10 @@ where
+             self.handle.increment_serial(resource);
+         }
+ 
+-        // Discard requests without any active input method instance.
+-        if !self.input_method_handle.has_instance() {
+-            debug!("discarding text-input request without IME running");
+-            return;
+-        }
++        // Moto (docs/58): keep tracking text-input state without an input-method
++        // client. The compositor itself commits text from the Android keyboard through
++        // `with_active_text_input`, which needs the enabled instance; every call into
++        // the input method below is a no-op when none is running.
+ 
+         let focus = match self.handle.focus() {
+             Some(focus) if focus.id().same_client_as(&resource.id()) => focus,
+@@ -351,6 +350,11 @@ where
+         let deactivate_im = {
+             let mut inner = self.handle.inner.lock().unwrap();
+             inner.instances.retain(|inst| inst.instance.id() != destroyed_id);
++            // Moto: a destroyed instance must not stay active; it would make every
++            // later enable be discarded as "already have an active one".
++            if inner.active_text_input_id.as_ref() == Some(&destroyed_id) {
++                inner.active_text_input_id = None;
++            }
+             let destroyed_focused = inner
+                 .focus
+                 .as_ref()

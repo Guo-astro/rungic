@@ -1,0 +1,159 @@
+From: Rungic <noreply@rungic.invalid>
+Date: Wed, 30 Sep 2026 12:34:37 +0800
+Subject: =?utf-8?q?Host=3A_on-demand_vsync_=E2=80=94_park_the_compositor_lo?=
+ =?utf-8?q?op_on_a_static_desktop?=
+
+Preserve the deployed implementation during the source/patch migration.
+
+Origin: vendor, RungicCore commit:bd28a94848635588e244c40de94ee70e52718848
+Forwarded: no
+Last-Update: 2026-09-30
+X-Rungic-Status: Inappropriate; Android host integration
+X-Rungic-Tests: L0:source-replay; L1:android-cross-build (host); runtime scope in docs/73
+X-Rungic-Docs: docs/73; docs/49; docs/research/91
+---
+ src/android/backend/wayland/input.rs  |  5 +++++
+ src/android/backend/wayland/server.rs | 11 +++++++++++
+ src/android/command_channel.rs        |  6 ++++--
+ src/compositor.rs                     | 33 +++++++++++++++++++++++++++++----
+ 4 files changed, 49 insertions(+), 6 deletions(-)
+
+diff --git a/src/android/backend/wayland/input.rs b/src/android/backend/wayland/input.rs
+index 84cd14a..f4fa45c 100644
+--- a/src/android/backend/wayland/input.rs
++++ b/src/android/backend/wayland/input.rs
+@@ -280,6 +280,11 @@ impl InputRouter {
+     /// Transitions to Armed state — waiting for window-drag or second finger.
+     /// Returns None: the state change alone carries the information; next
+     /// TouchMove (for drag) or multi-touch (for right-click) triggers emission.
++    /// A touch is down or a gesture is pending; keep the loop vsync-paced.
++    pub fn busy(&self) -> bool {
++        !self.active_touches.is_empty()
++    }
++
+     pub fn poll_timer(&mut self) -> Option<RoutedInputEvent> {
+         if let TouchGestureState::Pending { start_x, start_y, start_time, id } = self.touch_gesture_state {
+             if start_time.elapsed() >= LONG_PRESS_DURATION && self.active_touches.len() == 1 {
+diff --git a/src/android/backend/wayland/server.rs b/src/android/backend/wayland/server.rs
+index dd6963b..80c73ce 100644
+--- a/src/android/backend/wayland/server.rs
++++ b/src/android/backend/wayland/server.rs
+@@ -495,6 +495,17 @@ impl WaylandServer {
+         count
+     }
+ 
++    /// Descriptors that become readable when the parked loop has Wayland work:
++    /// client requests, new connections and the XWayland window manager.
++    pub fn wait_fds(&self) -> Vec<std::os::fd::RawFd> {
++        use std::os::fd::{AsFd, AsRawFd};
++        let mut fds = vec![self.display.as_fd().as_raw_fd(), self.listener.as_raw_fd()];
++        if let Some(event_loop) = self.xwayland_event_loop.as_ref() {
++            fds.push(event_loop.as_fd().as_raw_fd());
++        }
++        fds
++    }
++
+     pub fn pump(&mut self) {
+         let socket_present = fs::symlink_metadata(&self.socket_path)
+             .map(|metadata| metadata.file_type().is_socket())
+diff --git a/src/android/command_channel.rs b/src/android/command_channel.rs
+index c2d4b3d..a7666f7 100644
+--- a/src/android/command_channel.rs
++++ b/src/android/command_channel.rs
+@@ -99,10 +99,12 @@ pub fn set_command_tx(tx: crossbeam_channel::Sender<JniCommand>) {
+ 
+ /// Send a command to the compositor thread. Returns `false` if the channel is not set up yet.
+ pub fn send_command(cmd: JniCommand) -> bool {
+-    COMMAND_TX.lock().unwrap()
++    let sent = COMMAND_TX.lock().unwrap()
+         .as_ref()
+         .map(|tx| tx.send(cmd).is_ok())
+-        .unwrap_or(false)
++        .unwrap_or(false);
++    crate::android::frame_clock::kick();
++    sent
+ }
+ 
+ /// Check whether the command channel is initialized.
+diff --git a/src/compositor.rs b/src/compositor.rs
+index c511b41..7b53e5b 100644
+--- a/src/compositor.rs
++++ b/src/compositor.rs
+@@ -22,6 +22,11 @@ struct CompositorRuntime {
+ }
+ 
+ static RUNTIME: Mutex<Option<Box<CompositorRuntime>>> = Mutex::new(None);
++/// Quiet period (no commit, command, touch or pending SurfaceFlinger callback)
++/// after which the loop stops following vsync.
++const PARK_AFTER: Duration = Duration::from_millis(400);
++/// Housekeeping interval while parked (socket checks, XWayland reconnects, stats).
++const PARKED_TIMEOUT: Duration = Duration::from_secs(1);
+ 
+ fn is_wayland_socket_published(socket_dir: &Path, socket_name: &str) -> bool {
+     let socket_path = socket_dir.join(socket_name);
+@@ -115,10 +120,16 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+         let mut last_commits = crate::android::backend::wayland::engine_timing::commit_count();
+         let mut last_render = Instant::now();
+         let mut last_vsync = 0;
++        // On-demand vsync (frame_clock.rs): park after a quiet period.
++        let mut last_activity = Instant::now();
++        let mut parked = false;
+         log::info!("Compositor: runtime loop started");
+ 
+         while thread_running.load(Ordering::Relaxed) {
+-            crate::android::frame_clock::wait_next(&mut last_vsync);
++            match wayland_server.as_ref().filter(|_| parked) {
++                Some(server) => crate::android::frame_clock::wait_parked(&server.wait_fds(), PARKED_TIMEOUT),
++                None => crate::android::frame_clock::wait_next(&mut last_vsync),
++            }
+             let mut commands_this_spin = 0u32;
+             while let Ok(cmd) = cmd_rx.try_recv() {
+                 commands_this_spin += 1;
+@@ -446,7 +457,10 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+                 // heartbeat instead of 60fps of identical SHM copies.
+                 // Any client commit, input command, or gesture forces fresh.
+                 let commits = crate::android::backend::wayland::engine_timing::commit_count();
+-                let heartbeat = last_render.elapsed() >= Duration::from_millis(500);
++                let heartbeat = !parked && last_render.elapsed() >= Duration::from_millis(500);
++                if commits != last_commits || commands_this_spin > 0 {
++                    last_activity = Instant::now();
++                }
+                 if commits != last_commits || commands_this_spin > 0 || heartbeat {
+                     server.runtime.render_all();
+                     last_render = Instant::now();
+@@ -477,6 +491,16 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+             }
+             render_background_tick(&backend_state);
+ 
++            let settling = input_router.busy()
++                || backend_state.frames_presented == 0
++                || backend_state.presenter.as_ref().is_some_and(|p| !p.settled());
++            if settling {
++                last_activity = Instant::now();
++            }
++            parked = wayland_server.is_some() && last_activity.elapsed() >= PARK_AFTER
++                && crate::android::surface_control::on_demand_vsync();
++            crate::android::frame_clock::set_wants_vsync(!parked);
++
+             // Snapshot/diagnostics at ~2Hz, not every spin: the format!s and
+             // shared-state writes below are pure overhead per iteration.
+             if last_stats_print.elapsed() >= Duration::from_millis(500) {
+@@ -500,7 +524,7 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+                         .map(|s| format!("{:?}", s.id()))
+                         .unwrap_or_else(|| "none".to_string());
+                     let stats = format!(
+-                        "windows={} unmanaged={} focus={} injected={} dispatch={} focus_decision={} cursor={} {}",
++                        "windows={} unmanaged={} focus={} injected={} dispatch={} focus_decision={} cursor={} {} {}",
+                         server.runtime.space.elements().count(),
+                         server.runtime.unmanaged_surfaces.len(),
+                         focused,
+@@ -508,7 +532,8 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+                         server.runtime.last_seat_dispatch,
+                         server.runtime.last_focus_decision,
+                         server.runtime.last_cursor_mode,
+-                        crate::android::surface_control::stats()
++                        crate::android::surface_control::stats(),
++                        crate::android::frame_clock::stats()
+                     );
+                     crate::android::command_channel::set_runtime_stats(stats);
+                 }

@@ -30,7 +30,7 @@ from pathlib import Path
 
 WORKSPACE = Path(__file__).resolve().parent.parent
 DEFAULT_SERIAL = 'ZY32MVJS25'
-# Sets $p to the Android-side launcher (plasma/rungic-plasma), under its name before the cutover if
+# Sets $p to the Android-side launcher (system/rungic-plasma), under its name before the cutover if
 # that is what the phone has.
 LAUNCHER_SH = 'p=/data/adb/rungic-plasma/rungic-plasma; [ -x $p ] || p=/data/adb/moto-plasma/moto-plasma'
 # Shell words for root scripts: the launcher, and the Plasma LXC directory (config, state/).

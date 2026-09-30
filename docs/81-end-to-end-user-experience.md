@@ -203,13 +203,13 @@ flowchart TD
 ### 项目源码
 
 - [刷写状态与确认顺序](../tools/ci/flash_release.py)：`verify()`、`main()`、`Device.run()`。
-- [首启状态读取](../plasma/native-apk/src/com/rungic/plasma/FirstBootState.java)：`read()`。
+- [首启状态读取](../android/app/src/com/rungic/plasma/FirstBootState.java)：`read()`。
 - [首启发布与存储等待](../tools/ci/rungic-firstboot.sh)：`publish()`、`finish_exit()`、storage 阶段。
-- [宿主启动/菜单/返回](../plasma/native-apk/src/com/rungic/plasma/MainActivity.java)：`surfaceCreated()`、`registerEdgeBack()`、`showDesktopMenu()`。
-- [账户 UI](../plasma/native-apk/src/com/rungic/plasma/AccountSetup.java)、[账户助手](../plasma/account/setup.py)。
-- [后台通知](../plasma/native-apk/src/com/rungic/plasma/DesktopService.java)、[容器/桌面就绪](../plasma/rungic-plasma)。
-- [助理全屏工具栏](../plasma/native-apk/src/com/rungic/plasma/AgentFullscreen.java)、[小窗工具栏](../plasma/agent-screen/qml/Main.qml)。
-- [当前锁屏归属](../plasma/config/etc/xdg/kscreenlockerrc)、[发布/恢复工具](../tools/rungic_release.py)。
+- [宿主启动/菜单/返回](../android/app/src/com/rungic/plasma/MainActivity.java)：`surfaceCreated()`、`registerEdgeBack()`、`showDesktopMenu()`。
+- [账户 UI](../android/app/src/com/rungic/plasma/AccountSetup.java)、[账户助手](../system/account/setup.py)。
+- [后台通知](../android/app/src/com/rungic/plasma/DesktopService.java)、[容器/桌面就绪](../system/rungic-plasma)。
+- [助理全屏工具栏](../android/app/src/com/rungic/plasma/AgentFullscreen.java)、[小窗工具栏](../agent/screen/qml/Main.qml)。
+- [当前锁屏归属](../system/config/etc/xdg/kscreenlockerrc)、[发布/恢复工具](../tools/rungic_release.py)。
 - [80 篇实施复盘](80-g100-image-installation-retrospective.md)、[70 篇命名约定](70-rungic-rebrand.md)、[45 篇应用商店](45-plasma-app-store.md)、[65 篇助理屏](65-agent-screen.md)。
 
 ### 上游 UX 依据（2026-09-28 查阅）

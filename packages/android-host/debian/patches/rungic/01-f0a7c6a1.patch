@@ -1,0 +1,718 @@
+From: Rungic <noreply@rungic.invalid>
+Date: Wed, 30 Sep 2026 12:34:37 +0800
+Subject: Import Moto Plasma platform, shared bridges and research
+
+Preserve the deployed implementation during the source/patch migration.
+
+Origin: vendor, RungicCore commit:f0a7c6a1241d205a921bb8e85645ca96a9e1cdce
+Forwarded: no
+Last-Update: 2026-09-30
+X-Rungic-Status: Inappropriate; Android host integration
+X-Rungic-Tests: L0:source-replay; L1:android-cross-build (host); runtime scope in docs/73
+X-Rungic-Docs: docs/73; docs/49; docs/research/91
+---
+ Cargo.toml                                       | 138 +++++++++++------------
+ build.rs                                         |  12 +-
+ src/android/backend/smithay_backend.rs           |  48 ++++++--
+ src/android/backend/wayland/handlers.rs          |  14 +--
+ src/android/backend/wayland/input_router.rs      |  93 ++-------------
+ src/android/backend/wayland/output_management.rs |   4 +-
+ src/android/backend/wayland/seat.rs              |  45 ++++++--
+ src/android/backend/wayland/x11.rs               |   2 +-
+ src/android/bridge_init.rs                       |   4 +-
+ src/android/mod.rs                               |   4 +
+ src/compositor.rs                                |  33 ++++--
+ 11 files changed, 198 insertions(+), 199 deletions(-)
+
+diff --git a/Cargo.toml b/Cargo.toml
+index 548cbf6..51309bf 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -1,69 +1,69 @@
+-[package]
+-name = "winland_core"
+-version = "0.2.0"
+-edition = "2021"
+-
+-[lib]
+-name = "uniffi_winland_core"
+-crate-type = ["cdylib", "rlib"]
+-
+-[profile.release]
+-panic = "unwind"
+-
+-[profile.dev]
+-panic = "unwind"
+-
+-[[bin]]
+-name = "winland-setup"
+-path = "src/bin/winland-setup.rs"
+-
+-[features]
+-default = []
+-profiling = ["dep:tracy-client"]
+-patched_graphics = ["dep:smithay"]
+-xwayland = ["smithay/xwayland"]
+-smithay_android = ["patched_graphics", "xwayland", "smithay/backend_egl", "smithay/renderer_gl", "smithay/wayland_frontend", "smithay/xwayland", "dep:xkbcommon"]
+-
+-[dependencies]
+-# Android & Native Integration
+-jni = "0.21.1"
+-android_logger = "0.15.1"
+-log = "0.4.29"
+-tracing = "0.1"
+-tracing-log = "0.1"
+-tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+-ndk = "0.9.0"
+-ndk-sys = "0.6.0"
+-libc = "0.2.186"
+-# Utilities
+-lazy_static = "1.5.0"
+-uniffi = { version = "0.31.0", features = ["cli"] }
+-anyhow = "1.0.102"
+-thiserror = "2.0.18"
+-nix = { version = "0.31.2", features = ["fs", "socket", "uio", "inotify"] }
+-libloading = "0.9.0"
+-khronos-egl = { version = "6.0.0", features = ["dynamic"] }
+-gl = "0.14.0"
+-memmap2 = "0.9.10"
+-parking_lot = "0.12.3"
+-crossbeam-channel = "0.5"
+-async-io = "2.4.0"
+-euclid = "0.22.11"
+-tracy-client = { version = "0.17.0", features = ["enable"], optional = true }
+-# Graphics & Wayland (Smithay Stack)
+-xkbcommon = { version = "0.9.0", features = ["wayland"], optional = true }
+-wayland-protocols = { version = "0.32.12", default-features = false, features = ["unstable"] }
+-smithay = { path = "lib/smithay", default-features = false, features = ["wayland_frontend", "wayland-protocols", "desktop", "wayland-server", "renderer_glow", "xwayland"], optional = true }
+-winit = { path = "lib/winit/winit", default-features = false, features = ["android-native-activity", "wayland"], optional = true }
+-
+-# Android / Wayland extras
+-robius-directories = "5.0.1"   # مسار XDG_RUNTIME_DIR الآمن على Android
+-oboe = "0.6.1"                # الصوت (تشغيل/تسجيل) عبر Oboe (AAudio + OpenSL ES)
+-nokhwa = { version = "0.10.7", features = ["input-native", "rgb"] }  # الكاميرا
+-sysinfo = "0.30.0"             # معلومات النظام (CPU, RAM, ...)
+-# hbm is disabled because the current Android cross-build breaks on nix::sys::stat::makedev
+-# hbm = { version = "0.1.6", features = ["drm", "ash"] }
+-
+-[build-dependencies]
+-uniffi = { version = "0.31.0", features = ["build"] }
+-cc = "1.2.15"
++[package]
++name = "winland_core"
++version = "0.2.0"
++edition = "2021"
++
++[lib]
++name = "uniffi_winland_core"
++crate-type = ["cdylib", "rlib"]
++
++[profile.release]
++panic = "unwind"
++
++[profile.dev]
++panic = "unwind"
++
++[[bin]]
++name = "winland-setup"
++path = "src/bin/winland-setup.rs"
++
++[features]
++default = []
++profiling = ["dep:tracy-client"]
++patched_graphics = ["dep:smithay"]
++xwayland = ["smithay/xwayland"]
++smithay_android = ["patched_graphics", "xwayland", "smithay/backend_egl", "smithay/renderer_gl", "smithay/wayland_frontend", "smithay/xwayland", "dep:xkbcommon"]
++
++[dependencies]
++# Android & Native Integration
++jni = "0.21.1"
++android_logger = "0.15.1"
++log = "0.4.29"
++tracing = "0.1"
++tracing-log = "0.1"
++tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
++ndk = "0.9.0"
++ndk-sys = "0.6.0"
++libc = "0.2.186"
++# Utilities
++lazy_static = "1.5.0"
++uniffi = { version = "0.31.0", features = ["cli"] }
++anyhow = "1.0.102"
++thiserror = "2.0.18"
++nix = { version = "0.31.2", features = ["fs", "socket", "uio", "inotify"] }
++libloading = "0.9.0"
++khronos-egl = { version = "6.0.0", features = ["dynamic"] }
++gl = "0.14.0"
++memmap2 = "0.9.10"
++parking_lot = "0.12.3"
++crossbeam-channel = "0.5"
++async-io = "2.4.0"
++euclid = "0.22.11"
++tracy-client = { version = "0.17.0", features = ["enable"], optional = true }
++# Graphics & Wayland (Smithay Stack)
++xkbcommon = { version = "0.9.0", features = ["wayland"], optional = true }
++wayland-protocols = { version = "0.32.12", default-features = false, features = ["unstable"] }
++smithay = { path = "lib/smithay", default-features = false, features = ["wayland_frontend", "wayland-protocols", "desktop", "wayland-server", "renderer_glow", "xwayland"], optional = true }
++winit = { path = "lib/winit/winit", default-features = false, features = ["android-native-activity", "wayland"], optional = true }
++
++# Android / Wayland extras
++robius-directories = "5.0.1"   # مسار XDG_RUNTIME_DIR الآمن على Android
++oboe = { version = "0.6.1", features = ["shared-stdcxx"] }                # الصوت (تشغيل/تسجيل) عبر Oboe (AAudio + OpenSL ES)
++nokhwa = { version = "0.10.7", features = ["input-native", "rgb"] }  # الكاميرا
++sysinfo = "0.30.0"             # معلومات النظام (CPU, RAM, ...)
++# hbm is disabled because the current Android cross-build breaks on nix::sys::stat::makedev
++# hbm = { version = "0.1.6", features = ["drm", "ash"] }
++
++[build-dependencies]
++uniffi = { version = "0.31.0", features = ["build"] }
++cc = "1.2.15"
+diff --git a/build.rs b/build.rs
+index f09a26b..be854c4 100644
+--- a/build.rs
++++ b/build.rs
+@@ -4,6 +4,8 @@ use std::path::PathBuf;
+ 
+ fn main() {
+     println!("cargo:rerun-if-changed=build.rs");
++    println!("cargo:rerun-if-env-changed=MOTO_XKBCOMMON_LIB");
++    println!("cargo:rerun-if-env-changed=MOTO_JNI_LIBS_DIR");
+     println!("cargo:rerun-if-changed=../libxkbcommon/build-android/libxkbcommon.so");
+     println!("cargo:rerun-if-changed=src/android/sensor_shim.c");
+ 
+@@ -30,10 +32,13 @@ fn main() {
+ 
+     // Primary source: the library we built from source in libxkbcommon/build-android/
+     // Fallback: patches dir (alternative build location)
+-    let xkbcommon_candidates = [
++    let mut xkbcommon_candidates = vec![
+         manifest_dir.join("../libxkbcommon/build-android/libxkbcommon.so"),
+         manifest_dir.join("../patches/build-libxkbcommon/output/lib/libxkbcommon.so"),
+     ];
++    if let Some(path) = env::var_os("MOTO_XKBCOMMON_LIB") {
++        xkbcommon_candidates.insert(0, PathBuf::from(path));
++    }
+ 
+     let xkbcommon_lib = xkbcommon_candidates
+         .iter()
+@@ -67,7 +72,10 @@ fn main() {
+     println!("cargo:rustc-cdylib-link-arg=-Wl,--threads=1");
+ 
+     // Copy the built libxkbcommon.so into jniLibs so Gradle packages it in the APK.
+-    let packaged_jni_dir = manifest_dir.join("../app/src/main/jniLibs/arm64-v8a");
++    let packaged_jni_dir = env::var_os("MOTO_JNI_LIBS_DIR")
++        .map(PathBuf::from)
++        .unwrap_or_else(|| PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR missing"))
++            .join("jniLibs/arm64-v8a"));
+     if let Err(error) = fs::create_dir_all(&packaged_jni_dir) {
+         panic!("failed to create JNI output directory: {error}");
+     }
+diff --git a/src/android/backend/smithay_backend.rs b/src/android/backend/smithay_backend.rs
+index 7d82f0a..6b294fd 100644
+--- a/src/android/backend/smithay_backend.rs
++++ b/src/android/backend/smithay_backend.rs
+@@ -36,7 +36,7 @@ pub fn composite_multi(state: &mut AndroidSmithayState, surfaces: &[RenderItem])
+ 
+     let n_shm = surfaces.iter().filter(|s| matches!(s, RenderItem::Shm { .. })).count();
+     let n_dmabuf = surfaces.iter().filter(|s| matches!(s, RenderItem::DmaBuf { .. })).count();
+-    log::info!("composite_multi: {} surfaces ({} SHM, {} DMA-BUF), render_active={}",
++    log::debug!("composite_multi: {} surfaces ({} SHM, {} DMA-BUF), render_active={}",
+         surfaces.len(), n_shm, n_dmabuf,
+         crate::android::backend::wayland::engine_timing::is_rendering_active());
+ 
+@@ -113,7 +113,7 @@ pub fn composite_multi(state: &mut AndroidSmithayState, surfaces: &[RenderItem])
+             return;
+         }
+ 
+-        log::info!("composite_multi: eglMakeCurrent OK, viewport {}x{}",
++        log::debug!("composite_multi: eglMakeCurrent OK, viewport {}x{}",
+             physical_sw as i32, physical_sh as i32);
+ 
+         gl::Viewport(0, 0, physical_sw as i32, physical_sh as i32);
+@@ -221,6 +221,8 @@ pub fn composite_multi(state: &mut AndroidSmithayState, surfaces: &[RenderItem])
+                         let has_mods = state.has_dmabuf_import_modifiers && is_valid_modifier;
+                         let attribs = if has_mods {
+                             vec![
++                                EGL_WIDTH, width,
++                                EGL_HEIGHT, height,
+                                 EGL_LINUX_DRM_FOURCC_EXT, fourcc_val,
+                                 EGL_DMA_BUF_PLANE0_FD_EXT, fd.as_raw_fd() as i32,
+                                 EGL_DMA_BUF_PLANE0_OFFSET_EXT, i32::try_from(offset).unwrap_or(0),
+@@ -232,6 +234,8 @@ pub fn composite_multi(state: &mut AndroidSmithayState, surfaces: &[RenderItem])
+                             ]
+                         } else {
+                             vec![
++                                EGL_WIDTH, width,
++                                EGL_HEIGHT, height,
+                                 EGL_LINUX_DRM_FOURCC_EXT, fourcc_val,
+                                 EGL_DMA_BUF_PLANE0_FD_EXT, fd.as_raw_fd() as i32,
+                                 EGL_DMA_BUF_PLANE0_OFFSET_EXT, i32::try_from(offset).unwrap_or(0),
+@@ -241,7 +245,18 @@ pub fn composite_multi(state: &mut AndroidSmithayState, surfaces: &[RenderItem])
+                             ]
+                         };
+ 
+-                        let egl_img = create_image(display, std::ptr::null_mut(), EGL_LINUX_DMA_BUF_EXT, std::ptr::null_mut(), attribs.as_ptr());
++                        let ahb = crate::android::gpu_allocator::lookup(fd.as_raw_fd(), width, height, fourcc);
++                        let egl_img = if let Some(ref buffer) = ahb {
++                            let name = std::ffi::CString::new("eglGetNativeClientBufferANDROID").unwrap();
++                            let p = eglGetProcAddress(name.as_ptr());
++                            if p.is_null() { std::ptr::null_mut() } else {
++                                let get: unsafe extern "C" fn(*const std::ffi::c_void) -> *mut std::ffi::c_void = std::mem::transmute(p);
++                                let attrs = [EGL_IMAGE_PRESERVED_KHR, 1, EGL_NONE];
++                                create_image(display, std::ptr::null_mut(), 0x3140, get(buffer.ptr), attrs.as_ptr())
++                            }
++                        } else if state.has_dmabuf_import {
++                            create_image(display, std::ptr::null_mut(), EGL_LINUX_DMA_BUF_EXT, std::ptr::null_mut(), attribs.as_ptr())
++                        } else { std::ptr::null_mut() };
+                         if !egl_img.is_null() {
+                             let mut tex: gl::types::GLuint = 0;
+                             gl::GenTextures(1, &mut tex);
+@@ -275,11 +290,18 @@ pub fn composite_multi(state: &mut AndroidSmithayState, surfaces: &[RenderItem])
+                             gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
+                             gl::DisableVertexAttribArray(0);
+                             gl::DisableVertexAttribArray(1);
++                            gl::Finish(); // Complete sampling before the Wayland buffer can be reused.
+                             gl::DeleteTextures(1, &tex);
+-                            log::info!("DmaBuf: EGL imported {}x{}", width, height);
++                            static GPU_IMPORT_REPORTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
++                            if !GPU_IMPORT_REPORTED.swap(true, std::sync::atomic::Ordering::Relaxed) {
++                                log::warn!("MOTO_GPU: shared GPU buffer imported directly by Android EGL {}x{}", width, height);
++                            }
+                             continue;
+                         }
+-                        log::warn!("DmaBuf: eglCreateImageKHR failed, trying CPU fallback");
++                        static GPU_IMPORT_FAILURE_REPORTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
++                        if !GPU_IMPORT_FAILURE_REPORTED.swap(true, std::sync::atomic::Ordering::Relaxed) {
++                            log::warn!("MOTO_GPU: Android EGL DMA-BUF import failed error=0x{:x}; using CPU transfer", eglGetError());
++                        }
+                     }
+ 
+                     // CPU mmap fallback (EGL failed or unavailable)
+@@ -324,7 +346,10 @@ pub fn composite_multi(state: &mut AndroidSmithayState, surfaces: &[RenderItem])
+                         gl::DisableVertexAttribArray(0);
+                         gl::DisableVertexAttribArray(1);
+                         gl::DeleteTextures(1, &tex);
+-                        log::info!("DmaBuf: CPU fallback rendered {}x{} via mmap", width, height);
++                        static CPU_TRANSFER_REPORTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
++                        if !CPU_TRANSFER_REPORTED.swap(true, std::sync::atomic::Ordering::Relaxed) {
++                            log::warn!("MOTO_GPU: CPU DMA-BUF transfer active {}x{}", width, height);
++                        }
+                         continue;
+                     }
+                     log::warn!("DmaBuf: fallback failed, skipping");
+@@ -336,12 +361,13 @@ pub fn composite_multi(state: &mut AndroidSmithayState, surfaces: &[RenderItem])
+         gl::UseProgram(0);
+ 
+         let swap_ok = eglSwapBuffers(display, surface);
+-        log::info!("composite_multi: eglSwapBuffers -> {} (egl_error=0x{:x})", swap_ok, eglGetError());
++        if swap_ok != 0 { crate::android::frame_clock::note_present(); }
++        log::debug!("composite_multi: eglSwapBuffers -> {} (egl_error=0x{:x})", swap_ok, eglGetError());
+         let _ = eglMakeCurrent(display, egl::NO_SURFACE, egl::NO_SURFACE, egl::NO_CONTEXT);
+     }
+ 
+     state.frames_presented += 1;
+-    log::info!("composite_multi: done, frames_presented={}", state.frames_presented);
++    log::debug!("composite_multi: done, frames_presented={}", state.frames_presented);
+ }
+ 
+ pub fn render_background_tick(state: &AndroidSmithayState) {
+@@ -381,6 +407,8 @@ use std::os::fd::{AsRawFd, OwnedFd};
+ use libc;
+ 
+ const EGL_NONE: i32 = 0x3038;
++const EGL_WIDTH: i32 = 0x3057;
++const EGL_HEIGHT: i32 = 0x3056;
+ const EGL_EXTENSIONS: i32 = 0x3055;
+ const EGL_LINUX_DMA_BUF_EXT: i32 = 0x3270;
+ const EGL_LINUX_DRM_FOURCC_EXT: i32 = 0x3271;
+@@ -707,13 +735,13 @@ pub fn bind_native_window(state: &mut AndroidSmithayState, native_window_ptr: *m
+     let has_dmabuf = egl_extensions.contains("EGL_EXT_image_dma_buf_import");
+     let has_dmabuf_mods = egl_extensions.contains("EGL_EXT_image_dma_buf_import_modifiers");
+     let snippet = if egl_extensions.len() > 200 { &egl_extensions[..200] } else { &egl_extensions[..] };
+-    log::info!("EGL has_dmabuf_import={} has_dmabuf_modifiers={} extensions={}",
++    log::warn!("MOTO_GPU: EGL has_dmabuf_import={} has_dmabuf_modifiers={} extensions={}",
+                has_dmabuf, has_dmabuf_mods, snippet);
+     state.has_dmabuf_import = has_dmabuf;
+     state.has_dmabuf_import_modifiers = has_dmabuf_mods;
+ 
+     // Load EGL extension function pointers for DMA-BUF import
+-    if has_dmabuf {
++    if has_dmabuf || egl_extensions.contains("EGL_ANDROID_image_native_buffer") {
+         unsafe {
+             let create_name = std::ffi::CString::new("eglCreateImageKHR").unwrap();
+             let create_ptr = eglGetProcAddress(create_name.as_ptr());
+diff --git a/src/android/backend/wayland/handlers.rs b/src/android/backend/wayland/handlers.rs
+index 7e5679b..24b5d74 100644
+--- a/src/android/backend/wayland/handlers.rs
++++ b/src/android/backend/wayland/handlers.rs
+@@ -9,7 +9,7 @@ use smithay::backend::renderer::utils::on_commit_buffer_handler;
+ #[cfg(feature = "smithay_android")]
+ use smithay::desktop::space::SpaceElement;
+ #[cfg(feature = "smithay_android")]
+-use smithay::desktop::utils::send_frames_surface_tree;
++
+ #[cfg(feature = "smithay_android")]
+ use smithay::desktop::{PopupKind, Window};
+ #[cfg(feature = "smithay_android")]
+@@ -134,7 +134,7 @@ impl OutputHandler for AndroidSeatRuntime {
+         // نستخدم الشاشة المرتبطة نفسها، وليس self.output
+         let mode = output.current_mode().unwrap_or(OutputMode {
+             size: (1080, 1920).into(),
+-            refresh: 60000,
++            refresh: crate::android::frame_clock::refresh_mhz(),
+         });
+         output.change_current_state(Some(mode), Some(Transform::Normal), None, None);
+         log::info!(
+@@ -206,7 +206,7 @@ impl InputMethodHandler for AndroidSeatRuntime {
+         }
+         let mode = self.output.current_mode().unwrap_or(OutputMode {
+             size: (1080, 1920).into(),
+-            refresh: 60000,
++            refresh: crate::android::frame_clock::refresh_mhz(),
+         });
+         smithay::utils::Rectangle::new((0, 0).into(), (mode.size.w, mode.size.h).into())
+     }
+@@ -369,13 +369,7 @@ impl CompositorHandler for AndroidSeatRuntime {
+ 
+         on_commit_buffer_handler::<Self>(surface);
+ 
+-        send_frames_surface_tree(
+-            surface,
+-            &self.output,
+-            std::time::Duration::ZERO,
+-            None,
+-            |_, _| Some(self.output.clone()),
+-        );
++
+ 
+         // No direct render_all() here: the paced compositor loop renders
+         // within ~1 frame anyway. Rendering synchronously per commit
+diff --git a/src/android/backend/wayland/input_router.rs b/src/android/backend/wayland/input_router.rs
+index 7c8a643..63caab3 100644
+--- a/src/android/backend/wayland/input_router.rs
++++ b/src/android/backend/wayland/input_router.rs
+@@ -1144,99 +1144,22 @@ impl AndroidSeatRuntime {
+         let _is_xwayland = focus.as_ref().map(is_xwayland_surface).unwrap_or(false);
+ 
+         match mode {
++            // Moto: deliver native wl_touch; let nested Phoc handle gestures.
+             WinlandInputMode::Touch => match event {
+                 RoutedInputEvent::TouchDown { id, point } => {
+-                    // Multi-touch fallback (2+ fingers)
+-                    if self.active_touch_ids.len() >= 1 {
+-                        self.touch_two_finger_tap_active = true;
+-                    }
+-                    self.dispatch_touch_down(*id, point);
+-                    self.handle_absolute_pointer_down(*id, point, Some(0x110));
+-                    self.handle_touch_down(*id, point, &focus);
++                    let pt = self.logical_pt(point.x, point.y);
++                    self.apply_forced_focus_at("native-touch", pt.x as f32, pt.y as f32);
++                    let touch_focus = self.focused_surface.clone();
++                    self.handle_touch_down(*id, point, &touch_focus);
+                 }
+                 RoutedInputEvent::TouchMove { id, point } => {
+-                    // Only clear two-finger tap if a DIFFERENT finger moves
+-                    if self.touch_two_finger_tap_active && self.primary_touch_id != Some(*id) {
+-                        self.touch_two_finger_tap_active = false;
+-                    }
+-                    self.handle_absolute_pointer_move(*id, point, &focus);
+                     self.handle_touch_move(*id, point, &focus);
+                 }
+-                RoutedInputEvent::TouchUp { id } => {
+-                    if self.touch_two_finger_tap_active {
+-                        // Two-finger tap handling: all fingers are tapping
+-                        let p = self.pointer.clone();
+-                        self.handle_touch_up(*id);  // removes from active_touch_ids
+-                        if self.active_touch_ids.is_empty() {
+-                            // All fingers lifted → right-click
+-                            self.touch_two_finger_tap_active = false;
+-                            // Release left button (pressed by first TouchDown)
+-                            if self.pointer_button_pressed {
+-                                p.button(
+-                                    self,
+-                                    &ButtonEvent {
+-                                        serial: SERIAL_COUNTER.next_serial(),
+-                                        time: engine_timing::now_ms_u32(),
+-                                        button: 0x110,
+-                                        state: ButtonState::Released,
+-                                    },
+-                                );
+-                                p.frame(self);
+-                                self.pointer_button_pressed = false;
+-                            }
+-                            // Right button click
+-                            let ct = engine_timing::now_ms_u32();
+-                            p.button(
+-                                self,
+-                                &ButtonEvent {
+-                                    serial: SERIAL_COUNTER.next_serial(),
+-                                    time: ct,
+-                                    button: 0x111,
+-                                    state: ButtonState::Pressed,
+-                                },
+-                            );
+-                            p.frame(self);
+-                            p.button(
+-                                self,
+-                                &ButtonEvent {
+-                                    serial: SERIAL_COUNTER.next_serial(),
+-                                    time: ct,
+-                                    button: 0x111,
+-                                    state: ButtonState::Released,
+-                                },
+-                            );
+-                            p.frame(self);
+-                            self.primary_touch_id = None;
+-                            engine_timing::emit_hybrid_trace(
+-                                "Two-finger tap → right-click".to_string(),
+-                            );
+-                            self.last_seat_dispatch = "touch_two_finger_tap".into();
+-                        }
+-                    } else {
+-                        self.handle_absolute_pointer_up(*id);
+-                        self.handle_touch_up(*id);
+-                    }
+-                }
++                RoutedInputEvent::TouchUp { id } => self.handle_touch_up(*id),
+                 RoutedInputEvent::TouchCancel { .. } => {
+-                    let t = self.touch.clone();
+-                    t.cancel(self);
+-                    t.frame(self);
+-                    self.swipe_starts.clear();
+-                    self.active_touch_ids.clear();
++                    let t = self.touch.clone(); t.cancel(self); t.frame(self);
++                    self.active_touch_ids.clear(); self.swipe_starts.clear();
+                     self.swipe_cycle_armed = false;
+-                    self.touch_two_finger_tap_active = false;
+-                    self.last_seat_dispatch = format!("touch_cancel touch focus={}", has_focus);
+-                }
+-                RoutedInputEvent::TouchClick { id, point } => {
+-                    self.handle_touch_click(*id, point);
+-                }
+-                RoutedInputEvent::TouchRightClick { id, point } => {
+-                    self.handle_touch_down(*id, point, &focus);
+-                    self.handle_touch_right_click(*id, point);
+-                }
+-                RoutedInputEvent::TouchMiddleClick { id, point } => {
+-                    self.handle_touch_down(*id, point, &focus);
+-                    self.handle_touch_middle_click(*id, point);
+                 }
+                 _ => {}
+             },
+diff --git a/src/android/backend/wayland/output_management.rs b/src/android/backend/wayland/output_management.rs
+index 7e13d7f..32481b9 100644
+--- a/src/android/backend/wayland/output_management.rs
++++ b/src/android/backend/wayland/output_management.rs
+@@ -129,7 +129,7 @@ impl smithay::wayland::GlobalDispatch2<ZwlrOutputManagerV1, AndroidSeatRuntime>
+         let output = &state.output;
+         let current_mode = output.current_mode().unwrap_or(smithay::output::Mode {
+             size: (1920, 1080).into(),
+-            refresh: 60000,
++            refresh: crate::android::frame_clock::refresh_mhz(),
+         });
+         let pp = output.physical_properties();
+         let location = output.current_location();
+@@ -307,7 +307,7 @@ impl smithay::wayland::Dispatch2<ZwlrOutputConfigurationV1, AndroidSeatRuntime>
+                     None => {
+                         let current = state.output.current_mode().unwrap_or(smithay::output::Mode {
+                             size: (1080, 2296).into(),
+-                            refresh: 60000,
++                            refresh: crate::android::frame_clock::refresh_mhz(),
+                         });
+                         (current.size.w, current.size.h)
+                     }
+diff --git a/src/android/backend/wayland/seat.rs b/src/android/backend/wayland/seat.rs
+index 260c1c8..19a6892 100644
+--- a/src/android/backend/wayland/seat.rs
++++ b/src/android/backend/wayland/seat.rs
+@@ -519,7 +519,7 @@ impl AndroidSeatRuntime {
+         );
+         let mode = OutputMode {
+             size: (width, height).into(),
+-            refresh: 60000,
++            refresh: crate::android::frame_clock::refresh_mhz(),
+         };
+         log::info!(
+             "SmithayRuntime: Calling create_global for wl_output mode={}x{}",
+@@ -754,7 +754,7 @@ impl AndroidSeatRuntime {
+ 
+         let mode = OutputMode {
+             size: (width, height).into(),
+-            refresh: 60000,
++            refresh: crate::android::frame_clock::refresh_mhz(),
+         };
+         self.output.change_current_state(
+             Some(mode),
+@@ -1081,13 +1081,44 @@ impl AndroidSeatRuntime {
+         })
+     }
+ 
++    /// Complete the feedback for the surfaces just submitted to Android.
++    /// This is a software estimate after eglSwapBuffers, not a hardware
++    /// scanout timestamp: advertise no HW_CLOCK/HW_COMPLETION/VSYNC flags.
++    /// The runtime and GL submission execute on the same compositor thread;
++    /// no client commits are dispatched between render_all and this call.
++    pub(crate) fn finish_presentation(&self) {
++        use smithay::wayland::compositor::with_states;
++        use smithay::wayland::presentation::{PresentationFeedbackCachedState, Refresh};
++        use wayland_protocols::wp::presentation_time::server::wp_presentation_feedback;
++        let mut now = libc::timespec { tv_sec: 0, tv_nsec: 0 };
++        if unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut now) } != 0 { return; }
++        let time = std::time::Duration::new(now.tv_sec as u64, now.tv_nsec as u32);
++        let refresh = Refresh::fixed(std::time::Duration::from_secs_f64(
++            1000.0 / crate::android::frame_clock::refresh_mhz() as f64));
++        let finish = |surface: &WlSurface| {
++            let callbacks = with_states(surface, |states| {
++                std::mem::take(&mut states.cached_state
++                    .get::<PresentationFeedbackCachedState>().current().callbacks)
++            });
++            for feedback in callbacks {
++                feedback.presented(&self.output, time, refresh, 0,
++                    wp_presentation_feedback::Kind::empty());
++            }
++        };
++        for elem in self.space.elements() {
++            if let Some(surface) = elem.0.wl_surface() {
++                finish(surface.as_ref());
++                for (popup, _) in PopupManager::popups_for_surface(surface.as_ref()) {
++                    finish(popup.wl_surface());
++                }
++            }
++        }
++        for surface in &self.unmanaged_surfaces { finish(surface); }
++    }
++
+     fn send_frame_callback(wl_surface: &WlSurface) {
+         use smithay::wayland::compositor::{with_states, SurfaceAttributes};
+-        let now = (std::time::SystemTime::now()
+-            .duration_since(std::time::UNIX_EPOCH)
+-            .unwrap_or_default()
+-            .as_nanos()
+-            / 1_000_000) as u32;
++        let now = crate::android::frame_clock::timestamp_ms();
+ 
+         with_states(wl_surface, |states| {
+             let mut attrs = states.cached_state.get::<SurfaceAttributes>();
+diff --git a/src/android/backend/wayland/x11.rs b/src/android/backend/wayland/x11.rs
+index aa7c4f9..a49efa7 100644
+--- a/src/android/backend/wayland/x11.rs
++++ b/src/android/backend/wayland/x11.rs
+@@ -384,7 +384,7 @@ impl XwmHandler for AndroidSeatRuntime {
+         }
+         let mode = self.output.current_mode().unwrap_or(OutputMode {
+             size: (1080, 1920).into(),
+-            refresh: 60000,
++            refresh: crate::android::frame_clock::refresh_mhz(),
+         });
+         let rect = smithay::utils::Rectangle::new((0, 0).into(), (mode.size.w, mode.size.h).into());
+         let _ = window.configure(rect);
+diff --git a/src/android/bridge_init.rs b/src/android/bridge_init.rs
+index e5a93da..24c0785 100644
+--- a/src/android/bridge_init.rs
++++ b/src/android/bridge_init.rs
+@@ -61,7 +61,7 @@ pub unsafe extern "system" fn Java_com_winland_server_NativeBridge_initWaylandCo
+     android_logger::init_once(
+         android_logger::Config::default()
+             .with_tag("WinlandNative")
+-            .with_max_level(log::LevelFilter::Debug),
++            .with_max_level(log::LevelFilter::Warn),
+     );
+     clear_last_init_error();
+ 
+@@ -129,7 +129,7 @@ pub unsafe extern "system" fn Java_com_winland_server_NativeBridge_ensureSocketR
+     android_logger::init_once(
+         android_logger::Config::default()
+             .with_tag("WinlandNative")
+-            .with_max_level(log::LevelFilter::Debug),
++            .with_max_level(log::LevelFilter::Warn),
+     );
+ 
+     let result = std::panic::catch_unwind(AssertUnwindSafe(|| -> Result<(), String> {
+diff --git a/src/android/mod.rs b/src/android/mod.rs
+index c756336..3d5f01a 100644
+--- a/src/android/mod.rs
++++ b/src/android/mod.rs
+@@ -9,3 +9,7 @@ pub mod bridge_surface;     // السطح والشاشة (onSurfaceChanged, setR
+ pub mod bridge_diagnostics; // التشخيص والأخطاء (getLastNativeError, getWaylandRuntimeStats)
+ pub mod bridge_clipboard;   // الحافظة (updateClipboard, sendClipboardTextToWayland)
+ pub mod bridge_lifecycle;   // دورة حياة العرض (suspendRendering, resumeRendering)
++
++pub mod gpu_allocator;
++
++pub mod frame_clock;
+diff --git a/src/compositor.rs b/src/compositor.rs
+index bbe4e34..5d2c20a 100644
+--- a/src/compositor.rs
++++ b/src/compositor.rs
+@@ -114,10 +114,11 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+         // 500ms heartbeat (cursor blink/animations stay alive, steppy).
+         let mut last_commits = crate::android::backend::wayland::engine_timing::commit_count();
+         let mut last_render = Instant::now();
++        let mut last_vsync = 0;
+         log::info!("Compositor: runtime loop started");
+ 
+         while thread_running.load(Ordering::Relaxed) {
+-            let loop_start = Instant::now();
++            crate::android::frame_clock::wait_next(&mut last_vsync);
+             let mut commands_this_spin = 0u32;
+             while let Ok(cmd) = cmd_rx.try_recv() {
+                 commands_this_spin += 1;
+@@ -171,7 +172,7 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+                         let logical_h = backend_state.surface_size.1;
+ 
+                         if let Some(server) = wayland_server.as_mut() {
+-                            if server.runtime.current_input_mode == WinlandInputMode::Trackpad {
++                            if matches!(server.runtime.current_input_mode, WinlandInputMode::Trackpad | WinlandInputMode::Touch) {
+                                 // Trackpad mode: bypass InputRouter entirely.
+                                 // Construct RoutedInputEvent directly so the trackpad
+                                 // anchor lifecycle (down→anchor, move→delta, up→clear)
+@@ -326,7 +327,18 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+                         backend_state.scroll_sensitivity = value.clamp(0.1, 5.0);
+                     }
+                     JniCommand::SetRefreshRate { value } => {
+-                        backend_state.refresh_rate = value.clamp(30.0, 240.0);
++                        backend_state.refresh_rate = value.clamp(1.0, 240.0);
++                        crate::android::frame_clock::set_refresh(value);
++                        if let Some(server) = wayland_server.as_mut() {
++                            if let Some(mut mode) = server.runtime.output.current_mode() {
++                                let refresh = crate::android::frame_clock::refresh_mhz();
++                                if mode.refresh != refresh {
++                                    mode.refresh = refresh;
++                                    server.runtime.output.change_current_state(Some(mode), None, None, None);
++                                    server.runtime.output.set_preferred(mode);
++                                }
++                            }
++                        }
+                     }
+                     JniCommand::SetPhysicalSize { width_mm, height_mm } => {
+                         backend_state.physical_size_mm = (width_mm.max(1), height_mm.max(1));
+@@ -441,7 +453,13 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+                     last_commits = commits;
+                 }
+             }
++            let presents_before = crate::android::frame_clock::presented_count();
+             flush_deferred_composite(&mut backend_state, &render_rx);
++            if crate::android::frame_clock::presented_count() != presents_before {
++                if let Some(server) = wayland_server.as_mut() {
++                    server.runtime.finish_presentation();
++                }
++            }
+             render_background_tick(&backend_state);
+ 
+             // Snapshot/diagnostics at ~2Hz, not every spin: the format!s and
+@@ -480,14 +498,7 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+                 }
+             }
+ 
+-            // Frame pacing: cap the loop at the display refresh rate instead
+-            // of busy-spinning (yield_now = 100% CPU core). 2ms floor keeps
+-            // input latency low; queued commands preserve event order anyway.
+-            let period = Duration::from_secs_f32(1.0 / backend_state.refresh_rate.clamp(30.0, 240.0));
+-            let elapsed = loop_start.elapsed();
+-            if elapsed < period {
+-                thread::sleep((period - elapsed).max(Duration::from_millis(2)));
+-            }
++
+         }
+         log::info!("Compositor: runtime loop stopped");
+     });

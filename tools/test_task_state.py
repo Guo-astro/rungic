@@ -1,4 +1,4 @@
-"""The task state of an agent turn (plasma/voice-agent/task_state.py, docs/89)."""
+"""The task state of an agent turn (agent/assistant/task_state.py, docs/89)."""
 import ast
 import gettext
 import os
@@ -8,7 +8,7 @@ from pathlib import Path
 # The card's words are English in the source; a Chinese desktop reads them from the catalog
 # (po/zh_CN/rungic-voice-agent.po), checked at the end.
 os.environ['LANGUAGE'] = 'en_US'
-VOICE_AGENT = Path(__file__).resolve().parent.parent / 'plasma/voice-agent'
+VOICE_AGENT = Path(__file__).resolve().parent.parent / 'agent/assistant'
 sys.path.insert(0, str(VOICE_AGENT))
 import task_state as ts  # noqa: E402
 

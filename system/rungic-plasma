@@ -1,0 +1,301 @@
+#!/system/bin/sh
+set -eu
+BASE=/data/adb/rungic-plasma
+ENTER=$BASE/rungic-plasma-enter
+LXC=/data/adb/rungic-lxc/runtime/var/lib/lxc/plasma
+ROOT=$LXC/rootfs
+HOST_STATE=$LXC/state/host
+# Outside the runtime: toybox losetup takes paths under 64 bytes (rootfs-image).
+IMAGES=/data/adb/rungic-lxc/images
+[ "$(id -u)" = 0 ] || { echo 'Magisk root required' >&2; exit 1; }
+action=${1:-status}
+[ "$#" = 0 ] || shift
+# A product seed publishes the controller before the rootfs and shared paths.
+# Account setup must not enter that partially installed environment.
+case "$action" in
+  account-status|account-prepare|account-setup|start|restart-session)
+    if [ -f /product/etc/rungic/seed.env ]; then
+      expected_release=$(sed -n 's/^RELEASE_ID=//p' /product/etc/rungic/seed.env | tr -d "\"'")
+      installed_release=$(cat /data/adb/rungic-firstboot.complete 2>/dev/null) || installed_release=
+      if [ -z "$expected_release" ] || [ "$installed_release" != "$expected_release" ]; then
+        echo 'Rungic 正在完成首次安装，请稍候再打开；若持续未完成，请检查首次安装日志。' >&2
+        exit 1
+      fi
+    fi
+    ;;
+esac
+running() { [ "$("$ENTER" /usr/bin/lxc-info -n plasma -sH 2>/dev/null)" = RUNNING ]; }
+attach() { "$ENTER" /usr/bin/lxc-attach -n plasma -- "$@"; }
+device_rule() (
+    # Android can assign different character-device majors after a reboot.
+    [ -c "$1" ] || { echo "Missing character device: $1" >&2; exit 1; }
+    major_hex=$(stat -c '%t' "$1") || exit 1
+    minor_hex=$(stat -c '%T' "$1") || exit 1
+    case "$major_hex:$minor_hex" in
+      :*|*:|*[!0-9a-fA-F:]*) echo "Invalid device number: $1" >&2; exit 1;;
+    esac
+    printf 'lxc.cgroup2.devices.allow=c %d:%d %s\n' "0x$major_hex" "0x$minor_hex" "$2"
+)
+# The Linux side's RAM ceiling (docs/61): a memory cgroup of Android's (v1, /dev/memcg), so that
+# memory-hungry Linux programs are reclaimed or killed inside the container instead of Android's
+# low-memory killer taking the VPN and the desktop APK (2026-09-27). The choice, in MiB or
+# "unlimited", is kept in $MEMORY_CHOICE and set from the Rungic device panel.
+MEMCG=/dev/memcg/rungic-plasma
+MEMORY_CHOICE=$BASE/memory-limit
+MEMORY_PRESETS="2048 3072 4096 5120 6144 unlimited"
+MEMORY_DEFAULT=4096
+memory_choice() {
+    choice=$(cat "$MEMORY_CHOICE" 2>/dev/null) || choice=
+    case " $MEMORY_PRESETS " in *" $choice "*) echo "$choice" ;; *) echo "$MEMORY_DEFAULT" ;; esac
+}
+apply_memory_limit() {
+    [ -d /dev/memcg ] || return 0
+    mkdir -p "$MEMCG" || return 1
+    # Pages of adopted processes move with them (cgroup v1; ignored where the kernel dropped it).
+    echo 3 > "$MEMCG/memory.move_charge_at_immigrate" 2>/dev/null || true
+    choice=$(memory_choice)
+    # Android's sh has 32-bit arithmetic: the kernel takes the unit suffix instead.
+    if [ "$choice" = unlimited ]; then limit=-1; else limit=${choice}M; fi
+    # Lowering below the current use makes the kernel reclaim first; it refuses (EBUSY) what it cannot free.
+    echo "$limit" > "$MEMCG/memory.limit_in_bytes"
+}
+adopt_container() {
+    # Processes of a container started before the cgroup existed (or by an older launcher).
+    [ -d "$MEMCG" ] || return 0
+    # Shell built-ins only: Android runs over a thousand processes, a grep per process took a minute.
+    for proc in /proc/[0-9]*; do
+        container=0 adopted=0
+        [ -r "$proc/cgroup" ] || continue
+        # A process may exit meanwhile: its cgroup file then cannot be read (set -e must not end us).
+        { while read -r line; do
+            case "$line" in
+              *:memory:/rungic-plasma) adopted=1 ;;
+              *lxc.payload.plasma*|*lxc.monitor.plasma*) container=1 ;;
+            esac
+          done < "$proc/cgroup"; } 2>/dev/null || continue
+        if [ "$container" = 1 ] && [ "$adopted" = 0 ]; then
+            echo "${proc#/proc/}" > "$MEMCG/cgroup.procs" 2>/dev/null || true
+        fi
+    done
+    return 0
+}
+memory_status() {
+    limit=$(cat "$MEMCG/memory.limit_in_bytes" 2>/dev/null) || limit=
+    usage=$(cat "$MEMCG/memory.usage_in_bytes" 2>/dev/null) || usage=0
+    peak=$(cat "$MEMCG/memory.max_usage_in_bytes" 2>/dev/null) || peak=0
+    total=$(sed -n 's/^MemTotal: *\([0-9]*\) kB/\1/p' /proc/meminfo)
+    mib() { awk -v b="$1" 'BEGIN { printf "%d", b / 1048576 }'; }   # sh arithmetic is 32-bit here
+    case "$limit" in ''|9223372036854*) limit_mib=null ;; *) limit_mib=$(mib "$limit") ;; esac
+    printf '{"choice":"%s","default":%s,"presets":"%s","limit_mib":%s,"usage_mib":%s,"peak_mib":%s,"total_mib":%s}\n' \
+        "$(memory_choice)" "$MEMORY_DEFAULT" "$MEMORY_PRESETS" "$limit_mib" "$(mib "$usage")" "$(mib "$peak")" $((total / 1024))
+}
+# The desktop in front gets what Android gives its top app (docs/49): the desktop session runs on
+# the big cores (uclamp.min 50 %, above the little cores' capacity of 405/1024) with top-app's CPU
+# share; behind the other apps or with the screen off, the defaults again. Measured: on the little
+# cores, where the scheduler kept KWin and plasmashell, 10-14 % of the frames of a swipe came late;
+# on the big cores 7-8 %, in less CPU time. Only the session of the desktop account (its user
+# manager and everything it starts): never the container's system services or its builds.
+CPUCTL=/dev/cpuctl/rungic-desktop
+DESKTOP_SESSION=lxc.payload.plasma/user.slice/user-1000.slice/user@1000.service
+adopt_desktop() {
+    # New processes inherit the group of the one that starts them: the session needs adopting only
+    # when its user manager is new (the container or the account's session started again).
+    manager=$(pgrep -u 1000 -f '^/usr/lib/systemd/systemd --user' | head -n 1) || manager=
+    [ -n "$manager" ] || return 0
+    case "$(cat "/proc/$manager/cgroup" 2>/dev/null)" in *cpu:/rungic-desktop*) return 0 ;; esac
+    # Shell built-ins only, as adopt_container.
+    for proc in /proc/[0-9]*; do
+        { while read -r line; do
+            case "$line" in
+              *"$DESKTOP_SESSION"*) echo "${proc#/proc/}" > "$CPUCTL/cgroup.procs" 2>/dev/null || true; break ;;
+            esac
+          done < "$proc/cgroup"; } 2>/dev/null || continue
+    done
+    return 0
+}
+desktop_boost() {
+    [ -d /dev/cpuctl ] || return 0
+    mkdir -p "$CPUCTL"
+    adopt_desktop
+    if [ "$1" = on ]; then min=50 shares=5120; else min=0 shares=1024; fi
+    echo "$min" > "$CPUCTL/cpu.uclamp.min"
+    echo "$shares" > "$CPUCTL/cpu.shares"
+}
+start_container() {
+    # Recreate the shared folder after storage becomes available (including an
+    # Android storage remount). Never create it below an unavailable mount.
+    [ -d /storage/emulated/0/Android ] || {
+      echo 'Android 共享存储尚未就绪，请解锁手机后重试。' >&2; exit 1;
+    }
+    mkdir -p /storage/emulated/0/Plasma
+    # Account setup also starts the container, before normal desktop/audio start.
+    # Its enter helper needs the audio bind source even when no server is needed.
+    "$BASE/android-audio" prepare
+    # The container starts inside the memory cgroup: lxc-start and everything below inherit it.
+    if apply_memory_limit; then echo $$ > "$MEMCG/cgroup.procs" 2>/dev/null || true; fi
+    gpu_rule=$(device_rule /dev/kgsl-3d0 rw)
+    heap_rule=$(device_rule /dev/dma_heap/system r)
+    label=$(ls -dZ /data/user/0/com.rungic.plasma/files | cut -d ' ' -f 1)
+    case "$label" in u:object_r:app_data_file:s0:c*) ;;
+      *) echo 'Cannot identify desktop APK SELinux label' >&2; exit 1;;
+    esac
+    # Files the Android side hands to the container live in state/host, bind-mounted at
+    # /var/lib/rungic-host (plasma.config): an image rootfs is not visible from here (docs/61 §7).
+    mkdir -p "$HOST_STATE/transfer"
+    printf '%s\n' "$label" | sed 's/:app_data_file:/:appdomain_tmpfs:/' > "$HOST_STATE/android-shm-context"
+    set -- -s "$gpu_rule" -s "$heap_rule"
+    # An image rootfs (system/rootfs-image, docs/61 §7): a pre-mount hook mounts its device-mapper
+    # device onto the rootfs directory, and the data that must not roll back with the system comes
+    # from state/ (bind mounts).
+    # Until phase D of the Rungic rename (docs/70) the state is mounted under its old names as well:
+    # container releases from before it use /var/lib/moto-*.
+    if [ -f "$IMAGES/rootfs.img" ]; then
+      "$BASE/rootfs-image" attach >/dev/null || { echo 'Cannot attach the rootfs image' >&2; exit 1; }
+      install -m 755 "$BASE/rootfs-mount-hook" "$LXC/rootfs-mount-hook"
+      set -- "$@" -s "lxc.hook.pre-mount=/var/lib/lxc/plasma/rootfs-mount-hook"
+      for pair in home:home rungic-cores:var/lib/rungic-cores rungic-apt:var/lib/rungic-apt \
+                  rungic-cores:var/lib/moto-cores rungic-apt:var/lib/moto-apt host:var/lib/moto-host; do
+        set -- "$@" -s "lxc.mount.entry=/var/lib/lxc/plasma/state/${pair%%:*} ${pair#*:} none bind,create=dir 0 0"
+      done
+    fi
+    "$ENTER" /usr/bin/lxc-start -n plasma -d -l INFO -o /var/log/lxc/plasma.log "$@" 9>&-
+}
+case "$action" in
+  account-status)
+    if running; then
+      attach /usr/libexec/rungic-plasma-account-setup --status
+    elif [ -f "$HOST_STATE/account.json" ]; then
+      cat "$HOST_STATE/account.json"
+    else
+      echo '{"configured":false,"username":"rungic"}'
+    fi
+    ;;
+  account-prepare)
+    exec 9>"$BASE/control.lock"
+    flock 9 9>&9
+    if ! running; then start_container; fi
+    ready=0
+    for attempt in $(seq 1 90); do
+      if attach /bin/sh -c '
+        set -e
+        test -x /usr/libexec/rungic-plasma-account-setup
+        test -x /usr/libexec/rungic-user-dirs
+        name=$(getent passwd 1000 | cut -d: -f1)
+        home=$(getent passwd 1000 | cut -d: -f6)
+        test -n "$name" && test -d "$home"
+        mountpoint -q /mnt/android-shared
+        mountpoint -q "$home/Shared"
+        state=$(systemctl is-system-running 2>/dev/null) || true
+        case "$state" in running|degraded) ;; *) exit 1;; esac
+        # Directory registration is part of account readiness, not an assumption
+        # left for the first app after the desktop appears. The session repeats
+        # this idempotently after the selected login/home has been applied.
+        runuser -u "$name" -- env HOME="$home" /usr/libexec/rungic-user-dirs
+      ' 9>&-; then ready=1; break; fi
+      sleep 2
+    done
+    [ "$ready" = 1 ] || { echo '账户环境仍未就绪，请稍后重试。' >&2; exit 1; }
+    echo 'Account environment ready'
+    ;;
+  account-setup)
+    exec 9>"$BASE/control.lock"
+    flock 9 9>&9
+    if ! running; then start_container; fi
+    attach /usr/libexec/rungic-plasma-account-setup 9>&-
+    ;;
+  lock)
+    # Acknowledge before Android suspends the foreground APK on screen-off.
+    nohup /system/bin/sh -c 'sleep 0.3; /system/bin/input keyevent 223' >/dev/null 2>&1 </dev/null &
+    exit 0
+    ;;
+  open)
+    exec am start --user 0 -n com.rungic.plasma/.MainActivity
+    ;;
+  start|restart-session|stop)
+    exec 9>"$BASE/control.lock"
+    # Surface recreation and explicit restarts can overlap; serialize them.
+    flock 9 9>&9
+    if [ "$action" = stop ]; then
+      "$BASE/android-calls" stop 9>&-
+      "$BASE/android-clipboard" stop 9>&-
+      if running; then "$ENTER" /usr/bin/lxc-stop -n plasma -t 15 9>&-; fi
+      [ ! -f "$IMAGES/rootfs.img" ] || "$BASE/rootfs-image" detach 9>&-
+      "$BASE/android-audio" stop 9>&-
+      echo 'Plasma Mobile stopped'
+      exit 0
+    fi
+    "$BASE/android-audio" start 9>&-
+    "$BASE/android-clipboard" start 9>&-
+    "$BASE/android-calls" start 9>&-
+    # The container binds /storage/emulated/0/Plasma when it starts. After an Android
+    # userspace restart vold remounts storage and that bind goes stale; only a
+    # container restart recreates it (rungic-plasma-shared otherwise fails forever).
+    if running && ! attach /bin/sh -c 'test -r /mnt/android-shared/.' 9>&-; then
+      echo 'Android storage was remounted; restarting the Plasma container' >&2
+      "$ENTER" /usr/bin/lxc-stop -n plasma -t 15 9>&- || true
+    fi
+    old_pids=
+    if [ "$action" = restart-session ] && running; then
+      # The old compositor and shell take a moment to exit: readiness must see new ones.
+      old_pids=$(attach /bin/sh -c 'echo $(pidof kwin_wayland) $(pidof plasmashell)' 9>&-) || old_pids=
+      attach /bin/sh -c 'systemctl restart rungic-plasma-session.service' 9>&-
+    fi
+    if ! running; then
+      start_container
+    fi
+    ready=0
+    for i in $(seq 1 60); do
+      pids=$(attach /bin/sh -c 'test -f /run/user/1000/rungic-session.env && k=$(pidof kwin_wayland) && p=$(pidof plasmashell) && echo $k $p' 9>&-) || pids=
+      if [ -n "$pids" ]; then
+        new=1
+        for pid in $pids; do case " $old_pids " in *" $pid "*) new=0 ;; esac; done
+        if [ "$new" = 1 ]; then ready=1; break; fi
+      fi
+      sleep 1
+    done
+    [ "$ready" = 1 ] || { echo 'Desktop did not become ready; use plasma log' >&2; exit 1; }
+    echo 'Plasma Mobile ready (native Wayland)'
+    ;;
+  status) exec "$ENTER" /usr/bin/lxc-info -n plasma ;;
+  memory-status) memory_status ;;
+  boost)
+    # boost on|off: the desktop in front or not (the APK, onStart/onStop).
+    case "${1:-}" in on|off) desktop_boost "$1" ;; *) echo 'Usage: boost on|off' >&2; exit 2 ;; esac
+    ;;
+  memory-limit)
+    # memory-limit [2048|3072|4096|5120|6144|unlimited]: set (MiB) and/or show the Linux RAM ceiling as JSON.
+    if [ "$#" -gt 0 ]; then
+      case " $MEMORY_PRESETS " in *" $1 "*) ;; *) echo "Unknown memory limit: $1 (one of $MEMORY_PRESETS)" >&2; exit 2 ;; esac
+      echo "$1" > "$MEMORY_CHOICE"
+    fi
+    apply_memory_limit || { echo 'Cannot apply the memory limit (more in use than the new limit allows?)' >&2; memory_status; exit 1; }
+    adopt_container
+    memory_status
+    ;;
+  rootfs)
+    # status | snapshot | rollback | commit | migrate (system/rootfs-image); the container must be stopped
+    # for all but status.
+    exec 9>"$BASE/control.lock"
+    flock 9 9>&9
+    exec "$BASE/rootfs-image" "$@" 9>&-
+    ;;
+  hide-keyboard|home)
+    exec "$ENTER" /usr/bin/lxc-attach -n plasma -- /usr/bin/rungic-plasma-user-exec /usr/libexec/rungic-plasma-desktop-action "$action"
+    ;;
+  shell) exec "$ENTER" /usr/bin/lxc-attach -n plasma -- /bin/sh -l ;;
+  exec|user-exec)
+    [ "$#" -gt 0 ] || { echo 'Command required' >&2; exit 2; }
+    if [ "$action" = user-exec ]; then
+      exec "$ENTER" /usr/bin/lxc-attach -n plasma -- /usr/bin/rungic-plasma-user-exec "$@"
+    fi
+    exec "$ENTER" /usr/bin/lxc-attach -n plasma -- "$@"
+    ;;
+  log)
+    # The session writes to the container journal; the file holds output from before that change.
+    if running; then
+      exec "$ENTER" /usr/bin/lxc-attach -n plasma -- journalctl -b -n 70 --no-pager -o short-precise -u rungic-plasma-session.service
+    fi
+    tail -n 70 "$ROOT/var/log/plasma/session.log"
+    ;;
+  *) echo 'Usage: plasma {open|start|restart-session|stop|status|shell|exec COMMAND...|user-exec COMMAND...|log}' >&2; exit 2 ;;
+esac

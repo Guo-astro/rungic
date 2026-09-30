@@ -11,7 +11,7 @@ import types
 import unittest
 from unittest.mock import Mock
 
-source = Path(__file__).resolve().parents[2] / 'plasma/voice-agent/rungic_voice_agent.py'
+source = Path(__file__).resolve().parents[2] / 'agent/assistant/rungic_voice_agent.py'
 tree = ast.parse(source.read_text())
 CONSTANTS = {'CURATE_EFFORT', 'CURATE_TIMEOUT_S', 'CURATE_INPUT_MAX', 'CURATE_KINDS', 'CURATE_SCHEMA',
              'CURATE_INSTRUCTIONS', 'CARD_INSTRUCTIONS'}

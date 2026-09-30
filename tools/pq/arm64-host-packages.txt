@@ -1,6 +1,6 @@
 # Packages of the Mac mini build host's image (tools/pq/arm64-host.Dockerfile), installed with their
-# recommends as on the phone: the phone's own selection (plasma/ubuntu-packages.txt,
-# plasma/ubuntu-build-packages.txt) and what it has installed by hand since (apt-mark showmanual,
+# recommends as on the phone: the phone's own selection (system/ubuntu-packages.txt,
+# system/ubuntu-build-packages.txt) and what it has installed by hand since (apt-mark showmanual,
 # 2026-09-27), so builds see the same installed QML modules and libraries as the phone's container
 # (qmlcachegen compiles against what is installed, docs/71). Left out: this project's own packages,
 # debug symbols, Firefox (Mozilla's archive) and what Ubuntu's archive does not carry (wechat,

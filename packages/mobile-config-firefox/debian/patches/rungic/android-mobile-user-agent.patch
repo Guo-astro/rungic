@@ -1,0 +1,37 @@
+From: Rungic <noreply@rungic.invalid>
+Date: Wed, 30 Sep 2026 12:34:40 +0800
+Subject: Use Android Mobile as the default user agent
+
+Preserve the deployed implementation during the source/patch migration.
+
+Origin: vendor, RungicCore pre-migration tree e5511528
+Forwarded: no
+Last-Update: 2026-09-30
+X-Rungic-Status: Inappropriate; Android device configuration
+X-Rungic-Tests: L0:source-replay; L1:firefox-installed-files; runtime scope in docs/73
+X-Rungic-Docs: docs/73; docs/research/35-hardware-codec-integration.md
+---
+ src/modules/UserAgentManager.sys.mjs | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/modules/UserAgentManager.sys.mjs b/src/modules/UserAgentManager.sys.mjs
+index ac27131..91e9e82 100644
+--- a/src/modules/UserAgentManager.sys.mjs
++++ b/src/modules/UserAgentManager.sys.mjs
+@@ -11,14 +11,14 @@ export class UserAgentManager {
+     const UA_FIREFOX_DESKTOP =
+           `Mozilla/5.0 (X11; Linux x86_64; Mobile; rv:${APP_VERSION}) Gecko/20100101 Firefox/${APP_VERSION}`;
+     const UA_FIREFOX_ANDROID =
+-          `Mozilla/5.0 (Android 15; Mobile; rv:${APP_VERSION}) Gecko/${APP_VERSION} Firefox/${APP_VERSION}`;
++          `Mozilla/5.0 (Android 16; Mobile; rv:${APP_VERSION}) Gecko/${APP_VERSION} Firefox/${APP_VERSION}`;
+     // Google version API: https://developer.chrome.com/docs/web-platform/versionhistory/reference
+     const UA_CHROME_ANDROID =
+           "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.7827.115 Mobile Safari/537.36";
+     const UA_CHROME_CHROMEOS =
+           "Mozilla/5.0 (X11; CrOS aarch64 16640.57.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.7778.250 Safari/537.36";
+     // Set default user agent
+-    PrefManager.defaultPref('general.useragent.override', UA_FIREFOX_DESKTOP);
++    PrefManager.defaultPref('general.useragent.override', UA_FIREFOX_ANDROID);
+ 
+     const userAgentRules = {
+         // Google

@@ -1,0 +1,55 @@
+{
+  "name": "rungic-plasma-diagnostics",
+  "formerly": "moto-plasma-diagnostics",
+  "architecture": "arm64",
+  "build": "device",
+  "paths": [
+    "system/diagnostics",
+    "shared/graphics",
+    "desktop/gpu-ahb-probe.c",
+    "desktop/bench/compbench"
+  ],
+  "depends": "rungic-plasma-config, python3, python3-gi, gir1.2-atspi-2.0, gdb, elfutils, systemd-coredump, ubuntu-dbgsym-keyring, zstd",
+  "build_depends": [
+    "libdrm-dev",
+    "qt6-base-dev",
+    "qt6-declarative-dev",
+    "libkf6service-dev",
+    "libgbm-dev",
+    "libegl-dev",
+    "libgles-dev",
+    "libwayland-dev",
+    "wayland-protocols",
+    "libvulkan-dev",
+    "glslang-tools",
+    "pkgconf",
+    "g++"
+  ],
+  "description": "Plasma Mobile on Android: diagnostics\nCore dump collection with signatures and coredumpctl records, on-demand debug symbols,\nthe rootfs integrity check, the filesystem capability audit, the AT-SPI driver, the\ncompositor benchmark and small GPU, screen, input and launcher probes (docs/55, docs/61).",
+  "units": {
+    "system": [
+      "rungic-coredump.path"
+    ]
+  },
+  "obsolete": [
+    "/usr/local/bin/moto-a11y",
+    "/usr/local/bin/moto-fs-audit",
+    "/usr/local/bin/moto-integrity",
+    "/usr/local/bin/moto-crash-symbols",
+    "/usr/local/libexec/moto-coredump-collect",
+    "/usr/local/bin/moto-gpu-probe",
+    "/usr/local/bin/moto-gpu-ahb-probe",
+    "/usr/local/bin/moto-compbench",
+    "/usr/local/bin/moto-input-probe",
+    "/usr/local/bin/screen-probe",
+    "/usr/local/bin/apps-probe",
+    "/etc/systemd/system/moto-coredump.path",
+    "/etc/systemd/system/moto-coredump.service",
+    "/etc/systemd/system/paths.target.wants/moto-coredump.path",
+    "/etc/systemd/system.conf.d/60-moto-core.conf",
+    "/etc/systemd/user.conf.d/60-moto-core.conf",
+    "/etc/systemd/system/sys-kernel-tracing.mount.d",
+    "/etc/tmpfiles.d/moto-coredump.conf"
+  ],
+  "user_systemd": true
+}

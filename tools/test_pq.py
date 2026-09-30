@@ -4,6 +4,9 @@ patch/test matrix (docs/71)."""
 import hashlib
 import io
 import json
+import os
+import subprocess
+import tarfile
 from pathlib import Path
 import tempfile
 import unittest
@@ -155,6 +158,85 @@ class VerifyTests(PackageTree):
             ok, text = pq.verify('demo', ref)
         self.assertFalse(ok)
         self.assertIn('No such file', text)
+
+
+class GitSubtreeTests(PackageTree):
+    """Exercise real git archives, subtree hashes and extraction without network/Docker."""
+    def setUp(self):
+        super().setUp()
+        self.repo = self.root / 'upstream'
+        self.repo.mkdir()
+        self.git('init', '-q')
+        for name, content in {'outside': 'not a build input', 'native/src/main.rs': 'host',
+                              'native/logs/debug.txt': 'generated', 'other/main.rs': 'other'}.items():
+            path = self.repo / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content)
+        self.git('add', '.')
+        self.git('-c', 'user.name=Test', '-c', 'user.email=test@example.invalid',
+                 'commit', '-qm', 'baseline')
+        self.info = {'kind': 'git', 'git': str(self.repo), 'commit': self.git('rev-parse', 'HEAD'),
+                     'tree': self.git('rev-parse', 'HEAD:native'), 'subdir': 'native', 'files': {}}
+        self.output = self.root / 'output'
+
+    def git(self, *args):
+        env = dict(os.environ, GIT_AUTHOR_DATE='2001-01-01T00:00:00Z', GIT_COMMITTER_DATE='2001-01-01T00:00:00Z')
+        return subprocess.check_output(['git', *args], cwd=self.repo, text=True, env=env).strip()
+
+    def write_recipe(self):
+        path = self.root / 'packages/demo/recipe.json'
+        if path.exists():
+            path.write_text(json.dumps(self.info))
+        else:
+            self.package({}, recipe=self.info)
+
+    def test_subtree_is_selected_and_exclusions_are_applied(self):
+        self.info['exclude'] = ['logs']
+        self.write_recipe()
+        pq.source('demo', self.output)
+        self.assertEqual((self.output / 'src/main.rs').read_text(), 'host')
+        self.assertFalse((self.output / 'outside').exists())
+        self.assertFalse((self.output / 'logs').exists())
+        with tarfile.open(pq.orig_tarball('demo')) as archive:
+            self.assertEqual({m.mtime for m in archive.getmembers()}, {978307200})
+
+    def test_whole_commit_archive_keeps_existing_layout_and_timestamp(self):
+        self.info.pop('subdir')
+        self.info['tree'] = self.git('rev-parse', 'HEAD^{tree}')
+        self.write_recipe()
+        pq.source('demo', self.output)
+        self.assertTrue((self.output / 'outside').exists())
+        with tarfile.open(pq.orig_tarball('demo')) as archive:
+            self.assertEqual(archive.pax_headers['comment'], self.info['commit'])
+            self.assertEqual({m.mtime for m in archive.getmembers()}, {978307200})
+
+    def test_changed_subtree_does_not_reuse_previous_archive(self):
+        self.write_recipe()
+        pq.source('demo', self.output)
+        self.info.update(subdir='other', tree=self.git('rev-parse', 'HEAD:other'))
+        self.write_recipe()
+        pq.source('demo', self.output)
+        self.assertEqual((self.output / 'main.rs').read_text(), 'other')
+        self.assertFalse((self.output / 'src').exists())
+
+    def test_wrong_tree_hash_rejects_source_even_after_previous_fetch(self):
+        self.write_recipe()
+        pq.fetch('demo')
+        self.info['tree'] = '0' * 40
+        self.write_recipe()
+        with self.assertRaisesRegex(SystemExit, 'recipe says'):
+            pq.fetch('demo')
+
+    def test_missing_exclusion_requires_review(self):
+        self.info['exclude'] = ['removed-in-new-version']
+        self.write_recipe()
+        with self.assertRaisesRegex(SystemExit, 'no longer exists'):
+            pq.source('demo', self.output)
+
+    def test_paths_cannot_escape_selected_tree(self):
+        for value in ('../outside', '/outside', '.'):
+            with self.subTest(value=value), self.assertRaisesRegex(SystemExit, 'invalid source path'):
+                pq.relative_source_path(value)
 
 
 if __name__ == '__main__':

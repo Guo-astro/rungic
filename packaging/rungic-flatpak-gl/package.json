@@ -1,0 +1,11 @@
+{
+  "name": "rungic-flatpak-gl",
+  "architecture": "arm64",
+  "build": "device",
+  "image": "freedesktopsdk/sdk:25.08-aarch64",
+  "shlibdeps": false,
+  "paths": ["desktop/mesa-meson-options"],
+  "upstream": ["mesa"],
+  "depends": "flatpak",
+  "description": "The phone's GPU for Flatpak apps\nThis project's Mesa (KGSL, Freedreno, Zink, Turnip) built against the Freedesktop 25.08 runtime\nas the GL extension org.freedesktop.Platform.GL.rungic, which the session selects with\nFLATPAK_GL_DRIVERS (docs/49). The runtime's GL.default has no KGSL driver: apps rendered\nwith llvmpipe on the CPU."
+}

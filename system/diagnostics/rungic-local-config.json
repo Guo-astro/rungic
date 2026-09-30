@@ -1,0 +1,86 @@
+{
+  "comment": "Machine-local configuration and credentials (docs/61): never packaged or committed. Paths, owners and modes only, no contents. rungic-integrity checks presence and permissions; '~' is the desktop user's home.",
+  "files": [
+    {
+      "path": "/etc/profile.d/proxy.sh",
+      "owner": "root",
+      "mode": "0644",
+      "required": false,
+      "source": "set up by hand",
+      "purpose": "HTTP(S) proxy for downloads (AGENTS.md)"
+    },
+    {
+      "path": "/etc/apt/apt.conf.d/80rungic-proxy",
+      "owner": "root",
+      "mode": "0644",
+      "required": false,
+      "source": "system/apt-proxy.conf, set up by hand",
+      "purpose": "APT through the HTTP proxy (AGENTS.md); machine-specific"
+    },
+    {
+      "path": "/etc/apt/apt.conf.d/80moto-proxy",
+      "owner": "root",
+      "mode": "0644",
+      "required": false,
+      "source": "the same file under its name before the Rungic rename; rungic-plasma-config copied it",
+      "purpose": "kept for a rollback to a release from before the rename, until phase D (docs/70)"
+    },
+    {
+      "path": "/var/lib/rungic-host/audio-cookie",
+      "owner": "1000",
+      "mode": "0600",
+      "required": true,
+      "source": "system/android-audio at each start",
+      "purpose": "PulseAudio cookie of the Android audio bridge"
+    },
+    {
+      "path": "/var/lib/rungic-host/android-shm-context",
+      "owner": "root",
+      "required": true,
+      "source": "system/rungic-plasma at each start",
+      "purpose": "SELinux label for shared memory with the APK"
+    },
+    {
+      "path": "/var/lib/rungic-host/account.json",
+      "owner": "root",
+      "required": false,
+      "source": "system/account/setup.py (first-run account)",
+      "purpose": "desktop account state"
+    },
+    {
+      "path": "~/.config/rungic-voice-agent/openai-api-key",
+      "owner": "1000",
+      "mode": "0600",
+      "required": false,
+      "source": "entered by the user",
+      "purpose": "OpenAI key: voice agent, call proxy, Luna, speech"
+    },
+    {
+      "path": "~/.config/rungic-voice-agent/typesafe-api-key",
+      "owner": "1000",
+      "mode": "0600",
+      "required": false,
+      "alternatives": [
+        "~/.config/rungic-cua/typesafe-api-key"
+      ],
+      "source": "entered by the user",
+      "purpose": "JEV/TypeSafe key: rungic-clicker, call proxy"
+    },
+    {
+      "path": "~/.local/state/rungic-cua/remote-desktop-token",
+      "owner": "1000",
+      "mode": "0600",
+      "required": false,
+      "source": "RemoteDesktop portal (rungic-cua)",
+      "purpose": "restore token of the desktop automation portal session"
+    },
+    {
+      "path": "~/.codex/auth.json",
+      "owner": "1000",
+      "mode": "0600",
+      "required": false,
+      "source": "codex login (device code)",
+      "purpose": "Codex login used by the voice agent"
+    }
+  ]
+}

@@ -243,7 +243,7 @@ done
     journal = logs(since_seconds, sources=('journal',), priority=6,
                    grep=r'coredump:|dumped core|code=dumped|code=killed|SIGSEGV|SIGABRT|KCrash', limit=100)
     result['container'] = journal['entries']
-    # Reports of plasma/diagnostics/rungic-coredump-collect, and apport's Python
+    # Reports of system/diagnostics/rungic-coredump-collect, and apport's Python
     # exception reports in /var/crash.
     reports = run(f'''python3 - <<'PY'
 import json, pathlib
@@ -266,7 +266,7 @@ PY
 
 
 def crash_groups(since_seconds=30 * 86400, release=None):
-    """Container crash reports grouped by signature (plasma/diagnostics/rungic-coredump-collect).
+    """Container crash reports grouped by signature (system/diagnostics/rungic-coredump-collect).
 
     With release, also lists the signatures seen only in that release: new there, or not seen
     in the reports still kept from earlier ones."""
@@ -351,7 +351,7 @@ def crash_get(crash_id, lines=160):
 
 def integrity():
     """Drift of the container rootfs against dpkg, the release and the local-config manifest
-    (plasma/diagnostics/rungic-integrity, docs/61). Read-only; takes about a minute (dpkg --verify)."""
+    (system/diagnostics/rungic-integrity, docs/61). Read-only; takes about a minute (dpkg --verify)."""
     text = run('for p in /usr/bin/rungic-integrity /usr/bin/moto-integrity; do '
                '[ -x $p ] && exec $p --json; done; echo null', 'container', timeout=300, check=False).stdout
     report = json.loads(text)
@@ -399,7 +399,7 @@ def screenshot(path=None):
 # ---------------------------------------------------------------- desktop UI (AT-SPI)
 
 def a11y(*args, timeout=120):
-    """Run plasma/diagnostics/rungic-a11y as the desktop user; returns parsed JSON."""
+    """Run system/diagnostics/rungic-a11y as the desktop user; returns parsed JSON."""
     return json.loads(out(rungic_device.prog('a11y') + ' ' + shlex.join(map(str, args)), 'user', timeout=timeout))
 
 

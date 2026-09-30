@@ -1,5 +1,5 @@
 {
- "comment": "Pinned upstream of Mesa (docs/40, docs/71, docs/73): the Mesa for Android container branch (KGSL support for Freedreno/Turnip and the KGSL dma-buf path) at a fixed commit, checked by its tree hash. Built on the phone with meson (plasma/mesa-meson-options, tools/build_mesa.py) and packaged by plasma/package-mesa.py; debian/ holds only the patches and the changelog that names the package version.",
+ "comment": "Pinned upstream of Mesa (docs/40, docs/71, docs/73): the Mesa for Android container branch (KGSL support for Freedreno/Turnip and the KGSL dma-buf path) at a fixed commit, checked by its tree hash. Built on the phone with meson (desktop/mesa-meson-options, tools/build_mesa.py) and packaged by desktop/package-mesa.py; debian/ holds only the patches and the changelog that names the package version.",
  "kind": "git",
  "source": "mesa",
  "version": "26.3.0~devel20260824",

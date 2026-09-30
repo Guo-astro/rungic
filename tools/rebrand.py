@@ -28,12 +28,12 @@ SKIP = [
     r'^docs/', r'^benchmarks/', r'^provenance/', r'^signing/', r'^\.work/',
     r'(^|/)debian/changelog$', r'^tools/pq-history/', r'^tools/rebrand\.py$',
     r'^(?!packages/).*\.patch$',          # historical patches: import evidence the pq-history plans name
-    r'^vendor/[^/]+/po/', r'^vendor/manifest\.json$', r'^vendor/README\.md$',
-    r'^plasma/native-apk/', r'^native/', r'^shared/android/', r'^docker/', r'^lxc/', r'^cutout/', r'^kernel/', r'^plasma/build-apk\.sh$', r'^plasma/build-native-core\.sh$',
+    r'^packages/(android-host|smithay|winit)/', r'^android/host/',
+    r'^android/app/', r'^shared/android/', r'^docker/', r'^lxc/', r'^kernel/', r'^android/build-apk\.sh$', r'^android/build-native-core\.sh$',
     r'^tools/moto-magisk-bootstrap\.', r'^tools/moto_.*enter', r'enter\.c$',
-    r'^plasma/rootfs-image$', r'^plasma/rootfs-mount-hook$', r'^plasma/rootfs\.sepolicy\.rule$',
-    r'^plasma/build-launcher\.sh$',        # builds the Android-side enter program
-    r'^plasma/android-audio(\.pa)?$',     # Termux PulseAudio on Android; the enter program binds its directory
+    r'^system/rootfs-image$', r'^system/rootfs-mount-hook$', r'^system/rootfs\.sepolicy\.rule$',
+    r'^android/build-launcher\.sh$',        # builds the Android-side enter program
+    r'^system/android-audio(\.pa)?$',     # Termux PulseAudio on Android; the enter program binds its directory
     # ROM and product-partition tools: host directories that exist, the delta file format's magic
     r'^tools/(assemble_clean_rom|build_offline_magisk|build_product_delta|product_delta|test_product_delta|'
     r'restore_gki_module_certificate|verify_clean_rom|verify_offline_device|verify_offline_product)\.py$',
@@ -83,7 +83,7 @@ PATH_RULES = [
     (r'(?<![A-Za-z])Moto(?=[A-Z])', 'Rungic'),
 ]
 
-KEEP_PATHS = [r'^plasma/moto-plasma$']    # the Magisk launcher (phase C)
+KEEP_PATHS = [r'^system/moto-plasma$']    # the Magisk launcher (phase C)
 
 
 def files():

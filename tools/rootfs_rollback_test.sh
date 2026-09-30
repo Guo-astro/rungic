@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# The rootfs snapshot rollback (plasma/rootfs-image) on a small test image, never the system's: dataset A,
+# The rootfs snapshot rollback (system/rootfs-image) on a small test image, never the system's: dataset A,
 # a snapshot, rounds that replace A (reusing its blocks) and leave without unmounting, a rollback;
 # then fsck and A's checksums. Android side, Magisk root (docs/70, the 2026-09-27 incident).
 #   rollback-test.sh SCRIPT ROUNDS [MERGE_ROUNDS] [BIG_MB]
@@ -7,7 +7,7 @@
 # dataset C and detach before the merge has finished, as a container started on it does.
 # BIG_MB (default 0): every dataset also gets that many MB in 100 MB files, so the snapshot holds
 # enough changed chunks for the merge to run while the next writes happen.
-# SCRIPT: a copy of plasma/rootfs-image. The copy is rewritten to use a test directory and test
+# SCRIPT: a copy of system/rootfs-image. The copy is rewritten to use a test directory and test
 # device-mapper names, with the "container running" check disabled.
 set -eu
 SRC=$1; ROUNDS=${2:-3}; MERGE_ROUNDS=${3:-0}; BIG_MB=${4:-0}

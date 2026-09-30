@@ -1,0 +1,36 @@
+From: Rungic <noreply@rungic.invalid>
+Date: Wed, 30 Sep 2026 12:34:38 +0800
+Subject: Desktop in front runs on the big cores;
+ idle cost from ~30 % of a core to 3-4 % (docs/49)
+
+Preserve the deployed implementation during the source/patch migration.
+
+Origin: vendor, RungicCore commit:04779298924333689a4f9f646507df9e19bc1ebe
+Forwarded: no
+Last-Update: 2026-09-30
+X-Rungic-Status: Inappropriate; Android host integration
+X-Rungic-Tests: L0:source-replay; L1:android-cross-build (host); runtime scope in docs/73
+X-Rungic-Docs: docs/73; docs/49; docs/research/91
+---
+ src/android/backend/wayland/input_router.rs | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/src/android/backend/wayland/input_router.rs b/src/android/backend/wayland/input_router.rs
+index db9a782..94f3147 100644
+--- a/src/android/backend/wayland/input_router.rs
++++ b/src/android/backend/wayland/input_router.rs
+@@ -191,6 +191,14 @@ impl AndroidSeatRuntime {
+     }
+ 
+     pub(crate) fn clear_input_state(&mut self) {
++        // Touches still down are cancelled for the clients too: the lift that follows is dropped
++        // while rendering is suspended, and a client (the navigation panel's Home button held for
++        // the voice assistant) kept the press forever (docs/49).
++        if !self.active_touch_ids.is_empty() {
++            let t = self.touch.clone();
++            t.cancel(self);
++            t.frame(self);
++        }
+         self.active_touch_ids.clear();
+         self.swipe_starts.clear();
+         self.swipe_cycle_armed = false;

@@ -10,5 +10,6 @@
 *.dmabuf binary
 *.p12 binary
 
-# Preserve imported source bytes and identify upstream code in GitHub.
-vendor/** -text linguist-vendored
+# Patch context includes blank lines prefixed with a space and original CRLF bytes.
+# Preserve these verbatim; check source formatting in the prepared upstream tree.
+*.patch -text whitespace=-blank-at-eol,-blank-at-eof,-space-before-tab

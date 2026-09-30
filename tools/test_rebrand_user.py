@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""plasma/rebrand-user.py (docs/70) in a temporary home: up renames, down gives it back."""
+"""desktop/rebrand-user.py (docs/70) in a temporary home: up renames, down gives it back."""
 import importlib.util
 import os
 import tempfile
@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-SCRIPT = Path(__file__).resolve().parent.parent / 'plasma/rebrand-user.py'
+SCRIPT = Path(__file__).resolve().parent.parent / 'desktop/rebrand-user.py'
 
 
 def load(home):

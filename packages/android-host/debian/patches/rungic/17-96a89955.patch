@@ -1,0 +1,158 @@
+From: Rungic <noreply@rungic.invalid>
+Date: Wed, 30 Sep 2026 12:34:38 +0800
+Subject: Refactor first-run readiness, account recovery and display handoff
+
+Preserve the deployed implementation during the source/patch migration.
+
+Origin: vendor, RungicCore commit:96a899550c800162ee545ffa6fd9fd29912cd6ab
+Forwarded: no
+Last-Update: 2026-09-30
+X-Rungic-Status: Inappropriate; Android host integration
+X-Rungic-Tests: L0:source-replay; L1:android-cross-build (host); runtime scope in docs/73
+X-Rungic-Docs: docs/73; docs/49; docs/research/91
+---
+ src/android/backend/smithay_backend.rs | 49 +++++++++++++++++++++++++++++++++-
+ src/android/command_channel.rs         |  1 +
+ src/android/mod.rs                     |  2 ++
+ src/compositor.rs                      |  5 ++++
+ 4 files changed, 56 insertions(+), 1 deletion(-)
+
+diff --git a/src/android/backend/smithay_backend.rs b/src/android/backend/smithay_backend.rs
+index 02e2b0a..1f37814 100644
+--- a/src/android/backend/smithay_backend.rs
++++ b/src/android/backend/smithay_backend.rs
+@@ -371,7 +371,15 @@ pub fn composite_multi(state: &mut AndroidSmithayState, surfaces: &[RenderItem])
+ 
+         gl::UseProgram(0);
+ 
++        let ticket = crate::android::frame_clock::phone_proof();
++        let startup_frame = if ticket != 0 { next_startup_egl_frame(display, surface) } else { None };
+         let swap_ok = eglSwapBuffers(display, surface);
++        if swap_ok != 0 {
++            if let Some(id) = startup_frame {
++                if state.startup_egl_frames.len() >= 32 { state.startup_egl_frames.remove(0); }
++                state.startup_egl_frames.push((surface, id, ticket));
++            }
++        }
+         if swap_ok != 0 {
+             crate::android::frame_clock::note_present();
+             // After a rotation the window's buffers can lag SurfaceChanged by frames.
+@@ -446,6 +454,7 @@ extern "C" {
+     fn eglCreateWindowSurface(display: *mut std::ffi::c_void, config: *mut std::ffi::c_void, win: *mut std::ffi::c_void, attrib_list: *const i32) -> *mut std::ffi::c_void;
+     fn eglCreateContext(display: *mut std::ffi::c_void, config: *mut std::ffi::c_void, share_context: *mut std::ffi::c_void, attrib_list: *const i32) -> *mut std::ffi::c_void;
+     fn eglMakeCurrent(display: *mut std::ffi::c_void, draw: *mut std::ffi::c_void, read: *mut std::ffi::c_void, ctx: *mut std::ffi::c_void) -> u32;
++    fn eglSurfaceAttrib(display: *mut std::ffi::c_void, surface: *mut std::ffi::c_void, attribute: i32, value: i32) -> u32;
+     fn eglSwapBuffers(display: *mut std::ffi::c_void, surface: *mut std::ffi::c_void) -> u32;
+     fn eglQuerySurface(display: *mut std::ffi::c_void, surface: *mut std::ffi::c_void, attribute: i32, value: *mut i32) -> u32;
+     fn eglDestroySurface(display: *mut std::ffi::c_void, surface: *mut std::ffi::c_void) -> u32;
+@@ -491,6 +500,7 @@ pub struct AndroidSmithayState {
+     pub shm_enabled: bool,
+     pub shm_region: Option<ShmRegion>,
+     pub frames_presented: u64,
++    startup_egl_frames: Vec<(egl::EGLSurface, u64, u64)>,
+     /// Size of the last frame drawn into the native window with GLES (queried from
+     /// EGL). The zero-copy layer is a child of that window's layer and SurfaceFlinger
+     /// crops it to the parent's buffer, so after a resize (rotation) GLES frames come
+@@ -542,6 +552,7 @@ impl AndroidSmithayState {
+             shm_enabled: false,
+             shm_region: None,
+             frames_presented: 0,
++            startup_egl_frames: Vec::new(),
+             window_frame_size: (0, 0),
+             presenter: None,
+             cast: None,
+@@ -676,6 +687,7 @@ fn try_zero_copy(state: &mut AndroidSmithayState, items: &mut [RenderItem]) -> b
+     let acquire_fd = acquire.as_ref().and_then(|fence| fence.try_clone().ok());
+     if let Some(presenter) = state.presenter.as_mut() {
+         presenter.present(ahb, hold, release.take(), acquire_fd, (w, h), surface_size, 0);
++        presenter.track_startup_frame(crate::android::frame_clock::phone_proof());
+     }
+     crate::android::frame_clock::note_present();
+     state.frames_presented += 1;
+@@ -1165,4 +1177,39 @@ pub mod smithay_globals {
+     {
+         ShmState::new::<D>(display, [])
+     }
+-}
+\ No newline at end of file
++}
++// EGL fallback has its own real display timestamp. eglSwapBuffers success is
++// only submission and must not release the startup gate.
++type NextFrame = unsafe extern "C" fn(egl::EGLDisplay, egl::EGLSurface, *mut u64) -> u32;
++type FrameTimes = unsafe extern "C" fn(egl::EGLDisplay, egl::EGLSurface, u64, i32, *const i32, *mut i64) -> u32;
++type SupportsTime = unsafe extern "C" fn(egl::EGLDisplay, egl::EGLSurface, i32) -> u32;
++const DISPLAY_PRESENT: i32 = 0x343A;
++unsafe fn next_startup_egl_frame(display: egl::EGLDisplay, surface: egl::EGLSurface) -> Option<u64> {
++    let next = eglGetProcAddress(c"eglGetNextFrameIdANDROID".as_ptr());
++    let supported = eglGetProcAddress(c"eglGetFrameTimestampSupportedANDROID".as_ptr());
++    if next.is_null() || supported.is_null() { return None; }
++    let supported: SupportsTime = std::mem::transmute(supported);
++    if supported(display, surface, DISPLAY_PRESENT) == 0 || eglSurfaceAttrib(display, surface, 0x3430, 1) == 0 { return None; }
++    let next: NextFrame = std::mem::transmute(next);
++    let mut id = 0;
++    (next(display, surface, &mut id) != 0).then_some(id)
++}
++pub fn collect_startup_egl_frames(state: &mut AndroidSmithayState) {
++    if state.startup_egl_frames.is_empty() { return; }
++    let ticket = crate::android::frame_clock::phone_proof();
++    let (Some(display), Some(surface)) = (state.egl_display, state.egl_surface) else {
++        state.startup_egl_frames.clear(); return;
++    };
++    unsafe {
++        let query = eglGetProcAddress(c"eglGetFrameTimestampsANDROID".as_ptr());
++        if query.is_null() { state.startup_egl_frames.clear(); return; }
++        let query: FrameTimes = std::mem::transmute(query);
++        state.startup_egl_frames.retain(|(frame_surface, id, frame_ticket)| {
++            if *frame_ticket != ticket || ticket == 0 || *frame_surface != surface { return false; }
++            let mut value: i64 = -1;
++            if query(display, surface, *id, 1, &DISPLAY_PRESENT, &mut value) == 0 { return false; }
++            if value > 0 { crate::android::frame_clock::confirm_phone_proof(ticket); }
++            value == -2 // only genuinely pending timestamps remain
++        });
++    }
++}
+diff --git a/src/android/command_channel.rs b/src/android/command_channel.rs
+index 0238e38..af5ddab 100644
+--- a/src/android/command_channel.rs
++++ b/src/android/command_channel.rs
+@@ -93,6 +93,7 @@ pub enum JniCommand {
+     SetOffsets { x_offset: i32, y_offset: i32 },
+     SuspendRendering,
+     ResumeRendering,
++    AwaitPhoneFrame { ticket: u64 },
+     UpdateClipboard { text: String },
+     /// Clipboard text flowing Wayland/X11 → Android.
+     /// Set from background threads, processed on compositor thread,
+diff --git a/src/android/mod.rs b/src/android/mod.rs
+index 2efd72b..f6953c5 100644
+--- a/src/android/mod.rs
++++ b/src/android/mod.rs
+@@ -16,3 +16,5 @@ pub mod surface_control;
+ 
+ pub mod frame_clock;
+ pub mod idle_inhibit;
++
++pub mod presentation_gate;
+diff --git a/src/compositor.rs b/src/compositor.rs
+index 4aa4048..42b0c46 100644
+--- a/src/compositor.rs
++++ b/src/compositor.rs
+@@ -458,6 +458,10 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+                         input_router.clear();
+                     }
+                     JniCommand::ResumeRendering => {}
++                    JniCommand::AwaitPhoneFrame { ticket } => {
++                        crate::android::frame_clock::arm_phone_proof(ticket);
++                        if let Some(server) = wayland_server.as_mut() { server.runtime.render_all(); }
++                    }
+                     JniCommand::SetResolution { width, height } => {
+                         backend_state.requested_resolution = Some((width, height));
+                         if let Some(server) = wayland_server.as_mut() {
+@@ -601,6 +605,7 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+                     server.runtime.complete_presentation(presented.callbacks, presented.time_ns, presented.hardware);
+                 }
+             }
++            crate::android::backend::smithay_backend::collect_startup_egl_frames(&mut backend_state);
+             render_background_tick(&backend_state);
+ 
+             let settling = input_router.busy()

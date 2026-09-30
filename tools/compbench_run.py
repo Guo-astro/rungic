@@ -4,7 +4,7 @@
 # dependencies = ["perfetto>=0.58", "pandas>=2"]
 # ///
 # SPDX-License-Identifier: MIT
-"""Run plasma/bench/compbench as an interleaved GLES/Vulkan matrix on the phone.
+"""Run desktop/bench/compbench as an interleaved GLES/Vulkan matrix on the phone.
 
 The Plasma session is stopped so the Android host serves only compbench, then
 restored (also on failure). Each run is traced (perfetto + KGSL instance) so

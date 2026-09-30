@@ -1,0 +1,31 @@
+{
+  "name": "rungic-suggestions",
+  "architecture": "arm64",
+  "build": "device",
+  "paths": [
+    "agent/suggestions",
+    "compatibility",
+    "docs/73-reduce-upstream-changes.md",
+    "docs/90-blender-vulkan-incident.md",
+    "packages/qt6-multimedia/debian/patches/rungic/pulseaudio-sink-target-latency.patch"
+  ],
+  "depends": "rungic-design, dpkg, systemd, qml6-module-org-kde-ki18n",
+  "build_depends": [
+    "cmake",
+    "qt6-base-dev",
+    "qt6-declarative-dev",
+    "libkf6windowsystem-dev",
+    "libkf6config-dev",
+    "libkf6i18n-dev",
+    "gettext"
+  ],
+  "description": "Rungic suggestions, compatibility knowledge and home feed\nPersistent suggestions with bounded diagnostics, deferred reminders, Agent handoff and shared QML cards.",
+  "units": {
+    "system": [
+      "rungic-suggestions-collect.timer"
+    ],
+    "user": [
+      "rungic-suggestions.service"
+    ]
+  }
+}

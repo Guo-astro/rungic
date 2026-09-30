@@ -23,7 +23,7 @@
 
 ## 部署与数据
 
-源码、CMake、安装脚本：[plasma/rime/](../plasma/rime)。适配代码使用 GPL-3.0-or-later；当前发行版 librime 包为 GPL-3.0-only，Qt 布局保留 GPL-3.0-only 许可，朙月拼音和 prelude 数据包为 LGPL-3，详细版权随系统包保留。
+源码、CMake、安装脚本：[plasma/rime/](../desktop/rime)。适配代码使用 GPL-3.0-or-later；当前发行版 librime 包为 GPL-3.0-only，Qt 布局保留 GPL-3.0-only 许可，朙月拼音和 prelude 数据包为 LGPL-3，详细版权随系统包保留。
 
 容器内依赖：
 

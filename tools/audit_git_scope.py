@@ -49,7 +49,7 @@ def main():
         tracked = set(subprocess.check_output(
             ["git", "ls-files", "-z"], cwd=ROOT).decode().split("\0")) - {""}
     paths = sorted({os.fsdecode(p) for p in raw.split(b"\0") if p} | tracked)
-    exceptions_file = ROOT / "vendor/audit-exceptions.json"
+    exceptions_file = ROOT / "provenance/audit-exceptions.json"
     exceptions = json.loads(exceptions_file.read_text()) if exceptions_file.exists() else {}
     groups = collections.defaultdict(lambda: {"files": 0, "bytes": 0})
     files, findings = [], []
@@ -81,7 +81,7 @@ def main():
             if pattern.search(data):
                 findings.append({"path": name, "kind": label})
     # Only exact upstream bytes with an individually reviewed reason qualify.
-    # A later edit to these files must be reviewed again; vendor/ isn't exempt.
+    # A later edit to these files must be reviewed again; no source directory is exempt.
     verified = {}
     for name, exception in exceptions.items():
         path = ROOT / name

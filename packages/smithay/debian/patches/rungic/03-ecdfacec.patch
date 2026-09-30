@@ -1,0 +1,69 @@
+From: Rungic <noreply@rungic.invalid>
+Date: Wed, 30 Sep 2026 12:34:40 +0800
+Subject: Output pacing: an output nobody sees gets frames at a low rate;
+ outputs no longer repaint each other (docs/65)
+
+Preserve the deployed implementation during the source/patch migration.
+
+Origin: vendor, RungicCore commit:ecdfacecad4b1f485ddc8bab50e2535bdcb50f4f
+Forwarded: no
+Last-Update: 2026-09-30
+X-Rungic-Status: Inappropriate; Android host integration
+X-Rungic-Tests: L0:source-replay; L1:android-cross-build (host); runtime scope in docs/73
+X-Rungic-Docs: docs/73; docs/49; docs/research/91
+---
+ src/wayland/presentation/mod.rs | 20 +++++++++++++++++---
+ 1 file changed, 17 insertions(+), 3 deletions(-)
+
+diff --git a/src/wayland/presentation/mod.rs b/src/wayland/presentation/mod.rs
+index 54b5ce6..e008e36 100644
+--- a/src/wayland/presentation/mod.rs
++++ b/src/wayland/presentation/mod.rs
+@@ -296,6 +296,13 @@ impl PresentationFeedbackCallback {
+ pub struct PresentationFeedbackCachedState {
+     /// Holds the registered presentation feedbacks
+     pub callbacks: Vec<PresentationFeedbackCallback>,
++    /// Rungic (docs/65): keep the feedbacks of superseded content updates in `superseded`
++    /// instead of discarding them at once. A compositor pacing the surface down reports them
++    /// discarded at its next frame: KWin counts a discarded frame as no longer pending and
++    /// would otherwise render the next one at its own rate.
++    pub hold_superseded: bool,
++    /// Feedbacks of superseded updates held back while `hold_superseded`; to be discarded.
++    pub superseded: Vec<PresentationFeedbackCallback>,
+ }
+ 
+ impl PresentationFeedbackCachedState {
+@@ -317,6 +324,8 @@ impl Cacheable for PresentationFeedbackCachedState {
+     fn commit(&mut self, _dh: &DisplayHandle) -> Self {
+         PresentationFeedbackCachedState {
+             callbacks: std::mem::take(&mut self.callbacks),
++            hold_superseded: false,
++            superseded: Vec::new(),
+         }
+     }
+ 
+@@ -331,8 +340,13 @@ impl Cacheable for PresentationFeedbackCachedState {
+ 
+         // discard unprocessed callbacks as defined by the spec
+         // ...the user did not see the content update because it was superseded...
+-        for callback in std::mem::replace(&mut into.callbacks, std::mem::take(&mut self.callbacks)) {
+-            callback.discarded();
++        let replaced = std::mem::replace(&mut into.callbacks, std::mem::take(&mut self.callbacks));
++        if into.hold_superseded {
++            into.superseded.extend(replaced);
++        } else {
++            for callback in replaced {
++                callback.discarded();
++            }
+         }
+     }
+ }
+@@ -341,7 +355,7 @@ impl Drop for PresentationFeedbackCachedState {
+     fn drop(&mut self) {
+         // discard unprocessed callbacks as defined by the spec
+         // ...the user did not see the content update because it was superseded or its surface destroyed...
+-        for callback in self.callbacks.drain(..) {
++        for callback in self.callbacks.drain(..).chain(self.superseded.drain(..)) {
+             callback.discarded();
+         }
+     }

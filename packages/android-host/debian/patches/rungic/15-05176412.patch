@@ -1,0 +1,88 @@
+From: Rungic <noreply@rungic.invalid>
+Date: Wed, 30 Sep 2026 12:34:38 +0800
+Subject: Rebrand phase C1: the Android side under Rungic names
+
+Preserve the deployed implementation during the source/patch migration.
+
+Origin: vendor, RungicCore commit:051764126265a8f89a5fac95e224f8726274e2eb
+Forwarded: no
+Last-Update: 2026-09-30
+X-Rungic-Status: Inappropriate; Android host integration
+X-Rungic-Tests: L0:source-replay; L1:android-cross-build (host); runtime scope in docs/73
+X-Rungic-Docs: docs/73; docs/49; docs/research/91
+---
+ build.rs                               | 8 ++++----
+ src/android/backend/smithay_backend.rs | 8 ++++----
+ 2 files changed, 8 insertions(+), 8 deletions(-)
+
+diff --git a/build.rs b/build.rs
+index be854c4..500e443 100644
+--- a/build.rs
++++ b/build.rs
+@@ -4,8 +4,8 @@ use std::path::PathBuf;
+ 
+ fn main() {
+     println!("cargo:rerun-if-changed=build.rs");
+-    println!("cargo:rerun-if-env-changed=MOTO_XKBCOMMON_LIB");
+-    println!("cargo:rerun-if-env-changed=MOTO_JNI_LIBS_DIR");
++    println!("cargo:rerun-if-env-changed=RUNGIC_XKBCOMMON_LIB");
++    println!("cargo:rerun-if-env-changed=RUNGIC_JNI_LIBS_DIR");
+     println!("cargo:rerun-if-changed=../libxkbcommon/build-android/libxkbcommon.so");
+     println!("cargo:rerun-if-changed=src/android/sensor_shim.c");
+ 
+@@ -36,7 +36,7 @@ fn main() {
+         manifest_dir.join("../libxkbcommon/build-android/libxkbcommon.so"),
+         manifest_dir.join("../patches/build-libxkbcommon/output/lib/libxkbcommon.so"),
+     ];
+-    if let Some(path) = env::var_os("MOTO_XKBCOMMON_LIB") {
++    if let Some(path) = env::var_os("RUNGIC_XKBCOMMON_LIB") {
+         xkbcommon_candidates.insert(0, PathBuf::from(path));
+     }
+ 
+@@ -72,7 +72,7 @@ fn main() {
+     println!("cargo:rustc-cdylib-link-arg=-Wl,--threads=1");
+ 
+     // Copy the built libxkbcommon.so into jniLibs so Gradle packages it in the APK.
+-    let packaged_jni_dir = env::var_os("MOTO_JNI_LIBS_DIR")
++    let packaged_jni_dir = env::var_os("RUNGIC_JNI_LIBS_DIR")
+         .map(PathBuf::from)
+         .unwrap_or_else(|| PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR missing"))
+             .join("jniLibs/arm64-v8a"));
+diff --git a/src/android/backend/smithay_backend.rs b/src/android/backend/smithay_backend.rs
+index dc3edd7..02e2b0a 100644
+--- a/src/android/backend/smithay_backend.rs
++++ b/src/android/backend/smithay_backend.rs
+@@ -305,13 +305,13 @@ pub fn composite_multi(state: &mut AndroidSmithayState, surfaces: &[RenderItem])
+                             gl::DeleteTextures(1, &tex);
+                             static GPU_IMPORT_REPORTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+                             if !GPU_IMPORT_REPORTED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+-                                log::warn!("MOTO_GPU: shared GPU buffer imported directly by Android EGL {}x{}", width, height);
++                                log::warn!("RUNGIC_GPU: shared GPU buffer imported directly by Android EGL {}x{}", width, height);
+                             }
+                             continue;
+                         }
+                         static GPU_IMPORT_FAILURE_REPORTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+                         if !GPU_IMPORT_FAILURE_REPORTED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+-                            log::warn!("MOTO_GPU: Android EGL DMA-BUF import failed error=0x{:x}; using CPU transfer", eglGetError());
++                            log::warn!("RUNGIC_GPU: Android EGL DMA-BUF import failed error=0x{:x}; using CPU transfer", eglGetError());
+                         }
+                     }
+ 
+@@ -359,7 +359,7 @@ pub fn composite_multi(state: &mut AndroidSmithayState, surfaces: &[RenderItem])
+                         gl::DeleteTextures(1, &tex);
+                         static CPU_TRANSFER_REPORTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+                         if !CPU_TRANSFER_REPORTED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+-                            log::warn!("MOTO_GPU: CPU DMA-BUF transfer active {}x{}", width, height);
++                            log::warn!("RUNGIC_GPU: CPU DMA-BUF transfer active {}x{}", width, height);
+                         }
+                         continue;
+                     }
+@@ -919,7 +919,7 @@ pub fn bind_native_window(state: &mut AndroidSmithayState, native_window_ptr: *m
+     let has_dmabuf = egl_extensions.contains("EGL_EXT_image_dma_buf_import");
+     let has_dmabuf_mods = egl_extensions.contains("EGL_EXT_image_dma_buf_import_modifiers");
+     let snippet = if egl_extensions.len() > 200 { &egl_extensions[..200] } else { &egl_extensions[..] };
+-    log::warn!("MOTO_GPU: EGL has_dmabuf_import={} has_dmabuf_modifiers={} extensions={}",
++    log::warn!("RUNGIC_GPU: EGL has_dmabuf_import={} has_dmabuf_modifiers={} extensions={}",
+                has_dmabuf, has_dmabuf_mods, snippet);
+     state.has_dmabuf_import = has_dmabuf;
+     state.has_dmabuf_import_modifiers = has_dmabuf_mods;

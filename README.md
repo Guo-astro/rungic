@@ -2,7 +2,7 @@
 
 <p align="center"><strong>AgentOS in your hand.</strong></p>
 
-<p align="center">An Android phone, a full Linux desktop computer, and an assistant that does the work for you.</p>
+<p align="center">A budget-friendly Android phone, a full Linux desktop computer, and an assistant that does the work for you.</p>
 
 <p align="center">
   <img src="docs/images/readme/demo.gif" width="300" alt="Asked for a rocket, the assistant plans the work, builds the model in Blender on its own screen, renders it and hands back the picture and the file">
@@ -10,15 +10,34 @@
 
 <p align="center"><sub>“Make a little rocket in Blender and render it for me.” The whole task took about 2½ minutes; shown here sped up.</sub></p>
 
-Rungic turns a phone into a real computer. It opens to the KDE Plasma desktop and runs desktop software such as Firefox, Blender, Krita and VS Code. Connect a TV and it becomes a desktop PC.
+Rungic turns a compatible Android phone into a real computer—a budget-friendly way to make more of the hardware you already own. It opens to the KDE Plasma desktop and runs desktop software such as Firefox, Blender, Krita and VS Code. Connect a TV and it becomes a desktop PC.
 
 It also comes with an AI assistant that can see, speak and act. Tell it what you need, and it opens the apps and gets the job done while you watch.
 
+**Rungic is built for agents of your choice.** The bundled assistant is a working demonstration and default implementation, currently powered by Codex. You can use another agent: the desktop, phone interfaces and system services are available independently of that choice. Integrating a replacement into the bundled assistant's voice, task and widget experience requires an adapter; there is no universal one-click switch yet.
+
 ## Still your Android phone
 
-Rungic is an app. After a one-time setup of the phone (see [Supported devices](#supported-devices)), install the APK, tap its icon, and the Linux desktop opens.
+Rungic opens as an Android app after the phone has been prepared. Our installation starts with the manufacturer's original firmware for the exact device and firmware version. We modify that firmware and rebuild its matching GKI kernel with the capabilities needed to run RungicOS in LXC. Android remains the phone's operating system, alongside the Linux desktop.
 
-You don't give anything up for it. Android is not wiped or replaced: your apps, calls, messages, photos and accounts stay where they are, and you can switch back to them at any time. The desktop and Android run side by side, sharing the clipboard and your photos, videos and downloads.
+Once installation, account setup and device checks are complete, tap the Rungic icon to open the desktop, or return to Android to use your phone. Both environments run side by side, sharing the clipboard and your photos, videos and downloads. **The initial full installation resets the phone and erases user data.** Back up before starting; see [Before you install](#before-you-install) for app and manufacturer restrictions.
+
+## What makes it Agent Ready
+
+Rungic gives an agent a place to work, tools to act, evidence to inspect and a way to deliver the result. These capabilities sit in the system and can be reused by different agents.
+
+| What the system provides | What an agent can do | What you get |
+|---|---|---|
+| **A real Linux environment** | Run code and command-line tools, work with files, install desktop software through the package system | Finished documents, images, projects and installed apps |
+| **Desktop control** | Launch apps, inspect windows, take screenshots, click and type through desktop MCP tools | Work in existing graphical apps, including apps without an agent-specific integration |
+| **An agent workspace** | Work on a separate desktop, or use your desktop when requested | A visible work session that can run alongside your own |
+| **Phone and desktop interfaces** | Read device state, change brightness, use the shared clipboard and control casting through structured commands | Tasks that connect desktop software with the phone and its display |
+| **Diagnostics and compatibility knowledge** | Inspect available logs and crash evidence, check installed versions against known issues, propose a scoped fix | An explanation grounded in this device's evidence and software versions |
+| **Persistent suggestions and task state** | Pick up an issue, report investigation and repair progress, and record the outcome | Problems you can revisit and results you can review |
+
+The bundled assistant shows how to connect these pieces: a request becomes a plan, visible actions, progress updates and files you can open from the conversation. The same foundations support development agents through diagnostic MCP tools and the repository's build and installation skills. Phone-side assistance and developer-side device management have different access requirements.
+
+Agent choice and model choice are separate from these system capabilities. A replacement can use the Linux tools and supported MCP, command-line and D-Bus interfaces; its own execution, conversation and authorization behavior belongs to that integration. See the [integration map](docs/README.md#integrating-another-agent) for the reusable interfaces and the parts currently connected to Codex.
 
 ## Just say it
 
@@ -57,7 +76,7 @@ The assistant lays out a plan first and tells you out loud how it is going. It o
 The assistant works on a desktop of its own, so your phone stays yours.
 
 - Its screen floats in a small window you can resize, tuck against the edge, or send to the TV with one sentence.
-- Its clicks and typing happen only on its own screen. Keep using your phone meanwhile.
+- While it works in that workspace, its clicks and typing stay there. Keep using your phone meanwhile.
 - When you have desktop mode on or are casting to a TV, it works right there on your desktop with you. You can also tell it where to work.
 
 </td>
@@ -77,6 +96,22 @@ The assistant works on a desktop of its own, so your phone stays yours.
 - **No silent detours.** If the plan hits a wall, it explains the options and what each one means, and you choose. It does not quietly settle for less.
 - **You set the rules.** The assistant's guidelines and skills are plain text files in your home folder. Edit them and the change applies right away.
 
+These describe the bundled assistant's workflow. Its separate desktop isolates the work session's display and input; it shares your Linux account and files. Instructions to ask first are agent behavior, while administrator authentication uses the system's authorization dialog. A replacement agent needs its own corresponding policies and integration.
+
+## Proactive intelligence: useful suggestions, at your pace
+
+The first scope is system care: faults that need attention and known software compatibility or optimization opportunities. Rungic keeps a local record of the issue, its evidence, your decision and any investigation or repair task.
+
+1. **Notice what happened.** Collect recent Linux crashes, failed services, incomplete package operations and low storage. Check installed software against the repository's [compatibility knowledge base](compatibility/README.md), using exact package versions and any recorded environment constraints. Intentional settings are preserved as policy rather than flagged for optimization.
+2. **Give it a useful place on the desktop.** Suggestions appear in the assistant's Suggestions page and native Plasma home-screen widgets. The widgets leave the wallpaper, favorite apps and app drawer intact. Repeated evidence for the same issue is consolidated; related cards form a stack you can swipe up or down, with different groups shown separately. Tap a card to open that issue in the app.
+3. **Let you choose when to deal with it.** Keep an issue for later, set a reminder or dismiss it. Notifications respect system inhibition and avoid repeating progress already shown to you; ordinary suggestions are throttled and wait for a suitable context. Results remain available to revisit.
+4. **Investigate before changing things.** Hand a suggestion to the agent. Its result explains what happened, what the evidence supports, how certain the conclusion is and what to do next. Unknown causes remain unknown. Repairs require a proposed plan and your confirmation; approval is tied to the plan and evidence revision, so an outdated plan cannot silently be applied.
+5. **Verify and keep the history.** Investigation, repair progress, issue status and reminder choices are tracked separately and survive service restarts. Completing an agent task does not by itself prove the underlying problem is fixed. Upstream feedback starts with a local facts bundle and a record of the issue or PR; external submission needs an explicit request, and an upstream merge does not establish that your installed version is repaired.
+
+A separate **Agent widget** shows the bundled Codex integration's activity and usage with small pixel illustrations. It displays token usage observed by the integration and account quota/reset information when the account provides it; API-key accounts do not get invented subscription reset times. It opens the assistant or usage details when tapped. Another agent needs to supply its own usage data for this experience.
+
+This is an implemented foundation with a deliberately bounded scope. It does not yet detect every Android fault or automatically determine whether every app is using hardware acceleration. Compatibility suggestions depend on reviewed knowledge entries, and automatic upstream PR submission and status synchronization are not implemented. The [implementation and acceptance record](docs/research/proactive-system-care.md) separates device-tested behavior from remaining work.
+
 ## A real computer in your pocket
 
 - **A complete Linux desktop.** Ubuntu 26.04 with KDE Plasma Mobile 6.6. Install software with apt, Flatpak or the Discover app store.
@@ -84,7 +119,7 @@ The assistant works on a desktop of its own, so your phone stays yours.
 - **Your phone's hardware.** Speaker, microphone, front and rear cameras, a clipboard shared with Android, and Chinese input with Rime.
 - **Desktop mode and casting.** Open the full desktop in a floating window, or cast it wirelessly to a TV and use the phone as its touchpad and keyboard.
 - **Smooth.** Frames go straight to the display without copying, at up to 120 Hz while you touch the screen.
-- **Looks after itself.** A home-screen widget spots problems on the system and hands them to the assistant to investigate.
+- **System care.** Home-screen suggestions surface faults and known compatibility issues for you to investigate and handle when convenient.
 
 <table>
 <tr>
@@ -119,18 +154,18 @@ flowchart TB
 
 Rungic does not replace the phone's operating system. Android keeps handling calls, networking, the camera and the rest of the hardware. The Linux desktop runs in a container, and the Rungic app ties together its picture, touch input, sound and camera.
 
-The assistant has two parts: a realtime voice model talks with you, and an agent in the background does the work.
+The bundled assistant has two parts: a realtime voice model talks with you, and Codex runs tasks in the background. This is the reference integration; another agent can reuse the system capabilities described above.
 
 ## Supported devices
 
-Rungic is not tied to one phone model. It changes very little on the phone: the Linux desktop runs in a container on the phone's own kernel, and the Rungic app reaches the screen, touch, sound and cameras through standard Android interfaces.
+Rungic's architecture can be adapted to different phones. The Linux desktop runs in an LXC container sharing Android's kernel, and the Rungic app reaches the screen, touch, sound and cameras through Android interfaces.
 
-The one system-level change is the kernel. Android's Generic Kernel Image (GKI) ships with a few features that containers need turned off, so we rebuild it from Google's source with them turned on: System V IPC, POSIX message queues, IPC, PID and user namespaces, and devtmpfs. The build keeps the kernel's module interface intact, so the phone maker's own drivers keep loading as before. Only the boot partition changes; Android, its apps and data stay.
+For each device, we pin kernel sources and a build configuration matching its stock firmware, then enable the missing container capabilities, such as System V IPC, POSIX message queues, IPC/PID/user namespaces and devtmpfs. Keeping the manufacturer's drivers usable requires checking the rebuilt kernel's module ABI and signature trust, followed by testing on the device. Full flash packages also integrate root, the Rungic app and first-boot installation; their partition changes are recorded in the device's release manifest.
 
-So most Android phones that meet these conditions should be able to run it:
+The current adaptation path requires:
 
-- **The bootloader can be unlocked and the phone rooted** (Magisk). Unlocking usually erases the phone once, so back it up first.
-- **It runs a GKI kernel**, which phones launched with Android 12 or later do. Kernels built so far: android15-6.6 and android16-6.12; older GKI branches follow the same method.
+- **An unlockable bootloader and a supported root setup.** Current device integrations use Magisk; eligibility and consequences depend on the manufacturer and device variant.
+- **A GKI kernel with matching sources and compatible vendor modules.** Kernels built so far: android15-6.6 and android16-6.12. Other branches need their own adaptation and checks; the Android version alone does not establish compatibility.
 - **A Snapdragon chip with an Adreno GPU**, for the hardware-accelerated desktop (Mesa's Turnip and freedreno on Adreno's KGSL driver). Phones with other GPUs need their own graphics work first.
 - **ARM64 and enough free storage** for the Linux system.
 
@@ -143,6 +178,13 @@ Tested so far:
 | moto g100s (XT2537-4) | android15-6.6 | Main development device, most complete |
 | moto g100 (XT2533-4) | android15-6.6 | One-step flash package verified on a wiped phone |
 | moto X70 Air Pro | android16-6.12 | In progress |
+
+### Before you install
+
+1. **Make a complete backup off the phone.** The full flash installation resets the device and erases user data; bootloader unlocking also normally triggers a [factory reset](https://source.android.com/docs/core/architecture/bootloader/locking_unlocking). Back up photos, files, contacts and messages, export app-specific data, and make sure you can restore access to your accounts. Keeping the manufacturer's Android base does not preserve your existing user data through this process.
+2. **The goal is to retain normal Android functionality.** Calls, messages, networking, cameras and other phone functions should remain available alongside RungicOS after adaptation and validation. This is a design goal, not a blanket guarantee for every phone or firmware. Check the device's acceptance record and release notes, including any selected preinstalled apps removed or disabled by its firmware profile.
+3. **Some apps may reject the modified device.** Apps or their services can check root, bootloader state or device integrity and restrict access, even when Android itself works normally. For example, [Play Integrity](https://developer.android.com/google/play/integrity/overview) lets developers apply their own access policies. Such restrictions are imposed by the app or service; Rungic cannot guarantee that every app will accept the device. Other app failures still need diagnosis rather than being assumed to be security-policy restrictions.
+4. **Research the manufacturer's policies for your exact model and variant.** Before unlocking or rooting, check eligibility, the required procedure, and whether protected features or update support will change. Some effects can persist after restoring stock firmware: [Samsung's Knox documentation](https://docs.samsungknox.com/admin/knox-platform-for-enterprise/faq/), for example, describes restrictions on Knox-dependent services after its Warranty Bit is tripped. This is a manufacturer-specific example, not a statement that Samsung devices are supported by Rungic.
 
 ## Status
 
@@ -160,9 +202,9 @@ Skills are reusable instructions that an agent reads to carry out a task. This r
 | Skill | Where to use it | What it does |
 |---|---|---|
 | [`rungic-three-stage-image`](.agents/skills/rungic-three-stage-image/SKILL.md) | Codex working in this repository | Builds the device's GKI kernel, the RungicOS Linux image and the complete flash package. Covers individual stages, device bring-up, installation and acceptance. |
-| [`rungic-phone-desktop`](plasma/voice-agent/skills/rungic-phone-desktop/SKILL.md) | The assistant running on the phone | Operates desktop apps and windows, controls phone functions, casts to a TV and handles supported call workflows. |
+| [`rungic-phone-desktop`](agent/assistant/skills/rungic-phone-desktop/SKILL.md) | The assistant running on the phone | Operates desktop apps and windows, controls phone functions, casts to a TV and handles supported call workflows. |
 
-The desktop skill ships with the assistant. Its editable copy lives at `~/.codex/skills/rungic-phone-desktop/` on the phone; changes you make there are preserved when the package updates.
+The desktop skill ships with the bundled assistant. Its editable copy lives at `~/.codex/skills/rungic-phone-desktop/` on the phone; changes you make there are preserved when the package updates. These locations and invocation examples describe the current Codex integration. Other agents can reuse the instructions and underlying tools, adapting skill loading to their own format.
 
 ### Choose what to build and install
 
@@ -204,6 +246,8 @@ These skills guide the existing build tools; the complete process still involves
 
 ## Learn more
 
+- [Source layout](docs/README.md#repository-layout): Android host, agents, desktop integration, system services, package definitions and upstream patches
 - [Developer guide and documentation index](docs/README.md): repository layout, development entry points, and the design and acceptance documents for each capability
+- [Integrating another agent](docs/README.md#integrating-another-agent) · [Proactive system care](docs/research/proactive-system-care.md) · [Compatibility knowledge](compatibility/README.md)
 - [Voice assistant](docs/59-voice-agent.md) · [Computer use](docs/60-computer-use.md) · [Assistant's screen](docs/65-agent-screen.md) · [Agent workspaces](docs/research/91-agent-workspaces.md) (in Chinese)
 - [Engineering conventions](AGENTS.md) (in Chinese)

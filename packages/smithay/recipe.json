@@ -1,0 +1,13 @@
+{
+  "comment": "Pinned subtree of the Winland fork used by the existing Android host. This migration preserves its baseline; it does not claim this subtree equals an official upstream release. See docs/73.",
+  "kind": "git",
+  "source": "smithay",
+  "version": "0.7.0",
+  "git": "https://github.com/eirkkk/winland-Android",
+  "commit": "4269ec048e83133102d00464fd4c23af44d84707",
+  "subdir": "native/lib/smithay",
+  "tree": "ddc78efe6616bcce50ce6fecf7560385f6a78212",
+  "upstream": "https://github.com/Smithay/smithay",
+  "licenses": "MIT; LICENSE.txt",
+  "files": {}
+}

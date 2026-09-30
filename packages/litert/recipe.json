@@ -1,5 +1,5 @@
 {
- "comment": "Pinned upstream of LiteRT (docs/64, docs/71, docs/73): its C API headers (litert/c, litert/build_common/config) for the APK's OCR JNI library, which links the prebuilt libLiteRt.so of Maven com.google.ai.edge.litert:litert:2.2.0 (plasma/build-apk.sh). Pinned by commit, checked by its tree hash. No changes.",
+ "comment": "Pinned upstream of LiteRT (docs/64, docs/71, docs/73): its C API headers (litert/c, litert/build_common/config) for the APK's OCR JNI library, which links the prebuilt libLiteRt.so of Maven com.google.ai.edge.litert:litert:2.2.0 (android/build-apk.sh). Pinned by commit, checked by its tree hash. No changes.",
  "kind": "git",
  "source": "litert",
  "version": "2.2.0",

@@ -7,7 +7,7 @@
  "steps": [
   {
    "name": "panel-exclusive-zone",
-   "patch": "plasma/panel-exclusive-zone.patch",
+   "patch": "desktop/patches/panel-exclusive-zone.patch",
    "date": "2026-09-23T21:00:53+08:00",
    "subject": "Top panel: keep the layer-shell exclusive zone equal to the panel thickness",
    "description": "Android cutout metadata can change the top panel's thickness after its first Wayland configure.\nResizing the visible panel alone left the original exclusive zone, so applications kept the old\nreserved area. The panel now sets its layer-shell exclusion zone to its real thickness whenever\nthe thickness, visibility mode or floating state changes.",
@@ -23,7 +23,7 @@
   },
   {
    "name": "convergent-keyboard",
-   "patch": "plasma/convergent-keyboard.patch",
+   "patch": "desktop/patches/convergent-keyboard.patch",
    "date": "2026-09-23T21:00:53+08:00",
    "subject": "convergentwindows: do not reapply MaximizeArea to borderless windows (keyboard avoidance)",
    "description": "The direct resize only works around a decoration change. Once a window is borderless KWin owns its\nmaximized geometry, including the room the on-screen keyboard takes; reapplying MaximizeArea on\nevery activation discarded that keyboard avoidance. currentWindow also starts from the active window.",

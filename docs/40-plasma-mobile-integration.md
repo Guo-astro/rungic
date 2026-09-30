@@ -49,7 +49,7 @@ flowchart LR
 
 Mesa源归档复用Phosh固定版本，SHA256 `edf9673f141d0809a923f60e442c52df6df892486ff31ded6d95636984773d62`；包含此前KGSL Wayland设备回退补丁，不是未修改的上游发行包。此次全部为Ubuntu glibc重新编译，未复制Alpine musl二进制。
 
-[构建脚本](../plasma/build-mesa.sh)和[打包脚本](../plasma/package-mesa.py)生成统一版本的mesa-libgallium、libegl-mesa0、libglx-mesa0、libgbm1、libgbm-dev、libgl1-mesa-dri、mesa-vulkan-drivers。保留Ubuntu的GLVND分派器，不使用全局LD_LIBRARY_PATH混库。七个定制包整体hold，未来升级必须重新构建、联动升级和验收，不能单独解除一个包的hold。
+[构建脚本](../plasma/build-mesa.sh)和[打包脚本](../desktop/package-mesa.py)生成统一版本的mesa-libgallium、libegl-mesa0、libglx-mesa0、libgbm1、libgbm-dev、libgl1-mesa-dri、mesa-vulkan-drivers。保留Ubuntu的GLVND分派器，不使用全局LD_LIBRARY_PATH混库。七个定制包整体hold，未来升级必须重新构建、联动升级和验收，不能单独解除一个包的hold。
 
 KWin补丁目前涉及：
 

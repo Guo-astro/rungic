@@ -1,0 +1,348 @@
+From: Rungic <noreply@rungic.invalid>
+Date: Wed, 30 Sep 2026 12:34:37 +0800
+Subject: Cast step 2: TV as a second KWin output with the Plasma desktop
+
+Preserve the deployed implementation during the source/patch migration.
+
+Origin: vendor, RungicCore commit:8de5b53718ef3b936ecd33f678d8a0726f9621ba
+Forwarded: no
+Last-Update: 2026-09-30
+X-Rungic-Status: Inappropriate; Android host integration
+X-Rungic-Tests: L0:source-replay; L1:android-cross-build (host); runtime scope in docs/73
+X-Rungic-Docs: docs/73; docs/49; docs/research/91
+---
+ src/android/backend/smithay_backend.rs      | 84 +++++++++++++++++++++++++++++
+ src/android/backend/wayland/handlers.rs     |  5 +-
+ src/android/backend/wayland/input_router.rs |  2 +-
+ src/android/backend/wayland/mod.rs          |  2 +
+ src/android/backend/wayland/seat.rs         | 18 ++++++-
+ src/android/bridge_surface.rs               | 34 ++++++++++++
+ src/android/command_channel.rs              |  9 ++++
+ src/compositor.rs                           | 27 +++++++++-
+ 8 files changed, 177 insertions(+), 4 deletions(-)
+
+diff --git a/src/android/backend/smithay_backend.rs b/src/android/backend/smithay_backend.rs
+index 4fbc09c..78c473a 100644
+--- a/src/android/backend/smithay_backend.rs
++++ b/src/android/backend/smithay_backend.rs
+@@ -497,6 +497,8 @@ pub struct AndroidSmithayState {
+     /// first until the window's buffers have the new size.
+     pub window_frame_size: (i32, i32),
+     pub(crate) presenter: Option<crate::android::surface_control::Presenter>,
++    /// Miracast TV window (docs/58): zero-copy only, no GLES path.
++    pub(crate) cast: Option<CastWindow>,
+     /// User-requested resolution override (set by SetResolution from Dashboard).
+     /// When Some, SurfaceChanged uses this instead of native Android dimensions.
+     pub requested_resolution: Option<(i32, i32)>,
+@@ -542,6 +544,7 @@ impl AndroidSmithayState {
+             frames_presented: 0,
+             window_frame_size: (0, 0),
+             presenter: None,
++            cast: None,
+             requested_resolution: None,
+             requested_scale: None,
+             current_scale: 1.0,
+@@ -559,6 +562,15 @@ impl AndroidSmithayState {
+ // SAFETY: The state is owned by the compositor thread (single-thread access).
+ unsafe impl Send for AndroidSmithayState {}
+ 
++impl std::fmt::Debug for RenderItem {
++    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
++        f.write_str(match self {
++            RenderItem::Shm { .. } => "RenderItem::Shm",
++            RenderItem::DmaBuf { .. } => "RenderItem::DmaBuf",
++        })
++    }
++}
++
+ pub(crate) enum RenderItem {
+     Shm {
+         pixels: Vec<u8>,
+@@ -670,6 +682,78 @@ fn try_zero_copy(state: &mut AndroidSmithayState, items: &mut [RenderItem]) -> b
+     true
+ }
+ 
++/// The SurfaceView window on the cast display and its zero-copy layer.
++#[derive(Debug)]
++pub(crate) struct CastWindow {
++    window: *mut ndk_sys::ANativeWindow,
++    pub presenter: crate::android::surface_control::Presenter,
++    pub size: (i32, i32),
++    pub frames: u64,
++}
++
++impl Drop for CastWindow {
++    fn drop(&mut self) {
++        self.presenter.hide();
++        unsafe { ndk_sys::ANativeWindow_release(self.window) };
++    }
++}
++
++/// Take ownership of the cast display's window (acquired by ANativeWindow_fromSurface).
++pub fn bind_cast_window(state: &mut AndroidSmithayState, window: *mut ndk_sys::ANativeWindow, size: (i32, i32)) -> bool {
++    state.cast = None;
++    if window.is_null() || size.0 <= 0 || size.1 <= 0 {
++        return false;
++    }
++    unsafe {
++        // SurfaceFlinger crops the zero-copy child layer to its parent's buffer, so
++        // the SurfaceView needs one frame of the full size first (cf. the rotation fix).
++        ndk_sys::ANativeWindow_setBuffersGeometry(window, size.0, size.1, 1 /* RGBA_8888 */);
++        let mut buffer: ndk_sys::ANativeWindow_Buffer = std::mem::zeroed();
++        if ndk_sys::ANativeWindow_lock(window, &mut buffer, std::ptr::null_mut()) == 0 {
++            let rows = buffer.height.max(0) as usize;
++            let bytes = buffer.stride.max(0) as usize * 4;
++            std::ptr::write_bytes(buffer.bits as *mut u8, 0, rows * bytes);
++            // Opaque black: alpha bytes to 255.
++            let pixels = std::slice::from_raw_parts_mut(buffer.bits as *mut u32, rows * buffer.stride.max(0) as usize);
++            pixels.fill(0xff00_0000);
++            ndk_sys::ANativeWindow_unlockAndPost(window);
++        }
++    }
++    match crate::android::surface_control::Presenter::new(window) {
++        Some(presenter) => {
++            log::info!("cast: window bound {}x{}", size.0, size.1);
++            state.cast = Some(CastWindow { window, presenter, size, frames: 0 });
++            true
++        }
++        None => {
++            unsafe { ndk_sys::ANativeWindow_release(window) };
++            false
++        }
++    }
++}
++
++pub fn release_cast_window(state: &mut AndroidSmithayState) {
++    if state.cast.take().is_some() {
++        log::info!("cast: window released");
++    }
++}
++
++/// Hand the cast window's buffer (a leased AHardwareBuffer from KWin) to SurfaceFlinger.
++pub fn present_cast(state: &mut AndroidSmithayState, mut item: RenderItem) -> bool {
++    let Some(cast) = state.cast.as_mut() else { return false };
++    let RenderItem::DmaBuf { ref fd, fourcc, width, height, ref mut hold, ref acquire, ref mut release, .. } = item else {
++        return false;
++    };
++    let Some(ahb) = crate::android::gpu_allocator::lookup(fd.as_raw_fd(), width, height, fourcc) else {
++        return false;
++    };
++    let Some(hold) = hold.take() else { return false };
++    let acquire_fd = acquire.as_ref().and_then(|fence| fence.try_clone().ok());
++    cast.presenter.present(ahb, hold, release.take(), acquire_fd, (width, height), cast.size);
++    cast.frames += 1;
++    true
++}
++
+ /// Lightweight suspend: destroy only the EGL surface + ANativeWindow.
+ /// Keep the EGL context, display, shaders, and textures alive so Wayland
+ /// clients continue rendering headless. On resume, only a new surface is created.
+diff --git a/src/android/backend/wayland/handlers.rs b/src/android/backend/wayland/handlers.rs
+index 24b5d74..956c972 100644
+--- a/src/android/backend/wayland/handlers.rs
++++ b/src/android/backend/wayland/handlers.rs
+@@ -491,7 +491,10 @@ impl XdgShellHandler for AndroidSeatRuntime {
+         surface.send_configure();
+     }
+ 
+-    fn fullscreen_request(&mut self, surface: ToplevelSurface, _output: Option<WlOutput>) {
++    fn fullscreen_request(&mut self, surface: ToplevelSurface, output: Option<WlOutput>) {
++        if self.claim_cast_window(&surface, output.as_ref()) {
++            return;
++        }
+         // استخدام المساحة القابلة للاستخدام بدلاً من حجم الشاشة الخام
+         let (w, h) = self.usable_screen_size();
+         surface.with_pending_state(|state| {
+diff --git a/src/android/backend/wayland/input_router.rs b/src/android/backend/wayland/input_router.rs
+index 2976d7c..db9a782 100644
+--- a/src/android/backend/wayland/input_router.rs
++++ b/src/android/backend/wayland/input_router.rs
+@@ -96,7 +96,7 @@ impl AndroidSeatRuntime {
+             .elements()
+             .rev()
+             .filter_map(|elem| elem.0.wl_surface().map(|s| s.as_ref().clone()))
+-            .find(|s| s.is_alive())
++            .find(|s| s.is_alive() && !self.is_cast_surface(s))
+             .or_else(|| {
+                 self.focused_surface
+                     .as_ref()
+diff --git a/src/android/backend/wayland/mod.rs b/src/android/backend/wayland/mod.rs
+index b89f930..9b35e45 100644
+--- a/src/android/backend/wayland/mod.rs
++++ b/src/android/backend/wayland/mod.rs
+@@ -1,4 +1,6 @@
+ pub mod bind;
++#[cfg(feature = "smithay_android")]
++pub mod cast;
+ pub mod compositor;
+ pub mod engine_timing;
+ pub mod event_centralizer;
+diff --git a/src/android/backend/wayland/seat.rs b/src/android/backend/wayland/seat.rs
+index 1fc9dbe..c787f92 100644
+--- a/src/android/backend/wayland/seat.rs
++++ b/src/android/backend/wayland/seat.rs
+@@ -239,6 +239,10 @@ pub struct AndroidSeatRuntime {
+     pub(crate) space: Space<WindowElement>,
+     pub(crate) popups: PopupManager,
+     pub(crate) wl_to_window: HashMap<WlSurface, Window>,
++    /// Miracast TV output and its window (cast.rs).
++    pub(crate) cast: Option<crate::android::backend::wayland::cast::CastOutput>,
++    /// Newest buffer of the cast window, taken by the compositor loop after render_all.
++    pub(crate) pending_cast_frame: Option<crate::android::backend::smithay_backend::RenderItem>,
+     pub(crate) unmanaged_surfaces: Vec<WlSurface>,
+     pub(crate) last_seat_dispatch: String,
+     pub(crate) last_focus_decision: String,
+@@ -632,6 +636,8 @@ impl AndroidSeatRuntime {
+             space,
+             popups: PopupManager::default(),
+             wl_to_window: HashMap::new(),
++            cast: None,
++            pending_cast_frame: None,
+             unmanaged_surfaces: Vec::new(),
+             last_seat_dispatch: "none".to_string(),
+             last_focus_decision: "none".to_string(),
+@@ -788,7 +794,10 @@ impl AndroidSeatRuntime {
+ 
+         // Reconfigure all windows to the new output size.
+         let window_count = self.wl_to_window.len();
+-        for (_wl_surface, window) in &self.wl_to_window {
++        for (wl_surface, window) in &self.wl_to_window {
++            if self.is_cast_surface(wl_surface) {
++                continue; // sized by the cast output
++            }
+             if let Some(toplevel) = window.toplevel() {
+                 toplevel.with_pending_state(|state| {
+                     state.size = Some(Size::from((width, height)));
+@@ -1352,6 +1361,13 @@ impl AndroidSeatRuntime {
+                     attrs.current().buffer_scale.max(1)
+                 }) as f32;
+ 
++                if self.is_cast_surface(wl_surface) {
++                    // The cast window goes to the TV, never onto the phone surface.
++                    if let Some(buffer) = buffer_info {
++                        self.pending_cast_frame = Self::try_get_dmabuf_render_item(wl_surface, &buffer, 0, 0, surface_scale, false);
++                    }
++                    continue;
++                }
+                 if let Some(buffer) = buffer_info {
+                     let is_shm = buffer
+                         .data::<smithay::wayland::shm::ShmBufferUserData>()
+diff --git a/src/android/bridge_surface.rs b/src/android/bridge_surface.rs
+index 7c34d8d..386fa04 100644
+--- a/src/android/bridge_surface.rs
++++ b/src/android/bridge_surface.rs
+@@ -124,6 +124,40 @@ pub unsafe extern "system" fn Java_com_winland_server_NativeBridge_rebindSurface
+     }
+ }
+ 
++/// Cast display window (docs/58): the Surface of a SurfaceView on the Wi-Fi
++/// Display, in pixels, with the display's refresh rate.
++#[no_mangle]
++pub unsafe extern "system" fn Java_com_winland_server_NativeBridge_bindCastSurface(
++    env: JNIEnv,
++    _class: JClass,
++    surface: JObject,
++    width: jni::sys::jint,
++    height: jni::sys::jint,
++    refresh_mhz: jni::sys::jint,
++) {
++    let native_window = ndk_sys::ANativeWindow_fromSurface(env.get_native_interface(), surface.as_raw());
++    if native_window.is_null() {
++        log::error!("Bridge: bindCastSurface - no ANativeWindow for the Surface");
++        return;
++    }
++    let sent = crate::android::command_channel::send_command(
++        crate::android::command_channel::JniCommand::BindCastWindow {
++            native_window: crate::android::command_channel::NativeWindowPtr(native_window as *mut std::ffi::c_void),
++            width,
++            height,
++            refresh_mhz,
++        },
++    );
++    if !sent {
++        ndk_sys::ANativeWindow_release(native_window);
++    }
++}
++
++#[no_mangle]
++pub extern "system" fn Java_com_winland_server_NativeBridge_releaseCastSurface(_env: JNIEnv, _class: JClass) {
++    crate::android::command_channel::send_command(crate::android::command_channel::JniCommand::ReleaseCastWindow);
++}
++
+ #[no_mangle]
+ pub extern "system" fn Java_com_winland_server_NativeBridge_sendRelativeMotion(
+     _env: JNIEnv,
+diff --git a/src/android/command_channel.rs b/src/android/command_channel.rs
+index a7666f7..820b6be 100644
+--- a/src/android/command_channel.rs
++++ b/src/android/command_channel.rs
+@@ -43,6 +43,15 @@ pub enum JniCommand {
+     ReleaseNativeWindow {
+         response: mpsc::Sender<()>,
+     },
++    /// Cast display (Miracast TV) window: the compositor adds a host wl_output
++    /// for it and shows the client window that goes fullscreen there (docs/58).
++    BindCastWindow {
++        native_window: NativeWindowPtr,
++        width: i32,
++        height: i32,
++        refresh_mhz: i32,
++    },
++    ReleaseCastWindow,
+     SurfaceChanged {
+         width: i32,
+         height: i32,
+diff --git a/src/compositor.rs b/src/compositor.rs
+index 7b53e5b..1133a48 100644
+--- a/src/compositor.rs
++++ b/src/compositor.rs
+@@ -330,6 +330,20 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+                         }
+                         let _ = response.send(result);
+                     }
++                    JniCommand::BindCastWindow { native_window, width, height, refresh_mhz } => {
++                        let window = native_window.0 as *mut ndk_sys::ANativeWindow;
++                        if crate::android::backend::smithay_backend::bind_cast_window(&mut backend_state, window, (width, height)) {
++                            if let Some(server) = wayland_server.as_mut() {
++                                server.runtime.add_cast_output((width, height), refresh_mhz);
++                            }
++                        }
++                    }
++                    JniCommand::ReleaseCastWindow => {
++                        if let Some(server) = wayland_server.as_mut() {
++                            server.runtime.remove_cast_output();
++                        }
++                        crate::android::backend::smithay_backend::release_cast_window(&mut backend_state);
++                    }
+                     JniCommand::ReleaseNativeWindow { response } => {
+                         crate::android::backend::smithay_backend::release_native_window(&mut backend_state);
+                         let _ = response.send(());
+@@ -465,8 +479,18 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+                     server.runtime.render_all();
+                     last_render = Instant::now();
+                     last_commits = commits;
++                    if let Some(frame) = server.runtime.pending_cast_frame.take() {
++                        if crate::android::backend::smithay_backend::present_cast(&mut backend_state, frame) {
++                            // KWin keeps at most two frames of an output pending; report the
++                            // cast frame now rather than with the next phone frame.
++                            server.runtime.finish_presentation();
++                        }
++                    }
+                 }
+             }
++            if let Some(cast) = backend_state.cast.as_mut() {
++                cast.presenter.collect();
++            }
+             let presents_before = crate::android::frame_clock::presented_count();
+             flush_deferred_composite(&mut backend_state, &render_rx);
+             if crate::android::frame_clock::presented_count() != presents_before {
+@@ -493,7 +517,8 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+ 
+             let settling = input_router.busy()
+                 || backend_state.frames_presented == 0
+-                || backend_state.presenter.as_ref().is_some_and(|p| !p.settled());
++                || backend_state.presenter.as_ref().is_some_and(|p| !p.settled())
++                || backend_state.cast.as_ref().is_some_and(|c| !c.presenter.settled());
+             if settling {
+                 last_activity = Instant::now();
+             }
