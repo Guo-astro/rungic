@@ -210,7 +210,7 @@ case "$action" in
     attach /usr/libexec/rungic-plasma-account-setup 9>&-
     ;;
   install-publish)
-    # Cleared APK data loses the app-private install status (docs/94). A completed
+    # Cleared APK data loses the app-private install status (docs/95). A completed
     # release republishes it through its own first-boot script, which then only
     # publishes and exits; an install in progress publishes itself.
     if [ -f /data/adb/rungic-install/active.env ]; then
@@ -269,7 +269,7 @@ case "$action" in
     # The container binds the APK's socket directory (files/tmp) when it starts. Cleared app
     # data or a reinstall recreates that directory and can change the APK's UID and SELinux
     # label; the running container keeps the deleted one and the desktop cannot connect
-    # (docs/95). A container restart binds the new directory with the current label.
+    # (docs/96). A container restart binds the new directory with the current label.
     startup_phase=wayland-directory
     if running; then
       apk_dir=$(stat -c %i /data/user/0/com.rungic.plasma/files/tmp 2>/dev/null) || apk_dir=
@@ -280,7 +280,7 @@ case "$action" in
       fi
     fi
     # A plasmashell that failed while its compositor went away stays failed, and start would
-    # only wait for it; the APK's retry sends start (docs/95). Restart the session instead.
+    # only wait for it; the APK's retry sends start (docs/96). Restart the session instead.
     if [ "$action" = start ] && running &&
        attach /usr/bin/rungic-plasma-user-exec systemctl --user is-failed --quiet plasma-plasmashell.service 9>&-; then
       echo 'plasmashell had failed; restarting the desktop session' >&2

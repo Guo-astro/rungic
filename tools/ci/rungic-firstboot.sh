@@ -43,7 +43,7 @@ publish() {
     mv "$status_tmp" "$rungic_files/rungic-install.properties"
 }
 # Which release the APK waits for. App data can be cleared at any time, so every run
-# republishes it (docs/94); a legacy product run removes a descriptor it does not own.
+# republishes it (docs/95); a legacy product run removes a descriptor it does not own.
 source_file=$rungic_files/rungic-install-source.properties
 if [ "$seed" = /product/etc/rungic ]; then
     rm -f "$source_file"

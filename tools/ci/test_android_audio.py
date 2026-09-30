@@ -63,7 +63,7 @@ class AudioPidRecovery(unittest.TestCase):
         proc.wait(timeout=2)
 
     def test_pid_reused_by_kernel_thread_is_removed(self):
-        # Use case (docs/94): after a reboot the saved PID belongs to a kernel thread,
+        # Use case (docs/95): after a reboot the saved PID belongs to a kernel thread,
         # which has no /proc/PID/exe even for root. PID 2 is kthreadd on every Linux.
         self.assertIn('Kthread:\t1', Path('/proc/2/status').read_text())
         self.pidfile.write_text('2\n')

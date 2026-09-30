@@ -67,7 +67,7 @@ pkill -KILL -u "$(id -u)" -f '^(/usr/bin/)?startplasma-wayland' 2>/dev/null || t
 # stopping: plasmashell takes a second or two after its Wayland connection breaks. The new
 # session's targets only want their units, and systemd drops a wanted start that conflicts with a
 # running stop job, so plasmashell never started (2026-09-30, the APK relaunched after a force
-# stop; docs/95). Let the previous session's stop jobs finish first.
+# stop; docs/96). Let the previous session's stop jobs finish first.
 waited=0
 for _ in $(seq 200); do
     systemctl --user list-jobs --no-legend 2>/dev/null | awk '$3 == "stop" {found = 1} END {exit !found}' || break

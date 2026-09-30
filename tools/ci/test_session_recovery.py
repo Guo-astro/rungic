@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Use cases (docs/95): the desktop comes back after the APK's data is cleared or the APK is
+"""Use cases (docs/96): the desktop comes back after the APK's data is cleared or the APK is
 force-stopped and opened again.
 
 Runs the real controller block and session tail with stubbed platform commands. The device
-scenarios (pm clear, force stop with a relaunch 30 s later) are recorded in docs/95.
+scenarios (pm clear, force stop with a relaunch 30 s later) are recorded in docs/96.
 """
 import os
 from pathlib import Path

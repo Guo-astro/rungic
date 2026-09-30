@@ -1,5 +1,5 @@
 #!/bin/sh
-# Offline tests in one run (docs/94): Python and shell-sandbox tests, the account setup,
+# Offline tests in one run (docs/95): Python and shell-sandbox tests, the account setup,
 # the APK's plain-Java logic and the syntax of the Android/system shell scripts.
 # Device use cases are separate: tools/rungic_acceptance.py (smoke, full, install).
 set -u

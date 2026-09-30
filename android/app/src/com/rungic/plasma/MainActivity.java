@@ -60,7 +60,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     private String writtenDisplayMetrics;
     private volatile boolean accountReady;
     private volatile boolean accountPromptShowing;
-    /** Cleared app data loses the install status; root republishes it once per process (docs/94). */
+    /** Cleared app data loses the install status; root republishes it once per process (docs/95). */
     private static volatile boolean installRepublishAsked;
     private android.window.OnBackInvokedCallback edgeBackCallback;
 

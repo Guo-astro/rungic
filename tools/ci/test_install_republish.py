@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Use case (docs/94): Rungic's app data is cleared after installation, then the app is opened.
+"""Use case (docs/95): Rungic's app data is cleared after installation, then the app is opened.
 
 Runs the controller's install-publish action and the real first-boot script in a temporary
 path sandbox, for a standalone release on a reused base that still has an old product seed,

@@ -18,7 +18,7 @@ public final class FirstBootStateTest {
         require(FirstBootState.readSource(standalone.toFile(),seed.toFile(),status.toFile()).ready);
         write(standalone,"");
         require(!FirstBootState.readSource(standalone.toFile(),seed.toFile(),status.toFile()).ready);
-        // Reused base with an old product seed (docs/94): without the republished source the APK
+        // Reused base with an old product seed (docs/95): without the republished source the APK
         // compares the old release with the standalone status and waits; with it, it opens.
         write(seed,"RELEASE_ID='release-old'\n");
         Files.delete(standalone);

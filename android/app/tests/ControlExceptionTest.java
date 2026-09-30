@@ -5,7 +5,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.regex.*;
 
-/** Use case: a taken username keeps the account form open (docs/94). Crosses the contract
+/** Use case: a taken username keeps the account form open (docs/95). Crosses the contract
  * between system/account/setup.py's SetupError texts, the controller's merged output and the
  * APK's classification; no Android device needed. args[0]: path to system/account/setup.py. */
 public final class ControlExceptionTest {

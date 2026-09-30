@@ -1,6 +1,6 @@
 # APK 数据被清除或被强制停止后的桌面恢复
 
-2026-09-30，承接 [94 篇](94-install-use-case-tests.md)。那一轮用 `pm clear` 和强制停止做真机验证时，发现两个既有问题，桌面都要人工处理才能恢复。用户要求修复。真机为 G100 S（ZY32MVJS25，`10.77.0.16:35577`，K8-Plus 通过 Wi-Fi/VPN 连接），证据在 `.work/verify/20260930-review-fixes/`（`t9`–`t16`）。
+2026-09-30，承接 [95 篇](95-install-use-case-tests.md)。那一轮用 `pm clear` 和强制停止做真机验证时，发现两个既有问题，桌面都要人工处理才能恢复。用户要求修复。真机为 G100 S（ZY32MVJS25，`10.77.0.16:35577`，K8-Plus 通过 Wi-Fi/VPN 连接），证据在 `.work/verify/20260930-review-fixes/`（`t9`–`t16`）。
 
 ## A. 清除数据后，容器仍绑定已删除的 socket 目录
 
@@ -12,7 +12,7 @@
     - 这个场景很少出现，重启容器的代价可以接受，而且实现更简单。
 - **修复**：`start` 和 `restart-session` 在容器运行时，比较主机上 `files/tmp` 与容器内 `/mnt/android-wayland` 的 inode；两边都能读到且不一致时，停止容器，由后续步骤重新启动。任一侧读取失败时不重启，避免因一次 attach 失败误重启。
 - **真机**：在容器运行时 `pm clear`，然后打开 APK。容器 init PID 从 28030 变为 12381，容器内 inode 与新目录一致（559170），15 秒内 KWin/plasmashell 恢复为 active，全程无人工干预（`t15-A-pmclear.log`）。
-- **仍需注意**：在 APK 重新创建 `files/tmp` 之前，所有经过 `rungic-plasma-enter` 的控制命令都会报 `bind Android Wayland socket directory`。APK 在调用这些命令前会先创建该目录；94 篇新增的 `install-publish` 不经过 enter。
+- **仍需注意**：在 APK 重新创建 `files/tmp` 之前，所有经过 `rungic-plasma-enter` 的控制命令都会报 `bind Android Wayland socket directory`。APK 在调用这些命令前会先创建该目录；95 篇新增的 `install-publish` 不经过 enter。
 
 ## B. APK 被强制停止后再打开，plasmashell 停在 failed 或 inactive
 
