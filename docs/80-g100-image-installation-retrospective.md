@@ -1,5 +1,7 @@
 # G100 完整镜像实施复盘：遇到的问题与最佳解决路径
 
+> 2026-09-30 方向更新：本文保留旧整包清数据安装的过程与实机证据。当前三段式改为设备底座准备、独立 RungicOS 镜像、Rungic 单独安装/升级，见 [75 篇](75-image-build-separation.md#2026-09-30rungic-独立安装的三段式目标)。以下整包流程不再是日常发布的默认目标，也不能替代独立安装验收。
+
 日期：2026-09-28。范围：G100 / XT2533-4 / `portov_cn`，原厂固件 `W1VT36H.1-51-8`。
 
 ## 本轮结论
@@ -10,7 +12,7 @@
 
 本文总结可复用的方法。逐次试验、修订、哈希与实机日志索引见 [79 篇执行记录](79-g100-ci-execution.md)。早期版本中的“待验证”是当时状态，最终结果以本文及 79 篇末尾为准。
 
-后续执行已固化为项目 Skill：[rungic-three-stage-image](../.agents/skills/rungic-three-stage-image/SKILL.md)。它提供通用三段流程、新机型接入和工具适用边界；调用示例：`使用 $rungic-three-stage-image 为目标机型制作完整 Rungic 镜像包`。
+后续执行已固化为项目 Skill：[rungic-three-stage-image](../.agents/skills/rungic-three-stage-image/SKILL.md)。它提供通用三段流程、新机型接入和工具适用边界；当前调用示例：`使用 $rungic-three-stage-image 为目标机型构建独立 RungicOS 镜像，并核验独立安装前提与待办`。
 
 ## 一、我们遇到了哪些问题？
 

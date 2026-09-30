@@ -1,6 +1,6 @@
 # 工具地图与当前实现边界
 
-2026-09-28 根据仓库源码核对。执行前重读目标工具参数及实现；下表是入口索引，不是所有手机可直接执行的固定命令链。所有路径相对仓库根目录。
+2026-09-30 按独立安装目标核对。默认流程是底座/GKI、独立 OS 镜像、Rungic 单独安装/升级；下表区分已实现工具与旧整包路径，不是所有手机可直接执行的固定命令链。所有路径相对仓库根目录。
 
 ## 源码与工具入口
 
@@ -17,14 +17,18 @@
 | rootfs 镜像 | `tools/ci/build_rootfs_image.py` | 接收已准备的 root 树和 release，生成 ext4/压缩种子、包锁及报告；检查 `system/ubuntu-excluded-packages.txt` 和 Emoji Selector 排除规则，自身不是完整包下载器 |
 | APK | `android/build-apk.sh`、`tools/ci/apk-builder.Dockerfile` | Android 入口构建；保持指定开发签名身份，不混入其他凭据 |
 | 宿主种子 | `tools/ci/build_host_seed.py` | 输入 runtime、rootfs-tree、repo、lxc/plasma enter 二进制与 `--cast-jar`（`shared/android/rungic-cast/build.sh` 产物）；投屏组件为可选能力，首启安装失败只记日志 |
-| 纯净 product | `tools/ci/clean_product.py` | EROFS + product/preinstall 的命名、xattr 和 SKU 策略假设 |
-| 完整 product | `tools/ci/assemble_product.py` | 加入 APK/JNI、种子、首启及权限；输入必须与 spec/容量匹配 |
-| Magisk 引导 | `tools/ci/inject_magisk_seed.py` | 在已正确修补的 init_boot 中注入 bootstrap，不负责通用 root 修补 |
-| 整包组合 | `tools/ci/assemble_release.py` | 报告交叉核验、打包安装器/fastboot、生成 manifest；现有布局仍专属于已验证方案 |
-| 刷写 | 生成包中的 `flash.sh` / `flash.py` | 源文件 `tools/ci/flash_release.py` 依赖同目录 manifest；不要直接在源码目录执行刷写 |
-| 安装检查 | `tools/ci/accept_release.py` | 指定 release/serial/ADB 端口，检查当前实现约定；不替代用户首次配置及实际桌面证据 |
+| 旧整包：纯净 product | `tools/ci/clean_product.py` | EROFS + product/preinstall 的命名、xattr 和 SKU 策略假设 |
+| 旧整包：完整 product | `tools/ci/assemble_product.py` | 加入 APK/JNI、种子、首启及权限；输入必须与 spec/容量匹配 |
+| 旧整包：Magisk 引导 | `tools/ci/inject_magisk_seed.py` | 在已正确修补的 init_boot 中注入 bootstrap，不负责通用 root 修补 |
+| 旧整包：整包组合 | `tools/ci/assemble_release.py` | 报告交叉核验、打包安装器/fastboot、生成 manifest；现有布局仍专属于已验证方案 |
+| 旧整包：刷写 | 生成包中的 `flash.sh` / `flash.py` | 源文件 `tools/ci/flash_release.py` 依赖同目录 manifest；不要直接在源码目录执行刷写 |
+| 旧整包：安装检查 | `tools/ci/accept_release.py` | 指定 release/serial/ADB 端口，检查当前实现约定；不替代用户首次配置及实际桌面证据 |
 
-## 必须重新核对的 G100 假设
+## 独立安装入口的当前缺口
+
+`rungic_release.py deploy/rollback` 已支持既有 Rungic 的版本化 APT 更新。尚无通用的“兼容 Android 上首次安装完整 Rungic”或完整 rootfs 替换入口。APK、rootfs 与宿主种子构建器可复用，但 `rungic-firstboot.sh` 固定消费 product 种子并依赖预装应用；需先拆出可信载荷输入、普通 APK 权限/JNI检查、安装状态与恢复机制，验证后才能作为新 CI3。不能用下面的旧 `flash.sh` 代替独立安装。
+
+## 历史整包：必须重新核对的 G100 假设
 
 当前 `assemble_release.py` / `flash_release.py` 仍假定：
 
@@ -55,7 +59,7 @@ python3 tools/ci/build_rootfs_image.py --root "$rootfs_tree" \
   --size-gib "$rootfs_size_gib" --firefox-version "$firefox_version"
 ```
 
-最终组合器所需路径参数：`--spec`、`--stock`、`--product-image`、`--product-report`、`--boot`、`--init-boot`、`--init-boot-report`、`--rootfs-report`、`--host-report`、`--kernel-abi-report`、`--package-lock`、`--img2simg`、`--fastboot`、`--output`；另需实际 `--serial`、`--fastboot-bootloader-value`、`--release-id`。当前用硬链接收集部分载荷，输入与输出须位于支持该操作的文件系统；跨盘归档后重新核验完整性。
+只有明确选择历史整包/恢复任务时，才使用以下组合器及刷写入口。旧组合器所需路径参数：`--spec`、`--stock`、`--product-image`、`--product-report`、`--boot`、`--init-boot`、`--init-boot-report`、`--rootfs-report`、`--host-report`、`--kernel-abi-report`、`--package-lock`、`--img2simg`、`--fastboot`、`--output`；另需实际 `--serial`、`--fastboot-bootloader-value`、`--release-id`。当前用硬链接收集部分载荷，输入与输出须位于支持该操作的文件系统；跨盘归档后重新核验完整性。
 
 组合器已做多项摘要核对，但 ABI 报告没有自动证明与最终 boot 的全部来源关系。执行者仍需串联内核输出、封装过程、信任报告与最终摘要；不得以组合器退出 0 替代缺失的来源证据。
 
@@ -84,4 +88,4 @@ python3 tools/ci/accept_release.py "$release_dir" \
 - 镜像产物：对应文件系统校验、包检查、manifest 回读和用户范围内的清数据实机流程。
 - 构建环境/模板：`tools/ci/test_rootfs_isolation.py`、rootfs/host 构建器的 home 和未配置账户检查；目录准备使用 `tools/test_user_dirs.py`。检查入口详见 [构建隔离](build-isolation.md)。
 
-隔离测试和受控 UI 状态都不能替代整包首启证据。不要为了文档或 skill 变更执行手机测试或重刷。
+隔离测试和受控 UI 状态都不能替代相应首装证据；独立首装、升级与旧整包清数据验收分别记录。不要为了文档或 skill 变更执行手机测试或重刷。
