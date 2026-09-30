@@ -16,7 +16,7 @@ It also comes with an AI assistant that can see, speak and act. Tell it what you
 
 ## Still your Android phone
 
-Rungic is an app. Install the APK, tap its icon, and the Linux desktop opens.
+Rungic is an app. After a one-time setup of the phone (see [Supported devices](#supported-devices)), install the APK, tap its icon, and the Linux desktop opens.
 
 You don't give anything up for it. Android is not wiped or replaced: your apps, calls, messages, photos and accounts stay where they are, and you can switch back to them at any time. The desktop and Android run side by side, sharing the clipboard and your photos, videos and downloads.
 
@@ -123,11 +123,26 @@ The assistant has two parts: a realtime voice model talks with you, and an agent
 
 ## Supported devices
 
-| Device | Status |
-|---|---|
-| moto g100s (XT2537-4) | Main development device, most complete |
-| moto g100 (XT2533-4) | One-step flash package verified on a wiped phone |
-| moto X70 Air Pro | In progress |
+Rungic is not tied to one phone model. It changes very little on the phone: the Linux desktop runs in a container on the phone's own kernel, and the Rungic app reaches the screen, touch, sound and cameras through standard Android interfaces.
+
+The one system-level change is the kernel. Android's Generic Kernel Image (GKI) ships with a few features that containers need turned off, so we rebuild it from Google's source with them turned on: System V IPC, POSIX message queues, IPC, PID and user namespaces, and devtmpfs. The build keeps the kernel's module interface intact, so the phone maker's own drivers keep loading as before. Only the boot partition changes; Android, its apps and data stay.
+
+So most Android phones that meet these conditions should be able to run it:
+
+- **The bootloader can be unlocked and the phone rooted** (Magisk). Unlocking usually erases the phone once, so back it up first.
+- **It runs a GKI kernel**, which phones launched with Android 12 or later do. Kernels built so far: android15-6.6 and android16-6.12; older GKI branches follow the same method.
+- **A Snapdragon chip with an Adreno GPU**, for the hardware-accelerated desktop (Mesa's Turnip and freedreno on Adreno's KGSL driver). Phones with other GPUs need their own graphics work first.
+- **ARM64 and enough free storage** for the Linux system.
+
+Each new phone or firmware still needs a kernel built from its exact sources and a check that everything works. The [`rungic-three-stage-image`](.agents/skills/rungic-three-stage-image/SKILL.md) skill below walks through it.
+
+Tested so far:
+
+| Device | Kernel | Status |
+|---|---|---|
+| moto g100s (XT2537-4) | android15-6.6 | Main development device, most complete |
+| moto g100 (XT2533-4) | android15-6.6 | One-step flash package verified on a wiped phone |
+| moto X70 Air Pro | android16-6.12 | In progress |
 
 ## Status
 
