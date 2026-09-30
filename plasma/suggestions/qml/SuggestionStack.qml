@@ -19,7 +19,7 @@ QQC2.AbstractButton {
     background: Item {
         Rectangle { visible: card.count > 2; x: 12; y: 10; width: parent.width - 24; height: parent.height - 10; radius: 20; color: Theme.background; opacity: 0.5; border.color: Theme.line }
         Rectangle { visible: card.count > 1; x: 6; y: 5; width: parent.width - 12; height: parent.height - 10; radius: 20; color: Theme.background; opacity: 0.8; border.color: Theme.line }
-        Rectangle { width: parent.width; height: parent.height - (card.count > 1 ? 10 : 0); radius: 20; color: card.down || card.pressedFeedback ? Theme.hover : Theme.background; border.color: Theme.line }
+        Rectangle { width: parent.width; height: parent.height - (card.count > 1 ? 10 : 0); radius: 20; color: card.down || card.pressedFeedback ? Theme.fill2 : Theme.background; border.color: Theme.line }
     }
     contentItem: ColumnLayout {
         id: body

@@ -82,8 +82,10 @@ ApplicationWindow {
                     Q_ASSERT(stack);
                     const QPoint from = stack->mapToScene(QPointF(stack->width() / 2, stack->height() / 2)).toPoint();
                     QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, from);
-                    for (int n = 1; n <= 6; ++n)
-                        QTest::mouseMove(window, from + QPoint(0, distance * n / 6), duration / 6);
+                    for (int n = 1; n <= 6; ++n) {
+                        QTest::qWait(duration / 6);
+                        QTest::mouseMove(window, from + QPoint(0, distance * n / 6));
+                    }
                     QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, from + QPoint(0, distance));
                     QTest::qWait(settle);
                     stack = findStack();
@@ -110,7 +112,7 @@ ApplicationWindow {
                 QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, from - QPoint(0, 100));
                 QTest::qWait(250);
                 require(list->property("contentY").toDouble() > offset + 50, "header scrolls groups");
-                qInfo() << "PASS actual pointer stack switching, bounds, snap-back, header scrolling";
+                if (!failed) qInfo() << "PASS actual pointer stack switching, bounds, snap-back, header scrolling";
             }
         }
         if (widget && list && list->height() > window->height() / 2) failed = true;
