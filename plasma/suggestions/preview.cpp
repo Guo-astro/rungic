@@ -64,7 +64,10 @@ ApplicationWindow {
             failed = true;
         }
         if (widget && list && app.arguments().contains("--swipe-test")) {
-            auto *stack = window->findChild<QQuickItem *>("desktopSuggestionStack");
+            QQuickItem *stack = nullptr;
+            auto *content = qvariant_cast<QQuickItem *>(list->property("contentItem"));
+            if (content) for (auto *child : content->childItems())
+                if (child->objectName() == "desktopSuggestionStack" && child->property("count").toInt() > 1) { stack = child; break; }
             auto require = [&](bool ok, const char *label) {
                 if (!ok) { qWarning() << "swipe test:" << label; failed = true; }
             };
