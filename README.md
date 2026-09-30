@@ -18,9 +18,9 @@ It also comes with an AI assistant that can see, speak and act. Tell it what you
 
 ## Still your Android phone
 
-Rungic opens as an Android app after the phone has been prepared. Our installation starts with the manufacturer's original firmware for the exact device and firmware version. We modify that firmware and rebuild its matching GKI kernel with the capabilities needed to run RungicOS in LXC. Android remains the phone's operating system, alongside the Linux desktop.
+Rungic opens as an Android app after the phone has been prepared. Device preparation starts with the manufacturer's original firmware for the exact model and version, with a matching GKI kernel rebuilt for LXC. Our delivery direction separates that preparation from installing RungicOS: once the Android base is compatible, Rungic can be built and updated independently. Android remains the phone's operating system, alongside the Linux desktop.
 
-Once installation, account setup and device checks are complete, tap the Rungic icon to open the desktop, or return to Android to use your phone. Both environments run side by side, sharing the clipboard and your photos, videos and downloads. **The initial full installation resets the phone and erases user data.** Back up before starting; see [Before you install](#before-you-install) for app and manufacturer restrictions.
+Once installation, account setup and device checks are complete, tap the Rungic icon to open the desktop, or return to Android to use your phone. Both environments run side by side, sharing the clipboard and your photos, videos and downloads. **Bootloader unlocking or the required device-preparation procedure can erase user data.** Separate Rungic installation is intended to preserve Android data; the new standalone installer still needs implementation and validation. Back up before starting; see [Before you install](#before-you-install) for app and manufacturer restrictions.
 
 ## What makes it Agent Ready
 
@@ -38,6 +38,22 @@ Rungic gives an agent a place to work, tools to act, evidence to inspect and a w
 The bundled assistant shows how to connect these pieces: a request becomes a plan, visible actions, progress updates and files you can open from the conversation. The same foundations support development agents through diagnostic MCP tools and the repository's build and installation skills. Phone-side assistance and developer-side device management have different access requirements.
 
 Agent choice and model choice are separate from these system capabilities. A replacement can use the Linux tools and supported MCP, command-line and D-Bus interfaces; its own execution, conversation and authorization behavior belongs to that integration. See the [integration map](docs/README.md#integrating-another-agent) for the reusable interfaces and the parts currently connected to Codex.
+
+### Interfaces an agent can use
+
+Rungic exposes two **MCP (Model Context Protocol) servers**, alongside command-line tools, D-Bus services and standard Linux interfaces. MCP is one way to connect an agent; these capabilities do not require Codex.
+
+| Interface | Entry point | What it exposes |
+|---|---|---|
+| **Desktop MCP** · on the phone | `rungic-cua mcp` | Screenshots, pointer/keyboard actions, app launch and window management, whole-task execution and voice messages. Workspace routing adds `desktop_where`; available tools depend on the selected execution mode. |
+| **Development MCP** · on the development computer | [`tools/rungic_agent_mcp.py`](tools/rungic_agent_mcp.py), configured in [`.mcp.json`](.mcp.json) | Device/renderer state, merged Android/Linux/kernel logs, crash reports and symbolization, integrity checks, screenshots, evidence bundles, UI inspection/actions, performance traces and build status. Requires separately configured device access. |
+| **Phone control** · CLI + JSON | `rungic-platform --request '<json>'` | Device, network and display state; brightness, clipboard, orientation, vibration and Android settings panels. |
+| **Workspaces and displays** · CLI + JSON | `rungic-workspace-env`, `rungic-user`, `rungic-agent-screen`, `rungic-desktop-mode`, `rungic-cast` | Run in the selected desktop session, show the assistant's screen, control desktop mode, discover/connect TVs and inspect casting capabilities. |
+| **Proactive system care** · D-Bus + CLI | `com.rungic.Suggestions`, `rungic-suggestions` | Issue/evidence queries, compatibility knowledge, reminders, investigation results, repair plans and local upstream-feedback material. Task handoff currently targets the bundled assistant. |
+| **Tasks, voice and usage** · D-Bus | `com.rungic.VoiceAgent`; suggestion-service usage methods/signals | Conversations, task progress/stop, voice and call controls, observed tokens and provider-supplied quotas. Replacing the bundled agent requires adapting this bridge and its usage data. |
+| **Files, packages and hardware** · Linux interfaces | Shell/files, PackageKit/`pkgcli`, polkit, Wayland, desktop portals, AT-SPI, PipeWire/PulseAudio and Android-backed D-Bus services | Work with files, install software with system authorization, and use the same desktop/media/device interfaces as ordinary Linux apps. Android-backed services implement documented subsets. |
+
+For MCP startup examples, the current tool inventory, D-Bus methods, session requirements and integration limits, see the [Agent Ready interface reference](docs/agent-ready-interfaces.md). Low-level screenshot/action tools can use the connecting agent's own reasoning; the bundled `desktop_goal` helper has its own configured model backend. Display/input separation does not isolate the agent from files owned by the same Linux user.
 
 ## Just say it
 
@@ -181,7 +197,7 @@ Tested so far:
 
 ### Before you install
 
-1. **Make a complete backup off the phone.** The full flash installation resets the device and erases user data; bootloader unlocking also normally triggers a [factory reset](https://source.android.com/docs/core/architecture/bootloader/locking_unlocking). Back up photos, files, contacts and messages, export app-specific data, and make sure you can restore access to your accounts. Keeping the manufacturer's Android base does not preserve your existing user data through this process.
+1. **Make a complete backup off the phone.** The previously validated full-flash path erases user data, and bootloader unlocking normally triggers a [factory reset](https://source.android.com/docs/core/architecture/bootloader/locking_unlocking). Back up photos, files, contacts and messages, export app-specific data, and make sure you can restore access to your accounts. Device preparation and Rungic installation are separate operations; keeping the manufacturer's Android base does not make unlocking or a firmware reset preserve your data.
 2. **The goal is to retain normal Android functionality.** Calls, messages, networking, cameras and other phone functions should remain available alongside RungicOS after adaptation and validation. This is a design goal, not a blanket guarantee for every phone or firmware. Check the device's acceptance record and release notes, including any selected preinstalled apps removed or disabled by its firmware profile.
 3. **Some apps may reject the modified device.** Apps or their services can check root, bootloader state or device integrity and restrict access, even when Android itself works normally. For example, [Play Integrity](https://developer.android.com/google/play/integrity/overview) lets developers apply their own access policies. Such restrictions are imposed by the app or service; Rungic cannot guarantee that every app will accept the device. Other app failures still need diagnosis rather than being assumed to be security-policy restrictions.
 4. **Research the manufacturer's policies for your exact model and variant.** Before unlocking or rooting, check eligibility, the required procedure, and whether protected features or update support will change. Some effects can persist after restoring stock firmware: [Samsung's Knox documentation](https://docs.samsungknox.com/admin/knox-platform-for-enterprise/faq/), for example, describes restrictions on Knox-dependent services after its Warranty Bit is tripped. This is a manufacturer-specific example, not a statement that Samsung devices are supported by Rungic.
@@ -201,7 +217,7 @@ Skills are reusable instructions that an agent reads to carry out a task. This r
 
 | Skill | Where to use it | What it does |
 |---|---|---|
-| [`rungic-three-stage-image`](.agents/skills/rungic-three-stage-image/SKILL.md) | Codex working in this repository | Builds the device's GKI kernel, the RungicOS Linux image and the complete flash package. Covers individual stages, device bring-up, installation and acceptance. |
+| [`rungic-three-stage-image`](.agents/skills/rungic-three-stage-image/SKILL.md) | Codex working in this repository | Guides device/GKI preparation, independent RungicOS image builds, and separate Rungic installation or upgrades. Covers existing tools, implementation gaps and acceptance. |
 | [`rungic-phone-desktop`](agent/assistant/skills/rungic-phone-desktop/SKILL.md) | The assistant running on the phone | Operates desktop apps and windows, controls phone functions, casts to a TV and handles supported call workflows. |
 
 The desktop skill ships with the bundled assistant. Its editable copy lives at `~/.codex/skills/rungic-phone-desktop/` on the phone; changes you make there are preserved when the package updates. These locations and invocation examples describe the current Codex integration. Other agents can reuse the instructions and underlying tools, adapting skill loading to their own format.
@@ -212,37 +228,30 @@ Invoke `$rungic-three-stage-image` in Codex from the repository root, and specif
 
 | Your goal | Build scope and output | Installation path |
 |---|---|---|
-| **Build a complete phone release** | **CI1 → CI2 → CI3:** GKI/boot, RungicOS rootfs, then the device flash package with Android partitions, APK, first-boot components, checksums and installer. | Use the generated package's installer for the matching device. Complete-release acceptance includes a wiped install, account setup and reaching Plasma. |
-| **Build the kernel only** | **CI1:** the spec's pinned kernel sources, configuration and patches; produces GKI/boot and ABI/module-trust reports. | Use the target device's verified boot/flash procedure and validate the candidate on that device. |
-| **Build the Linux system image only** | **CI2:** install the selected package release in a clean ARM64 root tree; produce ext4 rootfs, compressed seed, package lock and report. | Feed it into a matching device installation package. For updates to an existing installation, use the package-update path below. |
-| **Assemble a package from existing builds** | **CI3:** reuse verified kernel/rootfs artifacts and the exact OEM firmware inputs; assemble and check the device package. | Use the generated installer. Existing artifacts must match the selected spec and their recorded checksums. |
+| **Prepare a phone for Rungic** | **CI1:** the spec's pinned GKI/boot, required Android-base preparation and recovery artifacts, ABI/module-trust reports. | Use the device's verified preparation procedure. Reuse an already compatible base; repeat only when its requirements change. |
+| **Build the Linux system image** | **CI2:** install a selected package release in a clean ARM64 root tree; produce ext4 rootfs, compressed payload, package lock and report. | Deliver independently of Android firmware. The standalone first-install path is being defined; existing installations can use package updates below. |
+| **Install or upgrade Rungic separately** | **CI3 target:** combine verified rootfs, APK and required host runtime with version/protocol checks and an installer. No Android partition images in the normal Rungic payload. | Install on a compatible prepared phone. The unified standalone installer and full-rootfs replacement path are not yet implemented and accepted. |
 | **Update desktop or Agent components on an installed phone** | Build the changed packages and a versioned APT release; keep the compatible kernel and Android base. | Deploy through [`rungic_release.py`](tools/rungic_release.py), reload affected services/UI and run the relevant acceptance checks. |
 
 Example requests for Codex — replace the placeholders with your chosen inputs:
 
 ```text
-Use $rungic-three-stage-image to build a complete Rungic flash package
-for <device-spec>. Deliver the package, checksums and offline validation report.
-
 Use $rungic-three-stage-image to run CI1 only for <device-spec>.
 Build the kernel/boot candidate and check its OEM module compatibility.
 
 Use $rungic-three-stage-image to run CI2 only for <device-spec>, using
 <package-release>. Produce a clean RungicOS rootfs image and package lock.
 
-Use $rungic-three-stage-image to run CI3 for <device-spec>, reusing
-<verified-kernel-artifacts> and <verified-rootfs-artifacts>.
-
-Use $rungic-three-stage-image to install <prepared-release> on
-<device-serial>. A full wipe is intended. Verify first boot and account
-setup through to the Plasma desktop.
+Use $rungic-three-stage-image to assess CI3 for <device-spec> and
+<verified-rootfs-artifacts>. Check the prepared Android base, identify
+missing standalone-install tooling, and define first-install and upgrade acceptance.
 ```
 
-For installation, name the exact artifact and target device/serial, and state whether a full wipe is intended. A build-only request produces artifacts; it does not flash the phone. Kernel and rootfs stages can be rebuilt independently when the existing components remain compatible. The Linux rootfs shares Android's kernel and is a container filesystem image, not an Android `system.img`.
+For installation, name the exact artifact and target device/serial, and distinguish first install from upgrade. A build request produces artifacts; it does not flash the phone. Rungic installation should preserve the existing Android base and user data; any necessary bootloader or firmware work belongs to the separate device-preparation step. The Linux rootfs shares Android's kernel and is a container filesystem image, not an Android `system.img`.
 
 For incremental work, a request such as “Build and deploy the updated suggestion widget to my existing Rungic installation on `<device-serial>`, then verify its desktop interactions” selects the package-update path. Project packages use [`rungic_package.py`](tools/rungic_package.py); modified upstream packages use [`build_on_device.py`](tools/build_on_device.py).
 
-These skills guide the existing build tools; the complete process still involves several tools and device-specific inputs. In particular, [`build_rootfs_image.py`](tools/ci/build_rootfs_image.py) packages an already prepared root tree and checks its package versions. See the [tool map](.agents/skills/rungic-three-stage-image/references/tool-map.md) for stage entry points, [new-device guide](.agents/skills/rungic-three-stage-image/references/device-onboarding.md) for adaptation, and [first-boot guide](.agents/skills/rungic-three-stage-image/references/first-boot.md) for installation and recovery. The [G100 acceptance record](docs/80-g100-image-installation-retrospective.md) documents the verified full-install path; other device/firmware combinations need their own validation. These detailed engineering guides are currently in Chinese.
+These skills guide the existing build tools; the complete process still involves several tools and device-specific inputs. In particular, [`build_rootfs_image.py`](tools/ci/build_rootfs_image.py) packages an already prepared root tree and checks its package versions. See the [tool map](.agents/skills/rungic-three-stage-image/references/tool-map.md) for stage entry points, [new-device guide](.agents/skills/rungic-three-stage-image/references/device-onboarding.md) for adaptation, and [first-boot guide](.agents/skills/rungic-three-stage-image/references/first-boot.md) for installation and recovery. The [current delivery contract](docs/75-image-build-separation.md#2026-09-30rungic-独立安装的三段式目标) separates device preparation from Rungic installation. The [G100 acceptance record](docs/80-g100-image-installation-retrospective.md) documents the older full-flash path; it does not establish acceptance of the new standalone installer. Legacy full-flash tools remain for explicitly selected recovery or reproduction work. These detailed engineering guides are currently in Chinese.
 
 ## Learn more
 

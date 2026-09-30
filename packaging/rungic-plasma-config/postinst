@@ -1,4 +1,12 @@
 #!/bin/sh
+# dpkg path filters apply on unpack, so also remove files installed before our
+# config package. Only exact standalone-app paths are listed in this policy.
+if [ "$1" = configure ]; then
+    sed -n 's|^path-exclude=\(/.*\)$|\1|p' /etc/dpkg/dpkg.cfg.d/zz-rungic-apps |
+    while IFS= read -r path; do
+        rm -f -- "$path"
+    done
+fi
 # The critical power action used to be set by editing Ubuntu's UPower.conf; the drop-in in
 # UPower.conf.d carries it now, so the packaged file goes back to its defaults.
 if [ "$1" = configure ] && [ -f /etc/UPower/UPower.conf ]; then

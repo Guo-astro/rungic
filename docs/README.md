@@ -29,6 +29,8 @@ Agent Ready is a system capability, independent of the selected agent. The bundl
 
 ## Integrating another agent
 
+Start with the [Agent Ready interface reference](agent-ready-interfaces.md): both MCP servers, their tool inventory and startup, phone/workspace commands, suggestion and assistant D-Bus methods, and the shared Linux interfaces. It distinguishes reusable system entry points from the bundled assistant's integration contracts.
+
 Users can run another compatible agent in the Linux environment and connect it to the tools it supports. Reusing system tools and replacing the bundled assistant's complete experience are different integration scopes: voice, chat progress, suggestion execution and usage currently have explicit Codex/assistant connections that need adaptation.
 
 | Layer | Reusable interface and source | What a replacement must provide |
@@ -72,7 +74,7 @@ Acceptance evidence and historical revisions are in the [system-care record](res
 | System services | Two-way clipboard and clipboard history; Wi-Fi, Bluetooth and cellular state from Android; SSH on by default; rootless Docker in the container | [83](83-service-policy.md), [85](85-lxc-rootless-docker.md), [Clipboard history](research/clipboard-history.md) |
 | Apps | Firefox (WebGL, hardware video), Blender (Vulkan viewport), Krita 6, Telegram, VS Code, WeChat; installs through Discover and `pkgcli`, with the system's password dialog | [36](36-firefox-input-fix.md), [45](45-plasma-app-store.md), [90](90-blender-vulkan-incident.md) |
 | Delivery | Upstream components pinned with patch queues; a local APT repository and release metapackage, automatic acceptance after deployment, rollback by package | [61](61-delivery-diagnostics-plan.md), [71](71-upstream-patch-queue.md), [73](73-reduce-upstream-changes.md) |
-| Flash packages | GKI, rootfs and one-step package built separately; the G100 reaches Plasma after a wiped install, the X70 Air Pro is being brought up | [75](75-image-build-separation.md), [80](80-g100-image-installation-retrospective.md), [83](83-x70-air-pro-onboarding.md) |
+| Delivery stages | Device/GKI preparation → independent RungicOS image → separate installation/upgrades. APT updates exist; the standalone first-install/full-rootfs update tool remains to be implemented. G100 full-flash acceptance belongs to the earlier path | [75](75-image-build-separation.md), [80](80-g100-image-installation-retrospective.md), [83](83-x70-air-pro-onboarding.md) |
 
 The acceptance scope of each item is in its documents. Known limits: Turnip's Wayland presentation flickers on KGSL, so the desktop stays on GLES ([56](56-kwin-vulkan-quantification.md)); Mesa is still based on a community branch, and a move to upstream was tried and reverted ([research/94](research/94-mesa-base.md)).
 
@@ -111,7 +113,7 @@ Which layer a vendor adaptation belongs in, and what can move to a shared backen
 
 Delivery, acceptance and diagnostics: [61](61-delivery-diagnostics-plan.md). Every file this project puts on the container's rootfs comes from a package (`packaging`, patch queues and vendor rebuilds), deployed through the local APT repository and the release metapackage (`tools/rungic_release.py deploy|rollback|status`), followed by automatic acceptance (`tools/rungic_acceptance.py`); `rungic-integrity` checks for drift. The rootfs is an ext4 image (`system/rootfs-image`); deployment can take a dm-snapshot first and return to it when acceptance fails. `/home`, crash reports and the local repository are not rolled back with it.
 
-How Android system images, the RungicOS rootfs and kernel builds are split across phones, with device capability probing and release gates: [75](75-image-build-separation.md).
+Current delivery direction: prepare the Android/GKI base once when compatible, build RungicOS independently, and install or update Rungic separately; contracts, existing tools and remaining work: [75](75-image-build-separation.md).
 
 ## Documentation index
 

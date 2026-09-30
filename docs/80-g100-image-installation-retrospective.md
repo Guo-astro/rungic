@@ -1,5 +1,7 @@
 # G100 完整镜像实施复盘：遇到的问题与最佳解决路径
 
+> 2026-09-30 方向更新：本文保留旧整包清数据安装的过程与实机证据。当前三段式改为设备底座准备、独立 RungicOS 镜像、Rungic 单独安装/升级，见 [75 篇](75-image-build-separation.md#2026-09-30rungic-独立安装的三段式目标)。以下整包流程不再是日常发布的默认目标，也不能替代独立安装验收。
+
 日期：2026-09-28。范围：G100 / XT2533-4 / `portov_cn`，原厂固件 `W1VT36H.1-51-8`。
 
 ## 本轮结论
@@ -10,7 +12,7 @@
 
 本文总结可复用的方法。逐次试验、修订、哈希与实机日志索引见 [79 篇执行记录](79-g100-ci-execution.md)。早期版本中的“待验证”是当时状态，最终结果以本文及 79 篇末尾为准。
 
-后续执行已固化为项目 Skill：[rungic-three-stage-image](../.agents/skills/rungic-three-stage-image/SKILL.md)。它提供通用三段流程、新机型接入和工具适用边界；调用示例：`使用 $rungic-three-stage-image 为目标机型制作完整 Rungic 镜像包`。
+后续执行已固化为项目 Skill：[rungic-three-stage-image](../.agents/skills/rungic-three-stage-image/SKILL.md)。它提供通用三段流程、新机型接入和工具适用边界；当前调用示例：`使用 $rungic-three-stage-image 为目标机型构建独立 RungicOS 镜像，并核验独立安装前提与待办`。
 
 ## 一、我们遇到了哪些问题？
 
@@ -178,3 +180,8 @@ flowchart TD
 ## 2026-09-28 补充：按用户要求清理过时 product
 
 已删除本 run 的 `product/assembled-v3` 至 `assembled-v8` 和原始 `product/root`；clean 镜像/verified-root、发行包及恢复输入保留。报告和元数据改存 `.work/audits/product-cleanup-20260928/build-metadata/portov-20260927-86c6642d/product/`。原 v8 被 X70 复用的三个载荷已校验并迁往 `.work/deps/product-seed-20260928/`；本轮仅完成明确范围的 product 清理，不追认 rootfs/内核清理或独立分发归档完成。跨机清理范围和实际空间收益见 83 篇末及 audit JSON。
+
+
+## 2026-09-30：旧完整包清理
+
+用户要求改走 Rungic 独立安装并删除旧完整刷机包。已删除 G100/X70 共 8 份完整包，文件系统实际可用空间增加约 **114.38 GiB**（约 87 GiB → 201 GiB）。包内 manifest、报告、安装脚本已归档到 `.work/audits/full-bundle-cleanup-20260930/metadata/`；最终 G100 `.5` 和 X70 `.3` 的 boot/init_boot/vbmeta 小型恢复镜像一并保留。原厂输入、独立 rootfs、宿主种子、运行依赖和实机日志未删除。历史报告中的整包路径现在仅用于溯源，不能再直接执行；删除清单见 [来源记录](../provenance/full-bundle-cleanup-20260930.json)。

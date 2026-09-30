@@ -1,5 +1,6 @@
 # Runtime package selection; Firefox comes from the authenticated Mozilla source.
 # Exact installed closure: provenance/plasma-mobile-20260923/release/packages.tsv
+# Removed defaults: ubuntu-excluded-packages.txt; checked by the image builder.
 plasma-mobile
 plasma-mobile-tweaks
 plasma-settings
@@ -7,7 +8,6 @@ plasma-keyboard
 qmlkonsole
 dolphin
 koko
-haruna
 okular
 dbus-user-session
 libpam-systemd
@@ -56,13 +56,9 @@ plasma-discover
 apt-config-icons-hidpi
 
 # Plasma Mobile recommended applications (Kalk through Discover)
-angelfish
 arianna
-kjournaldbrowser
-klevernotes
 kontrast
 marble-maps
-marknote
 plasma-camera
 kalk
 krecorder

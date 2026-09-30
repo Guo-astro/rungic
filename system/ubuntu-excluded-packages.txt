@@ -1,0 +1,8 @@
+# Not preinstalled in release images (user selection, 2026-09-30).
+# Image builders reject these even when inherited from an older rootfs.
+# This is not an APT ban: users can still install them themselves.
+angelfish
+haruna
+kjournaldbrowser
+klevernotes
+marknote

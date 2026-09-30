@@ -44,6 +44,29 @@ def run(*args):
     subprocess.run(args, check=True)
 
 
+def check_preinstalled_apps(root, installed):
+    """Do not silently bring removed applications back through a reused root tree."""
+    workspace = Path(__file__).resolve().parents[2]
+    excluded = {line.strip() for line in
+                (workspace / 'system/ubuntu-excluded-packages.txt').read_text().splitlines()
+                if line.strip() and not line.lstrip().startswith('#')}
+    unwanted = excluded.intersection(name.split(':')[0] for name in installed)
+    if unwanted:
+        raise ValueError('purge excluded preinstalled apps in the build root before imaging: ' +
+                         ', '.join(sorted(unwanted)))
+    config = Path('etc/dpkg/dpkg.cfg.d/zz-rungic-apps')
+    required = {line for line in (workspace / 'system/config' / config).read_text().splitlines()
+                if line.startswith('path-exclude=')}
+    actual = set((root / config).read_text().splitlines()) if (root / config).is_file() else set()
+    if not required.issubset(actual):
+        raise ValueError('rebuild and install rungic-plasma-config: app exclusion rules missing')
+    remaining = [line.split('=', 1)[1] for line in sorted(required)
+                 if os.path.lexists(root / line.split('=', 1)[1].lstrip('/'))]
+    if remaining:
+        raise ValueError('excluded app files remain; reconfigure rungic-plasma-config: ' +
+                         ', '.join(remaining))
+
+
 def check_home_layout(root, home_path):
     """Reject build residue or extra homes instead of reserving user logins."""
     if not re.fullmatch(r"/home/[a-z][a-z0-9_-]{0,31}", home_path):
@@ -109,6 +132,7 @@ def main():
     if output.exists() or args.size_gib < 8 or args.size_gib > 128:
         raise ValueError("output exists or image size is outside 8–128 GiB")
     installed = packages(root / "var/lib/dpkg/status")
+    check_preinstalled_apps(root, installed)
     manifest = json.loads(release.read_text())
     expected = dict(manifest["packages"], firefox=args.firefox_version,
                     **{"rungic-release": manifest["version"]})
@@ -167,7 +191,7 @@ def main():
     with compressed.open("wb") as destination:
         subprocess.run(["gzip", "-1", "-n", "-c", str(output)], stdout=destination, check=True)
     report = {"schema_version": 1, "account_status_protocol": 2, "home_layout_checked": True,
-              "fresh_account_checked": True,
+              "fresh_account_checked": True, "preinstalled_apps_checked": True,
               "release_version": manifest["version"],
               "release_sha256": sha256(release), "arch": "arm64",
               "package_count": len(installed), "package_lock_sha256": sha256(output.parent / "packages.lock.tsv"),

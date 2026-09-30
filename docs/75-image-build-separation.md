@@ -1,5 +1,32 @@
 # 镜像与内核构建拆分：跨手机的兼容契约
 
+## 2026-09-30：Rungic 独立安装的三段式目标
+
+用户明确调整方向：不再追求将 Android 与 Rungic 合并为完整镜像一次刷入，**Rungic 安装成为单独步骤**。以下为当前目标；后面的 2026-09-27 方案保留为历史设计，旧整包的实机结论见 [80 篇](80-g100-image-installation-retrospective.md)。本次调整的是交付契约与执行指南，尚未实现新的独立首装安装器。
+
+| 阶段 | 交付内容 | 何时执行 |
+| --- | --- | --- |
+| CI1：设备底座 | 基于原厂固件的 GKI/boot、必要的 root/容器能力准备、设备适配与恢复材料、兼容报告 | 新机型、固件/内核变化，或底座能力不满足时；已有兼容底座可复用 |
+| CI2：RungicOS | 独立 ext4 rootfs、压缩包、精确包锁、哈希和离线检查报告 | OS 内容或预装集合变化时；不携带 Android 系统分区或独立内核 |
+| CI3：独立安装/升级 | OS 镜像、需要的 APK/JNI/宿主桥与 LXC 运行时、版本/协议清单、安装和恢复入口 | 在已准备的 Android 上安装 Rungic，之后独立更新；日常组件更新继续走 APT release |
+
+CI1 的解锁或机型特定底座准备可能清数据，仍须事先备份。CI3 的设计边界是保留 Android 数据、已安装 Android 应用与现有底座；不能因更新 Rungic 自动刷 `super/product/boot/init_boot` 或擦除 `userdata/metadata`。底座确实不兼容时回到 CI1 明确处理。独立安装并不消除内核、驱动和宿主桥依赖，而是将它们变成可核验、可复用的前提。
+
+版本不要求同步发布，但必须兼容：CI2 声明架构、页大小/内核能力、图形媒体后端、宿主桥协议和包版本；CI3 将其与实际设备及宿主版本核对，绑定输入 SHA 和安装结果。相同 Android 版本或同型号不足以替代这些检查。上述契约是设计要求，目前 v1 spec 和工具没有完整表达这些字段，后续实现必须同步生产者、消费者和验收，不能添加无人读取的字段后宣称完成。
+
+**现有实现与待补入口：**
+
+- 已有：固定内核配方、rootfs 构建器、APK 与宿主种子构建、版本化 APT 发布/部署/回滚、rootfs 快照及账户/安装状态契约。
+- 已有但属于旧路径：`assemble_product.py` 将 rootfs/宿主载荷放入 product，`assemble_release.py` 组装 Android 分区包，`flash_release.py` 执行整包刷写。它们继续用于明确指定的历史复现和恢复，不是新的独立安装器。
+- 待实现：独立载荷打包/校验入口、对已启动 Android 的安装通路、普通 APK 安装与权限/JNI验收、完整 rootfs 的安全替换及宿主版本联动恢复。现有 `rungic-firstboot.sh` 固定从 `/product/etc/rungic` 读取种子，依赖预装应用并按首次安装逻辑展开，不能直接改一个目录就当作完整升级器。
+- 现有 `rungic_release.py deploy/rollback` 服务于已安装 Rungic 的 APT 更新；它不是空白设备首装器，也不等于任意完整 rootfs 替换流程。
+
+独立首装从“底座已就绪、没有 Rungic 安装和账户”开始验收：传输/校验载荷 → 安装与挂载准备 → 真实 loading → 账户配置 → Plasma 实际显示。此处的全新 Rungic 状态不要求恢复 Android 出厂设置。升级须验证账户、文件、Agent 登录状态和 Android 数据保留；失败恢复须包含匹配的宿主、配置及数据迁移边界，不能仅把 rootfs 换回去就认定恢复成功。中断重试、首装、升级和恢复分别留证。
+
+本轮只完成源码预装策略与文档/Skill 调整，没有重新制作镜像或操作设备；G100 旧整包 `.5` 的清数据成功仍有效，但不能证明新独立安装已通过。
+
+## 历史方案：2026-09-27
+
 2026-09-27 架构分析；同日按用户澄清修订：目标是**以自编 GKI 为基线，为一款手机生成含 RungicOS 的完整、一键刷入发行包**。本文提出拆分方向和验收条件；没有生成新镜像、移植新设备或改变当前手机。现有实机验收仍以 40、42、61 篇为准，G100（`portov_cn`）目前只有原厂镜像的主机侧核验（[78 篇](78-g100-firmware-inventory.md)）。
 
 ## 1. 先明确三个不同产物
@@ -92,3 +119,21 @@ VINTF 可用于 Android framework/vendor/HAL 的原有兼容检查；它不描�
 - 源码/许可证：Linux 内核源码及补丁按其 GPL-2.0 许可核对；AOSP 构建工具、mmdebstrap、Ubuntu 包分别保留各自来源和许可清单。Motorola 原厂分区镜像是单独的 OEM 输入；公开发布权未核实，不能默认随通用源码或公开镜像发布。当前私有仓库只跟踪配方/补丁/来源记录，生成物继续留在 `.work/`。
 
 本方案的首个可审查里程碑是：选定一款手机的固定固件基线，CI 从锁定源码重建候选 GKI，产生可比较的 ABI/模块报告与 boot 候选；同一设备的检测报告区分原机事实和候选内核结果。下一里程碑才是离线 rootfs 与清数据后首启播种；这两项未通过之前不发布“完整一键刷入”包。`portov` 当前只有原厂镜像主机侧核验，尚无自编 GKI 或 RungicOS 实机结果。
+
+
+## 2026-09-30：预装应用调整
+
+用户要求移除 Haruna、Marknote、KleverNotes、Journald Browser、Emoji Selector 和 Angelfish。前五个独立包（不含 Emoji Selector）从 `system/ubuntu-packages.txt` 及开发机的显式安装清单移除；`system/ubuntu-excluded-packages.txt` 记录镜像排除集合。用户日后仍可自行安装这些独立应用，不设置 APT 禁装策略。
+
+本地实际包清单表明 Emoji Selector 的程序和菜单属于 `plasma-desktop`，全局快捷键入口属于 `plasma-desktop-data`（6.6.6）。不能因此卸载桌面。`rungic-plasma-config` 安装 `zz-rungic-apps`，使用 [dpkg 标准 path-exclude](https://manpages.debian.org/trixie/dpkg/dpkg.1.en.html) 排除三个精确路径：`/usr/bin/plasma-emojier`、`/usr/share/applications/org.kde.plasma.emojier.desktop`、`/usr/share/kglobalaccel/org.kde.plasma.emojier.desktop`。配置包 postinst 同时清理此前已安装的这三个文件；桌面、Emoji 字体及共享资源保留。现有完整性检查已识别 dpkg 路径排除规则。
+
+复用旧构建 root 树时，先在 `tools/ci/arm64_chroot.py` 提供的构建 chroot 内模拟并执行以下命令；只用于待发行模板，不在开发宿主直接执行，也不自动操作手机：
+
+```sh
+apt-get --simulate purge haruna marknote klevernotes kjournaldbrowser angelfish
+apt-get purge -y haruna marknote klevernotes kjournaldbrowser angelfish
+```
+
+同时构建并安装新版本 `rungic-plasma-config`，更新 release 锁定的版本后再生成 rootfs。`build_rootfs_image.py` 会拒绝仍包含被排除软件包、缺少排除规则或留有 Emoji Selector 入口的输入树。它不会在镜像生成时偷偷卸包，也不会改写旧发行镜像。
+
+离线验证：18 项测试及 204 项子检查通过；基于现有 ARM64 root 树的 APT 模拟仅移除指定五包；配置 DEB 构建通过。一次性无网络容器验证真实 postinst 清除旧 Emoji Selector 入口，随后 fixture 包解包遵守排除规则且保留其他文件；测试容器缺 KDE 配置依赖，因此该项仅验证维护脚本与 dpkg 文件过滤，不等于完整依赖/桌面验收。日志在 `.work/preinstalled-apps-20260930/`。现有 `20260928.7` 镜像和实机未更新，新预装集合将在下一次重建镜像时生效。
