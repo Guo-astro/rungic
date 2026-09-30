@@ -401,3 +401,11 @@ G100 的真实 GPT-6 Luna / API Key 请求不调用工具，只回复验收文�
 最终部署 suggestions **0.452**、voice-agent **0.453**，仅补齐旧任务迟到 token 事件仍归属启动时账户的边界。Python 33 项回归通过；此增量未重复整套 smoke，完整 smoke 以 `.11` 为准。重启 Agent 后再次执行真实 Luna 只读回复验收，新增 **15,772 token**（输入 15,748、输出 24），累计从 15,771 变为 **31,543**；重启建议服务重读事件后不重复计数。临时对话删除、原对话恢复，最终无运行任务。账户仍为 API Key / GPT-6 Luna，用量文件 0600，API Key 不展示虚构的订阅重置。订阅账户额度与重置仅完成固定协议和隔离替身验证，未在真实订阅登录上验收。
 
 最终桌面截图人工核对：一个堆叠、两条独立调查、独立像素 Agent 组件显示 31,543 token，壁纸留白和底部四图标保留。SSH socket enabled/active，`dpkg --audit` 无输出。部署记录 `.work/deploy/20260930-102514-20260930.12/`；新增证据 `.work/experiments/widget-stacks/{deploy-account.log,real-usage-final.log,final-check-final.log,final-home.png}`。
+
+## 2026-09-30：桌面堆叠内滑动切换（实现与验收中）
+
+此前只有视觉叠层，`SuggestionsWidget` 始终展示 `members[0]`，拖动只改变外层列表偏移；两条记录并为一组后列表无溢出，所以上滑没有可见响应。此前列表滚动验收不能覆盖堆叠内切换。
+
+复用核验：继续使用固定 Plasma Mobile 6.6.5 / LGPL-2.0-or-later 的 `WidgetContainer`、`WidgetDelegate` 和 `components/mobileshell/components/swipearea.cpp`，实读本地补丁队列源码；SwipeArea 尊重 keepMouseGrab/keepTouchGrab，WidgetContainer 根据移动阈值取消原生长按计时。比较 Qt 的 [SwipeView](https://doc.qt.io/qt-6/qml-qtquick-controls-swipeview.html) 与现有 [MouseArea](https://doc.qt.io/qt-6/qml-qtquick-mousearea.html)：独立嵌套 SwipeView 仍有已复现的父级抢手势和同方向列表竞争，因此保留已验收的 preventStealing 接管入口，复用 Qt NumberAnimation 做双卡跟手切换，不新增 Folio 补丁。Qt 文档页面当前为 6.11，运行/构建基线仍为 6.10.2，接口是否可用以该版本实际编译与运行验收为准。本项目新增 QML 沿用 GPL-2.0-or-later。
+
+卡片内拖动切换组内成员，标题/间隙拖动滚动组列表；起手时固定目标，首尾回弹不把手势传给抽屉。按记录 ID 保持当前成员，后台刷新延后至拖动/动画结束；当前成员消失时回到剩余第一项。点正面打开该条详情，点卡片顶部“共 N 条记录”打开组。只有停稳且实际可见的成员产生展示回执。实机结论待下述验收补记。

@@ -20,7 +20,7 @@ Timer {
         const next = ({})
         const shown = [], opened = []
         for (const child of view.contentItem.children) {
-            if (!("suggestionRecord" in child) || !child.visible) continue
+            if (!("suggestionRecord" in child) || !child.visible || ("presentationMoving" in child && child.presentationMoving)) continue
             const record = child.suggestionRecord
             if (!record || !record.id) continue
             const pos = child.mapToItem(view, 0, 0)

@@ -168,7 +168,9 @@ def main():
                 assert ('--agent' in sys.argv or '--usage' in sys.argv) or 0 < len(shown) < 40, ('presentation must acknowledge only visible cards', len(shown))
                 assert all(not i.get('openedRevision') for i in cli('list')['items'])
                 print('PASS: QML acknowledged only displayed card revisions:', len(shown))
-                if '--widget' in sys.argv:
+                if '--swipe-test' in sys.argv:
+                    assert cli('get', first).get('displayedRevision') and cli('get', second).get('displayedRevision'), 'both actually viewed members need receipts'
+                elif '--widget' in sys.argv:
                     assert not (cli('get', first).get('displayedRevision') and cli('get', second).get('displayedRevision')), 'hidden stack member was acknowledged'
             print('PASS: 40 cards, restart, snooze, dedup/mute, Agent handoff/result, private feedback, independent upstream state, QML preview')
         finally:
