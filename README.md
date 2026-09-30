@@ -39,6 +39,22 @@ The bundled assistant shows how to connect these pieces: a request becomes a pla
 
 Agent choice and model choice are separate from these system capabilities. A replacement can use the Linux tools and supported MCP, command-line and D-Bus interfaces; its own execution, conversation and authorization behavior belongs to that integration. See the [integration map](docs/README.md#integrating-another-agent) for the reusable interfaces and the parts currently connected to Codex.
 
+### Interfaces an agent can use
+
+Rungic exposes two **MCP (Model Context Protocol) servers**, alongside command-line tools, D-Bus services and standard Linux interfaces. MCP is one way to connect an agent; these capabilities do not require Codex.
+
+| Interface | Entry point | What it exposes |
+|---|---|---|
+| **Desktop MCP** · on the phone | `rungic-cua mcp` | Screenshots, pointer/keyboard actions, app launch and window management, whole-task execution and voice messages. Workspace routing adds `desktop_where`; available tools depend on the selected execution mode. |
+| **Development MCP** · on the development computer | [`tools/rungic_agent_mcp.py`](tools/rungic_agent_mcp.py), configured in [`.mcp.json`](.mcp.json) | Device/renderer state, merged Android/Linux/kernel logs, crash reports and symbolization, integrity checks, screenshots, evidence bundles, UI inspection/actions, performance traces and build status. Requires separately configured device access. |
+| **Phone control** · CLI + JSON | `rungic-platform --request '<json>'` | Device, network and display state; brightness, clipboard, orientation, vibration and Android settings panels. |
+| **Workspaces and displays** · CLI + JSON | `rungic-workspace-env`, `rungic-user`, `rungic-agent-screen`, `rungic-desktop-mode`, `rungic-cast` | Run in the selected desktop session, show the assistant's screen, control desktop mode, discover/connect TVs and inspect casting capabilities. |
+| **Proactive system care** · D-Bus + CLI | `com.rungic.Suggestions`, `rungic-suggestions` | Issue/evidence queries, compatibility knowledge, reminders, investigation results, repair plans and local upstream-feedback material. Task handoff currently targets the bundled assistant. |
+| **Tasks, voice and usage** · D-Bus | `com.rungic.VoiceAgent`; suggestion-service usage methods/signals | Conversations, task progress/stop, voice and call controls, observed tokens and provider-supplied quotas. Replacing the bundled agent requires adapting this bridge and its usage data. |
+| **Files, packages and hardware** · Linux interfaces | Shell/files, PackageKit/`pkgcli`, polkit, Wayland, desktop portals, AT-SPI, PipeWire/PulseAudio and Android-backed D-Bus services | Work with files, install software with system authorization, and use the same desktop/media/device interfaces as ordinary Linux apps. Android-backed services implement documented subsets. |
+
+For MCP startup examples, the current tool inventory, D-Bus methods, session requirements and integration limits, see the [Agent Ready interface reference](docs/agent-ready-interfaces.md). Low-level screenshot/action tools can use the connecting agent's own reasoning; the bundled `desktop_goal` helper has its own configured model backend. Display/input separation does not isolate the agent from files owned by the same Linux user.
+
 ## Just say it
 
 <table>

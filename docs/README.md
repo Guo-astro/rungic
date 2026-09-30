@@ -29,6 +29,8 @@ Agent Ready is a system capability, independent of the selected agent. The bundl
 
 ## Integrating another agent
 
+Start with the [Agent Ready interface reference](agent-ready-interfaces.md): both MCP servers, their tool inventory and startup, phone/workspace commands, suggestion and assistant D-Bus methods, and the shared Linux interfaces. It distinguishes reusable system entry points from the bundled assistant's integration contracts.
+
 Users can run another compatible agent in the Linux environment and connect it to the tools it supports. Reusing system tools and replacing the bundled assistant's complete experience are different integration scopes: voice, chat progress, suggestion execution and usage currently have explicit Codex/assistant connections that need adaptation.
 
 | Layer | Reusable interface and source | What a replacement must provide |
