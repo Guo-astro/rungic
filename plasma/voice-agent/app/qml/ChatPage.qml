@@ -25,7 +25,7 @@ Item {
     function open(id, title) {
         if (id && id === conversationId) return
         if (conversationId) AgentClient.closeConversation(conversationId)
-        chat.load({ title: "新对话", history: [] })
+        chat.load({ title: "", history: [] })
         conversationId = id || ""
         initialTitle = title || ""
         creating = false
@@ -79,7 +79,7 @@ Item {
         function onTextReady(json) { composer.dictated(JSON.parse(json).text || "") }
     }
     Component.onDestruction: if (conversationId) AgentClient.closeConversation(conversationId)
-    // Presses, messages and 朗读 go to this page's conversation, whatever else was opened
+    // Presses, messages and Read aloud go to this page's conversation, whatever else was opened
     // meanwhile (the overlay, a restart, the warm-up; docs/89).
     Binding { target: AgentClient; property: "conversation"; value: page.conversationId }
 
@@ -94,14 +94,14 @@ Item {
         IconButton {
             anchors { left: parent.left; leftMargin: 6; verticalCenter: parent.verticalCenter }
             iconName: "menu"
-            text: "对话列表"
+            text: i18nc("@action:button open the side panel", "Conversations")
             onClicked: drawer.open()
         }
         Text {
             anchors { left: parent.left; right: parent.right; leftMargin: 64; rightMargin: 64; verticalCenter: parent.verticalCenter }
             horizontalAlignment: Text.AlignHCenter
             text: !page.conversationId && chat.entries.count === 0 ? "Agent"
-                : page.loaded ? chat.title : page.initialTitle
+                : chat.titleText(page.loaded ? chat.title : page.initialTitle)
             elide: Text.ElideRight
             font.family: Theme.fontFamily
             font.pixelSize: Theme.titleSize
@@ -112,7 +112,7 @@ Item {
         IconButton {
             anchors { right: parent.right; rightMargin: 6; verticalCenter: parent.verticalCenter }
             iconName: "compose"
-            text: "新对话"
+            text: i18nc("@action:button", "New conversation")
             enabled: page.conversationId !== "" || chat.entries.count > 0
             onClicked: page.newConversation()
         }
@@ -158,7 +158,7 @@ Item {
         spacing: 12
         visible: !page.loaded && !slowLoad.running
         BusyRing { Layout.alignment: Qt.AlignHCenter }
-        Text { text: "正在打开…"; color: Theme.dim; font.family: Theme.fontFamily; font.pixelSize: Theme.metaSize }
+        Text { text: i18nc("@info:status a conversation loading", "Opening…"); color: Theme.dim; font.family: Theme.fontFamily; font.pixelSize: Theme.metaSize }
     }
 
     // ---- a new conversation: a question and a few things to try ----------------------
@@ -172,7 +172,7 @@ Item {
         Item { Layout.fillHeight: true }
         Text {
             Layout.alignment: Qt.AlignHCenter
-            text: "有什么可以帮你？"
+            text: i18nc("@title a new conversation", "How can I help?")
             font.family: Theme.fontFamily
             font.pixelSize: Theme.headingSize
             font.weight: Font.DemiBold
@@ -180,7 +180,10 @@ Item {
         }
         Item { Layout.fillHeight: true }
         Repeater {
-            model: ["手机还剩多少存储空间？", "把屏幕调暗一点", "帮我整理一下下载文件夹"]
+            // Sent as they read (in the desktop's language).
+            model: [i18nc("@action:button a request to try", "How much storage is left on my phone?"),
+                    i18nc("@action:button a request to try", "Make the screen a little dimmer"),
+                    i18nc("@action:button a request to try", "Tidy up my Downloads folder")]
             PillButton {
                 required property string modelData
                 Layout.fillWidth: true
@@ -202,7 +205,7 @@ Item {
         anchors { horizontalCenter: parent.horizontalCenter; bottom: composer.top; bottomMargin: 8 }
         visible: !view.follow && !view.atYEnd && view.contentHeight > view.height
         iconName: "chevron-down"
-        text: "回到最新"
+        text: i18nc("@action:button scroll to the end of the thread", "Jump to latest")
         onClicked: { view.follow = true; view.positionViewAtEnd() }
     }
 

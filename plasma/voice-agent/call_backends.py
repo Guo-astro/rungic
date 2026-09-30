@@ -7,6 +7,8 @@ app, and SIM data subscription are not routing rules.
 import re
 import shutil
 
+from voice_i18n import _
+
 
 def resolve(params):
     backend = params.get('backend')
@@ -16,18 +18,18 @@ def resolve(params):
         backend = 'cellular' if app == 'cellular' or (params.get('number') and not app) else 'app' if app else None
     if backend == 'cellular':
         if app and app != 'cellular':
-            raise ValueError('手机电话与应用通话参数冲突，请按用户指定的方式选择')
+            raise ValueError(_('Phone call and app call parameters conflict; choose the way the user asked for'))
         number = params.get('number', '')
         if not isinstance(number, str) or not re.fullmatch(r'\+?[0-9]{3,15}', number):
-            raise ValueError('手机电话需要已核实的电话号码 number')
+            raise ValueError(_('A phone call needs a verified phone number in number'))
         return backend, 'cellular'
     if backend == 'app':
         if not isinstance(app, str) or app == 'cellular' or not re.fullmatch(r'[A-Za-z0-9_][A-Za-z0-9_.+-]*', app):
-            raise ValueError('应用通话需要明确指定 app 的进程名称')
+            raise ValueError(_("An app call needs the app's process name in app"))
         if params.get('number'):
-            raise ValueError('应用通话请使用 contact，不能把电话号码当成手机拨号请求')
+            raise ValueError(_('An app call takes contact; a phone number is not a request to dial from the phone'))
         return backend, app
-    raise ValueError('请明确指定 backend=cellular（手机电话）或 backend=app（应用通话）')
+    raise ValueError(_('Specify backend=cellular (a phone call) or backend=app (an app call)'))
 
 
 def capabilities(*, key_configured=False, probe=None, router_available=None):

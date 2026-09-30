@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// Text with light passing over it: work in progress (正在处理 · 12 秒 · …).
+// Text with light passing over it: work in progress (Working · 12s · …).
 import QtQuick
 import QtQuick.Effects
 import com.rungic.design

@@ -16,6 +16,7 @@
     "plasma/display.py",
     "plasma/brightness.py",
     "plasma/power-policy.py",
+    "plasma/po/zh_CN/rungic-power-policy.po",
     "plasma/account",
     "plasma/screen-metrics.cpp",
     "plasma/rungic-plasma-session.service",
@@ -27,6 +28,7 @@
   ],
   "depends": "rungic-plasma-config, python3, python3-gi, bindfs, xdg-user-dirs, kwin-wayland (>= 4:6.6.6-0ubuntu0.1+rungic7~), plasma-mobile, pulseaudio",
   "build_depends": [
+    "gettext",
     "qt6-base-dev",
     "pkgconf",
     "g++"

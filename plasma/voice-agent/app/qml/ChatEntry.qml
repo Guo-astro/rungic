@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // One entry of the thread (docs/59, docs/87). What the user said or typed is a light grey
 // bubble on the right; the assistant's words are the page's text. An agent turn shows as
-// shining text while it runs ("正在处理 · 12 秒 · …") and as "已处理 N 步 · 用时 N 秒 ›"
+// shining text while it runs ("Working · 12s · …") and as "Worked through N steps · Ns ›"
 // afterwards, which opens its steps; the answer under it has copy and read-aloud. Calls
 // (docs/63), approvals and the "set up first" prompt are outlined blocks.
 import QtCore
@@ -43,6 +43,7 @@ Item {
     signal openImage(url source, string name)
     // A command without the shell wrapper Codex adds.
     function summary(text) { return text.replace(/^\/bin\/(?:ba)?sh -lc '([\s\S]*)'$/, "$1") }
+    function duration(seconds) { return i18nc("@info a short duration", "%1s", seconds) }
 
     width: ListView.view ? ListView.view.width : column
     implicitHeight: loader.implicitHeight
@@ -140,7 +141,7 @@ Item {
                 implicitHeight: 44
                 radius: 20
                 color: Theme.fill
-                Accessible.name: entry.status === "listening" ? "正在听" : "正在识别"
+                Accessible.name: entry.status === "listening" ? i18nc("@info:status", "Listening") : i18nc("@info:status what was said is being transcribed", "Transcribing")
                 Wave {
                     anchors.centerIn: parent
                     visible: entry.status === "listening"
@@ -154,7 +155,7 @@ Item {
                     anchors.centerIn: parent
                     visible: entry.status !== "listening"
                     pixelSize: Theme.metaSize
-                    text: "正在识别…"
+                    text: i18nc("@info:status what was said is being transcribed", "Transcribing…")
                 }
             }
         }
@@ -192,13 +193,13 @@ Item {
         IconButton {
             small: true
             iconName: "copy"
-            text: "复制"
+            text: i18nc("@action:button copy the answer", "Copy")
             onClicked: { clip.text = parent.answer; clip.selectAll(); clip.copy(); clip.text = "" }
         }
         IconButton {
             small: true
             iconName: "speaker"
-            text: "朗读"
+            text: i18nc("@action:button the voice reads the answer out", "Read aloud")
             onClicked: entry.readAloud(parent.answer)
         }
         TextEdit { id: clip; visible: false }
@@ -245,12 +246,16 @@ Item {
             ShineText {
                 Layout.fillWidth: true
                 visible: turn.running
-                text: "正在处理 · " + turn.seconds + " 秒"
+                text: i18nc("@info:status the agent at work; %1 is how long", "Working · %1", entry.duration(turn.seconds))
                       + (!turn.card && entry.text ? " · " + entry.summary(entry.text).split("\n")[0] : "")
             }
             MetaButton {
                 visible: !turn.running
-                text: (entry.status === "stopped" ? "已停止 · " : "已处理 ") + entry.steps.count + " 步 · 用时 " + turn.seconds + " 秒"
+                text: entry.status === "stopped"
+                    ? i18ncp("@action:button a stopped agent turn: its steps and how long it ran", "Stopped · %1 step · %2",
+                             "Stopped · %1 steps · %2", entry.steps.count, entry.duration(turn.seconds))
+                    : i18ncp("@action:button a finished agent turn: its steps and how long it took", "Worked through %1 step · %2",
+                             "Worked through %1 steps · %2", entry.steps.count, entry.duration(turn.seconds))
                 expanded: entry.expanded
                 onClicked: entry.model.setProperty(entry.index, "expanded", !entry.expanded)
             }
@@ -284,7 +289,7 @@ Item {
                 finished: visible && preview.done === true
                 maxWidth: Math.min(entry.column, 360)
                 maxHeight: 360
-                onClicked: entry.openImage(source, "渲染预览")
+                onClicked: entry.openImage(source, i18nc("@title a live picture of a render", "Render preview"))
             }
             // The files the turn changed, when opened: a tap opens one.
             Flow {
@@ -295,8 +300,8 @@ Item {
                     model: entry.expanded && turn.card ? turn.card.files : []
                     FileChip {
                         required property var modelData
-                        name: modelData.path.split("/").pop() + (modelData.kind === "delete" ? " · 已删除"
-                              : " · +" + modelData.added + " −" + modelData.removed)
+                        name: modelData.path.split("/").pop() + " · " + (modelData.kind === "delete" ? i18nc("@info a file the turn deleted", "Deleted")
+                              : "+" + modelData.added + " −" + modelData.removed)
                         maxWidth: entry.column
                         enabled: modelData.kind !== "delete"
                         onClicked: Qt.openUrlExternally("file://" + modelData.path)
@@ -355,9 +360,12 @@ Item {
         Layout.leftMargin: 2
         spacing: 4
         Text {
-            text: step.isCommand ? (step.status === "running" ? "命令 · 运行中"
-                                    : step.exitCode === "0" || step.exitCode === "" ? "命令 · 完成" : "命令 · 退出码 " + step.exitCode)
-                : step.kind === "files" ? "修改了文件" : step.kind === "said" ? "说了" : step.kind === "answer" ? "答复" : "说明"
+            text: step.isCommand ? (step.status === "running" ? i18nc("@info a step of an agent turn", "Command · Running")
+                                    : step.exitCode === "0" || step.exitCode === "" ? i18nc("@info a step of an agent turn", "Command · Done")
+                                    : i18nc("@info a step of an agent turn", "Command · Exit code %1", step.exitCode))
+                : step.kind === "files" ? i18nc("@info a step of an agent turn", "Changed files")
+                : step.kind === "said" ? i18nc("@info a step of an agent turn: what the voice said", "Said")
+                : step.kind === "answer" ? i18nc("@info a step of an agent turn", "Answer") : i18nc("@info a step of an agent turn: the agent's note", "Note")
             font.family: Theme.fontFamily
             font.pixelSize: Theme.footSize
             color: Theme.dim
@@ -379,7 +387,7 @@ Item {
             Layout.fillWidth: true
             visible: step.isCommand
             implicitHeight: code.implicitHeight + 24
-            Accessible.name: step.open ? "收起输出" : "展开输出"
+            Accessible.name: step.open ? i18nc("@action:button", "Collapse output") : i18nc("@action:button", "Expand output")
             onClicked: step.open = !step.open
             background: Rectangle { radius: Theme.radiusInput; color: Theme.fill }
             contentItem: Text {
@@ -426,15 +434,16 @@ Item {
                     font.pixelSize: Theme.bodySize
                     font.weight: Font.DemiBold
                     color: Theme.text
-                    text: (callBox.userTalks ? "你在通话中"
-                           : !callBox.running ? (callBox.connected || !entry.itemId ? "通话结束" : "通话未接通")
-                           : entry.command === "connecting" ? "准备通话…"
-                           : entry.command === "dialing" ? "正在拨号…"
-                           : entry.command === "ringing" ? "已拨出，等待接听"
-                           : entry.command === "dial-failed" ? "没能拨出"
-                           : entry.command === "hanging-up" ? "正在挂断…"
-                           : entry.command === "hangup-failed" ? (entry.callBackend === "cellular" ? "请在系统电话中挂断" : "请在通话应用中挂断")
-                           : "助理通话中") + (entry.role ? " · " + entry.role : "")
+                    text: (callBox.userTalks ? i18nc("@info:status the user talks on the call", "You're on the call")
+                           : !callBox.running ? (callBox.connected || !entry.itemId ? i18nc("@info:status", "Call ended") : i18nc("@info:status", "Call didn't connect"))
+                           : entry.command === "connecting" ? i18nc("@info:status", "Preparing the call…")
+                           : entry.command === "dialing" ? i18nc("@info:status", "Dialing…")
+                           : entry.command === "ringing" ? i18nc("@info:status dialed, waiting to be answered", "Ringing…")
+                           : entry.command === "dial-failed" ? i18nc("@info:status", "Couldn't place the call")
+                           : entry.command === "hanging-up" ? i18nc("@info:status", "Hanging up…")
+                           : entry.command === "hangup-failed" ? (entry.callBackend === "cellular" ? i18nc("@info:status", "Hang up in the Phone app")
+                                                                  : i18nc("@info:status", "Hang up in the calling app"))
+                           : i18nc("@info:status a call", "Assistant on the call")) + (entry.role ? " · " + entry.role : "")
                 }
                 Text {
                     visible: callBox.connected
@@ -446,8 +455,9 @@ Item {
             }
             Text {
                 Layout.fillWidth: true
-                text: entry.callBackend === "cellular" ? "手机电话" + (entry.callNumber ? " · " + entry.callNumber : "")
-                    : entry.callBackend === "wechat" ? "微信通话" : "应用通话 · " + entry.callBackend
+                text: entry.callBackend === "cellular" ? i18nc("@info the kind of call", "Phone call") + (entry.callNumber ? " · " + entry.callNumber : "")
+                    : entry.callBackend === "wechat" ? i18nc("@info the kind of call", "WeChat call")
+                    : i18nc("@info the kind of call; %1 is the app", "App call · %1", entry.callBackend)
                 color: Theme.dim
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.labelSize
@@ -455,7 +465,8 @@ Item {
             Text {
                 Layout.fillWidth: true
                 visible: callBox.userTalks || entry.text.length > 0
-                text: callBox.userTalks ? "语音助手已暂停，挂断后自动恢复" : "目的：" + entry.text
+                text: callBox.userTalks ? i18nc("@info", "The voice assistant is paused and resumes when you hang up.")
+                    : i18nc("@info what the call is for", "Goal: %1", entry.text)
                 wrapMode: Text.Wrap
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.labelSize
@@ -478,15 +489,22 @@ Item {
                         lineHeightMode: Text.FixedHeight
                         font.weight: transcript.kind === "ask" ? Font.DemiBold : Font.Normal
                         color: Theme.text
-                        readonly property string who: ({ remote: "对方", agent: "助理", owner: "你", note: "记录", ask: "问你", error: "提示" })[transcript.kind] || ""
-                        text: "<font color='" + Theme.dim + "'>" + who + "：</font>" + transcript.text.replace(/&/g, "&amp;").replace(/</g, "&lt;")
+                        // Who said it, with the punctuation that introduces what was said (a fullwidth
+                        // colon carries its own space).
+                        readonly property string who: ({ remote: i18nc("@label a call transcript: the other party", "Them:"),
+                                                         agent: i18nc("@label a call transcript", "Assistant:"),
+                                                         owner: i18nc("@label a call transcript: the user", "You:"),
+                                                         note: i18nc("@label a call transcript: the assistant's note", "Note:"),
+                                                         ask: i18nc("@label a call transcript: the assistant asks the user", "Asks you:"),
+                                                         error: i18nc("@label a call transcript: a problem", "Notice:") })[transcript.kind] || ""
+                        text: "<font color='" + Theme.dim + "'>" + who + "</font>" + (/\uff1a$/.test(who) ? "" : " ") + transcript.text.replace(/&/g, "&amp;").replace(/</g, "&lt;")
                     }
                 }
             }
             Text {
                 Layout.fillWidth: true
                 visible: !callBox.running && entry.output.length > 0
-                text: "结果：" + entry.output
+                text: i18nc("@info how the call went", "Result: %1", entry.output)
                 wrapMode: Text.Wrap
                 font.family: Theme.fontFamily
                 font.pixelSize: 15
@@ -498,7 +516,7 @@ Item {
                 QQC2.TextField {
                     id: callInstruction
                     Layout.fillWidth: true
-                    placeholderText: "给通话助理的文字指示"
+                    placeholderText: i18nc("@info:placeholder", "Text instruction for the call assistant")
                     function send() {
                         if (!text.trim()) return
                         callBox.command("instruct", {text: text.trim()})
@@ -507,7 +525,7 @@ Item {
                     onAccepted: send()
                 }
                 PillButton {
-                    text: "发送"
+                    text: i18nc("@action:button", "Send")
                     enabled: callInstruction.text.trim().length > 0
                     onClicked: callInstruction.send()
                 }
@@ -515,7 +533,7 @@ Item {
             Text {
                 Layout.fillWidth: true
                 visible: callBox.running && !callBox.userTalks && !entry.privateVoiceInstructions
-                text: "文字指示只发给助理；需要亲自说话时点“我来接”。"
+                text: i18nc("@info", "Text instructions go only to the assistant. To speak yourself, tap “Take over”.")
                 wrapMode: Text.Wrap
                 color: Theme.dim
                 font.pixelSize: Theme.labelSize
@@ -529,20 +547,20 @@ Item {
                     Layout.fillWidth: true
                     visible: !callBox.userTalks && entry.independentMonitor
                     iconName: "headset"
-                    text: entry.callMonitor ? "停止旁听" : "旁听"
+                    text: entry.callMonitor ? i18nc("@action:button stop hearing the call", "Stop listening in") : i18nc("@action:button hear the call", "Listen in")
                     onClicked: callBox.command(entry.callMonitor ? "monitor-off" : "monitor-on")
                 }
                 PillButton {
                     Layout.fillWidth: true
                     visible: !callBox.userTalks
                     iconName: "phone"
-                    text: "我来接"
+                    text: i18nc("@action:button the user takes the call over from the assistant", "Take over")
                     onClicked: callBox.command("take-over")
                 }
                 PillButton {
                     Layout.fillWidth: true
                     iconName: "hang-up"
-                    text: "挂断"
+                    text: i18nc("@action:button end the call", "Hang up")
                     negative: true
                     onClicked: callBox.command("hang-up")
                 }
@@ -554,7 +572,7 @@ Item {
         id: approval
         Outlined {
             Text {
-                text: "需要你的批准"
+                text: i18nc("@title", "Needs your approval")
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.bodySize
                 font.weight: Font.DemiBold
@@ -572,13 +590,14 @@ Item {
                 Layout.fillWidth: true
                 visible: entry.status === "pending"
                 spacing: 8
-                PillButton { text: "允许"; onClicked: AgentClient.approve(entry.itemId, "allow") }
-                PillButton { text: "本次对话都允许"; onClicked: AgentClient.approve(entry.itemId, "allow-session") }
-                PillButton { text: "拒绝"; negative: true; onClicked: AgentClient.approve(entry.itemId, "deny") }
+                PillButton { text: i18nc("@action:button", "Allow"); onClicked: AgentClient.approve(entry.itemId, "allow") }
+                PillButton { text: i18nc("@action:button", "Allow for this conversation"); onClicked: AgentClient.approve(entry.itemId, "allow-session") }
+                PillButton { text: i18nc("@action:button", "Deny"); negative: true; onClicked: AgentClient.approve(entry.itemId, "deny") }
             }
             Text {
                 visible: entry.status !== "pending"
-                text: entry.status === "decline" ? "已拒绝" : entry.status === "accept" ? "已允许" : "已过期"
+                text: entry.status === "decline" ? i18nc("@info:status an approval", "Denied")
+                    : entry.status === "accept" ? i18nc("@info:status an approval", "Allowed") : i18nc("@info:status an approval", "Expired")
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.labelSize
                 color: Theme.dim
@@ -599,7 +618,7 @@ Item {
                     spacing: 2
                     Text {
                         Layout.fillWidth: true
-                        text: entry.text || "还差一步：配置 OpenAI API Key"
+                        text: entry.text || i18nc("@title", "One more step: set up an OpenAI API key")
                         wrapMode: Text.Wrap
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.bodySize
@@ -608,7 +627,7 @@ Item {
                     }
                     Text {
                         Layout.fillWidth: true
-                        text: entry.output || "配好之后我就能替你操作手机。"
+                        text: entry.output || i18nc("@info", "Once it's set up, I can use the phone for you.")
                         wrapMode: Text.Wrap
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.metaSize
@@ -616,7 +635,7 @@ Item {
                     }
                 }
             }
-            PillButton { text: "去设置"; onClicked: entry.openSettings(entry.command) }
+            PillButton { text: i18nc("@action:button", "Go to settings"); onClicked: entry.openSettings(entry.command) }
         }
     }
 

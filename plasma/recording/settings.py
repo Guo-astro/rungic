@@ -1,12 +1,15 @@
 #!/usr/bin/python3
 # SPDX-License-Identifier: MIT
 import configparser
+import gettext
 from pathlib import Path
 import gi
 gi.require_version('Gtk','4.0')
 gi.require_version('Adw','1')
 from gi.repository import Adw, Gtk
 PATH=Path.home()/'.config/rungic-screen-recording.ini'
+# Follows the desktop language (LANGUAGE/LANG of the Plasma session).
+_=gettext.translation('rungic-recording-settings',localedir='/usr/share/locale',fallback=True).gettext
 class App(Adw.Application):
     def __init__(self):
         super().__init__(application_id='com.rungic.RecordingSettings')
@@ -15,18 +18,18 @@ class App(Adw.Application):
     def activate(self,*_):
         if self.window:
             self.window.present(); return
-        self.window=Adw.PreferencesWindow(application=self,title='录屏设置',default_width=360,default_height=650)
+        self.window=Adw.PreferencesWindow(application=self,title=_('Screen Recording Settings'),default_width=360,default_height=650)
         self.window.connect('close-request',self.close)
-        page=Adw.PreferencesPage(title='录屏')
-        group=Adw.PreferencesGroup(title='画面',description='录制 Linux 桌面的原始分辨率，使用硬件 H.264 编码。更高质量会增大文件。帧率受设备负载影响。')
+        page=Adw.PreferencesPage(title=_('Screen Recording'))
+        group=Adw.PreferencesGroup(title=_('Video'),description=_('Records the Linux desktop at its native resolution with hardware H.264 encoding. Higher quality makes larger files. The frame rate depends on the device load.'))
         page.add(group)
         c=configparser.ConfigParser();c.read(PATH)
         self.values=dict(c['Recording']) if c.has_section('Recording') else {}
-        self.combo(group,'清晰度','quality',['standard','high','smooth'],['标准 · 4 Mbps / 30 帧','高清 · 8 Mbps / 30 帧','流畅 · 12 Mbps / 60 帧'],'high')
-        group=Adw.PreferencesGroup(title='声音',description='系统声音指 Linux 应用的声音。混合模式为两路各留一半音量，建议佩戴耳机避免扬声器声音再次进入麦克风。')
+        self.combo(group,_('Quality'),'quality',['standard','high','smooth'],[_('Standard · 4 Mbps / 30 fps'),_('High · 8 Mbps / 30 fps'),_('Smooth · 12 Mbps / 60 fps')],'high')
+        group=Adw.PreferencesGroup(title=_('Sound'),description=_('System sound is the sound of Linux apps. Mixing keeps each source at half volume; use headphones so the speaker doesn\'t feed back into the microphone.'))
         page.add(group)
-        self.combo(group,'声音来源','audio',['system','microphone','both','none'],['系统声音','麦克风','系统声音与麦克风','无声'],'system')
-        page.add(Adw.PreferencesGroup(description='自动保存；下次开始录屏时生效。视频保存在“视频”文件夹，可从 Android 的 Plasma/Videos 查看。'))
+        self.combo(group,_('Sound source'),'audio',['system','microphone','both','none'],[_('System sound'),_('Microphone'),_('System sound and microphone'),_('No sound')],'system')
+        page.add(Adw.PreferencesGroup(description=_('Saved automatically; takes effect the next time you start recording. Videos go to the Videos folder, which you can open on Android under Plasma/Videos.')))
         self.window.add(page);self.window.present()
     def combo(self,group,title,key,keys,labels,default):
         value=self.values.get(key,default)

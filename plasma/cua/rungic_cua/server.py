@@ -36,6 +36,7 @@ from arc_cua import DesktopExecutor, RuntimeConfig, result_to_dict, subtask_from
 from arc_cua.policies import TypeSafeJevPolicy
 
 from . import a11y, activity, names, speech, switch
+from .i18n import _
 from .backend import LinuxAtspiBackend
 from .luna import ComputerUse
 
@@ -210,8 +211,9 @@ PLAN_ONE_TOOLS = [
                      'multi-step task prefer desktop_goal (faster).'),
      'inputSchema': {'type': 'object', 'properties': {
          'actions': {'type': 'array', 'items': ACTION_SCHEMA},
-         'note': {'type': 'string', 'description': ('What this batch does, a few words of Simplified Chinese '
-                                                    '(e.g. 打开“渲染”菜单): the user sees it as a live caption.')}},
+         'note': {'type': 'string', 'description': ('What this batch does, a few words in the language you speak '
+                                                    'with the user (e.g. "Open the Render menu", 打开“渲染”菜单): '
+                                                    'the user sees it as a live caption.')}},
          'required': ['actions']},
      'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False}},
 ]
@@ -373,12 +375,14 @@ class Cua:
                                     'Tell the user; try again after the call.'}
                 if not confirmed:
                     return {'launched': None, 'needs_confirmation': True,
-                            'question': f"{entry['name']}正在你的手机上运行。我要先把它关掉，在助理屏上重新打开，"
-                                        '用完再帮你恢复。可以吗？',
+                            # For the user, in the desktop's language.
+                            'question': _("{app} is running on your phone. I'd close it there, open it again on "
+                                          "the assistant's screen, and bring it back to you when I'm done. "
+                                          'Is that OK?').format(app=entry['name']),
                             'note': 'Ask the user this question and wait for the answer. Only if they agree, call '
                                     'desktop_launch again with "switch": true. Never close it any other way '
                                     '(kill, pkill, desktop_window).'}
-                activity.report(f"把{entry['name']}切到助理屏")
+                activity.report(_("Move {app} to the assistant's screen").format(app=entry['name']))
                 left = switch.close_in_user_session(entry, theirs)
                 if left:
                     return {'launched': None, 'blocked': 'still_running',
@@ -397,7 +401,7 @@ class Cua:
         info = kwin.windows()
         prefix = 'CAST' if to_tv else 'WL'
         target_screen = next((n for n in info.get('screens', []) if n.startswith(prefix)), prefix)
-        activity.report(f"打开{entry['name']}")
+        activity.report(_('Open {app}').format(app=entry['name']))
         existing = None if args else next(
             (w for w in info['windows'] if (w['resource_class'] or '').casefold() in classes), None)
         if existing:
@@ -525,14 +529,14 @@ class Cua:
         computer = self.agent_screen()
         computer.screen.whole = scope == 'screen'
         computer.screen.window_id = None           # the active window, whichever it is now
-        url, image, _ = computer.screen.capture()
+        url, image, _changed = computer.screen.capture()
         return {'screen': computer.screen.output_name, 'shows': computer.screen.scope, 'width': image.width,
                 'height': image.height, '__image__': url.split(',', 1)[1]}
 
     def act(self, actions: list[dict], note: str = '') -> dict:
         computer = self.agent_screen()
         shown = [a for a in actions if a.get('type') != 'screenshot'] or actions
-        activity.report(note or (activity.describe(shown[0]) if shown else '看一下屏幕'))
+        activity.report(note or (activity.describe(shown[0]) if shown else _('Look at the screen')))
         if not computer.screen.scope:
             raise ValueError('take desktop_screenshot first: the actions are in its pixels')
         done = []
@@ -898,7 +902,7 @@ def import_session_environment() -> None:
                               '/org/freedesktop/systemd1', 'org.freedesktop.systemd1.Manager', 'Environment'],
                              capture_output=True, text=True, timeout=5, env=env).stdout
         for item in json.loads(out)['data']:
-            key, _, value = item.partition('=')
+            key, _sep, value = item.partition('=')
             os.environ.setdefault(key, value)
     except (OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
         logger.warning('session environment unavailable: %s', error)

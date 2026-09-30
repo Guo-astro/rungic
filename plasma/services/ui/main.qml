@@ -11,27 +11,27 @@ import org.kde.kirigamiaddons.formcard as FormCard
 KCM.SimpleKCM {
     id: root
 
-    title: "系统服务"
+    title: i18nc("@title", "Services")
     leftPadding: 0
     rightPadding: 0
     topPadding: 0
     bottomPadding: Kirigami.Units.gridUnit
 
     readonly property var riskText: ({
-        remote: "可从网络访问",
-        android: "可能影响 Android",
-        unknown: "影响未知",
-        none: "在本机没有作用"
+        remote: i18nc("@info risk of a service", "Reachable from the network"),
+        android: i18nc("@info risk of a service", "May affect Android"),
+        unknown: i18nc("@info risk of a service", "Unknown impact"),
+        none: i18nc("@info risk of a service", "No use on this device")
     })
     readonly property var evidenceText: ({
         recorded: "",
-        inferred: "（推测，未实测）",
-        unknown: "（原因未记录）"
+        inferred: i18nc("@info appended to a service's reason", " (inferred, not tested)"),
+        unknown: i18nc("@info appended to a service's reason", " (reason not recorded)")
     })
 
     function describe(group) {
         return group.status + " · " + riskText[group.risk] + "\n" + group.summary + evidenceText[group.evidence]
-            + "\n" + group.units.join("、")
+            + "\n" + group.units.join(i18nc("@info separator between unit names", ", "))
     }
 
     // Turning on something with a risk asks first; turning off does not.
@@ -49,7 +49,7 @@ KCM.SimpleKCM {
         property var group
         // On the window: inside the scrolling page it is centred in the whole (long) content.
         parent: QQC2.Overlay.overlay
-        title: group ? "开启 " + group.name + "？" : ""
+        title: group ? i18nc("@title:window", "Turn on %1?", group.name) : ""
         subtitle: group ? group.warning : ""
         standardButtons: Kirigami.Dialog.Ok | Kirigami.Dialog.Cancel
         onAccepted: kcm.setEnabled(group.id, true)
@@ -77,7 +77,7 @@ KCM.SimpleKCM {
         spacing: 0
 
         FormCard.FormHeader {
-            title: "可选服务"
+            title: i18nc("@title:group", "Optional services")
         }
         FormCard.FormCard {
             Repeater {
@@ -104,36 +104,37 @@ KCM.SimpleKCM {
                     FormCard.FormTextDelegate {
                         Layout.fillWidth: true
                         visible: modelData.id === "ssh" && modelData.on
-                        text: "连接命令"
+                        text: i18nc("@label", "Command to connect")
                         description: kcm.addresses.length
-                            ? kcm.addresses.map(a => "ssh " + kcm.userName + "@" + a.split(" ")[0] + "   （" + a.split("  ")[1] + "）").join("\n")
-                            : "没有可用的 IPv4 地址"
+                            ? kcm.addresses.map(a => i18nc("@info %1 an ssh command, %2 its network interface", "%1   (%2)",
+                                                           "ssh " + kcm.userName + "@" + a.split(" ")[0], a.split("  ")[1])).join("\n")
+                            : i18nc("@info", "No IPv4 address available")
                         textItem.wrapMode: Text.Wrap
                     }
                     FormCard.FormTextDelegate {
                         Layout.fillWidth: true
                         visible: modelData.id === "ssh" && modelData.on
-                        text: "主机密钥指纹（ED25519）"
-                        description: kcm.hostKey || "正在生成…"
+                        text: i18nc("@label", "Host key fingerprint (ED25519)")
+                        description: kcm.hostKey || i18nc("@info the host key", "Generating…")
                         descriptionItem.wrapMode: Text.WrapAnywhere
                     }
                     FormCard.FormTextDelegate {
                         Layout.fillWidth: true
                         visible: modelData.id === "ssh" && modelData.on
-                        text: "登录方式"
-                        description: "账户密码，或 ~/.ssh/authorized_keys 中的公钥"
+                        text: i18nc("@label", "Sign-in methods")
+                        description: i18nc("@info", "Your account password, or a public key in ~/.ssh/authorized_keys")
                     }
                 }
             }
         }
 
         FormCard.FormHeader {
-            title: "默认屏蔽的服务"
+            title: i18nc("@title:group", "Services masked by default")
         }
         FormCard.FormCard {
             FormCard.FormTextDelegate {
-                text: "为什么屏蔽"
-                description: "这些服务的功能由 Android 负责，或者在本机没有作用。允许运行只是解除屏蔽：已启用的服务会在下次开机或被调用时运行。关闭会重新屏蔽并立即停止。"
+                text: i18nc("@label", "Why they are masked")
+                description: i18nc("@info", "Android does what these services would do, or they have no use on this device. Allowing one only removes its mask: if it is enabled, it runs at the next boot or when something calls it. Turning it off masks it again and stops it at once.")
                 descriptionItem.wrapMode: Text.Wrap
             }
             Repeater {
@@ -156,7 +157,7 @@ KCM.SimpleKCM {
 
         FormCard.FormHeader {
             visible: kcm.otherMasks.length > 0
-            title: "其他被屏蔽的服务"
+            title: i18nc("@title:group", "Other masked services")
         }
         FormCard.FormCard {
             visible: kcm.otherMasks.length > 0
@@ -164,8 +165,8 @@ KCM.SimpleKCM {
                 model: kcm.otherMasks
                 delegate: FormCard.FormButtonDelegate {
                     required property var modelData
-                    text: modelData.unit + (modelData.scope === "user" ? "（用户）" : "")
-                    description: "不在 Rungic 的清单里，点按解除屏蔽"
+                    text: modelData.scope === "user" ? i18nc("@item a systemd user service", "%1 (user)", modelData.unit) : modelData.unit
+                    description: i18nc("@info", "Not on Rungic's list. Tap to unmask.")
                     enabled: !kcm.busy
                     onClicked: kcm.unmask(modelData.unit, modelData.scope)
                 }
@@ -173,13 +174,13 @@ KCM.SimpleKCM {
         }
 
         FormCard.FormHeader {
-            title: "Ubuntu 自带的屏蔽"
+            title: i18nc("@title:group", "Masked by Ubuntu")
         }
         FormCard.FormCard {
             FormCard.FormTextDelegate {
-                text: kcm.distributionMasks.length ? kcm.distributionMasks.join("、") : "无"
+                text: kcm.distributionMasks.length ? kcm.distributionMasks.join(i18nc("@info separator between unit names", ", ")) : i18nc("@info no masks", "None")
                 textItem.wrapMode: Text.Wrap
-                description: "旧式启动脚本的兼容占位，不是实际运行的服务，不能在这里更改。"
+                description: i18nc("@info", "Placeholders for old init scripts, not services that actually run. They can't be changed here.")
                 descriptionItem.wrapMode: Text.Wrap
             }
         }

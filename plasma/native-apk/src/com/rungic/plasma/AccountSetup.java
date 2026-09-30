@@ -21,30 +21,30 @@ final class AccountSetup {
         fields.setOrientation(LinearLayout.VERTICAL);
         fields.setPadding(padding,padding,padding,padding);
         TextView explanation=new TextView(activity);
-        explanation.setText("此密码用于安装软件和更改系统设置，与手机解锁密码不同。返回 Android 后，下次打开 Rungic 可以继续配置。");
+        explanation.setText(R.string.account_explanation);
         fields.addView(explanation);
         EditText username=new EditText(activity);
-        username.setHint("用户名（小写字母开头）");
+        username.setHint(R.string.account_username_hint);
         username.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         username.setSingleLine(true); username.setText(activity.getPreferences(Activity.MODE_PRIVATE).getString("setup-username","linux"));
         username.setImeOptions(EditorInfo.IME_ACTION_NEXT);
         username.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
-        addField(fields,username,"用户名");
+        addField(fields,username,R.string.account_username);
         EditText password=new EditText(activity);
-        password.setHint("密码（至少8个字符）");
+        password.setHint(R.string.account_password_hint);
         password.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
         password.setSingleLine(true); password.setSaveEnabled(false);
         password.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
         password.setImeOptions(EditorInfo.IME_ACTION_NEXT);
-        addField(fields,password,"密码");
+        addField(fields,password,R.string.account_password);
         EditText confirmation=new EditText(activity);
-        confirmation.setHint("再次输入密码");
+        confirmation.setHint(R.string.account_confirm);
         confirmation.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
         confirmation.setSingleLine(true); confirmation.setSaveEnabled(false);
         confirmation.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
         confirmation.setImeOptions(EditorInfo.IME_ACTION_DONE);
-        addField(fields,confirmation,"再次输入密码");
-        CheckBox visible=new CheckBox(activity); visible.setText("显示密码");
+        addField(fields,confirmation,R.string.account_confirm);
+        CheckBox visible=new CheckBox(activity); visible.setText(R.string.account_show_password);
         visible.setOnCheckedChangeListener((button,checked)->{
             password.setTransformationMethod(checked?null:PasswordTransformationMethod.getInstance());
             confirmation.setTransformationMethod(checked?null:PasswordTransformationMethod.getInstance());
@@ -52,9 +52,9 @@ final class AccountSetup {
         }); fields.addView(visible);
         TextView message=new TextView(activity); fields.addView(message);
         ScrollView scroll=new ScrollView(activity); scroll.addView(fields);
-        AlertDialog dialog=new AlertDialog.Builder(activity).setTitle("创建 Rungic 账户")
-            .setView(scroll).setPositiveButton("创建账户并进入桌面",null)
-            .setNegativeButton("返回 Android，稍后继续",(d,w)->activity.finish()).create();
+        AlertDialog dialog=new AlertDialog.Builder(activity).setTitle(R.string.account_title)
+            .setView(scroll).setPositiveButton(R.string.account_create,null)
+            .setNegativeButton(R.string.leave_for_later,(d,w)->activity.finish()).create();
         dialog.setCancelable(false);
         dialog.setOnShowListener(ignored -> {
             dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
@@ -62,21 +62,21 @@ final class AccountSetup {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
                 String name=username.getText().toString().trim();
                 String secret=password.getText().toString();
-                if(!name.matches("[a-z][a-z0-9_-]{0,31}")) {username.setError("用户名最多32位，以小写字母开头");return;}
+                if(!name.matches("[a-z][a-z0-9_-]{0,31}")) {username.setError(activity.getString(R.string.account_username_invalid));return;}
                 if(secret.codePointCount(0,secret.length())<8 || secret.getBytes(java.nio.charset.StandardCharsets.UTF_8).length>256
                         || secret.indexOf('\n')>=0 || secret.indexOf('\r')>=0 || secret.indexOf('\0')>=0) {
-                    password.setError("密码至少8个字符，UTF-8 编码不超过256字节，且不能包含换行或空字符");return;
+                    password.setError(activity.getString(R.string.account_password_invalid));return;
                 }
-                if(!secret.equals(confirmation.getText().toString())) {confirmation.setError("两次密码不一致");return;}
+                if(!secret.equals(confirmation.getText().toString())) {confirmation.setError(activity.getString(R.string.account_password_mismatch));return;}
                 final String payload;
                 try {payload=new JSONObject().put("username",name).put("password",secret).toString();}
-                catch(Exception e) {message.setText("无法准备账户信息");return;}
+                catch(Exception e) {message.setText(R.string.account_prepare_failed);return;}
                 activity.getPreferences(Activity.MODE_PRIVATE).edit().putString("setup-username",name).apply();
                 password.setText(""); confirmation.setText(""); visible.setChecked(false);
                 username.setEnabled(false);password.setEnabled(false);confirmation.setEnabled(false);
                 dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(false);
                 dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setEnabled(false);
-                message.setText("正在设置账户…");
+                message.setText(R.string.account_setting_up);
                 worker.execute(() -> {
                     try {
                         submit.apply(payload);
@@ -85,9 +85,10 @@ final class AccountSetup {
                         activity.runOnUiThread(() -> {
                             if(activity.isDestroyed())return;
                             String reason=e.getMessage()==null?"":e.getMessage().trim();
+                            // plasma/account/setup.py's SetupError texts: matched, never shown.
                             if(reason.equals("这个用户名已被使用") || reason.equals("这个用户名的主目录已存在")) {
-                                username.setError("这个用户名无法使用，请换一个用户名");
-                                message.setText("账户尚未创建，请修改用户名并重新输入密码。");
+                                username.setError(activity.getString(R.string.account_username_taken));
+                                message.setText(R.string.account_not_created);
                                 username.setEnabled(true);password.setEnabled(true);confirmation.setEnabled(true);
                                 dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(true);
                                 dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setEnabled(true);
@@ -103,7 +104,7 @@ final class AccountSetup {
         });
         dialog.show();
     }
-    private static void addField(LinearLayout fields,EditText input,String label) {
+    private static void addField(LinearLayout fields,EditText input,int label) {
         input.setId(View.generateViewId());
         TextView text=new TextView(fields.getContext()); text.setText(label); text.setLabelFor(input.getId());
         fields.addView(text); fields.addView(input);

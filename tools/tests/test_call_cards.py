@@ -7,6 +7,7 @@ Requires PySide6; QT_QPA_PLATFORM=offscreen allows running without a desktop.
 from pathlib import Path
 import json
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -14,7 +15,7 @@ import unittest
 sys.dont_write_bytecode = True
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 os.environ.setdefault('QT_QUICK_BACKEND', 'software')
-from PySide6.QtCore import QUrl
+from PySide6.QtCore import QObject, QUrl, Slot
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlComponent, QQmlEngine, QQmlExpression
 from PySide6.QtQuick import QQuickItem
@@ -23,9 +24,59 @@ ROOT = Path(__file__).resolve().parents[2]
 APP = QGuiApplication.instance() or QGuiApplication([])
 
 
+def fill(text, args):
+    """A KI18n message with %1… filled in (numbers as KI18n writes whole ones)."""
+    args = [int(a) if isinstance(a, float) and a.is_integer() else a for a in args]
+    return re.sub(r'%(\d+)', lambda m: str(args[int(m.group(1)) - 1]) if int(m.group(1)) <= len(args) else m.group(0), text)
+
+
+def arities(*fixed):
+    """Slot signatures for a KI18n call: its fixed arguments, then up to three to fill in."""
+    def decorate(function):
+        for extra in range(3, -1, -1):
+            function = Slot(*fixed, *(['QVariant'] * extra), result=str)(function)
+        return function
+    return decorate
+
+
+class I18nStub(QObject):
+    """The i18n calls KLocalizedQmlContext gives the app's QML (KI18n is not in PySide6): the
+    English source text, filled in."""
+    @arities(str)
+    def i18n(self, text, *args): return fill(text, args)
+
+    @arities(str, str)
+    def i18nc(self, context, text, *args): return fill(text, args)
+
+    @arities(str, str, 'QVariant')
+    def i18np(self, singular, plural, n, *args): return fill(singular if n == 1 else plural, (n, *args))
+
+    @arities(str, str, str, 'QVariant')
+    def i18ncp(self, context, singular, plural, n, *args): return fill(singular if n == 1 else plural, (n, *args))
+
+    @arities(str, str)
+    def i18nd(self, domain, text, *args): return fill(text, args)
+
+    @arities(str, str, str)
+    def i18ndc(self, domain, context, text, *args): return fill(text, args)
+
+
+# The design system's DesignI18n (a KI18nContext of org.kde.ki18n, not in PySide6), in QML.
+DESIGN_I18N = '''pragma Singleton
+import QtQml
+QtObject {
+    function fill(text, args) { return text.replace(/%(\\d+)/g, (m, n) => n <= args.length ? String(args[n - 1]) : m) }
+    function i18n(text) { return fill(text, Array.prototype.slice.call(arguments, 1)) }
+    function i18nc(context, text) { return fill(text, Array.prototype.slice.call(arguments, 2)) }
+}
+'''
+
+
 class CallCardsTest(unittest.TestCase):
     def setUp(self):
         self.engine = QQmlEngine()
+        self.i18n = I18nStub()
+        self.engine.rootContext().setContextObject(self.i18n)
         self.component = QQmlComponent(self.engine, QUrl.fromLocalFile(str(ROOT / 'plasma/voice-agent/app/qml/ChatModel.qml')))
         self.model = self.component.create()
         self.assertIsNotNone(self.model, '\n'.join(e.toString() for e in self.component.errors()))
@@ -132,7 +183,7 @@ class CallCardsTest(unittest.TestCase):
             design.mkdir(parents=True)
             module = ['module com.rungic.design']
             for path in (ROOT / 'plasma/design/qml').iterdir():
-                if path.suffix not in ('.qml', '.js'):
+                if path.suffix not in ('.qml', '.js') or path.name == 'DesignI18n.qml':
                     continue
                 (design / path.name).symlink_to(path)
                 if path.suffix == '.qml':
@@ -140,6 +191,8 @@ class CallCardsTest(unittest.TestCase):
                     module.append(f'{prefix}{path.stem} 1.0 {path.name}')
             (design / 'SystemTheme.qml').write_text('pragma Singleton\nimport QtQml\nQtObject { property bool dark: false }\n')
             module.append('singleton SystemTheme 1.0 SystemTheme.qml')
+            (design / 'DesignI18n.qml').write_text(DESIGN_I18N)
+            module.append('singleton DesignI18n 1.0 DesignI18n.qml')
             (design / 'qmldir').write_text('\n'.join(module) + '\n')
             agent = imports / 'com/rungic/voiceassistant'
             agent.mkdir(parents=True)
@@ -170,7 +223,7 @@ class CallCardsTest(unittest.TestCase):
                 pending.extend(child.childItems())
             texts = [child.property('text') for child in items
                      if child.metaObject().className().startswith('QQuickText')]
-            self.assertTrue(any(isinstance(text, str) and '对方' in text and '你好 &lt;测试>' in text
+            self.assertTrue(any(isinstance(text, str) and 'Them:' in text and '你好 &lt;测试>' in text
                                 for text in texts), texts)
             card.deleteLater()
             APP.processEvents()

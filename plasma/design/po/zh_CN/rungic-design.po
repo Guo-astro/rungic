@@ -1,0 +1,263 @@
+# Simplified Chinese translation of rungic-design.
+# The Chinese words the app showed before it was translated.
+# SPDX-License-Identifier: GPL-2.0-or-later
+msgid ""
+msgstr ""
+"Project-Id-Version: rungic-design\n"
+"Report-Msgid-Bugs-To: \n"
+"PO-Revision-Date: 2026-09-30 00:00+0800\n"
+"Last-Translator: Rungic\n"
+"Language-Team: Chinese Simplified\n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: qml/ActivityCard.qml:38
+msgctxt "@info:status the agent between two steps"
+msgid "Planning the next step"
+msgstr "想下一步"
+
+#: qml/ActivityCard.qml:39
+#, kde-format
+msgctxt "@info accessible name: %1 the step, %2 the last line it printed"
+msgid "%1, %2"
+msgstr "%1，%2"
+
+#: qml/ActivityCard.qml:73
+#, kde-format
+msgctxt "@info a short duration"
+msgid "%1s"
+msgstr "%1 秒"
+
+#: qml/ActivityCard.qml:74
+#, kde-format
+msgctxt "@info a short duration"
+msgid "%1m %2s"
+msgstr "%1 分 %2 秒"
+
+#: qml/Gallery.qml:17
+msgctxt "@title:window"
+msgid "Rungic Design System · States"
+msgstr "Rungic 设计系统 · 状态"
+
+#: qml/Gallery.qml:41
+msgctxt "@title"
+msgid "States · Dark"
+msgstr "状态 · 深色"
+
+#: qml/Gallery.qml:41
+msgctxt "@title"
+msgid "States · Light"
+msgstr "状态 · 浅色"
+
+#: qml/Gallery.qml:47
+msgctxt "@action:button switch to the light look"
+msgid "Light"
+msgstr "浅色"
+
+#: qml/Gallery.qml:47
+msgctxt "@action:button switch to the dark look"
+msgid "Dark"
+msgstr "深色"
+
+#: qml/Gallery.qml:68 qml/Gallery.qml:252
+msgctxt "@info sample text"
+msgid "Keyboard"
+msgstr "键盘"
+
+#: qml/Gallery.qml:72
+msgctxt "@info sample text"
+msgid "Copy"
+msgstr "复制"
+
+#: qml/Gallery.qml:79
+msgctxt "@info sample text"
+msgid "Stop"
+msgstr "停止"
+
+#: qml/Gallery.qml:83
+msgctxt "@info sample text"
+msgid "Send"
+msgstr "发送"
+
+#: qml/Gallery.qml:90
+msgctxt "@info sample text"
+msgid "Listen in"
+msgstr "旁听"
+
+#: qml/Gallery.qml:94
+msgctxt "@info sample text"
+msgid "Hang up"
+msgstr "挂断"
+
+#: qml/Gallery.qml:102
+msgctxt "@info sample text"
+msgid "Install Codex"
+msgstr "安装 Codex"
+
+#: qml/Gallery.qml:110
+msgctxt "@info sample text"
+msgid "Remove key"
+msgstr "移除密钥"
+
+#: qml/Gallery.qml:118
+msgctxt "@info sample text"
+msgid "Settings"
+msgstr "设置"
+
+#: qml/Gallery.qml:131
+msgctxt "@info sample text"
+msgid "Installed"
+msgstr "已安装"
+
+#: qml/Gallery.qml:141
+msgctxt "@info sample text"
+msgid "Switch"
+msgstr "开关"
+
+#: qml/Gallery.qml:155
+msgctxt "@info sample text"
+msgid "Photos"
+msgstr "照片"
+
+#: qml/Gallery.qml:163
+msgctxt "@info sample text"
+msgid "Render a small teacup in Blender"
+msgstr "在 Blender 里渲染小茶杯"
+
+#: qml/Gallery.qml:170
+msgctxt "@info sample text"
+msgid "Create make_teacup.py"
+msgstr "新建 make_teacup.py"
+
+#: qml/Gallery.qml:170
+msgctxt "@info sample text"
+msgid "+85 −0 lines"
+msgstr "+85 −0 行"
+
+#: qml/Gallery.qml:171
+msgctxt "@info sample text"
+msgid "Run Blender in the background (make_teacup.py)"
+msgstr "在后台运行 Blender（make_teacup.py）"
+
+#: qml/Gallery.qml:175
+msgctxt "@info sample text"
+msgid "Blender is starting the render"
+msgstr "Blender 开始渲染"
+
+#: qml/Gallery.qml:176 qml/Gallery.qml:178
+msgctxt "@info sample text"
+msgid "28/64 samples"
+msgstr "28/64 采样"
+
+#: qml/Gallery.qml:177
+msgctxt "@info sample text"
+msgid "Render finished"
+msgstr "渲染完成"
+
+#: qml/Gallery.qml:184 qml/Gallery.qml:198
+msgctxt "@info sample text"
+msgid "little-rocket.png"
+msgstr "小火箭.png"
+
+#: qml/Gallery.qml:191
+msgctxt "@info sample text"
+msgid "little-rocket.blend"
+msgstr "小火箭.blend"
+
+#: qml/Gallery.qml:198
+#, kde-format
+msgctxt "@action:button %1 is a state name"
+msgid "View · %1"
+msgstr "查看 · %1"
+
+#: qml/Gallery.qml:205
+msgctxt "@info sample text"
+msgid "Worked through 2 steps"
+msgstr "已处理 2 步"
+
+#: qml/Gallery.qml:212
+msgctxt "@info sample text"
+msgid "Cancel"
+msgstr "取消"
+
+#: qml/Gallery.qml:216
+msgctxt "@info sample text"
+msgid "To text"
+msgstr "转文字"
+
+#: qml/Gallery.qml:231
+msgctxt "@info sample text"
+msgid "Add"
+msgstr "添加"
+
+#: qml/Gallery.qml:245
+msgctxt "@info sample text"
+msgid "Hold to talk"
+msgstr "按住说话"
+
+#: qml/Gallery.qml:251
+msgctxt "@info sample text"
+msgid "Stop listening"
+msgstr "停止聆听"
+
+#: qml/Gallery.qml:270
+msgctxt "@info sample text"
+msgid "The key works. Connected to OpenAI."
+msgstr "密钥可用，已连上 OpenAI。"
+
+#: qml/Gallery.qml:278
+msgctxt "@info sample text"
+msgid "Working · 12s · Searching WeChat for a contact"
+msgstr "正在处理 · 12 秒 · 在微信里搜索联系人"
+
+#: qml/ImageViewer.qml:67 qml/Thumbnail.qml:95
+msgctxt "@info"
+msgid "Can't open this image"
+msgstr "图片打不开"
+
+#: qml/ImageViewer.qml:80
+msgctxt "@action:button"
+msgid "Close"
+msgstr "关闭"
+
+#: qml/ImageViewer.qml:97
+msgctxt "@action:button"
+msgid "Open in another app"
+msgstr "用其他应用打开"
+
+#: qml/MetaButton.qml:26
+#, kde-format
+msgctxt "@info accessible name of an opened button"
+msgid "%1, expanded"
+msgstr "%1，已展开"
+
+#: qml/PlanStep.qml:32
+#, kde-format
+msgctxt "@info accessible name of a plan step"
+msgid "%1, done"
+msgstr "%1，已完成"
+
+#: qml/PlanStep.qml:33
+#, kde-format
+msgctxt "@info accessible name of a plan step"
+msgid "%1, in progress"
+msgstr "%1，进行中"
+
+#: qml/PlanStep.qml:34
+#, kde-format
+msgctxt "@info accessible name of a plan step"
+msgid "%1, not started"
+msgstr "%1，未开始"
+
+#: qml/SecretField.qml:57
+msgctxt "@action:button"
+msgid "Hide key"
+msgstr "隐藏密钥"
+
+#: qml/SecretField.qml:57
+msgctxt "@action:button"
+msgid "Show key"
+msgstr "显示密钥"

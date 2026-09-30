@@ -3,6 +3,8 @@
 //   --overlay            the resident overlay the Home button brings up (docs/67)
 //   --conversation ID    open that conversation (in the running app, if there is one)
 #include <KColorScheme>
+#include <KLocalizedQmlContext>
+#include <KLocalizedString>
 #include <KSharedConfig>
 #include <KWindowSystem>
 
@@ -90,10 +92,13 @@ int main(int argc, char *argv[])
     const QString activationToken = qEnvironmentVariable("XDG_ACTIVATION_TOKEN");
     QGuiApplication app(argc, argv);
     QGuiApplication::setApplicationName(QStringLiteral("rungic-voice-assistant"));
+    // Words in the Plasma session's language (catalog rungic-voice-assistant, po/); the design
+    // system's controls bring their own (rungic-design).
+    KLocalizedString::setApplicationDomain(QByteArrayLiteral("rungic-voice-assistant"));
     // QML Settings (the app's choices, docs/87) need an organisation: ~/.config/Rungic/.
     QGuiApplication::setOrganizationName(QStringLiteral("Rungic"));
     QGuiApplication::setOrganizationDomain(QStringLiteral("rungic.com"));
-    QGuiApplication::setApplicationDisplayName(QStringLiteral("语音助手"));
+    QGuiApplication::setApplicationDisplayName(i18nc("@title the app's name", "Voice Assistant"));
     QGuiApplication::setDesktopFileName(QStringLiteral("com.rungic.VoiceAssistant"));
     QGuiApplication::setWindowIcon(QIcon::fromTheme(QStringLiteral("audio-input-microphone")));
     if (qEnvironmentVariableIsEmpty("QT_QUICK_CONTROLS_STYLE")) {
@@ -109,6 +114,8 @@ int main(int argc, char *argv[])
     auto bus = QDBusConnection::sessionBus();
 
     QQmlApplicationEngine engine;
+    // i18n() and friends in the app's QML (the overlay's too).
+    KLocalization::setupLocalizedContext(&engine);
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app, [] { QCoreApplication::exit(1); },
                      Qt::QueuedConnection);
     if (overlay) {

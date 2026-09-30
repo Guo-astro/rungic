@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "client.h"
+#include <KLocalizedString>
 #include <QDBusConnection>
 #include <QDBusInterface>
 #include <QDBusPendingCallWatcher>
@@ -22,7 +23,7 @@ SuggestionsClient::SuggestionsClient(QObject *parent) : QObject(parent),
     QDBusConnection::sessionBus().connect(BusName, BusPath, BusName, "Changed", this, SLOT(onChanged()));
     connect(&m_watcher, &QDBusServiceWatcher::serviceOwnerChanged, this,
         [this](const QString &, const QString &, const QString &owner) {
-            if (owner.isEmpty()) { m_error = "建议服务正在重新连接"; Q_EMIT changed(); }
+            if (owner.isEmpty()) { m_error = i18n("Reconnecting to the suggestions service"); Q_EMIT changed(); }
             else { refresh(); watching(m_watching); }
         });
     QTimer::singleShot(0, this, &SuggestionsClient::refresh);

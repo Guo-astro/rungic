@@ -19,7 +19,7 @@ tree = ast.parse(source.read_text())
 agent_class = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'VoiceAgent')
 methods = {'emit', '_start_call', 'call_command'}
 agent_class.body = [n for n in agent_class.body if isinstance(n, ast.FunctionDef) and n.name in methods]
-namespace = dict(json=json, time=time, uuid=uuid,
+namespace = dict(json=json, time=time, uuid=uuid, _=lambda message: message,
                  GLib=types.SimpleNamespace(idle_add=lambda fn: fn()), threading=Mock())
 exec(compile(ast.Module(body=[agent_class], type_ignores=[]), str(source), 'exec'), namespace)
 VoiceAgent = namespace['VoiceAgent']

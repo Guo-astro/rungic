@@ -9,7 +9,7 @@ Rectangle {
     id: page
     property string suggestionId: ""
     color: Theme.side
-    IconButton { id: back; anchors { top: parent.top; left: parent.left; margins: 6 } iconName: "back"; text: "返回"; onClicked: page.Window.window.back() }
+    IconButton { id: back; anchors { top: parent.top; left: parent.left; margins: 6 } iconName: "back"; text: i18nc("@action:button", "Back"); onClicked: page.Window.window.back() }
     SuggestionsFeed {
         anchors { top: back.bottom; left: parent.left; right: parent.right; bottom: parent.bottom }
         selectedId: page.suggestionId

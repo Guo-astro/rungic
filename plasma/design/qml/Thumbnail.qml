@@ -92,7 +92,7 @@ T.AbstractButton {
             Text {
                 id: problemLabel
                 anchors.verticalCenter: parent.verticalCenter
-                text: "图片打不开"
+                text: DesignI18n.i18nc("@info", "Can't open this image")
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.metaSize
                 color: Theme.dim

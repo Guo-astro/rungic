@@ -1,0 +1,189 @@
+# Simplified Chinese translation of plasma_com.rungic.quicksetting.cast (Rungic).
+# SPDX-License-Identifier: GPL-2.0-or-later
+msgid ""
+msgstr ""
+"Project-Id-Version: plasma_com.rungic.quicksetting.cast\n"
+"PO-Revision-Date: 2026-09-30 00:00+0000\n"
+"Last-Translator: Rungic\n"
+"Language-Team: Chinese Simplified\n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+
+#: quicksetting/contents/ui/main.qml
+msgid "Cast"
+msgstr "投屏"
+
+#: quicksetting/contents/ui/main.qml quicksetting/contents/ui/CastPicker.qml
+msgid "Connecting…"
+msgstr "正在连接…"
+
+#: quicksetting/contents/ui/main.qml quicksetting/contents/ui/CastPicker.qml
+msgid "TV disconnected, reconnecting…"
+msgstr "电视断开，正在重连…"
+
+#: quicksetting/contents/ui/main.qml
+msgid "Connected"
+msgstr "已连接"
+
+#: quicksetting/contents/ui/main.qml
+msgid "Tap to choose a TV"
+msgstr "点按选择电视"
+
+#: quicksetting/contents/ui/main.qml
+msgid "rungic-cast returned no result"
+msgstr "rungic-cast 没有返回结果"
+
+#: quicksetting/contents/ui/main.qml quicksetting/contents/ui/CastPicker.qml
+msgid "Casting isn't ready yet"
+msgstr "投屏组件未就绪"
+
+#: quicksetting/contents/ui/main.qml
+msgid "This device doesn't support wireless casting"
+msgstr "系统不支持无线投屏"
+
+#: quicksetting/contents/ui/CastPicker.qml
+msgid "Cast to"
+msgstr "投屏到"
+
+#: quicksetting/contents/ui/CastPicker.qml
+msgid "Turn on Wi-Fi first"
+msgstr "请先开启 Wi-Fi"
+
+#: quicksetting/contents/ui/CastPicker.qml
+msgid "Search failed. Check Android's cast settings."
+msgstr "搜索失败，可在 Android 投屏设置中查看"
+
+#: quicksetting/contents/ui/CastPicker.qml
+msgid "Couldn't connect to “%1”: the receiver didn't finish joining the network and negotiating. Try again."
+msgstr "没有连上“%1”，接收端未能完成网络连接和协商，请重试"
+
+#: quicksetting/contents/ui/CastPicker.qml
+msgid "Couldn't connect to “%1”"
+msgstr "连接“%1”失败"
+
+#: quicksetting/contents/ui/CastPicker.qml
+msgid "Negotiating · %1 second"
+msgid_plural "Negotiating · %1 seconds"
+msgstr[0] "正在协商 · %1 秒"
+
+#: quicksetting/contents/ui/CastPicker.qml
+msgid "Waiting for the receiver to join the network · %1 second"
+msgid_plural "Waiting for the receiver to join the network · %1 seconds"
+msgstr[0] "等待接收端联网 · %1 秒"
+
+#: quicksetting/contents/ui/CastPicker.qml
+msgid "Casting to %1"
+msgstr "正在投屏到 %1"
+
+#: quicksetting/contents/ui/CastPicker.qml
+msgid "Looking for TVs nearby…"
+msgstr "正在搜索附近的电视…"
+
+#: quicksetting/contents/ui/CastPicker.qml
+msgid "No TVs found nearby"
+msgstr "附近没有找到电视"
+
+#: quicksetting/contents/ui/CastPicker.qml
+msgid "Search finished"
+msgstr "搜索已结束"
+
+#: quicksetting/contents/ui/CastPicker.qml
+msgid "Cast device"
+msgstr "投屏设备"
+
+#: quicksetting/contents/ui/CastPicker.qml
+msgid "Close"
+msgstr "关闭"
+
+#: quicksetting/contents/ui/CastPicker.qml
+msgid "In use"
+msgstr "正在使用"
+
+#: quicksetting/contents/ui/CastPicker.qml
+msgid "Reconnecting…"
+msgstr "正在重连…"
+
+#: quicksetting/contents/ui/CastPicker.qml
+msgid "Casting"
+msgstr "正在投屏"
+
+#: quicksetting/contents/ui/CastPicker.qml
+msgid "Last used"
+msgstr "上次使用"
+
+#: quicksetting/contents/ui/CastPicker.qml
+msgid "Connecting… The receiver can take up to two minutes to switch networks"
+msgstr "正在连接…接收端切换网络可能需要两分钟"
+
+#: quicksetting/contents/ui/CastPicker.qml
+msgid "Busy · In use by another device"
+msgstr "忙碌中 · 正被其他设备使用"
+
+#: quicksetting/contents/ui/CastPicker.qml
+msgid "Last used · Available"
+msgstr "上次使用 · 可连接"
+
+#: quicksetting/contents/ui/CastPicker.qml
+msgid "Last used · Looking…"
+msgstr "上次使用 · 正在查找…"
+
+#: quicksetting/contents/ui/CastPicker.qml
+msgid "Last used · Not found yet, you can still try connecting"
+msgstr "上次使用 · 暂未找到，仍可尝试连接"
+
+#: quicksetting/contents/ui/CastPicker.qml
+msgid "Recently found devices"
+msgstr "最近发现的设备"
+
+#: quicksetting/contents/ui/CastPicker.qml
+msgid "Nearby devices"
+msgstr "附近的设备"
+
+#: quicksetting/contents/ui/CastPicker.qml
+msgid "Available"
+msgstr "可连接"
+
+#: quicksetting/contents/ui/CastPicker.qml
+msgid "Recently found"
+msgstr "最近发现"
+
+#: quicksetting/contents/ui/CastPicker.qml
+msgid "1. Open screen mirroring on the TV and leave it on the waiting screen\n2. A TV in its screensaver can't be found, so wake it with the remote first\n3. Keep the phone's Wi-Fi on and stay close to the TV"
+msgstr "1. 在电视上打开“无线投屏”，停在等待连接的画面\n2. 电视进入屏保后无法被搜到，先按遥控器唤醒\n3. 手机的 Wi-Fi 保持打开，并尽量靠近电视"
+
+#: quicksetting/contents/ui/CastPicker.qml
+msgid "Can't find your TV? Leave it on the screen mirroring waiting screen. A TV in its screensaver can't be found."
+msgstr "找不到电视？请让电视停在“无线投屏”的等待画面，电视进入屏保后无法被搜到。"
+
+#: quicksetting/contents/ui/CastPicker.qml
+msgid "You can't search for new TVs while casting. Switching to another TV disconnects the current one first, so the picture pauses for a few seconds until the new TV shows it. Apps open on the desktop keep running."
+msgstr "投屏时无法搜索新电视。换到另一台电视时，会先断开当前电视，新电视出现画面前会中断几秒，桌面上打开的应用不受影响。"
+
+#: quicksetting/contents/ui/CastPicker.qml
+msgid "Cancel"
+msgstr "取消连接"
+
+#: quicksetting/contents/ui/CastPicker.qml
+msgid "Search again"
+msgstr "重新搜索"
+
+#: quicksetting/contents/ui/CastPicker.qml
+msgid "Stop reconnecting"
+msgstr "停止重连"
+
+#: quicksetting/contents/ui/CastPicker.qml
+msgid "Stop casting"
+msgstr "断开投屏"
+
+#: quicksetting/contents/ui/CastPicker.qml
+msgid "Android cast settings"
+msgstr "Android 投屏设置"
+
+#: quicksetting/contents/ui/CastPicker.qml
+msgctxt "@info:whatsthis TV name, then its state"
+msgid "%1, %2"
+msgstr "%1，%2"

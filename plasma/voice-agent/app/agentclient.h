@@ -43,9 +43,9 @@ public:
     Q_INVOKABLE void callCommand(const QString &command);
     // A typed message; attachments: JSON [{"path", "name", "kind"}] (docs/87).
     Q_INVOKABLE void sendText(const QString &text, const QString &attachments);
-    // Hold released over "转文字": what was said, as text (textReady), sent nowhere.
+    // Hold released over "To text": what was said, as text (textReady), sent nowhere.
     Q_INVOKABLE void talkToText();
-    // "朗读": the voice reads this answer out.
+    // "Read aloud": the voice reads this answer out.
     Q_INVOKABLE void readAloud(const QString &text);
     // Settings calls (Setup, SetApiKey, TestApiKey, RemoveApiKey, CodexLogin, InstallCodex,
     // CancelInstall, SetPreferences): the JSON reply comes as replied(method, json).
@@ -54,7 +54,7 @@ public:
     // while someone looks. Said again when the service restarts.
     Q_INVOKABLE void setWatching(bool watching);
     // The conversation this window's actions belong to (docs/89). The service keeps one
-    // conversation open for everyone: before a press, a message or 朗读, this one is made the
+    // conversation open for everyone: before a press, a message or Read aloud, this one is made the
     // open one, and the action follows only when it is.
     Q_PROPERTY(QString conversation MEMBER m_conversation NOTIFY conversationChanged)
 

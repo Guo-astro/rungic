@@ -29,6 +29,8 @@ from gi.repository import GLib, Gst  # noqa: E402
 
 import websocket  # noqa: E402  (python3-websocket)
 
+from voice_i18n import _, language_name  # noqa: E402
+
 try:   # the transcriber often writes Traditional characters (週六晚上七點)
     import opencc
     _T2S = opencc.OpenCC('t2s.json')
@@ -67,6 +69,9 @@ JEV_KEYS = (Path.home() / '.config/rungic-cua/typesafe-api-key',
             Path.home() / '.config/rungic-voice-agent/typesafe-api-key')
 
 
+# The call agent's own instructions stay in Mandarin: it talks with the other side of a call made
+# in Chinese (its transcription is set to Chinese as well). What the user reads or hears of the
+# call (errors, questions, the summary) is in the desktop's language.
 def instructions(owner: str, contact: str, goal: str, incoming: bool = False) -> str:
     who = '替他接听' if incoming else '替他来电'
     return f'''你是{owner}的 AI 助理，正在替{owner}和{contact or '对方'}通电话。你只负责说话：用自然、简短、礼貌的普通话，像真人通话一样一次只说一两句。
@@ -104,8 +109,9 @@ def proxy_settings() -> dict:
     return {'http_proxy_host': parsed.hostname, 'http_proxy_port': parsed.port or 80, 'proxy_type': 'http'}
 
 
-def transcribe(pcm: bytes) -> str:
-    """The user's instruction (PCM 24 kHz mono) as text."""
+def transcribe(pcm: bytes, language: str | None = None) -> str:
+    """The user's words (PCM 24 kHz mono) as text. `language` (ISO 639-1) is a hint for the
+    recognizer; without one it detects the language spoken, which may differ from the desktop's."""
     import io
     import wave
     buffer = io.BytesIO()
@@ -115,9 +121,11 @@ def transcribe(pcm: bytes) -> str:
         w.setframerate(RATE)
         w.writeframes(pcm)
     boundary = 'motocall' + str(time.time_ns())
+    hint = (f'--{boundary}\r\nContent-Disposition: form-data; name="language"\r\n\r\n{language}\r\n'.encode()
+            if language else b'')
     body = b''.join([
         f'--{boundary}\r\nContent-Disposition: form-data; name="model"\r\n\r\ngpt-4o-mini-transcribe\r\n'.encode(),
-        f'--{boundary}\r\nContent-Disposition: form-data; name="language"\r\n\r\nzh\r\n'.encode(),
+        hint,
         f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="owner.wav"\r\n'
         'Content-Type: audio/wav\r\n\r\n'.encode(), buffer.getvalue(), f'\r\n--{boundary}--\r\n'.encode()])
     request = urllib.request.Request('https://api.openai.com/v1/audio/transcriptions', data=body, headers={
@@ -457,15 +465,18 @@ class CallProxy:
     def _summarize(self) -> str:
         """The result for the user, in text only (nothing is spoken any more)."""
         done = threading.Event()
-        roles = {'other': f'对方（{self.contact or "对方"}）', 'agent': '助理', 'owner': self.owner}
+        other = self.contact or 'the other side'
+        roles = {'other': f'Other side ({other})', 'agent': 'Assistant', 'owner': self.owner}
         self._summary_parts: list[str] = []
         self._summary_done = done
+        # The user reads it on the call's card: in the desktop's language.
         self._send({'type': 'response.create', 'response': {
             'output_modalities': ['text'], 'conversation': 'none',
             'input': [{'type': 'message', 'role': 'user', 'content': [{'type': 'input_text', 'text':
-                       f'{self.owner}的 AI 助理替他和{self.contact or "对方"}通了电话。通话记录：\n'
-                       + '\n'.join(f"{roles[t['who']]}：{t['text']}" for t in self.transcript)
-                       + f'\n\n直接对{self.owner}说（用“你”称呼他），两三句话：结果是什么，对方说了哪些要点。'}]}]}})
+                       f"{self.owner}'s AI assistant made a phone call with {other} for them. The transcript:\n"
+                       + '\n'.join(f"{roles[t['who']]}: {t['text']}" for t in self.transcript)
+                       + f'\n\nSpeak to {self.owner} directly (address them as "you"), in two or three sentences '
+                       f'of {language_name()}: what the result is and the main points the other side made.'}]}]}})
         done.wait(15)
         return ''.join(self._summary_parts).strip()
 
@@ -593,7 +604,8 @@ class CallProxy:
             return
         self.hanging = False
         self.emit({'type': 'call-state', 'state': 'hangup-failed'}, keep=False)
-        self.emit({'type': 'call-error', 'text': '没能挂断微信通话，请在微信里挂断。通话已转到手机上。'})
+        self.emit({'type': 'call-error', 'text': _("Couldn't hang up the WeChat call; hang up in WeChat. The call "
+                                                   'is on your phone now.')})
         if self.phase == 'agent':
             self.take_over()
 
@@ -655,7 +667,8 @@ class CallProxy:
             heard = self.transcript[last_other]['text']
             self.question, self.asked_upto = heard, last_other
             self.emit({'type': 'call-ask', 'text': heard})
-            threading.Thread(target=self.tell_owner, args=(f'通话中，对方说：{heard}',), daemon=True).start()
+            threading.Thread(target=self.tell_owner, args=(_('On the call, they said: {heard}').format(heard=heard),),
+                             daemon=True).start()
             # The voice model already said it would check (its prompt); only tell it.
             self._note(f'[系统] 已把对方的话转给{self.owner}，正在等他答复；不要替他答应。')
         elif step == 'RELAY_ANSWER' and confidence >= 0.6 and self.unrelayed and agent_spoke_last:
@@ -677,7 +690,7 @@ class CallProxy:
         other side has spoken again (they heard the answer and took leave), or
         the owner said to hang up."""
         last_owner = max((i for i, t in enumerate(self.transcript) if t['who'] == 'owner'), default=-1)
-        if last_owner >= 0 and '挂' in self.transcript[last_owner]['text']:
+        if last_owner >= 0 and any(word in self.transcript[last_owner]['text'].lower() for word in ('挂', 'hang up')):
             return True
         return any(t['who'] == 'other' for t in self.transcript[last_owner + 1:])
 

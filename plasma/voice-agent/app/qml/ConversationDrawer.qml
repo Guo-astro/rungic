@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// The conversations, in the side panel (docs/87): search, "新对话" and "主对话" (the one holding
-// Home talks in, docs/67: always there, not deleted, not filtered by the search), then "其他对话",
-// the user's own, by day (the open one marked), and the settings at the bottom. Holding one of
-// those offers to delete it.
+// The conversations, in the side panel (docs/87): search, "New conversation" and "Main conversation"
+// (the one holding Home talks in, docs/67: always there, not deleted, not filtered by the search),
+// then "Other conversations", the user's own, by day (the open one marked), and the settings at the
+// bottom. Holding one of those offers to delete it.
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as QQC2
@@ -28,24 +28,26 @@ SideDrawer {
         function onConversationsListed(json) { drawer.all = JSON.parse(json) }
     }
 
-    // "今天", "昨天", "9月24日" (this year), "更早" (before this year's first days on the list).
+    // "Today", "Yesterday", "Sep 24" (the last 30 days), "Earlier".
     function dayOf(seconds) {
         const d = new Date(seconds * 1000)
         const today = new Date()
         today.setHours(0, 0, 0, 0)
         const days = Math.floor((today - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000)
-        if (days <= 0) return "今天"
-        if (days === 1) return "昨天"
-        if (days < 30) return (d.getMonth() + 1) + "月" + d.getDate() + "日"
-        return "更早"
+        if (days <= 0) return i18nc("@title:group conversations of", "Today")
+        if (days === 1) return i18nc("@title:group conversations of", "Yesterday")
+        // TRANSLATORS: a Qt date format (MMM: the month's short name, d: the day)
+        if (days < 30) return d.toLocaleDateString(Qt.locale(), i18nc("@title:group conversations of a day, as a Qt date format", "MMM d"))
+        return i18nc("@title:group conversations of", "Earlier")
     }
-    // The service marks the main conversation in the list (`assistant`).
-    readonly property var main: all.find(c => c.assistant) || null
+    // The service marks the main conversation in the list (`main`; `assistant` before), and gives
+    // the titles in words to show (an untitled one's too).
+    readonly property var main: all.find(c => c.main || c.assistant) || null
     readonly property var shown: {
         const q = search.text.trim().toLowerCase()
-        return all.filter(c => !c.assistant)
+        return all.filter(c => !(c.main || c.assistant))
                   .filter(c => !q || (c.title || "").toLowerCase().includes(q) || (c.preview || "").toLowerCase().includes(q))
-                  .map(c => ({ cid: c.id, title: c.title || "新对话", day: dayOf(c.updated || c.created || 0) }))
+                  .map(c => ({ cid: c.id, title: c.title || i18nc("@title a conversation not named yet", "New conversation"), day: dayOf(c.updated || c.created || 0) }))
     }
     // Sections need a ListModel.
     ListModel { id: rows }
@@ -63,30 +65,31 @@ SideDrawer {
             Layout.fillWidth: true
             Layout.leftMargin: 12
             Layout.rightMargin: 12
-            placeholderText: "搜索对话"
+            placeholderText: i18nc("@info:placeholder", "Search conversations")
         }
         Item { implicitHeight: 8 }
         NavItem {
             iconName: "compose"
-            text: "新对话"
+            text: i18nc("@action:button", "New conversation")
             onClicked: drawer.newRequested()
         }
-        // Beside "新对话", as one of the panel's own entries: the conversation holding Home talks in.
+        // Beside "New conversation", as one of the panel's own entries: the conversation holding
+        // Home talks in.
         NavItem {
             visible: drawer.main !== null
             iconName: "voice"
-            text: "主对话"
+            text: i18nc("@title the conversation holding Home talks in", "Main conversation")
             current: drawer.main !== null && drawer.main.id === drawer.current
-            onClicked: drawer.openRequested(drawer.main.id, "主对话")
+            onClicked: drawer.openRequested(drawer.main.id, text)
         }
         NavItem {
             iconName: "alert"
-            text: "建议"
+            text: i18nc("@action:button proactive suggestions", "Suggestions")
             onClicked: drawer.suggestionsRequested()
         }
         SectionLabel {
             Layout.fillWidth: true
-            text: "其他对话"
+            text: i18nc("@title:group", "Other conversations")
             color: Theme.text
             font.weight: Font.Medium
             topPadding: 18
@@ -104,7 +107,7 @@ SideDrawer {
                 required property string section
                 width: ListView.view.width
                 text: section
-                // The first day sits right under "其他对话".
+                // The first day sits right under "Other conversations".
                 topPadding: rows.count > 0 && section === rows.get(0).day ? 6 : 18
                 bottomPadding: 6
             }
@@ -137,7 +140,7 @@ SideDrawer {
                         color: Theme.dim
                     }
                     PillButton {
-                        text: "删除"
+                        text: i18nc("@action:button delete the conversation", "Delete")
                         negative: true
                         onClicked: {
                             AgentClient.deleteConversation(row.cid)
@@ -146,13 +149,13 @@ SideDrawer {
                             drawer.deleting = ""
                         }
                     }
-                    IconButton { small: true; iconName: "close"; text: "不删除"; onClicked: drawer.deleting = "" }
+                    IconButton { small: true; iconName: "close"; text: i18nc("@action:button keep the conversation", "Don't delete"); onClicked: drawer.deleting = "" }
                 }
             }
             Text {
                 anchors.centerIn: parent
                 visible: list.count === 0
-                text: search.text ? "没有找到对话" : "还没有其他对话"
+                text: search.text ? i18nc("@info", "No conversations found") : i18nc("@info", "No other conversations yet")
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.metaSize
                 color: Theme.dim
@@ -161,7 +164,7 @@ SideDrawer {
         NavItem {
             Layout.bottomMargin: 12
             iconName: "settings"
-            text: "设置"
+            text: i18nc("@action:button", "Settings")
             onClicked: drawer.settingsRequested()
         }
     }

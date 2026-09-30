@@ -5,6 +5,7 @@ Android owns suspend and physical locking. These leases prevent foreground
 screen timeout only; they never create a background CPU wake lock.
 """
 import concurrent.futures
+import gettext
 import subprocess
 import dbus
 import dbus.service
@@ -13,6 +14,8 @@ from gi.repository import GLib
 POLICY = 'org.kde.Solid.PowerManagement.PolicyAgent'
 PROPS = 'org.freedesktop.DBus.Properties'
 LEGACY = 'org.freedesktop.PowerManagement.Inhibit'
+# The inhibition reason shows in Plasma's battery applet, in the desktop language.
+_ = gettext.translation('rungic-power-policy', localedir='/usr/share/locale', fallback=True).gettext
 
 
 PM = 'org.kde.Solid.PowerManagement'
@@ -96,7 +99,7 @@ class Policy(dbus.service.Object):
     def SetWaylandInhibition(self, enabled, sender=None):
         key = ('wayland', sender)
         if enabled and key not in self.records:
-            self.records[key] = (sender, 4, 'org.kde.KWin', 'Wayland 应用正在阻止屏幕休眠', True)
+            self.records[key] = (sender, 4, 'org.kde.KWin', _('A Wayland app is keeping the screen on'), True)
             self.changed()
         elif not enabled and self.records.pop(key, None):
             self.changed()

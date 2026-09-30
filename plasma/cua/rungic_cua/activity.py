@@ -3,7 +3,7 @@
 One small JSON file in the runtime directory, replaced atomically on every change:
 
   {"state": "working" | "done" | "question" | "failed" | "stopped",
-   "text": "打开「渲染」菜单",      what is happening now (a caption, Simplified Chinese)
+   "text": "Open the Render menu",  what is happening now (a caption, in the desktop's language)
    "task": "...",                   the task it is part of, if any
    "image": "/run/user/…/x.jpg",    optional: a live picture of the work (a render's latest pass, docs/90)
    "progress": 0.44,                optional: how far, 0..1
@@ -19,6 +19,8 @@ import json
 import os
 import time
 from pathlib import Path
+
+from .i18n import _
 
 STALE_S = 120
 PATH = Path(os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}') / 'rungic-agent-screen' / 'activity.json'
@@ -53,13 +55,15 @@ def read() -> dict:
 
 
 def describe(action: dict) -> str:
-    """A caption for one computer-use action when the model gave none."""
+    """A caption for one computer-use action when the model gave none (desktop's language)."""
     kind = action.get('type')
     if kind == 'type':
         text = ' '.join(str(action.get('text', '')).split())
-        return f'输入“{text[:24]}{"…" if len(text) > 24 else ""}”'
+        return _('Type “{text}”').format(text=text[:24] + ('…' if len(text) > 24 else ''))
     if kind == 'keypress':
-        keys = [str(k).upper() for k in action.get('keys') or []]
-        return {'ENTER': '按回车', 'ESCAPE': '按 Esc', 'TAB': '按 Tab'}.get('+'.join(keys), '按 ' + '+'.join(keys))
-    return {'click': '点击', 'double_click': '双击', 'drag': '拖动', 'move': '移动指针', 'scroll': '滚动页面',
-            'wait': '等待画面更新', 'screenshot': '看一下屏幕'}.get(kind, '操作屏幕')
+        keys = '+'.join(str(k).upper() for k in action.get('keys') or [])
+        named = {'ENTER': _('Press Enter'), 'ESCAPE': _('Press Esc'), 'TAB': _('Press Tab')}
+        return named.get(keys) or _('Press {keys}').format(keys=keys)
+    return {'click': _('Click'), 'double_click': _('Double-click'), 'drag': _('Drag'), 'move': _('Move the pointer'),
+            'scroll': _('Scroll the page'), 'wait': _('Wait for the screen to update'),
+            'screenshot': _('Look at the screen')}.get(kind) or _('Operate the screen')

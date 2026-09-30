@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 """Android-owned device capabilities for the Plasma session (private Unix IPC)."""
 import configparser
+import gettext
 import json
 import socket
 import sys
@@ -8,6 +9,9 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 SOCKET = '/mnt/android-wayland/platform.sock'
+# Follows the Plasma desktop language (LANGUAGE/LANG of the session).
+_translation = gettext.translation('rungic-platform', localedir='/usr/share/locale', fallback=True)
+_, pgettext = _translation.gettext, _translation.pgettext
 
 def request(data):
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
@@ -17,7 +21,7 @@ def request(data):
         with conn.makefile('rb') as stream:
             raw = stream.readline(65537)
         if len(raw) > 65536:
-            raise ValueError('宿主响应过大')
+            raise ValueError(_('The Android host sent a response that is too large'))
         result = json.loads(raw)
         if 'error' in result:
             raise RuntimeError(result['error'])
@@ -47,51 +51,51 @@ class DeviceApp(Adw.Application):
         if self.window:
             self.window.present()
             return
-        self.window = Adw.PreferencesWindow(application=self, title='Android 设备', default_width=360, default_height=700)
+        self.window = Adw.PreferencesWindow(application=self, title=_('Android Device'), default_width=360, default_height=700)
         self.window.connect('close-request', self.closed)
         self.window.set_search_enabled(False)
-        self.page = Adw.PreferencesPage(title='设备', icon_name='phone-symbolic')
+        self.page = Adw.PreferencesPage(title=_('Device'), icon_name='phone-symbolic')
         self.window.add(self.page)
-        g = self.group('手机与 Linux')
-        self.row(g, 'model', '手机型号')
+        g = self.group(_('Phone and Linux'))
+        self.row(g, 'model', _('Phone model'))
         self.row(g, 'system', 'Android / Linux')
-        self.row(g, 'timezone', '时区')
-        g = self.group('网络', '网络连接由 Android 管理')
-        for key, title in [('network','连接状态'),('address','IP 地址'),('dns','DNS'),('wifi','Wi-Fi 链路')]:
+        self.row(g, 'timezone', _('Time zone'))
+        g = self.group(_('Network'), _('Android manages network connections'))
+        for key, title in [('network',_('Connection')),('address',_('IP address')),('dns','DNS'),('wifi',_('Wi-Fi link'))]:
             self.row(g, key, title)
-        self.button(g, '管理网络', 'network')
-        g = self.group('显示', 'Android 的刷新率请求受系统省电与温控策略约束')
-        self.row(g, 'refresh', '支持的刷新率')
-        self.row(g, 'frames', '当前显示与画面提交')
-        self.orientation = Adw.ComboRow(title='屏幕方向', model=Gtk.StringList.new(['跟随 Android','竖屏','横屏']))
+        self.button(g, _('Manage networks'), 'network')
+        g = self.group(_('Display'), _('Android may limit refresh rate requests to save power or manage heat'))
+        self.row(g, 'refresh', _('Supported refresh rates'))
+        self.row(g, 'frames', _('Current display and frame rate'))
+        self.orientation = Adw.ComboRow(title=_('Screen orientation'), model=Gtk.StringList.new([_('Follow Android'),_('Portrait'),_('Landscape')]))
         self.orientation.connect('notify::selected', self.orientation_changed)
         g.add(self.orientation)
-        self.follow = Adw.SwitchRow(title='亮度跟随 Android', active=True)
+        self.follow = Adw.SwitchRow(title=_('Brightness follows Android'), active=True)
         g.add(self.follow)
         self.scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.02, 1.0, 0.01)
         self.scale.set_value(0.5)
         self.scale.set_hexpand(True)
         self.scale.set_draw_value(False)
-        row = Adw.ActionRow(title='桌面窗口亮度')
+        row = Adw.ActionRow(title=_('Desktop window brightness'))
         row.add_suffix(self.scale); g.add(row)
         self.follow.connect('notify::active', self.follow_changed)
         self.scale.connect('value-changed', self.brightness_changed)
-        self.button(g, 'Android 显示设置', 'display')
-        g = self.group('电池')
-        self.row(g, 'battery', '电量与温度')
-        self.row(g, 'charging', '充电状态')
-        g = self.group('内存', '限制 Linux 桌面可用的内存。超出时由 Linux 自己回收或关闭程序，不会挤掉 Android 的 VPN 和其他应用；上限太低时大型程序可能被关闭。')
-        self.row(g, 'memory', 'Linux 已用内存')
+        self.button(g, _('Android display settings'), 'display')
+        g = self.group(_('Battery'))
+        self.row(g, 'battery', _('Charge and temperature'))
+        self.row(g, 'charging', _('Charging status'))
+        g = self.group(_('Memory'), _('Limits the memory the Linux desktop can use. Above the limit, Linux reclaims memory or closes programs itself instead of pushing out Android’s VPN and other apps; with a very low limit, large programs may be closed.'))
+        self.row(g, 'memory', _('Linux memory in use'))
         self.memory_presets = ['2048', '3072', '4096', '5120', '6144', 'unlimited']
-        self.memory = Adw.ComboRow(title='内存上限', model=Gtk.StringList.new(
-            ['最低 · 2 GB', '3 GB', '4 GB（默认）', '5 GB', '6 GB', '无上限']))
+        self.memory = Adw.ComboRow(title=_('Memory limit'), model=Gtk.StringList.new(
+            [_('Minimum · 2 GB'), '3 GB', _('4 GB (default)'), '5 GB', '6 GB', _('No limit')]))
         self.memory.connect('notify::selected', self.memory_changed)
         g.add(self.memory)
-        g = self.group('系统设置')
-        for title, target in [('声音与输出设备','sound'),('蓝牙设备','bluetooth'),('日期与时区','datetime'),('定位设置','location')]:
+        g = self.group(_('System settings'))
+        for title, target in [(_('Sound and output devices'),'sound'),(_('Bluetooth devices'),'bluetooth'),(_('Date and time zone'),'datetime'),(_('Location settings'),'location')]:
             self.button(g, title, target)
-        self.button(g, '测试震动', None, {'op':'vibrate'})
-        self.message = Adw.PreferencesGroup(description='正在连接 Android…')
+        self.button(g, _('Test vibration'), None, {'op':'vibrate'})
+        self.message = Adw.PreferencesGroup(description=_('Connecting to Android…'))
         self.page.add(self.message)
         self.window.present()
         self.timer = GLib.timeout_add_seconds(2, self.refresh)
@@ -110,7 +114,7 @@ class DeviceApp(Adw.Application):
         return g
 
     def row(self, group, key, title):
-        row = Adw.ActionRow(title=title, subtitle='读取中…')
+        row = Adw.ActionRow(title=title, subtitle=_('Loading…'))
         row.set_subtitle_selectable(True)
         group.add(row); self.rows[key]=row
 
@@ -193,32 +197,37 @@ class DeviceApp(Adw.Application):
         r['system'].set_subtitle(f"Android {data['android']} / {version}")
         r['timezone'].set_subtitle(data['timezone'])
         net=data.get('network',{})
-        r['network'].set_subtitle((net.get('transport','未连接') + (' · 已联网' if net.get('validated') else ' · 未验证互联网')) if net.get('connected') else '未连接')
-        r['address'].set_subtitle('\n'.join(net.get('addresses',[])) or '无')
-        r['dns'].set_subtitle('\n'.join(net.get('dns',[])) or '无')
+        # Android sends fixed transport names (PlatformBridge.java); they are values, labelled here.
+        transports={'移动网络':_('Mobile network'),'以太网':_('Ethernet'),'其他':_('Other')}
+        transport=transports.get(net.get('transport'),net.get('transport',_('Not connected')))
+        r['network'].set_subtitle((transport + (_(' · Online') if net.get('validated') else _(' · Internet not verified'))) if net.get('connected') else _('Not connected'))
+        r['address'].set_subtitle('\n'.join(net.get('addresses',[])) or _('None'))
+        r['dns'].set_subtitle('\n'.join(net.get('dns',[])) or _('None'))
         if net.get('transport')=='Wi-Fi':
             ssid=net.get('ssid','')
-            if ssid in ('<unknown ssid>','"<unknown ssid>"',''):ssid='网络名称请在 Android 中查看'
-            r['wifi'].set_subtitle(f"{ssid}\n{net.get('rssi','?')} dBm · {net.get('frequency','?')} MHz\n协商速率 {net.get('linkMbps','?')} Mbps")
-        else:r['wifi'].set_subtitle('未连接 Wi-Fi')
+            if ssid in ('<unknown ssid>','"<unknown ssid>"',''):ssid=_('See the network name in Android')
+            r['wifi'].set_subtitle(f"{ssid}\n{net.get('rssi','?')} dBm · {net.get('frequency','?')} MHz\n" + _('Link speed {speed} Mbps').format(speed=net.get('linkMbps','?')))
+        else:r['wifi'].set_subtitle(_('Not connected to Wi-Fi'))
         battery=data.get('battery',{})
         r['battery'].set_subtitle(f"{battery.get('percent','?')}% · {battery.get('temperature','?')}°C")
-        states={1:'状态未知',2:'充电中',3:'正在放电',4:'暂停充电',5:'电量已满'}
-        r['charging'].set_subtitle(states.get(battery.get('status'),'未知')+(' · 已连接电源' if battery.get('plugged') else ' · 未连接电源'))
+        states={1:_('Status unknown'),2:_('Charging'),3:_('Discharging'),4:_('Charging paused'),5:_('Fully charged')}
+        r['charging'].set_subtitle(states.get(battery.get('status'),_('Unknown'))+(_(' · Plugged in') if battery.get('plugged') else _(' · Not plugged in')))
         c=configparser.ConfigParser()
         c.read('/mnt/android-wayland/android-refresh.ini')
         if c.has_section('refresh'):
             v=c['refresh'];r['refresh'].set_subtitle(f"{float(v.get('minimum-hz',0)):.0f}–{float(v.get('maximum-hz',0)):.0f} Hz")
-            r['frames'].set_subtitle(f"Android 报告 {float(v.get('android-reported-hz',0)):.0f} Hz\n桌面提交 {float(v.get('submitted-fps',0)):.1f} 帧/秒")
+            r['frames'].set_subtitle(_('Android reports {reported:.0f} Hz\nDesktop submits {submitted:.1f} fps').format(
+                reported=float(v.get('android-reported-hz',0)), submitted=float(v.get('submitted-fps',0))))
         memory=data.get('memory')
         if memory:
-            limit=f"{memory['limit_mib']} MB" if memory.get('limit_mib') else '无上限'
-            r['memory'].set_subtitle(f"{memory['usage_mib']} MB · 上限 {limit} · 峰值 {memory['peak_mib']} MB（共 {memory['total_mib']} MB）")
+            limit=f"{memory['limit_mib']} MB" if memory.get('limit_mib') else pgettext('memory limit', 'none')
+            r['memory'].set_subtitle(_('{usage} MB · limit {limit} · peak {peak} MB (of {total} MB)').format(
+                usage=memory['usage_mib'], limit=limit, peak=memory['peak_mib'], total=memory['total_mib']))
             if memory.get('choice') in self.memory_presets:
                 self.changing=True
                 self.memory.set_selected(self.memory_presets.index(memory['choice']))
                 self.changing=False
-        else:r['memory'].set_subtitle('需要更新 Android 端（Rungic APK 2.5）')
+        else:r['memory'].set_subtitle(_('Update the Android side (Rungic APK 2.5) to show this'))
         self.changing=True
         value=data.get('windowBrightness',-1)
         self.follow.set_active(value<0);self.scale.set_sensitive(value>=0)

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // A picture that keeps coming (docs/90): a render's passes as the agent's work shows them. Each
 // new `source` loads behind the one shown and fades in over it once it is there, so the picture
-// never blinks empty between passes. What it is (`text`, e.g. "Blender 渲染 · 28/64 采样") sits in
+// never blinks empty between passes. What it is (`text`, e.g. "Blender render · 28/64 samples") sits in
 // a capsule over its bottom edge, with a thin bar for `progress` (0..1, or -1 unknown). A tap is
 // `clicked` (the app opens it large).
 // States: waiting (no picture yet: a quiet box and a ring), live (passes coming: the dot

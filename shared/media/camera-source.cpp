@@ -20,6 +20,11 @@
 #include <string>
 #include <stdexcept>
 #include <cstring>
+#include <clocale>
+#include <libintl.h>
+
+// The node's name in the session's language (po/zh_CN/rungic-shared.po, rungic-plasma-bridges).
+static const char *tr(const char *text) { return dgettext("rungic-shared",text); }
 
 struct Source {
     pw_main_loop *loop=nullptr;
@@ -206,13 +211,15 @@ int main(int argc,char **argv) {
        (s.rotation!=0 && s.rotation!=90 && s.rotation!=180 && s.rotation!=270))return 2;
     s.out_width=s.rotation%180?s.height:s.width;s.out_height=s.rotation%180?s.width:s.height;
     signal(SIGPIPE,SIG_IGN);pw_init(&argc,&argv);
+    // Only the message language: numbers keep the C locale. UTF-8 whatever LC_CTYPE says.
+    setlocale(LC_MESSAGES,"");bindtextdomain("rungic-shared","/usr/share/locale");bind_textdomain_codeset("rungic-shared","UTF-8");
     s.loop=pw_main_loop_new(nullptr);s.context=pw_context_new(pw_main_loop_get_loop(s.loop),nullptr,0);
     s.core=pw_context_connect(s.context,nullptr,0);if(!s.core)return 1;
     s.timer=pw_loop_add_timer(pw_main_loop_get_loop(s.loop),tick,&s);
     pw_loop_add_signal(pw_main_loop_get_loop(s.loop),SIGINT,stop,&s);pw_loop_add_signal(pw_main_loop_get_loop(s.loop),SIGTERM,stop,&s);
     std::string name="rungic.camera."+s.id;
     s.stream=pw_stream_new(s.core,name.c_str(),pw_properties_new(PW_KEY_MEDIA_CLASS,"Video/Source",
-        PW_KEY_MEDIA_ROLE,"Camera",PW_KEY_NODE_NAME,name.c_str(),PW_KEY_NODE_DESCRIPTION,s.facing=="front"?"Android 前置相机":"Android 后置相机",
+        PW_KEY_MEDIA_ROLE,"Camera",PW_KEY_NODE_NAME,name.c_str(),PW_KEY_NODE_DESCRIPTION,s.facing=="front"?tr("Android Front Camera"):tr("Android Rear Camera"),
         PW_KEY_NODE_SUPPORTS_REQUEST,"1",PW_KEY_NODE_VIRTUAL,"true", "device.api","rungic-android", "api.libcamera.location",s.facing.c_str(),NULL));
     static const pw_stream_events events={.version=PW_VERSION_STREAM_EVENTS,.state_changed=state_changed,.param_changed=param_changed,.process=on_process};
     pw_stream_add_listener(s.stream,&s.listener,&events,&s);

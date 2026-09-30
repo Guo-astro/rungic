@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// A big square choice in the attach panel: 拍照, 照片, 文件.
+// A big square choice in the attach panel: Camera, Photos, Files.
 // States: normal, pressed, disabled.
 import QtQuick
 import QtQuick.Layouts

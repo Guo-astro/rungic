@@ -24,7 +24,7 @@ SettingsFrame {
             if (method === "Setup") {
                 page.setup = r
                 if (!page.edited) field.text = r.key && r.key.set ? r.key.masked : ""
-                // A key not tested since the service started is tested now: "可用" is never assumed.
+                // A key not tested since the service started is tested now: "works" is never assumed.
                 if (r.key && r.key.set && !page.status) {
                     if (r.key.working === true) page.status = "ok"
                     else { page.status = "testing"; AgentClient.request("TestApiKey") }
@@ -43,7 +43,7 @@ SettingsFrame {
         }
         function onEvent(json) {
             const e = JSON.parse(json)
-            if (e.type === "account") { page.login = e.success ? null : { error: e.error || "登录没有完成" }; AgentClient.request("Setup") }
+            if (e.type === "account") { page.login = e.success ? null : { error: e.error || i18nc("@info", "The sign-in didn't finish") }; AgentClient.request("Setup") }
         }
     }
 
@@ -61,14 +61,14 @@ SettingsFrame {
         spacing: 12
         Text {
             Layout.fillWidth: true
-            text: "Codex 用这把密钥调用 OpenAI，按用量计费。"
+            text: i18nc("@info", "Codex uses this key to call OpenAI. You're billed for what you use.")
             wrapMode: Text.Wrap
             font.family: Theme.fontFamily
             font.pixelSize: Theme.bodySize
             color: Theme.text
         }
         Text {
-            text: "<a href='https://platform.openai.com/api-keys'>在 OpenAI 平台创建密钥</a> ↗"
+            text: i18nc("@info a link; keep the markup", "<a href='%1'>Create a key on the OpenAI platform</a> ↗", "https://platform.openai.com/api-keys")
             textFormat: Text.StyledText
             linkColor: Theme.link
             font.family: Theme.fontFamily
@@ -97,13 +97,15 @@ SettingsFrame {
             Layout.fillWidth: true
             visible: page.status !== ""
             tone: page.status === "ok" ? "positive" : page.status === "error" ? "negative" : ""
-            text: page.status === "testing" ? "正在测试密钥…"
-                : page.status === "ok" ? "密钥可用，已连上 OpenAI。"
-                : "这把密钥用不了。检查一下是否复制完整，或在 OpenAI 平台上重新创建一把。" + (page.error ? "（" + page.error + "）" : "")
+            text: page.status === "testing" ? i18nc("@info:status", "Testing the key…")
+                : page.status === "ok" ? i18nc("@info:status", "The key works. Connected to OpenAI.")
+                : page.error ? i18nc("@info:status %1 is the error", "This key doesn't work. Check that you copied all of it, or create a new one on the OpenAI platform. (%1)", page.error)
+                : i18nc("@info:status", "This key doesn't work. Check that you copied all of it, or create a new one on the OpenAI platform.")
         }
         Note {
             Layout.fillWidth: true
-            text: "明文保存在本机的配置文件里（~/.config/rungic-voice-agent，只有你这个用户能读），只发给 OpenAI。"
+            text: i18nc("@info %1 is a folder", "Kept in plain text in a config file on this phone (%1, readable only by your user) and sent only to OpenAI.",
+                        "~/.config/rungic-voice-agent")
         }
     }
 
@@ -114,15 +116,16 @@ SettingsFrame {
         Layout.rightMargin: Theme.groupMargin
         ListRow {
             readonly property bool chatgpt: page.setup.account && page.setup.account.type === "chatgpt"
-            text: chatgpt ? "Codex 已用 ChatGPT 账号登录" : "改用 ChatGPT 账号登录"
-            subtitle: chatgpt ? (page.setup.account.email || "按 ChatGPT 套餐计费") : "在浏览器里登录，按 ChatGPT 套餐计费"
+            text: chatgpt ? i18nc("@info", "Codex is signed in with ChatGPT") : i18nc("@action:button", "Sign in with ChatGPT instead")
+            subtitle: chatgpt ? (page.setup.account.email || i18nc("@info", "Billed to your ChatGPT plan"))
+                : i18nc("@info", "Sign in with your browser. Billed to your ChatGPT plan.")
             accessory: chatgpt ? "" : "chevron"
             onClicked: if (!chatgpt) AgentClient.request("CodexLogin", ["chatgpt"])
         }
         ListRow {
             visible: page.setup.account && page.setup.account.type === "chatgpt" && page.key.set === true
-            text: "改用 API Key 登录 Codex"
-            subtitle: "Agent 的任务也按这把密钥的用量计费"
+            text: i18nc("@action:button", "Sign Codex in with the API key instead")
+            subtitle: i18nc("@info", "The Agent's tasks are then billed to this key too")
             accessory: "chevron"
             onClicked: AgentClient.request("CodexLogin", ["apiKey"])
         }
@@ -142,7 +145,8 @@ SettingsFrame {
         Text {
             Layout.fillWidth: true
             visible: page.login && page.login.userCode
-            text: page.login && page.login.userCode ? "在任意设备打开 <a href='" + page.login.verificationUrl + "'>" + page.login.verificationUrl + "</a>，输入下面的代码：" : ""
+            text: page.login && page.login.userCode
+                ? i18nc("@info a link; keep the markup", "On any device, open <a href='%1'>%1</a> and enter this code:", page.login.verificationUrl) : ""
             textFormat: Text.StyledText
             linkColor: Theme.link
             wrapMode: Text.Wrap
@@ -164,7 +168,8 @@ SettingsFrame {
     footer: [
         PrimaryButton {
             Layout.fillWidth: true
-            text: page.status === "error" && !page.edited ? "重新测试" : page.status === "testing" ? "正在测试…" : "完成"
+            text: page.status === "error" && !page.edited ? i18nc("@action:button", "Test again")
+                : page.status === "testing" ? i18nc("@action:button", "Testing…") : i18nc("@action:button", "Done")
             enabled: page.status !== "testing"
             onClicked: {
                 if (page.status === "error" && !page.edited) { page.status = "testing"; AgentClient.request("TestApiKey") }
@@ -174,7 +179,7 @@ SettingsFrame {
         SecondaryButton {
             Layout.fillWidth: true
             visible: page.key.set === true && !page.edited
-            text: "移除密钥"
+            text: i18nc("@action:button", "Remove key")
             negative: true
             onClicked: AgentClient.request("RemoveApiKey")
         }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// "已处理 2 步 · 用时 7 秒 ›": opens the steps behind an answer.
+// "Worked through 2 steps · 7s ›": opens the steps behind an answer.
 // States: collapsed, expanded, pressed.
 import QtQuick
 import QtQuick.Layouts
@@ -23,7 +23,7 @@ T.AbstractButton {
     implicitHeight: 32
     implicitWidth: implicitContentWidth
     padding: 0
-    Accessible.name: text + (expanded ? "，已展开" : "")
+    Accessible.name: expanded ? DesignI18n.i18nc("@info accessible name of an opened button", "%1, expanded", text) : text
     contentItem: RowLayout {
         spacing: 4
         Text {

@@ -21,15 +21,15 @@ RecordUtil::RecordUtil(QObject *parent):QObject(parent){
   m_running=false;m_stopping=false;changed();
   auto *n=new KNotification(QStringLiteral("captured"));
   n->setComponentName(QStringLiteral("rungic-screen-recording"));
-  n->setTitle(ok?QStringLiteral("录屏已保存"):QStringLiteral("录屏失败"));
-  n->setText(ok?m_outputs.join(QLatin1Char('\n')):(m_error.isEmpty()?QStringLiteral("录制未完成，请检查可用空间及硬件桥接。"):m_error));
+  n->setTitle(ok?i18n("Screen recording saved"):i18n("Screen recording failed"));
+  n->setText(ok?m_outputs.join(QLatin1Char('\n')):(m_error.isEmpty()?i18n("The recording didn't finish. Check the free space and the hardware bridge."):m_error));
   if(ok){QList<QUrl> urls;for(const auto &o:m_outputs)urls<<QUrl::fromLocalFile(o);n->setUrls(urls);}
   n->sendEvent();
  });
 }
 void RecordUtil::changed(){emit quickSettingTextChanged();emit quickSettingStatusChanged();emit isRecordingChanged();}
-QString RecordUtil::quickSettingText() const{return m_stopping?QStringLiteral("正在保存…"):(m_running?QStringLiteral("正在录屏…"):QStringLiteral("录屏"));}
-QString RecordUtil::quickSettingStatus() const{return m_stopping?QStringLiteral("请等待文件写入"):m_running?QStringLiteral("点击结束录屏"):QStringLiteral("点击录制 · 长按设置画质与声音");}
+QString RecordUtil::quickSettingText() const{return m_stopping?i18n("Saving…"):(m_running?i18n("Recording…"):i18n("Record Screen"));}
+QString RecordUtil::quickSettingStatus() const{return m_stopping?i18n("Wait while the file is written"):m_running?i18n("Tap to stop recording"):i18n("Tap to record · Hold for quality and sound");}
 bool RecordUtil::startRecording(int nodeId){
  return startRecordingScreens({QVariantMap{{QStringLiteral("node"),nodeId},{QStringLiteral("label"),QString()}}});
 }
@@ -38,7 +38,7 @@ bool RecordUtil::startRecordingScreens(const QVariantList &screens){
  const auto dir=QStandardPaths::writableLocation(QStandardPaths::MoviesLocation);
  if(!QDir().mkpath(dir))return false;
  // One screen keeps the old name; several screens share a numbered base name
- // with the screen as suffix, e.g. "screen-recording (2) - 外屏.mp4".
+ // with the screen as suffix, e.g. "screen-recording (2) - External.mp4".
  auto names=[&](int n){
   const QString base=n?QStringLiteral("screen-recording (%1)").arg(n):QStringLiteral("screen-recording");
   QStringList out;
@@ -69,5 +69,5 @@ bool RecordUtil::startRecordingScreens(const QVariantList &screens){
 void RecordUtil::stopRecording(){
  if(!m_running||m_stopping)return;
  m_stopping=true;changed();m_process.terminate();
- QTimer::singleShot(16000,this,[this]{if(m_stopping&&m_running){m_error=QStringLiteral("保存录屏超时，保留临时文件供恢复。");m_process.kill();}});
+ QTimer::singleShot(16000,this,[this]{if(m_stopping&&m_running){m_error=i18n("Saving the recording timed out. The temporary file is kept for recovery.");m_process.kill();}});
 }

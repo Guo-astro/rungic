@@ -22,4 +22,8 @@ qt6_generate_wayland_protocol_client_sources(rungicrecordplugin FILES
     ${PLASMA_WAYLAND_PROTOCOLS_DIR}/zkde-screencast-unstable-v1.xml)
 target_link_libraries(rungicrecordplugin PRIVATE Qt::Core Qt::Gui Qt::GuiPrivate Qt::WaylandClient Qt::Qml Qt::Quick
     KF6::CoreAddons KF6::I18n KF6::Notifications)
+# The plugin runs inside plasmashell: its i18n() uses the quick setting package's own domain.
+target_compile_definitions(rungicrecordplugin PRIVATE TRANSLATION_DOMAIN="plasma_com.rungic.quicksetting.record")
 ecm_finalize_qml_module(rungicrecordplugin)
+# Catalogs: the quick setting (QML and plugin) and the settings window (settings.py, gettext).
+ki18n_install(po)

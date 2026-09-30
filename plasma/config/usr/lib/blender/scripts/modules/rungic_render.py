@@ -23,6 +23,7 @@ written as a preview; the last one is the finished render (measured: 6 % slower 
   docs/90); at 64 samples the difference is small.
 - Other engines (EEVEE, Workbench) render once, as before; only the status is written.
 """
+import gettext
 import json
 import os
 import subprocess
@@ -34,6 +35,9 @@ import bpy
 
 RUNTIME = os.path.join(os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}', 'rungic-agent-screen')
 FIRST_BATCH = 4
+# The chat's task card shows these in the desktop language. The catalog ships with
+# rungic-plasma-bridges (this module's package, rungic-plasma-config, is built without gettext).
+_ = gettext.translation('rungic-render', localedir='/usr/share/locale', fallback=True).gettext
 
 
 def schedule(total):
@@ -80,7 +84,7 @@ def render(output, samples=None):
     copy = tempfile.mktemp(prefix='render-', suffix='.blend', dir=RUNTIME)
     bpy.ops.wm.save_as_mainfile(filepath=copy, copy=True, check_existing=False)
     _status(output, phase='rendering', samples=0, of=samples or 0)
-    _report('Blender 开始渲染', progress=0.0)
+    _report(_('Blender is starting the render'), progress=0.0)
     expr = f'import rungic_render; rungic_render._render_here({output!r}, {samples!r}, cleanup={copy!r})'
     subprocess.Popen([bpy.app.binary_path, '-b', copy, '--python-expr', expr],
                      stdout=subprocess.DEVNULL, stderr=open(output + '.render.log', 'w'), start_new_session=True)
@@ -129,7 +133,7 @@ def _render_window():
 
 def _show(path, state):
     image = bpy.data.images.load(path, check_existing=False)
-    image.name = '渲染预览'
+    image.name = _('Render preview')
     window, area = _render_window()
     if area is None:
         bpy.data.images.remove(image)
@@ -148,16 +152,16 @@ def _render_here(output, samples=None, cleanup=None):
     try:
         if scene.render.engine != 'CYCLES':
             _status(output, phase='rendering', samples=0, of=0)
-            _report('Blender 渲染中')
+            _report(_('Blender is rendering'))
             scene.render.filepath = output
             bpy.ops.render.render(write_still=True)
             _status(output, phase='done', samples=0, of=0, preview=output)
-            _report('Blender 渲染完成', image=output, progress=1.0, state='done')
+            _report(_('Blender render finished'), image=output, progress=1.0, state='done')
             return
         _progressive(scene, output, samples)
     except Exception as error:  # noqa: BLE001 (said in the status, then raised)
         _status(output, phase='error', error=f'{type(error).__name__}: {error}')
-        _report('Blender 渲染出错', state='failed')
+        _report(_('Blender render failed'), state='failed')
         raise
     finally:
         if cleanup:
@@ -206,7 +210,8 @@ def _progressive(scene, output, samples):
             except OSError:
                 pass
         _status(output, phase='rendering', samples=done, of=total, preview=preview)
-        _report(f'Blender 渲染 · {done}/{total} 采样', image=preview, progress=done / total)
+        _report(_('Blender render · {done}/{total} samples').format(done=done, total=total), image=preview,
+                progress=done / total)
     cycles.use_sample_subset = False
     settings.file_format, settings.color_depth = final_format, final_depth
     _save(accumulated / done, width, height, output)
@@ -215,7 +220,7 @@ def _progressive(scene, output, samples):
     except OSError:
         pass
     _status(output, phase='done', samples=done, of=total, preview=output)
-    _report('Blender 渲染完成', image=output, progress=1.0, state='done')
+    _report(_('Blender render finished'), image=output, progress=1.0, state='done')
 
 
 def _save(pixels, width, height, path):

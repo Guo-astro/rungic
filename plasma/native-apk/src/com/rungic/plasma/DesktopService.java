@@ -12,14 +12,14 @@ public final class DesktopService extends Service {
     private Notification notification(String state) {
         PendingIntent open=PendingIntent.getActivity(this,0,new Intent(this,MainActivity.class),PendingIntent.FLAG_IMMUTABLE);
         return new Notification.Builder(this,"desktop").setSmallIcon(android.R.drawable.ic_menu_view)
-            .setContentTitle(state).setContentText("点此返回 Rungic").setContentIntent(open)
+            .setContentTitle(state).setContentText(getString(R.string.notification_return)).setContentIntent(open)
             .setOnlyAlertOnce(true).setOngoing(true).build();
     }
     @Override public void onCreate() {
         super.onCreate();
         getSystemService(NotificationManager.class).createNotificationChannel(
             new NotificationChannel("desktop","Rungic",NotificationManager.IMPORTANCE_LOW));
-        startForeground(1,notification("正在准备 Rungic"));
+        startForeground(1,notification(getString(R.string.state_preparing)));
     }
     @Override public IBinder onBind(Intent intent) { return null; }
     @Override public int onStartCommand(Intent intent,int flags,int id) {

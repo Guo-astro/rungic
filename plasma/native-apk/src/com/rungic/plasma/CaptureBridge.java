@@ -59,7 +59,7 @@ final class CaptureBridge implements Closeable {
         for(String permission:new String[]{Manifest.permission.CAMERA,Manifest.permission.RECORD_AUDIO})
             if(activity.checkSelfPermission(permission)!=PackageManager.PERMISSION_GRANTED)required.add(permission);
         if(!required.isEmpty())activity.requestPermissions(required.toArray(new String[0]),PERMISSION_REQUEST);
-        else android.widget.Toast.makeText(activity,"麦克风和相机权限已开启",android.widget.Toast.LENGTH_SHORT).show();
+        else android.widget.Toast.makeText(activity,R.string.capture_permissions_on,android.widget.Toast.LENGTH_SHORT).show();
     }
     private void ensurePermission(String permission) throws Exception {
         synchronized(permissionLock) {

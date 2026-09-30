@@ -14,7 +14,7 @@ QQC2.ApplicationWindow {
     visible: true
     width: 390
     height: 844
-    title: "Rungic 设计系统 · 状态"
+    title: DesignI18n.i18nc("@title:window", "Rungic Design System · States")
     color: Theme.background
     Component.onCompleted: Theme.mode = initialTheme
 
@@ -38,13 +38,13 @@ QQC2.ApplicationWindow {
                 Layout.topMargin: 12
                 Text {
                     Layout.fillWidth: true
-                    text: "状态 · " + (Theme.dark ? "深色" : "浅色")
+                    text: Theme.dark ? DesignI18n.i18nc("@title", "States · Dark") : DesignI18n.i18nc("@title", "States · Light")
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.headingSize
                     font.weight: Font.DemiBold
                     color: Theme.text
                 }
-                PillButton { text: Theme.dark ? "浅色" : "深色"; onClicked: Theme.mode = Theme.dark ? "light" : "dark" }
+                PillButton { text: Theme.dark ? DesignI18n.i18nc("@action:button switch to the light look", "Light") : DesignI18n.i18nc("@action:button switch to the dark look", "Dark"); onClicked: Theme.mode = Theme.dark ? "light" : "dark" }
             }
 
             Section {
@@ -65,33 +65,33 @@ QQC2.ApplicationWindow {
                 name: "IconButton"
                 Repeater {
                     model: gallery.buttonStates
-                    Variant { label: modelData; IconButton { iconName: "keyboard"; text: "键盘"; forcedState: modelData } }
+                    Variant { label: modelData; IconButton { iconName: "keyboard"; text: DesignI18n.i18nc("@info sample text", "Keyboard"); forcedState: modelData } }
                 }
                 Repeater {
                     model: gallery.buttonStates
-                    Variant { label: "small " + modelData; IconButton { small: true; iconName: "copy"; text: "复制"; forcedState: modelData } }
+                    Variant { label: "small " + modelData; IconButton { small: true; iconName: "copy"; text: DesignI18n.i18nc("@info sample text", "Copy"); forcedState: modelData } }
                 }
             }
             Section {
                 name: "CircleButton"
                 Repeater {
                     model: ["normal", "pressed", "disabled"]
-                    Variant { label: "stop " + modelData; CircleButton { iconName: "stop"; text: "停止"; forcedState: modelData } }
+                    Variant { label: "stop " + modelData; CircleButton { iconName: "stop"; text: DesignI18n.i18nc("@info sample text", "Stop"); forcedState: modelData } }
                 }
                 Repeater {
                     model: ["normal", "pressed", "disabled"]
-                    Variant { label: "send " + modelData; CircleButton { iconName: "send"; text: "发送"; forcedState: modelData } }
+                    Variant { label: "send " + modelData; CircleButton { iconName: "send"; text: DesignI18n.i18nc("@info sample text", "Send"); forcedState: modelData } }
                 }
             }
             Section {
                 name: "PillButton"
                 Repeater {
                     model: gallery.buttonStates
-                    Variant { label: modelData; PillButton { iconName: "headset"; text: "旁听"; forcedState: modelData } }
+                    Variant { label: modelData; PillButton { iconName: "headset"; text: DesignI18n.i18nc("@info sample text", "Listen in"); forcedState: modelData } }
                 }
                 Repeater {
                     model: gallery.buttonStates
-                    Variant { label: "negative " + modelData; PillButton { iconName: "hang-up"; text: "挂断"; negative: true; forcedState: modelData } }
+                    Variant { label: "negative " + modelData; PillButton { iconName: "hang-up"; text: DesignI18n.i18nc("@info sample text", "Hang up"); negative: true; forcedState: modelData } }
                 }
             }
             Section {
@@ -99,7 +99,7 @@ QQC2.ApplicationWindow {
                 wide: true
                 Repeater {
                     model: ["normal", "pressed", "disabled", "busy"]
-                    Variant { label: modelData; wide: true; PrimaryButton { width: 300; iconName: "download"; text: "安装 Codex"; forcedState: modelData } }
+                    Variant { label: modelData; wide: true; PrimaryButton { width: 300; iconName: "download"; text: DesignI18n.i18nc("@info sample text", "Install Codex"); forcedState: modelData } }
                 }
             }
             Section {
@@ -107,7 +107,7 @@ QQC2.ApplicationWindow {
                 wide: true
                 Repeater {
                     model: ["normal", "pressed", "disabled"]
-                    Variant { label: modelData; wide: true; SecondaryButton { width: 300; text: "移除密钥"; negative: true; forcedState: modelData } }
+                    Variant { label: modelData; wide: true; SecondaryButton { width: 300; text: DesignI18n.i18nc("@info sample text", "Remove key"); negative: true; forcedState: modelData } }
                 }
             }
             Section {
@@ -115,7 +115,7 @@ QQC2.ApplicationWindow {
                 wide: true
                 Repeater {
                     model: ["normal", "pressed", "current", "disabled"]
-                    Variant { label: modelData; wide: true; NavItem { width: 300; iconName: "settings"; text: "设置"; forcedState: modelData } }
+                    Variant { label: modelData; wide: true; NavItem { width: 300; iconName: "settings"; text: DesignI18n.i18nc("@info sample text", "Settings"); forcedState: modelData } }
                 }
             }
             Section {
@@ -128,7 +128,7 @@ QQC2.ApplicationWindow {
                         wide: true
                         ListGroup {
                             width: 300
-                            ListRow { text: "Codex"; value: "已安装"; dot: "positive"; accessory: "chevron"; forcedState: modelData }
+                            ListRow { text: "Codex"; value: DesignI18n.i18nc("@info sample text", "Installed"); dot: "positive"; accessory: "chevron"; forcedState: modelData }
                             ListRow { text: "API Key"; value: "sk-…3f9a"; valueMono: true; accessory: "chevron"; forcedState: modelData }
                         }
                     }
@@ -138,7 +138,7 @@ QQC2.ApplicationWindow {
                 name: "Toggle"
                 Repeater {
                     model: ["off", "on", "pressed-off", "pressed-on", "disabled-off", "disabled-on"]
-                    Variant { label: modelData; Toggle { text: "开关"; forcedState: modelData } }
+                    Variant { label: modelData; Toggle { text: DesignI18n.i18nc("@info sample text", "Switch"); forcedState: modelData } }
                 }
             }
             Section {
@@ -152,7 +152,7 @@ QQC2.ApplicationWindow {
                 name: "Tile"
                 Repeater {
                     model: ["normal", "pressed", "disabled"]
-                    Variant { label: modelData; Rectangle { width: 104; height: 96; color: Theme.side; Tile { anchors.fill: parent; anchors.margins: 6; iconName: "image"; text: "照片"; forcedState: modelData } } }
+                    Variant { label: modelData; Rectangle { width: 104; height: 96; color: Theme.side; Tile { anchors.fill: parent; anchors.margins: 6; iconName: "image"; text: DesignI18n.i18nc("@info sample text", "Photos"); forcedState: modelData } } }
                 }
             }
             Section {
@@ -160,60 +160,60 @@ QQC2.ApplicationWindow {
                 wide: true
                 Repeater {
                     model: ["pending", "active", "done"]
-                    Variant { label: modelData; wide: true; PlanStep { width: 300; text: "在 Blender 里渲染小茶杯"; forcedState: modelData } }
+                    Variant { label: modelData; wide: true; PlanStep { width: 300; text: DesignI18n.i18nc("@info sample text", "Render a small teacup in Blender"); forcedState: modelData } }
                 }
             }
             Section {
                 name: "ActivityCard"
                 wide: true
                 Variant { label: "thinking"; wide: true; ActivityCard { width: 330 } }
-                Variant { label: "working"; wide: true; ActivityCard { width: 330; kind: "files"; text: "新建 make_teacup.py"; detail: "+85 −0 行"; seconds: 4 } }
-                Variant { label: "progress"; wide: true; ActivityCard { width: 330; kind: "command"; text: "在后台运行 Blender（make_teacup.py）"; detail: "Fra:1 Mem:212M | Rendering | Sample 38/64"; progress: 0.59; seconds: 27 } }
+                Variant { label: "working"; wide: true; ActivityCard { width: 330; kind: "files"; text: DesignI18n.i18nc("@info sample text", "Create make_teacup.py"); detail: DesignI18n.i18nc("@info sample text", "+85 −0 lines"); seconds: 4 } }
+                Variant { label: "progress"; wide: true; ActivityCard { width: 330; kind: "command"; text: DesignI18n.i18nc("@info sample text", "Run Blender in the background (make_teacup.py)"); detail: "Fra:1 Mem:212M | Rendering | Sample 38/64"; progress: 0.59; seconds: 27 } }
             }
             Section {
                 name: "LivePicture"
-                Variant { label: "waiting"; LivePicture { maxWidth: 150; maxHeight: 150; text: "Blender 开始渲染"; progress: 0 } }
-                Variant { label: "live"; LivePicture { maxWidth: 150; maxHeight: 150; source: gallery.samplePicture; text: "28/64 采样"; progress: 0.44 } }
-                Variant { label: "done"; LivePicture { maxWidth: 150; maxHeight: 150; source: gallery.samplePicture; text: "渲染完成"; finished: true } }
-                Variant { label: "pressed"; LivePicture { maxWidth: 150; maxHeight: 150; source: gallery.samplePicture; text: "28/64 采样"; progress: 0.44; down: true } }
+                Variant { label: "waiting"; LivePicture { maxWidth: 150; maxHeight: 150; text: DesignI18n.i18nc("@info sample text", "Blender is starting the render"); progress: 0 } }
+                Variant { label: "live"; LivePicture { maxWidth: 150; maxHeight: 150; source: gallery.samplePicture; text: DesignI18n.i18nc("@info sample text", "28/64 samples"); progress: 0.44 } }
+                Variant { label: "done"; LivePicture { maxWidth: 150; maxHeight: 150; source: gallery.samplePicture; text: DesignI18n.i18nc("@info sample text", "Render finished"); finished: true } }
+                Variant { label: "pressed"; LivePicture { maxWidth: 150; maxHeight: 150; source: gallery.samplePicture; text: DesignI18n.i18nc("@info sample text", "28/64 samples"); progress: 0.44; down: true } }
             }
             Section {
                 name: "Thumbnail"
                 Repeater {
                     model: ["loading", "ready", "pressed", "error"]
-                    Variant { label: modelData; Thumbnail { source: gallery.samplePicture; name: "小火箭.png"; maxWidth: 150; maxHeight: 150; forcedState: modelData } }
+                    Variant { label: modelData; Thumbnail { source: gallery.samplePicture; name: DesignI18n.i18nc("@info sample text", "little-rocket.png"); maxWidth: 150; maxHeight: 150; forcedState: modelData } }
                 }
             }
             Section {
                 name: "FileChip"
                 Repeater {
                     model: ["normal", "pressed", "disabled"]
-                    Variant { label: modelData; FileChip { name: "小火箭.blend"; maxWidth: 200; forcedState: modelData } }
+                    Variant { label: modelData; FileChip { name: DesignI18n.i18nc("@info sample text", "little-rocket.blend"); maxWidth: 200; forcedState: modelData } }
                 }
             }
             Section {
                 name: "ImageViewer"
                 Repeater {
                     model: ["loading", "ready", "error"]
-                    Variant { label: modelData; PillButton { text: "查看 · " + modelData; onClicked: { viewer.forcedState = modelData; viewer.show(gallery.samplePicture, "小火箭.png") } } }
+                    Variant { label: modelData; PillButton { text: DesignI18n.i18nc("@action:button %1 is a state name", "View · %1", modelData); onClicked: { viewer.forcedState = modelData; viewer.show(gallery.samplePicture, DesignI18n.i18nc("@info sample text", "little-rocket.png")) } } }
                 }
             }
             Section {
                 name: "MetaButton"
                 Repeater {
                     model: ["collapsed", "expanded", "pressed"]
-                    Variant { label: modelData; MetaButton { text: "已处理 2 步"; forcedState: modelData } }
+                    Variant { label: modelData; MetaButton { text: DesignI18n.i18nc("@info sample text", "Worked through 2 steps"); forcedState: modelData } }
                 }
             }
             Section {
                 name: "HoldTarget"
                 Repeater {
                     model: ["idle", "active"]
-                    Variant { label: "cancel " + modelData; HoldTarget { iconName: "close"; text: "取消"; forcedState: modelData } }
+                    Variant { label: "cancel " + modelData; HoldTarget { iconName: "close"; text: DesignI18n.i18nc("@info sample text", "Cancel"); forcedState: modelData } }
                 }
                 Repeater {
                     model: ["idle", "active"]
-                    Variant { label: "text " + modelData; HoldTarget { iconName: "text"; text: "转文字"; edit: true; forcedState: modelData } }
+                    Variant { label: "text " + modelData; HoldTarget { iconName: "text"; text: DesignI18n.i18nc("@info sample text", "To text"); edit: true; forcedState: modelData } }
                 }
             }
             Section {
@@ -228,7 +228,7 @@ QQC2.ApplicationWindow {
                             id: vb
                             width: 330
                             forcedState: modelData
-                            IconButton { iconName: "plus"; text: "添加"; tint: vb.ink; visible: vb.visualState === "idle" || vb.visualState === "pressed" || vb.visualState === "disabled" }
+                            IconButton { iconName: "plus"; text: DesignI18n.i18nc("@info sample text", "Add"); tint: vb.ink; visible: vb.visualState === "idle" || vb.visualState === "pressed" || vb.visualState === "disabled" }
                             Wave {
                                 visible: vb.visualState === "hot" || vb.visualState === "cancel" || vb.visualState === "handsFree"
                                 Layout.fillWidth: true
@@ -242,14 +242,14 @@ QQC2.ApplicationWindow {
                                 visible: vb.visualState === "idle" || vb.visualState === "pressed" || vb.visualState === "disabled"
                                 Layout.fillWidth: true
                                 horizontalAlignment: Text.AlignHCenter
-                                text: "按住说话"
+                                text: DesignI18n.i18nc("@info sample text", "Hold to talk")
                                 font.family: Theme.fontFamily
                                 font.pixelSize: Theme.bodySize
                                 font.weight: Font.DemiBold
                                 color: vb.ink
                             }
-                            CircleButton { visible: vb.visualState === "handsFree"; iconName: "stop"; text: "停止聆听" }
-                            IconButton { iconName: "keyboard"; text: "键盘"; tint: vb.ink; visible: vb.visualState === "idle" || vb.visualState === "pressed" || vb.visualState === "disabled" }
+                            CircleButton { visible: vb.visualState === "handsFree"; iconName: "stop"; text: DesignI18n.i18nc("@info sample text", "Stop listening") }
+                            IconButton { iconName: "keyboard"; text: DesignI18n.i18nc("@info sample text", "Keyboard"); tint: vb.ink; visible: vb.visualState === "idle" || vb.visualState === "pressed" || vb.visualState === "disabled" }
                         }
                     }
                 }
@@ -267,7 +267,7 @@ QQC2.ApplicationWindow {
                 wide: true
                 Repeater {
                     model: ["", "positive", "negative"]
-                    Variant { label: modelData || "plain"; wide: true; Note { width: 300; tone: modelData; text: "密钥可用，已连上 OpenAI。" } }
+                    Variant { label: modelData || "plain"; wide: true; Note { width: 300; tone: modelData; text: DesignI18n.i18nc("@info sample text", "The key works. Connected to OpenAI.") } }
                 }
             }
             Section {
@@ -275,7 +275,7 @@ QQC2.ApplicationWindow {
                 wide: true
                 Variant { label: "progress"; wide: true; Progress { width: 300 } }
                 Variant { label: "busy ring"; BusyRing {} }
-                Variant { label: "shine"; wide: true; ShineText { width: 300; text: "正在处理 · 12 秒 · 在微信里搜索联系人" } }
+                Variant { label: "shine"; wide: true; ShineText { width: 300; text: DesignI18n.i18nc("@info sample text", "Working · 12s · Searching WeChat for a contact") } }
             }
         }
     }

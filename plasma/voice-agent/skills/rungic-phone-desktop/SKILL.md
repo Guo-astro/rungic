@@ -54,11 +54,11 @@ Use these tools for anything on screen; they act with ordinary pointer/keyboard 
 
 **Whole tasks: `desktop_goal` (preferred for anything that takes several steps).** Give the goal as the user said it, with every literal value in it, and the app: `{"goal": "在文件传输助手里发一条消息：今晚七点见", "app": "微信"}`. GPT-6 Luna then looks at the screen and decides every click, key and text (it types any language). Results: `outcome` (`done`, `question`, `failed`, `unfinished`, `stopped`), `achieved`, `answer` (what the screen shows about the goal), `steps`. Outcome `question`: ask the user `question`, then call again with the same goal and `replies: [{"question": ..., "answer": ...}]`. Ask the user before a goal that sends, pays, deletes or changes an account, and then say in the goal that it is confirmed.
 
-**The user watches** (docs/88): the floating window shows a live caption of what is being done on the screen you work on (`desktop_goal` writes one per step by itself; give `desktop_act` a `note`), and it is spoken as progress. So do desktop-app work there, visibly, not headless.
+**The user watches** (docs/88): the floating window shows a live caption of what is being done on the screen you work on (`desktop_goal` writes one per step by itself; give `desktop_act` a `note`, a few words in the user's language), and it is spoken as progress. So do desktop-app work there, visibly, not headless.
 
 **Look and act yourself** (a single known step, or checking a result):
 - `desktop_screenshot` returns the active window on the screen you work on as an image (with its open menus and dialogs); `{"scope": "screen"}` for the whole screen (1920x1080).
-- `desktop_act {"actions": [...], "note": "打开“渲染”菜单"}` carries out a short batch in that image's pixels and returns the new screenshot. Actions: `{"type": "click", "x": 700, "y": 400}` (`button` left/right, `keys` held modifiers), `double_click`, `move`, `drag` (`path` of points), `scroll` (`x`, `y`, `scroll_y` in pixels, positive = down), `keypress` (`keys`: `["CTRL", "L"]`, `["ENTER"]`), `type` (`text`, any language, into the focused field), `wait`.
+- `desktop_act {"actions": [...], "note": "Open the Render menu"}` (in Chinese `"note": "打开“渲染”菜单"`) carries out a short batch in that image's pixels and returns the new screenshot. Actions: `{"type": "click", "x": 700, "y": 400}` (`button` left/right, `keys` held modifiers), `double_click`, `move`, `drag` (`path` of points), `scroll` (`x`, `y`, `scroll_y` in pixels, positive = down), `keypress` (`keys`: `["CTRL", "L"]`, `["ENTER"]`), `type` (`text`, any language, into the focused field), `wait`.
 
 **Windows** (the window manager, not the app; same in both plans):
 1. `desktop_windows` - the open windows of your workspace and which one is active.
@@ -102,7 +102,7 @@ WeChat exposes its controls; use these names instead of guessing (English UI nam
 When the user asks you to send a voice message (发语音, 用语音告诉…):
 
 1. Open the chat by the SOUND of the name with `desktop_goal` (`{"goal": "在微信里打开和周凯文的聊天（名字来自语音识别，按读音找），不要发送任何内容", "app": "微信"}`; see the WeChat section). Check the chat header in its `answer` shows that contact before sending. When you tell the user whom you sent it to, use the contact's real name (e.g. "发给了周楷雯").
-2. The content is what the user asked to say. Begin it with a short note that the assistant sends it for the user, e.g. `我是凯文的 AI 助理，替他发一条语音：……`. Do not add anything the user did not ask for.
+2. The content is what the user asked to say, in the language they want it said (by default the one they asked in). Begin it with a short note in that language that the assistant sends it for the user, e.g. `This is Kevin's AI assistant with a voice message from him: …` or `我是凯文的 AI 助理，替他发一条语音：……`. Do not add anything the user did not ask for.
 3. `desktop_voice_message {"text": ...}` with the chat open on the screen you work on: the model finds the record control on screen (WeChat: the round "Send Voice" icon right of the message box, not the microphone, which is dictation), the tool speaks once the app records from the Linux microphone, then the model presses send. Only this app's microphone is switched, for the recording; the user's real microphone is never sent. Under plan two the tool takes control names instead (`plan-two.md`).
 4. Report that it was sent (the tool returns the length) and to whom.
 
@@ -119,7 +119,7 @@ Choose the transport from the user's request: **“打电话” means a SIM/tele
 
 - Screenshot of your workspace: `spectacle -b -n -f -o /tmp/shot.png`. Look at the image to understand what is on screen.
 - To open a URL or file, launch the app with `desktop_launch` (`args` with the path or URL) and use `desktop_goal` or `desktop_act`.
-- Send the user a notification: `rungic-user notify-send "标题" "内容"` (plain `notify-send` would stay in your workspace, where nobody reads it).
+- Send the user a notification, in the user's language: `rungic-user notify-send "Title" "Text"` (plain `notify-send` would stay in your workspace, where nobody reads it).
 - Low-level AT-SPI tool for debugging only: `rungic-a11y` (apps/tree/find/act/text/windows).
 
 ## Screen recording

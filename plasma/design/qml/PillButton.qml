@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// An outlined button (44 px): suggestions, call controls, "去设置".
-// `negative` colours the label for destructive actions (挂断).
-// States: normal, pressed, checked (on: 停止旁听), disabled.
+// An outlined button (44 px): suggestions, call controls, "Go to Settings".
+// `negative` colours the label for destructive actions (Hang Up).
+// States: normal, pressed, checked (on: Stop Listening In), disabled.
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Templates as T

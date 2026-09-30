@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // The composer (docs/87). Voice first: the whole bar can be held to talk, a tap listens
-// hands-free. While held, sliding up onto × drops what was said and onto 文 turns it into
+// hands-free. While held, sliding up onto × drops what was said and onto 文 (To text) turns it into
 // text to edit. The keyboard button switches to typing; + adds photos or files.
 //
 // It is always in exactly one state (`phase`), and each state says, in one place (`states`),
 // which parts show, what the bar says and whether the keyboard is up:
-//   voice         idle: + · 按住说话 · keyboard
-//   busy          the agent works or speaks: + · 按住补充说明 · stop
+//   voice         idle: + · Hold to talk · keyboard
+//   busy          the agent works or speaks: + · Hold to add more · stop
 //   unavailable   the user is on a call themselves
 //   hold          held: the wave, the time, the two targets above
 //   cancel        held over ×
 //   toText        held over 文
 //   transcribing  released over 文, the text is on its way
-//   handsFree     listening without a hold: the wave · 说完自动发送 · stop
+//   handsFree     listening without a hold: the wave · Sends when you stop · stop
 //   keyboard      typing (attachments above the text)
 //   attach        the + panel in the keyboard's place (the bar the user came from; keyboard down)
 import QtQuick
@@ -60,7 +60,7 @@ Item {
 
     // What each state shows (the defaults are the idle voice bar's).
     property string barMode: "idle"
-    property string label: inCall ? "按住回答助理" : "按住说话"
+    property string label: inCall ? i18nc("@info the voice bar during a call", "Hold to answer the assistant") : i18nc("@info the voice bar", "Hold to talk")
     property bool showVoice: true
     property bool showText: false
     property bool showPanel: false
@@ -76,11 +76,11 @@ Item {
         State { name: "voice" },
         State {
             name: "busy"
-            PropertyChanges { composer.label: "按住补充说明"; composer.showKeyboardButton: false; composer.showStop: true }
+            PropertyChanges { composer.label: i18nc("@info the bar while the agent works", "Hold to add more"); composer.showKeyboardButton: false; composer.showStop: true }
         },
         State {
             name: "unavailable"
-            PropertyChanges { composer.barMode: "disabled"; composer.label: "你正在通话中"; composer.canHold: false; composer.showKeyboardButton: false; composer.showPlus: false }
+            PropertyChanges { composer.barMode: "disabled"; composer.label: i18nc("@info the voice bar while the user is on a call", "You're on a call"); composer.canHold: false; composer.showKeyboardButton: false; composer.showPlus: false }
         },
         State {
             name: "hold"
@@ -95,7 +95,7 @@ Item {
         },
         State {
             name: "transcribing"
-            PropertyChanges { composer.barMode: "disabled"; composer.label: "正在转成文字…"; composer.canHold: false; composer.showKeyboardButton: false; composer.showPlus: false }
+            PropertyChanges { composer.barMode: "disabled"; composer.label: i18nc("@info:status what was said is turned into text to edit", "Converting to text…"); composer.canHold: false; composer.showKeyboardButton: false; composer.showPlus: false }
         },
         State {
             name: "handsFree"
@@ -176,19 +176,20 @@ Item {
         RowLayout {
             id: targets
             anchors { left: parent.left; right: parent.right; bottom: parent.bottom; leftMargin: 28; rightMargin: 28; bottomMargin: 18 }
-            HoldTarget { id: cancelTarget; iconName: "close"; text: "取消"; on: composer.phase === "cancel" }
+            HoldTarget { id: cancelTarget; iconName: "close"; text: i18nc("@action slide here to drop what was said", "Cancel"); on: composer.phase === "cancel" }
             Text {
                 Layout.fillWidth: true
                 Layout.alignment: Qt.AlignVCenter
                 horizontalAlignment: Text.AlignHCenter
-                text: composer.phase === "cancel" ? "松开取消" : composer.phase === "toText" ? "松开后改成文字编辑" : "松开发送"
+                text: composer.phase === "cancel" ? i18nc("@info while held", "Release to cancel")
+                    : composer.phase === "toText" ? i18nc("@info while held", "Release to edit as text") : i18nc("@info while held", "Release to send")
                 font.family: Theme.fontFamily
                 font.pixelSize: 15
                 font.weight: Font.DemiBold
                 color: Theme.text
                 wrapMode: Text.Wrap
             }
-            HoldTarget { id: textTarget; iconName: "text"; text: "转文字"; edit: true; on: composer.phase === "toText" }
+            HoldTarget { id: textTarget; iconName: "text"; text: i18nc("@action slide here to get what was said as text", "To text"); edit: true; on: composer.phase === "toText" }
         }
     }
 
@@ -255,12 +256,12 @@ Item {
                     visible: composer.showVoice
                     mode: composer.barMode
                     Accessible.role: Accessible.Button
-                    Accessible.name: composer.showWave ? "正在听" : composer.label
+                    Accessible.name: composer.showWave ? i18nc("@info:status", "Listening") : composer.label
 
                     IconButton {
                         visible: composer.showPlus
                         iconName: composer.showPanel ? "close" : "plus"
-                        text: composer.showPanel ? "收起" : "添加照片或文件"
+                        text: composer.showPanel ? i18nc("@action:button close the attach panel", "Close") : i18nc("@action:button", "Add photos or files")
                         tint: voice.ink
                         onClicked: composer.attachOpen = !composer.attachOpen
                     }
@@ -289,7 +290,7 @@ Item {
                     Text {
                         visible: composer.showHandsFree
                         rightPadding: 8
-                        text: "说完自动发送"
+                        text: i18nc("@info hands-free listening", "Sends when you stop")
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.metaSize
                         color: Theme.dim
@@ -297,7 +298,7 @@ Item {
                     CircleButton {
                         visible: composer.showHandsFree
                         iconName: "stop"
-                        text: "停止聆听"
+                        text: i18nc("@action:button", "Stop listening")
                         onClicked: composer.handsFreeStopped()
                     }
                     // The bar's middle says what holding it does.
@@ -314,14 +315,14 @@ Item {
                     IconButton {
                         visible: composer.showKeyboardButton && !composer.showWave
                         iconName: "keyboard"
-                        text: "用键盘输入"
+                        text: i18nc("@action:button", "Use keyboard")
                         tint: voice.ink
                         onClicked: { composer.attachOpen = false; composer.keyboard = true }
                     }
                     CircleButton {
                         visible: composer.showStop
                         iconName: "stop"
-                        text: "停止"
+                        text: i18nc("@action:button stop the task or the answer", "Stop")
                         onClicked: composer.stopRequested()
                     }
                 }
@@ -384,7 +385,7 @@ Item {
                                         y: -6
                                         width: 24
                                         height: 24
-                                        Accessible.name: "移除" + modelData.name
+                                        Accessible.name: i18nc("@action:button %1 is a file name", "Remove %1", modelData.name)
                                         onClicked: composer.removeAttachment(modelData.path)
                                         background: Rectangle { radius: 12; color: Theme.strong; border.width: 2; border.color: Theme.fill }
                                         contentItem: Item { Icon { anchors.centerIn: parent; name: "close"; color: Theme.strongInk; implicitWidth: 12; implicitHeight: 12 } }
@@ -399,7 +400,7 @@ Item {
                         IconButton {
                             Layout.alignment: Qt.AlignBottom
                             iconName: composer.showPanel ? "close" : "plus"
-                            text: composer.showPanel ? "收起" : "添加照片或文件"
+                            text: composer.showPanel ? i18nc("@action:button close the attach panel", "Close") : i18nc("@action:button", "Add photos or files")
                             onClicked: composer.attachOpen = !composer.attachOpen
                         }
                         QQC2.TextArea {
@@ -412,12 +413,12 @@ Item {
                             leftPadding: 6
                             rightPadding: 6
                             wrapMode: TextEdit.Wrap
-                            placeholderText: "输入消息"
+                            placeholderText: i18nc("@info:placeholder", "Message")
                             placeholderTextColor: Theme.dim
                             color: Theme.text
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.bodySize
-                            Accessible.name: "输入消息"
+                            Accessible.name: i18nc("@info:placeholder", "Message")
                             // Touching the text while the panel is open: back to typing.
                             onActiveFocusChanged: if (activeFocus) composer.attachOpen = false
                             Keys.onReturnPressed: event => {
@@ -430,14 +431,14 @@ Item {
                             Layout.alignment: Qt.AlignBottom
                             visible: field.text.trim().length > 0 || composer.attachments.length > 0
                             iconName: "send"
-                            text: "发送"
+                            text: i18nc("@action:button", "Send")
                             onClicked: composer.submit()
                         }
                         IconButton {
                             Layout.alignment: Qt.AlignBottom
                             visible: field.text.trim().length === 0 && composer.attachments.length === 0
                             iconName: "voice"
-                            text: "改用语音"
+                            text: i18nc("@action:button", "Use voice")
                             onClicked: { composer.keyboard = false; composer.attachOpen = false; composer.dictation = false; field.focus = false; Qt.inputMethod.hide() }
                         }
                     }
@@ -461,16 +462,16 @@ Item {
                     Layout.fillWidth: true
                     columns: 2
                     columnSpacing: 10
-                    Tile { Layout.fillWidth: true; iconName: "image"; text: "照片"; onClicked: { dialog.images = true; dialog.open() } }
-                    Tile { Layout.fillWidth: true; iconName: "file"; text: "文件"; onClicked: { dialog.images = false; dialog.open() } }
+                    Tile { Layout.fillWidth: true; iconName: "image"; text: i18nc("@action:button pick photos", "Photos"); onClicked: { dialog.images = true; dialog.open() } }
+                    Tile { Layout.fillWidth: true; iconName: "file"; text: i18nc("@action:button pick files", "Files"); onClicked: { dialog.images = false; dialog.open() } }
                 }
                 RowLayout {
                     Layout.fillWidth: true
                     visible: recent.count > 0
-                    Text { Layout.fillWidth: true; text: "最近照片"; font.family: Theme.fontFamily; font.pixelSize: Theme.labelSize; color: Theme.dim }
+                    Text { Layout.fillWidth: true; text: i18nc("@title:group", "Recent photos"); font.family: Theme.fontFamily; font.pixelSize: Theme.labelSize; color: Theme.dim }
                     PillButton {
                         visible: photos.picked.length > 0
-                        text: "添加 " + photos.picked.length + " 张"
+                        text: i18ncp("@action:button", "Add %1 photo", "Add %1 photos", photos.picked.length)
                         onClicked: {
                             for (const url of photos.picked) composer.addAttachment(url)
                             photos.picked = []
@@ -509,7 +510,8 @@ Item {
                                 visible: index < 8
                                 width: photos.cell
                                 height: photos.cell
-                                Accessible.name: "照片 " + (index + 1) + (order >= 0 ? "，已选" : "")
+                                Accessible.name: order >= 0 ? i18nc("@info accessible name of a recent photo", "Photo %1, selected", index + 1)
+                                    : i18nc("@info accessible name of a recent photo", "Photo %1", index + 1)
                                 onClicked: {
                                     const url = fileUrl.toString()
                                     photos.picked = order >= 0 ? photos.picked.filter(u => u !== url) : photos.picked.concat([url])
@@ -563,7 +565,8 @@ Item {
         property bool images: true
         fileMode: FileDialog.OpenFiles
         currentFolder: StandardPaths.writableLocation(images ? StandardPaths.PicturesLocation : StandardPaths.DocumentsLocation)
-        nameFilters: images ? ["图片 (*.png *.jpg *.jpeg *.webp *.gif)"] : ["所有文件 (*)"]
+        nameFilters: images ? [i18nc("@item:inlistbox a file filter", "Images (%1)", "*.png *.jpg *.jpeg *.webp *.gif")]
+            : [i18nc("@item:inlistbox a file filter", "All files (%1)", "*")]
         onAccepted: {
             for (const url of selectedFiles) composer.addAttachment(url)
             composer.attached()

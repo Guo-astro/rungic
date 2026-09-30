@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// A quiet full-width text button (48 px): 稍后再说, 取消安装, 移除密钥.
+// A quiet full-width text button (48 px): Not Now, Cancel Installation, Remove Key.
 // States: normal, pressed, disabled.
 import QtQuick
 import QtQuick.Layouts

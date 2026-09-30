@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "service.h"
 #include "collector.h"
+#include <KLocalizedString>
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
 #include <QDBusInterface>
@@ -92,7 +93,7 @@ void Suggestions::recover() {
                 const auto state = r["state"].toString();
                 const bool terminal = QStringList{"finished", "failed", "stopped"}.contains(state);
                 model.taskEvent(id, taskId, {{"type", terminal ? state : QString("interrupted")},
-                    {"text", terminal ? r["result"].toString("处理已停止") : QString("原任务已不在运行，请查看已保存结果后决定是否重试")}}, now);
+                    {"text", terminal ? r["result"].toString(i18n("Stopped")) : i18n("The earlier task is no longer running. Check the saved result before deciding whether to retry.")}}, now);
             }
             publish();
         });
@@ -106,21 +107,22 @@ void Suggestions::Refresh() {
         const auto user = w->result(); w->deleteLater();
         const auto now = QDateTime::currentSecsSinceEpoch();
         const auto system = Care::readObject(feedPath);
-        coverage = user.value("coverage").toArray();
+        coverage = QJsonArray();
+        for (const auto &v : user.value("coverage").toArray()) coverage.append(Care::translated(v));
         auto ingest = [this, now](const QJsonObject &batch) {
             QHash<QString, QStringList> present;
             for (const auto &v : batch.value("items").toArray()) {
                 const auto o = v.toObject();
-                model.observe(o, batch.value("generated").toInteger(now)); present[o.value("source").toString()].append(o.value("id").toString());
+                model.observe(Care::localized(o), batch.value("generated").toInteger(now)); present[o.value("source").toString()].append(o.value("id").toString());
             }
             for (const auto &s : batch.value("sources").toArray()) model.reconcile(s.toString(), present.value(s.toString()), now);
         };
         ingest(user);
         if (system.value("schema").toInt() == 1 && now >= system.value("generated").toInteger() && now - system.value("generated").toInteger() < 180) {
             ingest(system);
-            for (const auto &v : system.value("coverage").toArray()) coverage.append(v);
+            for (const auto &v : system.value("coverage").toArray()) coverage.append(Care::translated(v));
             model.due(now);
-        } else coverage.append("系统诊断尚未更新，保留已有建议；暂不触发过期提醒");
+        } else coverage.append(i18n("System diagnostics haven't updated yet. Existing suggestions are kept; due reminders wait until they do."));
         scanning = false; publish(); recover(); notify();
     });
     w->setFuture(QtConcurrent::run(Care::collectUser));
@@ -159,8 +161,8 @@ void Suggestions::notify() {
     auto message = QDBusMessage::createMethodCall("org.freedesktop.Notifications", "/org/freedesktop/Notifications",
                                                  "org.freedesktop.Notifications", "Notify");
     message.setArguments({"Agent", uint(0), "dialog-information", item.value("title").toString(),
-        QString("有 %1 项建议可查看，也可以稍后处理。").arg(candidate.value("ids").toArray().size()),
-        QStringList{"default", "查看建议", "later", "稍后"}, hints, 10000});
+        i18np("1 suggestion to look at, now or later.", "%1 suggestions to look at, now or later.", candidate.value("ids").toArray().size()),
+        QStringList{"default", i18n("View suggestions"), "later", i18n("Later")}, hints, 10000});
     notifying = true;
     auto *w = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(message, 3000), this);
     connect(w, &QDBusPendingCallWatcher::finished, this, [this, w, id, candidate] {
@@ -172,7 +174,7 @@ void Suggestions::notify() {
 }
 QString Suggestions::Act(const QString &id, const QString &action, const QString &json) {
     const auto o = model.get(id);
-    if (o.isEmpty()) return failure("建议已不存在");
+    if (o.isEmpty()) return failure(i18n("This suggestion no longer exists."));
     auto args = QJsonDocument::fromJson(json.toUtf8()).object();
     if (action == "open") { open(id); return Get(id); }
     if (action == "investigate" || action == "apply") {
@@ -182,7 +184,7 @@ QString Suggestions::Act(const QString &id, const QString &action, const QString
         const auto taskId = begun["task"].toObject()["id"].toString();
         if (!publish()) {
             model.update(id, {{"task", o["task"]}, {"reminderState", o["reminderState"]}, {"note", o["note"]}});
-            return failure("无法保存任务授权，未开始执行");
+            return failure(i18n("Couldn't save the task approval, so nothing was started."));
         }
         auto message = QDBusMessage::createMethodCall(Voice, VoicePath, Voice, action == "apply" ? "ApplySuggestion" : "InvestigateSuggestion");
         message.setArguments({id, taskId});
@@ -198,7 +200,7 @@ QString Suggestions::Act(const QString &id, const QString &action, const QString
         return Get(id);
     }
     if (action == "stop") {
-        if (o["state"] != "working") return failure("当前没有正在运行的调查");
+        if (o["state"] != "working") return failure(i18n("No investigation is running."));
         const auto taskId = o["task"].toObject()["id"].toString();
         auto message = QDBusMessage::createMethodCall(Voice, VoicePath, Voice, "StopSuggestion");
         message.setArguments({id, taskId});
@@ -206,10 +208,10 @@ QString Suggestions::Act(const QString &id, const QString &action, const QString
         connect(w, &QDBusPendingCallWatcher::finished, this, [this, w, id, taskId] {
             QDBusPendingReply<> reply = *w; w->deleteLater();
             if (model.get(id)["task"].toObject()["id"] != taskId) return;
-            if (reply.isError()) model.update(id, {{"note", "停止请求未确认：" + reply.error().message()}});
+            if (reply.isError()) model.update(id, {{"note", i18n("The stop request wasn't confirmed: %1", reply.error().message())}});
             publish();
         });
-        model.update(id, {{"note", "已请求停止，等待 Agent 确认"}}); publish(); return Get(id);
+        model.update(id, {{"note", i18n("Stop requested. Waiting for Agent to confirm.")}}); publish(); return Get(id);
     }
     if (action == "feedback") return Feedback(id);
     const auto result = model.act(id, action, args, QDateTime::currentSecsSinceEpoch());
@@ -231,9 +233,9 @@ void Suggestions::AgentEvent(const QString &json) {
 }
 QString Suggestions::Update(const QString &id, const QString &json) {
     const auto input = QJsonDocument::fromJson(json.toUtf8()).object();
-    if (model.get(id).isEmpty()) return failure("建议已不存在");
+    if (model.get(id).isEmpty()) return failure(i18n("This suggestion no longer exists."));
     if (input.contains("taskId") && input["taskId"] != model.get(id)["task"].toObject()["id"])
-        return failure("任务已被替代，未覆盖当前记录");
+        return failure(i18n("The task was replaced, so the current record wasn't overwritten."));
     QJsonObject fields;
     for (const auto &key : {"result", "plan", "verification", "rollback", "planStatus"}) {
         if (input.contains(key)) fields[key] = input.value(key).toString().left(16000);
@@ -242,13 +244,13 @@ QString Suggestions::Update(const QString &id, const QString &json) {
         const auto upstream = input.value("upstream").toObject();
         const QUrl url(upstream.value("url").toString());
         const auto status = upstream.value("state").toString();
-        if (!QStringList{"not_evaluated", "prepared", "submitted", "review", "merged", "released", "not_applicable"}.contains(status)) return failure("无效的上游状态");
+        if (!QStringList{"not_evaluated", "prepared", "submitted", "review", "merged", "released", "not_applicable"}.contains(status)) return failure(i18n("Invalid upstream status."));
         if (status != "not_evaluated" && status != "prepared" && status != "not_applicable"
-            && (url.scheme() != "https" || url.host().isEmpty() || !url.userInfo().isEmpty())) return failure("该状态需要可核对的 HTTPS 上游链接");
-        fields["upstream"] = QJsonObject{{"state", status}, {"url", url.toString()}, {"recordedBy", "local-client"}, {"verification", "维护端记录，未自动核验远端"}};
+            && (url.scheme() != "https" || url.host().isEmpty() || !url.userInfo().isEmpty())) return failure(i18n("This status needs an HTTPS upstream link that can be checked."));
+        fields["upstream"] = QJsonObject{{"state", status}, {"url", url.toString()}, {"recordedBy", "local-client"}, {"verification", i18n("Recorded by the maintainer; the upstream wasn't checked automatically.")}};
     }
     // Recording a plan/result never auto-resolves an observed fault or silently applies code.
-    if (fields.isEmpty()) return failure("没有可更新的处理记录");
+    if (fields.isEmpty()) return failure(i18n("There is nothing to update in the record."));
     const auto plan = model.updatePlan(id, fields);
     if (plan.contains("error")) return encoded(plan);
     QJsonObject rest{{"updated", QDateTime::currentSecsSinceEpoch()}};
@@ -257,7 +259,7 @@ QString Suggestions::Update(const QString &id, const QString &json) {
 }
 QString Suggestions::Feedback(const QString &id) {
     const auto o = model.get(id);
-    if (o.isEmpty()) return failure("建议已不存在");
+    if (o.isEmpty()) return failure(i18n("This suggestion no longer exists."));
     const auto directory = QFileInfo(statePath).absolutePath() + "/feedback/" + id;
     QJsonObject safe;
     const auto e = o.value("evidence").toObject();
@@ -265,10 +267,10 @@ QString Suggestions::Feedback(const QString &id) {
     const auto project = o.value("upstreamProject").toString();
     const auto rules = Care::readObject(QFileInfo(knowledgePath).absolutePath() + "/upstreams.json").value(project).toObject();
     const QJsonObject report{{"schema", 1}, {"id", id}, {"facts", safe}, {"project", project}, {"policy", rules},
-        {"purpose", "内部反馈准备材料；需补充最小复现、预期/实际结果和测试，核对目标项目规则后由维护者提交"},
-        {"publicSubmission", false}, {"missing", QJsonArray{"最小复现", "独立验证", "维护者审阅"}}};
+        {"purpose", i18n("Internal feedback material. Add a minimal reproduction, expected and actual results and tests; a maintainer submits it after checking the target project's rules.")},
+        {"publicSubmission", false}, {"missing", QJsonArray{i18n("Minimal reproduction"), i18n("Independent verification"), i18n("Maintainer review")}}};
     QString error;
     if (!Care::writeObject(directory + "/facts.json", report, &error)) return failure(error);
     model.update(id, {{"feedback", directory + "/facts.json"}}); publish();
-    return encoded({{"path", directory + "/facts.json"}, {"message", "已生成本地反馈材料，尚未对外发送"}});
+    return encoded({{"path", directory + "/facts.json"}, {"message", i18n("Feedback material was saved on this device. Nothing has been sent.")}});
 }

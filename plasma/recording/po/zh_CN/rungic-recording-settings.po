@@ -1,0 +1,78 @@
+# Simplified Chinese translation of rungic-recording-settings (Rungic).
+# SPDX-License-Identifier: GPL-2.0-or-later
+msgid ""
+msgstr ""
+"Project-Id-Version: rungic-recording-settings\n"
+"PO-Revision-Date: 2026-09-30 00:00+0000\n"
+"Last-Translator: Rungic\n"
+"Language-Team: Chinese Simplified\n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+
+#: settings.py
+msgid "Screen Recording Settings"
+msgstr "录屏设置"
+
+#: settings.py
+msgid "Screen Recording"
+msgstr "录屏"
+
+#: settings.py
+msgid "Video"
+msgstr "画面"
+
+#: settings.py
+msgid "Records the Linux desktop at its native resolution with hardware H.264 encoding. Higher quality makes larger files. The frame rate depends on the device load."
+msgstr "录制 Linux 桌面的原始分辨率，使用硬件 H.264 编码。更高质量会增大文件。帧率受设备负载影响。"
+
+#: settings.py
+msgid "Quality"
+msgstr "清晰度"
+
+#: settings.py
+msgid "Standard · 4 Mbps / 30 fps"
+msgstr "标准 · 4 Mbps / 30 帧"
+
+#: settings.py
+msgid "High · 8 Mbps / 30 fps"
+msgstr "高清 · 8 Mbps / 30 帧"
+
+#: settings.py
+msgid "Smooth · 12 Mbps / 60 fps"
+msgstr "流畅 · 12 Mbps / 60 帧"
+
+#: settings.py
+msgid "Sound"
+msgstr "声音"
+
+#: settings.py
+msgid "System sound is the sound of Linux apps. Mixing keeps each source at half volume; use headphones so the speaker doesn't feed back into the microphone."
+msgstr "系统声音指 Linux 应用的声音。混合模式为两路各留一半音量，建议佩戴耳机避免扬声器声音再次进入麦克风。"
+
+#: settings.py
+msgid "Sound source"
+msgstr "声音来源"
+
+#: settings.py
+msgid "System sound"
+msgstr "系统声音"
+
+#: settings.py
+msgid "Microphone"
+msgstr "麦克风"
+
+#: settings.py
+msgid "System sound and microphone"
+msgstr "系统声音与麦克风"
+
+#: settings.py
+msgid "No sound"
+msgstr "无声"
+
+#: settings.py
+msgid "Saved automatically; takes effect the next time you start recording. Videos go to the Videos folder, which you can open on Android under Plasma/Videos."
+msgstr "自动保存；下次开始录屏时生效。视频保存在“视频”文件夹，可从 Android 的 Plasma/Videos 查看。"
