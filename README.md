@@ -1,89 +1,139 @@
-# Rungic
+<h1 align="center">Rungic</h1>
 
-**口袋里的 AI 电脑。** 一部安卓手机，一台完整的 Linux 桌面电脑，外加一个会替你动手的助理。
+<p align="center"><strong>AgentOS in your hand.</strong></p>
 
-Rungic 把手机变成真正的电脑：打开就是 KDE Plasma 桌面，跑的是 Firefox、Blender、Krita、VS Code 这些桌面软件；连上电视，它就是一台台式机。
+<p align="center">An Android phone, a full Linux desktop computer, and an assistant that does the work for you.</p>
 
-更重要的是，它自带一个能看、能说、能动手的 AI 助理。你说要什么，它就打开软件把事情做完，整个过程你都看得见。
+<p align="center">
+  <img src="docs/images/readme/demo.gif" width="300" alt="Asked for a rocket, the assistant plans the work, builds the model in Blender on its own screen, renders it and hands back the picture and the file">
+</p>
 
-## 说一句话，事情就办好
+<p align="center"><sub>“Make a little rocket in Blender and render it for me.” The whole task took 2½ minutes; shown here sped up.</sub></p>
 
-长按 Home 键，直接说出你要的：
+Rungic turns a phone into a real computer. It opens to the KDE Plasma desktop and runs desktop software such as Firefox, Blender, Krita and VS Code. Connect a TV and it becomes a desktop PC.
 
-> “用 Blender 做一个小火箭，渲染出来给我看。”
+It also comes with an AI assistant that can see, speak and act. Tell it what you need, and it opens the apps and gets the job done while you watch.
+
+## Just say it
+
+<table>
+<tr>
+<td>
+
+Hold the Home button and ask:
+
+> “Make a little rocket in Blender and render it for me.”
 >
-> “帮我装一个 Krita。”
+> “Install Krita for me.”
 >
-> “把你的屏幕投到电视上。”
+> “Put your screen on the TV.”
 >
-> “用微信给妈妈发条语音，说我今晚回家吃饭。”
+> “Send Mom a WeChat voice message: I'll be home for dinner.”
 
-助理会先列出计划，边做边用语音告诉你进展。它会打开软件、点按钮、输入文字，做完把图片和文件直接放进对话里，点开就能看。
+The assistant lays out a plan first and tells you out loud how it is going. It opens apps, clicks buttons and types for you. When it is done, the pictures and files it made land right in the conversation, ready to open.
 
-## 助理有自己的屏幕
+</td>
+<td width="260">
+<img src="docs/images/readme/phone-chat.jpg" width="240" alt="The finished task in the conversation: the rendered rocket, the Blender file and a short summary">
+</td>
+</tr>
+</table>
 
-助理在自己的桌面上工作，不会抢你的手机。
+## The assistant has its own screen
 
-- 它的屏幕显示在一个浮窗里，可以放大、缩小、收到屏幕边缘，也可以一句话投到电视上。
-- 它的点击和输入只发生在自己的屏幕上，你照常用手机。
-- 当你打开了桌面模式或正在投屏，它就直接在你的桌面上和你一起干活。你也可以指定它在哪里做。
+<table>
+<tr>
+<td width="260">
+<img src="docs/images/readme/phone-working.jpg" width="240" alt="The assistant's screen floating at the top of the phone shows Blender while the conversation below shows the render in progress">
+</td>
+<td>
 
-## 你始终说了算
+The assistant works on a desktop of its own, so your phone stays yours.
 
-- **先问再动**：要关掉你正在用的应用、删除或覆盖你的文件、发送消息之前，它都会先问你。
-- **密码只归你**：需要管理员权限时，系统会在你的屏幕上弹出密码框，由你自己输入，助理看不到密码。
-- **不擅自绕路**：原计划走不通时，它会说明各个方案的后果，由你来选，不会悄悄降级了事。
-- **规矩你来定**：助理的行为准则和技能就是你目录里的几个文本文件，改完立刻生效。
+- Its screen floats in a small window you can resize, tuck against the edge, or send to the TV with one sentence.
+- Its clicks and typing happen only on its own screen. Keep using your phone meanwhile.
+- When you have desktop mode on or are casting to a TV, it works right there on your desktop with you. You can also tell it where to work.
 
-## 一部手机，一台真正的电脑
+</td>
+</tr>
+</table>
 
-- **完整的 Linux 桌面**：Ubuntu 26.04 加 KDE Plasma Mobile 6.6，apt、Flatpak 和 Discover 应用商店都能直接用。
-- **GPU 加速**：桌面、浏览器和 3D 软件都用上手机的 GPU，老式 X11 程序和 Flatpak 应用也不例外；视频硬件解码。
-- **手机硬件都能用**：扬声器、麦克风、前后摄像头，和安卓互通的剪贴板，Rime 中文输入。
-- **桌面模式与投屏**：在手机浮窗里打开完整桌面，或者无线投到电视，手机就是触控板和键盘。
-- **流畅**：画面不经拷贝直接送上屏幕，触摸时最高 120Hz 刷新。
-- **主动关照**：主屏的建议小组件会发现系统里的问题，一键交给助理调查处理。
+<p align="center">
+  <img src="docs/images/readme/workspace-blender.jpg" width="820" alt="The assistant's full screen: Blender with the rocket it just modelled">
+</p>
 
-## 它是怎么工作的
+<p align="center"><sub>The assistant's screen at full size: Blender with the rocket it just built.</sub></p>
+
+## You stay in control
+
+- **It asks first.** Before it closes an app you are using, deletes or overwrites your files, or sends a message, it asks you.
+- **Your password stays yours.** When something needs administrator rights, the system shows a password dialog on your screen. You type it; the assistant never sees it.
+- **No silent detours.** If the plan hits a wall, it explains the options and what each one means, and you choose. It does not quietly settle for less.
+- **You set the rules.** The assistant's guidelines and skills are plain text files in your home folder. Edit them and the change applies right away.
+
+## A real computer in your pocket
+
+- **A complete Linux desktop.** Ubuntu 26.04 with KDE Plasma Mobile 6.6. Install software with apt, Flatpak or the Discover app store.
+- **GPU acceleration.** The desktop, the browser and 3D software all run on the phone's GPU, including older X11 programs and Flatpak apps. Video decoding runs in hardware.
+- **Your phone's hardware.** Speaker, microphone, front and rear cameras, a clipboard shared with Android, and Chinese input with Rime.
+- **Desktop mode and casting.** Open the full desktop in a floating window, or cast it wirelessly to a TV and use the phone as its touchpad and keyboard.
+- **Smooth.** Frames go straight to the display without copying, at up to 120 Hz while you touch the screen.
+- **Looks after itself.** A home-screen widget spots problems on the system and hands them to the assistant to investigate.
+
+<table>
+<tr>
+<td align="center"><img src="docs/images/readme/phone-apps.jpg" width="240" alt="The app drawer with Blender, Firefox, Krita and other desktop apps"><br><sub>Desktop apps on the phone</sub></td>
+<td align="center"><img src="docs/images/readme/phone-desktop-float.jpg" width="240" alt="Desktop mode: the full desktop in a floating window over the phone"><br><sub>Desktop mode in a floating window</sub></td>
+</tr>
+</table>
+
+<p align="center">
+  <img src="docs/images/readme/desktop.jpg" width="820" alt="The full Plasma desktop with its taskbar, as shown in desktop mode or on a TV">
+</p>
+
+<p align="center"><sub>The same desktop on a TV or in the floating window.</sub></p>
+
+## How it works
 
 ```mermaid
 flowchart TB
-    subgraph container["Linux 桌面（Ubuntu 容器）"]
-        desktop["Plasma 桌面与应用"]
-        agent["AI 助理"]
-        workspace["助理屏"]
-        agent -- 操作应用 --> workspace
-        agent -. 桌面模式或投屏时 .-> desktop
+    subgraph container["Linux desktop (Ubuntu container)"]
+        desktop["Plasma desktop and apps"]
+        agent["AI assistant"]
+        workspace["Assistant's screen"]
+        agent -- operates apps --> workspace
+        agent -. in desktop mode or when casting .-> desktop
     end
-    app["Rungic 安卓应用<br/>显示 · 触控 · 声音 · 摄像头"]
+    app["Rungic Android app<br/>display · touch · sound · camera"]
     desktop --> app
     workspace --> app
-    app --> phone["手机屏幕"]
-    app --> tv["浮窗与电视"]
+    app --> phone["Phone screen"]
+    app --> tv["Floating window and TV"]
 ```
 
-Rungic 不替换手机系统。安卓继续负责通话、网络和相机等硬件，Linux 桌面运行在容器里，由 Rungic 应用把画面、触控、声音和摄像头接在一起。
+Rungic does not replace the phone's operating system. Android keeps handling calls, networking, the camera and the rest of the hardware. The Linux desktop runs in a container, and the Rungic app ties together its picture, touch input, sound and camera.
 
-AI 助理由两部分组成：实时语音模型负责和你对话，后台的 Agent 负责真正干活。
+The assistant has two parts: a realtime voice model talks with you, and an agent in the background does the work.
 
-## 支持的设备
+## Supported devices
 
-| 设备 | 状态 |
+| Device | Status |
 |---|---|
-| moto g100s（XT2537-4） | 主力开发设备，功能最全 |
-| moto g100（XT2533-4） | 一键刷机包已验证，可清数据安装 |
-| moto X70 Air Pro | 适配中 |
+| moto g100s (XT2537-4) | Main development device, most complete |
+| moto g100 (XT2533-4) | One-step flash package verified on a wiped phone |
+| moto X70 Air Pro | In progress |
 
-## 现状
+## Status
 
-Rungic 正在快速开发中，目前是私有预览版。尚在打磨的部分：
+Rungic is under active development and in private preview. Still being polished:
 
-- 助理完成较复杂的任务（比如一次 3D 建模）大约需要两分钟，提速方案已经在做；
-- 替你打电话、接电话的通话代理还在实测；
-- Vulkan 桌面渲染在这类 GPU 上有闪屏，桌面暂时使用 OpenGL ES。
+- The assistant speaks Chinese and its interface is in Chinese for now.
+- Larger tasks, such as modelling in 3D, take the assistant about two minutes; work to speed this up is under way.
+- The call agent, which makes and answers phone calls for you, is still being tested.
+- Vulkan desktop rendering flickers on this GPU family, so the desktop uses OpenGL ES for now.
 
-## 了解更多
+## Learn more
 
-- [开发者指南与文档索引](docs/README.md)：仓库结构、开发入口、每项能力的设计与验收文档
-- [语音助理](docs/59-voice-agent.md) · [电脑操作](docs/60-computer-use.md) · [助理屏](docs/65-agent-screen.md) · [助理的工作区](docs/research/91-agent-workspaces.md)
-- [工程约定](AGENTS.md)
+- [Developer guide and documentation index](docs/README.md): repository layout, development entry points, and the design and acceptance documents for each capability
+- [Voice assistant](docs/59-voice-agent.md) · [Computer use](docs/60-computer-use.md) · [Assistant's screen](docs/65-agent-screen.md) · [Agent workspaces](docs/research/91-agent-workspaces.md) (in Chinese)
+- [Engineering conventions](AGENTS.md) (in Chinese)

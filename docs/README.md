@@ -1,173 +1,171 @@
-# Rungic 开发者指南与文档索引
+# Rungic developer guide and documentation index
 
-面向开发者：项目沿革、能力与实现文档的对照、仓库目录、开发入口和全部文档索引。产品介绍见[项目首页](../README.md)，工程约定见[AGENTS.md](../AGENTS.md)。
+For developers: where the project came from, which document covers each capability, the repository layout, how to get started, and the index of all documents. For the product itself see the [project home](../README.md); engineering conventions are in [AGENTS.md](../AGENTS.md). The documents themselves are written in Chinese; their titles are translated below.
 
-## 项目沿革
+## Project history
 
-Rungic是运行在Android手机上的AgentOS：Ubuntu容器中的Plasma Mobile桌面，加上Android宿主、硬件桥和语音/桌面自动化代理。开发设备是Motorola moto g100s（XT2537-4 / Adreno710）。2026-09-26起项目改名为Rungic（原名Moto Android / Plasma Mobile），名称迁移见[70篇](70-rungic-rebrand.md)。当前维护Ubuntu 26.04 ARM64、Plasma Mobile 6.6系列，以及Android宿主、GPU、输入、网络和媒体桥。
+Rungic is an AgentOS for Android phones: a Plasma Mobile desktop in an Ubuntu container, an Android host app, hardware bridges, and voice and desktop automation agents. The main development device is the Motorola moto g100s (XT2537-4, Adreno 710). The project was renamed Rungic on 2026-09-26 (formerly Moto Android / Plasma Mobile); see [70](70-rungic-rebrand.md). It maintains Ubuntu 26.04 ARM64, the Plasma Mobile 6.6 series, and the Android host, GPU, input, network and media bridges.
 
-2026-09-23按用户要求停止维护Phosh。共享媒体/网络/剪贴板实现保留在`shared/`；本次仅整理本地项目，没有卸载或更改手机中的系统。
+Phosh was dropped on 2026-09-23. The shared media, network and clipboard implementations live on in `shared/`.
 
-## Agent能力与文档对照
+## Agent capabilities and their documents
 
-Rungic的核心是系统级AI助理：用户用语音或文字交代任务，助理在Linux桌面上实际操作应用完成它，并让用户随时看到它在做什么。
-
-| 能力 | 说明 | 文档 |
+| Capability | What it does | Documents |
 |---|---|---|
-| 语音对话 | 长按Home呼出；GPT Realtime负责对话和语音播报，Codex在后台执行任务 | [59](59-voice-agent.md)、[67](67-home-assistant.md) |
-| 看得见的工作 | 聊天式界面（“主对话”与其他对话）；任务计划清单、按步骤的语音播报、回答里直接展示图片和文件 | [87](87-agent-app-redesign.md)–[89](89-agent-progress.md) |
-| 操作桌面应用 | 按无障碍树（AT-SPI）和虚拟输入操作控件；GPT-6 Luna看画面决定点哪里；手机GPU做OCR | [60](60-computer-use.md)、[64](64-goal-computer-use.md)、[68](68-luna-computer-use.md) |
-| 助理屏（工作区） | 助理自己的桌面：独立KWin、私有D-Bus和无障碍总线、自己的Xwayland，显示在手机浮窗或电视上，不碰用户正在用的屏幕 | [65](65-agent-screen.md)、[research/91](research/91-agent-workspaces.md) |
-| 工作位置 | 用户开着桌面模式或投屏时在用户桌面上工作，否则在助理屏；用户可以直接指定 | [research/91](research/91-agent-workspaces.md) |
-| 单实例应用切换 | 微信、Telegram等按需切到助理屏；关闭用户正在用的实例前先征得同意 | [research/91](research/91-agent-workspaces.md) |
-| 手机能力 | 亮度、剪贴板、方向、振动、网络与显示信息、Android设置面板（`rungic-platform`）；投屏、截图 | [59](59-voice-agent.md) |
-| 通话与语音代发 | 替用户打电话、接电话；在聊天应用里发语音消息 | [63](63-call-proxy.md) |
-| 主动建议 | 采集故障和软件适配问题，结合兼容性知识库在Folio主屏小组件里给出建议，用户委托后由助理调查和处理 | [主动建议](research/proactive-system-care.md) |
-| 可改的指令 | 行为准则和技能放在用户目录（`~/.config/rungic-voice-agent/prompts`、`~/.codex/skills`），改动随时生效；需要密码或会改变结果的绕路先问用户 | [59](59-voice-agent.md) |
-| 原生诊断 | 合并日志、崩溃符号化、证据快照、按控件操作，以MCP工具供开发Agent调用 | [55](55-agent-native-debugging.md) |
+| Voice conversation | Hold Home to call it; GPT Realtime talks and reads results aloud, Codex runs the task in the background | [59](59-voice-agent.md), [67](67-home-assistant.md) |
+| Visible work | Chat interface (the main conversation and others); a task plan checklist, spoken step updates, pictures and files right in the answer | [87](87-agent-app-redesign.md)–[89](89-agent-progress.md) |
+| Operating desktop apps | Controls through the accessibility tree (AT-SPI) and virtual input; GPT-6 Luna decides where to click from the picture; OCR on the phone's GPU | [60](60-computer-use.md), [64](64-goal-computer-use.md), [68](68-luna-computer-use.md) |
+| Assistant's screen (workspace) | A desktop of the assistant's own: its own KWin, private D-Bus and accessibility buses, its own Xwayland; shown in a floating window or on the TV, never touching the screen the user is on | [65](65-agent-screen.md), [research/91](research/91-agent-workspaces.md) |
+| Where it works | On the user's desktop while desktop mode or casting is on, otherwise on its own screen; the user can say which | [research/91](research/91-agent-workspaces.md) |
+| Single-instance apps | WeChat, Telegram and similar apps move to the assistant's screen when needed; the user is asked before an instance they use is closed | [research/91](research/91-agent-workspaces.md) |
+| Phone functions | Brightness, clipboard, orientation, vibration, network and display information, Android settings panels (`rungic-platform`); casting, screenshots | [59](59-voice-agent.md) |
+| Calls and voice messages | Makes and answers phone calls for the user; sends voice messages in chat apps | [63](63-call-proxy.md) |
+| Proactive suggestions | Collects faults and software compatibility problems, matches them against a compatibility knowledge base, and shows suggestions in a Folio home-screen widget; the assistant investigates when the user hands one over | [Proactive suggestions](research/proactive-system-care.md) |
+| Editable instructions | The guidelines and skills live in the user's home (`~/.config/rungic-voice-agent/prompts`, `~/.codex/skills`) and apply as soon as they change; a password or a detour that changes the outcome is asked about first | [59](59-voice-agent.md) |
+| Native diagnostics | Merged logs, crash symbolization, evidence snapshots and control-level UI actions as MCP tools for development agents | [55](55-agent-native-debugging.md) |
 
-## 系统特性与文档对照
+## System features and their documents
 
-| 领域 | 特性 | 文档 |
+| Area | Features | Documents |
 |---|---|---|
-| 底座 | Android 16上用LXC运行Ubuntu 26.04 ARM64（glibc），Magisk提供root；`~/Shared`即Android共享存储 | [38](38-plasma-mobile.md)、[40](40-plasma-mobile-integration.md)、[69](69-filesystem-capabilities.md) |
-| 桌面 | 官方Plasma Mobile 6.6.5，KWin 6.6.6加Android宿主后端；Rime中文输入、录屏、边缘返回 | [40](40-plasma-mobile-integration.md)、[41](41-plasma-rime-input.md)、[72](72-kwin-android-host-isolation.md) |
-| 显示 | 零拷贝呈现与显式同步、UBWC压缩输出；触摸时请求120Hz；原生分辨率与显示大小策略 | [49](49-plasma-performance.md)、[57](57-zero-copy-explicit-sync.md)、[85](85-phone-display-size-policy.md) |
-| 第二块屏 | 桌面模式（完整桌面在手机浮窗里）；自研Miracast发送端投屏到电视，手机当触控板和键盘 | [65](65-agent-screen.md)、[66](66-pointer-gestures.md)、[84](84-miracast-source.md) |
-| GPU | Mesa KGSL（freedreno GL/GLES、Turnip Vulkan 1.4）；X11应用经Xwayland的glamor和DRI3用GPU；Flatpak自带GL扩展，`--device=dri`带上KGSL | [51](51-plasma-vulkan-benchmark.md)、[research/93](research/93-xwayland-kgsl-gpu.md)、[research/94](research/94-mesa-base.md) |
-| 音视频 | 系统级扬声器与麦克风；摄像头经libcamera/PipeWire；H.264/HEVC/VP9硬解、H.264硬编；屏幕共享portal | [48](48-plasma-media-pipelines.md)、[62](62-linux-virtual-audio.md) |
-| 系统服务 | 双向剪贴板与剪贴板历史；Wi-Fi、蓝牙、蜂窝状态接Android；SSH自动开启；容器内rootless Docker | [83](83-service-policy.md)、[85](85-lxc-rootless-docker.md)、[剪贴板历史](research/clipboard-history.md) |
-| 应用 | Firefox（WebGL、硬解视频）、Blender（Vulkan视口）、Krita 6、Telegram、VS Code、微信；Discover与`pkgcli`安装，系统弹密码框 | [36](36-firefox-input-fix.md)、[45](45-plasma-app-store.md)、[90](90-blender-vulkan-incident.md) |
-| 交付 | 上游组件以固定版本加补丁队列维护；本地APT仓库与发布元包，部署后自动验收，按包回退 | [61](61-delivery-diagnostics-plan.md)、[71](71-upstream-patch-queue.md)、[73](73-reduce-upstream-changes.md) |
-| 刷机包 | GKI、rootfs、一键包三段式构建；G100清数据刷入后进入Plasma，X70 Air Pro在接入中 | [75](75-image-build-separation.md)、[80](80-g100-image-installation-retrospective.md)、[83](83-x70-air-pro-onboarding.md) |
+| Foundation | Ubuntu 26.04 ARM64 (glibc) in LXC on Android 16, root through Magisk; `~/Shared` is Android's shared storage | [38](38-plasma-mobile.md), [40](40-plasma-mobile-integration.md), [69](69-filesystem-capabilities.md) |
+| Desktop | Stock Plasma Mobile 6.6.5, KWin 6.6.6 with an Android host backend; Rime Chinese input, screen recording, edge back gesture | [40](40-plasma-mobile-integration.md), [41](41-plasma-rime-input.md), [72](72-kwin-android-host-isolation.md) |
+| Display | Zero-copy presentation with explicit sync and UBWC-compressed output; 120 Hz requested while touching; native resolution and display-size policy | [49](49-plasma-performance.md), [57](57-zero-copy-explicit-sync.md), [85](85-phone-display-size-policy.md) |
+| Second screen | Desktop mode (the full desktop in a floating window); casting to a TV with our own Miracast source, the phone as touchpad and keyboard | [65](65-agent-screen.md), [66](66-pointer-gestures.md), [84](84-miracast-source.md) |
+| GPU | Mesa on KGSL (freedreno GL/GLES, Turnip Vulkan 1.4); X11 apps on the GPU through Xwayland glamor and DRI3; a Flatpak GL extension, KGSL in `--device=dri` | [51](51-plasma-vulkan-benchmark.md), [research/93](research/93-xwayland-kgsl-gpu.md), [research/94](research/94-mesa-base.md) |
+| Audio and video | System speaker and microphone; cameras through libcamera and PipeWire; H.264/HEVC/VP9 hardware decoding, H.264 hardware encoding; screen-sharing portal | [48](48-plasma-media-pipelines.md), [62](62-linux-virtual-audio.md) |
+| System services | Two-way clipboard and clipboard history; Wi-Fi, Bluetooth and cellular state from Android; SSH on by default; rootless Docker in the container | [83](83-service-policy.md), [85](85-lxc-rootless-docker.md), [Clipboard history](research/clipboard-history.md) |
+| Apps | Firefox (WebGL, hardware video), Blender (Vulkan viewport), Krita 6, Telegram, VS Code, WeChat; installs through Discover and `pkgcli`, with the system's password dialog | [36](36-firefox-input-fix.md), [45](45-plasma-app-store.md), [90](90-blender-vulkan-incident.md) |
+| Delivery | Upstream components pinned with patch queues; a local APT repository and release metapackage, automatic acceptance after deployment, rollback by package | [61](61-delivery-diagnostics-plan.md), [71](71-upstream-patch-queue.md), [73](73-reduce-upstream-changes.md) |
+| Flash packages | GKI, rootfs and one-step package built separately; the G100 reaches Plasma after a wiped install, the X70 Air Pro is being brought up | [75](75-image-build-separation.md), [80](80-g100-image-installation-retrospective.md), [83](83-x70-air-pro-onboarding.md) |
 
-各项的验收边界以对应文档为准。已知限制：Turnip在KGSL上的Wayland呈现会闪屏，桌面仍用GLES（[56](56-kwin-vulkan-quantification.md)）；Mesa仍基于社区分支，换到上游的尝试已退回（[research/94](research/94-mesa-base.md)）。
+The acceptance scope of each item is in its documents. Known limits: Turnip's Wayland presentation flickers on KGSL, so the desktop stays on GLES ([56](56-kwin-vulkan-quantification.md)); Mesa is still based on a community branch, and a move to upstream was tried and reverted ([research/94](research/94-mesa-base.md)).
 
-## 工作区
+## Repository layout
 
-| 目录 | 内容 |
+| Directory | Contents |
 |---|---|
-| `plasma/` | KDE与Android APK适配、会话配置、构建脚本 |
-| `native/plasma/` | Rust/Smithay原生Wayland后端 |
-| `packages/` | 已迁为补丁队列的上游组件：固定上游来源加DEP-3补丁（[71篇](71-upstream-patch-queue.md)） |
-| `vendor/` | 仍直接跟踪的外来树（`native/plasma/`、`plasma/firefox-mobile/`）的来源记录与审计豁免 |
-| `shared/` | Linux媒体、网络、剪贴板与GPU公共接口 |
-| `tools/` | 管理、ROM、构建辅助和诊断工具 |
-| `kernel/`、`lxc/`、`cutout/` | 内核、容器与设备相关配置 |
-| `docs/` | 实施文档；`research/`保留可复用历史结论 |
-| `benchmarks/` | 已选定的性能原始数据与分析 |
-| `provenance/` | 上游来源、版本和校验记录 |
-| `signing/development/` | 按用户要求同步的开发APK签名身份 |
-| `.work/` | 不同步的下载、依赖、缓存、日志、媒体、安装包和其他密钥 |
+| `plasma/` | KDE and Android APK integration, session configuration, build scripts |
+| `native/plasma/` | The native Wayland backend in Rust (Smithay) |
+| `packages/` | Upstream components kept as patch queues: a pinned upstream plus DEP-3 patches ([71](71-upstream-patch-queue.md)) |
+| `vendor/` | Provenance and audit exceptions for the foreign trees still tracked directly (`native/plasma/`, `plasma/firefox-mobile/`) |
+| `shared/` | Common Linux interfaces for media, network, clipboard and GPU |
+| `tools/` | Management, ROM, build and diagnostic tools |
+| `kernel/`, `lxc/`, `cutout/` | Kernel, container and device configuration |
+| `docs/` | Implementation documents; `research/` keeps reusable findings |
+| `benchmarks/` | Selected raw performance data and analyses |
+| `provenance/` | Upstream sources, versions and checksums |
+| `signing/development/` | The development APK signing identity, synced at the user's request |
+| `.work/` | Not synced: downloads, dependencies, caches, logs, media, packages and other keys |
 
-完整边界与迁移说明见[目录与Git范围](52-git-repository-scope.md)。远程为私有仓库[kevinzhow/RungicCore](https://github.com/kevinzhow/RungicCore)（2026-09-28由`kevinzhow/range-dev`改名），默认分支为`main`。文档包含本机身份和网络配置，未作为公开发行材料脱敏。
+Boundaries and migration notes: [repository scope](52-git-repository-scope.md). The remote is the private repository [kevinzhow/RungicCore](https://github.com/kevinzhow/RungicCore) (renamed from `kevinzhow/range-dev` on 2026-09-28), default branch `main`. The documents contain device identities and network configuration and are not redacted for publication.
 
-## 当前状态与入口
+## Status and entry points
 
-- 原厂Android16 + Magisk31，全局SELinux Enforcing；LXC已部署，Docker改在容器内以rootless运行（[85篇](85-lxc-rootless-docker.md)）。三段式刷机包已在G100清数据刷入验证（[80篇](80-g100-image-installation-retrospective.md)）。
-- Plasma独立APK和Ubuntu容器已运行；原生1080×2400与30/60/90/120Hz/自动策略已接入。正式KWin继续使用GLES，Vulkan对照与限制见[51篇](51-plasma-vulkan-benchmark.md)，KWin原生Vulkan收益量化见[56篇](56-kwin-vulkan-quantification.md)。
-- 媒体和显示尚有剩余验收项，以[48篇](48-plasma-media-pipelines.md)、[50篇](50-plasma-display-settings.md)为准，不把安装成功等同于完整验收。
-- 设备管理：`python3 tools/rungic_plasma.py status`。开发环境：`source tools/work-env.sh`。APK构建：`bash plasma/build-apk.sh`，产物写入`.work/`。
-- 图形和后端架构见[40篇](40-plasma-mobile-integration.md)及[共享桥说明](../shared/README.md)。全新机器构建仍需准备SDK/NDK及部分依赖。
-- 远程源码核对和多机协作见[53篇](53-remote-system-development.md)。修改过的上游组件（KWin、Mesa、Xwayland、flatpak等）都在`packages/`中以补丁队列维护（`tools/pq.py`），构建用`tools/build_on_device.py`；只有`native/plasma/`、`plasma/firefox-mobile/`仍直接跟踪（[Vendor说明](../vendor/README.md)）。
+- Stock Android 16 with Magisk 31, SELinux enforcing. LXC is deployed; Docker runs rootless inside the container ([85](85-lxc-rootless-docker.md)). The three-stage flash package has been verified with a wiped install on the G100 ([80](80-g100-image-installation-retrospective.md)).
+- The Plasma APK and the Ubuntu container run at the native 1080×2400 with 30/60/90/120 Hz and automatic refresh policies. KWin stays on GLES; the Vulkan comparison and its limits are in [51](51-plasma-vulkan-benchmark.md), the value of a native Vulkan KWin in [56](56-kwin-vulkan-quantification.md).
+- Media and display still have open acceptance items; see [48](48-plasma-media-pipelines.md) and [50](50-plasma-display-settings.md). An installation that succeeds is not a completed acceptance.
+- Device management: `python3 tools/rungic_plasma.py status`. Development environment: `source tools/work-env.sh`. APK build: `bash plasma/build-apk.sh`, output under `.work/`.
+- Graphics and backend architecture: [40](40-plasma-mobile-integration.md) and the [shared bridges](../shared/README.md). A fresh build machine still needs the SDK/NDK and some dependencies.
+- Remote source checks and multi-machine work: [53](53-remote-system-development.md). Modified upstream components (KWin, Mesa, Xwayland, flatpak and others) are patch queues in `packages/` (`tools/pq.py`), built with `tools/build_on_device.py`; only `native/plasma/` and `plasma/firefox-mobile/` are tracked directly ([vendor notes](../vendor/README.md)).
 
-Vendor适配应放在哪一层、哪些可以抽离到共享后端，见[54篇架构评审](54-vendor-adaptation-boundaries.md)。
+Which layer a vendor adaptation belongs in, and what can move to a shared backend: [54](54-vendor-adaptation-boundaries.md).
 
-系统交付、验收与诊断见[61篇](61-delivery-diagnostics-plan.md)：容器rootfs上本项目的文件都来自包（`plasma/packaging`、补丁队列与vendor重建包），经本地APT仓库与发布元包部署（`tools/rungic_release.py deploy|rollback|status`），部署后自动验收（`tools/rungic_acceptance.py`），`rungic-integrity`检查漂移。rootfs是ext4镜像（`plasma/rootfs-image`），部署前自动建dm-snapshot，验收失败即回到快照；`/home`、崩溃报告与本地仓库不随之回滚。
+Delivery, acceptance and diagnostics: [61](61-delivery-diagnostics-plan.md). Every file this project puts on the container's rootfs comes from a package (`plasma/packaging`, patch queues and vendor rebuilds), deployed through the local APT repository and the release metapackage (`tools/rungic_release.py deploy|rollback|status`), followed by automatic acceptance (`tools/rungic_acceptance.py`); `rungic-integrity` checks for drift. The rootfs is an ext4 image (`plasma/rootfs-image`); deployment can take a dm-snapshot first and return to it when acceptance fails. `/home`, crash reports and the local repository are not rolled back with it.
 
-跨手机的 Android 系统镜像、RungicOS rootfs 和内核构建拆分方案，以及设备能力探测与发布门槛，见[75篇](75-image-build-separation.md)。
+How Android system images, the RungicOS rootfs and kernel builds are split across phones, with device capability probing and release gates: [75](75-image-build-separation.md).
 
-## 文档索引
+## Documentation index
 
-01–21包含设备/ROM/容器历史；早期Phosh专属安装文档已移除。28–35保留共享接口研究，38以后记录Plasma适配。历史“当时已验证”的状态不代表当前所有功能已经验收。
+01–21 cover the device, ROM and container history; the early Phosh-only installation documents were removed. 28–35 keep research on shared interfaces; 38 onward cover Plasma. A status recorded as verified at the time does not mean the feature is accepted today.
 
-| 文档 | 内容 |
+| Document | Topic |
 |---|---|
-| [01-device.md](01-device.md) | 设备身份 |
-| [02-linux-feasibility.md](02-linux-feasibility.md) | 为什么不做成 Linux 发行版 |
-| [03-gsi-dsu.md](03-gsi-dsu.md) | 官方 Android 17 GSI 与 DSU 试验 |
-| [04-permanent-gsi.md](04-permanent-gsi.md) | 永久刷入 Android 17 GSI |
-| [05-magisk-root.md](05-magisk-root.md) | Magisk root（init_boot） |
-| [06-pitfalls.md](06-pitfalls.md) | 踩坑清单 |
-| [07-restore-stock.md](07-restore-stock.md) | 回到官方 MYUI |
-| [08-commands.md](08-commands.md) | 命令速查 |
-| [09-stock-magisk.md](09-stock-magisk.md) | 原厂 MYUI + Magisk 可行性核验 |
-| [10-stock-debloat.md](10-stock-debloat.md) | 原厂固件精简版：W1WAA36.48-23-10 |
-| [11-stock-install.md](11-stock-install.md) | 原厂精简系统与 Magisk 实机安装记录 |
-| [12-offline-magisk.md](12-offline-magisk.md) | 原厂精简包 v2：已弃用的系统应用方案 |
-| [13-offline-magisk-user-app.md](13-offline-magisk-user-app.md) | Magisk 离线首启 v3：普通应用安装 |
-| [14-oneclick-package.md](14-oneclick-package.md) | v3 一键完整重装包（差分封装） |
-| [15-container-reassessment.md](15-container-reassessment.md) | Docker / LXC 重新评估（2026-09-22） |
-| [16-lxc-prerequisites.md](16-lxc-prerequisites.md) | LXC 运行条件实测（2026-09-22） |
-| [17-lxc-installation.md](17-lxc-installation.md) | LXC 实机部署与验证（2026-09-22） |
-| [18-termux-lxc.md](18-termux-lxc.md) | 用 Termux 管理 LXC（2026-09-22） |
-| [19-docker-installation.md](19-docker-installation.md) | 原厂 Android 16 上运行 Docker（2026-09-22；已由 85 篇的容器内 rootless Docker 取代并移除） |
-| [20-docker-storage.md](20-docker-storage.md) | Docker 卷与手机共享存储（2026-09-22） |
-| [21-memory-audit.md](21-memory-audit.md) | 原厂系统 RAM 占用实测（2026-09-22） |
-| [28-capability-audit.md](research/28-capability-audit.md) | Phosh 日常使用能力与 Android 硬件接口审计 |
-| [29-reuse-research.md](research/29-reuse-research.md) | Phosh 适配前的现有方案调研与复用判断 |
-| [30-feature-adaptation.md](research/30-feature-adaptation.md) | Phosh 功能逐项适配记录 |
-| [31-backend-integration.md](research/31-backend-integration.md) | Phosh 与 Android 后端的连接：架构、研究过程和维护方法 |
-| [32-network-integration.md](research/32-network-integration.md) | Android 网络接入 GNOME / Phosh |
-| [33-capture-integration.md](research/33-capture-integration.md) | 麦克风、相机、拍照和录像接入 |
-| [34-hardware-codec-audit.md](research/34-hardware-codec-audit.md) | 硬件视频编码、解码：实机核验与接入候选 |
-| [35-hardware-codec-integration.md](research/35-hardware-codec-integration.md) | Linux 应用和 Firefox 接入 Android 硬件编解码 |
-| [74-vaapi-feasibility.md](research/74-vaapi-feasibility.md) | 编解码桥做成 VA-API 驱动的可行性（结论：不能替换现有补丁） |
-| [36-firefox-input-fix.md](36-firefox-input-fix.md) | Firefox 地址栏输入崩溃修复 |
-| [37-linux-distribution-evaluation.md](37-linux-distribution-evaluation.md) | Alpine、Debian、Ubuntu 的取舍与迁移边界 |
-| [38-plasma-mobile.md](38-plasma-mobile.md) | 独立 Plasma Mobile 环境：版本目标、发行版选择与部署状态 |
-| [39-magisk-daemon-crash.md](39-magisk-daemon-crash.md) | Magisk 31.0 守护进程退出调查 |
-| [40-plasma-mobile-integration.md](40-plasma-mobile-integration.md) | Ubuntu Plasma Mobile：桌面与 Android 后端集成 |
-| [41-plasma-rime-input.md](41-plasma-rime-input.md) | Plasma Mobile 的 Rime 中文输入 |
-| [42-plasma-runtime-acceptance.md](42-plasma-runtime-acceptance.md) | Plasma Mobile 运行修复与验收 |
-| [43-plasma-panel-workarea.md](43-plasma-panel-workarea.md) | Plasma 状态栏高度与应用避让 |
-| [44-plasma-user-account.md](44-plasma-user-account.md) | 首次账户与密码设置 |
-| [45-plasma-app-store.md](45-plasma-app-store.md) | Plasma Mobile 应用商店 |
-| [46-plasma-recording-and-edge-back.md](46-plasma-recording-and-edge-back.md) | Plasma 录屏与 Android 边缘返回 |
-| [47-plasma-input-window-flicker.md](47-plasma-input-window-flicker.md) | Plasma Mobile 输入时窗口上下闪动 |
-| [48-plasma-media-pipelines.md](48-plasma-media-pipelines.md) | Plasma 媒体共享接口与质量验收 |
-| [49-plasma-performance.md](49-plasma-performance.md) | Plasma 动画、列表帧率与 Android 调度 |
-| [50-plasma-display-settings.md](50-plasma-display-settings.md) | KDE 显示设置与 Android 原生分辨率 |
-| [51-plasma-vulkan-benchmark.md](51-plasma-vulkan-benchmark.md) | Plasma Vulkan 链路与性能对照 |
-| [52-git-repository-scope.md](52-git-repository-scope.md) | 私有仓库与本地工作目录 |
-| [55-agent-native-debugging.md](55-agent-native-debugging.md) | Agent 原生调试：统一采集、崩溃现场、统一追踪与按控件操作 |
-| [56-kwin-vulkan-quantification.md](56-kwin-vulkan-quantification.md) | KWin + 原生 Vulkan 收益量化 |
-| [57-zero-copy-explicit-sync.md](57-zero-copy-explicit-sync.md) | 零拷贝呈现与显式同步 |
-| [58-miracast-desktop-feasibility.md](58-miracast-desktop-feasibility.md) | Miracast投屏桌面与手机触控板可行性 |
-| [59-voice-agent.md](59-voice-agent.md) | 语音Agent：GPT Realtime驱动Codex |
-| [60-computer-use.md](60-computer-use.md) | 电脑操作：arc-cua + JEV的Linux后端（rungic-cua） |
-| [61-delivery-diagnostics-plan.md](61-delivery-diagnostics-plan.md) | 系统交付、验收与诊断：打包、发布、回滚、验收、崩溃链、rootfs快照 |
-| [62-linux-virtual-audio.md](62-linux-virtual-audio.md) | Linux扬声器与Linux麦克风（系统级虚拟音频设备） |
-| [63-call-proxy.md](63-call-proxy.md) | 通话代理：语音助手替用户打电话、接电话 |
-| [64-goal-computer-use.md](64-goal-computer-use.md) | 目标级电脑操作：typesafe-computer-use + 手机GPU OCR |
-| [65-agent-screen.md](65-agent-screen.md) | 助理屏：按需开启、浮窗与投屏互转的第二输出 |
-| [66-pointer-gestures.md](66-pointer-gestures.md) | 指针手势与移动算法：直接触摸、触控板、电视 |
-| [67-home-assistant.md](67-home-assistant.md) | 长按Home呼出语音助手 |
-| [68-luna-computer-use.md](68-luna-computer-use.md) | GPT-6 Luna Computer Use（看画面决定点哪里） |
-| [69-filesystem-capabilities.md](69-filesystem-capabilities.md) | 文件系统与容器能力审计 |
-| [70-rungic-rebrand.md](70-rungic-rebrand.md) | Rungic（AgentOS）改名：命名规则、迁移调研、分阶段计划与进度 |
-| [71-upstream-patch-queue.md](71-upstream-patch-queue.md) | 上游组件改为补丁队列：业界做法、目录与补丁规范、工具与测试分层、KWin试点 |
-| [72-kwin-android-host-isolation.md](72-kwin-android-host-isolation.md) | KWin的Android宿主适配：协议化与独立后端（调研、目标结构、试点） |
-| [73-reduce-upstream-changes.md](73-reduce-upstream-changes.md) | 减少对上游源码的修改：补丁队列收尾、扩展点与共享系统服务替代（总方案与进度） |
-| [78-g100-firmware-inventory.md](78-g100-firmware-inventory.md) | XT2533-4 G100 原厂固件来源、提取与离线校验记录 |
-| [75-image-build-separation.md](75-image-build-separation.md) | Android 固件、RungicOS rootfs、内核构建拆分与跨设备兼容契约 |
-| [76-g100-memory-audit.md](76-g100-memory-audit.md) | XT2533-4 G100 当前 Android 内存占用的实机审计 |
-| [77-g100-three-ci-assessment.md](77-g100-three-ci-assessment.md) | 通用三条镜像 CI、G100 首个设备 spec、runner 分工与缓存清理 |
-| [79-g100-ci-execution.md](79-g100-ci-execution.md) | G100 三段镜像 CI 首轮执行记录 |
-| [80-g100-image-installation-retrospective.md](80-g100-image-installation-retrospective.md) | G100 完整镜像实施复盘：遇到的问题与最佳解决路径 |
-| [81-end-to-end-user-experience.md](81-end-to-end-user-experience.md) | Rungic 用户全流程 UX 审查与改进方案 |
-| [82-first-run-ux-refactor.md](82-first-run-ux-refactor.md) | 首启 UX 重构：第一批实施 |
-| [83-service-policy.md](83-service-policy.md) | 系统服务页与可选 SSH 登录 |
-| [83-x70-air-pro-onboarding.md](83-x70-air-pro-onboarding.md) | X70 Air Pro / vantage 首轮接入 |
-| [84-miracast-source.md](84-miracast-source.md) | 自研Miracast发送端：不依赖厂商投屏组件 |
-| [85-lxc-rootless-docker.md](85-lxc-rootless-docker.md) | Plasma容器内的rootless Docker：试验记录与打包方案 |
-| [85-phone-display-size-policy.md](85-phone-display-size-policy.md) | 手机显示大小策略与实现 |
-| [86-x70-miracast-assessment.md](86-x70-miracast-assessment.md) | X70 Air Pro Miracast 完善评估 |
-| [87-agent-app-redesign.md](87-agent-app-redesign.md) | Agent 助手第三版：聊天式界面与独立的设计系统库（2026-09-29） |
-| [88-agent-visible-work.md](88-agent-visible-work.md) | Agent 的工作要让用户看得见：对话里的图片、助理屏字幕、手机能力（2026-09-29） |
-| [89-agent-progress.md](89-agent-progress.md) | Agent 工作时的进度：任务状态、按事件的语音汇报、对话归属（2026-09-29） |
-| [90-blender-vulkan-incident.md](90-blender-vulkan-incident.md) | Blender 渲染事故与默认 CPU 渲染（2026-09-29） |
-| [91-agent-workspaces.md](research/91-agent-workspaces.md) | 工作空间：Agent 各自独立的 GUI 空间（方案，2026-09-29） |
-| [92-agent-task-speed.md](research/92-agent-task-speed.md) | Agent 做 Blender 这类任务为什么慢，业界怎么提速（调研，2026-09-30） |
-| [93-xwayland-kgsl-gpu.md](research/93-xwayland-kgsl-gpu.md) | X11 应用在 KGSL 上用 GPU：Xwayland 的几种做法（2026-09-30） |
-| [94-mesa-base.md](research/94-mesa-base.md) | Mesa 的底座：lfdevs 分支，还是上游加我们自己的补丁（调研，2026-09-30） |
+| [01-device.md](01-device.md) | Device identity |
+| [02-linux-feasibility.md](02-linux-feasibility.md) | Why not a Linux distribution |
+| [03-gsi-dsu.md](03-gsi-dsu.md) | Trying the official Android 17 GSI with DSU |
+| [04-permanent-gsi.md](04-permanent-gsi.md) | Flashing the Android 17 GSI permanently |
+| [05-magisk-root.md](05-magisk-root.md) | Magisk root (init_boot) |
+| [06-pitfalls.md](06-pitfalls.md) | Pitfalls |
+| [07-restore-stock.md](07-restore-stock.md) | Returning to stock MYUI |
+| [08-commands.md](08-commands.md) | Command reference |
+| [09-stock-magisk.md](09-stock-magisk.md) | Checking stock MYUI with Magisk |
+| [10-stock-debloat.md](10-stock-debloat.md) | A debloated stock firmware: W1WAA36.48-23-10 |
+| [11-stock-install.md](11-stock-install.md) | Installing the debloated system and Magisk on the device |
+| [12-offline-magisk.md](12-offline-magisk.md) | Debloated package v2: the abandoned system-app approach |
+| [13-offline-magisk-user-app.md](13-offline-magisk-user-app.md) | Magisk offline first boot v3: a regular app install |
+| [14-oneclick-package.md](14-oneclick-package.md) | v3 one-step full reinstall package (delta packaging) |
+| [15-container-reassessment.md](15-container-reassessment.md) | Docker and LXC reassessed (2026-09-22) |
+| [16-lxc-prerequisites.md](16-lxc-prerequisites.md) | LXC prerequisites measured (2026-09-22) |
+| [17-lxc-installation.md](17-lxc-installation.md) | LXC deployment and verification (2026-09-22) |
+| [18-termux-lxc.md](18-termux-lxc.md) | Managing LXC from Termux (2026-09-22) |
+| [19-docker-installation.md](19-docker-installation.md) | Docker on stock Android 16 (2026-09-22; superseded by rootless Docker in the container, 85, and removed) |
+| [20-docker-storage.md](20-docker-storage.md) | Docker volumes and the phone's shared storage (2026-09-22) |
+| [21-memory-audit.md](21-memory-audit.md) | RAM use of the stock system (2026-09-22) |
+| [28-capability-audit.md](research/28-capability-audit.md) | Phosh everyday capabilities and Android hardware interfaces |
+| [29-reuse-research.md](research/29-reuse-research.md) | Existing solutions researched before adapting Phosh |
+| [30-feature-adaptation.md](research/30-feature-adaptation.md) | Phosh feature-by-feature adaptation |
+| [31-backend-integration.md](research/31-backend-integration.md) | How Phosh connects to the Android backend: architecture, research and maintenance |
+| [32-network-integration.md](research/32-network-integration.md) | Android networking in GNOME and Phosh |
+| [33-capture-integration.md](research/33-capture-integration.md) | Microphone, camera, photos and video recording |
+| [34-hardware-codec-audit.md](research/34-hardware-codec-audit.md) | Hardware video encoding and decoding: device checks and candidates |
+| [35-hardware-codec-integration.md](research/35-hardware-codec-integration.md) | Android hardware codecs for Linux apps and Firefox |
+| [74-vaapi-feasibility.md](research/74-vaapi-feasibility.md) | The codec bridge as a VA-API driver (it cannot replace the current patches) |
+| [36-firefox-input-fix.md](36-firefox-input-fix.md) | Fixing the Firefox address-bar input crash |
+| [37-linux-distribution-evaluation.md](37-linux-distribution-evaluation.md) | Alpine, Debian or Ubuntu, and the migration limits |
+| [38-plasma-mobile.md](38-plasma-mobile.md) | A standalone Plasma Mobile: version target, distribution and deployment |
+| [39-magisk-daemon-crash.md](39-magisk-daemon-crash.md) | Why the Magisk 31.0 daemon exited |
+| [40-plasma-mobile-integration.md](40-plasma-mobile-integration.md) | Ubuntu Plasma Mobile: the desktop and the Android backend |
+| [41-plasma-rime-input.md](41-plasma-rime-input.md) | Rime Chinese input in Plasma Mobile |
+| [42-plasma-runtime-acceptance.md](42-plasma-runtime-acceptance.md) | Plasma Mobile runtime fixes and acceptance |
+| [43-plasma-panel-workarea.md](43-plasma-panel-workarea.md) | Plasma status bar height and app placement |
+| [44-plasma-user-account.md](44-plasma-user-account.md) | First account and password setup |
+| [45-plasma-app-store.md](45-plasma-app-store.md) | The Plasma Mobile app store |
+| [46-plasma-recording-and-edge-back.md](46-plasma-recording-and-edge-back.md) | Plasma screen recording and the Android edge back gesture |
+| [47-plasma-input-window-flicker.md](47-plasma-input-window-flicker.md) | Windows jumping while typing in Plasma Mobile |
+| [48-plasma-media-pipelines.md](48-plasma-media-pipelines.md) | Plasma media sharing interfaces and quality acceptance |
+| [49-plasma-performance.md](49-plasma-performance.md) | Plasma animation, list frame rates and Android scheduling |
+| [50-plasma-display-settings.md](50-plasma-display-settings.md) | KDE display settings and Android's native resolution |
+| [51-plasma-vulkan-benchmark.md](51-plasma-vulkan-benchmark.md) | The Plasma Vulkan path and its performance |
+| [52-git-repository-scope.md](52-git-repository-scope.md) | The private repository and local working directories |
+| [55-agent-native-debugging.md](55-agent-native-debugging.md) | Agent-native debugging: collection, crash scenes, tracing and control-level actions |
+| [56-kwin-vulkan-quantification.md](56-kwin-vulkan-quantification.md) | What a native Vulkan KWin would gain |
+| [57-zero-copy-explicit-sync.md](57-zero-copy-explicit-sync.md) | Zero-copy presentation and explicit sync |
+| [58-miracast-desktop-feasibility.md](58-miracast-desktop-feasibility.md) | Casting the desktop over Miracast with the phone as touchpad |
+| [59-voice-agent.md](59-voice-agent.md) | The voice agent: GPT Realtime driving Codex |
+| [60-computer-use.md](60-computer-use.md) | Computer use: a Linux backend for arc-cua and JEV (rungic-cua) |
+| [61-delivery-diagnostics-plan.md](61-delivery-diagnostics-plan.md) | Delivery, acceptance and diagnostics: packaging, releases, rollback, crash chain, rootfs snapshots |
+| [62-linux-virtual-audio.md](62-linux-virtual-audio.md) | A Linux speaker and microphone (system virtual audio devices) |
+| [63-call-proxy.md](63-call-proxy.md) | The call agent: making and answering calls for the user |
+| [64-goal-computer-use.md](64-goal-computer-use.md) | Goal-level computer use: typesafe-computer-use with OCR on the phone's GPU |
+| [65-agent-screen.md](65-agent-screen.md) | The assistant's screen: a second output on demand, in a floating window or cast |
+| [66-pointer-gestures.md](66-pointer-gestures.md) | Pointer gestures and movement: direct touch, touchpad, TV |
+| [67-home-assistant.md](67-home-assistant.md) | Holding Home to call the voice assistant |
+| [68-luna-computer-use.md](68-luna-computer-use.md) | GPT-6 Luna computer use (deciding where to click from the picture) |
+| [69-filesystem-capabilities.md](69-filesystem-capabilities.md) | File system and container capabilities |
+| [70-rungic-rebrand.md](70-rungic-rebrand.md) | The Rungic (AgentOS) rename: naming, migration research, phases and progress |
+| [71-upstream-patch-queue.md](71-upstream-patch-queue.md) | Upstream components as patch queues: practice, layout, patch rules, tools, tests and the KWin pilot |
+| [72-kwin-android-host-isolation.md](72-kwin-android-host-isolation.md) | KWin's Android host support as a protocol and a separate backend |
+| [73-reduce-upstream-changes.md](73-reduce-upstream-changes.md) | Changing less upstream code: finishing the patch queues, extension points and shared services |
+| [75-image-build-separation.md](75-image-build-separation.md) | Splitting Android firmware, RungicOS rootfs and kernel builds, and the cross-device contract |
+| [76-g100-memory-audit.md](76-g100-memory-audit.md) | Android memory use on the XT2533-4 G100 |
+| [77-g100-three-ci-assessment.md](77-g100-three-ci-assessment.md) | Three image CI pipelines, the G100 as the first device spec, runners and cache cleanup |
+| [78-g100-firmware-inventory.md](78-g100-firmware-inventory.md) | XT2533-4 G100 stock firmware sources, extraction and offline checks |
+| [79-g100-ci-execution.md](79-g100-ci-execution.md) | The first run of the G100 three-stage image CI |
+| [80-g100-image-installation-retrospective.md](80-g100-image-installation-retrospective.md) | G100 full image retrospective: the problems and the best path |
+| [81-end-to-end-user-experience.md](81-end-to-end-user-experience.md) | The end-to-end user experience: review and improvements |
+| [82-first-run-ux-refactor.md](82-first-run-ux-refactor.md) | First-run experience rework: first batch |
+| [83-service-policy.md](83-service-policy.md) | The system services page and optional SSH login |
+| [83-x70-air-pro-onboarding.md](83-x70-air-pro-onboarding.md) | Bringing up the X70 Air Pro (vantage) |
+| [84-miracast-source.md](84-miracast-source.md) | Our own Miracast source, without the vendor casting components |
+| [85-lxc-rootless-docker.md](85-lxc-rootless-docker.md) | Rootless Docker in the Plasma container: trials and packaging |
+| [85-phone-display-size-policy.md](85-phone-display-size-policy.md) | The phone display-size policy and its implementation |
+| [86-x70-miracast-assessment.md](86-x70-miracast-assessment.md) | Completing Miracast on the X70 Air Pro |
+| [87-agent-app-redesign.md](87-agent-app-redesign.md) | Assistant app v3: a chat interface and a design system library (2026-09-29) |
+| [88-agent-visible-work.md](88-agent-visible-work.md) | Making the assistant's work visible: pictures in the chat, screen captions, phone functions (2026-09-29) |
+| [89-agent-progress.md](89-agent-progress.md) | The assistant's progress: task state, spoken updates by event, conversation ownership (2026-09-29) |
+| [90-blender-vulkan-incident.md](90-blender-vulkan-incident.md) | The Blender rendering incident and CPU rendering by default (2026-09-29) |
+| [91-agent-workspaces.md](research/91-agent-workspaces.md) | Workspaces: a GUI space of each agent's own (2026-09-29) |
+| [92-agent-task-speed.md](research/92-agent-task-speed.md) | Why tasks like Blender modelling are slow, and how other agents speed them up (2026-09-30) |
+| [93-xwayland-kgsl-gpu.md](research/93-xwayland-kgsl-gpu.md) | X11 apps on the GPU with KGSL: approaches for Xwayland (2026-09-30) |
+| [94-mesa-base.md](research/94-mesa-base.md) | The Mesa base: the lfdevs branch or upstream with our own patches (2026-09-30) |
