@@ -77,7 +77,7 @@ class CallCardsTest(unittest.TestCase):
         self.engine = QQmlEngine()
         self.i18n = I18nStub()
         self.engine.rootContext().setContextObject(self.i18n)
-        self.component = QQmlComponent(self.engine, QUrl.fromLocalFile(str(ROOT / 'plasma/voice-agent/app/qml/ChatModel.qml')))
+        self.component = QQmlComponent(self.engine, QUrl.fromLocalFile(str(ROOT / 'agent/assistant/app/qml/ChatModel.qml')))
         self.model = self.component.create()
         self.assertIsNotNone(self.model, '\n'.join(e.toString() for e in self.component.errors()))
         self.engine.rootContext().setContextProperty('model', self.model)
@@ -182,7 +182,7 @@ class CallCardsTest(unittest.TestCase):
             design = imports / 'com/rungic/design'
             design.mkdir(parents=True)
             module = ['module com.rungic.design']
-            for path in (ROOT / 'plasma/design/qml').iterdir():
+            for path in (ROOT / 'desktop/design/qml').iterdir():
                 if path.suffix not in ('.qml', '.js') or path.name == 'DesignI18n.qml':
                     continue
                 (design / path.name).symlink_to(path)
@@ -203,7 +203,7 @@ class CallCardsTest(unittest.TestCase):
             self.event('call-transcript', callId='one', role='remote', text='你好 <测试>')
             self.engine.rootContext().setContextProperty('chatData', self.model)
             component = QQmlComponent(self.engine)
-            component.setData(('import QtQuick\nimport "' + (ROOT / 'plasma/voice-agent/app/qml').as_uri()
+            component.setData(('import QtQuick\nimport "' + (ROOT / 'agent/assistant/app/qml').as_uri()
                                + '"\nChatEntry { steps: chatData.entries.get(0).steps }').encode(), QUrl.fromLocalFile(str(imports / 'Card.qml')))
             errors = []
             self.engine.warnings.connect(lambda warnings: errors.extend(e.toString() for e in warnings))

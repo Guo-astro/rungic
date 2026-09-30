@@ -15,7 +15,7 @@
 | ARM64 包 | `tools/build_on_device.py`、`tools/rungic_release.py` | 固定配方构建、collect 和版本化包集合；仓库快照成熟度见 77 篇 |
 | ARM64 rootfs 安装环境 | `tools/ci/arm64_chroot.py`、`tools/ci/rootfs.Dockerfile` | QEMU/真 chroot、宿主 Python 环境隔离；检查 runner 的 namespaces、binfmt 和容量 |
 | rootfs 镜像 | `tools/ci/build_rootfs_image.py` | 接收已准备的 root 树和 release，生成 ext4/压缩种子、包锁及报告；自身不是完整包下载器 |
-| APK | `plasma/build-apk.sh`、`tools/ci/apk-builder.Dockerfile` | Android 入口构建；保持指定开发签名身份，不混入其他凭据 |
+| APK | `android/build-apk.sh`、`tools/ci/apk-builder.Dockerfile` | Android 入口构建；保持指定开发签名身份，不混入其他凭据 |
 | 宿主种子 | `tools/ci/build_host_seed.py` | 输入 runtime、rootfs-tree、repo、lxc/plasma enter 二进制与 `--cast-jar`（`shared/android/rungic-cast/build.sh` 产物）；投屏组件为可选能力，首启安装失败只记日志 |
 | 纯净 product | `tools/ci/clean_product.py` | EROFS + product/preinstall 的命名、xattr 和 SKU 策略假设 |
 | 完整 product | `tools/ci/assemble_product.py` | 加入 APK/JNI、种子、首启及权限；输入必须与 spec/容量匹配 |

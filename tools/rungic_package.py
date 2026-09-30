@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
-"""Build this project's own Debian packages (rungic-*) from plasma/packaging/<name>/ (docs/61).
+"""Build this project's own Debian packages (rungic-*) from packaging/<name>/ (docs/61).
 
 Each package directory holds:
   package.json  name, architecture (all|arm64), build (host|device), paths (repository paths
@@ -50,7 +50,7 @@ import build_on_device
 from rungic_device import WORKSPACE
 import rungic_release
 
-PACKAGING = WORKSPACE / 'plasma/packaging'
+PACKAGING = WORKSPACE / 'packaging'
 BUILDS = rungic_release.APT / 'project-builds.json'
 DEVICE_BASE = '/root/rungic-packages'
 MAINTAINER = 'range-dev <noreply@localhost>'

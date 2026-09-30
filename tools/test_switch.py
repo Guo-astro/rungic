@@ -15,7 +15,7 @@ from unittest import mock
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'plasma/cua'))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'agent/computer-use'))
 
 
 def load(runtime):

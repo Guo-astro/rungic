@@ -7,7 +7,7 @@ import types
 import unittest
 from unittest.mock import Mock
 
-source = Path(__file__).resolve().parents[2] / 'plasma/voice-agent/rungic_voice_agent.py'
+source = Path(__file__).resolve().parents[2] / 'agent/assistant/rungic_voice_agent.py'
 node = next(n for n in ast.parse(source.read_text()).body if isinstance(n, ast.ClassDef) and n.name == 'VoiceAgent')
 node.body = [n for n in node.body if isinstance(n, ast.FunctionDef) and n.name == 'on_notification']
 namespace = {'time': time, 'screen_activity': lambda: {}, 'GLib': types.SimpleNamespace(idle_add=Mock()),

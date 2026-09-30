@@ -6,7 +6,7 @@ The container shares Android's kernel, so one Android perfetto session sees
 KWin/plasmashell threads, SurfaceFlinger, the desktop APK and KGSL command
 batches together. KWin's own FTrace markers ("Paint (<output>) begin_ctx=N")
 reach the same buffer once tracefs is mounted in the container
-(plasma/diagnostics) and /FTrace is enabled; capture() enables it only for
+(system/diagnostics) and /FTrace is enabled; capture() enables it only for
 the capture and restores the previous state.
 
 Analysis uses Perfetto's trace_processor (Python package `perfetto`), see

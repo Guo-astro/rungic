@@ -1,0 +1,191 @@
+{
+ "comment": "Services the container keeps off by default, and why (docs/83). rungic-plasma-config installs this as /usr/share/rungic/service-policy.json and applies each unit's default once (masked: a /dev/null link in /etc/systemd/<scope>; disabled: not enabled), recording it in /var/lib/rungic/service-defaults, so a change made later in Settings -> Services survives upgrades. The Services page (rungic-plasma-services) lists the groups and changes them through its KAuth helper, which only acts on units named here. evidence: recorded = the reason is documented (see the doc named in summary); inferred = the reason is our reading, not verified on the phone; unknown = not recorded. risk: remote (reachable from the network), android (can take a function over from Android), unknown, none (has no use here). start: for a 'disabled' group, the units enabling turns on. name, summary and warning are English messages that the Services page translates (catalog kcm_rungic_services, desktop/services/po).",
+ "groups": [
+  {
+   "id": "ssh",
+   "name": "SSH login",
+   "default": "disabled",
+   "risk": "remote",
+   "evidence": "recorded",
+   "summary": "When on, devices on the same local network can sign in with this device's Linux account password or an SSH key (the phone's IP address, port 22).",
+   "warning": "When on, anyone on the local network can try to sign in with the account password. Make sure the password is strong, and turn this on only on networks you trust.",
+   "system": ["ssh.socket", "ssh.service"],
+   "start": ["ssh.socket"]
+  },
+  {
+   "id": "docker",
+   "name": "Docker (rootless)",
+   "default": "disabled",
+   "risk": "remote",
+   "evidence": "recorded",
+   "summary": "Docker running as the current user (rootless mode), with bridge networking, published ports and Compose. Images and data are in /var/lib/rungic-docker/<user UID>. Memory and CPU limits for individual containers are not supported: Android's resource controllers are not on cgroup v2 (docs/85).",
+   "warning": "Published ports are reachable on all of the phone's networks, so devices on the same local network can connect. Publish only the services that need to be reachable.",
+   "user": ["docker.service"],
+   "start": ["docker.service"]
+  },
+  {
+   "id": "docker-system",
+   "name": "Docker system service (rootful)",
+   "default": "masked",
+   "risk": "android",
+   "evidence": "recorded",
+   "summary": "The docker and containerd services that docker.io runs as root. Containers share the network with Android and have no net_admin, so they cannot start this way; use the rootless Docker above (docs/85).",
+   "warning": "It needs permission to manage the network, and this container shares network interfaces with Android. Even when allowed, it cannot run containers and only keeps reporting errors.",
+   "system": ["docker.service", "docker.socket", "containerd.service"]
+  },
+  {
+   "id": "networkmanager",
+   "name": "NetworkManager",
+   "default": "masked",
+   "risk": "android",
+   "evidence": "recorded",
+   "summary": "Android manages the network. Rungic's network compatibility service holds the D-Bus name org.freedesktop.NetworkManager and gives Linux apps Android's network state (docs/research/32).",
+   "warning": "The container shares network interfaces with Android. The real NetworkManager may take over Wi-Fi, cutting the phone's connection and wireless debugging, and it conflicts with Rungic's network compatibility service.",
+   "system": ["NetworkManager.service", "NetworkManager-wait-online.service"]
+  },
+  {
+   "id": "networkd",
+   "name": "systemd-networkd and netplan",
+   "default": "masked",
+   "risk": "android",
+   "evidence": "inferred",
+   "summary": "Ubuntu's network configuration services. Android manages network interfaces, addresses and routes.",
+   "warning": "The container shares network interfaces with Android. These services may change interface addresses and routes, cutting the phone's connection and wireless debugging.",
+   "system": ["systemd-networkd.service", "systemd-networkd.socket", "systemd-networkd-wait-online.service", "netplan-configure.service"]
+  },
+  {
+   "id": "resolved",
+   "name": "systemd-resolved",
+   "default": "masked",
+   "risk": "android",
+   "evidence": "inferred",
+   "summary": "Android handles DNS.",
+   "warning": "It may take over DNS settings, leaving Linux apps unable to resolve domain names.",
+   "system": ["systemd-resolved.service"]
+  },
+  {
+   "id": "wpa_supplicant",
+   "name": "wpa_supplicant",
+   "default": "masked",
+   "risk": "android",
+   "evidence": "inferred",
+   "summary": "Android's own wpa_supplicant manages Wi-Fi connections.",
+   "warning": "A second wpa_supplicant in the container competes for the same Wi-Fi interface and may cut the phone's connection and wireless debugging.",
+   "system": ["wpa_supplicant.service"]
+  },
+  {
+   "id": "modemmanager",
+   "name": "ModemManager",
+   "default": "masked",
+   "risk": "android",
+   "evidence": "recorded",
+   "summary": "Android's RIL manages the modem. Rungic's mobile network compatibility service holds org.freedesktop.ModemManager1 (docs/73).",
+   "warning": "It competes with Rungic's mobile network compatibility service for the same D-Bus name, and Linux settings may stop showing the SIM card and signal.",
+   "system": ["ModemManager.service"]
+  },
+  {
+   "id": "bluetooth",
+   "name": "BlueZ Bluetooth service",
+   "default": "masked",
+   "risk": "android",
+   "evidence": "recorded",
+   "summary": "Android manages Bluetooth, and the container has no Bluetooth controller. Rungic's Bluetooth compatibility service holds org.bluez (docs/73).",
+   "warning": "It competes with Rungic's Bluetooth compatibility service for org.bluez, and Bluetooth settings on the Linux side may stop working.",
+   "system": ["bluetooth.service"]
+  },
+  {
+   "id": "chrony",
+   "name": "chrony time sync",
+   "default": "masked",
+   "risk": "android",
+   "evidence": "inferred",
+   "summary": "Android keeps the system time in sync. The container and Android share the same kernel clock.",
+   "warning": "When chrony adjusts the time, it changes the time of the whole phone and may conflict with Android's time sync.",
+   "system": ["chrony.service"]
+  },
+  {
+   "id": "power-profiles",
+   "name": "power-profiles-daemon",
+   "default": "masked",
+   "risk": "android",
+   "evidence": "inferred",
+   "summary": "Android manages performance and power saving.",
+   "warning": "It cannot actually switch the phone's performance mode, and Settings may show power modes that do nothing.",
+   "system": ["power-profiles-daemon.service"]
+  },
+  {
+   "id": "powerdevil",
+   "name": "PowerDevil (user service)",
+   "default": "masked",
+   "risk": "unknown",
+   "evidence": "unknown",
+   "summary": "The reason for masking it was not recorded separately. Android manages the screen and power.",
+   "warning": "The reason for masking it was not recorded; the effect of turning it on is unknown.",
+   "user": ["plasma-powerdevil.service"]
+  },
+  {
+   "id": "ksmserver",
+   "name": "KDE session manager (ksmserver)",
+   "default": "masked",
+   "risk": "unknown",
+   "evidence": "unknown",
+   "summary": "Masked by hand for the first user before 2026-09-26, with no reason recorded; since then it is the same for all users (docs/61).",
+   "warning": "The reason for masking it was not recorded; the effect of turning it on is unknown.",
+   "user": ["plasma-ksmserver.service"]
+  },
+  {
+   "id": "x11-helpers",
+   "name": "X11 tray and menu proxies",
+   "default": "masked",
+   "risk": "none",
+   "evidence": "recorded",
+   "summary": "They only serve X11 programs, and the session has no X server.",
+   "user": ["plasma-xembedsniproxy.service", "plasma-gmenudbusmenuproxy.service"]
+  },
+  {
+   "id": "obex",
+   "name": "Bluetooth file transfer (obexd)",
+   "default": "masked",
+   "risk": "none",
+   "evidence": "recorded",
+   "summary": "The container has no Bluetooth controller (docs/73).",
+   "user": ["obex.service"]
+  },
+  {
+   "id": "cloud-init",
+   "name": "cloud-init",
+   "default": "masked",
+   "risk": "none",
+   "evidence": "inferred",
+   "summary": "First-boot setup for Ubuntu cloud images. This device is not a cloud server.",
+   "system": ["cloud-init-local.service", "cloud-init-network.service", "cloud-config.service", "cloud-final.service", "cloud-init.target"]
+  },
+  {
+   "id": "snapd",
+   "name": "Snap package service",
+   "default": "masked",
+   "risk": "none",
+   "evidence": "inferred",
+   "summary": "Software is installed with apt and Flatpak. Snap has not been tested in the container.",
+   "system": ["snapd.service", "snapd.socket", "snapd.seeded.service"]
+  },
+  {
+   "id": "getty",
+   "name": "Console login terminals",
+   "default": "masked",
+   "risk": "none",
+   "evidence": "inferred",
+   "summary": "The container has no physical console.",
+   "system": ["console-getty.service", "getty@tty1.service"]
+  },
+  {
+   "id": "tpm",
+   "name": "TPM device rules",
+   "default": "masked",
+   "risk": "none",
+   "evidence": "inferred",
+   "summary": "The phone has no TPM security chip.",
+   "system": ["tpm-udev.path", "tpm-udev.service"]
+  }
+ ]
+}

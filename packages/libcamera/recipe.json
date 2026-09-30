@@ -1,5 +1,5 @@
 {
- "comment": "Pinned upstream of the libcamera source package (docs/71, docs/73): Ubuntu's 0.7.0-1ubuntu2, built whole (it used to be Ubuntu's binary packages with our libcamera.so swapped in). packages/libcamera/debian replaces its debian/ (Ubuntu's packaging plus our patches under debian/patches/rungic); the virtual cameras' configuration (plasma/libcamera/virtual.yaml) is placed by the overlay and installed by libcamera0.7.install.",
+ "comment": "Pinned upstream of the libcamera source package (docs/71, docs/73): Ubuntu's 0.7.0-1ubuntu2, built whole (it used to be Ubuntu's binary packages with our libcamera.so swapped in). packages/libcamera/debian replaces its debian/ (Ubuntu's packaging plus our patches under debian/patches/rungic); the virtual cameras' configuration (desktop/libcamera/virtual.yaml) is placed by the overlay and installed by libcamera0.7.install.",
  "kind": "ubuntu",
  "source": "libcamera",
  "version": "0.7.0-1ubuntu2",
@@ -14,7 +14,7 @@
  },
  "fetch": "https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/libcamera/0.7.0-1ubuntu2/{file}",
  "overlay": {
-  "rungic/virtual.yaml": "plasma/libcamera/virtual.yaml"
+  "rungic/virtual.yaml": "desktop/libcamera/virtual.yaml"
  },
  "build_arch_only": true
 }

@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 sys.dont_write_bytecode = True
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'plasma/voice-agent'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'agent/assistant'))
 # GI/WebSocket are runtime adapters. These tests never create them, and can run
 # in restricted CI without a sound server, GI packages or a network connection.
 gi = types.ModuleType('gi'); gi.require_version = lambda *args: None

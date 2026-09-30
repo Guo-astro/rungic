@@ -7,7 +7,7 @@
  "steps": [
   {
    "name": "android-host-graphics",
-   "patch": "plasma/kwin-android.patch",
+   "patch": "desktop/patches/kwin-android.patch",
    "subject": "Nested Wayland backend on the Android host: KGSL render device, Android buffer allocator, flat output",
    "description": "KWin runs nested in the APK compositor. MOTO_KWIN_RENDER_DEVICE selects /dev/kgsl-3d0 for EGL and\nlimits linux-dmabuf to v3; MOTO_GPU_ALLOCATOR allocates output buffers from the host (AHardwareBuffer)\ninstead of GBM; MOTO_KWIN_FLAT_OUTPUT maps a scaled output 1:1 onto the host surface (pointer and\ntouch positions divided by the scale); MOTO_KWIN_ANDROID_SHM places SHM buffers in /dev/shm.",
    "author_name": "kevinzhow",
@@ -23,7 +23,7 @@
   },
   {
    "name": "idle-android-power",
-   "patch": "plasma/kwin-idle.patch",
+   "patch": "desktop/patches/kwin-idle.patch",
    "subject": "Idle inhibition is forwarded to the Android power service",
    "description": "On the Android host (MOTO_KWIN_RENDER_DEVICE set) an idle-inhibiting window keeps the phone screen on\nthrough dev.moto.Android.Power.SetWaylandInhibition instead of KWin's own idle timers.",
    "author_name": "kevinzhow",
@@ -39,7 +39,7 @@
   },
   {
    "name": "screencast-mobile-shell",
-   "patch": "plasma/kwin-screencast.patch",
+   "patch": "desktop/patches/kwin-screencast.patch",
    "subject": "Screencast: do not exclude the Plasma Mobile shell when it is the recorder",
    "description": "Plasma Mobile records from its own shell process; excluding the recorder's PID also removed the\nwallpaper, launcher and panels (a black home screen). Per-window excludeFromCapture still applies.\nCurrently gated on MOTO_KWIN_FLAT_OUTPUT; an upstream version would key on the shell, not the host.",
    "author_name": "kevinzhow",
@@ -55,7 +55,7 @@
   },
   {
    "name": "screencast-gles-readback",
-   "patch": "plasma/kwin-screencast-shm.patch",
+   "patch": "desktop/patches/kwin-screencast-shm.patch",
    "subject": "Screencast: no GLES readback flip on the flat Android output",
    "description": "The nested GLES framebuffer on the Android host already follows the bottom-left readback\nconvention; flipping it again made SHM screencasts upside down.",
    "author_name": "kevinzhow",
@@ -71,7 +71,7 @@
   },
   {
    "name": "android-display-settings",
-   "patch": "plasma/kwin-display-settings.patch",
+   "patch": "desktop/patches/kwin-display-settings.patch",
    "subject": "Output configuration follows the Android display (resolution, refresh policy, scale)",
    "description": "User output changes on the flat output go to the host through android-display-client\n(MotoDisplay::request); modes and the current mode come from the host's display info.",
    "author_name": "kevinzhow",

@@ -1,0 +1,11 @@
+#!/bin/sh
+# lxc.hook.pre-mount for the image rootfs (docs/61 §7). LXC's storage backends take no plain
+# block device, so the rootfs stays a directory in the configuration and this hook, which runs
+# in the container's mount namespace before LXC mounts the rootfs, mounts the device-mapper
+# device "rungic-root" (system/rootfs-image) onto that directory.
+for d in /sys/block/dm-*; do
+    [ "$(cat "$d/dm/name" 2>/dev/null)" = rungic-root ] || continue
+    exec mount -t ext4 -o noatime "/dev/block/${d##*/}" "$LXC_ROOTFS_PATH"
+done
+echo 'rungic-root: no such device-mapper device' >&2
+exit 1

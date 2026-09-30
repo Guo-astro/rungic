@@ -15,7 +15,7 @@ what changed.
                configure/build through debhelper's stamp) to produce .debs
   targets      for trees without Debian packaging (recipe kind upstream/git): configure once in
                <component>/build (Ninja, /usr prefix) and build --target T...;
-               a meson tree (Mesa) is configured with plasma/<component>-meson-options
+               a meson tree (Mesa) is configured with desktop/<component>-meson-options
   status       state of the build unit and the log tail
   install      dpkg -i the .debs of the last build (version from debian/changelog)
   collect      the last build's .debs and .ddebs into the release repository pool (rungic_release.py)
@@ -136,7 +136,7 @@ class MacMini:
             return
         # Build context: the Dockerfile and the debug symbol source it copies (the phone's own file).
         files = {'Dockerfile': WORKSPACE / 'tools/pq/arm64-host.Dockerfile',
-                 'rungic-ddebs.sources': WORKSPACE / 'plasma/config/etc/apt/rungic-ddebs.sources',
+                 'rungic-ddebs.sources': WORKSPACE / 'system/config/etc/apt/rungic-ddebs.sources',
                  'arm64-host-packages.txt': WORKSPACE / 'tools/pq/arm64-host-packages.txt'}
         digest = hashlib.sha256()
         for name, path in files.items():
@@ -242,8 +242,8 @@ def stage(component):
     archive = WORKSPACE / f'.work/cache/{component}-stage.tar'
     with tarfile.open(archive, 'w') as tar:
         tar.add(source, arcname='src')
-        tar.add(WORKSPACE / 'plasma/build-shims', arcname='cmake-shims')
-        options = WORKSPACE / f'plasma/{component}-meson-options'
+        tar.add(WORKSPACE / 'desktop/build-shims', arcname='cmake-shims')
+        options = WORKSPACE / f'desktop/{component}-meson-options'
         if options.exists():
             tar.add(options, arcname='meson-options')
     return archive
@@ -269,7 +269,7 @@ rm -rf {work}/incoming
 
 
 def component_uses_meson(component):
-    return (WORKSPACE / f'plasma/{component}-meson-options').exists()
+    return (WORKSPACE / f'desktop/{component}-meson-options').exists()
 
 
 def arch_only(component):

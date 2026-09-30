@@ -1,0 +1,80 @@
+#!/bin/sh
+# rungic-workspace N: agent workspace N (docs/research/91), a KWin of its own on the Android host.
+#
+# Its own D-Bus session, its own Wayland socket (wayland-ws-N), its own Xwayland, its own KWin
+# settings; its only output is the one the host offers on /mnt/android-wayland/ws-N, which the
+# TV, fullscreen or a floating window can show. Everything started in it (rungic-workspace-env)
+# lands there and nowhere else; its input never touches the phone's.
+set -eu
+slot=${1:?usage: rungic-workspace N}
+case "$slot" in [1-9]) ;; *) echo "workspace: a slot 1..9" >&2; exit 2 ;; esac
+host=/mnt/android-wayland/ws-$slot
+[ -S "$host" ] || { echo "workspace $slot: the host does not offer $host (APK 2.14 or later)" >&2; exit 1; }
+
+# The GPU as the phone's KWin has it (desktop/kwin): Mesa's KGSL driver, and the host's output
+# buffers in Adreno UBWC, which KWin cannot render into without FD_KGSL_DMABUF_UBWC (EGL_BAD_MATCH).
+[ ! -f /etc/plasma/gpu-env ] || . /etc/plasma/gpu-env
+export FD_KGSL_DMABUF_UBWC=1
+
+# KWin keeps its settings apart from the user's (kwinrc, the output configuration); the look
+# (kdeglobals) is the user's.
+state=${XDG_STATE_HOME:-$HOME/.local/state}/rungic-workspaces/$slot
+mkdir -p "$state/config"
+export RUNGIC_USER_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+[ -e "$state/config/kdeglobals" ] || ln -s "$RUNGIC_USER_CONFIG_HOME/kdeglobals" "$state/config/kdeglobals"
+export XDG_CONFIG_HOME="$state/config"
+# A desktop's window behaviour, not the phone's: Plasma Mobile's configuration leaves the search
+# path, the workspace defaults come first (defaults/kwinrc).
+dirs=$(printf '%s' "${XDG_CONFIG_DIRS:-/etc/xdg}" | tr ':' '\n' | grep -v '/plasma-mobile/*$' | grep . | paste -sd: -)
+export XDG_CONFIG_DIRS="/usr/share/rungic-workspace/defaults:$dirs"
+# And a cache of its own: KDE's application database (ksycoca) records the settings directory it
+# was built for, and one file shared with the user's session was rebuilt by each side in turn,
+# several times a second; every rebuild made the phone's home screen reload its apps, and it
+# lost its dock and widgets (2026-09-29).
+export XDG_CACHE_HOME="$state/cache"
+mkdir -p "$XDG_CACHE_HOME"
+
+# What the private bus starts (portals) inherits the bus daemon's environment: this workspace's
+# display. Never dbus-update-activation-environment here: it also sets the systemd user
+# manager's environment, the user's session's (WAYLAND_DISPLAY=wayland-ws-1 reached the
+# user's services that way, 2026-09-29).
+export RUNGIC_WORKSPACE=$slot WAYLAND_DISPLAY=wayland-ws-$slot
+unset DISPLAY XAUTHORITY
+export QT_QPA_PLATFORM=wayland XDG_CURRENT_DESKTOP=KDE XDG_SESSION_TYPE=wayland
+
+# In a session bus of its own, at a fixed address: conversations and tools that already know
+# it (the agent's Codex threads and their desktop tools, docs/research/91) reach the workspace
+# again after it restarted (dbus-run-session's address changed with every start, and they failed
+# with "Could not connect"). KWin starts its Xwayland on the first X client and picks a free
+# display itself; the X socket it listens on is written to $state/display for rungic-workspace-env.
+runtime=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+bus=$runtime/rungic-workspace-$slot.bus
+rm -f "$state/bus" "$state/display" "$bus"
+# Its own configuration: the workspace's accessibility bus (rungic-workspace-a11y) must not take
+# the user's over.
+dbus-daemon --config-file=/usr/share/rungic-workspace/dbus-1/session.conf --nofork --nopidfile \
+    --address="unix:path=$bus" &
+dbusd=$!
+for i in $(seq 50); do [ -S "$bus" ] && break; sleep 0.1; done
+export DBUS_SESSION_BUS_ADDRESS="unix:path=$bus"
+kwin_wayland --android-host --android-workspace --wayland-display="$host" \
+    --socket "wayland-ws-$slot" --xwayland --no-lockscreen --no-global-shortcuts --no-kactivities &
+kwin=$!
+trap 'kill $kwin $dbusd 2>/dev/null' TERM INT
+for i in $(seq 100); do
+    inodes=$(ls -l /proc/$kwin/fd 2>/dev/null | sed -n 's/.*socket:\[\([0-9]*\)\].*/\1/p' | tr '\n' ' ')
+    display=$(awk -v inodes=" $inodes" 'index(inodes, " " $7 " ") && $8 ~ /^\/tmp\/.X11-unix\/X/ { sub(/.*X/, "", $8); print ":" $8; exit }' /proc/net/unix)
+    if [ -n "$display" ]; then
+        echo "$display" > "$state/display"
+        break
+    fi
+    sleep 0.1
+done
+echo "$DBUS_SESSION_BUS_ADDRESS" > "$state/bus"
+# Its wallpaper: without Plasma's shell an empty workspace is transparent.
+while [ ! -S "$runtime/wayland-ws-$slot" ] && kill -0 $kwin 2>/dev/null; do sleep 0.1; done
+/usr/libexec/rungic-workspace-desktop &
+status=0
+wait $kwin || status=$?
+kill $dbusd 2>/dev/null || true
+exit $status

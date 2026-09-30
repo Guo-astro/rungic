@@ -12,7 +12,7 @@ mapped in the core, and a tar of those exact files with core.zst. The analysis r
 host's container (build_on_device.py --host macmini): the files form a sysroot, the owning
 packages' -dbgsym at exactly the phone's versions are unpacked into it (this project's from the
 release repository, Ubuntu's from ddebs.ubuntu.com), and gdb runs the phone's own collector
-(plasma/diagnostics/rungic-coredump-collect) against that sysroot. The phone's report gets the new
+(system/diagnostics/rungic-coredump-collect) against that sysroot. The phone's report gets the new
 backtrace.txt and info.json (signature recomputed, the unsymbolized one kept), as
 rungic-crash-symbols did there.
 """
@@ -174,7 +174,7 @@ for spec in {wanted}; do
 done
 cd {work}/debs
 for deb in *.deb; do [ -e "$deb" ] && dpkg-deb -x "$deb" {work}/sysroot; done; true''', timeout=3 * 3600)
-    host.put(WORKSPACE / 'plasma/diagnostics/rungic-coredump-collect', f'{WORK}/rungic-coredump-collect', '644')
+    host.put(WORKSPACE / 'system/diagnostics/rungic-coredump-collect', f'{WORK}/rungic-coredump-collect', '644')
     script = WORKSPACE / f'.work/crash/analyse.py'
     script.write_text(ANALYSE)
     host.put(script, f'{WORK}/analyse.py', '644')

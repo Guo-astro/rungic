@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 import unittest
 
-SCRIPT = Path(__file__).resolve().parents[1] / 'plasma/user-dirs'
+SCRIPT = Path(__file__).resolve().parents[1] / 'system/user-dirs'
 
 class UserDirsTests(unittest.TestCase):
     def setUp(self):

@@ -202,7 +202,7 @@ Skills are reusable instructions that an agent reads to carry out a task. This r
 | Skill | Where to use it | What it does |
 |---|---|---|
 | [`rungic-three-stage-image`](.agents/skills/rungic-three-stage-image/SKILL.md) | Codex working in this repository | Builds the device's GKI kernel, the RungicOS Linux image and the complete flash package. Covers individual stages, device bring-up, installation and acceptance. |
-| [`rungic-phone-desktop`](plasma/voice-agent/skills/rungic-phone-desktop/SKILL.md) | The assistant running on the phone | Operates desktop apps and windows, controls phone functions, casts to a TV and handles supported call workflows. |
+| [`rungic-phone-desktop`](agent/assistant/skills/rungic-phone-desktop/SKILL.md) | The assistant running on the phone | Operates desktop apps and windows, controls phone functions, casts to a TV and handles supported call workflows. |
 
 The desktop skill ships with the bundled assistant. Its editable copy lives at `~/.codex/skills/rungic-phone-desktop/` on the phone; changes you make there are preserved when the package updates. These locations and invocation examples describe the current Codex integration. Other agents can reuse the instructions and underlying tools, adapting skill loading to their own format.
 
@@ -246,6 +246,7 @@ These skills guide the existing build tools; the complete process still involves
 
 ## Learn more
 
+- [Source layout](docs/README.md#repository-layout): Android host, agents, desktop integration, system services, package definitions and upstream patches
 - [Developer guide and documentation index](docs/README.md): repository layout, development entry points, and the design and acceptance documents for each capability
 - [Integrating another agent](docs/README.md#integrating-another-agent) · [Proactive system care](docs/research/proactive-system-care.md) · [Compatibility knowledge](compatibility/README.md)
 - [Voice assistant](docs/59-voice-agent.md) · [Computer use](docs/60-computer-use.md) · [Assistant's screen](docs/65-agent-screen.md) · [Agent workspaces](docs/research/91-agent-workspaces.md) (in Chinese)

@@ -4,7 +4,7 @@
 
 **本轮实施更新：Ubuntu26.04、Plasma Mobile6.6.5、定制KWin6.6.6已部署；桌面、GPU、触摸和Rime中文输入均已通过实机验收。当前实施状态以[40篇](40-plasma-mobile-integration.md)为准，以下“仅研究/未部署”描述属于实施前的选型记录。**
 
-部署目标保存在 [plasma/target.json](../plasma/target.json)。它同时记录原始目标与已部署版本；实际验收边界以40–42篇为准。
+部署目标保存在 [plasma/target.json](../desktop/target.json)。它同时记录原始目标与已部署版本；实际验收边界以40–42篇为准。
 
 ## 实施前的发行版选型：Ubuntu26.04LTS ARM64
 

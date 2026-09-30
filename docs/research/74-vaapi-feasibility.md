@@ -22,7 +22,7 @@ VA-API驱动可作为**另一项新增能力**单独评估，服务对象是mpv�
 | 编解码桥 | APK中的`CodecBridge`调用MediaCodec（`c2.qti.*`）；容器侧[`codec-client.c`](../../shared/media/codec-client.c)经`/mnt/android-wayland/codec.sock`通信，用32MiB SharedMemory传帧，并做I420的CPU复制 | 有状态的“码流进、帧出”接口（FRAME/DRAIN/FLUSH/CLOSE），支持H.264/HEVC编解码和VP9解码；非零复制，见[35篇](35-hardware-codec-integration.md) |
 | FFmpeg 2条补丁 | `packages/ffmpeg`：`android-codec-registration.patch`在`allcodecs.c`/`Makefile`中登记7个`*_rungic*`编解码器；`libx264-software-name.patch`把x264改名为`libx264_sw` | 私有FFmpeg 8.1.2，服务对象只有Firefox。按名字选`libx264`的调用方会拿到硬件优先、失败回退软件的混合编码器 |
 | Snapshot补丁 | `packages/snapshot` `android-h264-encoder.patch`：在`aperture/src/utils.rs`和`viewfinder.rs`中识别`rungich264enc`（17行） | Snapshot的“硬件编码”开关对我们的GStreamer元素生效 |
-| Firefox包装 | [`plasma/firefox`](../../plasma/firefox)：设置`LD_LIBRARY_PATH`，用`LD_PRELOAD=librungiccodec.so:libavcodec.so.62`，并设`RUNGIC_CODEC_PRECONNECT=1` | 沙箱建立前连上broker，fork出的子进程各持一条连接；各进程统一使用私有FFmpeg |
+| Firefox包装 | [`plasma/firefox`](../../desktop/firefox)：设置`LD_LIBRARY_PATH`，用`LD_PRELOAD=librungiccodec.so:libavcodec.so.62`，并设`RUNGIC_CODEC_PRECONNECT=1` | 沙箱建立前连上broker，fork出的子进程各持一条连接；各进程统一使用私有FFmpeg |
 | GStreamer | [`gst-rungic-codec.c`](../../shared/media/gst-rungic-codec.c)，属于自有插件，不修改上游 | `rungich26{4,5}{enc,dec}`、`rungicvp9dec`，rank为PRIMARY+32 |
 
 ## 源码版本与许可

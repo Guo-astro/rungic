@@ -80,7 +80,7 @@
 
 ## 本地目录与同步边界
 
-- 需要同步的源码、文档、基准数据和来源记录分别放在plasma/native/shared/tools、docs、benchmarks、provenance等目录；当前只维护Plasma桌面。
+- 需要同步的源码、文档、基准数据和来源记录分别放在android/agent/desktop/system/shared/tools、docs、benchmarks、provenance等目录；当前只维护Plasma桌面。自有软件包定义在`packaging/`，发行清单在`release/`；`packages/`只管理上游配方与补丁。
 - 下载、构建缓存、安装包、日志、截图、实机媒体、私钥与本机配置统一放在`.work/`，不得新增到源码目录。Python/Cargo开发可先`source tools/work-env.sh`；开发用Python依赖（PySide6、pytest）由`sh tools/dev-setup.sh`装入`.work/venv`，只用于原型和测试，进入生产的部分改用C++等重写（用户于2026-09-29明确）。
 - 用户于2026-09-23明确要求同步开发用APK签名密钥：`signing/development/launcher-signing.p12`是上述规则的指定例外，随私有仓库跟踪，构建脚本默认使用它。此授权不包含其他密钥或`.work/`内容。
 - 用户于2026-09-30明确同意：README 的产品展示图和动图放在`docs/images/readme/`，随仓库同步，是媒体只放`.work/`的第二个指定例外。只放经过挑选、缩小尺寸、确认不含隐私的成品；原始录像和截图仍留在`.work/readme/`。
@@ -89,7 +89,7 @@
 ## 上游源码与多机协作
 
 - 所有修改过的上游组件按“固定上游＋补丁队列”维护（docs/71、docs/73）：只在`packages/<名称>/`（`recipe.json`固定来源与许可证，`debian/patches/rungic/`为DEP-3补丁），用`tools/pq.py prepare/export`修改补丁；共享和自有模块用配方的`overlay`放入源码树，不复制进补丁。不要恢复`vendor/`源码目录或`stage_vendor.py`。
-- 2026-09-30已补齐原先直接维护的例外：Android原生宿主在`packages/android-host/`，Smithay/Winit分别在`packages/smithay/`、`packages/winit/`，Firefox移动配置在`packages/mobile-config-firefox/`。`native/plasma/`、`plasma/firefox-mobile/`和`vendor/`已删除。宿主自有模块在`plasma/android-host/`，`tools/prepare_android_host.py`在`.work/build/android-host/source/`组装三份固定源码；`plasma/build-native-core.sh`交叉编译Android库，Linux上游包继续用`tools/build_on_device.py`。`plasma/qt-video-duration.patch`是未验收实验，未进入Qt补丁队列。
+- 2026-09-30已补齐原先直接维护的例外：Android原生宿主在`packages/android-host/`，Smithay/Winit分别在`packages/smithay/`、`packages/winit/`，Firefox移动配置在`packages/mobile-config-firefox/`。`native/plasma/`、`plasma/firefox-mobile/`和`vendor/`已删除。宿主自有模块在`android/host/`，`tools/prepare_android_host.py`在`.work/build/android-host/source/`组装三份固定源码；`android/build-native-core.sh`交叉编译Android库，Linux上游包继续用`tools/build_on_device.py`。`desktop/patches/qt-video-duration.patch`是未验收实验，未进入Qt补丁队列。
 - 上游升级先核对新版本是否已包含我们的修复，已包含的删除；升级时更新配方版本、哈希和许可证记录。跨组件协议变更在同一组Git提交中同步；本机和K8用提交SHA协作，协作与核对结果见`docs/53-remote-system-development.md`。
 - 本机生成的源码树、构建产物只能进入`.work`；审计仅按精确哈希豁免已核对的上游公开文件（`provenance/audit-exceptions.json`）。
 

@@ -13,8 +13,8 @@ from unittest.mock import Mock, patch
 
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / 'plasma/voice-agent'))
-source = ROOT / 'plasma/voice-agent/rungic_voice_agent.py'
+sys.path.insert(0, str(ROOT / 'agent/assistant'))
+source = ROOT / 'agent/assistant/rungic_voice_agent.py'
 tree = ast.parse(source.read_text())
 agent_class = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'VoiceAgent')
 methods = {'emit', '_start_call', 'call_command'}

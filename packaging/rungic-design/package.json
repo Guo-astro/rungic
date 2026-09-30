@@ -1,0 +1,9 @@
+{
+  "name": "rungic-design",
+  "architecture": "arm64",
+  "build": "device",
+  "paths": ["desktop/design"],
+  "depends": "qml6-module-org-kde-kirigami, qml6-module-org-kde-ki18n, qml6-module-qtquick-shapes, qml6-module-qtquick-effects, qml6-module-qtquick-controls, qml6-module-qtquick-templates, qml6-module-qtquick-layouts",
+  "build_depends": ["cmake", "qt6-base-dev", "qt6-declarative-dev", "libkf6config-dev", "libkf6i18n-dev", "gettext"],
+  "description": "Plasma Mobile on Android: Rungic design system\nThe QML module com.rungic.design: design tokens for the dark and light looks,\nthe system's colour scheme, the design's icons and shared controls (docs/87)."
+}

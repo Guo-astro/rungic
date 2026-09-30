@@ -2,7 +2,7 @@
 """Assemble the pinned Android host and its separately maintained dependencies in .work.
 
 Edit upstream changes with pq.py prepare/export android-host or smithay. Rungic-only
-modules live in plasma/android-host and enter through the android-host recipe's overlay.
+modules live in android/host and enter through the android-host recipe's overlay.
 This command only prepares source; it does not build, install or contact a device.
 """
 import argparse

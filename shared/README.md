@@ -2,7 +2,7 @@
 
 These sources support the Plasma environment through standard Linux interfaces.
 They were extracted from the retired Phosh directory; a Phosh installation is
-not required. Android-side services are in `plasma/native-apk/`.
+not required. Android-side services are in `android/app/`.
 
 | Path | Interface and consumer |
 |---|---|

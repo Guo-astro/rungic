@@ -11,7 +11,7 @@ import unittest
 from unittest.mock import patch
 
 sys.dont_write_bytecode = True
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'plasma/voice-agent'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'agent/assistant'))
 from cellular_audio import PCMPlayer, exchange, FRAME_BYTES
 
 

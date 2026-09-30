@@ -15,15 +15,15 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
 import cast_payload
 ANDROID_FILES = (
-    ("plasma/rungic-plasma", "rungic-plasma/rungic-plasma", 0o755),
-    ("plasma/android-calls", "rungic-plasma/android-calls", 0o755),
-    ("plasma/android-clipboard", "rungic-plasma/android-clipboard", 0o755),
-    ("plasma/android-audio", "rungic-plasma/android-audio", 0o755),
-    ("plasma/android-audio.pa", "rungic-plasma/android-audio.pa", 0o644),
-    ("plasma/rootfs-image", "rungic-plasma/rootfs-image", 0o755),
-    ("plasma/rootfs.sepolicy.rule", "rungic-plasma/rootfs.sepolicy.rule", 0o644),
-    ("plasma/rootfs-mount-hook", "rungic-plasma/rootfs-mount-hook", 0o755),
-    ("plasma/plasma.config", "rungic-lxc/runtime/var/lib/lxc/plasma/config", 0o644),
+    ("system/rungic-plasma", "rungic-plasma/rungic-plasma", 0o755),
+    ("system/android-calls", "rungic-plasma/android-calls", 0o755),
+    ("system/android-clipboard", "rungic-plasma/android-clipboard", 0o755),
+    ("system/android-audio", "rungic-plasma/android-audio", 0o755),
+    ("system/android-audio.pa", "rungic-plasma/android-audio.pa", 0o644),
+    ("system/rootfs-image", "rungic-plasma/rootfs-image", 0o755),
+    ("system/rootfs.sepolicy.rule", "rungic-plasma/rootfs.sepolicy.rule", 0o644),
+    ("system/rootfs-mount-hook", "rungic-plasma/rootfs-mount-hook", 0o755),
+    ("system/plasma.config", "rungic-lxc/runtime/var/lib/lxc/plasma/config", 0o644),
     ("lxc/rungic-lxc", "rungic-lxc/rungic-lxc", 0o755),
     # Casting (docs/58); firstboot moves service.d/ into /data/adb/service.d.
     *((source, "rungic-wfd/" + dest, mode) for source, dest, mode in cast_payload.FILES),

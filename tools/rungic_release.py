@@ -4,7 +4,7 @@
 deploy, rollback and status (docs/61).
 
 A release is rungic-release=<version>: a metapackage with an exact dependency on every
-package in plasma/release/packages.json (rebuilt Ubuntu packages, this project's rungic-*
+package in release/packages.json (rebuilt Ubuntu packages, this project's rungic-*
 packages, and the Ubuntu packages coupled to them), plus /usr/share/rungic/release.json with the
 git commit. The repository is .work/apt/repo on this computer (the pool of .debs is build
 output); deploy mirrors it to /var/lib/rungic-apt in the container, where it is a trusted file:
@@ -49,7 +49,7 @@ from pathlib import Path
 import rungic_device
 from rungic_device import DeviceError, WORKSPACE, out, push, run
 
-SPEC = WORKSPACE / 'plasma/release/packages.json'
+SPEC = WORKSPACE / 'release/packages.json'
 APT = WORKSPACE / '.work/apt'
 POOL = APT / 'repo'                  # flat repository: .debs, Packages, Release
 RELEASES = APT / 'releases'          # <version>.json: what each metapackage pins
@@ -71,8 +71,8 @@ DEVICE_DEB_DIRS = ['/root/rungic-build/*', '/root/moto-build/*', '/root/moto-mes
                    '/root/moto-media-packages', '/root/rungic-packages/*', '/root/moto-packages/*', '/root']
 # The source and pin that rungic-plasma-config ships; deploy installs the same bytes before the
 # package exists, so dpkg later takes them over as unchanged conffiles.
-SOURCES = (WORKSPACE / 'plasma/config/etc/apt/sources.list.d/rungic.sources').read_text()
-PREFERENCES = (WORKSPACE / 'plasma/config/etc/apt/preferences.d/rungic').read_text()
+SOURCES = (WORKSPACE / 'system/config/etc/apt/sources.list.d/rungic.sources').read_text()
+PREFERENCES = (WORKSPACE / 'system/config/etc/apt/preferences.d/rungic').read_text()
 APT_OURS = ('-o Dir::Etc::SourceList=/etc/apt/sources.list.d/rungic.sources -o Dir::Etc::SourceParts=- '
             '-o APT::Get::List-Cleanup=0')
 
@@ -247,7 +247,7 @@ Description: Rungic: release {version}
 
 def index():
     """Flat repository index: Packages(.gz,.xz) and Release with origin and label rungic (the pin of
-    plasma/config/etc/apt/preferences.d/rungic; moto / moto-plasma before the Rungic rename)."""
+    system/config/etc/apt/preferences.d/rungic; moto / moto-plasma before the Rungic rename)."""
     POOL.mkdir(parents=True, exist_ok=True)
     archive = ['apt-ftparchive']
     if not shutil.which('apt-ftparchive'):
@@ -291,7 +291,7 @@ def build(version=None, allow_dirty=False, note='', coupled_override=None):
         for name in s['project']:
             pkg = definitions.get(name)
             if pkg is None:
-                raise SystemExit(f'{name} has no plasma/packaging definition')
+                raise SystemExit(f'{name} has no packaging definition')
             if not rungic_package.current(pkg):
                 missing.append(f'{name} (not built for the current sources: rungic_package.py build {name})')
                 continue
@@ -594,7 +594,7 @@ def restart_container():
 
 
 def rootfs(action):
-    """plasma/rootfs-image through the Android-side launcher (plasma/rungic-plasma): status, snapshot, rollback, commit."""
+    """system/rootfs-image through the Android-side launcher (system/rungic-plasma): status, snapshot, rollback, commit."""
     result = run(f'{rungic_device.PLASMA} rootfs {action}', 'root', timeout=900, check=False)
     return result.returncode == 0, (result.stdout + result.stderr).strip()
 

@@ -34,7 +34,7 @@
 
 KWin + Vulkan开发至少同时需要前三行与Android宿主。当前生产KWin仍为GLES，Turnip/Zink及性能工具已经在仓库；原生Vulkan KWin合成器尚未实现，不是代码漏传。量化基准见[51篇](51-plasma-vulkan-benchmark.md)。
 
-几个共享文件使用仓库内相对链接，构建准备工具将它们展开。历史补丁仅供查来源，规则见[补丁说明](../plasma/PATCHES.md)。
+几个共享文件使用仓库内相对链接，构建准备工具将它们展开。历史补丁仅供查来源，规则见[补丁说明](../packages/WORKFLOW.md)。
 
 ## 两台机器与其他仓库如何同步
 

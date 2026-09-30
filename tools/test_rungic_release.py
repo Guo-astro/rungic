@@ -47,7 +47,7 @@ class AndroidFilesTests(unittest.TestCase):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         self.root = Path(temp.name)
-        (self.root / 'plasma').mkdir()
+        (self.root / 'system').mkdir()
         self.record = self.root / 'record'
         self.record.mkdir()
 
@@ -64,9 +64,9 @@ class AndroidFilesTests(unittest.TestCase):
 
     def test_rollback_restores_replaced_and_removes_added_files(self):
         device = FakeDevice({'/data/adb/x/config': b'old config', '/data/adb/x/same': b'same'})
-        info = self.release({'/data/adb/x/config': ('plasma/config', b'new config'),
-                             '/data/adb/x/hook': ('plasma/hook', b'new hook'),
-                             '/data/adb/x/same': ('plasma/same', b'same')})
+        info = self.release({'/data/adb/x/config': ('system/config', b'new config'),
+                             '/data/adb/x/hook': ('system/hook', b'new hook'),
+                             '/data/adb/x/same': ('system/same', b'same')})
         patches = self.patched(device)
         for p in patches:
             p.start()
@@ -86,7 +86,7 @@ class AndroidFilesTests(unittest.TestCase):
 
     def test_nothing_to_restore_without_changes(self):
         device = FakeDevice({'/data/adb/x/same': b'same'})
-        info = self.release({'/data/adb/x/same': ('plasma/same', b'same')})
+        info = self.release({'/data/adb/x/same': ('system/same', b'same')})
         patches = self.patched(device)
         for p in patches:
             p.start()
@@ -103,16 +103,17 @@ class DeployFailureTests(unittest.TestCase):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         self.root = Path(temp.name)
-        (self.root / 'plasma').mkdir()
-        (self.root / 'plasma/config').write_bytes(b'lxc config')
+        (self.root / 'system').mkdir()
+        (self.root / 'system/config').write_bytes(b'lxc config')
         self.info = {'version': 'test', 'packages': {}, 'android': {
-            '/data/adb/x/config': {'source': 'plasma/config', 'sha256': hashlib.sha256(b'lxc config').hexdigest(),
+            '/data/adb/x/config': {'source': 'system/config', 'sha256': hashlib.sha256(b'lxc config').hexdigest(),
                                    'mode': '644'}}}
         self.calls = []
         stubs = dict(
             WORKSPACE=self.root, DEPLOY=self.root / 'deploy', HISTORY=self.root / 'history.json',
             releases=lambda: [self.info], preflight=lambda: ([], []), rootfs_state=lambda: ('image', 'none'),
             with_container_stopped=self.stopped, device_release=lambda: ('previous', None),
+            android_layouts=lambda info: ('rungic', 'rungic'),
             installed_versions=lambda: {}, integrity_summary=lambda: {}, ensure_apt_source=lambda: None,
             sync_repo=lambda: {}, apt_install=lambda info, record: (True, ''), run=lambda *a, **k: None)
         for name, value in stubs.items():
@@ -136,7 +137,7 @@ class DeployFailureTests(unittest.TestCase):
         return True, action
 
     def test_changed_android_source_aborts_before_the_snapshot(self):
-        (self.root / 'plasma/config').write_bytes(b'edited since the build')
+        (self.root / 'system/config').write_bytes(b'edited since the build')
         log = rungic_release.deploy('test')
         self.assertEqual(log['result'], 'aborted')
         self.assertEqual(self.calls, [])

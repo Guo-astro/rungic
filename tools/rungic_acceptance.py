@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
-"""Post-release acceptance on the phone (docs/61): scenarios from plasma/release/acceptance.json.
+"""Post-release acceptance on the phone (docs/61): scenarios from release/acceptance.json.
 
   rungic_acceptance.py smoke [--release V]     every deploy; about two minutes
   rungic_acceptance.py full [--release V]      release candidates: smoke plus the full scenarios
@@ -27,7 +27,7 @@ import rungic_agent  # noqa: E402
 import rungic_device  # noqa: E402
 from rungic_device import out, run  # noqa: E402
 
-SCENARIOS = rungic_device.WORKSPACE / 'plasma/release/acceptance.json'
+SCENARIOS = rungic_device.WORKSPACE / 'release/acceptance.json'
 RESULTS = rungic_device.WORKSPACE / '.work/acceptance'
 CHECKS = {}
 

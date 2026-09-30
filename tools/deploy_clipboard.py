@@ -61,7 +61,7 @@ def main():
     (args.output / 'clipboard.before.py').write_text(root(ctl + ' exec cat /usr/bin/rungic-clipboard'))
     (args.output / 'helper.before').write_text(root('if [ -f /data/adb/rungic-plasma/android-clipboard ]; then cat /data/adb/rungic-plasma/android-clipboard; fi'))
     files = [(args.output / 'controller.incremental', ctl),
-             (ROOT / 'plasma/android-clipboard', '/data/adb/rungic-plasma/android-clipboard'),
+             (ROOT / 'system/android-clipboard', '/data/adb/rungic-plasma/android-clipboard'),
              (ROOT / 'shared/platform/clipboard.py', '/usr/bin/rungic-clipboard')]
     remote = '/data/local/tmp/rungic-clipboard-' + str(time.time_ns())
     run('shell', 'mkdir', '-p', remote)

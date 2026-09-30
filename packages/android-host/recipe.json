@@ -21,12 +21,12 @@
     "src/graphify-out"
   ],
   "overlay": {
-    "src/android/frame_clock.rs": "plasma/android-host/src/android/frame_clock.rs",
-    "src/android/gpu_allocator.rs": "plasma/android-host/src/android/gpu_allocator.rs",
-    "src/android/idle_inhibit.rs": "plasma/android-host/src/android/idle_inhibit.rs",
-    "src/android/surface_control.rs": "plasma/android-host/src/android/surface_control.rs",
-    "src/android/presentation_gate.rs": "plasma/android-host/src/android/presentation_gate.rs",
-    "src/android/backend/wayland/explicit_sync.rs": "plasma/android-host/src/android/backend/wayland/explicit_sync.rs",
-    "src/android/backend/wayland/cast.rs": "plasma/android-host/src/android/backend/wayland/cast.rs"
+    "src/android/frame_clock.rs": "android/host/src/android/frame_clock.rs",
+    "src/android/gpu_allocator.rs": "android/host/src/android/gpu_allocator.rs",
+    "src/android/idle_inhibit.rs": "android/host/src/android/idle_inhibit.rs",
+    "src/android/surface_control.rs": "android/host/src/android/surface_control.rs",
+    "src/android/presentation_gate.rs": "android/host/src/android/presentation_gate.rs",
+    "src/android/backend/wayland/explicit_sync.rs": "android/host/src/android/backend/wayland/explicit_sync.rs",
+    "src/android/backend/wayland/cast.rs": "android/host/src/android/backend/wayland/cast.rs"
   }
 }
