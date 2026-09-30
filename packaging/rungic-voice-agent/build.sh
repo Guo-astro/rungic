@@ -5,7 +5,7 @@ cmake --build "$V/app/build" -j"${JOBS:-4}"
 DESTDIR="$DESTDIR" cmake --install "$V/app/build"
 install -Dm755 "$V/rungic_voice_agent.py" "$DESTDIR/usr/bin/rungic-voice-agent"
 install -Dm644 "$V/call_proxy.py" "$DESTDIR/usr/lib/rungic-voice-agent/call_proxy.py"
-for f in cellular_audio cellular_call call_backends voice_i18n; do install -Dm644 "$V/$f.py" "$DESTDIR/usr/lib/rungic-voice-agent/$f.py"; done
+for f in cellular_audio cellular_call call_backends voice_i18n model_catalog; do install -Dm644 "$V/$f.py" "$DESTDIR/usr/lib/rungic-voice-agent/$f.py"; done
 # The service's words in the desktop's language (voice_i18n): po/<lang>/rungic-voice-agent.po.
 for po in "$V"/po/*/rungic-voice-agent.po; do
     lang=$(basename "$(dirname "$po")")

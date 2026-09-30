@@ -49,6 +49,7 @@ sys.path.insert(1, '/usr/lib/rungic-cua')
 import shutil
 import socket
 import task_state
+import model_catalog
 from voice_i18n import _, desktop_language, language_name, language_note
 
 RATE = 24000                 # PCM format of the Realtime API
@@ -84,8 +85,11 @@ REALTIME_MODEL = 'gpt-realtime-2.1-mini'
 # ("新对话"; "语音助手", then "主对话"): they are read as the same keys.
 UNTITLED = ('', '新对话')
 MAIN_TITLES = ('主对话', '语音助手')
-AGENT_MODEL = os.environ.get('RUNGIC_AGENT_MODEL', 'gpt-6-sol')
-AGENT_EFFORT = 'medium'
+# The agent's model and reasoning effort are the user's choice (docs/98): by default the account's
+# default model at that model's default effort, read from the provider's catalog (model_catalog).
+# RUNGIC_AGENT_MODEL, for development, runs every task on that model whatever the choice.
+AGENT_MODEL_OVERRIDE = os.environ.get('RUNGIC_AGENT_MODEL', '')
+AGENT_PROVIDER = 'codex'
 # The agent's own workspace (docs/research/91): a KWin of its own on the Android host, where
 # everything the agent opens appears and nothing reaches the user's phone. A second agent
 # would get 2, and so on (the host offers ws-1 .. ws-4).
@@ -146,6 +150,8 @@ INTERFACE = '''
     <method name="InstallCodex"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
     <method name="CancelInstall"><arg type="s" direction="out"/></method>
     <method name="SetPreferences"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
+    <method name="Models"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
+    <method name="SetAgentModel"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
     <method name="SetWatching"><arg type="b" direction="in"/></method>
     <method name="Use"><arg type="s" direction="in"/></method>
     <method name="InvestigateSuggestion"><arg type="s" direction="in"/><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
@@ -166,6 +172,9 @@ INTERFACE = '''
 # (turn/start outputSchema, strict). The service validates the answer again; nothing of it is
 # an instruction to anyone.
 CURATE_EFFORT = 'low'
+# Curation is background work: its own model, not the user's choice for tasks. The account's default
+# stands in when its catalog no longer offers this one.
+CURATE_MODEL = 'gpt-6-sol'
 CURATE_TIMEOUT_S = 90
 CURATE_INPUT_MAX = 64 * 1024
 CURATE_KINDS = ['attention', 'issues', 'improvement', 'result', 'followup']
@@ -286,12 +295,28 @@ def openai_key() -> str:
 PREFERENCES = {'homeHold': True, 'speak': True, 'handsFreeAutoSend': True}
 
 
-def preferences() -> dict:
+def saved_preferences() -> dict:
     try:
         saved = json.loads((CONFIG / 'preferences.json').read_text())
     except (OSError, ValueError):
         saved = {}
+    return saved if isinstance(saved, dict) else {}
+
+
+def preferences() -> dict:
+    saved = saved_preferences()
     return {k: bool(saved.get(k, v)) for k, v in PREFERENCES.items()}
+
+
+def model_choices() -> dict:
+    """provider -> {"model", "effort"} (docs/98), in preferences.json under "models"."""
+    saved = saved_preferences().get('models')
+    return {p: model_catalog.normalize_choice(c) for p, c in (saved or {}).items()} if isinstance(saved, dict) else {}
+
+
+def save_preferences(prefs, choices):
+    CONFIG.mkdir(parents=True, exist_ok=True)
+    (CONFIG / 'preferences.json').write_text(json.dumps({**prefs, 'models': choices}))
 
 
 def log(*args):
@@ -708,6 +733,7 @@ class VoiceAgent:
         self.open_generation = 0
         self.talking = False
         self.agent_busy = False
+        self.model_pending = False    # the model changed during a task: the thread takes it after (docs/98)
         self.agent_idle_since = time.monotonic()
         self.realtime_prompt = None   # hash of the realtime prompt its session started with
         self.muted = False
@@ -762,6 +788,9 @@ class VoiceAgent:
         self.uploads = queue.Queue()
         threading.Thread(target=self.upload_loop, daemon=True).start()
         self.prefs = preferences()
+        # The agent's model (docs/98): each provider's catalog and the user's choice for it.
+        self.catalogs = {'codex': model_catalog.CodexCatalog(lambda: self.server)}
+        self.model_choice = model_choices()
         self.key_working = None      # the last test of the API key: True, False, or not tested
         self.installer = None        # a Codex installation under way
         # Codex turns in threads of our own that no conversation shows (briefing curation):
@@ -787,6 +816,8 @@ class VoiceAgent:
                                        'capabilities': {'experimentalApi': True}})
             server.notify('initialized')
             self.server = server
+            # The account's models, ready before the first conversation needs them (docs/98).
+            threading.Thread(target=self.warm_catalog, daemon=True).start()
         except (FileNotFoundError, TimeoutError, RuntimeError) as error:
             log('codex app-server not started:', error)
             self.server = None
@@ -803,6 +834,9 @@ class VoiceAgent:
                     old.proc.terminate()
                 except OSError:
                     pass
+            # Another key or sign-in: another account, maybe other models (docs/98).
+            for catalog in self.catalogs.values():
+                catalog.forget()
             self.start_server()
         self.emit_raw({'type': 'agent-restarted', 'conversation': open_id, 'time': time.time()})
 
@@ -885,7 +919,10 @@ class VoiceAgent:
     def thread_settings(self):
         # update_plan is off unless configured (codex config resolve_update_plan_enabled):
         # its plan is the task card's checklist and the voice's milestones (docs/89).
-        config = {'model_reasoning_effort': AGENT_EFFORT, 'tools.update_plan.enabled': True}
+        config = {'tools.update_plan.enabled': True}
+        agent = self.agent_model()
+        if agent['effort']:
+            config['model_reasoning_effort'] = agent['effort']
         # The agent works in its own workspace (docs/research/91): its commands and its desktop
         # tools see that KWin only, so whatever it opens appears there from the first frame.
         # Codex starts MCP servers with a few variables only (rungic-cua fills in the user's
@@ -896,8 +933,113 @@ class VoiceAgent:
             config['mcp_servers.rungic-desktop.env'] = env
         # Full access without approval prompts (the user's choice, docs/59): the
         # sandbox could not reach the desktop and every approval interrupted work.
-        return {'cwd': str(Path.home()), 'sandbox': 'danger-full-access', 'approvalPolicy': 'never',
-                'model': AGENT_MODEL, 'config': config, 'developerInstructions': agent_instructions()}
+        settings = {'cwd': str(Path.home()), 'sandbox': 'danger-full-access', 'approvalPolicy': 'never',
+                    'config': config, 'developerInstructions': agent_instructions()}
+        if agent['model']:          # None: the catalog isn't known, Codex takes the account's default
+            settings['model'] = agent['model']
+        return settings
+
+    # ---- the agent's model (docs/98) --------------------------------------------------
+    def catalog(self, provider=None):
+        return self.catalogs[provider or AGENT_PROVIDER]
+
+    def agent_model(self, provider=None):
+        """What tasks run with: model_catalog.resolve() of the user's choice (RUNGIC_AGENT_MODEL wins)."""
+        provider = provider or AGENT_PROVIDER
+        catalog = self.catalog(provider)
+        choice = self.model_choice.get(provider, {})
+        if AGENT_MODEL_OVERRIDE:
+            choice = {'model': AGENT_MODEL_OVERRIDE, 'effort': choice.get('effort', '')}
+            return {**model_catalog.resolve(None, choice), 'override': True}
+        return model_catalog.resolve(catalog.read(), choice)
+
+    def models(self, provider=None, refresh=False):
+        """Models(): a provider's catalog, the user's choice and what it resolves to."""
+        provider = provider or AGENT_PROVIDER
+        catalog = self.catalog(provider)
+        catalog.read(refresh)
+        reply = catalog.describe(self.model_choice.get(provider, {}))
+        reply['effective'] = self.agent_model(provider)
+        reply['override'] = AGENT_MODEL_OVERRIDE
+        reply['providers'] = [{'id': p, 'name': c.name} for p, c in self.catalogs.items()]
+        return reply
+
+    def set_agent_model(self, values):
+        """SetAgentModel(): {"provider", "model", "effort"}, '' for the default. The open conversation
+        takes it at once when idle, else when its task is done."""
+        provider = values.get('provider') or AGENT_PROVIDER
+        if provider not in self.catalogs:
+            raise RuntimeError(f'unknown provider {provider}')
+        choice = model_catalog.normalize_choice(values)
+        error = model_catalog.valid_choice(self.catalog(provider).read(), choice)
+        if error:
+            raise RuntimeError(error)
+        self.model_choice[provider] = choice
+        save_preferences(self.prefs, self.model_choice)
+        reply = self.models(provider)
+        self.emit_raw({'type': 'agent-model', **reply, 'time': time.time()})
+        self.usage_push('ProviderChanged', 'codex')
+        log('agent model:', choice, '->', reply['effective'].get('model'), reply['effective'].get('effort'))
+        if provider == AGENT_PROVIDER:
+            threading.Thread(target=self.apply_agent_model, daemon=True).start()
+        return reply
+
+    def resume_with_settings(self, thread_id):
+        """thread/resume with the current settings, and the model and effort really taken: Codex keeps a
+        loaded thread as it is and a resume of it changes nothing (docs/98, measured with Codex
+        0.156.1), so a thread loaded with another model is unsubscribed (unloaded) and resumed again."""
+        reply = self.server.call('thread/resume', {'threadId': thread_id, **self.thread_settings()})
+        agent = self.agent_model()
+        if agent['model'] and (reply.get('model') != agent['model']
+                               or (agent['effort'] and reply.get('reasoningEffort') != agent['effort'])):
+            log('agent model:', thread_id, 'is on', reply.get('model'), reply.get('reasoningEffort'),
+                '-> reloading on', agent['model'], agent['effort'])
+            self.server.call('thread/unsubscribe', {'threadId': thread_id})
+            reply = self.server.call('thread/resume', {'threadId': thread_id, **self.thread_settings()})
+        return reply
+
+    def apply_agent_model(self):
+        """The open conversation's thread takes the current model at once: its next turns, those the
+        voice starts too (background_agent), run with the thread's model. The voice session is
+        stopped around the reload and comes back if it was on. During a task or a press it waits
+        for the end; a thread without a turn yet has nothing Codex can reload (no rollout), so it
+        waits for its first turn (a typed one carries the model itself, turn/start)."""
+        with self.lock:
+            thread_id = self.thread_id
+            if not thread_id or not self.server:
+                return
+            if self.agent_busy or self.talking or not self.store.history(thread_id):
+                self.model_pending = True
+                return
+            self.model_pending = False
+            voice = self.realtime or self.realtime_starting
+            self.stop_realtime()
+            try:
+                reply = self.resume_with_settings(thread_id)
+                log('agent model: applied to', thread_id, reply.get('model'), reply.get('reasoningEffort'))
+            except Exception as error:  # noqa: BLE001
+                log('agent model: not applied to', thread_id, error)
+            if voice:
+                threading.Thread(target=self.start_realtime, daemon=True).start()
+
+    def warm_catalog(self):
+        self.catalog().read(refresh=True)
+        self.check_agent_model()
+
+    def curate_model(self):
+        """CURATE_MODEL, or the account's default when the catalog doesn't offer it."""
+        models = self.catalog().read()
+        if not models or any(m['id'] == CURATE_MODEL for m in models):
+            return CURATE_MODEL
+        return model_catalog.resolve(models, {})['model']
+
+    def check_agent_model(self):
+        """After the catalog is read again (another account, a retired model): say when the choice
+        no longer holds, so the app shows what runs instead."""
+        effective = self.agent_model()
+        if effective.get('fallback') or effective.get('effortFallback'):
+            log('agent model: choice not offered, using', effective.get('model'), effective.get('effort'))
+            self.emit_raw({'type': 'agent-model', **self.models(), 'time': time.time()})
 
     def note_instructions(self, thread_id, fingerprint=None):
         entry = self.store.index.setdefault(thread_id, {'title': '', 'created': time.time()})
@@ -974,7 +1116,7 @@ class VoiceAgent:
         if not self.server:
             return
         try:
-            self.server.call('thread/resume', {'threadId': thread_id, **self.thread_settings()})
+            self.resume_with_settings(thread_id)
         except Exception as error:  # noqa: BLE001
             log('resume', thread_id, 'failed:', error)
             with self.lock:
@@ -1534,7 +1676,8 @@ class VoiceAgent:
         RPCs; tokens seen on this device are pushed as they happen (RecordTokens) and repeated here
         for a usage service that restarted. Never a key, token or email."""
         identity = self.usage_identity()
-        result = {'accountKey': identity, 'model': AGENT_MODEL, 'status': 'working' if self.agent_busy else 'ready',
+        effective = self.agent_model()
+        result = {'accountKey': identity, 'model': effective.get('name') or effective.get('model') or '', 'status': 'working' if self.agent_busy else 'ready',
                   'account': {'kind': 'none', 'label': '', 'plan': ''}}
         server = self.server
         if not server:
@@ -1593,8 +1736,17 @@ class VoiceAgent:
                      'total': (usage.get('total') or {}).get('totalTokens'), 'last': (usage.get('last') or {}).get('totalTokens')}
             self.usage_tokens[(identity, event['session'])] = event
             self.usage_push('RecordTokens', 'codex', json.dumps(event))
-        elif method in ('account/rateLimits/updated', 'account/updated'):
+        elif method == 'account/updated':
+            # Another plan or account can offer other models (docs/98).
+            self.catalog().forget()
+            threading.Thread(target=self.warm_catalog, daemon=True).start()
+        elif method == 'account/rateLimits/updated':
             pass  # told above
+        elif method == 'model/rerouted' and params.get('threadId') == self.thread_id:
+            # Codex handed the turn to another model (capacity, safety): the task card says so.
+            log('model rerouted:', params.get('fromModel'), '->', params.get('toModel'), params.get('reason'))
+            self.emit({'type': 'model-rerouted', 'from': params.get('fromModel') or '', 'to': params.get('toModel') or '',
+                       'reason': params.get('reason') or ''})
         elif (background := getattr(self, 'background', {}).get(params.get('threadId'))) is not None:
             background.on(method, params)     # a curation turn: never the open conversation's
         elif params.get('threadId') and params['threadId'] != self.thread_id:
@@ -1670,6 +1822,8 @@ class VoiceAgent:
             self.turn_id = None
             self.agent_busy = False
             self.agent_idle_since = time.monotonic()
+            if getattr(self, 'model_pending', False):
+                threading.Thread(target=self.apply_agent_model, daemon=True).start()
             # A caption left "working" (a tool call cut short) must not stay on the screen.
             if screen_activity().get('state') == 'working':
                 from rungic_cua import activity
@@ -2123,7 +2277,7 @@ class VoiceAgent:
         turn = BackgroundTurn()
         try:
             started = server.call('thread/start', {
-                'model': AGENT_MODEL, 'ephemeral': True, 'cwd': str(Path.home()),
+                'model': self.curate_model(), 'ephemeral': True, 'cwd': str(Path.home()),
                 'sandbox': 'read-only', 'approvalPolicy': 'never',
                 'config': {'model_reasoning_effort': CURATE_EFFORT},
                 'developerInstructions': CURATE_INSTRUCTIONS + language_note()}, timeout=30)
@@ -2220,7 +2374,14 @@ class VoiceAgent:
         self.last_activity = time.monotonic()
         self.emit({'type': 'message', 'role': 'user', 'id': f'typed-{time.time_ns()}', 'text': text,
                    'typed': True, 'attachments': attachments})
-        self.server.call('turn/start', {'threadId': self.thread_id, 'input': items})
+        turn = {'threadId': self.thread_id, 'input': items}
+        agent = self.agent_model()
+        if agent['model']:
+            # For this turn and the thread's next ones (TurnStartParams), whatever the thread started with.
+            turn['model'] = agent['model']
+            if agent['effort']:
+                turn['effort'] = agent['effort']
+        self.server.call('turn/start', turn)
 
     def talk_to_text(self):
         """The hold ended over "转文字": what was said comes back as text to edit; nothing
@@ -2345,8 +2506,7 @@ class VoiceAgent:
 
     def set_preferences(self, values):
         self.prefs = {k: bool(values.get(k, v)) for k, v in self.prefs.items()}
-        CONFIG.mkdir(parents=True, exist_ok=True)
-        (CONFIG / 'preferences.json').write_text(json.dumps(self.prefs))
+        save_preferences(self.prefs, self.model_choice)
         self.emit_raw({'type': 'preferences', **self.prefs, 'time': time.time()})
         return self.prefs
 
@@ -2656,6 +2816,13 @@ class Service:
                     result = json.dumps(agent.cancel_install(), ensure_ascii=False)
                 elif method == 'SetPreferences':
                     result = json.dumps(agent.set_preferences(json.loads(args[0])), ensure_ascii=False)
+                elif method == 'Models':
+                    # {"provider": "", "refresh": false}; the provider '' is the agent's own (docs/98).
+                    options = json.loads(args[0] or '{}')
+                    result = json.dumps(agent.models(options.get('provider') or None, bool(options.get('refresh'))),
+                                        ensure_ascii=False)
+                elif method == 'SetAgentModel':
+                    result = json.dumps(agent.set_agent_model(json.loads(args[0])), ensure_ascii=False)
                 invocation.return_value(GLib.Variant('(s)', (result,)) if result is not None else None)
             except Exception as error:
                 log('call failed', method, error)

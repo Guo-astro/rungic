@@ -247,6 +247,11 @@ QtObject {
             break
         }
         case "files": root.addStep({ kind: "files", text: (e.paths || []).join("\n") }); break
+        // Codex handed the turn to another model (capacity, safety; docs/98): the task card says which.
+        case "model-rerouted":
+            root.addStep({ kind: "note", text: i18nc("@info a step of an agent turn; %1 and %2 are model names",
+                                                      "Continued on %1 instead of %2", e.to, e.from) })
+            break
         case "approval": {
             const pending = e.status === "pending" && live
             entries.append(entry({ kind: "approval", itemId: e.id, text: e.reason || "",

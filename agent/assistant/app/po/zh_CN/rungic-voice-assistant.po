@@ -1052,3 +1052,129 @@ msgstr "OpenAI API Key 明文保存在本机的配置文件里（%1，只有你�
 msgctxt "@title"
 msgid "Agent Usage"
 msgstr "Agent 用量"
+
+#: qml/SettingsPage.qml qml/ModelPage.qml
+msgctxt "@label the agent's model"
+msgid "Model"
+msgstr "模型"
+
+msgctxt "@title"
+msgid "Model"
+msgstr "模型"
+
+msgctxt "@title:group"
+msgid "Model"
+msgstr "模型"
+
+msgctxt "@title:group %1 is the agent, e.g. Codex"
+msgid "%1 model"
+msgstr "%1 模型"
+
+msgctxt "@item the model"
+msgid "Account default"
+msgstr "跟随账户默认"
+
+msgctxt "@info %1 is a model"
+msgid "Now %1"
+msgstr "现在是 %1"
+
+msgctxt "@info %1 describes the model, %2 is the model replacing it"
+msgid "%1 · Being replaced by %2"
+msgstr "%1 · 将由 %2 取代"
+
+msgctxt "@title:group"
+msgid "Reasoning effort"
+msgstr "推理强度"
+
+msgctxt "@item reasoning effort"
+msgid "Model default"
+msgstr "模型默认"
+
+msgctxt "@item reasoning effort"
+msgid "None"
+msgstr "不思考"
+
+msgctxt "@item reasoning effort"
+msgid "Minimal"
+msgstr "最少"
+
+msgctxt "@item reasoning effort"
+msgid "Low"
+msgstr "低"
+
+msgctxt "@item reasoning effort"
+msgid "Medium"
+msgstr "中"
+
+msgctxt "@item reasoning effort"
+msgid "High"
+msgstr "高"
+
+msgctxt "@item reasoning effort"
+msgid "Extra high"
+msgstr "很高"
+
+msgctxt "@item reasoning effort"
+msgid "Max"
+msgstr "最高"
+
+msgctxt "@item reasoning effort"
+msgid "Ultra"
+msgstr "极致"
+
+msgctxt "@info reasoning effort"
+msgid "Answers at once, for the simplest requests"
+msgstr "直接回答，只适合最简单的请求"
+
+msgctxt "@info reasoning effort"
+msgid "Quick, for everyday tasks on the phone"
+msgstr "快，适合手机上的日常任务"
+
+msgctxt "@info reasoning effort"
+msgid "Balances speed and care"
+msgstr "速度和细致兼顾"
+
+msgctxt "@info reasoning effort"
+msgid "Thinks longer about harder tasks"
+msgstr "遇到较难的任务多想一会儿"
+
+msgctxt "@info reasoning effort"
+msgid "Thinks much longer; noticeably slower"
+msgstr "想得久得多，明显更慢"
+
+msgctxt "@info reasoning effort"
+msgid "Slow, and uses much more of your plan"
+msgstr "很慢，占用的额度也多得多"
+
+msgctxt "@info reasoning effort"
+msgid "The most thorough; only for the rare very hard task"
+msgstr "最彻底，只适合少数非常难的任务"
+
+msgctxt "@info"
+msgid "Reading the models of your account…"
+msgstr "正在读取你的账户可用的模型…"
+
+msgctxt "@info %1 is the reason"
+msgid "Couldn't read the models: %1"
+msgstr "读取模型失败：%1"
+
+msgctxt "@action:button"
+msgid "Try again"
+msgstr "重试"
+
+msgctxt "@info %1 is a model"
+msgid "A development setting (RUNGIC_AGENT_MODEL) runs every task on %1."
+msgstr "开发设置 RUNGIC_AGENT_MODEL 生效中：所有任务都用 %1。"
+
+msgctxt "@info %1 the chosen model, %2 the model used instead"
+msgid "This account no longer offers %1. Tasks use the account's default, %2."
+msgstr "这个账户已不再提供 %1，任务改用账户默认的 %2。"
+
+msgctxt "@info"
+msgid "More effort means the agent thinks longer: slower answers, more of your plan. A change applies from the next task."
+msgstr "强度越高，Agent 想得越久：回答更慢，占用的额度也更多。改动从下一个任务开始生效。"
+
+#: qml/ChatModel.qml
+msgctxt "@info a step of an agent turn; %1 and %2 are model names"
+msgid "Continued on %1 instead of %2"
+msgstr "改由 %1 继续（原为 %2）"

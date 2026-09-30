@@ -22,7 +22,7 @@ agent_class.body = [n for n in agent_class.body if isinstance(n, ast.FunctionDef
                     and n.name in {'curate', 'open_briefing_card', 'on_notification'}]
 body.append(agent_class)
 namespace = {'json': json, 're': re, 'threading': threading, 'time': time, 'Path': Path, '_': lambda text: text,
-             'AGENT_MODEL': 'test-model', 'language_note': lambda: '\n\nlanguage: English', 'log': lambda *a: None,
+             'language_note': lambda: '\n\nlanguage: English', 'log': lambda *a: None,
              'openai_key': lambda: ''}
 exec(compile(ast.Module(body=body, type_ignores=[]), str(source), 'exec'), namespace)
 VoiceAgent = namespace['VoiceAgent']
@@ -67,6 +67,9 @@ class FakeServer:
 class CurationTests(unittest.TestCase):
     def setUp(self):
         self.agent = VoiceAgent()
+        # Curation's model (docs/98): CURATE_MODEL, or the account's default when it is gone.
+        self.agent.curate_model = Mock(return_value='test-model')
+        self.agent.catalog = Mock()
         self.agent.background = {}
         self.agent.curation_lock = threading.Lock()
         self.agent.usage_accounts = {}
@@ -145,6 +148,8 @@ class CurationTests(unittest.TestCase):
 class OpenCardTests(unittest.TestCase):
     def setUp(self):
         self.agent = VoiceAgent()
+        self.agent.curate_model = Mock(return_value='test-model')
+        self.agent.catalog = Mock()
         self.agent.lock = threading.RLock()
         self.agent.agent_busy = False; self.agent.talking = False
         self.agent.call_in_progress = Mock(return_value=False); self.agent.needs_setup = Mock(return_value=False)

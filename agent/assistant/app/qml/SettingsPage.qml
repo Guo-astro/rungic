@@ -5,9 +5,12 @@ import QtQuick.Layouts
 import QtQuick.Controls as QQC2
 import com.rungic.design
 import com.rungic.voiceassistant
+import "efforts.js" as Efforts
 
 SettingsFrame {
     id: page
+    // i18nc for efforts.js (a library has no context to find it in).
+    readonly property var tr: (context, text) => i18nc(context, text)
     title: i18nc("@title", "Settings")
     property var setup: ({})
     readonly property var settings: QQC2.ApplicationWindow.window ? QQC2.ApplicationWindow.window.settings : null
@@ -15,11 +18,21 @@ SettingsFrame {
     readonly property var themeNames: [["system", i18nc("@item the app's theme", "System")], ["light", i18nc("@item the app's theme", "Light")],
                                        ["dark", i18nc("@item the app's theme", "Dark")]]
 
-    Component.onCompleted: AgentClient.request("Setup")
-    onVisibleChanged: if (visible) AgentClient.request("Setup")
+    // The agent's model (docs/98): Models(), and SetAgentModel's reply or event when it changes.
+    property var models: ({})
+    readonly property var agentModel: models.effective || ({})
+    readonly property string modelLabel: !models.known ? "" : [agentModel.name || i18nc("@item the model", "Account default"),
+        agentModel.effort ? Efforts.name(page.tr, agentModel.effort) : ""].filter(Boolean).join(" · ")
+    function refresh() { AgentClient.request("Setup"); AgentClient.request("Models", ["{}"]) }
+    Component.onCompleted: refresh()
+    onVisibleChanged: if (visible) refresh()
     Connections {
         target: AgentClient
-        function onReplied(method, json) { if (method === "Setup") page.setup = JSON.parse(json) }
+        function onReplied(method, json) {
+            if (method === "Setup") page.setup = JSON.parse(json)
+            else if (method === "Models" || method === "SetAgentModel") { const r = JSON.parse(json); if (r.models !== undefined) page.models = r }
+        }
+        function onEvent(json) { const e = JSON.parse(json); if (e.type === "agent-model") page.models = e }
     }
     readonly property var codex: setup.codex || {}
     readonly property var key: setup.key || {}
@@ -42,6 +55,14 @@ SettingsFrame {
             value: !page.setup.codex ? "" : page.codex.installed ? i18nc("@info Codex", "Installed") : i18nc("@info Codex", "Not installed")
             accessory: "chevron"
             onClicked: page.push("CodexPage.qml")
+        }
+        ListRow {
+            text: i18nc("@label the agent's model", "Model")
+            value: page.modelLabel
+            dot: page.agentModel.fallback ? "negative" : ""
+            enabled: page.codex.installed !== false
+            accessory: "chevron"
+            onClicked: page.push("ModelPage.qml")
         }
         ListRow { text: i18nc("@title", "Agent Usage"); accessory: "chevron"; onClicked: page.push("UsagePage.qml") }
         ListRow {

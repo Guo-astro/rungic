@@ -10,7 +10,7 @@ source = root / 'agent/assistant/rungic_voice_agent.py'
 tree = ast.parse(source.read_text())
 node = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'VoiceAgent')
 node.body = [n for n in node.body if isinstance(n, ast.FunctionDef) and n.name in {'usage', 'usage_limits', 'on_notification'}]
-namespace = {'AGENT_MODEL': 'test-model', '_': lambda text: text, 'json': json}
+namespace = {'_': lambda text: text, 'json': json, 'threading': types.SimpleNamespace(Thread=Mock()), 'log': Mock()}
 exec(compile(ast.Module(body=[node], type_ignores=[]), str(source), 'exec'), namespace)
 # Keys every provider object may carry (the rest is dropped by the service anyway).
 PROVIDER_KEYS = {'accountKey', 'status', 'account', 'model', 'tokens', 'limits', 'error', 'tokenEvents'}
@@ -27,6 +27,9 @@ class UsageBridgeTests(unittest.TestCase):
         self.agent.thread_id = 'active'
         self.agent.emit_raw = Mock()
         self.agent.usage_push = Mock()
+        # The agent's model (docs/98): what model_catalog resolved the user's choice to.
+        self.agent.agent_model = Mock(return_value={'model': 'test-model', 'name': 'test-model', 'effort': 'low'})
+        self.agent.catalog = Mock()
 
     def pushed(self, method):
         return [c.args[1:] for c in self.agent.usage_push.call_args_list if c.args[0] == method]
