@@ -243,6 +243,8 @@ Item {
 
     ConversationDrawer {
         id: drawer
+        // Only over the conversation: on a page above it, a drag to the right is that page's swipe back.
+        interactive: page.QQC2.StackView.status === QQC2.StackView.Active
         current: page.conversationId
         onOpenRequested: (id, title) => { drawer.close(); page.open(id, title) }
         onNewRequested: { drawer.close(); page.newConversation() }

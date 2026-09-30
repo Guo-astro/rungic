@@ -12,8 +12,11 @@ T.AbstractButton {
     property bool current: false
     property string forcedState: ""
     readonly property string visualState: forcedState !== "" ? forcedState
-        : !enabled ? "disabled" : down ? "pressed" : current ? "current" : "normal"
+        : !enabled ? "disabled" : down || tapShown.running ? "pressed" : current ? "current" : "normal"
     state: visualState
+    // A quick tap stays visible a moment after the click (ListRow, docs/102).
+    Timer { id: tapShown; interval: Theme.tapShown }
+    Connections { target: item; function onClicked() { tapShown.restart() } }
     property color fill: "transparent"
     property color ink: Theme.text
     property int weight: Font.Normal

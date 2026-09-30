@@ -15,7 +15,6 @@ SettingsFrame {
     title: i18nc("@title", "Settings")
     property var setup: ({})
     readonly property var settings: QQC2.ApplicationWindow.window ? QQC2.ApplicationWindow.window.settings : null
-    property bool choosingTheme: false
     readonly property var themeNames: [["system", i18nc("@item the app's theme", "System")], ["light", i18nc("@item the app's theme", "Light")],
                                        ["dark", i18nc("@item the app's theme", "Dark")]]
 
@@ -98,36 +97,21 @@ SettingsFrame {
             accessory: "chevron"
             onClicked: page.push("KeyPage.qml")
         }
-        ListRow {
+        ToggleRow {
             text: i18nc("@option:check", "Hold Home to open")
-            onClicked: homeToggle.toggle()
-            trailing: Toggle {
-                id: homeToggle
-                text: i18nc("@option:check", "Hold Home to open")
-                checked: page.prefs.homeHold !== false
-                onToggled: page.prefer("homeHold", checked)
-            }
+            checked: page.prefs.homeHold !== false
+            onSwitched: on => page.prefer("homeHold", on)
         }
-        ListRow {
+        ToggleRow {
             text: i18nc("@option:check", "Read answers aloud")
-            onClicked: speakToggle.toggle()
-            trailing: Toggle {
-                id: speakToggle
-                text: i18nc("@option:check", "Read answers aloud")
-                checked: page.prefs.speak !== false
-                onToggled: page.prefer("speak", checked)
-            }
+            checked: page.prefs.speak !== false
+            onSwitched: on => page.prefer("speak", on)
         }
-        ListRow {
+        ToggleRow {
             text: i18nc("@option:check", "Auto-send in hands-free mode")
             subtitle: i18nc("@info", "Sends after a pause of about a second")
-            onClicked: autoToggle.toggle()
-            trailing: Toggle {
-                id: autoToggle
-                text: i18nc("@option:check", "Auto-send in hands-free mode")
-                checked: page.prefs.handsFreeAutoSend !== false
-                onToggled: page.prefer("handsFreeAutoSend", checked)
-            }
+            checked: page.prefs.handsFreeAutoSend !== false
+            onSwitched: on => page.prefer("handsFreeAutoSend", on)
         }
     }
 
@@ -136,22 +120,13 @@ SettingsFrame {
         Layout.fillWidth: true
         Layout.leftMargin: Theme.groupMargin
         Layout.rightMargin: Theme.groupMargin
+        // A short list of choices opens as a sheet from the bottom (docs/102).
         ListRow {
             readonly property var names: ({ system: page.themeNames[0][1], light: page.themeNames[1][1], dark: page.themeNames[2][1] })
             text: i18nc("@label", "Theme")
             value: page.settings ? names[page.settings.theme] || names.system : ""
             accessory: "chevron"
-            onClicked: page.choosingTheme = !page.choosingTheme
-        }
-        Repeater {
-            model: page.choosingTheme ? page.themeNames : []
-            ListRow {
-                required property var modelData
-                text: modelData[1]
-                Accessible.role: Accessible.RadioButton
-                leading: RadioMark { on: page.settings && page.settings.theme === modelData[0] }
-                onClicked: { page.settings.theme = modelData[0]; page.choosingTheme = false }
-            }
+            onClicked: themeSheet.open()
         }
     }
 
@@ -164,6 +139,15 @@ SettingsFrame {
         ListRow { text: i18nc("@action:button", "Privacy"); accessory: "chevron"; onClicked: page.push(privacy) }
     }
     Item { implicitHeight: 24 }
+
+    ChoiceSheet {
+        id: themeSheet
+        parent: QQC2.Overlay.overlay
+        title: i18nc("@label", "Theme")
+        choices: page.themeNames.map(n => ({ value: n[0], text: n[1] }))
+        current: page.settings ? page.settings.theme : "system"
+        onChosen: value => { if (page.settings) page.settings.theme = value }
+    }
 
     Component {
         id: privacy

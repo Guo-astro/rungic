@@ -25,8 +25,12 @@ T.AbstractButton {
     property alias trailing: trailingSlot.data
     property string forcedState: ""
     readonly property string visualState: forcedState !== "" ? forcedState
-        : !enabled ? "disabled" : down && interactive ? "pressed" : "normal"
+        : !enabled ? "disabled" : (down || tapShown.running) && interactive ? "pressed" : "normal"
     state: visualState
+    // A quick tap is over before the pressed fill could be seen: it stays a moment after the click,
+    // so a tap on a choice is felt before the choice changes (docs/102).
+    Timer { id: tapShown; interval: Theme.tapShown }
+    Connections { target: row; function onClicked() { if (row.interactive) tapShown.restart() } }
     property color fill: "transparent"
     property color ink: Theme.text
     property color inkDim: Theme.dim

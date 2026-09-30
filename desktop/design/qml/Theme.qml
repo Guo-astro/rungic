@@ -133,6 +133,7 @@ QtObject {
     readonly property real pressShade: 0.18      // black over a picture while pressed
     readonly property int focusWidth: 2          // the keyboard focus ring: `link`, outside the shape
     readonly property int focusGap: 2
+    readonly property int tapShown: 150          // a row keeps its pressed fill this long after a quick tap
 
     // ---- Motion (ms) ----
     // Short and eased out; nothing moves when the system asks for less.

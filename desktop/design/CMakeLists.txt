@@ -24,7 +24,7 @@ qt_add_qml_module(rungicdesign
     VERSION 1.0
     PLUGIN_TARGET rungicdesign
     OUTPUT_DIRECTORY "${module_dir}"
-    SOURCES systemtheme.cpp systemtheme.h
+    SOURCES systemtheme.cpp systemtheme.h pageswipe.cpp pageswipe.h
     QML_FILES ${controls}
     RESOURCES ${icons}   # the sources of qml/icons.js (make-icons.py), for other uses
 )

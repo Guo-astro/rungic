@@ -36,15 +36,12 @@ QQC2.ApplicationWindow {
     readonly property bool watching: visible && active && Qt.application.state === Qt.ApplicationActive
     onWatchingChanged: AgentClient.setWatching(watching)
 
-    QQC2.StackView {
+    // Pages slide over from the right, as settings pages do on the phone, and a drag to the right
+    // anywhere on one goes back (the design system's PageStack, docs/102).
+    PageStack {
         id: stack
         anchors.fill: parent
         initialItem: ChatPage { id: chat }
-        // Pages slide over from the right, as settings pages do on the phone.
-        pushEnter: Transition { XAnimator { from: stack.width; to: 0; duration: Theme.slide; easing.type: Easing.Bezier; easing.bezierCurve: Theme.easing } }
-        pushExit: Transition { XAnimator { from: 0; to: -stack.width * 0.3; duration: Theme.slide; easing.type: Easing.Bezier; easing.bezierCurve: Theme.easing } }
-        popEnter: Transition { XAnimator { from: -stack.width * 0.3; to: 0; duration: Theme.slide; easing.type: Easing.Bezier; easing.bezierCurve: Theme.easing } }
-        popExit: Transition { XAnimator { from: 0; to: stack.width; duration: Theme.slide; easing.type: Easing.Bezier; easing.bezierCurve: Theme.easing } }
     }
 
     function openSettings(page) {

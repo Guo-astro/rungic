@@ -127,24 +127,22 @@ SettingsFrame {
             Layout.fillWidth: true
             Layout.leftMargin: Theme.groupMargin
             Layout.rightMargin: Theme.groupMargin
-            ListRow {
+            ChoiceRow {
                 text: i18nc("@item the model", "Account default")
                 subtitle: page.defaultModel ? i18nc("@info %1 is a model", "Now %1", page.defaultModel.name) : ""
-                Accessible.role: Accessible.RadioButton
-                leading: RadioMark { on: page.choice.model === "" }
+                checked: page.choice.model === ""
                 onClicked: page.chooseModel("")
             }
             Repeater {
                 model: page.models
-                ListRow {
+                ChoiceRow {
                     required property var modelData
                     text: modelData.name
                     subtitle: modelData.upgrade
                         ? i18nc("@info %1 describes the model, %2 is the model replacing it", "%1 · Being replaced by %2", modelData.description,
                                 (page.models.find(m => m.id === modelData.upgrade) || { name: modelData.upgrade }).name)
                         : modelData.description
-                    Accessible.role: Accessible.RadioButton
-                    leading: RadioMark { on: page.choice.model === modelData.id }
+                    checked: page.choice.model === modelData.id
                     onClicked: page.chooseModel(modelData.id)
                 }
             }
@@ -155,21 +153,19 @@ SettingsFrame {
             Layout.fillWidth: true
             Layout.leftMargin: Theme.groupMargin
             Layout.rightMargin: Theme.groupMargin
-            ListRow {
+            ChoiceRow {
                 text: i18nc("@item reasoning effort", "Model default")
                 subtitle: page.shownModel && page.shownModel.defaultEffort ? Efforts.name(page.tr, page.shownModel.defaultEffort) : ""
-                Accessible.role: Accessible.RadioButton
-                leading: RadioMark { on: page.choice.effort === "" }
+                checked: page.choice.effort === ""
                 onClicked: page.choose(page.choice.model, "")
             }
             Repeater {
                 model: page.shownModel ? page.shownModel.efforts || [] : []
-                ListRow {
+                ChoiceRow {
                     required property var modelData
                     text: Efforts.name(page.tr, modelData.id)
                     subtitle: Efforts.note(page.tr, modelData)
-                    Accessible.role: Accessible.RadioButton
-                    leading: RadioMark { on: page.choice.effort === modelData.id }
+                    checked: page.choice.effort === modelData.id
                     onClicked: page.choose(page.choice.model, modelData.id)
                 }
             }

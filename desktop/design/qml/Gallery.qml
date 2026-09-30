@@ -24,6 +24,14 @@ QQC2.ApplicationWindow {
         '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><rect width="400" height="300" fill="#3b6ea5"/>'
         + '<rect y="200" width="400" height="100" fill="#2d5a3c"/><circle cx="300" cy="90" r="40" fill="#f5c542"/></svg>')
     ImageViewer { id: viewer }
+    ChoiceSheet {
+        id: themeSheet
+        title: DesignI18n.i18nc("@title sample", "Theme")
+        choices: [{ value: "system", text: DesignI18n.i18nc("@item sample", "System") }, { value: "light", text: DesignI18n.i18nc("@item sample", "Light") },
+                  { value: "dark", text: DesignI18n.i18nc("@item sample", "Dark") }]
+        current: Theme.mode
+        onChosen: value => Theme.mode = value
+    }
 
     Flickable {
         anchors.fill: parent
@@ -132,6 +140,55 @@ QQC2.ApplicationWindow {
                             ListRow { text: "API Key"; value: "sk-…3f9a"; valueMono: true; accessory: "chevron"; forcedState: modelData }
                         }
                     }
+                }
+            }
+            // Rows of choices and switches (docs/102): pressed like every row that can be tapped.
+            Section {
+                name: "ChoiceRow"
+                wide: true
+                Repeater {
+                    model: [["normal", false], ["pressed", false], ["normal", true], ["pressed", true], ["disabled", false]]
+                    Variant {
+                        label: modelData[0] + (modelData[1] ? " · on" : " · off")
+                        wide: true
+                        ListGroup {
+                            width: 300
+                            ChoiceRow {
+                                text: "GPT-6.1-Sol"
+                                subtitle: DesignI18n.i18nc("@info sample text", "Latest workhorse model for coding and everyday work.")
+                                checked: modelData[1]
+                                enabled: modelData[0] !== "disabled"
+                                forcedState: modelData[0]
+                            }
+                        }
+                    }
+                }
+            }
+            Section {
+                name: "ToggleRow"
+                wide: true
+                Repeater {
+                    model: [["normal", false], ["pressed", false], ["normal", true], ["pressed", true], ["disabled", true]]
+                    Variant {
+                        label: modelData[0] + (modelData[1] ? " · on" : " · off")
+                        wide: true
+                        ListGroup {
+                            width: 300
+                            ToggleRow {
+                                text: DesignI18n.i18nc("@info sample text", "Read answers aloud")
+                                checked: modelData[1]
+                                enabled: modelData[0] !== "disabled"
+                                forcedState: modelData[0]
+                            }
+                        }
+                    }
+                }
+            }
+            Section {
+                name: "ChoiceSheet"
+                Variant {
+                    label: "open"
+                    PillButton { text: DesignI18n.i18nc("@action:button sample", "Theme…"); onClicked: themeSheet.open() }
                 }
             }
             Section {

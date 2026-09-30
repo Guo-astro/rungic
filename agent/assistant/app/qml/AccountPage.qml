@@ -105,20 +105,18 @@ SettingsFrame {
         Layout.leftMargin: Theme.groupMargin
         Layout.rightMargin: Theme.groupMargin
         visible: page.choicesShown
-        ListRow {
+        ChoiceRow {
             text: i18nc("@option:radio how Codex signs in", "ChatGPT account")
             subtitle: i18nc("@info", "Sign in in a browser, on any device. Counts against your ChatGPT plan.")
-            Accessible.role: Accessible.RadioButton
-            leading: RadioMark { on: page.kind === "chatgpt" }
+            checked: page.kind === "chatgpt"
             onClicked: if (page.kind !== "chatgpt") { page.login = null; AgentClient.request("CodexLogin", ["chatgpt"]) }
         }
-        ListRow {
+        ChoiceRow {
             text: i18nc("@option:radio how Codex signs in", "API key")
             subtitle: page.key.set ? i18nc("@info", "The OpenAI API key set for voice. Billed to the OpenAI API by use.")
                 : i18nc("@info", "Set an OpenAI API key first")
             enabled: page.key.set === true || page.kind === "apiKey"
-            Accessible.role: Accessible.RadioButton
-            leading: RadioMark { on: page.kind === "apiKey"; enabled: parent.enabled }
+            checked: page.kind === "apiKey"
             onClicked: if (page.kind !== "apiKey") page.confirming = true
         }
     }
