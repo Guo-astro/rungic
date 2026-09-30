@@ -950,3 +950,10 @@ msgstr "登录后可以看到用量和额度。"
 msgctxt "@info Qt time format"
 msgid "HH:mm"
 msgstr "HH:mm"
+
+msgctxt "@title the ledger below the Agent's cards"
+msgid "All records"
+msgstr "全部记录"
+
+msgid "Checking again, and Agent sorts the cards again."
+msgstr "正在重新检查，Agent 也会重新整理卡片。"

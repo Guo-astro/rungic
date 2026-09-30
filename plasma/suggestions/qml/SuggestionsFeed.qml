@@ -109,12 +109,25 @@ Rectangle {
                     : l10n.i18n("Problems found, suggested improvements and their progress all stay here.")
                 font.pixelSize: 13; color: Theme.dim; wrapMode: Text.Wrap
             }
+            // What the Agent picked for now (docs/research/96), the same stack as on the home screen.
+            SuggestionsWidget {
+                visible: !feed.selectedId
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredWidth: Math.min(list.width - 32, 680)
+                Layout.preferredHeight: 330
+            }
+            Text {
+                visible: !feed.selectedId
+                Layout.fillWidth: true; Layout.leftMargin: 22; Layout.rightMargin: 22; Layout.topMargin: 10
+                text: l10n.i18nc("@title the ledger below the Agent's cards", "All records")
+                font.pixelSize: 17; font.weight: Font.DemiBold; color: Theme.text
+            }
             RowLayout {
                 Layout.leftMargin: 20; Layout.rightMargin: 20
                 PillButton { text: l10n.i18n("Pending"); checked: !feed.history; onClicked: feed.history = false }
                 PillButton { text: l10n.i18n("History"); checked: feed.history; onClicked: feed.history = true }
                 Item { Layout.fillWidth: true }
-                PillButton { text: l10n.i18n("Refresh"); enabled: !client.busy; onClicked: { client.scan(); feed.message = l10n.i18n("Checking again. System diagnostics update every minute.") } }
+                PillButton { text: l10n.i18n("Refresh"); enabled: !client.busy; onClicked: { client.scan(); client.curate(); feed.message = l10n.i18n("Checking again, and Agent sorts the cards again.") } }
             }
             Text {
                 Layout.fillWidth: true; Layout.leftMargin: 22; Layout.rightMargin: 22
