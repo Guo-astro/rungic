@@ -102,3 +102,12 @@ python3 tools/analyze_plasma_gpu.py benchmarks/plasma-vulkan-20260923
 这次完成目录迁移和本机路径适配，不等于全新机器一键构建：SDK/NDK和部分容器构建依赖仍需准备，历史ROM一键包也未重新整合全部Plasma改动。Winland固定基线`4269ec048e83133102d00464fd4c23af44d84707`的本地归档缺少根LICENSE（README标MIT、当时元数据license为null）；保留来源与子依赖许可证，未自行为整棵树重新授权。公开前需另行核实来源记录。
 
 本机迁移回归已通过：原生后端离线release构建、APK打包与签名验证、48个Python文件及35个Shell入口的语法检查；迁移后重新分析Vulkan数据，结果与原结果完全一致。当前Git候选约1,031个文件、17.6MiB；有限敏感模式检查及“被忽略文件是否落在.work之外”的检查均无发现。本次构建APK另存`.work/build/apk-migration-check/`，没有覆盖已验证的发布APK或安装到手机。
+
+## 2026-09-30：历史改写，移除已删除的上游源码副本
+
+用户要求清理拉取体积。历史中约 209 MB 是早已删除的 `vendor/`（Mesa 136 MB、FFmpeg、KWin、Qt Multimedia、snapshot 等）与 `native/plasma/` 源码副本；它们已改为 `packages/` 补丁队列，当前树中不存在。用 git-filter-repo `--path vendor/ --path native/plasma/ --invert-paths --prune-empty never` 改写全部提交：503 个提交全部保留（只改这些目录的 20 个提交成为空提交，提交说明仍在），最终树与改写前逐字节一致（tree `16439441`），`git fsck` 无误；仓库打包体积 215 MB → 12.3 MB，新克隆 13 MB。以 `--force-with-lease` 推送 main（`3cd30e4c` → `e44e87e5`），同时删除旧分支 `agent-native-debugging`。
+
+- **所有提交号都已改变。** 新旧对照：`provenance/history-rewrite-20260930/commit-map.txt`（每行“旧 新”）。发布记录（`.work/apt/releases/*.json`、手机 `/usr/share/rungic/release.json`）与文档中的旧提交号按此表查找。
+- **其他机器与会话**：先确认没有未推送的提交（有则先 `git format-patch` 导出），再 `git fetch origin && git reset --hard origin/main`，删除基于旧历史的本地分支后 `git reflog expire --expire=now --all && git gc --prune=now`；或直接重新克隆。**不要再推送旧历史的分支**，否则这些对象会重新进入仓库。
+- 改写前的完整备份仅在 K8 本机：`.work/history-cleanup/backup-origin-20260930.git`（远端镜像）与 `local-all-20260930.bundle`（本地全部分支）。
+
