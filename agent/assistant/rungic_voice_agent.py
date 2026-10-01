@@ -51,6 +51,7 @@ import socket
 import task_state
 import model_catalog
 import codex_install
+import media_frames
 from voice_i18n import _, desktop_language, language_name, language_note
 
 RATE = 24000                 # PCM format of the Realtime API
@@ -2386,20 +2387,31 @@ class VoiceAgent:
             return
         if not self.resumed.wait(60):
             raise RuntimeError(_("The conversation isn't ready yet"))
-        images = [p for p in paths if Path(p).suffix.lower() in ('.png', '.jpg', '.jpeg', '.webp', '.gif')]
-        others = [p for p in paths if p not in images]
+        self.store.touch(self.thread_id, text or Path(paths[0]).name)
+        self.last_activity = time.monotonic()
+        self.emit({'type': 'message', 'role': 'user', 'id': f'typed-{time.time_ns()}', 'text': text,
+                   'typed': True, 'attachments': attachments})
+        # Codex takes still images as input. Of a video or a moving picture it gets frames, with a
+        # line saying what they are (media_frames); other files are named, and the agent reads them.
+        images, clips, others = [], [], []
+        for path in paths:
+            clip = media_frames.prepare(path, log) if media_frames.may_move(path) else None
+            if clip:
+                clips.append(clip)
+            elif Path(path).suffix.lower() in ('.png', '.jpg', '.jpeg', '.webp', '.gif'):
+                images.append(path)
+            else:
+                others.append(path)
         prompt_text = text
+        if clips:
+            prompt_text += '\n\nVideos and moving pictures:\n' + '\n'.join(media_frames.describe(c) for c in clips)
         if others:
-            # Codex takes images as input; other files are named, and the agent reads them.
             prompt_text += '\n\nAttachments:\n' + '\n'.join(others)
         items = [{'type': 'text', 'text': prompt_text, 'text_elements': []}]
         if hidden:
             items.append({'type': 'text', 'text': hidden, 'text_elements': []})
         items += [{'type': 'localImage', 'path': p} for p in images]
-        self.store.touch(self.thread_id, text or Path(paths[0]).name)
-        self.last_activity = time.monotonic()
-        self.emit({'type': 'message', 'role': 'user', 'id': f'typed-{time.time_ns()}', 'text': text,
-                   'typed': True, 'attachments': attachments})
+        items += [{'type': 'localImage', 'path': f['path']} for c in clips for f in c['frames']]
         turn = {'threadId': self.thread_id, 'input': items}
         agent = self.agent_model()
         if agent['model']:

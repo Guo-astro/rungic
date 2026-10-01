@@ -62,6 +62,100 @@
 - **提示词**（`realtime.md`）：能力清单同步更新，并说明“在助理屏上”开头的进度是什么。
 - **提示词修正**：`agent.md` 里写的主目录 `/home/linux` 早已不对，改为 `~`。
 
+## 动图（2026-10-01）
+
+**问题（源码核对）**：`Thumbnail`、`ImageViewer`、对话里用户自己发的附件，以及输入栏和相册里的预览，用的都是 Qt 的 `Image`。`Image` 只显示 GIF 和动态 WebP 的第一帧。附件按扩展名把 `.gif` 归为图片，后端把它作为 `localImage` 交给 Codex。
+
+**调研**：手机容器里是 Ubuntu 26.04 的 Qt 6.10.2。源码在 `.work/refs/qt-6.10.2/`，均为 qtdeclarative / qtbase 的 v6.10.2 标签。核对结论如下：
+
+- **`AnimatedImage` 不能直接替换 `Image`**（`qquickanimatedimage.cpp`）：
+  - 本地文件在界面线程里同步用 `QMovie` 打开，不管 `asynchronous`。一张大照片会卡住界面。
+  - `sourceSize` 原样交给 `QMovie::setScaledSize`。`QImageReader` 对不支持缩放的格式（GIF）按 `IgnoreAspectRatio` 平滑缩放每一帧（`qimagereader.cpp`）。传一个限定框，画面会被拉伸。
+  - 默认 `cache: true`，会把所有帧都留在内存里。
+  - 改 `sourceSize` 会重新加载文件。
+- **`Image` 能异步给出帧数**：异步读取线程里的 `readImage` 记下 `QImageReader::imageCount()`（`qquickpixmapcache.cpp`），通过 `Image.frameCount` 读到。TIFF 这类多页格式的帧数也会大于 1。
+- **`Image` 的解码尺寸**：设了 `sourceSize` 时，按原图比例缩放（`qquickimageprovider.cpp` 的 `loadSize`）。在 Fit/Crop 模式下会盖满整个限定框，小图也会被放大。
+
+**实现**：设计系统新增 `Picture`（`desktop/design/qml/Picture.qml`），`Thumbnail`、`ImageViewer` 和 App 里的三处预览都改用它。
+
+- 先用 `Image` 异步加载，状态、隐式尺寸和 `sourceSize` 都取自它。
+- 帧数大于 1，而且不是 TIFF/ICO/ICNS/CUR 时，`Loader` 再建一个 `AnimatedImage` 叠在上面。它的第一帧出来后，才隐藏静态图。
+- `AnimatedImage` 的设置：
+  - `cache: false`，内存里同一时间只有一帧。
+  - 先按原尺寸读入。原图比静态图的解码尺寸大时，才把 `sourceSize` 设为那个尺寸，所以比例不变，也不会放大小图。
+  - 自己不可见或所在窗口隐藏、最小化时暂停。
+- 动画读不出来（比如格式插件不支持动画）时，静态图仍然保留。
+
+**离线验证**（本机 PySide6 6.11.2，`tools/tests/test_design_picture.py`，5 项通过）：
+- GIF 和动态 WebP 会播放，帧号在变化。
+- 600×400 的 GIF 帧尺寸跟随静态图的 450×300；60×40 的小 GIF 不放大。
+- 静态 PNG、单帧 GIF 和多页 TIFF 不建动画。
+- 不显示时暂停，显示后继续。
+- 状态总览的 `Thumbnail`、`ImageViewer` 两节渲染正常（`.work/verify/2026-10-01-moving-pictures/gallery/`）。软件后端不画 `MultiEffect`，所以示例图是空的，与改动前相同。
+
+**手机验证**（G100 S，开发覆盖 `rungic-design 0.514+dev20261001t074243`）：
+- 测试方式：以桌面用户身份、offscreen 平台运行 `qmltestrunner`，测试文件在 `.work/verify/2026-10-01-moving-pictures/device/`，不在用户屏幕上开窗口。
+- Qt 6.10.2 上的结果：
+  - GIF 会播放，帧号在变化；帧尺寸 450×300，跟随静态图；
+  - 60×40 的小 GIF 不放大；
+  - 静态 PNG 和单帧 GIF 不建动画；
+  - 隐藏后暂停。
+- **WebP 读不出来**：容器的 Qt 图片插件只有 gif、ico、jpeg、pdf、svg，没有装 `qt6-image-formats-plugins`。所以 WebP 图片无论动静，在所有 Qt 应用里都打不开。已给 `rungic-design` 加上这个依赖，重新部署后插件里有了 webp、tiff 等格式，手机上 7 项测试全部通过，动态 WebP 也能播放。
+
+**未验证**：
+- 在真实对话界面里看动图。
+- 长 GIF 的 CPU 和内存占用。
+
+## 让 Agent 看懂动图和视频（2026-10-01）
+
+**问题（源码核对）**：Codex 0.159.2 的 `codex-rs/utils/image` 只接受静态图，源码见 `.work/refs/codex-0.159.2/image-lib.rs`。
+
+- **GIF**：用 `DynamicImage::from_decoder` 解码，只得到第一帧，再转成 PNG。注释里写明 API 只支持非动画 GIF。
+- **WebP**：不需要缩放时按原字节透传，动态 WebP 也原样发出。
+- **视频**：我们的后端原来只在文本里附一行路径，模型看不到画面。
+
+**实现**（`agent/assistant/media_frames.py`，在 `send_text` 里调用）：
+
+- **抽帧规则**：
+  - 视频按扩展名识别：用 ffprobe 读时长、尺寸、旋转和有无声音，再用 ffmpeg 在每个时间点快速定位后取一帧。
+  - 动图（GIF、WebP、APNG）用 Pillow 读帧数和每帧时长；单帧的仍按原图发送。
+  - 取帧数量：约每 2 秒一帧，至少 2 帧、最多 8 帧，不超过实际帧数，取各段的中点。
+  - 帧图片的长边不超过 1024，不放大，存为 JPEG。
+- **发给 Codex 的内容**：这些帧作为 `localImage` 发送。文本里每个文件写一行，例如 `/…/clip.mp4 (video, 5 s, 1280x720, with sound): 3 frames from it are attached as images, at 0.83 s, 2.5 s, 4.17 s`。帧文件名形如 `<文件名>@<时间>s.jpg`，Codex 标注图片时会带上这个路径。
+- **缓存**：放在 `~/.cache/rungic-voice-agent/frames/<路径、大小和修改时间的哈希>/`。文件变了就重新抽帧，一周没用到的自动删除。
+- **出错时**：缺少 ffmpeg 或文件读不出来，就按原来的做法只附路径。
+- **先显示消息**：用户消息先显示在对话里，再抽帧，界面不用等。
+- **依赖**：deb 显式依赖 `ffmpeg` 和 `python3-pil`。Pillow 原本经 rungic-cua 间接安装；容器里是否已有 ffmpeg 命令行待上机核对。
+
+**离线验证**（本机 Ubuntu FFmpeg 8.0.1、Pillow 12.1.1，`tools/tests/test_media_frames.py`）：
+
+- 10 项通过，覆盖以下情况：
+  - GIF、动态 WebP、APNG 都能抽出帧；单帧图片不抽帧；
+  - 帧的数量、时间和尺寸符合规则；
+  - 带声音的 1280×720 视频抽出 3 帧；
+  - 带旋转标记的竖屏视频，尺寸按竖屏报告；
+  - 缓存会复用，文件变化后重新抽帧，旧缓存会被清理；
+  - 没有 ffmpeg 或文件损坏时不抽帧。
+- 测试发现 `scale` 会把小视频放大，已改为限定框取原尺寸与 1024 中较小的值。
+- 本机全部离线测试共 145 项通过。
+
+**手机验证**（开发覆盖 `rungic-voice-agent 0.514+dev20261001t074243`）：
+- 部署时 apt 按新依赖装上了 Ubuntu 的 `ffmpeg 8.0.1`。
+- 以桌面用户身份直接调用已安装的 `media_frames`：
+  - 20 秒 1080p、带声音的 H.264 视频抽 8 帧用时 4.0 秒，再次调用命中缓存；
+  - GIF 用时 0.18 秒；
+  - 静态 PNG 不抽帧。
+
+**未验证**：在对话里实际发送视频，以及 Codex 对这些帧的回答。
+
+## 视频在对话里显示（待做）
+
+现在视频附件和回答里的视频都只显示为文件卡片。做法需要上机核对后再定：
+
+- 容器里有没有装 Qt Multimedia 的 QML 模块；
+- 默认的视频应用是什么；
+- 封面图用 KIO 的共享缩略图（ffmpegthumbs），还是用 `MediaPlayer` 暂停在第一帧。核对结论：6.10.2 的 FFmpeg 后端停止状态下不建解码对象，暂停后才出第一帧，所以每个封面要常驻一套解码器。
+
 ## 已知限制与遗留
 
 - **恢复的对话仍用创建时的提示词**：
