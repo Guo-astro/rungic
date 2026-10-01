@@ -645,3 +645,31 @@ Agent 2  KWin#2 ──── │ 显示源 agent-2               │  电视 / �
 - 用户在真实界面里点各个浮窗的 ✕；
 - 三个工作区同时显示时声音同时接通；
 - 第二次运行能否完全复现（例如模型给出不同的做法）。
+
+### 12. 由 Codex 当组长：子 Agent 能否各用一个工作区（2026-10-01 实验）
+
+**目标**（用户提出）：不再由开发端 Agent 当组长，交给一个 Codex。它用原生子 Agent 分别操作不同的工作区并行开发，汇总测试，最后在用户手机上打开给用户试玩。
+
+**源码复核**（Codex 0.159.2，`.work/refs/codex-src-0.159.2`）：
+- 手机上 `multi_agent` 为 stable、已开启，`multi_agent_v2` 关闭。
+- MCP 运行时属于每个线程（`core/src/session/session.rs:1572`），所以每个子 Agent 会另起一个 MCP 服务进程，启动参数与父 Agent 相同。
+- 每次 MCP 工具调用都在 `_meta` 里带上 `threadId`（`core/src/mcp_tool_call.rs:1415`）。
+
+**实验**（`tools/team/subagent-probe/`）：
+- 用一个只记录启动信息和请求内容的探针 MCP 服务，替代桌面 MCP，不打开任何窗口。
+- 让 `codex exec` 派出两个子 Agent A、B。父 Agent 和两个子 Agent 各调用一次探针，各自在 shell 里打印 `RUNGIC_WORKSPACE`。
+- 模型 gpt-6.1-sol，推理强度 low，用了 7,342 token。
+
+**实测结果**：
+- **每个线程一个服务进程**：父 Agent、A、B 的服务 PID 分别是 27961、28258、28324，每个进程只收到本线程的那一次调用。子 Agent 的服务在子 Agent 启动后才起来；三个服务同时存在，父进程都是同一个 `codex exec`。
+- **调用元数据可以区分子 Agent**：
+  - 每次调用的 `_meta` 都有 `threadId`；
+  - 子 Agent 的调用在 `x-codex-turn-metadata` 里还带有 `parent_thread_id`、`thread_source: "subagent"`、`subagent_kind: "thread_spawn"`；
+  - 父 Agent 的调用是 `thread_source: "user"`。
+- **环境变量全部相同**：三个服务进程和三个 shell 的 `RUNGIC_WORKSPACE` 都是 1。
+- **子 Agent 结束后服务进程不退出**：子 Agent 汇报完以后，它的服务一直留到 `codex exec` 结束（本次没有调用 `close_agent`）。
+
+**结论**：
+- 不改 Codex 就能做到“每个子 Agent 一个工作区”：桌面 MCP 按进程，在子 Agent 第一次操作桌面时领取一个空闲工作区；`threadId` 和 `thread_source` 可以用来识别、记录调用者。
+- 工作区不能等进程退出才释放，要在子 Agent 交付或调用 `desktop_close_workspace` 时主动释放；进程退出只作为兜底。
+- shell 的环境仍然相同，所以子 Agent 在 shell 里启动的图形程序会开到父 Agent 的桌面，要用 `desktop_launch`，或用工具返回的命令前缀启动。
