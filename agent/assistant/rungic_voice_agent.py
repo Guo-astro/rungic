@@ -272,6 +272,13 @@ def workspace_env(slot=WORKSPACE, wait=10.0):
         env['DISPLAY'] = (state / 'display').read_text().strip()
     except OSError:
         pass
+    # Its sound in its own sink (rungic-workspace-sound), heard while the workspace is shown.
+    try:
+        sinks = subprocess.run(['pactl', 'list', 'short', 'sinks'], capture_output=True, text=True, timeout=5).stdout
+        if f'rungic_ws{slot}' in [line.split('\t')[1] for line in sinks.splitlines() if '\t' in line]:
+            env['PULSE_SINK'] = f'rungic_ws{slot}'
+    except (OSError, subprocess.SubprocessError, IndexError):
+        pass
     return env
 
 
@@ -1858,7 +1865,7 @@ class VoiceAgent:
             # A caption left "working" (a tool call cut short) must not stay on the screen.
             if screen_activity().get('state') == 'working':
                 from rungic_cua import activity
-                activity.report('', state='done')
+                activity.report('', state='done', workspace=working_screen())
             self.last_activity = time.monotonic()
             # The card as it ended stays with the history (plan, files, steps).
             with self.turn_lock:
@@ -2983,12 +2990,25 @@ def forget_screen_dismissal():
 
 
 def screen_activity():
-    """The assistant's screen's caption (rungic_cua.activity, docs/88), or {}."""
+    """The caption of the screen this agent works on (rungic_cua.activity, docs/88), or {}: its
+    workspace's or the user's desktop's, whichever it wrote last."""
     try:
         from rungic_cua import activity
-        return activity.read()
     except ImportError:
         return {}
+    reports = [activity.read(WORKSPACE), activity.read('')]
+    return max(reports, key=lambda data: float(data.get('time') or 0))
+
+
+def working_screen():
+    """The screen whose caption this agent wrote last: its workspace (WORKSPACE) or '' (the user's
+    desktop), for the final "done"."""
+    try:
+        from rungic_cua import activity
+    except ImportError:
+        return WORKSPACE
+    ours, desktop = activity.read(WORKSPACE), activity.read('')
+    return '' if float(desktop.get('time') or 0) > float(ours.get('time') or 0) else WORKSPACE
 
 
 def command_summary(command):

@@ -49,6 +49,13 @@ export KDE_FULL_SESSION=true KDE_SESSION_VERSION=6
 # XDG_CURRENT_DESKTOP (a forced one left Krita's session bus deaf).
 export PLASMA_INTEGRATION_USE_PORTAL=0
 unset QT_QPA_PLATFORMTHEME
+# Its sound in a sink of its own, heard while the workspace is shown (rungic-workspace-sound); none
+# if the sound server is not there (a missing PULSE_SINK would fail every stream).
+if rungic-workspace-sound "$slot" up; then
+    export PULSE_SINK=rungic_ws$slot
+else
+    unset PULSE_SINK
+fi
 
 # In a session bus of its own, at a fixed address: conversations and tools that already know
 # it (the agent's Codex threads and their desktop tools, docs/research/91) reach the workspace

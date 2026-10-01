@@ -79,7 +79,7 @@ def user_env():
         env['WAYLAND_DISPLAY'] = env.get('RUNGIC_USER_WAYLAND_DISPLAY') or 'wayland-0'
         env['DBUS_SESSION_BUS_ADDRESS'] = (env.get('RUNGIC_USER_DBUS_SESSION_BUS_ADDRESS')
                                            or f'unix:path={runtime}/bus')
-    for name in ('RUNGIC_WORKSPACE', 'DISPLAY', 'XAUTHORITY'):
+    for name in ('RUNGIC_WORKSPACE', 'DISPLAY', 'XAUTHORITY', 'PULSE_SINK'):  # PULSE_SINK: the workspace's sound
         env.pop(name, None)
     try:
         session = subprocess.run(['systemctl', '--user', 'show-environment'], capture_output=True, text=True,

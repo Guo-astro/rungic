@@ -96,7 +96,7 @@ def user_session_env(env: dict) -> dict:
     runtime = env.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}'
     env['WAYLAND_DISPLAY'] = env.get('RUNGIC_USER_WAYLAND_DISPLAY') or 'wayland-0'
     env['DBUS_SESSION_BUS_ADDRESS'] = env.get('RUNGIC_USER_DBUS_SESSION_BUS_ADDRESS') or f'unix:path={runtime}/bus'
-    for name in ('RUNGIC_WORKSPACE', 'DISPLAY', 'XAUTHORITY'):
+    for name in ('RUNGIC_WORKSPACE', 'DISPLAY', 'XAUTHORITY', 'PULSE_SINK'):  # PULSE_SINK: the workspace's sound
         env.pop(name, None)
     # What the workspace sets as a desktop does (docs/103): the user's session's own values again.
     for name in USER_VALUES:

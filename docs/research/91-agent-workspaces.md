@@ -582,3 +582,24 @@ Agent 2  KWin#2 ──── │ 显示源 agent-2               │  电视 / �
 - 通知里的两个操作；
 - 语音服务忙碌时只隐藏的路径；
 - 默认的 60 秒和 1800 秒在真实使用中是否合适。
+
+#### 每个工作区的声音和状态文件（2026-10-01，第 0 阶段）
+
+- **声音**（`agent/workspace/rungic-workspace-sound`）：
+  - 工作区启动时建一个 null sink `rungic_wsN`（描述为 “Agent workspace N”）。工作区里的程序通过 `PULSE_SINK` 输出到这里，设置它的有三处：`rungic-workspace`、`rungic-workspace-env` 和语音服务的 `workspace_env()`，后两处都会先确认 sink 存在。
+  - keeper 看到工作区正在显示（浮窗、全屏或电视），就用 `module-loopback` 把 sink 的 monitor 接到默认输出；隐藏时断开。
+  - 单元停止后，`ExecStopPost` 卸载 sink 和 loopback。
+  - 回到用户会话时去掉 `PULSE_SINK`，涉及 `rungic-user`、`router.user_session_env`、`switch.py` 和 `rungic-agent-screen`。
+  - 带空格的描述要在模块参数里写成 `sink_properties='device.description="…"'`。pactl 17 没有 `update-sink-proplist`。
+- **进度提示**：用户桌面用 `activity.json`，工作区 N 用 `activity-wsN.json`，由写入者的 `RUNGIC_WORKSPACE` 决定。每个浮窗读自己工作区的那个文件；语音服务两个都看，取较新的。
+- **应用切换记录**：记下是哪个工作区切换的，`restore(N)` 只归还本工作区的。以前的记录没有这一项，按 1 号工作区处理。
+- **实机验证**（4 号工作区，不显示，记录在 `.work/verify/2026-10-01-workspace-sound/sound-test-2.log`）：
+  - 有了 `rungic_ws4`，工作区里 `PULSE_SINK=rungic_ws4`；
+  - `paplay` 的声音进了这个 sink，没有 loopback，用户听不到；
+  - `listen` 和 `quiet` 能接上和断开 loopback；
+  - 停止后 sink 和模块都被清理，单元为 `Result=success`；
+  - 助理屏状态前后一致。
+- **没有实测**：
+  - 工作区显示时由 keeper 自动接上声音（需要在用户屏幕上显示工作区）；
+  - Ardour 等应用实际用的是哪种音频后端；
+  - 投屏到电视时的声音去向。

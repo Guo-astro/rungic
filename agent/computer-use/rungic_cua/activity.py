@@ -1,6 +1,8 @@
 """What the assistant is doing on its screen, for whoever shows it (docs/88).
 
-One small JSON file in the runtime directory, replaced atomically on every change:
+One small JSON file per screen in the runtime directory, replaced atomically on every change:
+activity.json for the user's desktop, activity-wsN.json for agent workspace N (docs/research/91: each
+workspace's floating window shows its own agent's work). The writer's RUNGIC_WORKSPACE picks it.
 
   {"state": "working" | "done" | "question" | "failed" | "stopped",
    "text": "Open the Render menu",  what is happening now (a caption, in the desktop's language)
@@ -23,30 +25,38 @@ from pathlib import Path
 from .i18n import _
 
 STALE_S = 120
-PATH = Path(os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}') / 'rungic-agent-screen' / 'activity.json'
+DIR = Path(os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}') / 'rungic-agent-screen'
 
 
-def report(text: str, *, state: str = 'working', task: str = '', image: str = '', progress: float | None = None) -> None:
+def path(workspace=None) -> Path:
+    """The file for workspace N (default: this process's RUNGIC_WORKSPACE), or the user's desktop's."""
+    slot = os.environ.get('RUNGIC_WORKSPACE') if workspace is None else workspace
+    return DIR / (f'activity-ws{slot}.json' if slot else 'activity.json')
+
+
+def report(text: str, *, state: str = 'working', task: str = '', image: str = '', progress: float | None = None,
+           workspace=None) -> None:
     """Say what is happening now. Never fails the caller: the caption is a courtesy."""
+    target = path(workspace)
     try:
-        PATH.parent.mkdir(parents=True, exist_ok=True)
+        target.parent.mkdir(parents=True, exist_ok=True)
         data = {'state': state, 'text': ' '.join(str(text).split())[:80], 'task': ' '.join(str(task).split())[:120],
                 'time': time.time()}
         if image:
             data['image'] = str(image)
         if progress is not None:
             data['progress'] = max(0.0, min(1.0, float(progress)))
-        temporary = PATH.with_suffix('.tmp')
+        temporary = target.with_suffix('.tmp')
         temporary.write_text(json.dumps(data, ensure_ascii=False))
-        os.replace(temporary, PATH)
+        os.replace(temporary, target)
     except OSError:
         pass
 
 
-def read() -> dict:
+def read(workspace=None) -> dict:
     """The latest report, or {} when there is none or it went stale."""
     try:
-        data = json.loads(PATH.read_text())
+        data = json.loads(path(workspace).read_text())
     except (OSError, ValueError):
         return {}
     if data.get('state') == 'working' and time.time() - float(data.get('time') or 0) > STALE_S:

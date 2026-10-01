@@ -119,7 +119,8 @@ AgentScreen::AgentScreen(int workspace, QObject *parent)
     const QString runtime = qEnvironmentVariable("XDG_RUNTIME_DIR", QStringLiteral("/run/user/%1").arg(getuid()));
     const QString dir = runtime + QStringLiteral("/rungic-agent-screen");
     QDir().mkpath(dir);
-    m_activityPath = dir + QStringLiteral("/activity.json");
+    // Each screen its own (rungic_cua.activity): workspace N's agent, or the agent on the user's desktop.
+    m_activityPath = dir + (m_workspace > 0 ? QStringLiteral("/activity-ws%1.json").arg(m_workspace) : QStringLiteral("/activity.json"));
     m_activityWatcher.addPath(dir);
     connect(&m_activityWatcher, &QFileSystemWatcher::directoryChanged, this, &AgentScreen::readActivity);
     readActivity();

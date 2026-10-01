@@ -13,5 +13,5 @@ for name in PLASMA_INTEGRATION_USE_PORTAL QT_QPA_PLATFORMTHEME; do
     if [ -n "$value" ]; then export "$name=$value"; else unset "$name"; fi
     unset "RUNGIC_USER_$name"
 done
-unset RUNGIC_WORKSPACE DISPLAY XAUTHORITY
+unset RUNGIC_WORKSPACE DISPLAY XAUTHORITY PULSE_SINK
 exec "$@"

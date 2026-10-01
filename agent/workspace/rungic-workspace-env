@@ -29,6 +29,12 @@ export KDE_FULL_SESSION=true KDE_SESSION_VERSION=6
 # probe) and left their session bus deaf.
 export PLASMA_INTEGRATION_USE_PORTAL=0
 unset QT_QPA_PLATFORMTHEME
+# Its sound in its own sink, while there is one (rungic-workspace-sound).
+if pactl list short sinks 2>/dev/null | cut -f2 | grep -qx "rungic_ws$slot"; then
+    export PULSE_SINK=rungic_ws$slot
+else
+    unset PULSE_SINK
+fi
 # Its own Xwayland for X11 programs; none at all rather than the phone's.
 if [ -s "$state/display" ]; then
     export DISPLAY="$(cat "$state/display")"

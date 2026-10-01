@@ -1,0 +1,49 @@
+#!/bin/sh
+# rungic-workspace-sound N up|down|listen|quiet: agent workspace N's sound (docs/research/91).
+#
+# A workspace's programs play into a null sink of its own, rungic_wsN (PULSE_SINK, set by
+# rungic-workspace and whatever starts programs in it), not straight out of the phone's speaker:
+# a music app at work in a hidden workspace is not heard. While the workspace is shown (floating
+# window, fullscreen or TV) its keeper connects the sink's monitor to the default output (listen)
+# and disconnects it when hidden (quiet). up: the sink, after what a previous run left; down: the
+# sink and its loopback gone (the unit stopped).
+set -u
+slot=${1:?usage: rungic-workspace-sound N up|down|listen|quiet}
+sink=rungic_ws$slot
+
+# Modules of this workspace: its sink ("sink_name=rungic_wsN ...") or its loopback ("source=rungic_wsN.monitor ...").
+modules() {
+    pactl list short modules 2>/dev/null | awk -F '\t' -v kind="$1" -v sink="$sink" '
+        kind == "sink" && $2 == "module-null-sink" && (" " $3 " ") ~ (" sink_name=" sink " ") { print $1 }
+        kind == "loopback" && $2 == "module-loopback" && (" " $3 " ") ~ (" source=" sink ".monitor ") { print $1 }'
+}
+unload() {
+    for id in $(modules "$1"); do pactl unload-module "$id" 2>/dev/null; done
+}
+
+case "${2:-}" in
+up)
+    unload loopback
+    unload sink
+    # A value with spaces: quoted for the module arguments ('…'), then for the property list ("…").
+    pactl load-module module-null-sink sink_name="$sink" \
+        "sink_properties='device.description=\"Agent workspace $slot\"'" >/dev/null
+    ;;
+down)
+    unload loopback
+    unload sink
+    ;;
+listen)
+    [ -n "$(modules sink)" ] || exit 1
+    [ -n "$(modules loopback)" ] && exit 0
+    # To the default output as it is now (the phone, or the TV's while casting); short latency.
+    pactl load-module module-loopback source="$sink.monitor" latency_msec=60 source_dont_move=true >/dev/null
+    ;;
+quiet)
+    unload loopback
+    ;;
+*)
+    echo "usage: rungic-workspace-sound N up|down|listen|quiet" >&2
+    exit 2
+    ;;
+esac

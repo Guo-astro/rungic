@@ -87,13 +87,16 @@ def test_close_records_and_restore_gives_back():
         switch = load(runtime)
         entry = {'id': 'test.sleeper', 'name': '测试', 'exec': f'{SLEEPER} 60'}
         theirs = sleeper('wayland-0')
-        left = switch.close_in_user_session(entry, [theirs.pid])
+        with mock.patch.dict(switch.os.environ, {'RUNGIC_WORKSPACE': '7'}):   # switched by workspace 7's tools
+            left = switch.close_in_user_session(entry, [theirs.pid])
         theirs.wait(5)
         assert left == []
-        assert json.loads(Path(runtime, 'rungic-workspace-switched.json').read_text())['test.sleeper']['name'] == '测试'
+        record = json.loads(Path(runtime, 'rungic-workspace-switched.json').read_text())['test.sleeper']
+        assert (record['name'], record['workspace']) == ('测试', 7)
         ours = sleeper('wayland-ws-7')      # the app, reopened in the workspace
         with mock.patch.object(switch, 'in_call', return_value=False), \
                 mock.patch.object(switch.subprocess, 'Popen') as popen:
+            assert switch.restore(1) == []          # another workspace's: not given back from here
             assert switch.restore(7) == ['测试']
         ours.wait(5)
         command = popen.call_args.args[0]

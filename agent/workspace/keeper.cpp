@@ -12,6 +12,8 @@
 //
 // RUNGIC_WORKSPACE_FREEZE_S (default 60) and RUNGIC_WORKSPACE_CLOSE_S (default 1800) set the times.
 // What it decides goes to stderr, one line a change (rungic-workspace keeps it in keeper.log).
+// It also turns the workspace's sound on while the workspace is shown, off while hidden
+// (rungic-workspace-sound).
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDateTime>
@@ -28,6 +30,7 @@
 #include <cstring>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <unistd.h>
 #include <wayland-client.h>
 
@@ -125,7 +128,14 @@ public:
     {
         // Being closed (rungic_cua workspace.close): its apps must answer, nothing is frozen.
         const bool closing = QFile::exists(QStringLiteral("%1/rungic-workspace-%2.closing").arg(qEnvironmentVariable("XDG_RUNTIME_DIR"), m_slot));
-        const bool isShown = m_inputIdle && !closing && shown();
+        const bool isShown = shown();
+        if (!m_soundShown || *m_soundShown != isShown) {
+            // Heard while shown, wherever (the phone's speaker, the TV's while casting): its sink's
+            // monitor to the default output (rungic-workspace-sound).
+            note(isShown ? QStringLiteral("shown: sound on") : QStringLiteral("hidden: sound off"));
+            QProcess::startDetached(QStringLiteral("rungic-workspace-sound"), {m_slot, isShown ? QStringLiteral("listen") : QStringLiteral("quiet")});
+            m_soundShown = isShown;
+        }
         const bool atWork = m_inputIdle && !closing && !isShown && agentAtWork();
         const bool quiet = m_inputIdle && !closing && !isShown && !atWork;
         const qint64 now = QDateTime::currentSecsSinceEpoch();
@@ -274,6 +284,7 @@ private:
     bool m_closeTried = false;
     bool m_freezeTried = false;
     bool m_wasQuiet = false;
+    std::optional<bool> m_soundShown;
     qint64 m_quietSince = 0;
 };
 

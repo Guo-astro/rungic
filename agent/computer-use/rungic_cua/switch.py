@@ -160,7 +160,7 @@ def close_in_user_session(entry: dict, pids: list[int]) -> list[int]:
     if not left:
         state = _load()
         state[entry['id']] = {'name': entry.get('name') or entry['id'], 'programs': sorted(programs(entry)),
-                              'time': time.time()}
+                              'time': time.time(), 'workspace': int(os.environ.get('RUNGIC_WORKSPACE') or 1)}
         _save(state)
     return left
 
@@ -176,6 +176,9 @@ def restore(workspace: int) -> list[str]:
     state = _load()
     given = []
     for app_id, info in list(state.items()):
+        # Each workspace gives back its own (switched before 2026-10-01: workspace 1, the only one).
+        if int(info.get('workspace') or 1) != int(workspace):
+            continue
         names = set(info.get('programs') or [])
         if in_call(names):
             continue
@@ -186,7 +189,7 @@ def restore(workspace: int) -> list[str]:
             env['WAYLAND_DISPLAY'] = env.get('RUNGIC_USER_WAYLAND_DISPLAY') or 'wayland-0'
             env['DBUS_SESSION_BUS_ADDRESS'] = (env.get('RUNGIC_USER_DBUS_SESSION_BUS_ADDRESS')
                                                or f'unix:path={RUNTIME}/bus')
-        for name in ('RUNGIC_WORKSPACE', 'DISPLAY', 'XAUTHORITY'):
+        for name in ('RUNGIC_WORKSPACE', 'DISPLAY', 'XAUTHORITY', 'PULSE_SINK'):  # PULSE_SINK: the workspace's sound
             env.pop(name, None)
         # What the workspace sets as a desktop does (docs/103): the user's session's own values again.
         for name in USER_VALUES:
