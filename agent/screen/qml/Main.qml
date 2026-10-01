@@ -5,8 +5,8 @@
 // and every change of place or size is animated.
 //
 // Window: the live picture, looked at and not touched through. One finger moves it; let go with it
-// a quarter past a side edge, or flick it towards one, and it tucks into a tab there. Two fingers
-// pinch it between half and the full width of the phone. A tap, a drag or a pinch shows a toolbar of
+// a quarter past a side edge, or flick it so it would get there, and it tucks into a tab there. Two
+// fingers pinch it between half and the full width of the phone; a pinch never tucks it. A tap, a drag or a pinch shows a toolbar of
 // icons below the picture, a small gap away (above it near the bottom of the screen), which hides a
 // few seconds later.
 // Fullscreen: the Android host presents the assistant's screen over the whole phone itself (the APK's
@@ -310,34 +310,71 @@ Window {
 
         // One finger moves, two pinch; a tap shows or hides the toolbar.
         DragHandler {
+            id: drag
             target: null
             maximumPointCount: 1
             property point offset
+            // The finger was lifted. A second finger often lands while the first is already moving
+            // out fast: this ends then with both fingers still down, and the pinch follows (docs/65).
+            property bool lifted: false
+            // A finger left over from a pinch: when one finger of a pinch lifts, the pinch lets the
+            // other go and this takes it at once (it has long moved past the drag distance since it
+            // was pressed), jumps the window by all that way and tucks it on the let-go (logged on
+            // the phone, Qt 6.10, docs/65). Such a finger neither moves nor tucks the window.
+            property bool leftover: false
+            onGrabChanged: (transition, point) => {
+                if (transition === PointerDevice.GrabExclusive)
+                    leftover = pinch.took(point)
+                if (point.state === EventPoint.Released)
+                    lifted = true
+            }
             onActiveChanged: {
                 if (active) {
                     offset = Qt.point(centroid.scenePressPosition.x - root.px, centroid.scenePressPosition.y - root.py)
+                    lifted = false
                     root.dragging = true
                 } else {
                     root.dragging = false
-                    // A quarter of it past a side edge, or flicked towards one: tuck it there.
+                    // The finger's grab is given up right after this: decide then.
                     const flick = centroid.velocity.x
-                    if (root.px < -root.panelWidth / 4 || (flick < -900 && root.px < root.area.width / 4))
-                        root.tuck("left")
-                    else if (root.px + root.panelWidth > root.area.width + root.panelWidth / 4
-                             || (flick > 900 && root.px + root.panelWidth > root.area.width * 3 / 4))
-                        root.tuck("right")
-                    else
-                        root.settle()
+                    Qt.callLater(() => drag.letGo(flick))
                 }
                 root.showToolbar()
             }
-            onCentroidChanged: if (active) {
+            // Only a let-go may tuck it: a quarter of it past a side edge, there or where a flick
+            // carries it (~0.15 s of its speed).
+            function letGo(flick) {
+                if (lifted)
+                    pinch.fingers = ({})            // its fingers are all up
+                if (!lifted || leftover || pinch.active || root.mode !== "window") {
+                    if (!pinch.active)
+                        root.settle()
+                    return
+                }
+                const ahead = root.px + (Math.abs(flick) > 900 ? flick * 0.15 : 0)
+                if (ahead < -root.panelWidth / 4)
+                    root.tuck("left")
+                else if (ahead + root.panelWidth > root.area.width + root.panelWidth / 4)
+                    root.tuck("right")
+                else
+                    root.settle()
+            }
+            onCentroidChanged: if (active && !leftover) {
                 root.px = centroid.scenePosition.x - offset.x
                 root.py = Math.max(0, Math.min(root.area.height - root.panelHeight, centroid.scenePosition.y - offset.y))
             }
         }
         PinchHandler {
+            id: pinch
             target: null
+            // The fingers it took, by id and press time (Android reuses the ids), until a drag ends.
+            property var fingers: ({})
+            function key(point) { return point.id + ":" + point.pressTimestamp }
+            function took(point) { return fingers[key(point)] === true }
+            onGrabChanged: (transition, point) => {
+                if (transition === PointerDevice.GrabExclusive)
+                    fingers[key(point)] = true
+            }
             property real startWidth
             property point centre
             onActiveChanged: {

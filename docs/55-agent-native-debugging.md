@@ -83,6 +83,7 @@ Claude Code原生支持MCP工具，Agent可以直接获得带参数模式的工�
 **P0：设备入口与只读Agent工具**
 
 - `tools/rungic_device.py`：按`MOTO_ADB`/`MOTO_SERIAL`/`MOTO_TRANSPORT`或`.work/device.env`定位adb；默认用`ro.serialno=ZY32MVJS25`在所有adb设备中查找，无线调试端口变化不需修改。脚本经stdin送到Android shell、Android root、容器root或桌面用户四个层级，避免多层引号；退出码原样返回。原7个硬编码`~/Android/Sdk`与序列号的工具改为共用此入口。
+- `tools/rungic_touch.py`（2026-10-01）：adb `input` 做不了的多点触控。以 root 向触摸屏的 evdev 节点写多点触控协议 B 的事件，一个 shell 里逐帧写入，约 12 ms 一帧，Android 和其后的 Plasma、Qt 都当作真实手指；运行前检查屏幕上没有真实手指。内置点击、拖动、双指张开或捏小，以及“张开后一根手指先抬起”（docs/65）。会在用户屏幕上实际操作。
 - 注意：未给adb子进程关闭stdin时，`adb shell`会吞掉调用者的stdin，使MCP stdio握手无响应。已统一使用`stdin=DEVNULL`。
 - `tools/rungic_agent.py`（库+命令行）与`tools/rungic_agent_mcp.py`（官方MCP Python SDK 2.2，uv内联依赖），在工作区`.mcp.json`注册为`moto`。工具：`device_status`、`logs`、`session_log`、`crashes`、`crash_detail`、`kwin_info`、`host_request`、`screenshot`、`snapshot`，只读工具带`read_only_hint`。
 - 日志以墙钟合并：logcat `-v epoch`、journald `__REALTIME_TIMESTAMP`、`dmesg -r`（保留内核自身级别；用同一脚本采样的CLOCK_REALTIME与`/proc/timer_list`单调时间换算）。`scope=plasma`只取桌面APK UID、本项目标签、crash缓冲及GPU/内存/SELinux相关内核行。已知噪声（bpf-firewall、runuser会话、binder释放、Moto剪贴板审计）只计数不显示，并注明原因。
