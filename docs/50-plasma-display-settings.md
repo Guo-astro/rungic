@@ -63,3 +63,51 @@ KScreen+moto2拆分刷新率选项、已选策略和实时显示信息的变更�
 
 
 2026-09-28：手机显示大小公共策略已重构，KWin 默认/保存/渲染分辨率补偿和 KScreen 五档 UI 共用 `shared/display-policy/`，移除固定 300% 上限与旧迁移。X70 Air Pro 默认 350%，已有设置保留；最新版本、GUI 恢复与实机边界见 [85 篇](85-phone-display-size-policy.md)。
+
+## 2026-10-01 旋转：由 Android 转动，Linux 只跟随
+
+**现象**（用户报告，G100 S）：
+- 在“设置 → 显示”里把手机屏转成横屏后，画面只占上面约 45%，下面全黑。
+- 用户随后强制停止了 APK，会话重启后仍然错位。
+- 恢复竖屏后，主屏的搜索框、图标和小部件都超出右边。
+- 横屏时，Android 的状态栏和手势导航条叠在 Plasma 的面板上，左侧还留了一条挖孔安全区的黑边。
+
+**原因**（源码核实和实机日志）：
+
+1. **KWin 内部旋转**：设置里的旋转是 KWin 的标准输出变换。Android 后端照单全收（`WaylandOutput::applyChanges` 设置 `next.transform`），同时把 2400×1080 的模式通过 `display-set` 交给宿主。宿主于是分配了横向缓冲区（`AHB allocated 2400x1080`），而 Android 窗口仍是竖屏，KWin 把旋转后的画面画进了这块缓冲区。这个变换还被写进了 `kwinoutputconfig.json`，会话重启后又被重放。
+2. **主屏边距**（plasma-mobile 6.6.5，上游 master 也一样）：
+   - `HomeScreen.qml` 在 `Component.onCompleted` 时计算边距，这时根项还是 0×0，右、下边距算成 −360、−800，页面成了屏幕的两倍宽。
+   - 之后只在容器的 `availableScreenRectChanged` 时重算，但 libplasma 在容器 `screen()` 为 −1 时会丢掉这个信号（`containment.cpp:75-77`），边距就一直不更新。
+   - 实机只读查询：Folio 容器的 `screen` 为 −1，可用区域正确。
+3. **APK**：横屏时把挖孔安全区设成了窗口的左右内边距；旋转不会触发窗口焦点变化，所以 `immersive()` 没有被再次调用，系统栏留在屏幕上。
+
+**修复**：
+
+- **KWin**（`packages/kwin/.../phone-turns-with-android.patch`）：
+  - 手机屏收到 90°/270° 的变换，或者方向与当前相反的模式时，通过平台桥 `{"op":"orientation"}` 请 Android 转动，和设备面板用的是同一个请求；
+  - 转动按相对方向理解：竖屏转横屏，横屏转竖屏；
+  - 手机屏在 KWin 内部不再接受任何变换，用户设置的和启动时重放的都一样。
+- **plasma-mobile**（`homescreen-margins-follow-geometry.patch`）：边距改为监听 `PlasmoidItem` 的信号，并在尺寸变化时按事件循环合并重算；0 尺寸时不计算，边距一律不小于 0。
+- **APK**：
+  - 横竖屏都铺到屏幕边缘，不再保留 Android 的挖孔安全区（用户要求）；
+  - `onConfigurationChanged` 时重新隐藏系统栏。
+  - `desktop/display.py`：只有挖孔落在状态栏那一行时，才用侧边安全区作为状态栏的左右内边距，其余情况用默认的 24。
+- **现场恢复**：
+  - 手机屏改回 1080×2400，不旋转；
+  - 恢复时指定 `@120` 让宿主变成了固定 120Hz，已经切回“自动”（`refreshPolicy 0`）；
+  - 出错时的配置保存在手机的 `/tmp/kwinoutputconfig.broken-192028.json`。
+
+**实机验证**（开发覆盖：KWin `+dev20261001t103229`，plasma-mobile 和 rungic-plasma-session `+dev20261001t104608`，APK 2.28 开发版；重启会话后）：
+- 用 `kscreen-doctor output.WL-0.rotation.right`（和设置界面走同一个接口）：Android 转成横屏，KWin 为 762×360、不旋转，平台桥报告 `landscape`，画面铺满。
+- 新 APK 装好后，横屏宽度为 800（挖孔不再留边），用户确认挖孔部分正常。
+- 主屏边距修复后，横屏的小部件和收藏栏都在屏幕之内。
+
+**还没验证**：
+- 从设置界面直接点击旋转，以及转回竖屏；
+- 多次往返；
+- 键盘、触摸、应用窗口；
+- 桌面模式时第二输出的重叠；
+- 会话重启后不再错位；
+- Halcyon 主屏。
+
+**待定**：横屏时小组件该怎么排（Folio 会对调宽高，横向的小组件被转成竖条），在调研中。

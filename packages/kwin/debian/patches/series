@@ -16,3 +16,4 @@ rungic/android-backend.patch
 rungic/clip-scaled-damage-to-surface.patch
 rungic/handset-display-size.patch
 rungic/android-workspace.patch
+rungic/phone-turns-with-android.patch

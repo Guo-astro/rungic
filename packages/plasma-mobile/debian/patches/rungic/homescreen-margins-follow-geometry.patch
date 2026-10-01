@@ -1,0 +1,86 @@
+From: clawd20130 <clawd20130@gmail.com>
+Date: Thu, 1 Oct 2026 19:45:37 +0900
+Subject: Home screen: margins follow the screen's free area and the home
+ screen's size
+
+The home screen (Folio, Halcyon) computed its margins once at Component.onCompleted, before the
+view sized it (0x0: right and bottom margins of -360 and -800, a page twice the screen), and
+again only on the containment's availableScreenRectChanged, which libplasma drops while the
+containment's screen() is -1 (containment.cpp). The margins then stayed wrong, also through a
+turn of the phone: the app drawer's search field and icons cut at the right edge, widgets
+shifted right, the navigation panel over the drawer's second row in landscape. Now they are
+computed from the PlasmoidItem's signal and on every size change, once per event loop, never
+below zero.
+
+Forwarded: no
+Last-Update: 2026-10-01
+X-Rungic-Status: Pending
+X-Rungic-Tests: none (gap: checked on the phone, docs/50)
+X-Rungic-Docs: docs/50
+---
+ .../mobileshell/qml/homescreen/HomeScreen.qml      | 40 +++++++++++++++++-----
+ 1 file changed, 32 insertions(+), 8 deletions(-)
+
+diff --git a/components/mobileshell/qml/homescreen/HomeScreen.qml b/components/mobileshell/qml/homescreen/HomeScreen.qml
+index 57b3775..79ea699 100644
+--- a/components/mobileshell/qml/homescreen/HomeScreen.qml
++++ b/components/mobileshell/qml/homescreen/HomeScreen.qml
+@@ -59,18 +59,42 @@ Item {
+     readonly property real contentOpacity: itemContainer.opacity
+ 
+     function evaluateMargins() {
+-        topMargin = plasmoidItem.availableScreenRect.y
+-        bottomMargin = root.height - (plasmoidItem.availableScreenRect.y + plasmoidItem.availableScreenRect.height)
+-        leftMargin = plasmoidItem.availableScreenRect.x
+-        rightMargin = root.width - (plasmoidItem.availableScreenRect.x + plasmoidItem.availableScreenRect.width)
++        // Not before the view sized this item: at 0x0 the margins came out -360 and -800 (a page
++        // twice the screen, the home screen and drawer cut at the right edge).
++        if (!plasmoidItem || root.width <= 0 || root.height <= 0) {
++            return;
++        }
++        const area = plasmoidItem.availableScreenRect;
++        topMargin = Math.max(0, area.y)
++        bottomMargin = Math.max(0, root.height - (area.y + area.height))
++        leftMargin = Math.max(0, area.x)
++        rightMargin = Math.max(0, root.width - (area.x + area.width))
++    }
++
++    // Once per event loop, whatever changed: the screen's free area (panels, a turn) or this item's
++    // size, which come in either order. Computed later to avoid binding loops with root.width and
++    // root.height changing along with the availableScreenRect.
++    property bool marginsQueued: false
++    function scheduleMargins() {
++        if (marginsQueued) {
++            return;
++        }
++        marginsQueued = true;
++        Qt.callLater(() => {
++            root.marginsQueued = false;
++            root.evaluateMargins();
++        });
+     }
++    onWidthChanged: scheduleMargins()
++    onHeightChanged: scheduleMargins()
+ 
+     Connections {
+-        target: Plasmoid
++        // The item's signal: the containment's (Plasmoid) is dropped while its screen() is -1, and
++        // the margins then stayed as first computed, also through a turn of the phone.
++        target: root.plasmoidItem
+ 
+-        // avoid binding loops with root.height and root.width changing along with the availableScreenRect
+         function onAvailableScreenRectChanged() {
+-            Qt.callLater(() => root.evaluateMargins());
++            root.scheduleMargins();
+         }
+     }
+ 
+@@ -114,7 +138,7 @@ Item {
+ 
+     Component.onCompleted: {
+         // determine the margins used
+-        evaluateMargins();
++        scheduleMargins();
+     }
+ 
+     WindowPlugin.WindowMaximizedTracker {

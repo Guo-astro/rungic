@@ -1,0 +1,136 @@
+From: clawd20130 <clawd20130@gmail.com>
+Date: Thu, 1 Oct 2026 19:32:13 +0900
+Subject: Android host: the phone turns as Android turns it,
+ also from display settings
+
+A quarter turn of the phone output in display settings (kcm_kscreen), or a mode across its
+current orientation (2400x1080 while upright), used to rotate KWin's picture into the host's
+upright buffers (a third of the screen drawn, the rest black) and was saved, so it came back
+with the next session. Now it asks Android to turn the phone (the platform bridge's
+"orientation", as the Android device panel does); the host then offers the turned size, which
+the output takes as any host resize. The phone output never takes a transform of its own,
+neither a user's nor a saved one replayed at start. A turn is relative: the settings show the
+turned phone upright again, so a quarter turn goes from upright to landscape and back.
+
+Forwarded: not-needed
+Last-Update: 2026-10-01
+X-Rungic-Status: Pending
+X-Rungic-Tests: none (gap)
+X-Rungic-Docs: docs/50
+---
+ src/backends/android/android-display-client.h |  4 +++-
+ src/backends/android/android_backend.cpp      | 15 ++++++++++++
+ src/backends/android/android_output.cpp       | 34 ++++++++++++++++++++++++++-
+ src/backends/android/android_output.h         |  5 ++++
+ 4 files changed, 56 insertions(+), 2 deletions(-)
+
+diff --git a/src/backends/android/android-display-client.h b/src/backends/android/android-display-client.h
+index e4a53be..e26e5fa 100644
+--- a/src/backends/android/android-display-client.h
++++ b/src/backends/android/android-display-client.h
+@@ -61,7 +61,9 @@ inline QJsonObject request(QJsonObject value)
+             return failure(QStringLiteral("Android display connection failed"));
+         }
+     }
+-    value.insert(QStringLiteral("op"), QStringLiteral("display-set"));
++    if (!value.contains(QStringLiteral("op"))) {
++        value.insert(QStringLiteral("op"), QStringLiteral("display-set"));
++    }
+     const QByteArray bytes = QJsonDocument(value).toJson(QJsonDocument::Compact) + '\n';
+     qsizetype sent = 0;
+     while (sent < bytes.size()) {
+diff --git a/src/backends/android/android_backend.cpp b/src/backends/android/android_backend.cpp
+index eb6d40b..2e744cb 100644
+--- a/src/backends/android/android_backend.cpp
++++ b/src/backends/android/android_backend.cpp
+@@ -289,6 +289,21 @@ OutputConfigurationError AndroidBackend::applyOutputChanges(const OutputConfigur
+             const auto props = config.constChangeSet(output);
+             // A cast output (TV) has the host's size: nothing to ask Android for.
+             if (!props || !static_cast<AndroidOutput *>(output)->isPhone()) continue;
++            if (static_cast<AndroidOutput *>(output)->requestsTurn(*props)) {
++                // The phone turns (display settings' rotation, docs/50): Android turns its window and
++                // the host then offers the turned size, which this output takes as any host resize.
++                // A turn is relative, as the settings show the turned phone upright again: upright
++                // turns to landscape and back. The mode that came with it is the host's to choose.
++                const bool landscape = output->modeSize().width() > output->modeSize().height();
++                const auto reply = RungicDisplay::request(QJsonObject{
++                    {QStringLiteral("op"), QStringLiteral("orientation")},
++                    {QStringLiteral("mode"), landscape ? QStringLiteral("portrait") : QStringLiteral("landscape")}});
++                if (reply.contains(QStringLiteral("error"))) {
++                    qCWarning(KWIN_WAYLAND_BACKEND) << "Android did not turn the phone:" << reply;
++                    return OutputConfigurationError::Unknown;
++                }
++                continue;
++            }
+             const auto mode = props->mode ? props->mode->lock() : nullptr;
+             const bool sizeChanged = mode && mode->size() != output->modeSize();
+             // The refresh policy (docs/73): the adaptive refresh (VRR) policy Automatic or Always is
+diff --git a/src/backends/android/android_output.cpp b/src/backends/android/android_output.cpp
+index ac5a13e..d00bb8f 100644
+--- a/src/backends/android/android_output.cpp
++++ b/src/backends/android/android_output.cpp
+@@ -167,15 +167,47 @@ QList<std::shared_ptr<OutputMode>> AndroidOutput::modesFor(const QSize &size, ui
+     return result;
+ }
+ 
++bool AndroidOutput::requestsTurn(const OutputChangeSet &change) const
++{
++    if (!m_phone) {
++        return false;
++    }
++    for (const auto &transform : {change.transform, change.manualTransform}) {
++        if (transform) {
++            switch (transform->kind()) {
++            case OutputTransform::Rotate90:
++            case OutputTransform::Rotate270:
++            case OutputTransform::FlipX90:
++            case OutputTransform::FlipX270:
++                return true;
++            default:
++                break;
++            }
++        }
++    }
++    if (const auto mode = change.mode ? change.mode->lock() : nullptr) {
++        const QSize now = modeSize();
++        return (mode->size().width() > mode->size().height()) != (now.width() > now.height());
++    }
++    return false;
++}
++
+ void AndroidOutput::applyExtraChanges(State &next, const OutputChangeSet &props, OutputConfiguration::Source source)
+ {
++    if (m_phone) {
++        // The phone turns as Android turns it (AndroidBackend::applyOutputChanges asks it to): its
++        // buffers have the host's orientation, and a transform here would draw a turned picture into
++        // them (2400x1080 rendered into the upright surface: a third of the screen, the rest black).
++        // Neither a user's rotation nor a saved one replayed at start is applied.
++        next.transform = m_state.transform;
++    }
+     if (m_phone && props.logicalDpi) m_logicalDpi = props.logicalDpi;
+     next.scale = props.scale.value_or(m_state.scale);
+     next.scaleSetting = props.scaleSetting.value_or(m_state.scaleSetting);
+     // The Android host owns the buffer size and physical refresh. Only explicit user changes
+     // may override it; replaying saved system state must not undo rotation, automatic
+     // refresh or the host preference.
+-    if (source == OutputConfiguration::Source::User && props.mode) {
++    if (source == OutputConfiguration::Source::User && props.mode && !requestsTurn(props)) {
+         if (const auto mode = props.mode->lock()) {
+             // A rate chosen on its own is a fixed rate (AndroidBackend::applyOutputChanges).
+             if (requestsFixedRefresh(props)) {
+diff --git a/src/backends/android/android_output.h b/src/backends/android/android_output.h
+index 1c4ad15..f03d58b 100644
+--- a/src/backends/android/android_output.h
++++ b/src/backends/android/android_output.h
+@@ -30,6 +30,11 @@ public:
+ 
+     bool isPhone() const;
+     bool requestsFixedRefresh(const OutputChangeSet &change) const;
++    /**
++     * The phone asked to turn (docs/50): a quarter turn of the output, or a mode across its current
++     * orientation (2400x1080 while upright). Android turns the phone; KWin never rotates it itself.
++     */
++    bool requestsTurn(const OutputChangeSet &change) const;
+     std::optional<double> recommendedScale(const QSize &size) const override;
+     std::optional<double> logicalDpi() const override;
+     void prepareDisplaySize(OutputChangeSet &change, bool userRequest) const override;

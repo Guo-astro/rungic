@@ -13,3 +13,4 @@ rungic/home-hold-voice-assistant.patch
 rungic/panels-app-colours.patch
 rungic/0014-Keep-clipboard-history-alive-and-show-its-desktop-tr.patch
 rungic/startplasmamobile-no-forced-platform-theme.patch
+rungic/homescreen-margins-follow-geometry.patch

@@ -42,8 +42,10 @@ def panel_values(info, qt_screen, kscreen_output):
     return {
         'statusBarHeight': (top + bottom) * factor if has_hole else -1,
         'statusBarCenterSpacing': (right - left + 16) * factor if has_hole else 0,
-        'statusBarLeftPadding': max(24, min(info.getint('safe-left'), 256)) * factor,
-        'statusBarRightPadding': max(24, min(info.getint('safe-right'), 256)) * factor,
+        # Android's side safe area only where its hole is in the bar's row; turned, the hole is at
+        # an edge's middle and the desktop goes on under it (docs/50): the usual padding then.
+        'statusBarLeftPadding': (max(24, min(info.getint('safe-left'), 256)) if has_hole else 24) * factor,
+        'statusBarRightPadding': (max(24, min(info.getint('safe-right'), 256)) if has_hole else 24) * factor,
     }
 
 while True:

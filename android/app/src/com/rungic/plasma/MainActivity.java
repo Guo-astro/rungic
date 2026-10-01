@@ -265,6 +265,13 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
             controller.hide(WindowInsets.Type.systemBars());
         }
     }
+    // A turn shows Android's status and navigation bars again over the Linux panels: hidden as when
+    // the window gets the focus (docs/50).
+    @Override public void onConfigurationChanged(android.content.res.Configuration config) {
+        super.onConfigurationChanged(config);
+        immersive();
+        if(display!=null)display.requestApplyInsets();
+    }
     @Override public void onWindowFocusChanged(boolean focus) {
         super.onWindowFocusChanged(focus);
         if(focus) { immersive(); if(display!=null)display.requestApplyInsets(); }
@@ -279,13 +286,10 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         Rect topCutout=new Rect();
         int safeTop=0, safeLeft=0, safeRight=0, radius=0;
         DisplayCutout cutout=insets.getDisplayCutout();
-        // In landscape the camera hole can cover application content halfway
-        // down an edge. Reserve that edge in the host window, keeping portrait
-        // edge-to-edge and its Phosh status-bar cutout handling.
-        boolean landscape=getResources().getConfiguration().orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE;
-        int padLeft=landscape && cutout!=null?cutout.getSafeInsetLeft():0;
-        int padRight=landscape && cutout!=null?cutout.getSafeInsetRight():0;
-        if(frame.getPaddingLeft()!=padLeft || frame.getPaddingRight()!=padRight)frame.setPadding(padLeft,0,padRight,0);
+        // Edge to edge in either orientation (docs/50): the desktop goes on under the camera hole, as
+        // the user wants; Android's safe area is not reserved. The cutout is still reported below
+        // (the Linux panel centres the status bar around it when upright).
+        if(frame.getPaddingLeft()!=0 || frame.getPaddingRight()!=0)frame.setPadding(0,0,0,0);
         if(cutout!=null) {
             safeTop=Math.max(0,cutout.getSafeInsetTop()-location[1]);
             safeLeft=Math.max(0,cutout.getSafeInsetLeft()-location[0]);
