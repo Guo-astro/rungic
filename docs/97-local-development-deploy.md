@@ -67,11 +67,19 @@
   - 安装失败时，开发覆盖和它的包都保持原样。
   - `rungic_release.py status` 多了一项 `dev_overlay`。
 - **记录**：`.work/dev-deploy/<时间>-deploy|reset/dev.json`，旁边还有前后的包版本和完整性报告。
+- **上游组件**（2026-10-01，用户要求“开发支持上游包”）：
+  - `deploy NAME` 也接受发布要重建的上游组件，即 `release/packages.json` 的 `rebuilt` 中 `source` 为 `packages/<名>` 的那些，例如 `plasma-mobile`、`xdg-desktop-portal-kde`；
+  - 构建复用 `tools/build_on_device.py`：同步补丁队列打好补丁的源码树，只在构建机那份树的 `debian/changelog` 顶部加一条开发版本 `<changelog 的版本>+dev<UTC 时间>.<短 sha>[.dirty]`，`packages/` 里的 changelog 不动；
+  - 上一次构建成功、还留着 obj 树时，做增量构建，否则全量构建，全量前先装构建依赖；
+  - 只取发布里登记的那几个二进制包（`rebuilt.<名>.packages` 中手机已装的发布包）及其 dbgsym，放进开发仓库。每个二进制包一条覆盖记录，带 `component`；
+  - `.dirty` 看 `packages/<名>` 和配方 `overlay` 引用的共享文件；
+  - `reset 组件名` 撤销这个组件的全部二进制包，`reset 包名` 只撤销那一个。
 
 ## 用法
 
 ```sh
 python3 tools/rungic_dev.py deploy rungic-design rungic-voice-agent   # 从工作区构建并装到手机
+python3 tools/rungic_dev.py deploy plasma-mobile                      # 上游组件：packages/plasma-mobile 的补丁队列
 python3 tools/rungic_dev.py status                                    # 基线、覆盖，以及 apt 是否保留它们
 python3 tools/rungic_dev.py reset [rungic-design]                     # 回到发布版本
 ```
@@ -134,3 +142,11 @@ python3 tools/rungic_dev.py reset [rungic-design]                     # 回到�
   - `rungic_dev.py status`：已安装和基线都是 20260930.10，覆盖为空，没有覆盖文件；
   - `tools/design_gallery.py phone` 截的 Toggle 和 HoldTarget 两节正常；
   - 用户接受 `.10` 后，执行了 `rungic_release.py commit`：快照已丢弃，容器重新启动并就绪（native Wayland）。
+
+## 首次部署上游组件（2026-10-01，实机）
+
+- 命令：`rungic_dev.py deploy plasma-mobile rungic-plasma-session`，见 docs/103 的 `startplasmamobile` 补丁。
+- Mac mini 上 `plasma-mobile` 留有上一次构建的 obj 树，所以做了增量构建，用时 238 秒；覆盖 `plasma-mobile`、`plasma-mobile-tweaks`，版本 `6.6.5-0ubuntu0.1+rungic9+dev20261001t040034.3fa5265.dirty`。
+- 安装成功，apt 校验通过；`plasma-mobile` 在 `session_restart` 里，会话按规则重启，报告 “Plasma Mobile ready”。
+- 完整性 `drift` 是早已存在的 `/usr/lib/rungic-cua/rungic_cua/keyring.py`（不属于任何包），与这次无关。
+

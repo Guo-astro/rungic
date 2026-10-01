@@ -15,8 +15,13 @@ system and offer nothing back. No rootfs snapshot: a reset returns the packages 
 
   rungic_dev.py deploy NAME... [--host macmini|phone] [--restart auto|never]
                                   build NAME... from the working tree and install them over the release
-                                  (earlier overrides stay)
-  rungic_dev.py reset [NAME...]   back to the release's versions (all overrides, or the named ones)
+                                  (earlier overrides stay). NAME is one of this project's packages
+                                  (packaging/) or an upstream component the release rebuilds
+                                  (packages/<name>, release/packages.json "rebuilt"): its source with our
+                                  patch queue is built with tools/build_on_device.py, and the binary
+                                  packages the release has from it are overridden
+  rungic_dev.py reset [NAME...]   back to the release's versions (all overrides, or the named ones: a
+                                  package, or an upstream component for all its packages)
   rungic_dev.py status            the release, the overrides and whether apt keeps them
 
 tools/rungic_release.py deploy clears an overlay before it installs a release (clear_device()).
@@ -24,6 +29,7 @@ Every deploy and reset leaves a record under .work/dev-deploy/<time>/.
 """
 import argparse
 import datetime
+import email.utils
 import json
 import os
 import shlex
@@ -160,9 +166,13 @@ def build(names, host, stamp, record):
     _, base_packages = base_of(info)
     POOL.mkdir(parents=True, exist_ok=True)
     build_on_device.use(host)
+    components = upstream_components()
+    own, upstream = resolve(names, definitions, components)
     overrides = {}
-    for name in names:
-        pkg = definitions.get(name) or sys.exit(f'no package {name} in {rungic_package.PACKAGING}')
+    for name in upstream:
+        overrides.update(build_upstream(name, components[name], base_packages, stamp, commit, record))
+    for name in own:
+        pkg = definitions[name]
         dirty = package_dirty(pkg)
         version = dev_version(base_packages.get(name, '0'), stamp, commit, dirty)
         print(f'building {name} {version} ({pkg["build"]}{", on " + host if pkg["build"] == "device" else ""})', flush=True)
@@ -174,6 +184,97 @@ def build(names, host, stamp, record):
                            'built': datetime.datetime.now().isoformat(timespec='seconds'), 'file': deb.name}
         record.step('build', package=name, version=version, seconds=round(time.time() - started))
     return overrides
+
+
+def upstream_components():
+    """Upstream components the release rebuilds from a patch queue (docs/71): name -> its entry of
+    release/packages.json "rebuilt" ('packages': its binary packages in the release; 'version': the
+    first entry of its changelog)."""
+    return {name: c for name, c in rungic_release.spec().get('rebuilt', {}).items()
+            if c.get('source', '').startswith('packages/')}
+
+
+def upstream_dirty(name):
+    """Uncommitted changes in the component's patch queue or in the shared files its recipe overlays."""
+    import pq
+    paths = [f'packages/{name}', *[e['from'] for e in pq.overlay(name).values()]]
+    return bool(git('status', '--porcelain', '--untracked-files=all', '--', *paths))
+
+
+def changelog_entry(source, version, distribution, date, commit, dirty):
+    """The development build's changelog entry, put on top of the synced tree's (never into packages/)."""
+    state = 'with uncommitted changes' if dirty else 'as committed'
+    return (f'{source} ({version}) {distribution}; urgency=medium\n\n'
+            f'  * Development build of {commit} {state} (tools/rungic_dev.py, docs/97).\n\n'
+            f' -- range-dev <noreply@localhost>  {date}\n\n')
+
+
+def release_binaries(component, base_packages):
+    """The component's binary packages that the release has: the ones an overlay replaces."""
+    return [b for b in component.get('packages', []) if b in base_packages]
+
+
+def build_upstream(name, component, base_packages, stamp, commit, record):
+    """Development .debs of an upstream component's release packages, in POOL. -> {package: override}"""
+    import build_on_device
+    host = build_on_device.host
+    binaries = release_binaries(component, base_packages)
+    if not binaries:
+        raise SystemExit(f'{name}: the installed release has none of its packages {component.get("packages")}')
+    dirty = upstream_dirty(name)
+    version = dev_version(component['version'], stamp, commit, dirty)
+    print(f'building {name} {version} (upstream, on {host.name}): {" ".join(binaries)}', flush=True)
+    started = time.time()
+    work = f'{build_on_device.BASE}/{name}'
+    build_on_device.sync(name)
+    source = host.out(f'dpkg-parsechangelog -l {work}/src/debian/changelog -S Source').strip()
+    distribution = host.out(f'dpkg-parsechangelog -l {work}/src/debian/changelog -S Distribution').strip()
+    date = email.utils.format_datetime(datetime.datetime.now(datetime.timezone.utc))
+    entry = changelog_entry(source, version, distribution, date, commit, dirty)
+    host.run(f"cd {work}/src && {{ printf '%s' {shlex.quote(entry)}; cat debian/changelog; }} > debian/changelog.dev "
+             f"&& mv debian/changelog.dev debian/changelog")
+    # An earlier successful build keeps its obj tree: build only what changed. Otherwise configure afresh.
+    previous = host.out(f'test -d {work}/src/obj-aarch64-linux-gnu && cat {work}/build.rc 2>/dev/null || true').strip()
+    mode = 'incremental' if previous == '0' else 'full'
+    if mode == 'full':
+        print(build_on_device.build_deps(name), flush=True)
+    build_on_device.start(name, mode, host.jobs)
+    while 'SubState=running' in (state := build_on_device.status(name)) or 'ActiveState=activating' in state:
+        time.sleep(20)
+    if 'Result=success' not in state:
+        raise SystemExit(f'{name}: {mode} build failed on {host.name}\n{state}\n'
+                         + host.out(f'tail -40 {work}/build.log', timeout=60))
+    file_version = version.split(':', 1)[-1]
+    listing = host.out(f'cd {work} && ls *_{file_version}_*.deb *_{file_version}_*.ddeb 2>/dev/null || true').split()
+    POOL.mkdir(parents=True, exist_ok=True)
+    overrides = {}
+    for binary in binaries:
+        debs = [f for f in listing if f.startswith(f'{binary}_') and f.endswith('.deb')]
+        if not debs:
+            raise SystemExit(f'{name}: the build made no {binary}_{file_version} package')
+        host.get(f'{work}/{debs[0]}', POOL / debs[0])
+        for symbols in (f for f in listing if f.startswith(f'{binary}-dbgsym_')):
+            host.get(f'{work}/{symbols}', POOL / (symbols[:-5] + '.deb' if symbols.endswith('.ddeb') else symbols))
+        overrides[binary] = {'version': version, 'commit': git('rev-parse', 'HEAD'), 'dirty': dirty,
+                             'built': datetime.datetime.now().isoformat(timespec='seconds'), 'file': debs[0],
+                             'component': name}
+    record.step('build', package=name, version=version, mode=mode, binaries=binaries,
+                seconds=round(time.time() - started))
+    return overrides
+
+
+def resolve(names, definitions, components):
+    """Split NAME... into this project's packages and upstream components; unknown names stop."""
+    unknown = [n for n in names if n not in definitions and n not in components]
+    if unknown:
+        raise SystemExit(f'no package or upstream component {", ".join(unknown)} (packaging/, release/packages.json '
+                         f'"rebuilt" with packages/<name>)')
+    return [n for n in names if n in definitions], [n for n in names if n not in definitions]
+
+
+def reset_names(names, overrides):
+    """The overrides a reset of NAME... removes: a package, or every package of an upstream component."""
+    return {key for key, o in overrides.items() if key in names or o.get('component') in names}
 
 
 def prune(info):
@@ -297,7 +398,7 @@ def reset(names, restart):
         record.log['result'] = 'ok'
         return record.log
     overrides = dict(info['dev']['overrides'])
-    for name in names or list(overrides):
+    for name in reset_names(names, overrides) if names else list(overrides):
         overrides.pop(name, None)
     if overrides:
         new = overlay_info(info, overrides, stamp_now())

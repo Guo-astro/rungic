@@ -36,6 +36,7 @@ python3 tools/rungic_dev.py reset [<包>...]
 ```
 
 - **包名**：取 `packaging/<名>/package.json` 里 `paths` 覆盖到改动文件的那些包。`tools/rungic_package.py list` 里显示 stale 或 uncommitted 的就是它们。
+- **上游组件**：改了 `packages/<名>` 的补丁队列（例如 `plasma-mobile`），直接 `deploy <组件名>`。它经 `build_on_device.py` 在 Mac mini 上构建，第一次是全量构建，可能要几十分钟；只覆盖发布里登记的那几个二进制包。`reset <组件名>` 一次撤销全部（docs/97）。
 - **版本号**：`<该包在发布里的版本>+dev<UTC 时间>.<短 sha>[.dirty]`。再次部署时，之前的覆盖保留，基线不变。
 - **部署后逐项核对**：
   - 记录里 `[verify] apt=ok`，也就是每个覆盖都满足 Installed 等于 Candidate；

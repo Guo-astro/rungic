@@ -73,5 +73,53 @@ class OverlayTests(unittest.TestCase):
             self.assertEqual(json.loads(extracted)['dev']['base'], '20260930.9')
 
 
+
+class UpstreamTests(unittest.TestCase):
+    """Upstream components (packages/<name>) as overlays: their release packages, a changelog entry of
+    the development version, and resets by component."""
+    COMPONENTS = {'plasma-mobile': {'source': 'packages/plasma-mobile', 'version': '6.6.5-0ubuntu1+rungic3',
+                                    'packages': ['plasma-mobile', 'plasma-mobile-tweaks', 'plasma-mobile-dev']}}
+
+    def test_names_split_and_unknown_stop(self):
+        own, upstream = rungic_dev.resolve(['rungic-design', 'plasma-mobile'], {'rungic-design': {}}, self.COMPONENTS)
+        self.assertEqual((own, upstream), (['rungic-design'], ['plasma-mobile']))
+        with self.assertRaises(SystemExit):
+            rungic_dev.resolve(['plasma-mobil'], {'rungic-design': {}}, self.COMPONENTS)
+
+    def test_only_the_release_packages(self):
+        base = {'plasma-mobile': '6.6.5-0ubuntu1+rungic3', 'plasma-mobile-tweaks': '6.6.5-0ubuntu1+rungic3'}
+        self.assertEqual(rungic_dev.release_binaries(self.COMPONENTS['plasma-mobile'], base),
+                         ['plasma-mobile', 'plasma-mobile-tweaks'])
+
+    def test_versions_with_an_epoch(self):
+        dev = rungic_dev.dev_version('4:6.6.6-0ubuntu0.1+rungic9', '20261001t040000', 'abc1234', False)
+        self.assertTrue(newer(dev, '4:6.6.6-0ubuntu0.1+rungic9'))
+        self.assertTrue(newer('4:6.6.6-0ubuntu0.1+rungic10', dev))
+
+    def test_changelog_entry_parses(self):
+        version = rungic_dev.dev_version('6.6.5-0ubuntu1+rungic3', '20261001t040000', 'abc1234', True)
+        entry = rungic_dev.changelog_entry('plasma-mobile', version, 'resolute', 'Wed, 01 Oct 2026 04:00:00 +0000',
+                                           'abc1234', True)
+        with tempfile.TemporaryDirectory() as temp:
+            changelog = Path(temp, 'changelog')
+            changelog.write_text(entry + 'plasma-mobile (6.6.5-0ubuntu1+rungic3) resolute; urgency=medium\n\n'
+                                 '  * Release.\n\n -- range-dev <noreply@localhost>  Mon, 29 Sep 2026 00:00:00 +0000\n')
+            parsed = subprocess.run(['dpkg-parsechangelog', '-l', str(changelog), '-S', 'Version'],
+                                    capture_output=True, text=True, check=True).stdout.strip()
+        self.assertEqual(parsed, version)
+
+    def test_reset_by_component(self):
+        overrides = {'plasma-mobile': {'component': 'plasma-mobile'}, 'plasma-mobile-tweaks': {'component': 'plasma-mobile'},
+                     'rungic-design': {}}
+        self.assertEqual(rungic_dev.reset_names(['plasma-mobile'], overrides), {'plasma-mobile', 'plasma-mobile-tweaks'})
+        self.assertEqual(rungic_dev.reset_names(['plasma-mobile-tweaks'], overrides), {'plasma-mobile-tweaks'})
+        self.assertEqual(rungic_dev.reset_names(['rungic-design'], overrides), {'rungic-design'})
+
+    def test_components_of_the_release(self):
+        components = rungic_dev.upstream_components()
+        self.assertIn('plasma-mobile', components)
+        self.assertTrue(all(c['source'].startswith('packages/') and c.get('version') for c in components.values()))
+
+
 if __name__ == '__main__':
     unittest.main()
