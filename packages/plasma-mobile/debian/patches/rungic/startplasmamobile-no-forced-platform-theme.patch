@@ -1,0 +1,39 @@
+From: kevinzhow <kevinzhow@local>
+Date: Thu, 1 Oct 2026 12:58:06 +0900
+Subject: startplasmamobile: let Qt pick the platform theme,
+ as Plasma's desktop session does
+
+startplasmamobile exported QT_QPA_PLATFORMTHEME=KDE, a leftover of the 2019 kwinwrapper that set up
+the whole session by hand. It now ends in startplasma-wayland, which sets XDG_CURRENT_DESKTOP=KDE,
+KDE_FULL_SESSION=true and KDE_SESSION_VERSION=6 as on the desktop; Qt picks the KDE platform theme
+from those (the plugin's key is "kde").
+
+Forced through the environment, the theme also reached the temporary QGuiApplication some
+programs make before their real one, which asks for no desktop settings (Krita's OpenGL probe,
+setDesktopSettingsAware(false) in a KDE session). The KDE theme connected the session bus there,
+and Qt resumes a default bus's suspended delivery with a call queued to that application: gone
+with it, the program's session bus stayed deaf for its whole life. With
+PLASMA_INTEGRATION_USE_PORTAL=1 every portal file dialog then waited forever for its Response and
+its invisible modal shell blocked the program (docs/103).
+
+Forwarded: no
+Last-Update: 2026-10-01
+X-Rungic-Status: Pending [the line is redundant upstream too]
+X-Rungic-Tests: none (gap: checked by hand with Krita, docs/103)
+X-Rungic-Docs: docs/103
+---
+ bin/startplasmamobile.in | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/bin/startplasmamobile.in b/bin/startplasmamobile.in
+index 9c4c994..9995036 100755
+--- a/bin/startplasmamobile.in
++++ b/bin/startplasmamobile.in
+@@ -7,7 +7,6 @@
+ 
+ [ -f /etc/profile ] && . /etc/profile
+ 
+-export QT_QPA_PLATFORMTHEME=KDE
+ export EGL_PLATFORM=wayland
+ 
+ export QT_QUICK_CONTROLS_STYLE=org.kde.breeze

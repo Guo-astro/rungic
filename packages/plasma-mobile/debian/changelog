@@ -1,3 +1,12 @@
+plasma-mobile (6.6.5-0ubuntu0.1+rungic9) resolute; urgency=medium
+
+  * startplasmamobile no longer forces QT_QPA_PLATFORMTHEME=KDE: Qt picks the
+    KDE theme from XDG_CURRENT_DESKTOP as on the desktop, and a program's
+    temporary application (Krita's OpenGL probe) no longer leaves its session
+    bus suspended for good (docs/103).
+
+ -- range-dev <noreply@localhost>  Wed, 01 Oct 2026 05:00:00 +0000
+
 plasma-mobile (6.6.5-0ubuntu0.1+rungic8) resolute; urgency=medium
 
   * Restore Folio's wallpaper, native widget grid, favourites and gestures.
