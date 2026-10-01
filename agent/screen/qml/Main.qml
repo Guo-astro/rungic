@@ -237,7 +237,9 @@ Window {
             width: root.pictureWidth
             height: root.pictureHeight
             radius: 14
-            color: "black"
+            // The director's screens bring their own black (below): this one would stay behind a
+            // focus breathing in, a black shadow around it.
+            color: root.directing ? "transparent" : "black"
             layer.enabled: true   // rounded corners for the picture too
             layer.effect: MultiEffect {
                 maskEnabled: true
