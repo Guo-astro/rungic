@@ -1,0 +1,231 @@
+From: clawd20130 <clawd20130@gmail.com>
+Date: Thu, 1 Oct 2026 20:08:54 +0900
+Subject: Folio: landscape keeps the grid and the widgets' shape,
+ the row/column swap is a setting
+
+In landscape Folio turned the page (RotateCounterClockwise: rows and columns swapped, each
+widget's width and height swapped), so a 4x1 bar widget became a 1x4 sliver too narrow for its
+text. Launcher3 and One UI keep a phone's grid in landscape with wider, lower cells and hide the
+app names; the folio README lists "option to turn off row/column swap" as a wanted feature. Now
+the swap is the setting swapRowsColumnsInLandscape (off by default, in the home screen settings
+with its Simplified Chinese text): off, landscape keeps the page as it is (RegularPosition) and
+the home screen's app names are hidden there, the cells being too low for them. The stored
+layout is the same either way.
+
+Forwarded: no
+Last-Update: 2026-10-01
+X-Rungic-Status: Pending
+X-Rungic-Tests: none (gap: checked on the phone, docs/50)
+X-Rungic-Docs: docs/50
+---
+ containments/homescreens/folio/foliosettings.cpp      | 19 +++++++++++++++++++
+ containments/homescreens/folio/foliosettings.h        |  9 +++++++++
+ containments/homescreens/folio/homescreenstate.cpp    | 16 +++++++++-------
+ containments/homescreens/folio/qml/HomeScreenPage.qml |  9 +++++++--
+ .../homescreens/folio/qml/settings/ConfigGeneral.qml  | 14 ++++++++++++--
+ ...a_applet_org.kde.plasma.mobile.homescreen.folio.po | 10 ++++++++++
+ 6 files changed, 66 insertions(+), 11 deletions(-)
+
+diff --git a/containments/homescreens/folio/foliosettings.cpp b/containments/homescreens/folio/foliosettings.cpp
+index e4a54fe..4746021 100644
+--- a/containments/homescreens/folio/foliosettings.cpp
++++ b/containments/homescreens/folio/foliosettings.cpp
+@@ -23,6 +23,7 @@ const QString CFG_KEY_HOMESCREEN_COLS = QStringLiteral("homeScreenColumns");
+ const QString CFG_KEY_SHOW_PAGES_APPLABELS = QStringLiteral("showPagesAppLabels");
+ const QString CFG_KEY_SHOW_FAVORITES_APPLABELS = QStringLiteral("showFavoritesAppLabels");
+ const QString CFG_KEY_LOCK_LAYOUT = QStringLiteral("lockLayout");
++const QString CFG_KEY_SWAP_ROWS_COLUMNS_IN_LANDSCAPE = QStringLiteral("swapRowsColumnsInLandscape");
+ const QString CFG_KEY_DELEGATE_ICON_SIZE = QStringLiteral("delegateIconSize");
+ const QString CFG_KEY_SHOW_FAVORITES_BAR_BACKGROUND = QStringLiteral("showFavoritesBarBackground");
+ const QString CFG_KEY_PAGE_TRANSITION_EFFECT = QStringLiteral("pageTransitionEffect");
+@@ -130,6 +131,20 @@ void FolioSettings::setLockLayout(bool lockLayout)
+     }
+ }
+ 
++bool FolioSettings::swapRowsColumnsInLandscape() const
++{
++    return m_swapRowsColumnsInLandscape;
++}
++
++void FolioSettings::setSwapRowsColumnsInLandscape(bool swap)
++{
++    if (m_swapRowsColumnsInLandscape != swap) {
++        m_swapRowsColumnsInLandscape = swap;
++        Q_EMIT swapRowsColumnsInLandscapeChanged();
++        save();
++    }
++}
++
+ int FolioSettings::delegateIconSize() const
+ {
+     return m_delegateIconSize;
+@@ -213,6 +228,7 @@ void FolioSettings::save()
+     generalGroup.writeEntry(CFG_KEY_SHOW_PAGES_APPLABELS, m_showPagesAppLabels);
+     generalGroup.writeEntry(CFG_KEY_SHOW_FAVORITES_APPLABELS, m_showFavouritesAppLabels);
+     generalGroup.writeEntry(CFG_KEY_LOCK_LAYOUT, m_lockLayout);
++    generalGroup.writeEntry(CFG_KEY_SWAP_ROWS_COLUMNS_IN_LANDSCAPE, m_swapRowsColumnsInLandscape);
+     generalGroup.writeEntry(CFG_KEY_DELEGATE_ICON_SIZE, m_delegateIconSize);
+     generalGroup.writeEntry(CFG_KEY_SHOW_FAVORITES_BAR_BACKGROUND, m_showFavouritesBarBackground);
+     generalGroup.writeEntry(CFG_KEY_PAGE_TRANSITION_EFFECT, (int)m_pageTransitionEffect);
+@@ -237,6 +253,8 @@ void FolioSettings::load()
+     m_showPagesAppLabels = generalGroup.readEntry(CFG_KEY_SHOW_PAGES_APPLABELS, true);
+     m_showFavouritesAppLabels = generalGroup.readEntry(CFG_KEY_SHOW_FAVORITES_APPLABELS, false);
+     m_lockLayout = generalGroup.readEntry(CFG_KEY_LOCK_LAYOUT, false);
++    // Off: widgets keep their shape in landscape (docs/50, Rungic).
++    m_swapRowsColumnsInLandscape = generalGroup.readEntry(CFG_KEY_SWAP_ROWS_COLUMNS_IN_LANDSCAPE, false);
+     m_delegateIconSize = generalGroup.readEntry(CFG_KEY_DELEGATE_ICON_SIZE, 48);
+     m_showFavouritesBarBackground = generalGroup.readEntry(CFG_KEY_SHOW_FAVORITES_BAR_BACKGROUND, true);
+     m_pageTransitionEffect = static_cast<PageTransitionEffect>(generalGroup.readEntry(CFG_KEY_PAGE_TRANSITION_EFFECT, (int)SlideTransition));
+@@ -248,6 +266,7 @@ void FolioSettings::load()
+     Q_EMIT showPagesAppLabels();
+     Q_EMIT showFavouritesAppLabelsChanged();
+     Q_EMIT lockLayoutChanged();
++    Q_EMIT swapRowsColumnsInLandscapeChanged();
+     Q_EMIT delegateIconSizeChanged();
+     Q_EMIT showFavouritesBarBackgroundChanged();
+     Q_EMIT pageTransitionEffectChanged();
+diff --git a/containments/homescreens/folio/foliosettings.h b/containments/homescreens/folio/foliosettings.h
+index bea2f9a..6db918a 100644
+--- a/containments/homescreens/folio/foliosettings.h
++++ b/containments/homescreens/folio/foliosettings.h
+@@ -22,6 +22,8 @@ class FolioSettings : public QObject
+     Q_PROPERTY(bool showPagesAppLabels READ showPagesAppLabels WRITE setShowPagesAppLabels NOTIFY showPagesAppLabelsChanged)
+     Q_PROPERTY(bool showFavouritesAppLabels READ showFavouritesAppLabels WRITE setShowFavouritesAppLabels NOTIFY showFavouritesAppLabelsChanged)
+     Q_PROPERTY(bool lockLayout READ lockLayout WRITE setLockLayout NOTIFY lockLayoutChanged)
++    Q_PROPERTY(bool swapRowsColumnsInLandscape READ swapRowsColumnsInLandscape WRITE setSwapRowsColumnsInLandscape NOTIFY
++                   swapRowsColumnsInLandscapeChanged)
+     Q_PROPERTY(int delegateIconSize READ delegateIconSize WRITE setDelegateIconSize NOTIFY delegateIconSizeChanged)
+     Q_PROPERTY(bool showFavouritesBarBackground READ showFavouritesBarBackground WRITE setShowFavouritesBarBackground NOTIFY showFavouritesBarBackgroundChanged)
+     Q_PROPERTY(
+@@ -75,6 +77,11 @@ public:
+     bool lockLayout() const;
+     void setLockLayout(bool lockLayout);
+ 
++    // Landscape as a turned page (rows and columns swapped, widgets turned on their side), or the
++    // same grid with wider, lower cells (Launcher3's and One UI's phones; widgets keep their shape).
++    bool swapRowsColumnsInLandscape() const;
++    void setSwapRowsColumnsInLandscape(bool swap);
++
+     int delegateIconSize() const;
+     void setDelegateIconSize(int delegateIconSize);
+ 
+@@ -101,6 +108,7 @@ Q_SIGNALS:
+     void showPagesAppLabelsChanged();
+     void showFavouritesAppLabelsChanged();
+     void lockLayoutChanged();
++    void swapRowsColumnsInLandscapeChanged();
+     void delegateIconSizeChanged();
+     void showFavouritesBarBackgroundChanged();
+     void pageTransitionEffectChanged();
+@@ -121,6 +129,7 @@ private:
+     bool m_showPagesAppLabels{false};
+     bool m_showFavouritesAppLabels{false};
+     bool m_lockLayout{false};
++    bool m_swapRowsColumnsInLandscape{false};
+     qreal m_delegateIconSize{48};
+     bool m_showFavouritesBarBackground{false};
+     PageTransitionEffect m_pageTransitionEffect{SlideTransition};
+diff --git a/containments/homescreens/folio/homescreenstate.cpp b/containments/homescreens/folio/homescreenstate.cpp
+index d7432a7..dec19bc 100644
+--- a/containments/homescreens/folio/homescreenstate.cpp
++++ b/containments/homescreens/folio/homescreenstate.cpp
+@@ -116,13 +116,15 @@ void HomeScreenState::init()
+         }
+     });
+ 
+-    connect(this, &HomeScreenState::viewWidthChanged, this, [this]() {
+-        // TODO: we only support 2 orientations at the moment since we don't know what the device rotated to
+-        setPageOrientation(m_viewWidth > m_viewHeight ? RotateCounterClockwise : RegularPosition);
+-    });
+-    connect(this, &HomeScreenState::viewHeightChanged, this, [this]() {
+-        setPageOrientation(m_viewWidth > m_viewHeight ? RotateCounterClockwise : RegularPosition);
+-    });
++    // TODO: we only support 2 orientations at the moment since we don't know what the device rotated to.
++    // Landscape turns the page only with the setting on (Rungic: off by default, widgets keep their shape).
++    const auto updatePageOrientation = [this]() {
++        const bool swap = m_homeScreen->folioSettings()->swapRowsColumnsInLandscape();
++        setPageOrientation(swap && m_viewWidth > m_viewHeight ? RotateCounterClockwise : RegularPosition);
++    };
++    connect(this, &HomeScreenState::viewWidthChanged, this, updatePageOrientation);
++    connect(this, &HomeScreenState::viewHeightChanged, this, updatePageOrientation);
++    connect(m_homeScreen->folioSettings(), &FolioSettings::swapRowsColumnsInLandscapeChanged, this, updatePageOrientation);
+     connect(this, &HomeScreenState::pageOrientationChanged, this, [this]() {
+         Q_EMIT pageRowsChanged();
+         Q_EMIT pageColumnsChanged();
+diff --git a/containments/homescreens/folio/qml/HomeScreenPage.qml b/containments/homescreens/folio/qml/HomeScreenPage.qml
+index cf28b5d..50bf576 100644
+--- a/containments/homescreens/folio/qml/HomeScreenPage.qml
++++ b/containments/homescreens/folio/qml/HomeScreenPage.qml
+@@ -23,6 +23,11 @@ Item {
+     property int pageNum
+ 
+     property var pageModel
++
++    // Landscape without the swap (FolioSettings.swapRowsColumnsInLandscape off): the same grid with
++    // cells too low for an icon and its name, so the names go, as Launcher3 does on a phone.
++    readonly property bool showAppLabels: folio.FolioSettings.showPagesAppLabels
++        && !(folio.HomeScreenState.viewWidth > folio.HomeScreenState.viewHeight && !folio.FolioSettings.swapRowsColumnsInLandscape)
+     property var homeScreen
+ 
+     onActiveFocusChanged: {
+@@ -271,7 +276,7 @@ Item {
+                     id: appDelegate
+                     folio: root.folio
+                     maskManager: root.maskManager
+-                    name: folio.FolioSettings.showPagesAppLabels ? delegate.pageDelegate.application.name : ""
++                    name: root.showAppLabels ? delegate.pageDelegate.application.name : ""
+                     application: delegate.pageDelegate.application
+                     turnToFolder: delegate.isAppHoveredOver
+                     turnToFolderAnimEnabled: folio.HomeScreenState.isDraggingDelegate
+@@ -347,7 +352,7 @@ Item {
+                     id: appFolderDelegate
+                     folio: root.folio
+                     maskManager: root.maskManager
+-                    name: folio.FolioSettings.showPagesAppLabels ? delegate.pageDelegate.folder.name : ""
++                    name: root.showAppLabels ? delegate.pageDelegate.folder.name : ""
+                     folder: delegate.pageDelegate.folder
+ 
+                     implicitWidth: folio.HomeScreenState.pageCellWidth
+diff --git a/containments/homescreens/folio/qml/settings/ConfigGeneral.qml b/containments/homescreens/folio/qml/settings/ConfigGeneral.qml
+index f001b47..d39742f 100644
+--- a/containments/homescreens/folio/qml/settings/ConfigGeneral.qml
++++ b/containments/homescreens/folio/qml/settings/ConfigGeneral.qml
+@@ -103,8 +103,18 @@ SimpleKCM {
+             }
+         }
+ 
+-        FormCard.FormSectionText {
+-            text: i18n("The rows and columns will swap depending on the screen rotation.")
++        FormCard.FormCard {
++            FormCard.FormSwitchDelegate {
++                id: swapInLandscape
++                text: i18n("Swap rows and columns in landscape")
++                description: i18n("Off: widgets keep their shape and app names are hidden in landscape.")
++                checked: folio.FolioSettings.swapRowsColumnsInLandscape
++                onCheckedChanged: {
++                    if (checked != folio.FolioSettings.swapRowsColumnsInLandscape) {
++                        folio.FolioSettings.swapRowsColumnsInLandscape = checked;
++                    }
++                }
++            }
+         }
+ 
+         FormCard.FormHeader {
+diff --git a/po/zh_CN/plasma_applet_org.kde.plasma.mobile.homescreen.folio.po b/po/zh_CN/plasma_applet_org.kde.plasma.mobile.homescreen.folio.po
+index f7e23a8..c102da4 100644
+--- a/po/zh_CN/plasma_applet_org.kde.plasma.mobile.homescreen.folio.po
++++ b/po/zh_CN/plasma_applet_org.kde.plasma.mobile.homescreen.folio.po
+@@ -280,3 +280,13 @@ msgstr "壁纸"
+ #, kde-format
+ msgid "Settings"
+ msgstr "设置"
++
++#: qml/settings/ConfigGeneral.qml
++#, kde-format
++msgid "Swap rows and columns in landscape"
++msgstr "横屏时互换行列"
++
++#: qml/settings/ConfigGeneral.qml
++#, kde-format
++msgid "Off: widgets keep their shape and app names are hidden in landscape."
++msgstr "关闭时，横屏下小组件保持原有形状，应用名称隐藏。"

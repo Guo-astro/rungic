@@ -961,3 +961,8 @@ msgstr "正在重新检查，Agent 也会重新整理卡片。"
 msgctxt "@info the agent has not chosen the cards yet"
 msgid "Not sorted yet"
 msgstr "尚未整理"
+
+#: qml/AgentWidget.qml
+msgctxt "@info tokens used: %1 a compact number"
+msgid "Today %1"
+msgstr "今天 %1"

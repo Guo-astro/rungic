@@ -35,6 +35,9 @@ Item {
         return chosen || (live ? usage.primary : providers[0]) || providers[0] || ({})
     }
     readonly property bool compact: width < 250
+    // Flat (a wide, short cell: a 4x1 widget on the home screen in landscape, docs/50): one row, the
+    // agent then its limits beside it, no reset notes.
+    readonly property bool flat: height < 90
     readonly property var limits: {
         const list = (provider.limits || []).slice().sort((a, b) => (a.windowMinutes || 0) - (b.windowMinutes || 0))
         return compact ? list.sort((a, b) => b.usedPercent - a.usedPercent).slice(0, 1) : list.slice(0, 2)
@@ -83,10 +86,12 @@ Item {
         border.color: tap.pressed && !chip.hovered ? Theme.fill2 : Theme.line
         ColumnLayout {
             anchors.fill: parent
-            anchors.leftMargin: 16; anchors.rightMargin: 16; anchors.topMargin: 12; anchors.bottomMargin: 12
+            anchors.leftMargin: 16; anchors.rightMargin: 16
+            anchors.topMargin: widget.flat ? 6 : 12; anchors.bottomMargin: widget.flat ? 6 : 12
             spacing: 0
             RowLayout {
                 Layout.fillWidth: true
+                Layout.fillHeight: widget.flat
                 Layout.preferredHeight: 22
                 spacing: 8
                 AgentMark {
@@ -101,12 +106,65 @@ Item {
                 }
                 BusyRing { visible: widget.provider.status === "working" || widget.provider.status === "connecting"; implicitWidth: 12; implicitHeight: 12 }
                 Text {
-                    visible: !widget.compact && widget.statusText !== ""
+                    visible: !widget.compact && !widget.flat && widget.statusText !== ""
                     text: widget.statusText
                     font.family: Theme.fontFamily; font.pixelSize: 13
                     color: widget.provider.status === "working" ? Theme.text : Theme.dim
                 }
-                Item { Layout.fillWidth: true }
+                Item { Layout.fillWidth: true; Layout.minimumWidth: widget.flat ? 8 : 0 }
+                // Flat: the limits in the same row, each its name, percentage and bar.
+                Repeater {
+                    model: widget.flat && widget.body === "meters" ? widget.limits : []
+                    ColumnLayout {
+                        required property var modelData
+                        readonly property bool near: modelData.usedPercent >= 80
+                        readonly property bool full: modelData.usedPercent >= 100
+                        Layout.preferredWidth: 130
+                        Layout.maximumWidth: 160
+                        spacing: 3
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 6
+                            Text {
+                                Layout.fillWidth: true
+                                text: UsageText.shortWindow(l10n, modelData)
+                                font.family: Theme.fontFamily; font.pixelSize: 12
+                                color: Theme.dim
+                                elide: Text.ElideRight
+                            }
+                            Text {
+                                text: widget.meterValue(modelData)
+                                font.family: Theme.fontFamily; font.pixelSize: 13; font.weight: Font.DemiBold; font.features: { "tnum": 1 }
+                                color: widget.stale ? Theme.dim : full ? Theme.negative : Theme.text
+                            }
+                        }
+                        Rectangle {
+                            Layout.fillWidth: true
+                            implicitHeight: 4
+                            radius: 2
+                            color: Theme.fill2
+                            Rectangle {
+                                width: parent.width * Math.max(0, Math.min(1, modelData.usedPercent / 100))
+                                height: parent.height
+                                radius: 2
+                                color: widget.stale ? Theme.faint : full ? Theme.negative : near ? Theme.text : Theme.dim
+                            }
+                        }
+                    }
+                }
+                // Flat: tokens, or the message, as one dim line.
+                Text {
+                    visible: widget.flat && widget.body !== "meters" && text !== ""
+                    Layout.maximumWidth: card.width * 0.55
+                    text: widget.body === "stats"
+                          ? l10n.i18nc("@info tokens used: %1 a compact number", "Today %1", UsageText.compact(l10n, widget.tokens.today != null ? widget.tokens.today : widget.tokens.device))
+                          : ({ none: l10n.i18n("No agent is connected yet."), signin: l10n.i18n("Sign in to see usage and limits."),
+                               unreachable: l10n.i18nc("@info %1 an agent's name", "Can’t reach %1 right now.", widget.provider.name || ""),
+                               norecords: l10n.i18n("No usage recorded yet.") })[widget.body] || ""
+                    font.family: Theme.fontFamily; font.pixelSize: 13
+                    color: Theme.dim
+                    elide: Text.ElideRight
+                }
                 Rectangle {
                     id: chip
                     property bool hovered: false
@@ -132,16 +190,16 @@ Item {
                     MouseArea { id: chipTap; anchors.fill: parent; anchors.margins: -9; onClicked: widget.chosenId = widget.nextProvider.id }
                 }
                 Text {
-                    visible: widget.rightText !== ""
+                    visible: widget.rightText !== "" && !widget.flat
                     text: widget.rightText
                     font.family: Theme.fontFamily; font.pixelSize: 12; font.features: { "tnum": 1 }
                     color: Theme.dim
                 }
             }
-            Item { Layout.fillHeight: true }
+            Item { Layout.fillHeight: true; visible: !widget.flat }
             // Limit windows side by side (one in the compact size).
             RowLayout {
-                visible: widget.body === "meters"
+                visible: widget.body === "meters" && !widget.flat
                 Layout.fillWidth: true
                 spacing: 16
                 Repeater {
@@ -193,7 +251,7 @@ Item {
             }
             // Token counts where there are no limits (an API key, an agent that reports none).
             RowLayout {
-                visible: widget.body === "stats"
+                visible: widget.body === "stats" && !widget.flat
                 Layout.fillWidth: true
                 spacing: 16
                 Repeater {
@@ -215,7 +273,7 @@ Item {
                 }
             }
             ColumnLayout {
-                visible: ["none", "signin", "unreachable", "norecords"].includes(widget.body)
+                visible: ["none", "signin", "unreachable", "norecords"].includes(widget.body) && !widget.flat
                 Layout.fillWidth: true
                 spacing: 2
                 Text {
@@ -239,7 +297,7 @@ Item {
             }
             // First load: the final layout in outline, so nothing jumps when data arrives.
             RowLayout {
-                visible: widget.body === "skeleton"
+                visible: widget.body === "skeleton" && !widget.flat
                 Layout.fillWidth: true
                 spacing: 16
                 Repeater {

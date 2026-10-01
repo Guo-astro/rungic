@@ -13,7 +13,7 @@ ApplicationWindow {
     property string initialTheme: "system"
     property string section: ""
     width: 4 * 380 + 5 * 20
-    height: 2480
+    height: 2900
     visible: true
     color: Theme.dark ? "#1e2822" : "#6d8a74"
     Component.onCompleted: Theme.mode = initialTheme
@@ -82,15 +82,19 @@ ApplicationWindow {
                     { label: "first run", state: "firstrun", briefing: {} },
                     { label: "offline", state: "offline", briefing: {} },
                     { label: "size 4×2", cards: [gallery.crashes, gallery.video], height: 220 },
-                    { label: "size 4×4", cards: [gallery.longest, gallery.video], height: 440 }
+                    { label: "size 4×4", cards: [gallery.longest, gallery.video], height: 440 },
+                    // The home screen in landscape (docs/50): the 4×3 card wide and low.
+                    { label: "landscape 4×3", cards: [gallery.crashes, gallery.video, gallery.fix], width: 700, height: 170 },
+                    { label: "landscape 4×3, longest text", cards: [gallery.longest, gallery.video], width: 700, height: 170 }
                 ]
                 ColumnLayout {
                     required property var modelData
                     Layout.alignment: Qt.AlignTop
+                    Layout.columnSpan: (modelData.width || 340) > 340 ? 2 : 1
                     spacing: 8
                     Label { text: modelData.label; color: "white"; font.pixelSize: 13; font.weight: Font.DemiBold }
                     SuggestionsWidget {
-                        Layout.preferredWidth: 340
+                        Layout.preferredWidth: modelData.width || 340
                         Layout.preferredHeight: modelData.height || 330
                         Layout.leftMargin: 20; Layout.rightMargin: 20
                         forcedState: modelData.state || ""
@@ -125,16 +129,22 @@ ApplicationWindow {
                     { label: "usage · 2×1", providers: [gallery.codex()], width: 160 },
                     { label: "usage · 2×1 used up", providers: [gallery.codex({ limits: [{ windowMinutes: 300, usedPercent: 100, resetsAt: gallery.now + 2520 }] })], width: 160 },
                     { label: "usage · 2×1 API key", providers: [gallery.claude({ account: { kind: "api-key" }, limits: [], tokens: { today: 67421, device: 2300000 } })], width: 160 },
-                    { label: "usage · 2×1 two agents", providers: [gallery.codex(), gallery.claude()], width: 160 }
+                    { label: "usage · 2×1 two agents", providers: [gallery.codex(), gallery.claude()], width: 160 },
+                    // The home screen in landscape (docs/50): the 4×1 bar wide and flat.
+                    { label: "usage · landscape 4×1", providers: [gallery.codex()], width: 700, height: 60 },
+                    { label: "usage · landscape 4×1 used up", providers: [gallery.codex({ limits: [{ windowMinutes: 300, usedPercent: 100, resetsAt: gallery.now + 2520 }, { windowMinutes: 10080, usedPercent: 70, resetsAt: gallery.now + 3 * 86400 }] })], width: 700, height: 60 },
+                    { label: "usage · landscape 4×1 API key", providers: [gallery.claude({ account: { kind: "api-key" }, limits: [], tokens: { today: 67421, device: 2300000 } })], width: 700, height: 60 },
+                    { label: "usage · landscape 4×1 signed out", providers: [gallery.codex({ status: "signed-out", limits: [], tokens: {}, account: { kind: "none" } })], width: 700, height: 60 }
                 ]
                 ColumnLayout {
                     required property var modelData
                     Layout.alignment: Qt.AlignTop
+                    Layout.columnSpan: (modelData.width || 340) > 380 ? 2 : 1
                     spacing: 8
                     Label { text: modelData.label; color: "white"; font.pixelSize: 13; font.weight: Font.DemiBold }
                     AgentWidget {
                         Layout.preferredWidth: modelData.width || 340
-                        Layout.preferredHeight: 100
+                        Layout.preferredHeight: modelData.height || 100
                         Layout.leftMargin: 20
                         forcedProviders: modelData.providers
                         forcedNow: gallery.now

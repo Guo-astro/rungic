@@ -84,9 +84,12 @@ Rectangle {
         return "card"
     }
 
+    // Low (a wide, short cell: the home screen in landscape, docs/50): one line of title, tighter edges.
+    readonly property bool low: height < 200
+
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 16
+        anchors.margins: face.low ? 12 : 16
         spacing: 0
         RowLayout {
             Layout.fillWidth: true
@@ -115,7 +118,7 @@ Rectangle {
         }
         RowLayout {
             Layout.fillWidth: true
-            Layout.topMargin: 14
+            Layout.topMargin: face.low ? 8 : 14
             spacing: 6
             BusyRing { visible: face.kindBusy; implicitWidth: 12; implicitHeight: 12; ring: face.kindColor }
             Rectangle { visible: face.kindDot; implicitWidth: 6; implicitHeight: 6; radius: 3; color: face.kindColor }
@@ -136,7 +139,7 @@ Rectangle {
             lineHeight: 25; lineHeightMode: Text.FixedHeight
             color: Theme.text
             wrapMode: Text.Wrap
-            maximumLineCount: 2
+            maximumLineCount: face.low ? 1 : 2
             elide: Text.ElideRight
         }
         Text {
