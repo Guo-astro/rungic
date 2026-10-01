@@ -78,3 +78,51 @@ msgstr "把{app}切到助理屏"
 #, python-brace-format
 msgid "Open {app}"
 msgstr "打开{app}"
+
+#: rungic_cua/team.py
+msgid "Write {name}"
+msgstr "编写 {name}"
+
+#: rungic_cua/team.py
+msgid "Read {name}"
+msgstr "查看 {name}"
+
+#: rungic_cua/team.py
+msgid "Run {name}"
+msgstr "运行 {name}"
+
+#: rungic_cua/team.py
+msgid "Run a script"
+msgstr "运行脚本"
+
+#: rungic_cua/team.py
+msgid "Make the folder {name}"
+msgstr "建立文件夹 {name}"
+
+#: rungic_cua/team.py
+msgid "Look at the files"
+msgstr "查看文件"
+
+#: rungic_cua/team.py
+msgid "Process the audio with {tool}"
+msgstr "用 {tool} 处理音频"
+
+#: rungic_cua/team.py
+msgid "Copy {name}"
+msgstr "复制 {name}"
+
+#: rungic_cua/team.py
+msgid "an app"
+msgstr "应用"
+
+#: rungic_cua/team.py
+msgid "Look at the windows"
+msgstr "查看窗口"
+
+#: rungic_cua/team.py
+msgid "Report to the lead"
+msgstr "向组长汇报"
+
+#: rungic_cua/team.py
+msgid "Start a team member"
+msgstr "派出成员"

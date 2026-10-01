@@ -9,14 +9,14 @@ from pathlib import Path
 from unittest import mock
 
 root = Path(__file__).resolve().parents[2]
-sys.modules.setdefault('gi', types.ModuleType('gi'))
 repository = types.ModuleType('gi.repository')
 repository.Gio = repository.GLib = mock.MagicMock()
-sys.modules['gi.repository'] = repository
-sys.modules['rungic_host_watch'] = types.ModuleType('rungic_host_watch')
-spec = importlib.util.spec_from_file_location('audio_follow', root / 'shared/media/audio-follow.py')
-follow = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(follow)
+# Stand-ins only while the module loads: other tests use the real gi.
+with mock.patch.dict(sys.modules, {'gi': types.ModuleType('gi'), 'gi.repository': repository,
+                                   'rungic_host_watch': types.ModuleType('rungic_host_watch')}):
+    spec = importlib.util.spec_from_file_location('audio_follow', root / 'shared/media/audio-follow.py')
+    follow = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(follow)
 
 
 def stream(index, sink='android', pid=0, module=''):

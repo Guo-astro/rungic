@@ -824,7 +824,7 @@ final class CastControls {
         LinearLayout chips = new LinearLayout(context);
         for (int slot : director.members()) {
             boolean on = slot == director.focus();
-            String name = director.label(slot);
+            String name = director.screenName(slot);
             TextView chip = text(name, 14, on ? Color.WHITE : 0xFFD0D5D9, on);
             chip.setGravity(Gravity.CENTER);
             chip.setMinHeight(dp(44));

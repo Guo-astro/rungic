@@ -749,3 +749,43 @@ Agent 2  KWin#2 ──── │ 显示源 agent-2               │  电视 / �
 - **依据**：
   - 单一决策者：与第 3 节 Cognition、Anthropic 的经验一致；
   - 轮数：多 Agent 辩论研究中，讨论轮数增加后收益很快变平，成本随轮数增长。本轮没有在本机测量这一轮评审的 token 和用时，留到下次实测。
+
+
+### 13. 实时看到团队在做什么（2026-10-02）
+
+**用户反馈**：
+- 评审环节看不到；
+- 状态一直显示“评审中”；
+- 以前每个浮窗都显示“正在画什么”，合成导播台后没了；
+- 希望干活时的“碎碎念”随时可见，全屏的黑底改成模糊壁纸。
+
+设计稿：https://claude.ai/artifact/AitnMPUxZcHhNrQxR52ppA，用户认可后按它实现。
+
+**调研**（子代理查了 Claude Code agent teams、Codex 子 Agent、AutoGen Studio、CrewAI、LangGraph Studio、OpenAI Agents SDK、Devin、OpenHands、Copilot、Magentic-UI 等）：
+- 通常做法：每个 Agent 一个状态标签，原文按需展开，一份共享计划，只在“需要你”“完成”“失败”时打扰人；
+- 已知的坑：模型不一定会主动汇报，也可能刷屏，所以状态要由系统根据元数据自己生成。
+
+**本机限制**：Codex 里 Agent 之间的消息（派活、评审回复）在会话记录里是 `encrypted_content`，读不到原文；每次工具调用倒是明文。
+
+**做法**：
+1. **团队日志 `team_post`**（`rungic_cua/team.py`）：发言类型有 brief、review、decision、progress、blocked、question、done。
+   - 写入 `<项目>/.team/journal.jsonl`；
+   - 成员的发言还会写进 `team-wsN.json`，并通过 `{"op":"director","member":…}` 发给 APK；
+   - 成员结束时没说结果，自动补一条 ended。
+2. **碎碎念**（`team.Murmur`）：每个线程的桌面工具进程读取自己的 `~/.codex/sessions/…/rollout-*-<线程>.jsonl`，把每次工具调用翻成一句短话（按桌面语言翻译），用 `activity.report` 写到格子上，最多每 1.5 秒一句。
+   - 命令行：编写、查看、运行某个文件，用 ffmpeg 处理音频等；
+   - `desktop_goal` 直接用目标原文；
+   - 和组长沟通：向组长汇报。
+3. **状态自动推断**：
+   - review 之后只要有桌面操作或碎碎念，就算“制作中”（桌面工具端 `at_work()` 和 APK 端 `stateKind()` 两处都会推断）；
+   - 发过言但工作区还没启动的成员也进入导播台，显示占位格：角色首字加“还没打开应用”。
+4. **画法**（`DirectorArt`，电视和手机全屏共用）：
+   - 左上角状态胶囊：绿表示干活，灰表示等待，琥珀表示要人回答，红表示失败；
+   - 底部深色渐变条：小格显示一行，焦点显示三行滚动字幕；
+   - 里程碑带标签，显示 8 秒：简报、评审、决定、进展用蓝色，问题、受阻用琥珀色，完成用绿色；
+   - 受阻时焦点框变成琥珀色；放大级别的细条只画状态点。
+5. **全屏和电视的背景**：
+   - Linux 端由 `rungic-agent-screen background` 把壁纸做模糊、压暗 52%，生成 960×540 的 JPEG，经平台桥发给 APK。共用目录不归容器写，所以走平台桥；
+   - APK 按呈现窗口的大小和方向裁切、旋转后交给宿主（`setCastBackground`）；
+   - 宿主把它画进 SurfaceView 自己的缓冲，各个格子图层叠在上面。
+6. **测试**：路由、碎碎念措辞、日志、声音跟随都有单元测试，共 347 项。路由测试要把 `team.Murmur` 换成空实现，否则后台线程会让同一进程里后面的 Qt 测试崩溃。

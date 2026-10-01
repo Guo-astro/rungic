@@ -14,8 +14,10 @@ import pytest  # noqa: E402
 
 @pytest.fixture(autouse=True)
 def workspace_up():
-    """The workspace counts as running (workspace.ensure would start it)."""
-    with mock.patch.object(router.workspace, 'ensure', return_value=True):
+    """The workspace counts as running (workspace.ensure would start it); no murmur thread follows
+    a session log (team.Murmur)."""
+    with mock.patch.object(router.workspace, 'ensure', return_value=True), \
+            mock.patch.object(router.team, 'Murmur', mock.MagicMock()):
         yield
 
 
@@ -231,3 +233,22 @@ def test_the_leads_post_has_no_tile(host, tmp_path, monkeypatch):
                PARENT_META)
     entry = json.loads((project / '.team/journal.jsonl').read_text())
     assert entry['kind'] == 'decision' and 'workspace' not in entry
+
+
+# ---- the murmur: tool calls as a few words (team.describe_call) ------------------------------------
+def test_shell_commands_as_words():
+    d = router.team.describe_command
+    assert d("cat > /home/u/Projects/card/art/draw_card.py <<'PY'\nprint(1)\nPY") == 'Write draw_card.py'
+    assert d('cat /home/u/Projects/card/BRIEF.md') == 'Read BRIEF.md'
+    assert d('python3 /home/u/Projects/card/art/draw_card.py --check') == 'Run draw_card.py'
+    assert d('rungic-workspace-env 2 krita --help') == 'Run krita'
+    assert d("python3 - <<'PY'\nx\nPY") == 'Run a script'
+    assert d('LC_ALL=C ffprobe -v error chime.wav') == 'Process the audio with ffprobe'
+
+
+def test_code_mode_calls_as_words():
+    code = ('text(await tools.exec_command({cmd:"cat /p/BRIEF.md"})); '
+            'text(await tools.mcp__rungic_desktop__desktop_goal({goal:"取消 Recover Files 恢复对话框"}));')
+    assert router.team.describe_call('exec', code) == ['Read BRIEF.md', '取消 Recover Files 恢复对话框']
+    assert router.team.describe_call('send_message', '{}') == ['Report to the lead']
+    assert router.team.describe_call('wait_agent', '{}') == []

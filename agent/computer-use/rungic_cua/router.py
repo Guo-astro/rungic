@@ -177,10 +177,13 @@ class Router:
         self.subagent: dict | None = None    # a sub-agent's thread: {'thread', 'parent'}
         self.claimed: int | None = None      # the workspace it holds
         self.member: dict | None = None      # its last team_post: role, kind, project (team.py)
+        self.thread: str = ''                # its Codex thread (the murmur follows its log)
+        self.murmur = None
 
     def caller(self, meta: dict | None) -> None:
         """Who calls, from the first call's _meta (Codex 0.159: x-codex-turn-metadata)."""
         turn = (meta or {}).get('x-codex-turn-metadata') or {}
+        self.thread = self.thread or turn.get('thread_id') or (meta or {}).get('threadId') or ''
         if self.subagent is None and turn.get('thread_source') == 'subagent':
             self.subagent = {'thread': turn.get('thread_id') or (meta or {}).get('threadId'),
                              'parent': turn.get('parent_thread_id')}
@@ -244,6 +247,7 @@ class Router:
     def call(self, name: str, arguments: dict, meta: dict | None = None) -> dict:
         """A tools/call result: from the child of the session the agent works in now."""
         self.caller(meta)
+        self.follow_murmur()
         if name == WHERE_TOOL['name']:
             if arguments.get('target'):
                 self.override = str(arguments['target'])
@@ -267,6 +271,8 @@ class Router:
         target, why = self.where()
         if target == 'workspace':
             workspace.thaw(self.slot)
+            self.at_work()
+            self.follow_murmur()
         result = self.child(target).request('tools/call', {'name': name, 'arguments': arguments})
         if target != self.last:
             # The agent learns where it works whenever that changes.
@@ -275,6 +281,18 @@ class Router:
                                             {'type': 'text', 'text': json.dumps(note, ensure_ascii=False)}]}
             self.last = target
         return result
+
+    def follow_murmur(self) -> None:
+        """Once its workspace is known: say this thread's tool calls on its tile (team.Murmur)."""
+        if self.murmur or not self.thread or (self.subagent and self.claimed is None):
+            return
+        self.murmur = team.Murmur(self.thread, self.claimed if self.subagent else self.home)
+
+    def at_work(self) -> None:
+        """A member acting after its review is at work: its tile says so without its words."""
+        if self.subagent and self.member and self.member.get('kind') in ('review', 'brief') and self.claimed:
+            self.member = {**self.member, 'kind': 'progress'}
+            team.update_state({'role': self.member.get('role', ''), 'kind': 'progress', 'workspace': self.claimed})
 
     def team_post(self, arguments: dict) -> dict:
         """team_post (team.py): a member's post goes on its own workspace's tile, the lead's to the journal."""
@@ -290,6 +308,8 @@ class Router:
         return {'content': [{'type': 'text', 'text': json.dumps(data, ensure_ascii=False)}]}
 
     def close(self) -> None:
+        if self.murmur:
+            self.murmur.close()
         for child in self.children.values():
             child.close()
         # A member that ends without saying how: "ended" for it, so its tile does not stay at work.

@@ -168,4 +168,16 @@
     <string name="team_done">done</string>
     <string name="team_failed">failed</string>
     <string name="team_ended">ended</string>
+    <string name="team_waiting">waiting</string>
+    <string name="team_briefing">writing the brief</string>
+    <string name="team_deciding">deciding</string>
+    <string name="tile_not_open">App not open yet</string>
+    <string name="tag_brief">Brief</string>
+    <string name="tag_review">Review</string>
+    <string name="tag_decision">Decision</string>
+    <string name="tag_progress">Progress</string>
+    <string name="tag_blocked">Blocked</string>
+    <string name="tag_question">Question</string>
+    <string name="tag_done">Done</string>
+    <string name="tag_failed">Failed</string>
 </resources>

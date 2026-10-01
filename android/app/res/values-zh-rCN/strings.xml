@@ -158,4 +158,16 @@
     <string name="team_done">完成</string>
     <string name="team_failed">失败</string>
     <string name="team_ended">已结束</string>
+    <string name="team_waiting">等待</string>
+    <string name="team_briefing">写简报</string>
+    <string name="team_deciding">定稿中</string>
+    <string name="tile_not_open">还没打开应用</string>
+    <string name="tag_brief">简报</string>
+    <string name="tag_review">评审</string>
+    <string name="tag_decision">决定</string>
+    <string name="tag_progress">进展</string>
+    <string name="tag_blocked">受阻</string>
+    <string name="tag_question">问题</string>
+    <string name="tag_done">完成</string>
+    <string name="tag_failed">失败</string>
 </resources>

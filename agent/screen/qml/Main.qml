@@ -307,6 +307,16 @@ Window {
                     nodeId: tile.modelData.nodeId
                     visible: nodeId > 0
                 }
+                Text {  // a member whose workspace is not open yet (docs/58): its name for now
+                    anchors.centerIn: parent
+                    visible: tile.modelData.nodeId === 0
+                    text: root.screenName(tile.modelData, !tile.focused)
+                    color: Qt.rgba(1, 1, 1, 0.7)
+                    font.pixelSize: tile.focused ? 16 : 9
+                    width: parent.width - 8
+                    horizontalAlignment: Text.AlignHCenter
+                    elide: Text.ElideRight
+                }
                 Rectangle {  // its number
                     visible: !tile.focused
                     anchors { left: parent.left; bottom: parent.bottom; margins: 3 }

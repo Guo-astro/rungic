@@ -53,6 +53,8 @@ public final class NativeBridge {
     public static native int liveSources();
     /** Move the director's tile of `slot` (fractions) without a new frame: its spring (docs/58). */
     public static native void placeTile(int slot, float x, float y, float width, float height);
+    /** The picture under the director's tiles: RGBA_8888-ordered pixels of the presenter window's size, or none (black). */
+    public static native void setCastBackground(int[] pixels, int width, int height);
     /** Whether a Wayland client (KWin, for an idle-inhibiting window) inhibits idle (docs/72). */
     public static native boolean idleInhibited();
     /** eventfd that becomes readable when idleInhibited() changes; the reader drains it. */

@@ -154,6 +154,62 @@ def status():
     return result
 
 
+
+
+def wallpaper():
+    """The phone's wallpaper file: the mobile shell's `Image=`, else its look-and-feel's default
+    (Plasma's "Next"); a wallpaper package gives its widest landscape picture."""
+    image = ''
+    try:
+        config = open(os.path.expanduser('~/.config/plasma-org.kde.plasma.mobileshell-appletsrc')).read()
+        image = next((line.split('=', 1)[1].strip() for line in config.splitlines() if line.startswith('Image=')), '')
+    except OSError:
+        pass
+    image = image.removeprefix('file://') or 'Next'
+    if os.path.isfile(image):
+        return image
+    for base in (os.path.expanduser('~/.local/share/wallpapers'), '/usr/share/wallpapers'):
+        folder = os.path.join(image if image.startswith('/') else os.path.join(base, image), 'contents', 'images')
+        try:
+            names = os.listdir(folder)
+        except OSError:
+            continue
+        sizes = []
+        for name in names:
+            try:
+                w, h = (int(v) for v in name.split('.')[0].split('x'))
+            except ValueError:
+                continue
+            sizes.append((w >= h, w, name))
+        if sizes:
+            return os.path.join(folder, max(sizes)[2])
+    return ''
+
+
+def background():
+    """The director's background (docs/58) to the app, which draws it under the tiles on the TV and
+    fullscreen: the wallpaper, blurred and dimmed, 960x540 (blurred, more is not seen), sent over
+    the platform bridge (the folder the app shares is not the container's to write)."""
+    import base64
+    import io
+    source = wallpaper()
+    if not source:
+        return {'background': None}
+    try:
+        from PIL import Image, ImageFilter
+        image = Image.open(source).convert('RGB')
+        image = image.resize((480, round(480 * image.height / image.width)), Image.BILINEAR)
+        top = max(0, (image.height - 270) // 2)
+        image = image.crop((0, top, 480, top + 270)).filter(ImageFilter.GaussianBlur(10))
+        image = Image.eval(image, lambda v: int(v * 0.48 + 8 * 0.52))   # the design's 52 % dark scrim
+        data = io.BytesIO()
+        image.resize((960, 540), Image.BICUBIC).save(data, 'JPEG', quality=86)
+    except (OSError, ImportError, ValueError) as error:
+        return {'background': None, 'error': str(error)}
+    sent = bridge({'op': 'director', 'background': base64.b64encode(data.getvalue()).decode()})
+    return {'background': len(data.getvalue()), 'from': source, 'sent': 'error' not in sent}
+
+
 def start_window(slot=None):
     """One floating window per screen (per workspace for the assistant's): callers at the same
     moment (the quick setting's poll, the agent's tools) take turns, and the second finds the first's
@@ -169,6 +225,7 @@ def start_window(slot=None):
         others = [] if DESKTOP or not slot else [n for n in windows_shown() if n != slot]
         if others:
             # A second workspace out: one director window for them all (docs/58) instead of a window each.
+            background()
             for n in others:
                 subprocess.run(['pkill', '-f', f'^{WINDOW} --workspace {n}$'], capture_output=True)
             subprocess.Popen(['systemd-run', '--user', '--scope', '--collect', '--quiet', '--slice=app.slice',
@@ -225,6 +282,7 @@ def on():
         raise SystemExit(json.dumps({'error': 'the host offers no workspaces (APK 2.14 or later)'}))
     workspace_up(slot)
     thaw(slot)
+    background()
     bridge({'op': OP, 'workspace': slot, 'enabled': True})
     start_window(slot)
     return status()
@@ -417,7 +475,7 @@ def main():
         command = 'off' if bridge({'op': OP})['enabled'] else 'on'
     actions = {'on': on, 'off': off, 'close': close, 'dismiss': dismiss, 'notify-unsaved': notify_unsaved,
                'status': status, 'ensure': ensure, 'tv': tv, 'notv': lambda: tv(False),
-               'workspace-stopped': workspace_stopped}
+               'workspace-stopped': workspace_stopped, 'background': background}
     if command not in actions:
         raise SystemExit(__doc__)
     print(json.dumps(actions[command](), ensure_ascii=False))

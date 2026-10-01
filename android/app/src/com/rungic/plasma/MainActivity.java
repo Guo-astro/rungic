@@ -582,6 +582,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         if (request.has("focus")) director.setFocus(request.getInt("focus"));
         if (request.has("step")) director.step(request.getInt("step"));
         if (request.has("level")) director.setLevel(request.getInt("level"));
+        if (request.has("background")) director.setBackground(android.util.Base64.decode(request.getString("background"), android.util.Base64.DEFAULT));
         if (request.has("member")) {
             org.json.JSONObject m = request.getJSONObject("member");
             director.setMember(m.getInt("slot"), m.optString("role"), m.optString("kind"), m.optString("text"));
@@ -631,6 +632,8 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
      * it only while it is the one bound, so the other is never cut off.
      */
     void bindPresenter(String owner, android.view.Surface surface, int width, int height, int refreshMhz, int rotation) {
+        // The window's base, under the director's tiles: the wallpaper, blurred (docs/58).
+        director.prepareBackground(width, height, rotation);
         // Its source first (the desktop, or a workspace), so the host makes no output for the other.
         if ("tv".equals(owner)) NativeBridge.presentWorkspace(director.tvSource());
         else if (agentFullscreen.directing()) NativeBridge.presentWorkspace(director.focus());

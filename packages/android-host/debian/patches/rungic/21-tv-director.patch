@@ -10,15 +10,15 @@ X-Rungic-Status: Inappropriate; Android host integration
 X-Rungic-Tests: L1:android-cross-build (host); runtime: docs/58 director acceptance
 X-Rungic-Docs: docs/58; docs/research/91
 ---
- src/android/backend/smithay_backend.rs | 68 ++++++++++++++++++++++++++++++++--
- src/android/backend/wayland/seat.rs    | 45 +++++++++++++++++-----
- src/android/bridge_surface.rs          | 43 +++++++++++++++++++++
- src/android/command_channel.rs         |  4 ++
- src/compositor.rs                      | 38 ++++++++++++++++---
- 5 files changed, 180 insertions(+), 18 deletions(-)
+ src/android/backend/smithay_backend.rs | 126 ++++++++++++++++++++++++++++-----
+ src/android/backend/wayland/seat.rs    |  45 +++++++++---
+ src/android/bridge_surface.rs          |  69 ++++++++++++++++++
+ src/android/command_channel.rs         |   6 ++
+ src/compositor.rs                      |  41 +++++++++--
+ 5 files changed, 254 insertions(+), 33 deletions(-)
 
 diff --git a/src/android/backend/smithay_backend.rs b/src/android/backend/smithay_backend.rs
-index 1f37814..013faf8 100644
+index 1f37814..12db2c5 100644
 --- a/src/android/backend/smithay_backend.rs
 +++ b/src/android/backend/smithay_backend.rs
 @@ -686,7 +686,7 @@ fn try_zero_copy(state: &mut AndroidSmithayState, items: &mut [RenderItem]) -> b
@@ -73,7 +73,74 @@ index 1f37814..013faf8 100644
  }
  
  impl Drop for CastWindow {
-@@ -736,7 +772,7 @@ pub fn bind_cast_window(state: &mut AndroidSmithayState, window: *mut ndk_sys::A
+@@ -712,31 +748,59 @@ impl Drop for CastWindow {
+     }
+ }
+ 
+-/// Take ownership of the cast display's window (acquired by ANativeWindow_fromSurface).
+-pub fn bind_cast_window(state: &mut AndroidSmithayState, window: *mut ndk_sys::ANativeWindow, size: (i32, i32), rotation: i32) -> bool {
+-    state.cast = None;
+-    if window.is_null() || size.0 <= 0 || size.1 <= 0 {
+-        return false;
+-    }
++/// The picture under the director's tiles (docs/58): the user's wallpaper, blurred and dimmed by
++/// the app, exactly the window's size and orientation, pixels in RGBA_8888 memory order; black
++/// without one.
++pub static CAST_BACKGROUND: std::sync::Mutex<Option<(Vec<u32>, i32, i32)>> = std::sync::Mutex::new(None);
++
++/// Paint the window's own buffer (under the zero-copy layers): the background when it fits the
++/// window, else opaque black.
++fn paint_cast_base(window: *mut ndk_sys::ANativeWindow, size: (i32, i32)) {
+     unsafe {
+-        // SurfaceFlinger crops the zero-copy child layer to its parent's buffer, so
+-        // the SurfaceView needs one frame of the full size first (cf. the rotation fix).
+         ndk_sys::ANativeWindow_setBuffersGeometry(window, size.0, size.1, 1 /* RGBA_8888 */);
+         let mut buffer: ndk_sys::ANativeWindow_Buffer = std::mem::zeroed();
+-        if ndk_sys::ANativeWindow_lock(window, &mut buffer, std::ptr::null_mut()) == 0 {
+-            let rows = buffer.height.max(0) as usize;
+-            let bytes = buffer.stride.max(0) as usize * 4;
+-            std::ptr::write_bytes(buffer.bits as *mut u8, 0, rows * bytes);
++        if ndk_sys::ANativeWindow_lock(window, &mut buffer, std::ptr::null_mut()) != 0 {
++            return;
++        }
++        let rows = buffer.height.max(0) as usize;
++        let stride = buffer.stride.max(0) as usize;
++        let pixels = std::slice::from_raw_parts_mut(buffer.bits as *mut u32, rows * stride);
++        let background = CAST_BACKGROUND.lock().ok();
++        match background.as_ref().and_then(|b| b.as_ref()).filter(|(_, w, h)| (*w, *h) == size) {
++            Some((image, w, _)) => {
++                let width = (*w as usize).min(buffer.width.max(0) as usize);
++                for row in 0..rows {
++                    pixels[row * stride..row * stride + width].copy_from_slice(&image[row * *w as usize..row * *w as usize + width]);
++                }
++            }
+             // Opaque black: alpha bytes to 255.
+-            let pixels = std::slice::from_raw_parts_mut(buffer.bits as *mut u32, rows * buffer.stride.max(0) as usize);
+-            pixels.fill(0xff00_0000);
+-            ndk_sys::ANativeWindow_unlockAndPost(window);
++            None => pixels.fill(0xff00_0000),
+         }
++        ndk_sys::ANativeWindow_unlockAndPost(window);
++    }
++}
++
++/// Paint the bound cast window's base again (a new background).
++pub fn repaint_cast_base(state: &mut AndroidSmithayState) {
++    if let Some(cast) = state.cast.as_ref() {
++        paint_cast_base(cast.window, cast.size);
++    }
++}
++
++/// Take ownership of the cast display's window (acquired by ANativeWindow_fromSurface).
++pub fn bind_cast_window(state: &mut AndroidSmithayState, window: *mut ndk_sys::ANativeWindow, size: (i32, i32), rotation: i32) -> bool {
++    state.cast = None;
++    if window.is_null() || size.0 <= 0 || size.1 <= 0 {
++        return false;
+     }
++    // SurfaceFlinger crops the zero-copy child layer to its parent's buffer, so the SurfaceView
++    // needs one frame of the full size first (cf. the rotation fix): its base, black or the
++    // director's background.
++    paint_cast_base(window, size);
      match crate::android::surface_control::Presenter::new(window) {
          Some(presenter) => {
              log::info!("cast: window bound {}x{} turned {}", size.0, size.1, rotation);
@@ -82,7 +149,7 @@ index 1f37814..013faf8 100644
              true
          }
          None => {
-@@ -757,7 +793,9 @@ pub fn release_cast_window(state: &mut AndroidSmithayState) {
+@@ -757,7 +821,9 @@ pub fn release_cast_window(state: &mut AndroidSmithayState) {
  /// dmabuf, not a host-allocated buffer, no buffer hold.
  pub static CAST_SKIPPED: [std::sync::atomic::AtomicU64; 4] = [const { std::sync::atomic::AtomicU64::new(0) }; 4];
  
@@ -93,7 +160,7 @@ index 1f37814..013faf8 100644
      use std::sync::atomic::Ordering::Relaxed;
      let Some(cast) = state.cast.as_mut() else { CAST_SKIPPED[0].fetch_add(1, Relaxed); return false };
      let RenderItem::DmaBuf { ref fd, fourcc, width, height, ref mut hold, ref acquire, ref mut release, .. } = item else {
-@@ -770,7 +808,29 @@ pub fn present_cast(state: &mut AndroidSmithayState, mut item: RenderItem) -> bo
+@@ -770,7 +836,29 @@ pub fn present_cast(state: &mut AndroidSmithayState, mut item: RenderItem) -> bo
      };
      let Some(hold) = hold.take() else { CAST_SKIPPED[3].fetch_add(1, Relaxed); return false };
      let acquire_fd = acquire.as_ref().and_then(|fence| fence.try_clone().ok());
@@ -226,10 +293,10 @@ index 6fda313..e1d3f23 100644
      /// presented or discarded (at most two pending). A paced output's superseded frames are
      /// therefore reported discarded only at its next turn, else KWin would render at its own
 diff --git a/src/android/bridge_surface.rs b/src/android/bridge_surface.rs
-index 940b75b..c6c3f03 100644
+index 940b75b..e39a24d 100644
 --- a/src/android/bridge_surface.rs
 +++ b/src/android/bridge_surface.rs
-@@ -200,6 +200,49 @@ pub extern "system" fn Java_com_winland_server_NativeBridge_presentWorkspace(
+@@ -200,6 +200,75 @@ pub extern "system" fn Java_com_winland_server_NativeBridge_presentWorkspace(
      crate::android::command_channel::send_command(crate::android::command_channel::JniCommand::PresentWorkspace { slot });
  }
  
@@ -270,6 +337,32 @@ index 940b75b..c6c3f03 100644
 +    crate::android::command_channel::send_command(crate::android::command_channel::JniCommand::PlaceTile { slot, rect: [x, y, width, height] });
 +}
 +
++/// The picture under the director's tiles: `pixels` (RGBA_8888 memory order, `width` x `height`,
++/// the cast window's size and orientation), or none (empty: black).
++#[no_mangle]
++pub extern "system" fn Java_com_winland_server_NativeBridge_setCastBackground(
++    env: JNIEnv,
++    _class: JClass,
++    pixels: jni::objects::JIntArray,
++    width: jni::sys::jint,
++    height: jni::sys::jint,
++) {
++    let count = env.get_array_length(&pixels).unwrap_or(0).max(0) as usize;
++    let image = if count > 0 && count == (width.max(0) * height.max(0)) as usize {
++        let mut values = vec![0i32; count];
++        if env.get_int_array_region(&pixels, 0, &mut values).is_err() {
++            return;
++        }
++        Some((values.into_iter().map(|v| v as u32).collect(), width, height))
++    } else {
++        None
++    };
++    if let Ok(mut background) = crate::android::backend::smithay_backend::CAST_BACKGROUND.lock() {
++        *background = image;
++    }
++    crate::android::command_channel::send_command(crate::android::command_channel::JniCommand::CastBackground);
++}
++
 +/// The sources there are now: bit 0 the user's desktop, bit n agent workspace n (cast.rs).
 +#[no_mangle]
 +pub extern "system" fn Java_com_winland_server_NativeBridge_liveSources(_env: JNIEnv, _class: JClass) -> jni::sys::jint {
@@ -280,10 +373,10 @@ index 940b75b..c6c3f03 100644
  pub extern "system" fn Java_com_winland_server_NativeBridge_sendRelativeMotion(
      _env: JNIEnv,
 diff --git a/src/android/command_channel.rs b/src/android/command_channel.rs
-index 3e7fdd7..f318b73 100644
+index 3e7fdd7..3f5cc71 100644
 --- a/src/android/command_channel.rs
 +++ b/src/android/command_channel.rs
-@@ -73,6 +73,10 @@ pub enum JniCommand {
+@@ -73,6 +73,12 @@ pub enum JniCommand {
      /// Which source the TV or fullscreen presenter shows (docs/research/91): 0 the cast
      /// output (the user's desktop or the assistant's screen), n agent workspace n.
      PresentWorkspace { slot: i32 },
@@ -291,11 +384,13 @@ index 3e7fdd7..f318b73 100644
 +    SetDirector { tiles: Vec<(i32, [f32; 4])>, focus: i32 },
 +    /// One tile of the director moved (its spring), without a new frame.
 +    PlaceTile { slot: i32, rect: [f32; 4] },
++    /// A new background under the director's tiles (smithay_backend::CAST_BACKGROUND): paint it.
++    CastBackground,
      SurfaceChanged {
          width: i32,
          height: i32,
 diff --git a/src/compositor.rs b/src/compositor.rs
-index 2c3c279..3f4a5e2 100644
+index 2c3c279..c747f8f 100644
 --- a/src/compositor.rs
 +++ b/src/compositor.rs
 @@ -144,7 +144,9 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
@@ -304,15 +399,18 @@ index 2c3c279..3f4a5e2 100644
                  commands_this_spin += 1;
 -                if !matches!(cmd, JniCommand::CastPointer { .. } | JniCommand::PresentWorkspace { .. } | JniCommand::GetRuntimeStats { .. }
 +                if !matches!(cmd, JniCommand::CastPointer { .. } | JniCommand::PresentWorkspace { .. } | JniCommand::SetDirector { .. }
-+                    | JniCommand::PlaceTile { .. }
++                    | JniCommand::PlaceTile { .. } | JniCommand::CastBackground
 +                    | JniCommand::GetRuntimeStats { .. }
                      | JniCommand::GetSurfaceSize { .. } | JniCommand::GetScrollSensitivity { .. }
                      | JniCommand::GetBackendSnapshot { .. }) {
                      phone_commands += 1;
-@@ -392,6 +394,31 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+@@ -392,6 +394,34 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
                              server.runtime.present_source(slot.max(0) as usize);
                          }
                      }
++                    JniCommand::CastBackground => {
++                        crate::android::backend::smithay_backend::repaint_cast_base(&mut backend_state);
++                    }
 +                    JniCommand::PlaceTile { slot, rect } => {
 +                        let slot = slot.max(0) as usize;
 +                        if let Some(server) = wayland_server.as_mut() {
@@ -341,7 +439,7 @@ index 2c3c279..3f4a5e2 100644
                      JniCommand::CastPointer { op, x, y } => {
                          if let Some(server) = wayland_server.as_mut() {
                              let rt = &mut server.runtime;
-@@ -564,8 +591,9 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+@@ -564,8 +594,9 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
                      server.runtime.render(phone_commands > 0 || uncovered);
                      last_render = Instant::now();
                      last_commits = commits;
@@ -353,7 +451,7 @@ index 2c3c279..3f4a5e2 100644
                      }
                      // KWin keeps at most two frames of an output pending. Report every
                      // cast commit when it is rendered, also one that brought no new buffer
-@@ -577,7 +605,7 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+@@ -577,7 +608,7 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
                  }
              }
              if let Some(cast) = backend_state.cast.as_mut() {
@@ -362,7 +460,7 @@ index 2c3c279..3f4a5e2 100644
              }
              let presents_before = crate::android::frame_clock::presented_count();
              flush_deferred_composite(&mut backend_state, &render_rx);
-@@ -607,7 +635,7 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+@@ -607,7 +638,7 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
              let settling = input_router.busy()
                  || backend_state.frames_presented == 0
                  || backend_state.presenter.as_ref().is_some_and(|p| !p.settled())

@@ -42,6 +42,13 @@ final class Director {
     private final Activity activity;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private List<Integer> members = new ArrayList<>();
+    /** The workspaces running now (the host's liveSources); members also has team members not open yet. */
+    private List<Integer> live = new ArrayList<>();
+    private final DirectorArt art = new DirectorArt();
+    /** The last few lines each workspace's agent said or did (the tiles' murmur), oldest first. */
+    private final java.util.Map<Integer, java.util.ArrayDeque<String>> murmurs = new java.util.HashMap<>();
+    private static final int MURMUR_KEPT = 3;
+    private static final long MILESTONE_MS = 8000;
     private int focus = 1, level = STANDARD;
     /** What a TV shows: the director, or the user's desktop. */
     private boolean tvDirector = true;
@@ -79,6 +86,58 @@ final class Director {
     boolean bound() { return bound; }
     /** The TV shows the director now (else the user's desktop, or no TV). */
     boolean onTv() { return bound && tvDirector && !members.isEmpty(); }
+
+    private String backgroundKey = "";
+    private int[] presenterShape = {0, 0, 0};
+
+    /** The Linux side sent the background (a JPEG): kept in the app's files, shown at once if bound. */
+    void setBackground(byte[] jpeg) {
+        java.io.File file = new java.io.File(activity.getFilesDir(), "director-background.jpg");
+        try (java.io.FileOutputStream out = new java.io.FileOutputStream(file)) { out.write(jpeg); }
+        catch (java.io.IOException e) { android.util.Log.w("RungicCast", "director background: " + e.getMessage()); return; }
+        backgroundKey = "";
+        if (presenterShape[0] > 0) prepareBackground(presenterShape[0], presenterShape[1], presenterShape[2]);
+    }
+
+    /**
+     * The picture under the tiles of a presenter window `width` x `height` turned `rotation` (90:
+     * fullscreen on the portrait phone): the user's wallpaper, blurred and dimmed by the Linux side
+     * (rungic-agent-screen background, kept as files/director-background.jpg), cropped to the
+     * window's shape and handed to the host; black without it.
+     */
+    void prepareBackground(int width, int height, int rotation) {
+        presenterShape = new int[] {width, height, rotation};
+        java.io.File file = new java.io.File(activity.getFilesDir(), "director-background.jpg");
+        String key = file.lastModified() + ":" + width + "x" + height + "@" + rotation;
+        if (key.equals(backgroundKey)) return;
+        backgroundKey = key;
+        int[] pixels = new int[0];
+        int w = 0, h = 0;
+        android.graphics.Bitmap source = file.isFile() ? android.graphics.BitmapFactory.decodeFile(file.getPath()) : null;
+        if (source != null && width > 0 && height > 0) {
+            // The picture's shape upright: the window turned back for fullscreen.
+            int uw = rotation == 90 ? height : width, uh = rotation == 90 ? width : height;
+            float scale = Math.max(uw / (float) source.getWidth(), uh / (float) source.getHeight());
+            int sw = Math.round(source.getWidth() * scale), sh = Math.round(source.getHeight() * scale);
+            android.graphics.Bitmap scaled = android.graphics.Bitmap.createScaledBitmap(source, sw, sh, true);
+            android.graphics.Bitmap upright = android.graphics.Bitmap.createBitmap(scaled, (sw - uw) / 2, (sh - uh) / 2, uw, uh);
+            android.graphics.Bitmap shown = upright;
+            if (rotation == 90) {
+                android.graphics.Matrix turn = new android.graphics.Matrix();
+                turn.postRotate(90);
+                shown = android.graphics.Bitmap.createBitmap(upright, 0, 0, uw, uh, turn, true);
+            }
+            w = shown.getWidth(); h = shown.getHeight();
+            pixels = new int[w * h];
+            shown.getPixels(pixels, 0, w, 0, 0, w, h);
+            // ARGB ints to RGBA_8888 memory order (little-endian 0xAABBGGRR).
+            for (int i = 0; i < pixels.length; i++) {
+                int c = pixels[i];
+                pixels[i] = (c & 0xFF00FF00) | ((c >> 16) & 0xFF) | ((c & 0xFF) << 16);
+            }
+        }
+        try { NativeBridge.setCastBackground(pixels, w, h); } catch (UnsatisfiedLinkError e) { /* an older host */ }
+    }
 
     /** Fullscreen on the phone shows the director, or no longer. */
     void setFullscreen(boolean value, float windowAspect) {
@@ -186,11 +245,106 @@ final class Director {
 
     /** A member posted (op "director" {"member": {slot, role, kind, text}}); an empty role: gone. */
     void setMember(int slot, String role, String kind, String text) {
-        if (role.isEmpty()) { membersSaid.remove(slot); memberTimes.remove(slot); }
-        else { membersSaid.put(slot, new String[] {role, kind, text}); memberTimes.put(slot, android.os.SystemClock.uptimeMillis()); }
+        if (role.isEmpty()) { membersSaid.remove(slot); memberTimes.remove(slot); murmurs.remove(slot); }
+        else {
+            // A silent state change (the tools inferred it) keeps the last words.
+            String[] before = membersSaid.get(slot);
+            boolean said = !text.isEmpty();
+            membersSaid.put(slot, new String[] {role, kind, said ? text : before != null ? before[2] : ""});
+            if (said) {
+                memberTimes.put(slot, android.os.SystemClock.uptimeMillis());
+                remember(slot, text);
+                // The milestone's tag goes after a few seconds: redraw then.
+                handler.postDelayed(this::redraw, MILESTONE_MS + 50);
+            } else if (!memberTimes.containsKey(slot)) {
+                memberTimes.put(slot, 0L);
+            }
+        }
+        refreshMembers();
+        redraw();
+    }
+
+    private void redraw() {
         if (labels != null) labels.invalidate();
         for (Runnable listener : new ArrayList<>(listeners)) listener.run();
     }
+
+    private void remember(int slot, String line) {
+        java.util.ArrayDeque<String> lines = murmurs.computeIfAbsent(slot, k -> new java.util.ArrayDeque<>());
+        if (line.equals(lines.peekLast())) return;
+        lines.addLast(line);
+        while (lines.size() > MURMUR_KEPT) lines.removeFirst();
+    }
+
+    /** Whether `slot`'s workspace is open (its picture is there). */
+    boolean live(int slot) { return live.contains(slot); }
+
+    /** The last lines of `slot`'s murmur, oldest first. */
+    List<String> murmur(int slot) {
+        java.util.ArrayDeque<String> lines = murmurs.get(slot);
+        if (lines == null) return new ArrayList<>();
+        String[] c = captions.get(slot);
+        Long at = captionTimes.get(slot);
+        // A long silence: the murmur is old news.
+        long newest = Math.max(at == null ? 0 : at, memberTimes.getOrDefault(slot, 0L));
+        if (android.os.SystemClock.uptimeMillis() - newest > CAPTION_STALE_MS && !(c != null && !"working".equals(c[0]))) return new ArrayList<>();
+        return new ArrayList<>(lines);
+    }
+
+    /** {kind, text} of `slot`'s member's post while it is fresh (its tag shows), or null. */
+    String[] milestone(int slot) {
+        String[] m = membersSaid.get(slot);
+        Long at = memberTimes.get(slot);
+        if (m == null || at == null || m[2].isEmpty() || android.os.SystemClock.uptimeMillis() - at > MILESTONE_MS) return null;
+        return new String[] {m[1], m[2]};
+    }
+
+    /**
+     * What `slot` is at: a member's latest kind, "working" once its tools act after a review, else
+     * "working" while its agent is at work, "waiting" otherwise.
+     */
+    String stateKind(int slot) {
+        String[] m = membersSaid.get(slot);
+        String[] c = captions.get(slot);
+        Long at = captionTimes.get(slot);
+        boolean acting = c != null && at != null && "working".equals(c[0])
+            && android.os.SystemClock.uptimeMillis() - at < CAPTION_STALE_MS;
+        if (m != null) {
+            boolean early = "review".equals(m[1]) || "brief".equals(m[1]) || "decision".equals(m[1]);
+            if (early && acting && at > memberTimes.getOrDefault(slot, 0L)) return "working";
+            return "progress".equals(m[1]) ? "working" : m[1];
+        }
+        return acting ? "working" : "waiting";
+    }
+
+    String stateName(int slot) {
+        int id = STATE_NAMES.getOrDefault(stateKind(slot), 0);
+        return id == 0 ? "" : activity.getString(id);
+    }
+
+    /** A tile's name: a member's role, else the screen's. */
+    String screenName(int slot) {
+        String[] m = membersSaid.get(slot);
+        if (m != null) return m[0];
+        return slot == 0 ? activity.getString(R.string.tv_desktop) : activity.getString(R.string.tv_workspace, slot);
+    }
+
+    String initial(int slot) {
+        String name = screenName(slot);
+        return membersSaid.containsKey(slot) && !name.isEmpty() ? name.substring(0, Math.min(1, name.length())).toUpperCase() : String.valueOf(slot);
+    }
+
+    String notOpenText() { return activity.getString(R.string.tile_not_open); }
+
+    String tagName(String kind) {
+        int id = TAG_NAMES.getOrDefault(kind, R.string.tag_progress);
+        return activity.getString(id);
+    }
+
+    private static final java.util.Map<String, Integer> TAG_NAMES = java.util.Map.of(
+        "brief", R.string.tag_brief, "review", R.string.tag_review, "decision", R.string.tag_decision,
+        "progress", R.string.tag_progress, "blocked", R.string.tag_blocked, "question", R.string.tag_question,
+        "done", R.string.tag_done, "failed", R.string.tag_failed);
 
     /** Needs the user or the lead: blocked or a question (its tile turns amber). */
     boolean needsAttention(int slot) {
@@ -202,6 +356,7 @@ final class Director {
     void setCaption(int slot, String state, String text) {
         captions.put(slot, new String[] {state, text});
         captionTimes.put(slot, android.os.SystemClock.uptimeMillis());
+        if (!text.isEmpty()) remember(slot, text);
         if (labels != null) labels.invalidate();
         for (Runnable listener : new ArrayList<>(listeners)) listener.run();
         // An ending shows a few seconds, then goes.
@@ -240,9 +395,10 @@ final class Director {
     }
 
     private static final java.util.Map<String, Integer> STATE_NAMES = java.util.Map.of(
-        "review", R.string.team_reviewing, "progress", R.string.team_working, "blocked", R.string.team_blocked,
+        "review", R.string.team_reviewing, "blocked", R.string.team_blocked,
         "question", R.string.team_question, "done", R.string.team_done, "failed", R.string.team_failed,
-        "ended", R.string.team_ended);
+        "ended", R.string.team_ended, "working", R.string.team_working, "waiting", R.string.team_waiting,
+        "brief", R.string.team_briefing, "decision", R.string.team_deciding);
 
     private void changed(boolean banner) {
         changedVersion();
@@ -268,6 +424,11 @@ final class Director {
         try { mask = NativeBridge.liveSources(); } catch (UnsatisfiedLinkError e) { /* an older host */ }
         List<Integer> found = new ArrayList<>();
         for (int slot = 1; slot < 31; slot++) if ((mask & (1 << slot)) != 0) found.add(slot);
+        live = new ArrayList<>(found);
+        // A team member that spoke shows before its workspace opens (a placeholder tile).
+        for (java.util.Map.Entry<Integer, String[]> m : membersSaid.entrySet())
+            if (!found.contains(m.getKey()) && !"ended".equals(m.getValue()[1])) found.add(m.getKey());
+        found.sort(Integer::compare);
         members = found;
         // A focus that closed: the first member left.
         if (!members.isEmpty() && !members.contains(focus)) focus = members.get(0);
@@ -415,29 +576,10 @@ final class Director {
 
         @Override protected void onDraw(Canvas canvas) {
             float w = getWidth(), h = getHeight(), unit = h / 1080f;
-            outline.setStrokeWidth(4 * unit);
-            boolean small = level == ENLARGED;
-            boolean many = tiles.length > 1;
-            for (int i = 0; i < tiles.length; i++) {
-                float[] t = tiles[i];
-                RectF r = new RectF(t[0] * w, t[1] * h, (t[0] + t[2]) * w, (t[1] + t[3]) * h);
-                if (i == 0 && many) {
-                    outline.setColor(needsAttention(tileSlots[i]) ? 0xFFF0B35E : 0xFF3DAEE9);
-                    canvas.drawRoundRect(r.left - 3 * unit, r.top - 3 * unit, r.right + 3 * unit, r.bottom + 3 * unit, 6 * unit, 6 * unit, outline);
-                }
-                String[] c = caption(tileSlots[i]);
-                boolean working = c != null && "working".equals(c[0]);
-                String mark = needsAttention(tileSlots[i]) ? "  ⚠" : working && i > 0 ? "  ●" : "";
-                if (many && (i == 0 || !small)) chip(canvas, label(tileSlots[i]) + mark, r.left + 12 * unit, r.bottom - 12 * unit, unit, i == 0 ? 26 : 22);
-                // What the focus's agent is doing, centred at its bottom, as the floating window shows it.
-                if (i == 0 && c != null && !c[1].isEmpty()) {
-                    text.setTextSize(24 * unit);
-                    float tw = text.measureText(c[1]);
-                    chip(canvas, c[1], (r.left + r.right) / 2 - tw / 2 - 12 * unit, r.bottom - 64 * unit, unit, 24);
-                }
-            }
-            if (android.os.SystemClock.uptimeMillis() < bannerUntil && tiles.length <= 1) {
-                chip(canvas, onTv() ? label(focus) : activity.getString(R.string.cast_tv_desktop), 32 * unit, h - 32 * unit, unit, 30);
+            if (onTv()) art.paint(canvas, w, h, Director.this, 1f);
+            // Computer mode, for a moment after a switch: which screen the TV shows.
+            if (android.os.SystemClock.uptimeMillis() < bannerUntil && !onTv()) {
+                chip(canvas, activity.getString(R.string.cast_tv_desktop), 32 * unit, h - 32 * unit, unit, 30);
             }
         }
 
