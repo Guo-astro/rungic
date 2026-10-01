@@ -922,7 +922,9 @@ final class CastControls {
             for (int i = 0; receivers != null && i < receivers.length(); i++) {
                 JSONObject r = receivers.optJSONObject(i);
                 boolean current = r.optBoolean("active");
-                if (!current && !r.optBoolean("last") && r.isNull("seen_ms_ago")) continue;
+                // Android can't search while casting: the TVs it has saved (connected before) and
+                // those a search found lately. Switching to a saved one that is off fails like any.
+                if (!current && !r.optBoolean("last") && r.isNull("seen_ms_ago") && !r.optBoolean("remembered")) continue;
                 if (current && others == 0 && i + 1 < receivers.length()) {
                     list.addView(row(r, true));
                     View divider = new View(context);
@@ -970,7 +972,8 @@ final class CastControls {
             texts.addView(line, new LinearLayout.LayoutParams(-1, -2));
             String sub = current ? (resolution.isEmpty() ? context.getString(R.string.cast_casting)
                     : context.getString(R.string.cast_casting_at, resolution))
-                : context.getString(r.optBoolean("last") ? R.string.cast_last_used : R.string.cast_recent);
+                : context.getString(r.optBoolean("last") ? R.string.cast_last_used
+                    : !r.isNull("seen_ms_ago") ? R.string.cast_recent : R.string.cast_saved);
             texts.addView(text(sub, 13, current ? ACCENT_TEXT : TEXT_DIM, false));
             row.addView(texts, new LinearLayout.LayoutParams(0, -2, 1));
             row.addView(text(current ? "✓" : "›", 20, current ? ACCENT_TEXT : 0xFF8A939B, false));

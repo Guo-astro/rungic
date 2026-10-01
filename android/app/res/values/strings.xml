@@ -136,13 +136,14 @@
     <string name="cast_modes_error">Can\'t load the cast modes right now. Try again later.</string>
     <string name="cast_modes_none">There are no adjustable cast modes right now.</string>
     <string name="cast_change_title">Change cast device</string>
-    <string name="cast_change_subtitle">New TVs can\'t be searched for while casting; these are the ones found recently</string>
+    <string name="cast_change_subtitle">New TVs can\'t be searched for while casting; these are the saved ones and those found recently</string>
     <string name="cast_change_note">Switching disconnects the current TV first. The picture pauses for a few seconds until the new TV shows it; apps open on the desktop are not affected.</string>
     <string name="cast_devices_loading">Loading devices…</string>
-    <string name="cast_no_other">No other TVs were found recently. After disconnecting, you can search again from “Cast” in Quick Settings.</string>
+    <string name="cast_no_other">No other saved or recently found TVs. After disconnecting, you can search again from “Cast” in Quick Settings.</string>
     <string name="cast_current_tag">Current</string>
     <string name="cast_last_used">Last used</string>
     <string name="cast_recent">Recently found</string>
+    <string name="cast_saved">Saved</string>
     <string name="touchpad_hint_move">Move the pointer with one finger, tap to click</string>
     <string name="touchpad_hint_drag">Tap, then touch and hold to drag</string>
     <string name="touchpad_hint_scroll">Scroll with two fingers, tap with two to right-click</string>

@@ -563,6 +563,30 @@ G100 S（XT2537-4，SM6435 `_parrot_v3`），接收端TCL 85Q6H。电视这次�
 - Android层的胶囊始终画在Linux画面之上，Plasma面板打开时小胶囊仍会压在面板边缘。
 - 胶囊收起后，原来展开区域的点击会落到桌面。
 
+### 更换设备列表里没有其他电视（2026-10-01）
+
+- **现象**（用户报告）：投屏中打开 APK 胶囊的“更换投屏设备”，搜不到电视选项。当时电视没在屏保。
+- **实机状态**（G100 S，只读查询）：
+  - 正在投 `UGREEN-52BCCF3C`，`active_state` 为 2。
+  - `rungic-cast status` 的 `receivers` 里有 `TCL 85Q6H-9E92`：`available: true`、`remembered: true`，但 `seen_ms_ago: null`。
+  - `run/seen` 里 TCL 的最后记录约在 40 小时前，早已超过十分钟的有效期。
+- **原因**：
+  - 表单打开时只读一次 `status`，不扫描。
+  - 表单只保留三类：当前电视、上次使用的电视、十分钟内见过的电视（`DeviceSheet.show`）。
+  - 投屏中 Android 不扫描，`run/seen` 不会更新。投屏一久，Android 已保存的电视就全被过滤掉了。
+  - 这不是代码回退：该过滤逻辑自加入以来没有变过。
+- **修复**：
+  - 表单同时列出 Android 已保存的电视（`remembered`），副标题写“已保存”，与“上次使用”“最近发现”区分。
+  - 表单的说明和空列表提示也改成“已保存和最近发现”。
+  - 切换路径不变：root 工具的 `connect` 先断开当前电视，再边扫描边连接目标。已保存的电视如果不在线，会像其他连接失败一样提示。
+- **root 组件过旧（已修）**：
+  - 手机上的 `/data/adb/rungic-wfd/rungic-cast.jar` 还是 09-29 的版本（SHA-256 `1936b97d…`），`status` 里没有 `protocol_version`。
+  - 09-30 发布的容器侧 `rungic-cast 0.510` 要求这个字段。实测容器里 `rungic-cast status` 返回 `backend-incompatible`，所以 Plasma 快捷设置的投屏面板列不出电视；APK 胶囊不受影响。
+  - 用当前源码重建 jar（SHA-256 `2e528d0e4695…`），经 `deploy_cast.py` 备份并升级。证据和备份在 `.work/cast/g100s-root-update-20261001/`。
+  - 升级后，容器里的 `rungic-cast status` 带 `protocol_version: 1`，返回码为 0。
+- **安装**：APK 2.28 开发版（只改了 Java 和字符串，原生库取自手机上已装的 2.28），SHA-256 `70114e37…`，用 `adb install -r` 安装。装完后 KWin 和 plasmashell 均为 active。
+- **待验收**：投屏中打开“更换投屏设备”，确认 TCL 以“已保存”出现，并实际切换一次。
+
 ## 断开电视后通知在手机上重复弹出（2026-09-29）
 
 - 现象（用户报告，实机复现）：连过电视再断开后，每条通知在手机上出现两个弹窗。一个是手机壳层的居中卡片，另一个是桌面样式的弹窗，在左上角，带倒计时条和✕。复现方法：电视已断开时在容器中执行`notify-send -t 20000 …`。

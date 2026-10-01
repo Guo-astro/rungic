@@ -126,13 +126,14 @@
     <string name="cast_modes_error">暂时无法读取投屏模式，请稍后重试。</string>
     <string name="cast_modes_none">当前没有可调整的投屏模式。</string>
     <string name="cast_change_title">更换投屏设备</string>
-    <string name="cast_change_subtitle">投屏时无法搜索新电视，列出最近发现的电视</string>
+    <string name="cast_change_subtitle">投屏时无法搜索新电视，列出已保存和最近发现的电视</string>
     <string name="cast_change_note">切换时会先断开当前电视，新电视出现画面前会中断几秒，桌面上打开的应用不受影响。</string>
     <string name="cast_devices_loading">正在读取设备…</string>
-    <string name="cast_no_other">没有其他最近发现的电视。断开后，在快捷设置的“投屏”里可以重新搜索。</string>
+    <string name="cast_no_other">没有其他已保存或最近发现的电视。断开后，在快捷设置的“投屏”里可以重新搜索。</string>
     <string name="cast_current_tag">当前</string>
     <string name="cast_last_used">上次使用</string>
     <string name="cast_recent">最近发现</string>
+    <string name="cast_saved">已保存</string>
     <string name="touchpad_hint_move">单指移动光标，轻点单击</string>
     <string name="touchpad_hint_drag">轻点后再按住拖动</string>
     <string name="touchpad_hint_scroll">双指滚动，双指轻点右键</string>
