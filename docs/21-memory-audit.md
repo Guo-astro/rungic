@@ -150,3 +150,67 @@ pm uninstall --user 0 com.lenovo.octopus
 这是当前设备上的应用卸载。原厂只读镜像中的 `/product/preinstall/LenovoSmartHome/` 及现有 v3 一键包尚未重建；未来制作新版精简镜像时应将这个目录加入移除清单。不能把本轮操作当作已从固件镜像物理删除。
 
 证据：`.work/refs/memory-audit-20260922/octopus-before-uninstall.txt`、`octopus-uninstall.txt`、`octopus-after-uninstall.txt`。未把卸载前约 134 MiB PSS 宣称为卸载后恒定的净 RAM 节省量。
+
+## 2026-10-01：为“四个工作区”算的内存账（只读采样）
+
+**采样条件**：G100 S（ZY32MVJS25），开机 4 天 10 小时，16:25 CST。Rungic 桌面、语音助手和 1 号工作区都在运行；另一条工作线正在调 Ardour。
+
+- **数据来源**：`dumpsys meminfo`、`/proc/meminfo`、`/dev/memcg/rungic-plasma`，存放在 `.work/refs/memory-audit-20261001/`。
+- **容器和 Android 的区分**：按容器 memcg 里的 PID，把进程 PSS 分到“容器”和“Android”两边。注意 `dumpsys` 的 Used RAM 把容器进程也算在里面。
+- **本节只做了分析**，没有停用任何组件。
+
+### 整体
+
+| 项目 | 数值 | 说明 |
+|---|---:|---|
+| 总内存 | 7.35 GiB | `MemTotal` |
+| Used RAM | 7.0 GiB | 进程 PSS 4.88 GiB，内核 2.13 GiB |
+| 容器进程 PSS | 3.18 GiB | memcg 用量 2.49 GiB，上限 4 GiB，历史峰值已到 4 GiB |
+| Android 进程 PSS | 2.81 GiB | 其中缓存进程 0.53 GiB，常驻约 2.28 GiB |
+| 内核 | 2.13 GiB | 包括 ZRAM 实占 0.65 GiB（存了 2.84 GiB 换出内容），GPU 私有 0.33 GiB；09-22 时为 0.96 GiB |
+| GPU | 1.0 GiB | dmabuf 0.67 GiB，私有 0.33 GiB；KGSL `page_alloc` 0.62 GiB |
+| MemAvailable | 2.68 GiB | 内存压力指标为 0 |
+
+### Android 一侧
+
+- **Rungic 和系统必需的**：
+  - system 267 MiB、SurfaceFlinger 264 MiB（含图形统计）、SystemUI 135 MiB；
+  - Rungic 宿主 APK 69 MiB、VPN（swiftwire）80 MiB；
+  - 相机 HAL 66 MiB（相机共享要用）；
+  - Magisk 51 MiB；
+  - Rungic 的三个 root 守护进程：投屏 watch、剪贴板、电话，各约 50 MiB；
+  - 音频、媒体、Wi-Fi、无线投屏 HAL 等。
+- **用户界面相关、要先决定是否替换的**：
+  - 原厂桌面 148 MiB（另有应用预测 11 MiB）；
+  - 搜狗输入法 70 MiB；
+  - 设置 55 MiB（使用过后留下的）。
+- **可以考虑停用的 Moto、联想附加组件**（按包名统计）：常驻约 **279 MiB**，缓存约 **460 MiB**。
+  - 较大的几项：`deviceshield`（235 MiB 缓存，engine 72 MiB 常驻）、`mobiledesktop`（Ready For，90 + 18 MiB 缓存）、`myscreen` 69 MiB、`personalize` 64 MiB（缓存）、应用商店 26 MiB（缓存）。
+  - 较小的十几项：游戏模式、Moto 手势、小窗、钱包、天气时钟、日历、联想助手、`zui.sdac` 等。
+- **停用能省多少**：
+  - 缓存进程在内存紧张时本来就会被回收，停用它们省下的主要是“被杀了又重新拉起”的反复，不是一笔稳定的空闲内存。
+  - 稳定收益约 0.3 GiB；如果把原厂桌面也换掉，再加约 0.15 GiB。
+
+### 容器一侧（同时采样）
+
+| 进程 | PSS |
+|---|---:|
+| plasmashell（手机界面） | 476 MiB |
+| 用户自己的 `raft-computer`（两个进程） | 390 + 198 MiB |
+| 主 KWin | 239 MiB |
+| 工作区 KWin | 134 MiB |
+| codex app-server × 3（语音服务、托管守护进程 0.159.3、另一个 stdio 实例） | 229 + 121 + 101 MiB |
+| Ardour 9 | 185 MiB |
+| plasma-keyboard | 134 MiB |
+| `rungic_cua mcp` × 5（每个 Codex 线程一份） | 各约 80 MiB |
+| polkit 认证代理 | 103 MiB |
+
+### 结论（推断）
+
+- **Android 并没有“占好几 GB”**：Used RAM 里约 3.2 GiB 是容器进程；内核那 2.1 GiB 里，ZRAM 和 GPU 部分很大程度上也是容器的负载带来的。
+- **四个工作区的需求**：每个工作区固定约 0.35–0.5 GiB。应用方面，Godot 实测约 1 GiB，Ardour 实测 0.18 GiB（空闲时），Blender 和 Krita 估计各 0.5–1.5 GiB。在现在的基础上，还要再加 3.5–6 GiB。
+- **停用 Android 附加组件只能补上一小部分**。更大的空间在于：
+  - 容器自己的冗余（重复的 app-server、每个线程一份的桌面工具）；
+  - 不让四个重型 GUI 同时处于活跃状态（后台的工作区靠 ZRAM 压缩，或者直接停掉）；
+  - 降低后台工作区的分辨率和 GPU 占用；
+  - 把重任务放到别的机器上。
