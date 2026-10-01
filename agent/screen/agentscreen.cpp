@@ -412,16 +412,12 @@ void AgentScreen::scroll(double dx, double dy)
 
 void AgentScreen::castToTv()
 {
-    setStatus(QStringLiteral("connecting the TV"));
-    // A TV shows desktop mode unless asked for the assistant's screen.
-    if (m_workspace > 0)
-        bridge({{QStringLiteral("op"), op()}, {QStringLiteral("tv"), true}});
-    // Connecting takes seconds to a minute, off the UI thread; the next poll sees the TV take the screen.
-    QThread *worker = QThread::create([] {
-        bridge({{QStringLiteral("op"), QStringLiteral("cast")}, {QStringLiteral("args"), QJsonArray{QStringLiteral("connect")}}}, 75000);
-    });
-    connect(worker, &QThread::finished, worker, &QObject::deleteLater);
-    worker->start();
+    // The cast button (docs/58): no TV yet, the Rungic app's TV picker, the picked TV then showing
+    // this window's screen; a TV, the next screen on it.
+    const QJsonObject state = bridge({{QStringLiteral("op"), QStringLiteral("tv")}, {QStringLiteral("button"), true},
+                                      {QStringLiteral("source"), m_workspace}});
+    if (state.contains(QStringLiteral("error")))
+        setStatus(state.value(QStringLiteral("error")).toString());
 }
 
 void AgentScreen::fullscreen()

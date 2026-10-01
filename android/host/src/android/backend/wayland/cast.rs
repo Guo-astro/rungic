@@ -18,6 +18,12 @@
 //! source at a time: `presented` 0 is the user's cast output above, n a workspace.
 //! A workspace not presented still gets its frame callbacks as it commits, so it
 //! keeps working (screenshots, its floating window) while nobody presents it.
+//!
+//! Director layout (the TV's "导播台", docs/58): the TV shows several sources at once, each in a
+//! tile of its own (`tiles`, set by the APK, which also draws their labels): every tiled source's
+//! frames go to a layer of its own in the cast window, placed by SurfaceFlinger, still zero-copy.
+//! The presented source is the focused one: full rate, the touchpad's target; the others are
+//! thumbnails at `THUMBNAIL_INTERVAL`.
 use smithay::backend::input::{Axis, AxisSource, ButtonState};
 use smithay::desktop::Window;
 use smithay::input::pointer::{AxisFrame, ButtonEvent, MotionEvent, RelativeMotionEvent};
@@ -40,6 +46,20 @@ const CAST_ORIGIN: (i32, i32) = (100_000, 0);
 /// A workspace's size (the assistant's screen, docs/65) and refresh.
 pub(crate) const WORKSPACE_SIZE: (i32, i32) = (1920, 1080);
 const WORKSPACE_REFRESH_MHZ: i32 = 60_000;
+/// A thumbnail tile of the director layout: about 15 frames a second.
+pub(crate) const THUMBNAIL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(66);
+
+/// A source shown in the director layout: `rect` its place in the cast window as fractions
+/// (x, y, width, height) of the window's size.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct Tile {
+    pub slot: usize,
+    pub rect: [f32; 4],
+}
+
+/// The sources there are now (bit 0 the user's desktop, always; bit n workspace n with its
+/// window), for the APK's layout (NativeBridge.liveSources).
+pub(crate) static LIVE_SOURCES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(1);
 
 #[derive(Debug)]
 pub(crate) struct CastOutput {
@@ -154,11 +174,43 @@ impl AndroidSeatRuntime {
     /// desktop (the window's size). A presenter showing a workspace gives the user's KWin no
     /// empty second screen for its windows to land on.
     pub(crate) fn sync_user_cast(&mut self) {
-        let wanted = self.agent_screen.or(if self.wanted_source == 0 { self.cast_window } else { None });
+        let shows_desktop = self.wanted_source == 0 || self.tiles.iter().any(|t| t.slot == 0);
+        let wanted = self.agent_screen.or(if shows_desktop { self.cast_window } else { None });
         match wanted {
             Some((size, refresh)) => self.add_cast_output(size, refresh),
             None => self.remove_cast_output(),
         }
+    }
+
+    /// The director layout: `tiles` (empty: off, one source on the whole TV) with `focus` the
+    /// presented one. Every tiled source sends its current frame at once.
+    pub(crate) fn set_director(&mut self, tiles: Vec<Tile>, focus: usize) {
+        self.tiles = tiles;
+        self.pending_cast_frames.clear();
+        for slot in self.tiles.iter().map(|t| t.slot).collect::<Vec<_>>() {
+            if let Some(source) = self.source_mut(slot) {
+                source.last_buffer = None;
+                source.deferred = true;
+            }
+        }
+        log::info!("cast: director {:?}, focus {focus}", self.tiles.iter().map(|t| t.slot).collect::<Vec<_>>());
+        self.present_source(focus);
+    }
+
+    /// Where source `slot` goes in the cast window: its tile, or None (the whole window).
+    pub(crate) fn tile(&self, slot: usize) -> Option<[f32; 4]> {
+        self.tiles.iter().find(|t| t.slot == slot).map(|t| t.rect)
+    }
+
+    /// Record which sources exist now (LIVE_SOURCES).
+    pub(crate) fn publish_live_sources(&self) {
+        let mut mask = 1u32;
+        for (i, workspace) in self.workspaces.iter().enumerate() {
+            if workspace.as_ref().and_then(|w| w.surface.as_ref()).is_some_and(|s| s.is_alive()) {
+                mask |= 1 << (i + 1);
+            }
+        }
+        LIVE_SOURCES.store(mask, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Workspaces whose KWin is gone lose their output (`alive`: whether a client still is).
@@ -191,7 +243,9 @@ impl AndroidSeatRuntime {
         let slot = if slot == 0 || self.source(slot).is_some() { slot } else { 0 };
         if slot != self.presented {
             self.presented = slot;
-            self.pending_cast_frame = None;
+            if self.tiles.is_empty() {
+                self.pending_cast_frames.clear();
+            }
             if let Some(source) = self.source_mut(slot) {
                 source.last_buffer = None;       // its current frame goes out at once
                 source.deferred = true;
@@ -220,7 +274,7 @@ impl AndroidSeatRuntime {
     pub(crate) fn remove_cast_output(&mut self) {
         if let Some(cast) = self.cast.take() {
             self.display_handle.remove_global::<Self>(cast.global);
-            self.pending_cast_frame = None;
+            self.pending_cast_frames.retain(|(slot, _)| *slot != 0);
             log::info!("cast: withdrew host output");
         }
     }

@@ -406,7 +406,9 @@ impl Presenter {
     /// GPU completion fence (explicit sync), or None when the client already waited.
     /// `rotation` 90 turns the picture a quarter clockwise and fits it into the surface,
     /// centred with black bars (the assistant's screen fullscreen on the portrait phone,
-    /// docs/65); SurfaceFlinger does the turn, so the frame stays zero-copy.
+    /// docs/65); SurfaceFlinger does the turn, so the frame stays zero-copy. `destination`
+    /// (x, y, width, height in surface pixels) places it in a tile of the surface instead (the
+    /// TV's director layout, cast.rs), scaled by SurfaceFlinger as well.
     pub fn present(
         &mut self,
         ahb: Arc<AhbBuffer>,
@@ -416,6 +418,7 @@ impl Presenter {
         buffer_size: (i32, i32),
         surface_size: (i32, i32),
         rotation: i32,
+        destination: Option<(i32, i32, i32, i32)>,
     ) {
         let Some(set_buffer) = set_buffer_with_release() else { return };
         let id = self.next_id;
@@ -438,7 +441,10 @@ impl Presenter {
                 let complete = Box::into_raw(Box::new(CompleteContext { id, tx: self.complete_tx.clone() })) as *mut c_void;
                 ASurfaceTransaction_setOnComplete(txn, complete, on_complete);
             }
-            if rotation == 90 && buffer_size.0 > 0 && buffer_size.1 > 0 {
+            if let Some((x, y, w, h)) = destination.filter(|_| buffer_size.0 > 0 && buffer_size.1 > 0) {
+                let destination = ARect { left: x, top: y, right: x + w, bottom: y + h };
+                ASurfaceTransaction_setGeometry(txn, self.control, &full, &destination, 0);
+            } else if rotation == 90 && buffer_size.0 > 0 && buffer_size.1 > 0 {
                 let (content_w, content_h) = (buffer_size.1 as f32, buffer_size.0 as f32);
                 let scale = (surface_size.0 as f32 / content_w).min(surface_size.1 as f32 / content_h);
                 let (w, h) = ((content_w * scale).round() as i32, (content_h * scale).round() as i32);

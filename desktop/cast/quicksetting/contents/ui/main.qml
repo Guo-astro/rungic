@@ -43,6 +43,11 @@ QS.QuickSetting {
     }
 
     function toggle() {
+        // Casting: the next screen on the TV (docs/58); the picker is for starting a cast.
+        if (casting) {
+            run("tv next", null);
+            return;
+        }
         MobileShellState.ShellDBusClient.closeActionDrawer();
         error = "";
         picker.casting = casting;

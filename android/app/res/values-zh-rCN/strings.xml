@@ -137,4 +137,14 @@
     <string name="touchpad_hint_move">单指移动光标，轻点单击</string>
     <string name="touchpad_hint_drag">轻点后再按住拖动</string>
     <string name="touchpad_hint_scroll">双指滚动，双指轻点右键</string>
+    <string name="tv_desktop">我的桌面</string>
+    <string name="tv_workspace">助理屏 %1$d</string>
+    <string name="cast_tv_shows">电视显示</string>
+    <string name="cast_director">导播台</string>
+    <string name="cast_director_note">所有屏幕同时上电视：选中的大屏显示，其余在下方。投屏按钮切换焦点。</string>
+    <string name="cast_pick_title">投屏到电视</string>
+    <string name="cast_pick_subtitle">选择要显示这块屏幕的电视</string>
+    <string name="cast_searching">正在搜索电视…</string>
+    <string name="cast_none_found">没有找到电视。请确认电视已开机，并打开了“无线投屏 / Miracast”等待连接。</string>
+    <string name="cast_found">附近</string>
 </resources>

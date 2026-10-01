@@ -373,11 +373,40 @@ final class CastControls {
         thread.start();
     }
 
+    /**
+     * The cast button without a TV (docs/58): the TV picker. It lists the saved TVs at once and
+     * searches for nearby ones meanwhile (Android can search while not casting).
+     */
+    void pickTv() {
+        closeResolution(false);
+        collapse();
+        if (sheet != null) return;
+        sheet = new DeviceSheet(context, true);
+        frame.addView(sheet, new FrameLayout.LayoutParams(-1, -1));
+        DeviceSheet opened = sheet;
+        tool(new String[] {"status"}, 15, result -> { if (sheet == opened) opened.show(result); });
+        searchRound(opened, 0);
+    }
+
+    /** Up to three searches of six seconds, the list refreshed after each, while the picker is open. */
+    private void searchRound(DeviceSheet opened, int round) {
+        if (sheet != opened || available || round >= 3) {
+            if (sheet == opened) opened.searching(false);
+            return;
+        }
+        opened.searching(true);
+        tool(new String[] {"scan", "6"}, 30, scan -> tool(new String[] {"status"}, 15, result -> {
+            if (sheet != opened) return;
+            opened.show(result);
+            searchRound(opened, round + 1);
+        }));
+    }
+
     private void openSheet() {
         closeResolution(false);
         collapse();
         if (sheet != null) return;
-        sheet = new DeviceSheet(context);
+        sheet = new DeviceSheet(context, false);
         frame.addView(sheet, new FrameLayout.LayoutParams(-1, -1));
         pill.setVisibility(View.INVISIBLE);
         DeviceSheet opened=sheet;
@@ -684,6 +713,8 @@ final class CastControls {
             setClickable(true);
         }
 
+        void addTvScreens() { addTvScreensTo(this); }
+
         void refresh() {
             removeAllViews();
             boolean pending = session == Session.SWITCHING || session == Session.RECONNECTING;
@@ -733,6 +764,7 @@ final class CastControls {
                     segments.addView(seg, lp);
                 }
                 addView(segments);
+                addTvScreens();
                 TextView modeButton = button(context.getString(R.string.cast_resolution_button), false, v -> openResolution());
                 LayoutParams mlp = new LayoutParams(-1,-2); mlp.topMargin = dp(12);
                 addView(modeButton, mlp);
@@ -759,6 +791,49 @@ final class CastControls {
             actions.addView(button(stop, true, v -> disconnect()), slp);
             addView(actions, alp);
         }
+    }
+
+    /** "On the TV": a chip per screen (the one shown, or the focus, selected) and the director view. */
+    private void addTvScreensTo(LinearLayout panel) {
+        TvScreens tv = ((MainActivity) context).tvScreens();
+        TextView label = text(context.getString(R.string.cast_tv_shows), 12, TEXT_DIM, true);
+        label.setPadding(0, dp(14), 0, dp(6));
+        panel.addView(label);
+        android.widget.HorizontalScrollView scroll = new android.widget.HorizontalScrollView(context);
+        scroll.setHorizontalScrollBarEnabled(false);
+        LinearLayout chips = new LinearLayout(context);
+        for (int slot : tv.sources()) {
+            boolean on = slot == tv.source();
+            String name = tv.label(slot);
+            TextView chip = text(name, 14, on ? Color.WHITE : 0xFFD0D5D9, on);
+            chip.setGravity(Gravity.CENTER);
+            chip.setMinHeight(dp(44));
+            chip.setPadding(dp(14), 0, dp(14), 0);
+            pressable(chip, round(on ? ACCENT : RAISED, 22));
+            chip.setContentDescription(on ? context.getString(R.string.item_selected, name) : name);
+            chip.setOnClickListener(v -> { tv.show(slot); refresh(); });
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
+            lp.rightMargin = dp(8);
+            chips.addView(chip, lp);
+        }
+        scroll.addView(chips);
+        panel.addView(scroll);
+        LinearLayout row = new LinearLayout(context);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, dp(10), 0, 0);
+        LinearLayout texts = new LinearLayout(context);
+        texts.setOrientation(LinearLayout.VERTICAL);
+        texts.addView(text(context.getString(R.string.cast_director), 15, TEXT, true));
+        TextView note = text(context.getString(R.string.cast_director_note), 12, TEXT_DIM, false);
+        note.setPadding(0, dp(2), dp(8), 0);
+        texts.addView(note);
+        row.addView(texts, new LinearLayout.LayoutParams(0, -2, 1));
+        android.widget.Switch toggle = new android.widget.Switch(context);
+        toggle.setChecked(tv.director());
+        toggle.setContentDescription(context.getString(R.string.cast_director));
+        toggle.setOnCheckedChangeListener((v, checked) -> { tv.setDirector(checked); handler.post(this::refresh); });
+        row.addView(toggle);
+        panel.addView(row);
     }
 
     /** Shared in-capsule bottom sheet. It stays in the Activity's own view tree. */
@@ -890,9 +965,16 @@ final class CastControls {
 
     /** "Change cast device": uses the same sheet as the capsule's video mode selector. */
     private final class DeviceSheet extends CastSheet {
-        DeviceSheet(Context context) {
-            super(context,context.getString(R.string.cast_change_title),context.getString(R.string.cast_change_subtitle),() -> closeSheet());
+        /** Picking a TV to start casting (the cast button), not changing the one in use. */
+        private final boolean pick;
+        private View searchRow;
+
+        DeviceSheet(Context context, boolean pick) {
+            super(context,context.getString(pick ? R.string.cast_pick_title : R.string.cast_change_title),
+                context.getString(pick ? R.string.cast_pick_subtitle : R.string.cast_change_subtitle),() -> closeSheet());
+            this.pick = pick;
             list.addView(loadingRow());
+            if (pick) return;
             TextView note = text(context.getString(R.string.cast_change_note), 13, 0xFFC4CACE, false);
             note.setLineSpacing(0, 1.3f);
             note.setPadding(dp(14), dp(12), dp(14), dp(12));
@@ -913,6 +995,21 @@ final class CastControls {
             t.setPadding(dp(10), 0, 0, 0);
             row.addView(t);
             return row;
+        }
+
+        /** The picker's search in progress (a row under the list) or done. */
+        void searching(boolean on) {
+            if (searchRow != null) { footer.removeView(searchRow); searchRow = null; }
+            if (!on) return;
+            LinearLayout row = new LinearLayout(context);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(dp(20), dp(10), dp(20), dp(4));
+            row.addView(spinner(16, ACCENT_TEXT));
+            TextView t = text(context.getString(R.string.cast_searching), 13, TEXT_DIM, false);
+            t.setPadding(dp(10), 0, 0, 0);
+            row.addView(t);
+            searchRow = row;
+            footer.addView(row, 0);
         }
 
         void show(JSONObject status) {
@@ -938,7 +1035,7 @@ final class CastControls {
                 list.addView(row(r, current));
             }
             if (others == 0) {
-                TextView none = text(context.getString(R.string.cast_no_other), 14, TEXT_DIM, false);
+                TextView none = text(context.getString(pick ? R.string.cast_none_found : R.string.cast_no_other), 14, TEXT_DIM, false);
                 none.setLineSpacing(0, 1.3f);
                 none.setPadding(dp(20), dp(12), dp(20), dp(4));
                 list.addView(none);

@@ -1,0 +1,323 @@
+From: Rungic <noreply@rungic.invalid>
+Date: Thu, 1 Oct 2026 23:12:14 +0900
+Subject: The TV's director layout: several sources at once,
+ each in a tile on a layer of its own (docs/58)
+
+Origin: vendor
+Forwarded: no
+Last-Update: 2026-10-01
+X-Rungic-Status: Inappropriate; Android host integration
+X-Rungic-Tests: L1:android-cross-build (host); runtime: docs/58 director acceptance
+X-Rungic-Docs: docs/58; docs/research/91
+---
+ src/android/backend/smithay_backend.rs | 44 ++++++++++++++++++++++++++++++---
+ src/android/backend/wayland/seat.rs    | 45 +++++++++++++++++++++++++++-------
+ src/android/bridge_surface.rs          | 29 ++++++++++++++++++++++
+ src/android/command_channel.rs         |  2 ++
+ src/compositor.rs                      | 28 +++++++++++++++++----
+ 5 files changed, 130 insertions(+), 18 deletions(-)
+
+diff --git a/src/android/backend/smithay_backend.rs b/src/android/backend/smithay_backend.rs
+index 1f37814..425f52a 100644
+--- a/src/android/backend/smithay_backend.rs
++++ b/src/android/backend/smithay_backend.rs
+@@ -686,7 +686,7 @@ fn try_zero_copy(state: &mut AndroidSmithayState, items: &mut [RenderItem]) -> b
+     // SurfaceFlinger takes ownership of the acquire fence fd and waits for it itself.
+     let acquire_fd = acquire.as_ref().and_then(|fence| fence.try_clone().ok());
+     if let Some(presenter) = state.presenter.as_mut() {
+-        presenter.present(ahb, hold, release.take(), acquire_fd, (w, h), surface_size, 0);
++        presenter.present(ahb, hold, release.take(), acquire_fd, (w, h), surface_size, 0, None);
+         presenter.track_startup_frame(crate::android::frame_clock::phone_proof());
+     }
+     crate::android::frame_clock::note_present();
+@@ -703,6 +703,27 @@ pub(crate) struct CastWindow {
+     /// Degrees clockwise the picture is turned in the window (0 or 90).
+     pub rotation: i32,
+     pub frames: u64,
++    /// The director layout's layers, one per tiled source (cast.rs); `presenter` is hidden then.
++    pub tiles: std::collections::HashMap<usize, crate::android::surface_control::Presenter>,
++}
++
++impl CastWindow {
++    /// Release buffers SurfaceFlinger is done with, on every layer.
++    pub fn collect(&mut self) {
++        self.presenter.collect();
++        for layer in self.tiles.values_mut() {
++            layer.collect();
++        }
++    }
++
++    pub fn settled(&self) -> bool {
++        self.presenter.settled() && self.tiles.values().all(|l| l.settled())
++    }
++
++    /// Keep the layers of `slots` only (the director layout changed); none: one source again.
++    pub fn keep_tiles(&mut self, slots: &[usize]) {
++        self.tiles.retain(|slot, _| slots.contains(slot));
++    }
+ }
+ 
+ impl Drop for CastWindow {
+@@ -736,7 +757,7 @@ pub fn bind_cast_window(state: &mut AndroidSmithayState, window: *mut ndk_sys::A
+     match crate::android::surface_control::Presenter::new(window) {
+         Some(presenter) => {
+             log::info!("cast: window bound {}x{} turned {}", size.0, size.1, rotation);
+-            state.cast = Some(CastWindow { window, presenter, size, rotation, frames: 0 });
++            state.cast = Some(CastWindow { window, presenter, size, rotation, frames: 0, tiles: Default::default() });
+             true
+         }
+         None => {
+@@ -757,7 +778,9 @@ pub fn release_cast_window(state: &mut AndroidSmithayState) {
+ /// dmabuf, not a host-allocated buffer, no buffer hold.
+ pub static CAST_SKIPPED: [std::sync::atomic::AtomicU64; 4] = [const { std::sync::atomic::AtomicU64::new(0) }; 4];
+ 
+-pub fn present_cast(state: &mut AndroidSmithayState, mut item: RenderItem) -> bool {
++/// `slot`'s frame; `tile` its place in the director layout (fractions of the window), else
++/// the whole window.
++pub fn present_cast(state: &mut AndroidSmithayState, slot: usize, tile: Option<[f32; 4]>, mut item: RenderItem) -> bool {
+     use std::sync::atomic::Ordering::Relaxed;
+     let Some(cast) = state.cast.as_mut() else { CAST_SKIPPED[0].fetch_add(1, Relaxed); return false };
+     let RenderItem::DmaBuf { ref fd, fourcc, width, height, ref mut hold, ref acquire, ref mut release, .. } = item else {
+@@ -770,7 +793,20 @@ pub fn present_cast(state: &mut AndroidSmithayState, mut item: RenderItem) -> bo
+     };
+     let Some(hold) = hold.take() else { CAST_SKIPPED[3].fetch_add(1, Relaxed); return false };
+     let acquire_fd = acquire.as_ref().and_then(|fence| fence.try_clone().ok());
+-    cast.presenter.present(ahb, hold, release.take(), acquire_fd, (width, height), cast.size, cast.rotation);
++    match tile {
++        None => cast.presenter.present(ahb, hold, release.take(), acquire_fd, (width, height), cast.size, cast.rotation, None),
++        Some([x, y, w, h]) => {
++            cast.presenter.hide();
++            if !cast.tiles.contains_key(&slot) {
++                let Some(layer) = crate::android::surface_control::Presenter::new(cast.window) else { return false };
++                cast.tiles.insert(slot, layer);
++            }
++            let (sw, sh) = (cast.size.0 as f32, cast.size.1 as f32);
++            let place = ((x * sw).round() as i32, (y * sh).round() as i32, (w * sw).round() as i32, (h * sh).round() as i32);
++            let layer = cast.tiles.get_mut(&slot).expect("inserted");
++            layer.present(ahb, hold, release.take(), acquire_fd, (width, height), cast.size, 0, Some(place));
++        }
++    }
+     cast.frames += 1;
+     true
+ }
+diff --git a/src/android/backend/wayland/seat.rs b/src/android/backend/wayland/seat.rs
+index 6fda313..e1d3f23 100644
+--- a/src/android/backend/wayland/seat.rs
++++ b/src/android/backend/wayland/seat.rs
+@@ -256,7 +256,10 @@ pub struct AndroidSeatRuntime {
+     /// refresh of the user's second output it keeps.
+     pub(crate) agent_screen: Option<((i32, i32), i32)>,
+     /// Newest buffer of the cast window, taken by the compositor loop after render_all.
+-    pub(crate) pending_cast_frame: Option<crate::android::backend::smithay_backend::RenderItem>,
++    /// New frames for the cast window, by source (one, or each tile of the director layout).
++    pub(crate) pending_cast_frames: Vec<(usize, crate::android::backend::smithay_backend::RenderItem)>,
++    /// The director layout (cast.rs): empty while the TV shows one source.
++    pub(crate) tiles: Vec<crate::android::backend::wayland::cast::Tile>,
+     /// Output pacing (docs/65): each output is rendered when its own windows changed, at
+     /// most once per interval while nobody sees it (set by the compositor loop).
+     pub(crate) pacing: OutputPacing,
+@@ -657,7 +660,8 @@ impl AndroidSeatRuntime {
+             wl_to_window: HashMap::new(),
+             cast: None,
+             agent_screen: None,
+-            pending_cast_frame: None,
++            pending_cast_frames: Vec::new(),
++            tiles: Vec::new(),
+             workspaces: (0..crate::android::backend::wayland::server::WORKSPACE_SLOTS).map(|_| None).collect(),
+             presented: 0,
+             wanted_source: 0,
+@@ -1258,7 +1262,9 @@ impl AndroidSeatRuntime {
+         if let Some(surface) = self.cast.as_ref().and_then(|c| c.surface.clone()).filter(|s| s.is_alive()) {
+             let commits = engine_timing::cast_commit_count();
+             let pending = commits != self.pacing.cast_commits_seen || self.pacing.cast_deferred;
+-            let interval = if self.presented == 0 { self.pacing.cast_interval } else { None };
++            let thumbnail = self.presented != 0 && self.cast_window.is_some() && self.tile(0).is_some();
++            let interval = if self.presented == 0 { self.pacing.cast_interval }
++                else if thumbnail { Some(crate::android::backend::wayland::cast::THUMBNAIL_INTERVAL) } else { None };
+             let p = &mut self.pacing;
+             if OutputPacing::take_turn(pending, interval, &mut p.last_cast_frame, &mut p.cast_deferred, &mut p.due, now) {
+                 self.pacing.cast_commits_seen = commits;
+@@ -1267,9 +1273,12 @@ impl AndroidSeatRuntime {
+             }
+         }
+         // Agent workspaces: at their own pace, the presented one at the presenter's.
++        self.publish_live_sources();
+         for slot in 1..=self.workspaces.len() {
+             let presented = self.presented == slot;
+-            let interval = if presented { self.pacing.cast_interval } else { None };
++            let thumbnail = !presented && self.cast_window.is_some() && self.tile(slot).is_some();
++            let interval = if presented { self.pacing.cast_interval }
++                else if thumbnail { Some(crate::android::backend::wayland::cast::THUMBNAIL_INTERVAL) } else { None };
+             let Some(workspace) = self.workspaces[slot - 1].as_mut() else { continue };
+             let Some(surface) = workspace.surface.clone().filter(|s| s.is_alive()) else { continue };
+             let pending = workspace.commits != workspace.commits_seen || workspace.deferred;
+@@ -1284,26 +1293,44 @@ impl AndroidSeatRuntime {
+     /// A turn of source `slot`: the presented one hands its new frame to the presenter (and
+     /// is reported when the loop presents it); every other gets its frame reported at once.
+     fn take_source_frame(&mut self, slot: usize, surface: &WlSurface) {
+-        use smithay::wayland::compositor::{with_states, SurfaceAttributes};
+         // A workspace presented while no TV or fullscreen window is bound (the floating window
+         // records it in its own KWin) is reported at once like any other.
+         if slot == self.presented && (slot == 0 || self.cast_window.is_some()) {
+             if let Some(buffer) = Self::get_surface_buffer(surface) {
+                 if crate::android::backend::wayland::cast::take_new_buffer(self.source_mut(slot), &buffer) {
+-                    let scale = with_states(surface, |states| {
+-                        states.cached_state.get::<SurfaceAttributes>().current().buffer_scale.max(1)
+-                    }) as f32;
+-                    self.pending_cast_frame = Self::try_get_dmabuf_render_item(surface, &buffer, 0, 0, scale, false);
++                    self.queue_cast_frame(slot, surface, &buffer);
+                 }
+             }
+             Self::send_frame_callback(surface);
+             self.pacing.cast_released = true;
++        } else if self.cast_window.is_some() && self.tile(slot).is_some() {
++            // A thumbnail of the director layout: to its layer, reported at once like an unseen one.
++            if let Some(buffer) = Self::get_surface_buffer(surface) {
++                if crate::android::backend::wayland::cast::take_new_buffer(self.source_mut(slot), &buffer) {
++                    self.queue_cast_frame(slot, surface, &buffer);
++                }
++            }
++            Self::send_frame_callback(surface);
++            self.finish_source_presentation(slot);
+         } else {
+             Self::send_frame_callback(surface);
+             self.finish_source_presentation(slot);
+         }
+     }
+ 
++    /// The frame of `slot` for its layer in the cast window (replacing one not yet presented).
++    fn queue_cast_frame(&mut self, slot: usize, surface: &WlSurface,
++                        buffer: &smithay::reexports::wayland_server::protocol::wl_buffer::WlBuffer) {
++        use smithay::wayland::compositor::{with_states, SurfaceAttributes};
++        let scale = with_states(surface, |states| {
++            states.cached_state.get::<SurfaceAttributes>().current().buffer_scale.max(1)
++        }) as f32;
++        self.pending_cast_frames.retain(|(s, _)| *s != slot);
++        if let Some(item) = Self::try_get_dmabuf_render_item(surface, buffer, 0, 0, scale, false) {
++            self.pending_cast_frames.push((slot, item));
++        }
++    }
++
+     /// KWin renders the next frame of an output as soon as the previous one is reported
+     /// presented or discarded (at most two pending). A paced output's superseded frames are
+     /// therefore reported discarded only at its next turn, else KWin would render at its own
+diff --git a/src/android/bridge_surface.rs b/src/android/bridge_surface.rs
+index 940b75b..d893c3a 100644
+--- a/src/android/bridge_surface.rs
++++ b/src/android/bridge_surface.rs
+@@ -200,6 +200,35 @@ pub extern "system" fn Java_com_winland_server_NativeBridge_presentWorkspace(
+     crate::android::command_channel::send_command(crate::android::command_channel::JniCommand::PresentWorkspace { slot });
+ }
+ 
++/// The TV's director layout (cast.rs): `slots[i]` in the rectangle `rects[4i..4i+4]` (x, y,
++/// width, height as fractions of the TV), `focus` the presented one; no slots: one source.
++#[no_mangle]
++pub extern "system" fn Java_com_winland_server_NativeBridge_setDirector(
++    env: JNIEnv,
++    _class: JClass,
++    slots: jni::objects::JIntArray,
++    rects: jni::objects::JFloatArray,
++    focus: jni::sys::jint,
++) {
++    let count = env.get_array_length(&slots).unwrap_or(0).max(0) as usize;
++    let mut slot_values = vec![0i32; count];
++    let mut rect_values = vec![0f32; count * 4];
++    if count > 0 && (env.get_int_array_region(&slots, 0, &mut slot_values).is_err()
++        || env.get_float_array_region(&rects, 0, &mut rect_values).is_err()) {
++        return;
++    }
++    let tiles = slot_values.iter().enumerate()
++        .map(|(i, slot)| (*slot, [rect_values[4 * i], rect_values[4 * i + 1], rect_values[4 * i + 2], rect_values[4 * i + 3]]))
++        .collect();
++    crate::android::command_channel::send_command(crate::android::command_channel::JniCommand::SetDirector { tiles, focus });
++}
++
++/// The sources there are now: bit 0 the user's desktop, bit n agent workspace n (cast.rs).
++#[no_mangle]
++pub extern "system" fn Java_com_winland_server_NativeBridge_liveSources(_env: JNIEnv, _class: JClass) -> jni::sys::jint {
++    crate::android::backend::wayland::cast::LIVE_SOURCES.load(std::sync::atomic::Ordering::Relaxed) as jni::sys::jint
++}
++
+ #[no_mangle]
+ pub extern "system" fn Java_com_winland_server_NativeBridge_sendRelativeMotion(
+     _env: JNIEnv,
+diff --git a/src/android/command_channel.rs b/src/android/command_channel.rs
+index 3e7fdd7..8b232e4 100644
+--- a/src/android/command_channel.rs
++++ b/src/android/command_channel.rs
+@@ -73,6 +73,8 @@ pub enum JniCommand {
+     /// Which source the TV or fullscreen presenter shows (docs/research/91): 0 the cast
+     /// output (the user's desktop or the assistant's screen), n agent workspace n.
+     PresentWorkspace { slot: i32 },
++    /// The TV's director layout: (slot, x, y, width, height as fractions); empty: off.
++    SetDirector { tiles: Vec<(i32, [f32; 4])>, focus: i32 },
+     SurfaceChanged {
+         width: i32,
+         height: i32,
+diff --git a/src/compositor.rs b/src/compositor.rs
+index 2c3c279..68f4bab 100644
+--- a/src/compositor.rs
++++ b/src/compositor.rs
+@@ -144,7 +144,8 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+             let mut phone_commands = 0u32;
+             while let Ok(cmd) = cmd_rx.try_recv() {
+                 commands_this_spin += 1;
+-                if !matches!(cmd, JniCommand::CastPointer { .. } | JniCommand::PresentWorkspace { .. } | JniCommand::GetRuntimeStats { .. }
++                if !matches!(cmd, JniCommand::CastPointer { .. } | JniCommand::PresentWorkspace { .. } | JniCommand::SetDirector { .. }
++                    | JniCommand::GetRuntimeStats { .. }
+                     | JniCommand::GetSurfaceSize { .. } | JniCommand::GetScrollSensitivity { .. }
+                     | JniCommand::GetBackendSnapshot { .. }) {
+                     phone_commands += 1;
+@@ -392,6 +393,22 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+                             server.runtime.present_source(slot.max(0) as usize);
+                         }
+                     }
++                    JniCommand::SetDirector { tiles, focus } => {
++                        let tiles: Vec<crate::android::backend::wayland::cast::Tile> = tiles.into_iter()
++                            .map(|(slot, rect)| crate::android::backend::wayland::cast::Tile { slot: slot.max(0) as usize, rect })
++                            .collect();
++                        let slots: Vec<usize> = tiles.iter().map(|t| t.slot).collect();
++                        if let Some(cast) = backend_state.cast.as_mut() {
++                            cast.keep_tiles(&slots);
++                            if slots.is_empty() {
++                                // One source again: its next frame shows the main layer.
++                                cast.presenter.hide();
++                            }
++                        }
++                        if let Some(server) = wayland_server.as_mut() {
++                            server.runtime.set_director(tiles, focus.max(0) as usize);
++                        }
++                    }
+                     JniCommand::CastPointer { op, x, y } => {
+                         if let Some(server) = wayland_server.as_mut() {
+                             let rt = &mut server.runtime;
+@@ -564,8 +581,9 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+                     server.runtime.render(phone_commands > 0 || uncovered);
+                     last_render = Instant::now();
+                     last_commits = commits;
+-                    if let Some(frame) = server.runtime.pending_cast_frame.take() {
+-                        crate::android::backend::smithay_backend::present_cast(&mut backend_state, frame);
++                    for (slot, frame) in std::mem::take(&mut server.runtime.pending_cast_frames) {
++                        let tile = server.runtime.tile(slot);
++                        crate::android::backend::smithay_backend::present_cast(&mut backend_state, slot, tile, frame);
+                     }
+                     // KWin keeps at most two frames of an output pending. Report every
+                     // cast commit when it is rendered, also one that brought no new buffer
+@@ -577,7 +595,7 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+                 }
+             }
+             if let Some(cast) = backend_state.cast.as_mut() {
+-                cast.presenter.collect();
++                cast.collect();
+             }
+             let presents_before = crate::android::frame_clock::presented_count();
+             flush_deferred_composite(&mut backend_state, &render_rx);
+@@ -607,7 +625,7 @@ pub fn spawn(distro_id: &str) -> Result<(), String> {
+             let settling = input_router.busy()
+                 || backend_state.frames_presented == 0
+                 || backend_state.presenter.as_ref().is_some_and(|p| !p.settled())
+-                || backend_state.cast.as_ref().is_some_and(|c| !c.presenter.settled());
++                || backend_state.cast.as_ref().is_some_and(|c| !c.settled());
+             if settling {
+                 last_activity = Instant::now();
+             }

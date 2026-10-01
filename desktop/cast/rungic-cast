@@ -10,6 +10,10 @@ host app's root tool rungic-cast through the platform bridge.
   rungic-cast modes               current video mode and receiver/source compatible modes
   rungic-cast resolution MAC/1920x1080@30 change the active video mode and reconnect
   rungic-cast disconnect          stop casting (no automatic reconnect follows)
+  rungic-cast tv [next | N | director on|off | button N]
+                                  what the TV shows (the Rungic app, docs/58): the next screen, screen N
+                                  (0 the desktop, n assistant screen n), the director view, or the cast
+                                  button of screen N (no TV yet: the app's TV picker)
 
 Prints the tool's JSON; exits 1 with {"error": ...} on failure.
 """
@@ -42,8 +46,39 @@ def request(args: list[str]) -> dict:
             return validate_result(args[0], json.loads(stream.readline(1 << 20)))
 
 
+def tv(args: list[str]) -> dict:
+    if not args:
+        req = {}
+    elif args == ['next']:
+        req = {'next': True}
+    elif args[0] == 'director' and len(args) == 2 and args[1] in ('on', 'off'):
+        req = {'director': args[1] == 'on'}
+    elif args[0] == 'button' and len(args) == 2 and args[1].isdigit():
+        req = {'button': True, 'source': int(args[1])}
+    elif len(args) == 1 and args[0].isdigit():
+        req = {'source': int(args[0])}
+    else:
+        raise ValueError('usage')
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
+        conn.settimeout(10)
+        conn.connect(SOCKET)
+        conn.sendall(json.dumps({'op': 'tv', **req}).encode() + b'\n')
+        with conn.makefile('rb') as stream:
+            return json.loads(stream.readline(1 << 20))
+
+
 def main() -> int:
     args = sys.argv[1:] or ['status']
+    if args[0] == 'tv':
+        try:
+            result = tv(args[1:])
+        except ValueError:
+            print(__doc__.strip(), file=sys.stderr)
+            return 2
+        except OSError as e:
+            result = {'error': f'Plasma Mobile host not reachable: {e}'}
+        print(json.dumps(result, ensure_ascii=False))
+        return 1 if 'error' in result else 0
     if args[0] not in COMMANDS or len(args) > (2 if args[0] in ('connect', 'scan', 'resolution') else 1):
         print(__doc__.strip(), file=sys.stderr)
         return 2

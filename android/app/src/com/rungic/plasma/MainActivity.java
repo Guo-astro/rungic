@@ -115,14 +115,10 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
             @Override public void releasePresenter(String owner) { MainActivity.this.releasePresenter(owner); }
             @Override public void leaveFullscreen() { agentFullscreen.hide(); }
             @Override public void castToTv() {
-                // The TV takes over what fullscreen showed.
-                setTvSource(fullscreenSource);
+                // The cast button (docs/58): the TV, once picked, takes over what fullscreen showed.
+                int source = fullscreenSource;
                 agentFullscreen.hide();
-                // As the Plasma cast tile does (rungic-cast, docs/58): the last TV; seconds to a minute.
-                new Thread(() -> {
-                    try { new ProcessBuilder("su", "-c", "/data/adb/rungic-wfd/rungic-cast connect").redirectErrorStream(true).start().waitFor(); }
-                    catch (Exception e) { Log.w("RungicCast", "connect failed: " + e); }
-                }, "rungic-cast").start();
+                castButton(source);
             }
             @Override public void closeAgentScreen() {
                 try {
@@ -132,9 +128,10 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
                 catch (Exception e) { Log.w("RungicWayland", "screen off failed: " + e); }
             }
         });
+        tvScreens = new TvScreens(this);
         castDesktop = new CastDesktop(this, () -> initialized, () -> desktopMode ? AGENT_SCREEN_SIZE : null, bound -> {
             // A TV that goes away forgets what it showed: the next one shows the desktop.
-            if (!bound) tvSource = 0;
+            tvScreens.bound(bound, castDesktop.display());
             castControls.setAvailable(bound);
             // The TV takes the assistant's screen from fullscreen (it bound the presenter first).
             if (bound) agentFullscreen.hide();
@@ -507,7 +504,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
      */
     private boolean assistantScreen;
     private int assistantWorkspace = 1;
-    private int tvSource = 0;              // what a TV shows: 0 the desktop, n workspace n
+    private TvScreens tvScreens;           // what a TV shows (docs/58): one screen or the director view
     private int fullscreenSource = 0;      // what fullscreen shows
     org.json.JSONObject desktopMode(org.json.JSONObject request) throws Exception {
         if (request.has("enabled")) {
@@ -527,7 +524,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         if (request.has("watched")) setAgentScreenWatched(request.getBoolean("watched"));
         return new org.json.JSONObject().put("enabled", desktopMode)
             .put("width", AGENT_SCREEN_SIZE[0]).put("height", AGENT_SCREEN_SIZE[1])
-            .put("tv", castControls.available() && tvSource == 0)
+            .put("tv", castControls.available() && tvScreens.shown().contains(0))
             .put("fullscreen", agentFullscreen.shown() && fullscreenSource == 0)
             .put("watched", agentScreenWatched);
     }
@@ -541,7 +538,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
             getPreferences(MODE_PRIVATE).edit().putBoolean("assistant_screen", assistantScreen).apply();
             if (!assistantScreen) {
                 if (fullscreenSource != 0) agentFullscreen.hide();
-                if (tvSource != 0) setTvSource(0);     // the TV goes back to the desktop
+                if (!tvScreens.director() && tvScreens.source() != 0) setTvSource(0);     // the TV goes back to the desktop
             }
         }
         if (request.has("tv")) setTvSource(request.getBoolean("tv") ? assistantWorkspace : 0);
@@ -552,13 +549,37 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         }
         return new org.json.JSONObject().put("enabled", assistantScreen).put("workspace", assistantWorkspace)
             .put("width", AGENT_SCREEN_SIZE[0]).put("height", AGENT_SCREEN_SIZE[1])
-            .put("tv", castControls.available() && tvSource == assistantWorkspace)
-            .put("fullscreen", agentFullscreen.shown() && fullscreenSource == assistantWorkspace);
+            .put("tv", castControls.available() && tvScreens.shown().contains(assistantWorkspace))
+            .put("fullscreen", agentFullscreen.shown() && fullscreenSource == assistantWorkspace)
+            .put("tvShown", new org.json.JSONArray(tvScreens.shown()))
+            .put("tvHeard", castControls.available() ? tvScreens.source() : -1);
+    }
+    TvScreens tvScreens() { return tvScreens; }
+    /**
+     * "tv" (docs/58): what the TV shows. {"source": n} one screen (in the director view: the
+     * focus), {"next": true} the next screen, {"director": bool} the director view on or off,
+     * {"button": true, "source": n} the cast button of screen n: with a TV the next screen, else
+     * the TV picker, the picked TV then showing screen n. Answers the TV's state.
+     */
+    org.json.JSONObject tv(org.json.JSONObject request) throws Exception {
+        boolean picking = false;
+        if (request.has("director")) tvScreens.setDirector(request.getBoolean("director"));
+        if (request.optBoolean("button")) picking = castButton(request.optInt("source", 0));
+        else if (request.optBoolean("next")) { if (castControls.available()) tvScreens.next(); }
+        else if (request.has("source")) tvScreens.show(request.getInt("source"));
+        return tvScreens.state().put("picking", picking);
+    }
+    /** The cast button of screen `source`: with a TV the next screen; else the TV picker. True: picking. */
+    boolean castButton(int source) {
+        if (castControls.available()) { tvScreens.next(); return false; }
+        if (!hasWindowFocus()) throw new IllegalStateException("请先返回 Plasma Mobile");
+        tvScreens.show(source);
+        castControls.pickTv();
+        return true;
     }
     /** What a TV shows; a TV already showing something switches at once. */
     private void setTvSource(int source) {
-        tvSource = source;
-        if (initialized && "tv".equals(presenterOwner)) NativeBridge.presentWorkspace(source);
+        tvScreens.show(source);
     }
     private void setAgentScreenWatched(boolean watched) {
         agentScreenWatched = watched;
@@ -572,7 +593,12 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
      */
     void bindPresenter(String owner, android.view.Surface surface, int width, int height, int refreshMhz, int rotation) {
         // Its source first (the desktop, or a workspace), so the host makes no output for the other.
-        NativeBridge.presentWorkspace("tv".equals(owner) ? tvSource : fullscreenSource);
+        if ("tv".equals(owner)) NativeBridge.presentWorkspace(tvScreens.source());
+        else {
+            // Fullscreen shows one screen: no director layout left from a TV.
+            try { NativeBridge.setDirector(new int[0], new float[0], fullscreenSource); }
+            catch (UnsatisfiedLinkError e) { NativeBridge.presentWorkspace(fullscreenSource); }
+        }
         NativeBridge.bindCastSurface(surface, width, height, refreshMhz, rotation);
         presenterOwner = owner;
         // Fullscreen covers the phone's own picture: the host paces it down (docs/65).

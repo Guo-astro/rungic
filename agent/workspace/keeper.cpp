@@ -20,6 +20,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
@@ -131,12 +132,14 @@ public:
         // Being closed (rungic_cua workspace.close): its apps must answer, nothing is frozen.
         const bool closing = QFile::exists(QStringLiteral("%1/rungic-workspace-%2.closing").arg(qEnvironmentVariable("XDG_RUNTIME_DIR"), m_slot));
         const bool isShown = shown();
-        if (!m_soundShown || *m_soundShown != isShown) {
+        // Heard while shown, but of the TV's director view only the focus.
+        const bool isHeard = isShown && m_heard;
+        if (!m_soundShown || *m_soundShown != isHeard) {
             // Heard while shown, wherever (the phone's speaker, the TV's while casting): its sink's
             // monitor to the default output (rungic-workspace-sound).
-            note(isShown ? QStringLiteral("shown: sound on") : QStringLiteral("hidden: sound off"));
-            QProcess::startDetached(QStringLiteral("rungic-workspace-sound"), {m_slot, isShown ? QStringLiteral("listen") : QStringLiteral("quiet")});
-            m_soundShown = isShown;
+            note(isHeard ? QStringLiteral("shown: sound on") : QStringLiteral("not heard: sound off"));
+            QProcess::startDetached(QStringLiteral("rungic-workspace-sound"), {m_slot, isHeard ? QStringLiteral("listen") : QStringLiteral("quiet")});
+            m_soundShown = isHeard;
         }
         const bool atWork = m_inputIdle && !closing && !isShown && agentAtWork();
         const bool quiet = m_inputIdle && !closing && !isShown && !atWork;
@@ -228,12 +231,19 @@ private:
         if (state.isEmpty()) {
             return true;
         }
+        // On the TV: alone, or a tile of its director view (docs/58), where only the focus is heard.
+        const QJsonArray onTv = state.value(QStringLiteral("tvShown")).toArray();
+        if (onTv.contains(m_slot.toInt())) {
+            m_heard = state.value(QStringLiteral("tvHeard")).toInt(-1) == m_slot.toInt();
+            return true;
+        }
+        m_heard = true;
         if (!state.value(QStringLiteral("enabled")).toBool()) {
             return false;
         }
-        // On the TV or fullscreen: the one workspace the host presents. Else its own floating window
+        // Fullscreen: the one workspace the host presents. Else its own floating window
         // (several workspaces' can be out at once, rungic-agent-screen).
-        if (state.value(QStringLiteral("tv")).toBool() || state.value(QStringLiteral("fullscreen")).toBool()) {
+        if (state.value(QStringLiteral("fullscreen")).toBool()) {
             return QString::number(state.value(QStringLiteral("workspace")).toInt(1)) == m_slot;
         }
         return QProcess::execute(QStringLiteral("pgrep"), {QStringLiteral("-f"), QStringLiteral("^/usr/libexec/rungic-agent-screen-window --workspace %1$").arg(m_slot)}) == 0;
@@ -309,6 +319,7 @@ private:
     bool m_freezeTried = false;
     bool m_wasQuiet = false;
     std::optional<bool> m_soundShown;
+    bool m_heard = true;    // shown() found it heard (false: a thumbnail of the TV's director view)
     qint64 m_quietSince = 0;
 };
 

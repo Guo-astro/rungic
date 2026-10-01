@@ -53,6 +53,9 @@ final class CastDesktop implements DisplayManager.DisplayListener, SurfaceHolder
 
     boolean enabled() { return enabled; }
 
+    /** The cast display the desktop is on, or null. */
+    Display display() { return displayId < 0 ? null : displays.getDisplay(displayId); }
+
     JSONObject request(JSONObject request) throws Exception {
         if (request.has("enabled")) {
             enabled = request.getBoolean("enabled");

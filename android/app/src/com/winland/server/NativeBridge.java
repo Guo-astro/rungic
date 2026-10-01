@@ -47,6 +47,10 @@ public final class NativeBridge {
     public static native void castPointer(int op, float x, float y);
     /** Which source the TV or fullscreen shows: 0 the assistant's screen / desktop output, n agent workspace n (docs/research/91). */
     public static native void presentWorkspace(int slot);
+    /** The TV's director layout: slots[i] in rects[4i..4i+4] (x, y, width, height as fractions), focus presented; no slots: one source (docs/58). */
+    public static native void setDirector(int[] slots, float[] rects, int focus);
+    /** The sources there are now: bit 0 the user's desktop, bit n agent workspace n. */
+    public static native int liveSources();
     /** Whether a Wayland client (KWin, for an idle-inhibiting window) inhibits idle (docs/72). */
     public static native boolean idleInhibited();
     /** eventfd that becomes readable when idleInhibited() changes; the reader drains it. */

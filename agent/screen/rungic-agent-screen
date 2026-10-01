@@ -371,8 +371,10 @@ def tv(show=True):
         raise SystemExit(json.dumps({'error': 'a TV shows desktop mode anyway; rungic-cast connects one'}))
     if show:
         on()
-    state = bridge({'op': OP, 'tv': show})
-    if show and not state.get('tv'):
+    # This workspace's screen (several can be out, docs/research/91), shown alone or, in the TV's
+    # director view, focused (docs/58).
+    state = bridge({'op': 'tv', 'source': workspace() if show else 0})
+    if show and not state.get('connected'):
         # No TV yet: the last one, as the quick setting and the floating window connect it
         # (seconds to a minute).
         result = bridge({'op': 'cast', 'args': ['connect']}, timeout=75)
