@@ -1,5 +1,8 @@
 # Reviewed benchmark evidence
 
+`geekbench7-cpu-20261001/` compares Geekbench 7 CPU on the same moto g100s as the Android app and in Rungic's
+Ubuntu container (README, Performance): scores transcribed from the Geekbench Browser comparison page, one run each.
+
 `kwin-vulkan-20260923/` holds the KWin + native Vulkan quantification (doc 56):
 real-desktop stage timing and the GLES/Vulkan compositor prototype.
 

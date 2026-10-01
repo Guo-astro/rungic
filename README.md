@@ -139,6 +139,25 @@ Rungic does not replace the phone's operating system. Android keeps handling cal
 
 The bundled assistant has two parts: a realtime voice model talks with you, and Codex runs tasks in the background. This is the reference integration; another agent can reuse the system capabilities described below.
 
+## Performance
+
+**Linux programs run at the phone's native CPU speed.** The desktop is an LXC container on Android's own Linux kernel. There is no virtual machine, no emulator and no instruction translation: Ubuntu's ARM64 programs run directly on the phone's CPU cores, and the same kernel schedules them alongside Android's apps. The container only gives them their own namespaces (files, processes, users) and resource groups. What Rungic adds sits around the programs rather than under them: their picture, touch, sound and camera pass through the Rungic app, while their computation runs as on any ARM64 Linux machine.
+
+Geekbench 7 on the same moto g100s, once as the Android app and once in Rungic's Linux desktop ([comparison](https://browser.geekbench.com/v7/cpu/compare/511001?baseline=515585)):
+
+| Geekbench 7 CPU | Android ([511001](https://browser.geekbench.com/v7/cpu/511001)) | Rungic, Ubuntu 26.04 in the container ([515585](https://browser.geekbench.com/v7/cpu/515585)) | Rungic vs Android |
+|---|---:|---:|---:|
+| Single-core | 820 | 814 | 99% |
+| Multi-core | 2485 | 2563 | 103% |
+
+- **Same processor.** Both runs report the same CPU (Snapdragon SM6435, 8 cores, processor ID part 3393) and 7.3 GB of memory. Geekbench names the phone "moto g57 power" on Android and "mumba", its codename, on Linux.
+- **Individual workloads.**
+  - Single-core: the 16 workloads land between 88% and 111% of Android's scores. Rungic is ahead in Video Encoder (+11%), Audio Encoder (+10%) and Photo Library (+9%), and behind in Asset Compression (−13%), Ray Tracer (−12%) and HDR (−8%).
+  - Multi-core: six of the eight workloads are within ±7%. Two stand out: Text Processing scores 2.6× Android's (2998 against 1165), and Photo Editor 58% of it (974 against 1678). Neither difference has been investigated yet.
+- **Limits of the comparison.** One run each, with different Geekbench builds (7.1.0 on Android, 7.0.0 Preview on Linux) and different system libraries (Android's bionic, Ubuntu's glibc). Treat the overall result as parity, not a gain.
+
+All per-workload scores are in [`benchmarks/geekbench7-cpu-20261001`](benchmarks/geekbench7-cpu-20261001/results.json). Graphics run on the phone's GPU through Mesa; display and renderer measurements are in the [benchmark notes](benchmarks/README.md).
+
 ## What makes it Agent Ready
 
 Rungic gives an agent a place to work, tools to act, evidence to inspect and a way to deliver the result. These capabilities sit in the system and can be reused by different agents.

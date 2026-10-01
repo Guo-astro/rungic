@@ -1,0 +1,183 @@
+{
+ "comment": "Geekbench 7 CPU on one phone (moto g100s, XT2537-4, codename mumba): once as the Android app, once in Rungic's Ubuntu container. Transcribed from the Geekbench Browser comparison page the user supplied (2026-10-01); the page itself sits behind a Cloudflare check and was not fetched here. One run each.",
+ "source": "https://browser.geekbench.com/v7/cpu/compare/511001?baseline=515585",
+ "android": {
+  "result": 511001,
+  "url": "https://browser.geekbench.com/v7/cpu/511001",
+  "geekbench": "7.1.0",
+  "reported_os": "Android 17",
+  "reported_model": "motorola moto g57 power",
+  "processor": "QTI SM6435 @ 1.80 GHz, 1 processor, 8 cores",
+  "memory_gb": 7.34
+ },
+ "rungic": {
+  "result": 515585,
+  "url": "https://browser.geekbench.com/v7/cpu/515585",
+  "geekbench": "7.0.0 Preview",
+  "reported_os": "Ubuntu 26.04.1 LTS",
+  "reported_model": "mumba",
+  "processor": "ARM ARMv8 @ 1.80 GHz, 1 processor, 8 cores",
+  "memory_gb": 7.35
+ },
+ "processor_id": "ARM implementer 65 architecture 8 variant 1 part 3393 revision 2 (both)",
+ "scores": {
+  "single_core": {
+   "android": 820,
+   "rungic": 814,
+   "rungic_vs_android": 0.993
+  },
+  "multi_core": {
+   "android": 2485,
+   "rungic": 2563,
+   "rungic_vs_android": 1.031
+  }
+ },
+ "single_core_workloads": [
+  {
+   "workload": "File Compression",
+   "android": 1004,
+   "rungic": 1037,
+   "rungic_vs_android": 1.033
+  },
+  {
+   "workload": "Navigation",
+   "android": 991,
+   "rungic": 1007,
+   "rungic_vs_android": 1.016
+  },
+  {
+   "workload": "HTML5 Browser",
+   "android": 986,
+   "rungic": 983,
+   "rungic_vs_android": 0.997
+  },
+  {
+   "workload": "PDF Viewer",
+   "android": 1206,
+   "rungic": 1205,
+   "rungic_vs_android": 0.999
+  },
+  {
+   "workload": "Photo Library",
+   "android": 830,
+   "rungic": 901,
+   "rungic_vs_android": 1.086
+  },
+  {
+   "workload": "Clang",
+   "android": 700,
+   "rungic": 702,
+   "rungic_vs_android": 1.003
+  },
+  {
+   "workload": "Text Processing",
+   "android": 872,
+   "rungic": 825,
+   "rungic_vs_android": 0.946
+  },
+  {
+   "workload": "Asset Compression",
+   "android": 1017,
+   "rungic": 890,
+   "rungic_vs_android": 0.875
+  },
+  {
+   "workload": "HDR",
+   "android": 828,
+   "rungic": 760,
+   "rungic_vs_android": 0.918
+  },
+  {
+   "workload": "Photo Editor",
+   "android": 471,
+   "rungic": 470,
+   "rungic_vs_android": 0.998
+  },
+  {
+   "workload": "Ray Tracer",
+   "android": 878,
+   "rungic": 775,
+   "rungic_vs_android": 0.883
+  },
+  {
+   "workload": "Structure from Motion",
+   "android": 760,
+   "rungic": 761,
+   "rungic_vs_android": 1.001
+  },
+  {
+   "workload": "Game Physics",
+   "android": 701,
+   "rungic": 668,
+   "rungic_vs_android": 0.953
+  },
+  {
+   "workload": "Video Encoder",
+   "android": 677,
+   "rungic": 754,
+   "rungic_vs_android": 1.114
+  },
+  {
+   "workload": "Audio Encoder",
+   "android": 828,
+   "rungic": 907,
+   "rungic_vs_android": 1.095
+  },
+  {
+   "workload": "Video Player",
+   "android": 673,
+   "rungic": 671,
+   "rungic_vs_android": 0.997
+  }
+ ],
+ "multi_core_workloads": [
+  {
+   "workload": "File Compression",
+   "android": 2577,
+   "rungic": 2521,
+   "rungic_vs_android": 0.978
+  },
+  {
+   "workload": "Photo Library",
+   "android": 2921,
+   "rungic": 3015,
+   "rungic_vs_android": 1.032
+  },
+  {
+   "workload": "Clang",
+   "android": 2471,
+   "rungic": 2401,
+   "rungic_vs_android": 0.972
+  },
+  {
+   "workload": "Text Processing",
+   "android": 1165,
+   "rungic": 2998,
+   "rungic_vs_android": 2.573
+  },
+  {
+   "workload": "Asset Compression",
+   "android": 4748,
+   "rungic": 4409,
+   "rungic_vs_android": 0.929
+  },
+  {
+   "workload": "HDR",
+   "android": 2104,
+   "rungic": 1965,
+   "rungic_vs_android": 0.934
+  },
+  {
+   "workload": "Photo Editor",
+   "android": 1678,
+   "rungic": 974,
+   "rungic_vs_android": 0.58
+  },
+  {
+   "workload": "Ray Tracer",
+   "android": 4000,
+   "rungic": 4027,
+   "rungic_vs_android": 1.007
+  }
+ ]
+}
