@@ -7,5 +7,6 @@ After=plasma-kwin_wayland.service
 ExecStart=/usr/bin/rungic-workspace %i
 ExecStopPost=/bin/sh -c 'rm -f "$${XDG_STATE_HOME:-$$HOME/.local/state}/rungic-workspaces/%i/bus" "$${XDG_STATE_HOME:-$$HOME/.local/state}/rungic-workspaces/%i/display"'
 ExecStopPost=-/usr/bin/rungic-workspace-sound %i down
+ExecStopPost=-/usr/bin/rungic-agent-screen workspace-stopped %i
 Restart=on-failure
 RestartSec=3

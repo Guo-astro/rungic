@@ -179,7 +179,7 @@ def test_the_agent_closes_its_workspace_and_the_next_call_starts_it_again():
         first = r.children['workspace']
         result = r.call('desktop_close_workspace', {'force': True})
         assert json.loads(result['content'][0]['text'])['closed'] is True
-        close.assert_called_once_with('1', force=True)
+        close.assert_called_once_with(1, force=True)
         assert first.closed and 'workspace' not in r.children
         r.call('desktop_windows', {})
         assert r.children['workspace'] is not first and ensure.call_count == 2
@@ -204,7 +204,7 @@ def test_a_frozen_workspace_is_thawed_before_a_tool_reaches_it():
             mock.patch.object(workspace, 'ensure', return_value=True), \
             mock.patch.object(workspace, 'thaw', return_value=True) as thaw:
         router.Router(ENV).call('desktop_windows', {})
-    thaw.assert_called_once_with('1')
+    thaw.assert_called_once_with(1)
     with mock.patch.object(router, 'Child', FakeChild), \
             mock.patch.object(router, 'bridge', return_value={'enabled': True, 'tv': False}), \
             mock.patch.object(workspace, 'thaw') as thaw:

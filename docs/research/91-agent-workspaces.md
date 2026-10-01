@@ -673,3 +673,24 @@ Agent 2  KWin#2 ──── │ 显示源 agent-2               │  电视 / �
 - 不改 Codex 就能做到“每个子 Agent 一个工作区”：桌面 MCP 按进程，在子 Agent 第一次操作桌面时领取一个空闲工作区；`threadId` 和 `thread_source` 可以用来识别、记录调用者。
 - 工作区不能等进程退出才释放，要在子 Agent 交付或调用 `desktop_close_workspace` 时主动释放；进程退出只作为兜底。
 - shell 的环境仍然相同，所以子 Agent 在 shell 里启动的图形程序会开到父 Agent 的桌面，要用 `desktop_launch`，或用工具返回的命令前缀启动。
+
+**第 2 步：桌面 MCP 按子 Agent 分配工作区（已实现，实机通过）**：
+- `rungic_cua/router.py`：
+  - **识别子 Agent**：第一次调用时读 `_meta` 的 `x-codex-turn-metadata`，`thread_source: "subagent"` 的进程就是子 Agent 的工具进程；
+  - **领取**：子 Agent 第一次需要工作区时领取一个（`workspace.claim`），避开父 Agent 的工作区，优先选没在运行的，之后只在那里操作；
+  - **不受桌面模式影响**：桌面模式开着也不去用户桌面，否则几个 Agent 会抢同一套指针和焦点。
+- **领取记录**：`rungic-workspace-N.busy` 写入进程 PID、线程号和父线程号，每次调用刷新修改时间。
+  - 进程结束，或 20 分钟没有调用，就视为无效；
+  - 子 Agent 调用 `desktop_close_workspace` 关闭成功时主动释放，工具进程退出时也会释放；
+  - keeper 和 `rungic-agent-screen dismiss` 用同样的规则判断“有 Agent 在干活”；
+  - `tools/team` 写入的空文件仍表示一直占用，直到删除。
+- **工作区信息**：`desktop_where` 和第一次调用的结果里带上 `workspace` 编号和 `shell`（`rungic-workspace-env N COMMAND`）；子 Agent 还会被告知“这个工作区只归你，做完要关闭”。手机桌面技能也补了一条：子 Agent 的 shell 仍在父 Agent 的工作区里。
+- **浮窗**：
+  - `show_workspace` 认 `status` 新增的 `windows` 列表，只打开自己的浮窗，不再把助理屏切来切去；
+  - 浮窗作为 scope 启动，用 `BindsTo` 绑定到自己的工作区，工作区关闭时一起关掉。第一次实验时，工作区关了浮窗还留着，因此加了这一条；
+  - 工作区单元停止后执行 `rungic-agent-screen workspace-stopped N`：如果助理屏正显示 N，就改为显示还开着的浮窗，没有的话关闭助理屏，免得之后的 `ensure` 又把停掉的工作区启动起来。
+- **实机验证**（2026-10-01 20:45，用户同意在开发手机上直接显示）：父 Codex 派出 A、B 两个子 Agent，A 打开计算器，B 打开时钟，各自截图后关闭工作区。
+  - 领取：A 拿到 2 号、B 拿到 3 号，父 Agent 仍在 1 号；
+  - 浮窗：两个浮窗同时出现，各自随工作区关闭而消失；
+  - 收尾：领取记录随关闭释放，工作区单元没有失败，助理屏最后为关闭；
+  - 用量：36,511 token。

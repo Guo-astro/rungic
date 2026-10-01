@@ -9,6 +9,12 @@ screen (the agent's own workspace, a KWin of its own). The agent works:
 - else in its own workspace;
 - or where the user says (`desktop_where`), for the rest of the conversation.
 
+Codex starts this server once per thread, a sub-agent's as its parent's, all with the parent's
+environment (docs/research/91, "由 Codex 当组长"): a sub-agent's (its calls say thread_source
+"subagent") takes a workspace of its own at its first desktop call (workspace.claim), works only
+there, and gives it back when it closes it or ends. Agents working in parallel cannot share one
+desktop: KWin has one pointer, one keyboard focus.
+
 The voice agent starts this MCP server in the workspace's environment, with the user's session
 as RUNGIC_USER_*. It serves the tools itself but acts through two children, `rungic-cua mcp` in
 each session, started when first needed: each keeps all the logic of its session (windows,
@@ -42,7 +48,10 @@ WHERE_TOOL = {
                     "user's desktop while desktop mode is on or the TV shows the desktop, else your workspace. Set it "
                     "when the user says where to work (\"on my desktop\", \"on the assistant's screen\", \"在我的桌面上\", "
                     "\"在助理屏上\"); it holds for this "
-                    "conversation. Without `target` it only says where you work now and why."),
+                    "conversation. Without `target` it only says where you work now and why, and which "
+                    "workspace is yours: start programs from your shell with `rungic-workspace-env N COMMAND` "
+                    "so that their windows open there (your shell's environment is not the workspace's). A "
+                    "sub-agent gets a workspace of its own and works only there."),
     'inputSchema': {'type': 'object', 'properties': {
         'target': {'type': 'string', 'enum': ['auto', 'desktop', 'workspace']}}},
     'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False},
@@ -54,7 +63,8 @@ CLOSE_TOOL = {
                     "does not close (it asks about unsaved changes) comes back in `remaining` and the workspace "
                     "stays: handle it (save or discard as the user wants) and call again. `force` closes anyway "
                     "and loses what is unsaved: only when the user said so. Everything started there ends with it; "
-                    "your next desktop tool call starts it again, empty."),
+                    "your next desktop tool call starts it again, empty. A sub-agent closes its workspace "
+                    "when its part is done, which gives the workspace back for other agents."),
     'inputSchema': {'type': 'object', 'properties': {'force': {'type': 'boolean'}}},
     'annotations': {'readOnlyHint': False, 'destructiveHint': True, 'openWorldHint': False},
 }
@@ -150,52 +160,113 @@ class Child:
             self.process.kill()
 
 
+def workspace_env(env: dict, slot: int, run=subprocess.run) -> dict:
+    """`env` moved into workspace `slot`: what rungic-workspace-env sets (the user's session goes
+    along as RUNGIC_USER_*, already in `env`)."""
+    out = run(['rungic-workspace-env', str(slot), 'env', '-0'], capture_output=True, env=env, timeout=10, check=True)
+    return dict(item.split('=', 1) for item in out.stdout.decode().split('\0') if '=' in item)
+
+
 class Router:
     def __init__(self, env: dict | None = None) -> None:
         self.env = dict(env or os.environ)
+        self.home = int(self.env.get('RUNGIC_WORKSPACE') or 1)   # the parent's workspace
         self.override = 'auto'
         self.children: dict[str, Child] = {}
         self.last: str | None = None
+        self.subagent: dict | None = None    # a sub-agent's thread: {'thread', 'parent'}
+        self.claimed: int | None = None      # the workspace it holds
+
+    def caller(self, meta: dict | None) -> None:
+        """Who calls, from the first call's _meta (Codex 0.159: x-codex-turn-metadata)."""
+        turn = (meta or {}).get('x-codex-turn-metadata') or {}
+        if self.subagent is None and turn.get('thread_source') == 'subagent':
+            self.subagent = {'thread': turn.get('thread_id') or (meta or {}).get('threadId'),
+                             'parent': turn.get('parent_thread_id')}
+            logger.info('sub-agent %s of %s', self.subagent['thread'], self.subagent['parent'])
+
+    @property
+    def slot(self) -> int:
+        """The workspace this thread works in: the parent's, or a sub-agent's own (taken now if needed)."""
+        if not self.subagent:
+            return self.home
+        if self.claimed is not None:
+            holder = workspace.claim_holder(self.claimed)
+            if holder and holder.get('pid') == os.getpid():
+                workspace.touch_claim(self.claimed)
+                return self.claimed
+            logger.warning('workspace %s: claim lost', self.claimed)
+            self.drop('workspace')
+        self.claimed = workspace.claim({'pid': os.getpid(), **self.subagent}, exclude=[self.home])
+        if self.claimed is None:
+            raise RuntimeError('every agent workspace is taken by other agents: wait until one is closed '
+                               '(desktop_close_workspace gives it back) or work without the desktop')
+        logger.info('sub-agent %s: workspace %s', self.subagent['thread'], self.claimed)
+        return self.claimed
 
     def where(self) -> tuple[str, str]:
         """(target, why)."""
         if self.override != 'auto':
             return self.override, 'the user said so'
+        if self.subagent:
+            return 'workspace', 'a sub-agent works in a workspace of its own'
         in_use, why = desktop_in_use()
         return ('desktop' if in_use else 'workspace'), why
+
+    def describe(self, target: str, why: str) -> dict:
+        data = {'where': target, 'screen': SESSION_NAMES[target], 'why': why}
+        if target == 'workspace':
+            slot = self.slot
+            data.update(workspace=slot, shell=f'rungic-workspace-env {slot} COMMAND')
+            if self.subagent:
+                data['yours'] = 'this workspace is yours alone; close it (desktop_close_workspace) when your part is done'
+        return data
+
+    def drop(self, target: str) -> None:
+        child = self.children.pop(target, None)
+        if child:
+            child.close()
 
     def child(self, target: str) -> Child:
         child = self.children.get(target)
         if child is None or not child.alive():
-            if target == 'workspace' and not workspace.ensure(self.env.get('RUNGIC_WORKSPACE') or 1):
-                raise RuntimeError('your workspace did not start')
-            env = self.env if target == 'workspace' else user_session_env(self.env)
+            if target == 'workspace':
+                slot = self.slot
+                if not workspace.ensure(slot):
+                    raise RuntimeError(f'workspace {slot} did not start')
+                env = self.env if slot == self.home else workspace_env(self.env, slot)
+            else:
+                env = user_session_env(self.env)
             child = self.children[target] = Child(env)
         return child
 
-    def call(self, name: str, arguments: dict) -> dict:
+    def call(self, name: str, arguments: dict, meta: dict | None = None) -> dict:
         """A tools/call result: from the child of the session the agent works in now."""
+        self.caller(meta)
         if name == WHERE_TOOL['name']:
             if arguments.get('target'):
                 self.override = str(arguments['target'])
             target, why = self.where()
             self.last = target
-            data = {'where': target, 'screen': SESSION_NAMES[target], 'why': why, 'setting': self.override}
+            data = {**self.describe(target, why), 'setting': self.override}
             return {'content': [{'type': 'text', 'text': json.dumps(data, ensure_ascii=False)}]}
         if name == CLOSE_TOOL['name']:
             # The child in the workspace goes with it; the next call starts both again.
-            child = self.children.pop('workspace', None)
-            if child:
-                child.close()
-            data = workspace.close(self.env.get('RUNGIC_WORKSPACE') or 1, force=bool(arguments.get('force')))
+            slot = self.slot
+            self.drop('workspace')
+            data = workspace.close(slot, force=bool(arguments.get('force')))
+            if self.subagent and data.get('closed'):
+                workspace.release(slot, os.getpid())
+                self.claimed = None
+                self.last = None
             return {'content': [{'type': 'text', 'text': json.dumps(data, ensure_ascii=False)}]}
         target, why = self.where()
         if target == 'workspace':
-            workspace.thaw(self.env.get('RUNGIC_WORKSPACE') or 1)
+            workspace.thaw(self.slot)
         result = self.child(target).request('tools/call', {'name': name, 'arguments': arguments})
         if target != self.last:
             # The agent learns where it works whenever that changes.
-            note = {'where': target, 'screen': SESSION_NAMES[target], 'why': why}
+            note = self.describe(target, why)
             result = {**result, 'content': [*result.get('content', []),
                                             {'type': 'text', 'text': json.dumps(note, ensure_ascii=False)}]}
             self.last = target
@@ -204,3 +275,5 @@ class Router:
     def close(self) -> None:
         for child in self.children.values():
             child.close()
+        if self.claimed is not None:
+            workspace.release(self.claimed, os.getpid())

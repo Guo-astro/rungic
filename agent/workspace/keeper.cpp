@@ -18,9 +18,11 @@
 #include <QDBusMessage>
 #include <QDateTime>
 #include <QFile>
+#include <QFileInfo>
 #include <QGuiApplication>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonValue>
 #include <QLocalSocket>
 #include <QProcess>
 #include <QProcessEnvironment>
@@ -237,12 +239,22 @@ private:
         return QProcess::execute(QStringLiteral("pgrep"), {QStringLiteral("-f"), QStringLiteral("^/usr/libexec/rungic-agent-screen-window --workspace %1$").arg(m_slot)}) == 0;
     }
 
-    // An agent is at work in this workspace: a team member's runner says so (rungic-workspace-N.busy),
-    // or the voice agent's State does.
+    // An agent is at work in this workspace: one holds it (rungic-workspace-N.busy, rungic_cua.workspace:
+    // a runner's empty file until removed, or a sub-agent's desktop tools' record while that process
+    // lives and touches it), or the voice agent's State says so.
     bool agentAtWork()
     {
-        if (QFile::exists(QStringLiteral("%1/rungic-workspace-%2.busy").arg(qEnvironmentVariable("XDG_RUNTIME_DIR"), m_slot))) {
-            return true;
+        QFile claim(QStringLiteral("%1/rungic-workspace-%2.busy").arg(qEnvironmentVariable("XDG_RUNTIME_DIR"), m_slot));
+        if (claim.open(QIODevice::ReadOnly)) {
+            const QByteArray text = claim.readAll().trimmed();
+            if (text.isEmpty()) {
+                return true;
+            }
+            const QJsonValue pid = QJsonDocument::fromJson(text).object().value(QStringLiteral("pid"));
+            const qint64 age = QFileInfo(claim).lastModified().secsTo(QDateTime::currentDateTime());
+            if (!pid.isDouble() || (age < 20 * 60 && QFile::exists(QStringLiteral("/proc/%1").arg(pid.toInteger())))) {
+                return true;
+            }
         }
         QDBusMessage call = QDBusMessage::createMethodCall(QStringLiteral("com.rungic.VoiceAgent"), QStringLiteral("/com/rungic/VoiceAgent"),
                                                            QStringLiteral("com.rungic.VoiceAgent"), QStringLiteral("State"));

@@ -259,3 +259,70 @@ def _close(slot, timeout: float, force: bool, run) -> dict:
     if remaining:
         result['closed_unsaved'] = remaining
     return result
+
+
+# ---- a sub-agent's own workspace (docs/research/91, "由 Codex 当组长") ------------------------------
+# Codex starts the desktop tools once per thread, a sub-agent's like its parent's, with the same
+# environment. Each sub-agent's takes a workspace of its own at its first desktop call: the claim,
+# rungic-workspace-N.busy, says an agent is at work there (its keeper neither freezes nor closes
+# it, its window's close button only hides it). It names the process holding it and is touched at
+# every call: a claim whose process ended, or untouched for CLAIM_STALE_S, is free again.
+CLAIM_STALE_S = 20 * 60
+
+
+def slots() -> list[int]:
+    """The workspaces the host offers (APK: ws-1 to ws-4)."""
+    return sorted(int(path.name[3:]) for path in Path('/mnt/android-wayland').glob('ws-*') if path.name[3:].isdigit())
+
+
+def claim_path(slot) -> Path:
+    return _runtime() / f'rungic-workspace-{slot}.busy'
+
+
+def claim_holder(slot, clock=time.time) -> dict | None:
+    """Who holds workspace `slot` now: the claim's record, or None. A claim without a record (a
+    runner's empty file, tools/team) holds until removed."""
+    path = claim_path(slot)
+    try:
+        text = path.read_text().strip()
+        age = clock() - path.stat().st_mtime
+    except OSError:
+        return None
+    if not text:
+        return {'pid': None}
+    try:
+        record = json.loads(text)
+        pid = int(record['pid'])
+    except (ValueError, KeyError, TypeError):
+        return {'pid': None}
+    if age > CLAIM_STALE_S or not Path(f'/proc/{pid}').exists():
+        return None
+    return record
+
+
+def claim(record: dict, exclude=(), run=subprocess.run, clock=time.time) -> int | None:
+    """Take a free workspace for `record` (its pid, the thread): one not running first, else one
+    nobody holds. None: all are held."""
+    import fcntl
+    with open(_runtime() / 'rungic-workspace-claims.lock', 'w') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        free = [slot for slot in slots() if slot not in {int(s) for s in exclude} and claim_holder(slot, clock) is None]
+        if not free:
+            return None
+        slot = next((slot for slot in free if not running(slot, run)), free[0])
+        claim_path(slot).write_text(json.dumps({**record, 'since': round(clock())}))
+        return slot
+
+
+def touch_claim(slot) -> None:
+    try:
+        os.utime(claim_path(slot))
+    except OSError:
+        pass
+
+
+def release(slot, pid: int) -> None:
+    """Give the workspace back, if this process still holds it."""
+    holder = claim_holder(slot)
+    if holder and holder.get('pid') == pid:
+        claim_path(slot).unlink(missing_ok=True)

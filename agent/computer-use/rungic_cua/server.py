@@ -497,7 +497,10 @@ class Cua:
         try:
             state = json.loads(subprocess.run(['rungic-agent-screen', 'status'], capture_output=True, text=True,
                                               timeout=15).stdout)
-            if not state.get('enabled') or str(state.get('workspace')) != os.environ['RUNGIC_WORKSPACE']:
+            slot = int(os.environ['RUNGIC_WORKSPACE'])
+            if not state.get('enabled') or (str(state.get('workspace')) != str(slot)
+                                            and slot not in state.get('windows', [])):
+                # Its own floating window; others' stay (a team's workspaces, all shown at once).
                 subprocess.run(['rungic-agent-screen', 'on'], capture_output=True, timeout=30)
             elif not state.get('window_running') and state.get('shown_on') == 'floating window':
                 # On, but its floating window is gone (closed, or ended with the desktop).
@@ -885,7 +888,7 @@ def serve() -> None:
             elif method == 'tools/call' and router:
                 params = request.get('params', {})
                 try:
-                    result = router.call(params.get('name', ''), params.get('arguments') or {})
+                    result = router.call(params.get('name', ''), params.get('arguments') or {}, params.get('_meta'))
                 except Exception as error:  # reported to the model, not a protocol error
                     logger.exception('tool %s failed', params.get('name'))
                     result = {'content': [{'type': 'text', 'text': f'{type(error).__name__}: {error}'}],

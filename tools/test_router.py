@@ -113,3 +113,79 @@ def test_the_users_session_gets_its_own_values_back():
     assert not any(k.startswith('RUNGIC_USER_') for k in env)
     env = router.user_session_env(workspace)
     assert 'PLASMA_INTEGRATION_USE_PORTAL' not in env and 'QT_QPA_PLATFORMTHEME' not in env
+
+
+# ---- a sub-agent's own workspace (docs/research/91, "由 Codex 当组长") -----------------------------
+SUBAGENT_META = {'threadId': 'child-a', 'x-codex-turn-metadata': {
+    'thread_source': 'subagent', 'thread_id': 'child-a', 'parent_thread_id': 'parent'}}
+PARENT_META = {'threadId': 'parent', 'x-codex-turn-metadata': {'thread_source': 'user', 'thread_id': 'parent'}}
+
+
+@pytest.fixture
+def host(tmp_path, monkeypatch):
+    """Four host workspaces, claims in a temporary runtime directory, none running."""
+    monkeypatch.setenv('XDG_RUNTIME_DIR', str(tmp_path))
+    monkeypatch.setattr(router.workspace, 'slots', lambda: [1, 2, 3, 4])
+    monkeypatch.setattr(router.workspace, 'running', lambda slot, run=None: False)
+    monkeypatch.setattr(router, 'workspace_env',
+                        lambda env, slot: {**env, 'RUNGIC_WORKSPACE': str(slot), 'WAYLAND_DISPLAY': f'wayland-ws-{slot}'})
+    return tmp_path
+
+
+def sub_router(meta=SUBAGENT_META):
+    r = router.Router(WORKSPACE_ENV)
+    return r, json.loads(r.call('desktop_where', {}, meta)['content'][-1]['text'])
+
+
+def test_a_subagent_takes_a_workspace_of_its_own(host):
+    FakeChild.made.clear()
+    with mock.patch.object(router, 'Child', FakeChild), \
+            mock.patch.object(router, 'bridge', return_value={'enabled': True, 'tv': False}):
+        r, note = sub_router()
+        # Not the parent's (1), and not the user's desktop although desktop mode is on.
+        assert note['where'] == 'workspace' and note['workspace'] == 2
+        assert note['shell'] == 'rungic-workspace-env 2 COMMAND' and 'yours' in note
+        r.call('desktop_launch', {'app': 'Krita'}, SUBAGENT_META)
+    assert FakeChild.made[-1].env['RUNGIC_WORKSPACE'] == '2'
+    record = json.loads((host / 'rungic-workspace-2.busy').read_text())
+    assert record['thread'] == 'child-a' and record['parent'] == 'parent' and record['pid'] > 0
+
+
+def test_subagents_get_different_workspaces_and_the_parent_keeps_its_own(host):
+    with mock.patch.object(router, 'Child', FakeChild), \
+            mock.patch.object(router, 'bridge', return_value={'enabled': False, 'tv': False}):
+        _, a = sub_router()
+        # Another process's claim: workspace 2 is held while that process lives.
+        (host / 'rungic-workspace-2.busy').write_text(json.dumps({'pid': 1}))
+        _, b = sub_router()
+        _, parent = sub_router(PARENT_META)
+    assert (a['workspace'], b['workspace'], parent['workspace']) == (2, 3, 1)
+    assert 'yours' not in parent
+
+
+def test_a_claim_of_an_ended_process_is_free_again(host):
+    (host / 'rungic-workspace-2.busy').write_text(json.dumps({'pid': 999999999}))
+    with mock.patch.object(router, 'Child', FakeChild), \
+            mock.patch.object(router, 'bridge', return_value={'enabled': False, 'tv': False}):
+        _, note = sub_router()
+    assert note['workspace'] == 2
+
+
+def test_closing_gives_the_workspace_back(host):
+    with mock.patch.object(router, 'Child', FakeChild), \
+            mock.patch.object(router, 'bridge', return_value={'enabled': False, 'tv': False}), \
+            mock.patch.object(router.workspace, 'close', return_value={'closed': True}) as close:
+        r, note = sub_router()
+        r.call('desktop_close_workspace', {}, SUBAGENT_META)
+    close.assert_called_once_with(2, force=False)
+    assert not (host / 'rungic-workspace-2.busy').exists()
+
+
+def test_all_taken(host):
+    for slot in (2, 3, 4):
+        (host / f'rungic-workspace-{slot}.busy').write_text('')     # runners' claims (tools/team)
+    with mock.patch.object(router, 'Child', FakeChild), \
+            mock.patch.object(router, 'bridge', return_value={'enabled': False, 'tv': False}):
+        r = router.Router(WORKSPACE_ENV)
+        with pytest.raises(RuntimeError, match='every agent workspace is taken'):
+            r.call('desktop_launch', {'app': 'Krita'}, SUBAGENT_META)
