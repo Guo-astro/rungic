@@ -104,12 +104,12 @@ Window {
                   failed: i18nc("@info:status", "failed"),
                   ended: i18nc("@info:status a team member stopped", "ended") })[screen.teamKind] || ""
     }
-    function screenName(screen, short) {
+    function screenName(screen, compact) {
         if (screen.teamRole) {
             const state = teamState(screen)
             return state ? screen.teamRole + " · " + state : screen.teamRole
         }
-        return short ? String(screen.workspace)
+        return compact ? String(screen.workspace)
                      : i18nc("@label name of an assistant's screen, %1 its number", "Assistant Screen %1", screen.workspace)
     }
     function needsAttention(screen) { return screen.teamKind === "blocked" || screen.teamKind === "question" }

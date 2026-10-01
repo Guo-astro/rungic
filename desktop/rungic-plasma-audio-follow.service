@@ -1,0 +1,13 @@
+[Unit]
+Description=Sound where its picture is while casting (docs/58)
+After=pulseaudio.service plasma-kwin_wayland.service rungic-plasma-media.service
+Wants=pulseaudio.service
+PartOf=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/rungic-audio-follow
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=plasma-workspace.target
