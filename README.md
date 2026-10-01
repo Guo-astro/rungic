@@ -55,6 +55,8 @@ The assistant works on a desktop of its own, so your phone stays yours.
 - Its screen floats in a small window you can resize, tuck against the edge, or send to the TV with one sentence.
 - While it works in that workspace, its clicks and typing stay there. Keep using your phone meanwhile.
 - When you have desktop mode on or are casting to a TV, it works right there on your desktop with you. You can also tell it where to work.
+- Up to four agent workspaces can run at once, each with its own floating window and its own sound, heard only while its window is shown. Several windows stack down the screen, so you can watch them all.
+- Its close button closes that workspace and asks its apps to quit; an app with unsaved work keeps the workspace open and you are told. While an agent is still working there, the button only hides the window. A hidden, idle workspace has its apps paused and is closed after a long idle period.
 
 </td>
 </tr>
@@ -65,6 +67,28 @@ The assistant works on a desktop of its own, so your phone stays yours.
 </p>
 
 <p align="center"><sub>The assistant's screen at full size: Blender with the rocket it just built.</sub></p>
+
+## A team of agents
+
+Several agents can work side by side, each in its own workspace with its own apps, sharing a project folder.
+
+In the first team run, three Codex agents built a small Flappy Bird game together on a moto g100s. A written contract in the project set each member's files, sizes and formats, and each member reported its status in a shared folder:
+
+| Workspace | Member | Delivered |
+|---|---|---|
+| 2 | Godot | The full game logic, first with placeholder art; a gameplay check with no failures |
+| 3 | Krita | Six pixel-art images, drawn in Krita and exported from it, with layered source files |
+| 4 | Ardour | Flap, score and hit sound effects, exported from an Ardour project |
+
+The three worked in parallel for about 13 minutes. The Godot member then brought in the finished art and sound and played the game in the editor: flapping, scoring, hitting a pipe and restarting, with each sound on its event. The integration took about 7 minutes and passed with no failures.
+
+<p align="center">
+  <img src="docs/images/readme/team-godot.jpg" width="820" alt="The Godot member's workspace: the editor running Flappy Bird with the bird, pipes, clouds and city drawn by the Krita member">
+</p>
+
+<p align="center"><sub>The Godot member's workspace, playing the game with the Krita member's art.</sub></p>
+
+This first run was led by hand: a development agent split the work, started the members with the scripts in [`tools/team`](tools/team/README.md) and started the integration when the others were done. The bundled assistant cannot yet form a team for you. Its built-in team management, progress of each member in the conversation and handover notifications are not implemented yet. Free memory dropped to about 1.1 GB while Krita and three agents ran; larger apps such as Blender alongside them have not been tried. The run and its limits are recorded in the [agent workspaces document](docs/research/91-agent-workspaces.md) (in Chinese).
 
 ## Proactive intelligence: useful suggestions, at your pace
 
@@ -115,7 +139,7 @@ These describe the bundled assistant's workflow. Its separate desktop isolates t
 
 Rungic opens as an Android app after the phone has been prepared. Device preparation starts with the manufacturer's original firmware for the exact model and version, with a matching GKI kernel rebuilt for LXC. Our delivery direction separates that preparation from installing RungicOS: once the Android base is compatible, Rungic can be built and updated independently. Android remains the phone's operating system, alongside the Linux desktop.
 
-Once installation, account setup and device checks are complete, tap the Rungic icon to open the desktop, or return to Android to use your phone. Both environments run side by side, sharing the clipboard and your photos, videos and downloads. **Bootloader unlocking or the required device-preparation procedure can erase user data.** Separate Rungic installation is intended to preserve Android data; the new standalone installer still needs implementation and validation. Back up before starting; see [Before you install](#before-you-install) for app and manufacturer restrictions.
+Once installation, account setup and device checks are complete, tap the Rungic icon to open the desktop, or return to Android to use your phone. Both environments run side by side, sharing the clipboard and your photos, videos and downloads. **Bootloader unlocking or the required device-preparation procedure can erase user data.** Installing Rungic separately keeps the Android base and its data; this has been validated on the moto X70 Air Pro through a developer USB installer (see [Choose what to build and install](#choose-what-to-build-and-install)). Back up before starting; see [Before you install](#before-you-install) for app and manufacturer restrictions.
 
 ## How it works
 
@@ -181,10 +205,10 @@ Rungic exposes two **MCP (Model Context Protocol) servers**, alongside command-l
 
 | Interface | Entry point | What it exposes |
 |---|---|---|
-| **Desktop MCP** · on the phone | `rungic-cua mcp` | Screenshots, pointer/keyboard actions, app launch and window management, whole-task execution and voice messages. Workspace routing adds `desktop_where`; available tools depend on the selected execution mode. |
+| **Desktop MCP** · on the phone | `rungic-cua mcp` | Screenshots, pointer/keyboard actions, app launch and window management, whole-task execution and voice messages. Workspace routing adds `desktop_where` and `desktop_close_workspace`; available tools depend on the selected execution mode. |
 | **Development MCP** · on the development computer | [`tools/rungic_agent_mcp.py`](tools/rungic_agent_mcp.py), configured in [`.mcp.json`](.mcp.json) | Device/renderer state, merged Android/Linux/kernel logs, crash reports and symbolization, integrity checks, screenshots, evidence bundles, UI inspection/actions, performance traces and build status. Requires separately configured device access. |
 | **Phone control** · CLI + JSON | `rungic-platform --request '<json>'` | Device, network and display state; brightness, clipboard, orientation, vibration and Android settings panels. |
-| **Workspaces and displays** · CLI + JSON | `rungic-workspace-env`, `rungic-user`, `rungic-agent-screen`, `rungic-desktop-mode`, `rungic-cast` | Run in the selected desktop session, show the assistant's screen, control desktop mode, discover/connect TVs and inspect casting capabilities. |
+| **Workspaces and displays** · CLI + JSON | `rungic-workspace-env`, `rungic-user`, `rungic-agent-screen`, `rungic-desktop-mode`, `rungic-cast` | Run in the selected desktop session, show one or several workspaces' floating windows, close a workspace, control desktop mode, discover/connect TVs and inspect casting capabilities. |
 | **Proactive system care** · D-Bus + CLI | `com.rungic.Suggestions`, `rungic-suggestions` | Issue/evidence queries, compatibility knowledge, reminders, investigation results, repair plans and local upstream-feedback material. Task handoff currently targets the bundled assistant. |
 | **Tasks, voice and usage** · D-Bus | `com.rungic.VoiceAgent`; suggestion-service usage methods/signals | Conversations, task progress/stop, voice and call controls, observed tokens and provider-supplied quotas. Replacing the bundled agent requires adapting this bridge and its usage data. |
 | **Files, packages and hardware** · Linux interfaces | Shell/files, PackageKit/`pkgcli`, polkit, Wayland, desktop portals, AT-SPI, PipeWire/PulseAudio and Android-backed D-Bus services | Work with files, install software with system authorization, and use the same desktop/media/device interfaces as ordinary Linux apps. Android-backed services implement documented subsets. |
@@ -236,7 +260,7 @@ Tested so far:
 |---|---|---|
 | moto g100s (XT2537-4) | android15-6.6 | Main development device, most complete |
 | moto g100 (XT2533-4) | android15-6.6 | One-step flash package verified on a wiped phone |
-| moto X70 Air Pro | android16-6.12 | In progress |
+| moto X70 Air Pro | android16-6.12 | Standalone install verified: stock Android reflashed and wiped, then Rungic installed from scratch; three cold reboots and nine device checks passed |
 
 ### Before you install
 
@@ -247,14 +271,15 @@ Tested so far:
 
 ## Skills
 
-Skills are reusable instructions that an agent reads to carry out a task. This repository includes two:
+Skills are reusable instructions that an agent reads to carry out a task. This repository includes three:
 
 | Skill | Where to use it | What it does |
 |---|---|---|
 | [`rungic-three-stage-image`](.agents/skills/rungic-three-stage-image/SKILL.md) | Codex working in this repository | Guides device/GKI preparation, independent RungicOS image builds, and separate Rungic installation or upgrades. Covers existing tools, implementation gaps and acceptance. |
+| [`rungic-dev-release`](.agents/skills/rungic-dev-release/SKILL.md) | Codex or Claude Code working in this repository | Puts changes on an installed phone in one of two ways: a development overlay (`tools/rungic_dev.py`) that is visible and can be reset, or a formal release (commit, package build, release, deploy and acceptance). Covers screenshots of the UI states for interface changes. |
 | [`rungic-phone-desktop`](agent/assistant/skills/rungic-phone-desktop/SKILL.md) | The assistant running on the phone | Operates desktop apps and windows, controls phone functions, casts to a TV and handles supported call workflows. |
 
-The desktop skill ships with the bundled assistant. Its editable copy lives at `~/.codex/skills/rungic-phone-desktop/` on the phone; changes you make there are preserved when the package updates. These locations and invocation examples describe the current Codex integration. Other agents can reuse the instructions and underlying tools, adapting skill loading to their own format.
+The desktop skill ships with the bundled assistant. Its editable copy lives at `~/.codex/skills/rungic-phone-desktop/` on the phone; changes you make there are preserved when the package updates. These locations and invocation examples describe the current Codex integration; Claude Code finds the repository skills through `.claude/skills/`. Other agents can reuse the instructions and underlying tools, adapting skill loading to their own format.
 
 ### Choose what to build and install
 
@@ -263,8 +288,8 @@ Invoke `$rungic-three-stage-image` in Codex from the repository root, and specif
 | Your goal | Build scope and output | Installation path |
 |---|---|---|
 | **Prepare a phone for Rungic** | **CI1:** the spec's pinned GKI/boot, required Android-base preparation and recovery artifacts, ABI/module-trust reports. | Use the device's verified preparation procedure. Reuse an already compatible base; repeat only when its requirements change. |
-| **Build the Linux system image** | **CI2:** install a selected package release in a clean ARM64 root tree; produce ext4 rootfs, compressed payload, package lock and report. | Deliver independently of Android firmware. The standalone first-install path is being defined; existing installations can use package updates below. |
-| **Install or upgrade Rungic separately** | **CI3 target:** combine verified rootfs, APK and required host runtime with version/protocol checks and an installer. No Android partition images in the normal Rungic payload. | Install on a compatible prepared phone. The unified standalone installer and full-rootfs replacement path are not yet implemented and accepted. |
+| **Build the Linux system image** | **CI2:** install a selected package release in a clean ARM64 root tree; produce ext4 rootfs, compressed payload, package lock and report. | Deliver independently of Android firmware; install it with the standalone installer below. Existing installations can use package updates. |
+| **Install or upgrade Rungic separately** | **CI3 target:** combine verified rootfs, APK and required host runtime with version/protocol checks and an installer. No Android partition images in the normal Rungic payload. | Install on a compatible prepared phone over USB with [`standalone.py`](tools/ci/standalone.py): `pack`, `verify`, `install` and `status`, given the exact serial, ADB port and trusted manifest digest. It refuses a phone that already has Rungic. Upgrading an installed system by replacing its rootfs, and an installer for end users, are not implemented yet. |
 | **Update desktop or Agent components on an installed phone** | Build the changed packages and a versioned APT release; keep the compatible kernel and Android base. | Deploy through [`rungic_release.py`](tools/rungic_release.py), reload affected services/UI and run the relevant acceptance checks. |
 
 Example requests for Codex — replace the placeholders with your chosen inputs:
@@ -276,21 +301,21 @@ Build the kernel/boot candidate and check its OEM module compatibility.
 Use $rungic-three-stage-image to run CI2 only for <device-spec>, using
 <package-release>. Produce a clean RungicOS rootfs image and package lock.
 
-Use $rungic-three-stage-image to assess CI3 for <device-spec> and
-<verified-rootfs-artifacts>. Check the prepared Android base, identify
-missing standalone-install tooling, and define first-install and upgrade acceptance.
+Use $rungic-three-stage-image to run CI3 for <device-spec> with
+<verified-rootfs-artifacts>: pack and verify the standalone payload, then
+install it on <device-serial> and run the first-install acceptance.
 ```
 
 For installation, name the exact artifact and target device/serial, and distinguish first install from upgrade. A build request produces artifacts; it does not flash the phone. Rungic installation should preserve the existing Android base and user data; any necessary bootloader or firmware work belongs to the separate device-preparation step. The Linux rootfs shares Android's kernel and is a container filesystem image, not an Android `system.img`.
 
 For incremental work, a request such as “Build and deploy the updated suggestion widget to my existing Rungic installation on `<device-serial>`, then verify its desktop interactions” selects the package-update path. Project packages use [`rungic_package.py`](tools/rungic_package.py); modified upstream packages use [`build_on_device.py`](tools/build_on_device.py).
 
-These skills guide the existing build tools; the complete process still involves several tools and device-specific inputs. In particular, [`build_rootfs_image.py`](tools/ci/build_rootfs_image.py) packages an already prepared root tree and checks its package versions. See the [tool map](.agents/skills/rungic-three-stage-image/references/tool-map.md) for stage entry points, [new-device guide](.agents/skills/rungic-three-stage-image/references/device-onboarding.md) for adaptation, and [first-boot guide](.agents/skills/rungic-three-stage-image/references/first-boot.md) for installation and recovery. The [current delivery contract](docs/75-image-build-separation.md#2026-09-30rungic-独立安装的三段式目标) separates device preparation from Rungic installation. The [G100 acceptance record](docs/80-g100-image-installation-retrospective.md) documents the older full-flash path; it does not establish acceptance of the new standalone installer. Legacy full-flash tools remain for explicitly selected recovery or reproduction work. These detailed engineering guides are currently in Chinese.
+These skills guide the existing build tools; the complete process still involves several tools and device-specific inputs. In particular, [`build_rootfs_image.py`](tools/ci/build_rootfs_image.py) packages an already prepared root tree and checks its package versions. See the [tool map](.agents/skills/rungic-three-stage-image/references/tool-map.md) for stage entry points, [new-device guide](.agents/skills/rungic-three-stage-image/references/device-onboarding.md) for adaptation, and [first-boot guide](.agents/skills/rungic-three-stage-image/references/first-boot.md) for installation and recovery. The [current delivery contract](docs/75-image-build-separation.md#2026-09-30rungic-独立安装的三段式目标) separates device preparation from Rungic installation. The X70 Air Pro records cover the standalone installer: on a reused Android base ([91](docs/91-x70-independent-install.md)), after reflashing and wiping Android ([92](docs/92-x70-android-base-end-to-end.md)), and the rebuilt image that passed three cold reboots ([93](docs/93-x70-independent-image-revalidation.md)). The [G100 acceptance record](docs/80-g100-image-installation-retrospective.md) documents the older full-flash path. Legacy full-flash tools remain for explicitly selected recovery or reproduction work. These detailed engineering guides are currently in Chinese.
 
 ## Learn more
 
 - [Source layout](docs/README.md#repository-layout): Android host, agents, desktop integration, system services, package definitions and upstream patches
 - [Developer guide and documentation index](docs/README.md): repository layout, development entry points, and the design and acceptance documents for each capability
 - [Integrating another agent](docs/README.md#integrating-another-agent) · [Proactive system care](docs/research/proactive-system-care.md) · [Compatibility knowledge](compatibility/README.md)
-- [Voice assistant](docs/59-voice-agent.md) · [Computer use](docs/60-computer-use.md) · [Assistant's screen](docs/65-agent-screen.md) · [Agent workspaces](docs/research/91-agent-workspaces.md) (in Chinese)
+- [Voice assistant](docs/59-voice-agent.md) · [Computer use](docs/60-computer-use.md) · [Assistant's screen](docs/65-agent-screen.md) · [Agent workspaces and teams](docs/research/91-agent-workspaces.md) · [Standalone install on X70](docs/93-x70-independent-image-revalidation.md) · [Development deploys](docs/97-local-development-deploy.md) (in Chinese)
 - [Engineering conventions](AGENTS.md) (in Chinese)
