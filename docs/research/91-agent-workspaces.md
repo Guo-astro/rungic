@@ -478,3 +478,67 @@ Agent 2  KWin#2 ──── │ 显示源 agent-2               │  电视 / �
   - 各应用怎样可靠地保存和重新打开（Blender `-b` 脚本或 GUI 内保存、`godot --editor --path`、`krita <文件>`、`lmms <文件>`）；
   - 怎样从 KWin 读出和放回窗口布局（KWin 脚本，或启动后用窗口规则）；
   - 设置了实验开关后的 `xx-session-management` 能不能用来放回窗口（需要客户端支持，Qt 6.10 目前不支持）。
+
+### 10. 工作区的生命周期：Linux 上的标准做法（调研，2026-10-01）
+
+**起因**：用户关掉助理屏后，Ardour 还在运行。原因有两层：
+- 浮窗上的 ✕（`AgentScreen::close`）只把助理屏标为关闭、退出浮窗，`rungic-workspace@1` 继续运行；
+- `desktop_launch` 给应用建的 `app-rungic-ws1-…scope` 和工作区单元之间没有任何依赖，所以就算工作区停了，应用也不会跟着停。
+
+**参照的做法**：
+- **KDE 注销**（源码，plasma-workspace v6.6.6 `ksmserver/logout.cpp`，KWin v6.6.6 `sm.cpp`）分两段：
+  1. 先让 KWin 记下状态，再给每个 XSMP 客户端发 `SaveYourself`（交互式）。应用可以弹出保存提示，也可以取消注销。
+  2. 对 Wayland 窗口，KWin 的 `org.kde.KWin.Session.closeWaylandWindows` 逐个调用 `closeWindow()`：10 秒后还有没关的，发一条“取消注销 / 仍然注销”的通知；2 分钟后不再等待，强制继续。它只处理 `XdgToplevelWindow`，不管 Xwayland 程序。
+- **systemd 的桌面约定**（`docs/DESKTOP_ENVIRONMENTS.md`，systemd v259）：
+  - 会话必需的进程放在 `session.slice`，应用放在 `app.slice`，后台任务放在 `background.slice`；
+  - 应用单元的命名是 `app-<启动器>-<应用ID>-<随机串>.scope`，推荐用 `.service`；
+  - GNOME 用 drop-in 给自己启动的应用设置 `BindTo=graphical-session.target`、`CollectMode=inactive-or-failed`、`TimeoutSec=5s`，也就是“会话结束，应用跟着停止，最多等 5 秒”。
+- **KWin 关闭 X11 窗口**（源码，`x11window.cpp:1348`）：程序支持 `WM_DELETE_WINDOW` 就发关闭请求，否则直接 `killWindow()`。所以对不支持这个协议的 X11 程序，“请它关闭”等于直接杀掉。
+- **空闲检测**：KWin 实现了 `ext-idle-notify-v1` 和 `idle-inhibit-v1`（`src/wayland/idlenotify_v1.cpp`、`idleinhibit_v1.cpp`）。前者按输入判断空闲，用户和 Agent 的输入都算；后者是应用在播放等场景下声明“别当我空闲”的标准方式。
+- **冻结**（实机只读，systemd 259）：容器的 cgroup v2 没有任何控制器，但冻结是 cgroup v2 的核心接口，不依赖控制器：`app.slice/cgroup.freeze` 和 `cgroup.events`（`frozen 0`）都在，`systemctl --user show -p FreezerState` 能读到 `running`。`systemctl --user freeze` 这次还没实测。
+- **“有没有未保存内容”没有跨应用的标准查询方式**：Wayland 的 xdg-toplevel 没有“已修改”标志，Inhibit 门户的 logout 标志也很少有应用使用。所以“请窗口关闭、由应用自己决定要不要提示”是唯一通用的信号，KDE 和 GNOME 也都是这么做的。
+
+**结论：建议的分层**（推断，按标准机制组合；第 1、2 条已在实现）：
+
+1. **分组和生命周期交给 systemd**：
+   - 工作区自己的 KWin 等进程是 `rungic-workspace@N.service`；
+   - 应用按约定命名为 `app-rungicwsN-<应用ID>-<随机串>.scope`，放进工作区自己的 `app-rungicwsN.slice`（在 `app.slice` 之下）；
+   - 用 `BindsTo=` 和 `After=` 绑定工作区（GNOME 有同样的先例），工作区一停，systemd 先停应用，再停 KWin。
+2. **关闭分两段，和 KDE 注销一样**：
+   - 第一段可以被否决：请每个窗口关闭（Wayland 和 X11 都处理），没关掉的报告出来，不自动强制。KWin 自带的 `closeWaylandWindows` 2 分钟后会强制继续，而且不管 X11 窗口，所以不直接用它。
+   - 第二段不可否决：停止 systemd 单元，强制结束只作兜底。
+   - 对不支持 `WM_DELETE_WINDOW` 的 X11 程序，第一段会被 KWin 直接杀掉，需要先识别、跳过，并报告出来。
+3. **隐藏后冻结**（待实测）：
+   - 工作区被隐藏、Agent 又空闲时，用 `systemctl --user freeze app-rungicwsN.slice` 冻结应用：不占 CPU，状态不丢，内存在压力下会被 ZRAM 压缩；重新显示或 Agent 要用时立即解冻。
+   - KWin 本身不冻结，避免宿主等不到它的帧。
+   - 冻结期间，发给这些应用的 D-Bus 调用会超时，音频流会中断，所以只在空闲时冻结。
+4. **空闲判断用标准信号**：在工作区的 KWin 上用 `ext-idle-notify-v1`，没有任何输入一段时间才算空闲；应用用 `idle-inhibit-v1` 声明“别当我空闲”时不算空闲；再加上语音服务报告的“Agent 是否正在干活”。冻结一段时间后，再按第 2 条关闭。
+5. **项目会话**（第 9 小节）的“卸下”就是第 2 条，再加上保存布局。
+6. **资源上限**仍然只能从 Android 的 v1 memcg 来设（第 5 小节）。slice 只负责分组、冻结和停止。
+
+**已实现**：
+- `rungic_cua/workspace.py`：
+  - 应用的 scope 命名为 `app-rungicwsN-<应用ID>-<随机串>.scope`，放进 `app-rungicwsN.slice`，带 `BindsTo=` 和 `After=rungic-workspace@N.service`；
+  - `close-workspace` 分两段关闭：先把从用户会话切换过来的应用还回去，再请窗口逐个关闭，没关掉的报告出来，最后停止单元和 slice；
+  - 对 X11 程序：不支持 `WM_DELETE_WINDOW` 的不请求关闭，按 PID 识别，没有 PID 的按 `WM_CLASS` 识别。
+- Agent 的工具 `desktop_close_workspace`（router）。下一次调用桌面工具时，会自动重新启动工作区。
+- 命令 `rungic-agent-screen close [--force]`，与只隐藏浮窗的 `off` 区分开。
+- `rungic-workspace`：收到 TERM 停止时以 0 退出。原来退出码是 143，单元停止后显示 failed。
+- 测试：`tools/test_workspace_lifecycle.py`。
+
+**实机验证**（G100 S，开发覆盖，空闲的 4 号工作区，不显示，1 号工作区和其中的 Ardour 全程未受影响；记录在 `.work/verify/2026-10-01-workspace-lifecycle/`）：
+- Kalk 的 scope 为 `app-rungicws4-org.kde.kalk-….scope`，`Slice=app-rungicws4.slice`，带 `BindsTo` 和 `After`。
+- **冻结在容器里可用**：`systemctl --user freeze app-rungicws4.slice` 之后，`cgroup.events` 为 `frozen 1`，`FreezerState=frozen`；解冻后为 `frozen 0`。
+- `rungic-cua close-workspace 4` 返回 `{"closed": true}`，Kalk 退出，工作区单元为 inactive。
+- 兜底路径：只执行 `systemctl --user stop rungic-workspace@4`，Kalk 也随之停止，单元为 inactive、`Result=success`（修正 143 之前是 failed）。
+- X11：`xmessage`（支持 `WM_DELETE_WINDOW`，但没有设置 `_NET_WM_PID`）收到关闭请求后正常退出。因为它没有 PID，促成了按 `WM_CLASS` 识别的补充。“不支持 `WM_DELETE_WINDOW` 的 X11 程序”这一情况只有单元测试，没有实机样本。
+- 还没验证的：在真实对话里由 Agent 调用 `desktop_close_workspace`；有未保存内容的应用（例如 Ardour 的保存提示）走 `remaining` 的路径。
+
+**用户操作对应的行为**（建议，待用户确认）：
+
+| 操作 | 行为 |
+|---|---|
+| 浮窗 ✕，Agent 空闲 | 按第 2 条关闭；有应用没关的就保留工作区，并通知用户 |
+| 浮窗 ✕，Agent 正在干活 | 只隐藏，这一轮任务中不再自动弹出 |
+| 隐藏且空闲约 1 分钟 | 冻结应用 |
+| 冻结后长时间空闲 | 解冻，再按第 2 条关闭 |
