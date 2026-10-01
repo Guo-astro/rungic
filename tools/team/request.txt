@@ -1,0 +1,1 @@
+用一个团队帮我做一个 Flappy Bird 小游戏，项目放在 ~/Projects/flappy-lead：Godot 写游戏逻辑，Krita 画美术素材，Ardour 做音效，三部分同时做，最后汇总到 Godot 里测试。测试通过后在我的桌面打开给我玩（我已经同意做好后直接打开，不用再问我）。
