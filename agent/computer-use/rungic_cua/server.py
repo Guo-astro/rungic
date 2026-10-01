@@ -35,7 +35,7 @@ from pathlib import Path
 from arc_cua import DesktopExecutor, RuntimeConfig, result_to_dict, subtask_from_dict
 from arc_cua.policies import TypeSafeJevPolicy
 
-from . import a11y, activity, names, speech, switch
+from . import a11y, activity, blocked, names, speech, switch
 from .i18n import _
 from .backend import LinuxAtspiBackend
 from .luna import ComputerUse
@@ -530,8 +530,34 @@ class Cua:
         computer.screen.whole = scope == 'screen'
         computer.screen.window_id = None           # the active window, whichever it is now
         url, image, _changed = computer.screen.capture()
-        return {'screen': computer.screen.output_name, 'shows': computer.screen.scope, 'width': image.width,
-                'height': image.height, '__image__': url.split(',', 1)[1]}
+        result = {'screen': computer.screen.output_name, 'shows': computer.screen.scope, 'width': image.width,
+                  'height': image.height, '__image__': url.split(',', 1)[1]}
+        try:
+            held = self.held()
+        except Exception as error:  # noqa: BLE001 (a check beside the screenshot never costs it)
+            logger.warning('dialog check: %s', error)
+            held = None
+        if held:
+            result['note'] = held
+        return result
+
+    def held(self) -> str | None:
+        """A note when the active window's program is held by a dialog nobody can see, or waits for
+        one in another window (a portal file dialog, docs/103); None otherwise."""
+        bus = self.backend.bus
+        if bus is None:
+            return None
+        info = self.backend.kwin.windows()
+        active = info.get('active')
+        if not active:
+            return None
+        app_windows = []
+        for app in bus.applications():
+            if bus.pid(app[0]) == active['pid']:
+                app_windows += bus.windows(app)
+        hidden = blocked.hidden_dialogs(app_windows, info['windows'] + info.get('dialogs', []), active['pid'])
+        name = (active.get('caption') or '').split(' — ')[-1].strip() or active.get('resource_class', '')
+        return blocked.note(name, hidden)
 
     def act(self, actions: list[dict], note: str = '') -> dict:
         computer = self.agent_screen()
