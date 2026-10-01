@@ -126,3 +126,7 @@ msgstr "向组长汇报"
 #: rungic_cua/team.py
 msgid "Start a team member"
 msgstr "派出成员"
+
+#: rungic_cua/team.py
+msgid "Message {member}"
+msgstr "给 {member} 发消息"

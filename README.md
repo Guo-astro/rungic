@@ -70,25 +70,37 @@ The assistant works on a desktop of its own, so your phone stays yours.
 
 ## A team of agents
 
-Several agents can work side by side, each in its own workspace with its own apps, sharing a project folder.
-
-In the first team run, three Codex agents built a small Flappy Bird game together on a moto g100s. A written contract in the project set each member's files, sizes and formats, and each member reported its status in a shared folder:
-
-| Workspace | Member | Delivered |
-|---|---|---|
-| 2 | Godot | The full game logic, first with placeholder art; a gameplay check with no failures |
-| 3 | Krita | Six pixel-art images, drawn in Krita and exported from it, with layered source files |
-| 4 | Ardour | Flap, score and hit sound effects, exported from an Ardour project |
-
-The three worked in parallel for about 13 minutes. The Godot member then brought in the finished art and sound and played the game in the editor: flapping, scoring, hitting a pipe and restarting, with each sound on its event. The integration took about 7 minutes and passed with no failures.
+Several agents can work side by side, each in its own workspace with its own apps, sharing a project folder. One Codex agent leads: it writes a brief, starts a member for each part of the work, takes one round of review, decides and brings the results together.
 
 <p align="center">
-  <img src="docs/images/readme/team-godot.jpg" width="820" alt="The Godot member's workspace: the editor running Flappy Bird with the bird, pipes, clouds and city drawn by the Krita member">
+  <img src="docs/images/readme/team.webp" width="820" alt="The director on the phone: Krita drawing the pixel-art bird, Ardour editing the sound effects and Godot running the game, each tile labelled with its member and what it is doing">
 </p>
 
-<p align="center"><sub>The Godot member's workspace, playing the game with the Krita member's art.</sub></p>
+<p align="center"><sub>The director during a team run on a moto g100s, sped up: art in Krita, sound in Ardour, the game in Godot.</sub></p>
 
-This first run was led by hand: a development agent split the work, started the members with the scripts in [`tools/team`](tools/team/README.md) and started the integration when the others were done. The bundled assistant cannot yet form a team for you. Its built-in team management, progress of each member in the conversation and handover notifications are not implemented yet. Free memory dropped to about 1.1 GB while Krita and three agents ran; larger apps such as Blender alongside them have not been tried. The run and its limits are recorded in the [agent workspaces document](docs/research/91-agent-workspaces.md) (in Chinese).
+Asked for a small Flappy Bird, with Godot for the game, Krita for the art and Ardour for the sound, the lead:
+
+1. wrote a brief that set the direction (pixel art, three short effects, touch controls) and started three members, each in its own workspace;
+2. collected one round of review, eight points from the three members, settled them and started the work;
+3. let the members work in parallel: the Krita art was done about 7 minutes later, the Ardour effects about 8 minutes later, and the Godot member had the art and sound integrated and its gameplay, asset and audio-output checks passing after about 11 minutes;
+4. checked the result and opened the game, Sunny Flap, on the phone to play.
+
+From the request to a playable game took about 15 minutes.
+
+<p align="center">
+  <img src="docs/images/readme/team-director.jpg" width="820" alt="The director fullscreen: the Krita member's screen in focus with its pixel-art bird and a running line of what it is doing; the lead, Godot and Ardour members in a column beside it">
+</p>
+
+<table align="center">
+<tr>
+<td align="center"><img src="docs/images/readme/team-all.jpg" width="560" alt="The Godot member running Sunny Flap in the editor while the Krita and Ardour members keep working beside it"><br><sub>All at once: Godot in focus, Krita and Ardour beside it</sub></td>
+<td align="center"><img src="docs/images/readme/team-play.jpg" width="200" alt="Sunny Flap on the phone: the pixel-art bird between two pipes"><br><sub>Then you play</sub></td>
+</tr>
+</table>
+
+While a team works, the assistant screens gather into a **director**: the screen in focus large, the others in a column beside it. Each tile names its member and state and runs a short ticker of what that agent is doing, such as "Paint and export layered Krita game assets"; milestones the members post, like a review or a finished delivery, appear tagged in the same line. Tap a tile to bring it into focus. Fullscreen on the phone, or cast to a TV, it looks the same, over the phone's wallpaper blurred.
+
+The run was started from a single request with [`tools/team/run-lead.sh`](tools/team/README.md). The conversation does not show the team's progress yet, and handovers are not announced. The first team run, led by hand with a written contract, and the experiments behind the Codex lead are recorded in the [agent workspaces document](docs/research/91-agent-workspaces.md) (in Chinese).
 
 ## Proactive intelligence: useful suggestions, at your pace
 

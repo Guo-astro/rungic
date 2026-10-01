@@ -260,7 +260,13 @@ final class Director {
                 memberTimes.put(slot, 0L);
             }
         }
+        // A member that just spoke joins the layout at once (the poll compares with what this saw).
+        List<Integer> before = members;
         refreshMembers();
+        if (!before.equals(members)) {
+            changedVersion();
+            if (bound || fullscreen) apply(true);
+        }
         redraw();
     }
 

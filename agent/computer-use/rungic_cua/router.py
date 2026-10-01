@@ -302,6 +302,9 @@ class Router:
         entry = {'role': str(arguments.get('role') or ''), 'kind': kind, 'text': str(arguments.get('text') or '')}
         if self.subagent:
             entry.update(workspace=self.slot, thread=self.subagent.get('thread'), parent=self.subagent.get('parent'))
+        else:
+            # The lead's own workspace: its tile is named by its role too.
+            entry.update(workspace=self.home, thread=self.thread)
         project = str(arguments.get('project') or (self.member or {}).get('project') or '')
         self.member = {**entry, 'project': project}
         data = team.post(entry, project)

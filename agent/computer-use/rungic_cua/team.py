@@ -147,36 +147,50 @@ def _name(path: str) -> str:
 
 
 def describe_command(command: str) -> str:
-    """A shell command as a few words: what it does to which file."""
+    """A shell command as a few words: what it does to which file. Of a chain (`a && b; c`), the
+    file it writes if any, else its first step past the `cd`s."""
     line = command.strip().splitlines()[0] if command.strip() else ''
+    # Split where the shell would, not inside quotes (`grep -E 'a|b'`).
+    masked = _re.sub(r"'[^']*'|\"[^\"]*\"", lambda m: 'x' * len(m.group(0)), line)
+    cuts = [0] + [i for m in _re.finditer(r'&&|\|\||;|\|', masked) for i in m.span()] + [len(line)]
+    parts = [line[cuts[i]:cuts[i + 1]] for i in range(0, len(cuts), 2)]
+    steps = [_describe_step(part.strip()) for part in parts if part.strip()]
+    steps = [step for step in steps if step]
+    written = [step for step in steps if step[0] == 'write']
+    return (written or steps or [('', '')])[0][1]
+
+
+def _describe_step(line: str):
     words = line.split()
+    if words and words[0] in ('cd', 'set', 'export', 'source', '.', 'true', 'pushd', 'popd'):
+        return None
     while words and ('=' in words[0] and not words[0].startswith('-')):
         words = words[1:]                                   # VAR=value prefixes
     if len(words) > 2 and words[0] == 'rungic-workspace-env':
         words = words[2:]
     if not words:
-        return ''
+        return None
     program = _name(words[0])
     rest = [w for w in words[1:] if not w.startswith('-')]
     written = _re.search(r'(?:cat|tee)\s+>{0,2}\s*([^\s<>|;&]+)', line) if ('>' in line or program == 'tee') else None
     if program == 'cat' and '>' in line:
         written = _re.search(r'>\s*([^\s<>|;&]+)', line)
     if written:
-        return _('Write {name}').format(name=_name(written.group(1)))
+        return ('write', _('Write {name}').format(name=_name(written.group(1))))
     if program in ('cat', 'sed', 'head', 'tail', 'less', 'jq', 'grep', 'rg') and rest:
-        return _('Read {name}').format(name=_name(rest[-1]))
+        return ('', _('Read {name}').format(name=_name(rest[-1])))
     if program.startswith('python') or program in ('node', 'bash', 'sh'):
         script = next((w for w in rest if not w.startswith('<')), '')
-        return _('Run {name}').format(name=_name(script)) if script and script != '-' else _('Run a script')
+        return ('', _('Run {name}').format(name=_name(script)) if script and script != '-' else _('Run a script'))
     if program in ('mkdir',):
-        return _('Make the folder {name}').format(name=_name(rest[-1])) if rest else ''
+        return ('', _('Make the folder {name}').format(name=_name(rest[-1])) if rest else '')
     if program in ('ls', 'find', 'tree', 'stat', 'file'):
-        return _('Look at the files')
+        return ('', _('Look at the files'))
     if program in ('ffmpeg', 'ffprobe', 'sox'):
-        return _('Process the audio with {tool}').format(tool=program)
+        return ('', _('Process the audio with {tool}').format(tool=program))
     if program in ('cp', 'mv', 'ln'):
-        return _('Copy {name}').format(name=_name(rest[-1])) if rest else ''
-    return _('Run {name}').format(name=program)
+        return ('', _('Copy {name}').format(name=_name(rest[-1])) if rest else '')
+    return ('', _('Run {name}').format(name=program))
 
 
 def describe_call(name: str, arguments: str) -> list[str]:
@@ -200,8 +214,13 @@ def describe_call(name: str, arguments: str) -> list[str]:
             out.append(describe_command(json.loads(arguments).get('cmd', '')))
         except (ValueError, AttributeError):
             pass
-    elif name == 'send_message':
-        out.append(_('Report to the lead'))
+    elif name in ('send_message', 'send_input', 'followup_task'):
+        try:
+            target = str(json.loads(arguments).get('target') or json.loads(arguments).get('id') or '')
+        except (ValueError, AttributeError):
+            target = ''
+        member = target.rstrip('/').rsplit('/', 1)[-1] if target.count('/') > 1 else ''
+        out.append(_('Message {member}').format(member=member) if member else _('Report to the lead'))
     elif name == 'spawn_agent':
         out.append(_('Start a team member'))
     return [' '.join(line.split())[:TEXT_MAX] for line in out if line]

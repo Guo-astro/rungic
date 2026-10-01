@@ -224,15 +224,16 @@ def test_a_member_ending_silent_gets_ended(host, tmp_path, monkeypatch):
     assert kinds == ['progress', 'ended']
 
 
-def test_the_leads_post_has_no_tile(host, tmp_path, monkeypatch):
-    monkeypatch.setattr(router.team, 'tell_app', lambda slot, entry: (_ for _ in ()).throw(AssertionError('no tile')))
+def test_the_leads_post_goes_on_its_own_workspace(host, tmp_path, monkeypatch):
+    told = []
+    monkeypatch.setattr(router.team, 'tell_app', lambda slot, entry: told.append(slot))
     project = tmp_path / 'game'
     with mock.patch.object(router, 'Child', FakeChild):
         r = router.Router(WORKSPACE_ENV)
         r.call('team_post', {'role': 'lead', 'kind': 'decision', 'text': 'Pixel art, 3 frames', 'project': str(project)},
                PARENT_META)
     entry = json.loads((project / '.team/journal.jsonl').read_text())
-    assert entry['kind'] == 'decision' and 'workspace' not in entry
+    assert entry['kind'] == 'decision' and entry['workspace'] == 1 and told == [1]
 
 
 # ---- the murmur: tool calls as a few words (team.describe_call) ------------------------------------
@@ -250,5 +251,14 @@ def test_code_mode_calls_as_words():
     code = ('text(await tools.exec_command({cmd:"cat /p/BRIEF.md"})); '
             'text(await tools.mcp__rungic_desktop__desktop_goal({goal:"取消 Recover Files 恢复对话框"}));')
     assert router.team.describe_call('exec', code) == ['Read BRIEF.md', '取消 Recover Files 恢复对话框']
-    assert router.team.describe_call('send_message', '{}') == ['Report to the lead']
+    assert router.team.describe_call('send_message', '{"target": "/root"}') == ['Report to the lead']
+    assert router.team.describe_call('send_message', '{"target": "/root/art"}') == ['Message art']
     assert router.team.describe_call('wait_agent', '{}') == []
+
+
+def test_a_chain_is_described_by_its_step_not_its_last_word():
+    d = router.team.describe_command
+    assert d('mkdir -p .team; printf x > BRIEF.md') == 'Make the folder .team'
+    assert d('mkdir -p .team && cat > BRIEF.md <<EOF') == 'Write BRIEF.md'
+    assert d('cd ~/Projects/x && python3 check.py') == 'Run check.py'
+    assert d("grep -E 'godot|ardour|krita' apps.txt | head") == 'Read apps.txt'
