@@ -1,0 +1,50 @@
+From: kevinzhow <kevinzhow@local>
+Date: Thu, 1 Oct 2026 13:21:26 +0900
+Subject: Mobile file dialog: save to a typed full path
+
+The save button made the URL as the folder shown + "/" + the typed text: a full path typed into
+the field (/home/kevinzhow/Pictures/drawing.kra) became file:///home/kevinzhow/Pictures//home/
+kevinzhow/Pictures/drawing.kra, a folder that does not exist; the application then failed to save
+or, with a Qt application, kept waiting (docs/103). A typed full path or file URL is now used as
+given, a name still goes into the folder shown. Each part of the path is percent-encoded, so a
+name with # or ? is not cut at it. An empty name no longer saves to the folder itself, and Enter in
+the field saves as the button does.
+
+Forwarded: no
+Last-Update: 2026-10-01
+X-Rungic-Status: Pending [a plain bug; check upstream master first]
+X-Rungic-Tests: none (gap: checked by hand on the phone, docs/103)
+X-Rungic-Docs: docs/103
+---
+ src/kirigami-filepicker/declarative/FilePicker.qml | 13 ++++++++++++-
+ 1 file changed, 12 insertions(+), 1 deletion(-)
+
+diff --git a/src/kirigami-filepicker/declarative/FilePicker.qml b/src/kirigami-filepicker/declarative/FilePicker.qml
+index e7d213e..17acedb 100644
+--- a/src/kirigami-filepicker/declarative/FilePicker.qml
++++ b/src/kirigami-filepicker/declarative/FilePicker.qml
+@@ -99,12 +99,23 @@ Kirigami.ScrollablePage {
+                 Layout.fillWidth: true
+                 id: fileNameField
+                 placeholderText: i18n("File name")
++                onAccepted: saveButton.clicked()
+             }
+             Controls.ToolButton {
++                id: saveButton
+                 Layout.fillHeight: true
+                 icon.name: "dialog-ok-apply"
++                enabled: fileNameField.text.length > 0
+                 onClicked: {
+-                    root.fileUrls = [dirModel.folder + "/" + fileNameField.text]
++                    const typed = fileNameField.text
++                    if (typed.length === 0)
++                        return
++                    // Each part of the path percent-encoded: a name with # or ? stays a name.
++                    const encoded = typed.split("/").map(encodeURIComponent).join("/")
++                    // A full path (or a file URL) is used as given; a name goes into the folder shown.
++                    root.fileUrls = [typed.startsWith("file:") ? typed
++                                     : typed.startsWith("/") ? "file://" + encoded
++                                     : dirModel.folder + "/" + encoded]
+                     root.accepted(root.fileUrls)
+                 }
+             }

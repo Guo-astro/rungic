@@ -1,2 +1,4 @@
 relax-plasma-internal-build-deps.patch
 rungic/mobile-dialog-width.patch
+rungic/mobile-dialog-suggested-name.patch
+rungic/mobile-dialog-full-path.patch

@@ -1,3 +1,11 @@
+xdg-desktop-portal-kde (6.6.6-0ubuntu0.1+rungic2) resolute; urgency=medium
+
+  * Mobile file dialog: the name the application suggests (current_name) is
+    in the file name field; a full path typed there is used as given instead
+    of being appended to the folder shown (docs/103).
+
+ -- range-dev <noreply@localhost>  Wed, 01 Oct 2026 06:00:00 +0000
+
 xdg-desktop-portal-kde (6.6.6-0ubuntu0.1+rungic1) resolute; urgency=medium
 
   * Patch queue (docs/71, docs/73): the mobile dialog width fix as a DEP-3

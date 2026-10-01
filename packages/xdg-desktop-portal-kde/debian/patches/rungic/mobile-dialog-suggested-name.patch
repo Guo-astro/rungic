@@ -1,0 +1,39 @@
+From: kevinzhow <kevinzhow@local>
+Date: Thu, 1 Oct 2026 13:21:26 +0900
+Subject: Mobile file dialog: suggest the name the application asks for
+
+SaveFile's mobile path left current_name out ("not implemented"): the file name field stayed
+empty, so a Qt application's proposed name (untitled.kra, say) never showed and the user or the
+agent had to type one. Without current_file, the dialog now gets current_name as its current file,
+in current_folder or else the home folder it opens in; setCurrentFile already puts the name into
+the field and switches into that folder. Only the name part is used (the portal specifies a name).
+
+Forwarded: no
+Last-Update: 2026-10-01
+X-Rungic-Status: Pending [a plain gap; check upstream master first]
+X-Rungic-Tests: none (gap: checked by hand on the phone, docs/103)
+X-Rungic-Docs: docs/103
+---
+ src/filechooser.cpp | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/src/filechooser.cpp b/src/filechooser.cpp
+index 025dfc7..e94fa19 100644
+--- a/src/filechooser.cpp
++++ b/src/filechooser.cpp
+@@ -574,10 +574,13 @@ void FileChooserPortal::SaveFile(const QDBusObjectPath &handle,
+ 
+         if (!currentFile.isEmpty()) {
+             m_mobileFileDialog->setCurrentFile(currentFile);
++        } else if (!currentName.isEmpty()) {
++            // The suggested name in the file name field, in the suggested folder or else the home
++            // folder the dialog opens in: setCurrentFile takes a path and does both.
++            const QString folder = currentFolder.isEmpty() ? QStandardPaths::writableLocation(QStandardPaths::HomeLocation) : currentFolder;
++            m_mobileFileDialog->setCurrentFile(QDir(folder).filePath(QFileInfo(currentName).fileName()));
+         }
+ 
+-        // currentName: not implemented
+-
+         if (!acceptLabel.isEmpty()) {
+             m_mobileFileDialog->setAcceptLabel(acceptLabel);
+         }
