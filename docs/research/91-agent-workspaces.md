@@ -277,3 +277,204 @@ Agent 2  KWin#2 ──── │ 显示源 agent-2               │  电视 / �
   - 语音服务 `workspace_env()`：给 Codex 线程和桌面工具，也就是 Agent 启动的应用。
 - 用户会话原来的值随 `RUNGIC_USER_<变量名>` 带进工作区，在 `rungic-user`、`router.user_session_env`、`switch.restore` 交还用户会话时恢复。原来没有的，交还时也不设。
 - 测试：`tools/tests/test_workspace_env.py`、`tools/test_router.py`、`tools/test_switch.py`。
+
+
+## 多 Agent 团队（调研，2026-10-01）
+
+**用户设想**：做一款游戏时，由几个 Agent 组成团队，分别负责 Godot、Blender、音乐和绘画。每个 Agent 有自己相对独立的桌面，大家在同一个项目上协作。要回答的问题是：每个 Agent 一个桌面，还是所有 Agent 共用一个工作区？以及协作层怎么做。
+
+本节结论来自三条调研线：Codex 源码、业界资料、实机只读查询。标注方式：
+- **源码**：读过源码；
+- **实机**：执行主机 K8-Plus，手机 ZY32MVJS25，只读查询；
+- **资料**：官方文档、论文或博客；
+- **推断**：未经验证。
+
+本节不包含任何实施或验收。
+
+### 1. 桌面隔离的粒度：每个 Agent 一个桌面
+
+- **不能共用一个桌面**（源码，见上文“现状”一节）：KWin 只有一个座席，也就是一套指针、一个键盘焦点和一个活动窗口。两个 Agent 同时在一个桌面上操作 GUI，会互相抢焦点。要并行，就必须每个 Agent 一个合成器。
+- **业界做法**（资料）：
+  - 通常的隔离单位是“容器或 VM 加一个独立显示服务器”：Anthropic computer-use-demo、Bytebot、E2B Desktop、OpenHands、Devin 的子 Devin 都是这样。
+  - 跨 Agent 共享靠挂载的工作目录或 Git 仓库；共享剪贴板的做法本轮没有找到。
+  - 最接近我们的是 Microsoft UFO2 的 PiP 虚拟桌面（arXiv 2504.14603）：在同一台机器上另开一个会话，以画中画窗口显示。
+- **现有工作区已满足这个粒度**（源码）：每个槽位有自己的 KWin、私有 D-Bus、Wayland、Xwayland 和剪贴板。
+- **建议共享的**：同一个 Linux 用户、同一个家目录、同一个项目目录。分 Linux 用户会带来权限和配置复制的麻烦，收益很小。只有确实冲突的单实例应用，沿用上文的“按需切换”。
+
+### 2. Agent 编排：每个成员一个 Codex 线程
+
+- **Codex 0.159.2 自带多 Agent**（源码，`rust-v0.159.2` 浅克隆在 `.work/refs/codex-src-0.159.2`）：
+  - `multi_agent`（V1，Stable，默认开启）提供 `spawn_agent`、`send_input`、`wait_agent`、`close_agent`，默认最多 6 个线程（`core/src/config/mod.rs:254`）。
+  - `multi_agent_v2`（Stable，默认关闭）默认 4 个并发；子 Agent 结束后以消息形式交回父线程（`core/src/agent/control/completion.rs`）。
+  - 实际用 V1 还是 V2，取决于服务端下发的模型目录，本轮没有核实。
+- **原生子 Agent 做不到“一人一桌面”**（源码）：
+  - 子 Agent 从父 Agent 克隆配置，强制继承工作目录、审批策略和沙箱（`core/src/agent/child_config.rs:131-190`）。
+  - 角色（`[agents.<名>]`）只能改提示词、模型、推理强度等，改不了 `mcp_servers` 和环境变量（`core/src/agent/role.rs:36-48`）。
+  - 结果是所有子 Agent 的桌面工具都指向同一个槽位。
+- **可行做法**（源码 + 推断）：语音服务在同一个 app-server 里给每个成员开一个线程。
+  - `thread/start` 的 `config` 是正式字段（`app-server-protocol/src/protocol/v2/thread.rs:100`），按 `-c key=value` 合并（`app-server/src/config_manager.rs:437-455`）。
+  - 语音服务已经用它注入 `mcp_servers.rungic-desktop.env` 和 `shell_environment_policy.set`（`rungic_voice_agent.py` 的 `thread_settings()`）。只要按成员传入不同的 `RUNGIC_WORKSPACE`，就能把线程和槽位一一对应。
+  - 工作目录、角色提示词和模型也可以按成员分别设置。
+  - 成员线程内部仍可用原生子 Agent 做只读调研，因为它们共用同一个槽位，不冲突。
+- **代码里的单 Agent 假设**（源码），改造时要逐项处理：
+  - `rungic_voice_agent.py`：`WORKSPACE = 1`；只有一个 `thread_id`；不属于当前线程的通知直接丢弃；忙碌状态和进度播报都是单一的。
+  - `rungic_cua`：`show_workspace` 会把助理屏切到自己的槽位，多个 Agent 会互相抢；`activity.json` 和 `switch.py` 的状态文件都是全局唯一；`restore-apps` 默认槽位 1。
+  - 显示：`rungic-agent-screen` 一次只呈现一个槽位；APK 只记一个 `assistantWorkspace`。
+  - 宿主：`WORKSPACE_SLOTS = 4`，写死在 `packages/android-host` 的补丁里；`rungic-workspace` 接受 1..9，但宿主只提供 ws-1..ws-4（实机：四个 socket 都在）。
+
+### 3. 协作层：业界什么做法有效
+
+- **资料中一致的结论**：
+  - 一个协调者；
+  - 按产物（文件或目录）划分负责范围；
+  - 带依赖关系和锁的任务板；
+  - 结构化的交接件；
+  - 一个独立的验收 Agent。
+- **Claude Code agent teams**（官方文档，实验特性）：
+  - 组成：lead、若干 teammates、共享任务表（pending、in progress、completed，带依赖关系，认领时用文件锁），再加每人一个收件箱。
+  - 文档明确：两个成员改同一个文件就会互相覆盖，所以要让每人负责不同的文件；建议 3–5 名成员。
+  - 已知问题：任务状态滞后，lead 会提前宣布完成。
+- **A2A v1.0**（官方规范）：任务状态机（SUBMITTED、WORKING、INPUT_REQUIRED、COMPLETED、FAILED 等）和 Artifact 可以直接借用为我们任务板的语义。它是跨框架的互通协议，不是编排器。
+- **Anthropic 的经验**（官方博客）：
+  - 多 Agent 一般比单 Agent 多耗 3–15 倍 token；
+  - 应按“上下文能否隔离”来拆分任务，不按头衔；
+  - 子 Agent 把产物直接写进文件，比层层转述更可靠；
+  - 验证型子 Agent 效果最稳。
+- **反面证据**：
+  - Cognition 的 “Don't Build Multi-Agents”（博客）：决策分散在多个 Agent 里，会互相冲突。
+  - MAST（arXiv 2503.13657）：多 Agent 的失败集中在系统设计、Agent 间错位、验证不足三类。
+
+### 4. 游戏工具：能脚本化的用脚本，需要看和听时才开桌面
+
+（资料）
+
+- **Godot**：`--headless`、`--script`、`--import`、`--export-release`；推荐 glTF 导入，音乐用 Ogg。官方 4.7.2 提供 Linux ARM64 版本。社区有 godot-mcp（MIT），可以无界面地建场景、运行游戏、抓输出。
+- **Blender**：`-b --python` 能完成建模、材质、渲染和 glTF 导出。blender-mcp 必须在 GUI 进程里运行，而且没有鉴权。
+- **Krita**：Python 接口在 GUI 进程里。`kritarunner` 可以无界面运行，但维护不足。社区的 MCP 都需要开着 GUI。
+- **音乐**：
+  - LMMS：`lmms render`；
+  - Ardour：`luasession`；
+  - MuseScore：`-o` / `-j` 批处理；
+  - SuperCollider：NRT 离线渲染。
+  - 这些都能无界面导出。
+- **判断**：生成、转换和导出几乎都能脚本化。必须用桌面的只有三类：
+  - 看效果和听效果（比例、手感、混音）；
+  - 笔刷、雕刻这类交互操作；
+  - 插件驻留在 GUI 里的 MCP。
+
+### 5. 手机上的约束
+
+（实机，16:01–16:04）
+
+- **内存**：
+  - 手机 7.35 GiB，当时可用 2.68 GiB。
+  - 整个容器只有一个 Android v1 memcg：`/dev/memcg/rungic-plasma`，上限 4 GiB，当时用量 2.68 GiB，`failcnt` 约 28 万，经常在上限处回收。
+  - KGSL 显存峰值 2.08 GiB，很可能不计入这个 memcg（推断）。
+- **一个工作区的开销**：
+  - KWin 148–185 MB RSS，Xwayland 34 MB，desktop 75 MB，stream 59 MB；
+  - 显示为浮窗时再加约 113 MB；
+  - 私有总线上的门户、ksecretd 等，每个 36–62 MB。
+  - 每个成员的 Codex 线程和 `rungic_cua` 约 0.2–0.35 GB。
+- **重型应用实测**：当时另一条工作线正在 1 号工作区试装官方 Godot 4.7.2 arm64。启动 8 秒后 RSS 962 MB、显存 484 MiB；同一分钟 lmkd 以 “kswapd is busy” 为由连杀 6 个 Android 应用。
+- **systemd 资源限制在容器里不生效**：容器 cgroup2 从根到 `user@1000.service` 的 `cgroup.controllers` 全为空，memory、cpu、cpuset、blkio 都在 Android 的 v1 层级上。`MemoryMax`、`CPUWeight` 会静默失效，`rungic-workspace@1` 显示 `MemoryMax=infinity`。要按工作区限额，只能从 Android root 在 `/dev/memcg/rungic-plasma/` 和 `/dev/cpuctl` 下建子组，再把进程迁进去，做法类似现有的 `adopt_container`（推断）。
+- **声音**：
+  - 容器的声音服务是 PulseAudio 17，默认 sink `android` 直通手机外放。
+  - 工作区没有设 `PULSE_SINK`，所以工作区应用的声音会从手机外放出来。
+  - 方案（推断）：每个工作区建一个 `module-null-sink ws-N`，并导出 `PULSE_SINK`；用户想听哪个，就用 `module-loopback` 把它接到手机或电视。
+  - Sonic Pi、SuperCollider 需要 JACK，本机没有，需要另行验证。
+- **观看**：电视、全屏、浮窗各只能显示一个来源；浮窗脚本只能开一个助理屏。同时看多个工作区，需要改脚本、浮窗程序和 APK。
+- **应用**（Ubuntu 26.04 arm64）：
+  - 已安装：Blender 5.0.1、Krita 6.0.1。
+  - 只在软件源里：LMMS 1.2.2、Ardour 9.0.0、Audacity 3.7.7、SuperCollider 3.13.0、Sonic Pi 3.2.2。
+  - 软件源没有 Godot 4（只有 godot3 3.6.2），也没有 MuseScore 4。
+  - git 2.53 已装，git-lfs 3.7.1 可以装。
+  - 磁盘可用 120 GB 以上，不是瓶颈。
+- **估算**（推断）：
+  - 4 个工作区全开、各跑一个重型应用，需要 5–7 GB，超过 4 GiB 的容器上限和当时的可用内存。
+  - 默认档下比较现实的是：同时最多 1 个重型 GUI 应用、2 个工作区。
+
+### 6. 建议架构
+
+1. **成员 = Codex 线程 + 工作区槽位 + 角色**，由语音服务统一管理。
+   - 协调者就是用户正在对话的助手，它通过我们提供的团队工具派活、查进度、验收。
+   - 成员线程用线程级 `config` 绑定自己的槽位、工作目录和角色提示词。
+2. **无界面优先，需要时才开桌面**：
+   - 成员默认用脚本完成工作（`blender -b`、`godot --headless`、`lmms render`）。
+   - 只有要看效果、听效果，或要用交互工具时，才启动或唤醒自己的工作区。
+   - 工作区空闲就停掉。
+   - 同时开着的重型 GUI 应用数量由管理服务限制，在手机上默认 1 个。
+3. **协作层放在项目仓库里**：
+   - `.team/` 下存任务板：状态参照 A2A，任务有依赖关系，认领时加锁。
+   - 每个成员一个收件箱。
+   - 按目录划分负责范围（`game/`、`models/`、`art/`、`audio/`），跨目录只通过导出产物交接（GLB、PNG 加帧表、OGG），交接规格由脚本检查。
+   - 另设一个验收成员，在自己的工作区里运行游戏、截图、听声音。
+4. **共享层要补的能力**：
+   - 每个工作区的资源子组，从 Android root 侧建；
+   - 每个工作区的 null sink 和“旁听”；
+   - 全局状态文件（activity、switch）按槽位分开；
+   - `show_workspace` 改为“用户当前关注的成员”；
+   - 多个浮窗，或一个团队总览。
+5. **以后可以把重活搬到别的机器**：工作区本质上是“一个 KWin 加一条显示输出”，Blender 渲染这类重任务可以放到 Mac mini 上跑，画面传回手机。现在不做，但架构上不要把它堵死。
+
+### 7. 分期
+
+| 阶段 | 内容 | 验收 |
+|---|---|---|
+| 0 | 每个工作区的资源子组和 null sink；全局状态文件按槽位分开；`show_workspace` 不再抢助理屏 | 两个工作区同时运行时互不干扰；一个工作区超出限额时只影响它自己；声音不再直接外放 |
+| 1 | 线程与槽位一一对应；通知按线程分发；成员线程的启动和停止；工作区按需启动和回收 | 两个成员各在自己的槽位里打开应用、各自完成一个任务，用户手机上的焦点不受影响 |
+| 2 | `.team/` 任务板和收件箱；协调者和成员的团队工具；目录负责范围；交接规格检查；验收成员 | 一个小游戏切片：Blender 导出 GLB → Godot 导入并运行 → 验收成员截图确认 |
+| 3 | 团队总览、多个浮窗、旁听 | 用户能同时看到各成员的画面，并切换收听 |
+| 4（可选） | 远程工作区 | — |
+
+### 8. 需要用户决定
+
+- **token 成本**：多 Agent 比单 Agent 多 3–15 倍。是先用 2–3 个成员试，还是一开始就 4 个？
+- **容器内存档位**：默认 4 GiB 不够多个重型应用同时运行。调高档位会挤压 Android，增加 VPN 和宿主被杀的风险。
+- **默认工作方式**：成员是否默认用脚本工作、只在需要时开桌面？这是让手机跑得动的关键。
+
+调研时取用的 Codex 源码在 `.work/refs/codex-src-0.159.2` 和 `.work/refs/codex-0.156.1-features`（本机，不同步）。业界资料的出处见第 1、3、4 小节里的论文号和项目名。
+
+### 9. 项目会话：KDE 的会话保存能否用来“按项目切换”（2026-10-01）
+
+**用户设想**：Agent 会同时负责不同的项目。它应当知道自己在某个项目上用的是哪个桌面会话，以后能切回那个会话，打开的应用、文件和窗口都回到原样。
+
+**KDE 现有机制**（源码，取自 KWin v6.6.6 和 plasma-workspace v6.6.6，存放在 `.work/refs/kde-session-20261001/`；Qt 一项取自 qtbase v6.10.2 的源码树）：
+
+- **ksmserver**：
+  - 基于 XSMP（ICE），会在环境里设置 `SESSION_MANAGER`。
+  - D-Bus 接口已经支持按名字保存和恢复：`sessionList`、`saveCurrentSessionAs`、`restoreSession`。默认的两个会话叫 “saved at previous logout” 和 “saved by user”（`ksmserver/server.h:55-56`）。
+  - 它只能保存和重启说 XSMP 的客户端，重启时用的是应用自己登记的重启命令。
+- **Qt 6.10.2**：会话管理（`QSessionManager`）只在 X11 平台插件里实现（`qxcbsessionmanager.cpp`），Wayland 插件里没有。所以原生 Wayland 的 Qt 程序（Krita 6、KDE 应用）不参与 XSMP 会话，只有 Xwayland 程序才会被保存。
+- **KWin 的 `xx-session-management-v1`**（Wayland 会话协议）：
+  - 只有设置 `KWIN_WAYLAND_SUPPORT_XX_SESSION_MANAGER=1` 才打开（`wayland_server.cpp:383`），是实验特性。
+  - 它只保存窗口状态，存在 `kwinsession` 里，并不负责重启应用；而且客户端也要支持这个协议，Qt 6.10.2 的 Wayland 插件里没看到对应实现。
+  - KWin 自己的会话信息只保存 `X11Window`（`sm.cpp`）。
+- **活动（Activities）**：KWin 6.6.6 启动时会删掉旧的 `SubSession: …` 配置组（`activities.cpp:50-57`）。也就是说，“停用活动时保存它的窗口、再启用时恢复”这个功能已经不在了，活动现在只用来给窗口分组。
+- **应用这一侧**（推断，未逐一核对源码）：Blender 和 Godot 没有接入 XSMP。它们真正的状态在各自的项目文件里（`.blend`、`project.godot`、`.kra`、`.mmp`）。
+
+**结论**：
+- 方向对：“一个项目对应一个可保存、可切换的会话”。
+- 但 KDE 的会话机制在 Wayland 上恢复不了我们要用的这些应用，不能拿来当底座。
+
+**建议做法**（推断，未实施）：**项目会话由 Rungic 自己记录，工作区槽位只是用来显示它的地方。**
+
+关系类似 tmux：会话可以挂到某一块“屏幕”上，也可以从屏幕上卸下来。
+
+- **项目会话**是一份有名字的记录，存在项目仓库的 `.rungic/session.json` 里，或者在 `~/.local/share/rungic/sessions/<名字>/` 下登记一份索引。内容包括：
+  - 项目目录，以及对应的 Codex 线程 ID（继续这个项目时 `thread/resume`）；
+  - 打开过的应用：可执行文件、参数和它们打开的项目文件；
+  - 窗口布局：从 KWin 读出的位置、大小和最大化状态；
+  - 这个会话自己的工作区状态目录（KWin 配置、缓存），以及最后一次保存时的截图；
+  - 未保存改动的处理记录。
+- **挂上（attach）**：给会话分配一个空闲的槽位（宿主目前提供 1–4）；在这个槽位里启动 KWin，使用会话自己的状态目录；按记录用项目文件重新打开应用；再按记录放回窗口。
+- **卸下（detach）**：
+  1. 先让应用保存：Agent 用桌面工具或应用自己的脚本接口保存，存不了的要先问用户；
+  2. 把窗口布局记下来；
+  3. 关掉应用，释放槽位。
+  - 手机内存紧，卸下的会话不保持运行；冻结进程会继续占内存，只在短时间切换时才考虑。
+- **Agent 的视角**：项目和会话的对应关系写在项目里。Agent 进入一个项目时，就是“恢复这个 Codex 线程，再把这个项目的会话挂到一个槽位上”；切到别的项目，就先卸下当前会话。
+- **与第 6 小节的关系**：团队里的每个成员，就是“一个线程，加上它在这个项目里的会话”。同一个成员参与不同项目时，会有不同的会话。
+- **待核实**：
+  - 各应用怎样可靠地保存和重新打开（Blender `-b` 脚本或 GUI 内保存、`godot --editor --path`、`krita <文件>`、`lmms <文件>`）；
+  - 怎样从 KWin 读出和放回窗口布局（KWin 脚本，或启动后用窗口规则）；
+  - 设置了实验开关后的 `xx-session-management` 能不能用来放回窗口（需要客户端支持，Qt 6.10 目前不支持）。
