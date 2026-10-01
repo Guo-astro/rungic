@@ -120,6 +120,27 @@ def test_restore_from_inside_a_workspace_opens_on_the_phone():
         assert 'RUNGIC_WORKSPACE' not in env
 
 
+
+def test_restore_gives_the_phone_its_own_values_back():
+    """The workspace sets these as Plasma's desktop session has them (docs/103); an app given back to
+    the phone gets the user's values."""
+    with tempfile.TemporaryDirectory() as runtime:
+        switch = load(runtime)
+        for carried, expected in (('1', '1'), ('', None)):
+            theme = 'KDE' if carried else ''
+            Path(runtime, 'rungic-workspace-switched.json').write_text(
+                json.dumps({'test.sleeper': {'name': '测试', 'programs': ['rungic-test-sleeper']}}))
+            workspace = {'WAYLAND_DISPLAY': 'wayland-ws-1', 'RUNGIC_WORKSPACE': '1', 'PLASMA_INTEGRATION_USE_PORTAL': '0',
+                         'QT_QPA_PLATFORMTHEME': '', 'RUNGIC_USER_PLASMA_INTEGRATION_USE_PORTAL': carried,
+                         'RUNGIC_USER_QT_QPA_PLATFORMTHEME': theme}
+            with mock.patch.dict(os.environ, workspace), mock.patch.object(switch, 'in_call', return_value=False), \
+                    mock.patch.object(switch.subprocess, 'Popen') as popen:
+                switch.restore(1)
+            env = popen.call_args.kwargs['env']
+            assert env.get('PLASMA_INTEGRATION_USE_PORTAL') == expected
+            assert env.get('QT_QPA_PLATFORMTHEME') == (theme or None)
+            assert not any(k.startswith('RUNGIC_USER_') for k in env)
+
 def test_restore_waits_for_a_call():
     with tempfile.TemporaryDirectory() as runtime:
         switch = load(runtime)

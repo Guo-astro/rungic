@@ -260,3 +260,20 @@ Agent 2  KWin#2 ──── │ 显示源 agent-2               │  电视 / �
   - 已经连在失效总线上的 Qt 程序不会自己重连，切换 `IsEnabled` 也没用，需要重启：本次重启了 plasmashell。
   - 冒烟验收 9/9 通过。
 
+
+## 工作区的环境照 Plasma 桌面会话配置（2026-10-01）
+
+工作区是一块 1920×1080 的桌面，环境变量按 Plasma 桌面会话（`startplasma`）的样子设置，而不是手机会话（`startplasmamobile`）的。原因见 docs/103：Plasma Mobile 写死的 `QT_QPA_PLATFORMTHEME=KDE` 会进入程序启动时建的临时应用，让它的会话总线一直不派发消息；`PLASMA_INTEGRATION_USE_PORTAL=1` 又让文件对话框依赖门户的 D-Bus 信号，最终 Krita 整个卡死。
+
+| 变量 | 工作区 | 用户会话（手机） |
+|---|---|---|
+| `QT_QPA_PLATFORMTHEME` | 不设（Codex 里是空字符串，Qt 当作未设置） | 不设（2026-10-01 起，`plasma-mobile` 补丁） |
+| `PLASMA_INTEGRATION_USE_PORTAL` | `0`：进程内的 KDE 文件对话框 | `1`：门户的手机版选择器 |
+| `KDE_FULL_SESSION`、`KDE_SESSION_VERSION` | `true`、`6`，不依赖调用者 | 由 `startplasma` 设置 |
+
+- 三处保持一致：
+  - `rungic-workspace`：工作区总线拉起的程序（门户等）继承它；
+  - `rungic-workspace-env`；
+  - 语音服务 `workspace_env()`：给 Codex 线程和桌面工具，也就是 Agent 启动的应用。
+- 用户会话原来的值随 `RUNGIC_USER_<变量名>` 带进工作区，在 `rungic-user`、`router.user_session_env`、`switch.restore` 交还用户会话时恢复。原来没有的，交还时也不设。
+- 测试：`tools/tests/test_workspace_env.py`、`tools/test_router.py`、`tools/test_switch.py`。

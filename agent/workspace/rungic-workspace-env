@@ -15,9 +15,20 @@ fi
 if [ -z "${RUNGIC_WORKSPACE:-}" ]; then
     export RUNGIC_USER_WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
     export RUNGIC_USER_DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=$runtime/bus}"
+    export RUNGIC_USER_PLASMA_INTEGRATION_USE_PORTAL="${PLASMA_INTEGRATION_USE_PORTAL:-}"
+    export RUNGIC_USER_QT_QPA_PLATFORMTHEME="${QT_QPA_PLATFORMTHEME:-}"
 fi
 export WAYLAND_DISPLAY=wayland-ws-$slot DBUS_SESSION_BUS_ADDRESS="$(cat "$state/bus")" RUNGIC_WORKSPACE=$slot
 export QT_QPA_PLATFORM=wayland XDG_CURRENT_DESKTOP=KDE XDG_SESSION_TYPE=wayland
+# As in Plasma's session, whoever calls: programs tell a KDE session by these (Krita's OpenGL
+# probe then leaves the desktop theme out, docs/103).
+export KDE_FULL_SESSION=true KDE_SESSION_VERSION=6
+# A desktop, set up as Plasma's desktop session is (docs/103): in-process file dialogs, not the
+# phone's portal picker, and the platform theme Qt picks from XDG_CURRENT_DESKTOP. A forced
+# QT_QPA_PLATFORMTHEME reached the temporary applications programs make at start (Krita's OpenGL
+# probe) and left their session bus deaf.
+export PLASMA_INTEGRATION_USE_PORTAL=0
+unset QT_QPA_PLATFORMTHEME
 # Its own Xwayland for X11 programs; none at all rather than the phone's.
 if [ -s "$state/display" ]; then
     export DISPLAY="$(cat "$state/display")"

@@ -18,6 +18,11 @@ import subprocess
 import time
 from pathlib import Path
 
+# Set apart in a workspace, as Plasma's desktop session has them (docs/103); the user's session's
+# values go along as RUNGIC_USER_<name>.
+USER_VALUES = ('PLASMA_INTEGRATION_USE_PORTAL', 'QT_QPA_PLATFORMTHEME')
+
+
 # Program names (the executable's base name) of apps with one instance per user's data.
 SINGLE_INSTANCE = {'wechat', 'firefox', 'firefox-esr', 'chromium', 'chromium-browser', 'google-chrome',
                    'google-chrome-stable', 'telegram-desktop', 'telegram', 'thunderbird', 'signal-desktop'}
@@ -183,6 +188,13 @@ def restore(workspace: int) -> list[str]:
                                                or f'unix:path={RUNTIME}/bus')
         for name in ('RUNGIC_WORKSPACE', 'DISPLAY', 'XAUTHORITY'):
             env.pop(name, None)
+        # What the workspace sets as a desktop does (docs/103): the user's session's own values again.
+        for name in USER_VALUES:
+            value = env.pop('RUNGIC_USER_' + name, '')
+            if value:
+                env[name] = value
+            else:
+                env.pop(name, None)
         if not processes(names, None):
             subprocess.Popen(['kstart', '--application', app_id], stdout=subprocess.DEVNULL,
                              stderr=subprocess.DEVNULL, start_new_session=True, env=env)

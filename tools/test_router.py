@@ -90,3 +90,17 @@ def test_the_where_note_comes_only_when_it_changes():
         first = r.call('desktop_screenshot', {})
         second = r.call('desktop_screenshot', {})
     assert len(first['content']) == 2 and len(second['content']) == 1
+
+
+
+def test_the_users_session_gets_its_own_values_back():
+    """The workspace sets these as Plasma's desktop session has them (docs/103); the user's session
+    gets its own values back, and loses one it never had."""
+    workspace = {'WAYLAND_DISPLAY': 'wayland-ws-1', 'RUNGIC_WORKSPACE': '1', 'PLASMA_INTEGRATION_USE_PORTAL': '0',
+                 'QT_QPA_PLATFORMTHEME': ''}
+    env = router.user_session_env({**workspace, 'RUNGIC_USER_PLASMA_INTEGRATION_USE_PORTAL': '1',
+                                   'RUNGIC_USER_QT_QPA_PLATFORMTHEME': 'KDE'})
+    assert (env['PLASMA_INTEGRATION_USE_PORTAL'], env['QT_QPA_PLATFORMTHEME']) == ('1', 'KDE')
+    assert not any(k.startswith('RUNGIC_USER_') for k in env)
+    env = router.user_session_env(workspace)
+    assert 'PLASMA_INTEGRATION_USE_PORTAL' not in env and 'QT_QPA_PLATFORMTHEME' not in env

@@ -41,6 +41,14 @@ mkdir -p "$XDG_CACHE_HOME"
 export RUNGIC_WORKSPACE=$slot WAYLAND_DISPLAY=wayland-ws-$slot
 unset DISPLAY XAUTHORITY
 export QT_QPA_PLATFORM=wayland XDG_CURRENT_DESKTOP=KDE XDG_SESSION_TYPE=wayland
+# As in Plasma's session, whoever calls: programs tell a KDE session by these (Krita's OpenGL
+# probe then leaves the desktop theme out, docs/103).
+export KDE_FULL_SESSION=true KDE_SESSION_VERSION=6
+# A desktop, set up as Plasma's desktop session is (docs/103): KDE programs open their file
+# dialogs in process, not the phone's portal picker, and Qt picks the platform theme from
+# XDG_CURRENT_DESKTOP (a forced one left Krita's session bus deaf).
+export PLASMA_INTEGRATION_USE_PORTAL=0
+unset QT_QPA_PLATFORMTHEME
 
 # In a session bus of its own, at a fixed address: conversations and tools that already know
 # it (the agent's Codex threads and their desktop tools, docs/research/91) reach the workspace

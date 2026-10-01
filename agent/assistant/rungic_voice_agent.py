@@ -259,8 +259,14 @@ def workspace_env(slot=WORKSPACE, wait=10.0):
         time.sleep(0.2)
     env = {'WAYLAND_DISPLAY': f'wayland-ws-{slot}', 'DBUS_SESSION_BUS_ADDRESS': bus, 'RUNGIC_WORKSPACE': str(slot),
            'QT_QPA_PLATFORM': 'wayland', 'XDG_SESSION_TYPE': 'wayland', 'XDG_CURRENT_DESKTOP': 'KDE',
+           # A desktop, set up as Plasma's desktop session is (docs/103): in-process file dialogs, and
+           # the platform theme Qt picks (empty is unset to Qt; Codex can only set variables)
+           'PLASMA_INTEGRATION_USE_PORTAL': '0', 'QT_QPA_PLATFORMTHEME': '',
+           'KDE_FULL_SESSION': 'true', 'KDE_SESSION_VERSION': '6',
            'RUNGIC_USER_WAYLAND_DISPLAY': os.environ.get('WAYLAND_DISPLAY', 'wayland-0'),
-           'RUNGIC_USER_DBUS_SESSION_BUS_ADDRESS': os.environ.get('DBUS_SESSION_BUS_ADDRESS', f'unix:path={runtime}/bus')}
+           'RUNGIC_USER_DBUS_SESSION_BUS_ADDRESS': os.environ.get('DBUS_SESSION_BUS_ADDRESS', f'unix:path={runtime}/bus'),
+           'RUNGIC_USER_PLASMA_INTEGRATION_USE_PORTAL': os.environ.get('PLASMA_INTEGRATION_USE_PORTAL', ''),
+           'RUNGIC_USER_QT_QPA_PLATFORMTHEME': os.environ.get('QT_QPA_PLATFORMTHEME', '')}
     try:
         env['DISPLAY'] = (state / 'display').read_text().strip()
     except OSError:
