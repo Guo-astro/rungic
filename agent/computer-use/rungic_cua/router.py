@@ -24,6 +24,8 @@ import subprocess
 import threading
 from itertools import count
 
+from . import workspace
+
 # Set apart in a workspace, as Plasma's desktop session has them (docs/103); the user's session's
 # values go along as RUNGIC_USER_<name>.
 USER_VALUES = ('PLASMA_INTEGRATION_USE_PORTAL', 'QT_QPA_PLATFORMTHEME')
@@ -44,6 +46,17 @@ WHERE_TOOL = {
     'inputSchema': {'type': 'object', 'properties': {
         'target': {'type': 'string', 'enum': ['auto', 'desktop', 'workspace']}}},
     'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False},
+}
+CLOSE_TOOL = {
+    'name': 'desktop_close_workspace',
+    'description': ("Close your workspace (the assistant's screen) when its work is done or the user asks: every "
+                    "app in it is asked to close as with its close button, so save your work first. An app that "
+                    "does not close (it asks about unsaved changes) comes back in `remaining` and the workspace "
+                    "stays: handle it (save or discard as the user wants) and call again. `force` closes anyway "
+                    "and loses what is unsaved: only when the user said so. Everything started there ends with it; "
+                    "your next desktop tool call starts it again, empty."),
+    'inputSchema': {'type': 'object', 'properties': {'force': {'type': 'boolean'}}},
+    'annotations': {'readOnlyHint': False, 'destructiveHint': True, 'openWorldHint': False},
 }
 SESSION_NAMES = {'desktop': "the user's desktop", 'workspace': 'your workspace (the assistant\'s screen)'}
 
@@ -154,6 +167,8 @@ class Router:
     def child(self, target: str) -> Child:
         child = self.children.get(target)
         if child is None or not child.alive():
+            if target == 'workspace' and not workspace.ensure(self.env.get('RUNGIC_WORKSPACE') or 1):
+                raise RuntimeError('your workspace did not start')
             env = self.env if target == 'workspace' else user_session_env(self.env)
             child = self.children[target] = Child(env)
         return child
@@ -166,6 +181,13 @@ class Router:
             target, why = self.where()
             self.last = target
             data = {'where': target, 'screen': SESSION_NAMES[target], 'why': why, 'setting': self.override}
+            return {'content': [{'type': 'text', 'text': json.dumps(data, ensure_ascii=False)}]}
+        if name == CLOSE_TOOL['name']:
+            # The child in the workspace goes with it; the next call starts both again.
+            child = self.children.pop('workspace', None)
+            if child:
+                child.close()
+            data = workspace.close(self.env.get('RUNGIC_WORKSPACE') or 1, force=bool(arguments.get('force')))
             return {'content': [{'type': 'text', 'text': json.dumps(data, ensure_ascii=False)}]}
         target, why = self.where()
         result = self.child(target).request('tools/call', {'name': name, 'arguments': arguments})

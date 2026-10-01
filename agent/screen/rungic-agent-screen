@@ -5,8 +5,10 @@ phone, fullscreen, or on the TV:
   rungic-desktop-mode on | off | toggle | status | ensure        desktop mode: the user's desktop
       gets a second output (KWin's CAST-n), a full desktop. A TV shows it: casting is desktop mode
       on the TV.
-  rungic-agent-screen on | off | toggle | status | ensure [tv]   the assistant's screen: the
-      agent's own workspace, `rungic-workspace@N` ($RUNGIC_WORKSPACE, else 1), started when needed.
+  rungic-agent-screen on | off | close [--force] | toggle | status | ensure [tv]   the assistant's
+      screen: the agent's own workspace, `rungic-workspace@N` ($RUNGIC_WORKSPACE, else 1), started
+      when needed. `off` hides it and the workspace goes on; `close` also closes the workspace and
+      the apps in it (rungic-cua close-workspace).
       `tv`: show it on the TV instead of the desktop, connecting the TV if none is (`notv` gives
       the TV back to the desktop).
 
@@ -178,6 +180,23 @@ def off():
     return status()
 
 
+def close():
+    """`off` only hides the assistant's screen: its workspace and the apps in it go on. `close`
+    also closes the workspace: its apps are asked to close (one asking about unsaved work keeps
+    it open, reported under `workspace`), then it stops (rungic-cua close-workspace)."""
+    if DESKTOP:
+        raise SystemExit(json.dumps({'error': 'desktop mode has no workspace of its own; use off'}))
+    result = off()
+    slot = int(os.environ.get('RUNGIC_WORKSPACE') or 1)
+    args = ['rungic-cua', 'close-workspace', str(slot)] + (['--force'] if '--force' in sys.argv else [])
+    done = subprocess.run(args, capture_output=True, text=True, timeout=180)
+    try:
+        result['workspace'] = json.loads(done.stdout)
+    except ValueError:
+        result['workspace'] = {'closed': False, 'error': (done.stderr or done.stdout).strip()[-500:]}
+    return result
+
+
 def tv(show=True):
     """The assistant's screen on the TV instead of the desktop (or back to the desktop). The TV's
     source is set first and a TV is connected if none is: the TV shows the assistant's screen
@@ -203,7 +222,8 @@ def main():
     command = sys.argv[1] if len(sys.argv) > 1 else 'status'
     if command == 'toggle':
         command = 'off' if bridge({'op': OP})['enabled'] else 'on'
-    actions = {'on': on, 'off': off, 'status': status, 'ensure': ensure, 'tv': tv, 'notv': lambda: tv(False)}
+    actions = {'on': on, 'off': off, 'close': close, 'status': status, 'ensure': ensure, 'tv': tv,
+               'notv': lambda: tv(False)}
     if command not in actions:
         raise SystemExit(__doc__)
     print(json.dumps(actions[command](), ensure_ascii=False))

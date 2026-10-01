@@ -18,6 +18,7 @@ Wayland. Codex starts MCP servers outside that sandbox, so desktop operations
   rungic-cua goal '{"goal": ..., "app": ...}'   whole task (Luna, or JEV per step under plan atspi)
   rungic-cua screenshot OUT.png | act '<actions json>' | plan [luna|atspi]
   rungic-cua restore-apps [N]    give apps switched into workspace N back to the user (switch.py)
+  rungic-cua close-workspace [N] [--force]   ask workspace N's apps to close, then stop it (workspace.py)
 """
 from __future__ import annotations
 
@@ -35,7 +36,7 @@ from pathlib import Path
 from arc_cua import DesktopExecutor, RuntimeConfig, result_to_dict, subtask_from_dict
 from arc_cua.policies import TypeSafeJevPolicy
 
-from . import a11y, activity, blocked, names, speech, switch
+from . import a11y, activity, blocked, names, speech, switch, workspace
 from .i18n import _
 from .backend import LinuxAtspiBackend
 from .luna import ComputerUse
@@ -420,8 +421,11 @@ class Cua:
             # In a workspace KIO finds no systemd on the session bus and forks: the app stayed in the
             # voice agent's cgroup and ended when it restarted. A scope of its own, as in the user's
             # session (systemd-run reaches the user manager directly; the app keeps this display).
-            unit = f"app-rungic-ws{os.environ['RUNGIC_WORKSPACE']}-{entry['id']}-{os.getpid()}-{time.monotonic_ns()}"
-            command = ['systemd-run', '--user', '--scope', '--collect', '--quiet', '--unit', unit, '--', *command]
+            # The scope is bound to the workspace: it stops when the workspace does (workspace.py).
+            slot = os.environ['RUNGIC_WORKSPACE']
+            unit = workspace.scope_name(slot, entry['id'], f'{os.getpid()}{time.monotonic_ns()}')
+            command = ['systemd-run', '--user', '--scope', '--collect', '--quiet', '--unit', unit,
+                       *workspace.scope_properties(slot), '--', *command]
         placed = kwin.place_next(classes, prefix, lambda: subprocess.Popen(
             command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True), timeout=25)
         if placed is None:
@@ -855,7 +859,7 @@ def serve() -> None:
     agent's Codex), it routes each call to the user's desktop or the workspace (router.py)."""
     router = None
     if os.environ.get('RUNGIC_WORKSPACE') and not os.environ.get('RUNGIC_CUA_CHILD'):
-        from .router import WHERE_TOOL, Router
+        from .router import CLOSE_TOOL, WHERE_TOOL, Router
         router = Router()
     cua = None if router else Cua()
     out = sys.stdout
@@ -877,7 +881,7 @@ def serve() -> None:
                 result = {'protocolVersion': version, 'capabilities': {'tools': {}},
                           'serverInfo': {'name': 'rungic-cua', 'version': '0.1.0'}}
             elif method == 'tools/list':
-                result = {'tools': tools_for(plan()) + ([WHERE_TOOL] if router else [])}
+                result = {'tools': tools_for(plan()) + ([WHERE_TOOL, CLOSE_TOOL] if router else [])}
             elif method == 'tools/call' and router:
                 params = request.get('params', {})
                 try:
@@ -941,6 +945,19 @@ def main() -> None:
     command = sys.argv[1] if len(sys.argv) > 1 else 'mcp'
     if command == 'mcp':
         serve()
+        return
+    if command == 'close-workspace':     # rungic-cua close-workspace [N] [--force]
+        rest = [a for a in sys.argv[2:] if a != '--force']
+        slot = int(rest[0] if rest else os.environ.get('RUNGIC_WORKSPACE') or 1)
+        print(json.dumps(workspace.close(slot, force='--force' in sys.argv), ensure_ascii=False))
+        return
+    if command == 'close-windows':      # inside a workspace (rungic-workspace-env N): its apps' windows
+        timeout = float(sys.argv[2]) if len(sys.argv) > 2 else workspace.CLOSE_TIMEOUT_S
+        slot = os.environ.get('RUNGIC_WORKSPACE') or '1'
+        from .kwin import KWin
+        remaining = workspace.close_windows(KWin(), workspace.own_pids(slot), timeout,
+                                            unaskable=workspace.x11_without_close())
+        print(json.dumps({'remaining': remaining}, ensure_ascii=False))
         return
     if command == 'restore-apps':
         slot = int(sys.argv[2] if len(sys.argv) > 2 else os.environ.get('RUNGIC_WORKSPACE') or 1)

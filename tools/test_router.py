@@ -9,6 +9,15 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'agent/computer-use'))
 from rungic_cua import router  # noqa: E402
 
+import pytest  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def workspace_up():
+    """The workspace counts as running (workspace.ensure would start it)."""
+    with mock.patch.object(router.workspace, 'ensure', return_value=True):
+        yield
+
 
 class FakeChild:
     made = []
