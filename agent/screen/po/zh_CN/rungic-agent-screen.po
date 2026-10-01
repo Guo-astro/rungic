@@ -61,3 +61,33 @@ msgstr "助理屏"
 msgctxt "@label name of the user's second screen"
 msgid "Desktop"
 msgstr "桌面"
+
+#: rungic-agent-screen
+msgctxt "@item:intext list separator"
+msgid ", "
+msgstr "、"
+
+#: rungic-agent-screen
+msgctxt "@title the floating window"
+msgid "Assistant's screen"
+msgstr "助理屏"
+
+#: rungic-agent-screen
+msgctxt "@action:button show the assistant screen again"
+msgid "View"
+msgstr "查看"
+
+#: rungic-agent-screen
+msgctxt "@action:button close the workspace losing unsaved work"
+msgid "Close without saving"
+msgstr "不保存，直接关闭"
+
+#: rungic-agent-screen
+msgctxt "@title notification"
+msgid "The assistant's screen is still open"
+msgstr "助理屏还开着"
+
+#: rungic-agent-screen
+msgctxt "@info notification, {apps} lists apps"
+msgid "{apps} did not close, maybe with unsaved work, so its workspace is still open."
+msgstr "{apps} 没有关闭，可能有未保存的内容，所以它的工作区还开着。"

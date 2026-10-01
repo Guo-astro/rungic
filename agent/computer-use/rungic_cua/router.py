@@ -190,6 +190,8 @@ class Router:
             data = workspace.close(self.env.get('RUNGIC_WORKSPACE') or 1, force=bool(arguments.get('force')))
             return {'content': [{'type': 'text', 'text': json.dumps(data, ensure_ascii=False)}]}
         target, why = self.where()
+        if target == 'workspace':
+            workspace.thaw(self.env.get('RUNGIC_WORKSPACE') or 1)
         result = self.child(target).request('tools/call', {'name': name, 'arguments': arguments})
         if target != self.last:
             # The agent learns where it works whenever that changes.

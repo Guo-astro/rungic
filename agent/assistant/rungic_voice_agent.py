@@ -932,7 +932,7 @@ class VoiceAgent:
         else:
             phase = 'ready'
         call_phase = self.call.phase if self.call and self.call.phase in ('agent', 'user') else None
-        return {'conversation': self.thread_id, 'phase': phase, 'agentBusy': self.agent_busy,
+        return {'conversation': self.thread_id, 'phase': phase, 'agentBusy': self.agent_busy, 'workspace': WORKSPACE,
                 'handsFree': self.talking and self.hands_free, 'assistant': self.thread_id == self.assistant_id(),
                 'call': call_phase == 'agent', 'callPhase': call_phase,
                 'callInfo': {'id': getattr(self.call, 'id', ''),
@@ -1852,6 +1852,7 @@ class VoiceAgent:
             self.turn_id = None
             self.agent_busy = False
             self.agent_idle_since = time.monotonic()
+            forget_screen_dismissal()
             if getattr(self, 'model_pending', False):
                 threading.Thread(target=self.apply_agent_model, daemon=True).start()
             # A caption left "working" (a tool call cut short) must not stay on the screen.
@@ -2972,6 +2973,13 @@ def platform_request(request, timeout=1.0):
         return json.loads(reply or b'{}')
     except (OSError, ValueError):
         return {}
+
+
+def forget_screen_dismissal():
+    """The task is over: the assistant's screen, closed by the user while the agent was at work
+    (rungic-agent-screen dismiss), comes back with the next one."""
+    runtime = Path(os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}')
+    (runtime / f'rungic-agent-screen-dismissed-{WORKSPACE}').unlink(missing_ok=True)
 
 
 def screen_activity():

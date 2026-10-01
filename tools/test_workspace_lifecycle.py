@@ -48,7 +48,7 @@ class Clock:
 def test_apps_are_named_and_grouped_as_systemd_has_it_and_bound_to_the_workspace():
     assert workspace.scope_name(2, 'org.kde.kalk', '123') == 'app-rungicws2-org.kde.kalk-123.scope'
     assert workspace.scope_properties(2) == ['--slice=app-rungicws2.slice', '-p', 'BindsTo=rungic-workspace@2.service',
-                                             '-p', 'After=rungic-workspace@2.service']
+                                             '-p', 'After=rungic-workspace@2.service', '-p', 'TimeoutStopSec=10']
 
 
 def test_apps_are_asked_once_and_the_workspaces_own_windows_stay():
@@ -196,3 +196,36 @@ def test_a_workspace_that_does_not_start_is_an_error():
             assert 'did not start' in str(error)
         else:
             raise AssertionError('no error')
+
+
+def test_a_frozen_workspace_is_thawed_before_a_tool_reaches_it():
+    with mock.patch.object(router, 'Child', FakeChild), \
+            mock.patch.object(router, 'bridge', return_value={'enabled': False, 'tv': False}), \
+            mock.patch.object(workspace, 'ensure', return_value=True), \
+            mock.patch.object(workspace, 'thaw', return_value=True) as thaw:
+        router.Router(ENV).call('desktop_windows', {})
+    thaw.assert_called_once_with('1')
+    with mock.patch.object(router, 'Child', FakeChild), \
+            mock.patch.object(router, 'bridge', return_value={'enabled': True, 'tv': False}), \
+            mock.patch.object(workspace, 'thaw') as thaw:
+        router.Router(ENV).call('desktop_windows', {})      # on the user's desktop: nothing to thaw
+    thaw.assert_not_called()
+
+
+def test_closing_thaws_first():
+    run, calls = runner()
+    with mock.patch.object(workspace, 'ready', return_value=True), \
+            mock.patch.object(workspace, 'thaw') as thaw:
+        workspace.close(1, run=run)
+    assert thaw.call_count == 2           # at the start, and again right before the stop
+
+
+def test_the_keeper_is_told_while_a_workspace_closes(tmp_path):
+    run, calls = runner()
+    seen = []
+    with mock.patch.dict(workspace.os.environ, {'XDG_RUNTIME_DIR': str(tmp_path)}), \
+            mock.patch.object(workspace, 'ready', return_value=True), \
+            mock.patch.object(workspace, 'thaw', side_effect=lambda *a: seen.append(workspace.closing_marker(1).exists())):
+        workspace.close(1, run=run)
+        assert not workspace.closing_marker(1).exists()
+    assert seen == [True, True]          # thawed at the start and right before the stop, the marker there

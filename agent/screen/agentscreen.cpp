@@ -436,6 +436,14 @@ void AgentScreen::fullscreen()
 
 void AgentScreen::close()
 {
-    bridge({{QStringLiteral("op"), op()}, {QStringLiteral("enabled"), false}});
+    if (op() == QStringLiteral("agent-screen")) {
+        // The assistant's screen (docs/research/91): its workspace closes unless the agent is at work
+        // there (then only hidden) or an app keeps it open (the user is told). rungic-agent-screen
+        // decides and does it, in a unit of its own: it outlives this window and its cgroup.
+        QProcess::startDetached(QStringLiteral("systemd-run"), {QStringLiteral("--user"), QStringLiteral("--collect"), QStringLiteral("--quiet"),
+                                                                QStringLiteral("rungic-agent-screen"), QStringLiteral("dismiss")});
+    } else {
+        bridge({{QStringLiteral("op"), op()}, {QStringLiteral("enabled"), false}});
+    }
     QCoreApplication::quit();
 }

@@ -491,7 +491,7 @@ class Cua:
         floating window on the phone, or the TV or fullscreen already showing it). At most every
         10 s: the user may have closed it on purpose meanwhile, and the next task opens it again."""
         now = time.monotonic()
-        if now - getattr(self, '_shown_at', -60.0) < 10:
+        if now - getattr(self, '_shown_at', -60.0) < 10 or workspace.dismissed(os.environ['RUNGIC_WORKSPACE']):
             return
         self._shown_at = now
         try:

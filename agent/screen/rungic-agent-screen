@@ -8,7 +8,9 @@ phone, fullscreen, or on the TV:
   rungic-agent-screen on | off | close [--force] | toggle | status | ensure [tv]   the assistant's
       screen: the agent's own workspace, `rungic-workspace@N` ($RUNGIC_WORKSPACE, else 1), started
       when needed. `off` hides it and the workspace goes on; `close` also closes the workspace and
-      the apps in it (rungic-cua close-workspace).
+      the apps in it (rungic-cua close-workspace). `dismiss` is the floating window's close button:
+      only `off` while the agent is at work there, else `close`, and a notification when an app
+      kept the workspace open (unsaved work).
       `tv`: show it on the TV instead of the desktop, connecting the TV if none is (`notv` gives
       the TV back to the desktop).
 
@@ -18,12 +20,16 @@ screen that is on (after the Android host restarted, say); the quick settings po
 floating windows always open on the phone, also when the agent runs this from inside its
 workspace (RUNGIC_USER_* are the user's session).
 """
+import gettext
 import json
 import os
 import socket
 import subprocess
 import sys
 import time
+
+# The floating window's catalog (po/<language>/rungic-agent-screen.po), for the notification.
+_ = gettext.translation('rungic-agent-screen', fallback=True).pgettext
 
 SOCKET = '/mnt/android-wayland/platform.sock'
 WINDOW = '/usr/libexec/rungic-agent-screen-window'
@@ -152,6 +158,7 @@ def ensure():
             if not slot:
                 raise SystemExit(json.dumps({'error': 'the host offers no workspaces (APK 2.14 or later)'}))
             workspace_up(slot)
+            thaw(slot)
             if state.get('workspace') != slot:
                 bridge({'op': OP, 'workspace': slot})
         start_window()
@@ -170,6 +177,7 @@ def on():
     if not slot:
         raise SystemExit(json.dumps({'error': 'the host offers no workspaces (APK 2.14 or later)'}))
     workspace_up(slot)
+    thaw(slot)
     bridge({'op': OP, 'workspace': slot, 'enabled': True})
     start_window()
     return status()
@@ -180,21 +188,110 @@ def off():
     return status()
 
 
-def close():
+def close(slot=None, force=None):
     """`off` only hides the assistant's screen: its workspace and the apps in it go on. `close`
     also closes the workspace: its apps are asked to close (one asking about unsaved work keeps
     it open, reported under `workspace`), then it stops (rungic-cua close-workspace)."""
     if DESKTOP:
         raise SystemExit(json.dumps({'error': 'desktop mode has no workspace of its own; use off'}))
     result = off()
-    slot = int(os.environ.get('RUNGIC_WORKSPACE') or 1)
-    args = ['rungic-cua', 'close-workspace', str(slot)] + (['--force'] if '--force' in sys.argv else [])
+    slot = slot or int(os.environ.get('RUNGIC_WORKSPACE') or 1)
+    force = '--force' in sys.argv if force is None else force
+    thaw(slot)
+    args = ['rungic-cua', 'close-workspace', str(slot)] + (['--force'] if force else [])
     done = subprocess.run(args, capture_output=True, text=True, timeout=180)
     try:
         result['workspace'] = json.loads(done.stdout)
     except ValueError:
         result['workspace'] = {'closed': False, 'error': (done.stderr or done.stdout).strip()[-500:]}
     return result
+
+
+def voice_state():
+    """The voice agent's State (agentBusy, workspace), {} when it does not answer."""
+    runtime = os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}'
+    env = dict(os.environ, DBUS_SESSION_BUS_ADDRESS=os.environ.get('RUNGIC_USER_DBUS_SESSION_BUS_ADDRESS')
+               or (os.environ.get('DBUS_SESSION_BUS_ADDRESS') if not os.environ.get('RUNGIC_WORKSPACE') else None)
+               or f'unix:path={runtime}/bus')
+    try:
+        done = subprocess.run(['busctl', '--user', '--json=short', 'call', 'com.rungic.VoiceAgent',
+                               '/com/rungic/VoiceAgent', 'com.rungic.VoiceAgent', 'State'],
+                              capture_output=True, text=True, timeout=5, env=env)
+        return json.loads(json.loads(done.stdout)['data'][0])
+    except (OSError, ValueError, KeyError, IndexError, subprocess.SubprocessError):
+        return {}
+
+
+def dismissed_marker(slot):
+    """While it exists, the agent's tools do not bring the screen back (rungic_cua show_workspace);
+    the voice agent removes it when the task ends."""
+    runtime = os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}'
+    return os.path.join(runtime, f'rungic-agent-screen-dismissed-{slot}')
+
+
+def thaw(slot):
+    """The workspace's apps running again, if its keeper froze them (rungic-workspace-keeper)."""
+    uid = os.getuid()
+    events = (f'/sys/fs/cgroup/user.slice/user-{uid}.slice/user@{uid}.service/app.slice/'
+              f'app-rungicws{slot}.slice/cgroup.events')
+    try:
+        frozen = 'frozen 1' in open(events).read()
+    except OSError:
+        return
+    if frozen:
+        # On the user's bus: a workspace's own has no systemd (freeze and thaw ask it for a reference).
+        runtime = os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{uid}'
+        env = dict(os.environ, DBUS_SESSION_BUS_ADDRESS=os.environ.get('RUNGIC_USER_DBUS_SESSION_BUS_ADDRESS')
+                   or f'unix:path={runtime}/bus')
+        subprocess.run(['systemctl', '--user', 'thaw', f'app-rungicws{slot}.slice'], capture_output=True, timeout=15,
+                       env=env)
+
+
+def dismiss():
+    """The floating window's close button (docs/research/91): the agent at work in the workspace,
+    only hidden, and not brought back during this task; else the workspace closed, its apps asked
+    first. One that stays (unsaved work) keeps the workspace, and the user is told."""
+    if DESKTOP:
+        return off()
+    state = bridge({'op': OP})
+    slot = int(state.get('workspace') or os.environ.get('RUNGIC_WORKSPACE') or 1)
+    voice = voice_state()
+    if voice.get('agentBusy') and int(voice.get('workspace') or 1) == slot:
+        open(dismissed_marker(slot), 'w').close()
+        return {**off(), 'workspace': {'closed': False, 'hidden': 'the agent is at work'}}
+    result = close(slot, force=False)
+    if result['workspace'].get('remaining'):
+        subprocess.Popen([sys.argv[0], 'notify-unsaved', str(slot), json.dumps(result['workspace'])],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    return result
+
+
+def notify_unsaved():
+    """rungic-agent-screen notify-unsaved N RESULT: the apps that kept workspace N open, with
+    View (the assistant's screen again) and Close without saving."""
+    slot, result = int(sys.argv[2]), json.loads(sys.argv[3])
+    apps = []
+    for item in result.get('remaining') or []:
+        name = item.get('app') or item.get('caption') or '?'
+        if name not in apps:
+            apps.append(name)
+    # TRANSLATORS: joins the names of apps in a list
+    names = _('@item:intext list separator', ', ').join(apps)
+    done = subprocess.run(
+        ['notify-send', '--app-name', _('@title the floating window', "Assistant's screen"), '--wait',
+         f"--action=view={_('@action:button show the assistant screen again', 'View')}",
+         f"--action=force={_('@action:button close the workspace losing unsaved work', 'Close without saving')}",
+         _('@title notification', "The assistant's screen is still open"),
+         _('@info notification, {apps} lists apps',
+           '{apps} did not close, maybe with unsaved work, so its workspace is still open.').format(apps=names)],
+        capture_output=True, text=True)
+    choice = done.stdout.strip()
+    if choice == 'view':
+        os.environ['RUNGIC_WORKSPACE'] = str(slot)
+        return on()
+    if choice == 'force':
+        return close(slot, force=True)
+    return {'notified': True}
 
 
 def tv(show=True):
@@ -222,8 +319,8 @@ def main():
     command = sys.argv[1] if len(sys.argv) > 1 else 'status'
     if command == 'toggle':
         command = 'off' if bridge({'op': OP})['enabled'] else 'on'
-    actions = {'on': on, 'off': off, 'close': close, 'status': status, 'ensure': ensure, 'tv': tv,
-               'notv': lambda: tv(False)}
+    actions = {'on': on, 'off': off, 'close': close, 'dismiss': dismiss, 'notify-unsaved': notify_unsaved,
+               'status': status, 'ensure': ensure, 'tv': tv, 'notv': lambda: tv(False)}
     if command not in actions:
         raise SystemExit(__doc__)
     print(json.dumps(actions[command](), ensure_ascii=False))

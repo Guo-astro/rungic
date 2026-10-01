@@ -25,6 +25,14 @@ from pathlib import Path
 CLOSE_TIMEOUT_S = 20.0
 
 
+def user_env() -> dict:
+    """For systemctl and systemd-run: the user's session bus, also from inside a workspace (its own
+    bus has no systemd: `freeze` failed there with "Failed to add reference to unit")."""
+    runtime = os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}'
+    return dict(os.environ, DBUS_SESSION_BUS_ADDRESS=os.environ.get('RUNGIC_USER_DBUS_SESSION_BUS_ADDRESS')
+                or f'unix:path={runtime}/bus')
+
+
 def unit(slot: int | str) -> str:
     return f'rungic-workspace@{slot}.service'
 
@@ -41,7 +49,16 @@ def scope_name(slot: int | str, app_id: str, random: str) -> str:
 def scope_properties(slot: int | str) -> list[str]:
     """systemd-run options that put an app's scope in the workspace's slice, tied to the workspace:
     stopped with it, before it."""
-    return [f'--slice={slice_name(slot)}', '-p', f'BindsTo={unit(slot)}', '-p', f'After={unit(slot)}']
+    # Stopped after the apps were asked to close (close): a signal, then SIGKILL 10 s later rather than
+    # systemd's 90 (GNOME gives its apps 5).
+    return [f'--slice={slice_name(slot)}', '-p', f'BindsTo={unit(slot)}', '-p', f'After={unit(slot)}',
+            '-p', 'TimeoutStopSec=10']
+
+
+def closing_marker(slot) -> Path:
+    """While it exists the workspace is being closed: its keeper freezes nothing (a frozen app
+    neither answers the close request nor ends on a signal)."""
+    return _runtime() / f'rungic-workspace-{slot}.closing'
 
 
 def _state(slot) -> Path:
@@ -52,8 +69,29 @@ def _runtime() -> Path:
     return Path(os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}')
 
 
+def thaw(slot, run=subprocess.run) -> bool:
+    """Its apps running again if its keeper froze them (rungic-workspace-keeper): before anything
+    reaches them (a frozen app answers nothing). True if they were frozen."""
+    uid = os.getuid()
+    events = Path(f'/sys/fs/cgroup/user.slice/user-{uid}.slice/user@{uid}.service/app.slice/'
+                  f'{slice_name(slot)}/cgroup.events')
+    try:
+        frozen = 'frozen 1' in events.read_text()
+    except OSError:
+        return False
+    if frozen:
+        run(['systemctl', '--user', 'thaw', slice_name(slot)], capture_output=True, timeout=15, env=user_env())
+    return frozen
+
+
+def dismissed(slot) -> bool:
+    """The user closed the assistant's screen while the agent was at work (rungic-agent-screen
+    dismiss): not brought back during this task."""
+    return (_runtime() / f'rungic-agent-screen-dismissed-{slot}').exists()
+
+
 def running(slot, run=subprocess.run) -> bool:
-    return run(['systemctl', '--user', 'is-active', '--quiet', unit(slot)], timeout=10).returncode == 0
+    return run(['systemctl', '--user', 'is-active', '--quiet', unit(slot)], timeout=10, env=user_env()).returncode == 0
 
 
 def ready(slot) -> bool:
@@ -71,7 +109,8 @@ def ensure(slot, wait: float = 10.0, run=subprocess.run) -> bool:
     started = False
     while not ready(slot):
         if not started:
-            run(['systemctl', '--user', 'start', '--no-block', unit(slot)], capture_output=True, timeout=10)
+            run(['systemctl', '--user', 'start', '--no-block', unit(slot)], capture_output=True, timeout=10,
+                env=user_env())
             started = True
         if time.monotonic() > deadline:
             return False
@@ -82,7 +121,7 @@ def ensure(slot, wait: float = 10.0, run=subprocess.run) -> bool:
 def own_pids(slot, run=subprocess.run) -> set[int]:
     """The workspace's own processes (KWin, Xwayland, its desktop, stream and input helpers)."""
     group = run(['systemctl', '--user', 'show', '-p', 'ControlGroup', '--value', unit(slot)],
-                capture_output=True, text=True, timeout=10).stdout.strip()
+                capture_output=True, text=True, timeout=10, env=user_env()).stdout.strip()
     pids: set[int] = set()
     if not group:
         return pids
@@ -180,6 +219,19 @@ def close(slot, *, timeout: float = CLOSE_TIMEOUT_S, force: bool = False, run=su
     while an app is still open, unless `force` (what is unsaved is lost)."""
     if not running(slot, run):
         return {'closed': True, 'was_running': False}
+    marker = closing_marker(slot)
+    try:
+        marker.touch()
+    except OSError:
+        pass
+    try:
+        return _close(slot, timeout, force, run)
+    finally:
+        marker.unlink(missing_ok=True)
+
+
+def _close(slot, timeout: float, force: bool, run) -> dict:
+    thaw(slot, run)
     remaining: list[dict] = []
     # Apps switched over from the user's session (switch.py) go back there, not away.
     run(['rungic-cua', 'restore-apps', str(slot)], capture_output=True, timeout=60)
@@ -197,11 +249,12 @@ def close(slot, *, timeout: float = CLOSE_TIMEOUT_S, force: bool = False, run=su
         return {'closed': False, 'remaining': remaining,
                 'note': 'These apps are still open, most likely asking about unsaved work. Save or discard as '
                         'the user wants, then close again; force=true closes anyway and loses what is unsaved.'}
-    run(['systemctl', '--user', 'stop', unit(slot)], capture_output=True, timeout=120)
+    thaw(slot, run)      # its keeper stays off while the marker is there; frozen otherwise, nothing ends
+    run(['systemctl', '--user', 'stop', unit(slot)], capture_output=True, timeout=120, env=user_env())
     # Its slice (what was bound is already gone), and apps launched before scopes were bound and named
     # this way (app-rungic-wsN-…, until 2026-10-01).
     run(['systemctl', '--user', 'stop', slice_name(slot), f'app-rungic-ws{slot}-*.scope'], capture_output=True,
-        timeout=120)
+        timeout=120, env=user_env())
     result = {'closed': True, 'was_running': True}
     if remaining:
         result['closed_unsaved'] = remaining

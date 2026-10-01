@@ -542,3 +542,43 @@ Agent 2  KWin#2 ──── │ 显示源 agent-2               │  电视 / �
 | 浮窗 ✕，Agent 正在干活 | 只隐藏，这一轮任务中不再自动弹出 |
 | 隐藏且空闲约 1 分钟 | 冻结应用 |
 | 冻结后长时间空闲 | 解冻，再按第 2 条关闭 |
+
+#### ✕、冻结和自动关闭（2026-10-01，按用户确认的表格实现）
+
+- **浮窗的 ✕**（`agentscreen.cpp`）：助理屏的 ✕ 改为调用 `systemd-run --user rungic-agent-screen dismiss`，放在独立单元里运行，以免浮窗退出时连带被结束。`dismiss` 的行为：
+  - Agent 正在这个工作区干活（语音服务的 `State` 里 `agentBusy` 为真，且 `workspace` 等于当前槽位）：只隐藏，并写入标记 `rungic-agent-screen-dismissed-N`。标记存在时 `show_workspace` 不会自动弹出浮窗；语音服务在 `turn/completed` 时删除标记。
+  - 否则正常关闭工作区。有应用没关掉时，后台用 `notify-unsaved` 发一条通知，提供“查看”（重新打开助理屏）和“不保存，直接关闭”两个操作。
+- **冻结和自动关闭**（`agent/workspace/keeper.cpp`）：`rungic-workspace-keeper N` 随工作区一起启动和结束。
+  - **怎样算“安静”**：同时满足三条：
+    - `ext-idle-notify-v1` 报告没有输入；
+    - 平台桥显示这个工作区没在显示；
+    - Agent 没在这个工作区干活。
+  - **冻结**：安静时冻结 `app-rungicwsN.slice`。外部解冻后，只要仍然安静就会重新冻结。
+  - **自动关闭**：安静持续足够久，就在工作区单元之外运行 `systemd-run --wait --pipe rungic-cua close-workspace N`。
+  - **时间**：默认 60 秒冻结，1800 秒关闭；可以用 `RUNGIC_WORKSPACE_FREEZE_S` 和 `RUNGIC_WORKSPACE_CLOSE_S` 调整。
+  - **日志**：判断的变化写到工作区状态目录的 `keeper.log`。
+- **调用 systemd 时用用户会话总线**：工作区自己的总线上没有 systemd，`freeze` 会报 “Failed to add reference to unit”。所以 keeper、`workspace.py` 和 `rungic-agent-screen` 调用 systemctl 时，都显式使用用户会话总线。
+- **关闭期间不冻结**：
+  - `workspace.close` 会写一个“正在关闭”的标记 `rungic-workspace-N.closing`，keeper 看到它就不冻结；
+  - 关闭开始时和停止单元之前，各解冻一次；
+  - 工作区脚本收到 TERM 时也会先解冻；
+  - 应用 scope 的 `TimeoutStopSec` 为 10 秒。
+- **解冻的时机**：router 转发调用给工作区之前，以及 `rungic-agent-screen on`、`ensure` 显示浮窗之前，都先解冻。
+
+**实机验证**（4 号工作区，不显示；测试 drop-in 设为 10 秒冻结、45 秒关闭；脚本和日志在 `.work/verify/2026-10-01-workspace-lifecycle/keeper-test*.log`；助理屏状态前后一致）：
+- 没有输入 10 秒后冻结（`freeze: 0`，`FreezerState=frozen`）；
+- `workspace.thaw` 之后立即恢复，几秒内又重新冻结；
+- 安静 45 秒后自动关闭，Kalk 退出，工作区停止；
+- 拒绝关闭的 GTK 测试程序被报告在 `remaining` 里，工作区保留；强制关闭后它和工作区都结束了。
+
+**测试中发现并修正的问题**：
+- keeper 的 `systemctl` 和 `systemd-run` 走了工作区自己的总线，冻结和自动关闭都失败；
+- 关闭流程等待应用期间，keeper 又把应用冻住了，强制关闭后应用仍然存活，最长要等 90 秒才被结束。
+
+**一次测试方法上的错误**：在测试工作区里用 `rungic-cua launch` 打开应用，会调用 `show_workspace()`，结果用户手机上的助理屏被切到了 4 号工作区并打开了浮窗。已经恢复，之后的测试改用 `systemd-run` 直接启动应用。
+
+**没有实测**：
+- 用户在真实界面里点 ✕ 的三种情况；
+- 通知里的两个操作；
+- 语音服务忙碌时只隐藏的路径；
+- 默认的 60 秒和 1800 秒在真实使用中是否合适。
