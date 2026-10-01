@@ -49,10 +49,12 @@ Window {
     property bool pinching: false
     readonly property rect area: floater.area
     readonly property real minWidth: area.width * 0.5
-    readonly property real pictureHeight: Math.round(panelWidth * 9 / 16)
-    // The director's screens below the picture, a number each: the floating window is small, so it
-    // shows the focus alone (its layout of all the screens is fullscreen's and the TV's, docs/58).
-    readonly property real stripHeight: others < 1 ? 0 : 34
+    // The director's other screens in a column on the right of its focus, live and small (docs/58),
+    // as fullscreen and the TV lay them out.
+    readonly property real columnWidth: others < 1 ? 0 : Math.round(panelWidth * 0.24)
+    readonly property real pictureWidth: panelWidth - (others < 1 ? 0 : columnWidth + 4)
+    readonly property real pictureHeight: Math.round(pictureWidth * 9 / 16)
+    readonly property real stripHeight: 0
     readonly property real panelHeight: pictureHeight + stripHeight
     readonly property int gap: 10
     readonly property int tabWidth: 26
@@ -100,7 +102,7 @@ Window {
                 return
             root.shownFocus = director.focus
             // The new focus's picture comes in, faded and grown, so the switch is seen.
-            focusFade.start(); focusGrow.start()
+            focusFade.start()
         }
     }
     function setFullscreen() {
@@ -232,7 +234,8 @@ Window {
 
         Rectangle {
             id: picture
-            anchors { left: parent.left; right: parent.right; top: parent.top }
+            anchors { left: parent.left; top: parent.top }
+            width: root.pictureWidth
             height: root.pictureHeight
             radius: 14
             color: "black"
@@ -247,8 +250,8 @@ Window {
                 nodeId: root.screen.nodeId
                 visible: nodeId > 0
                 // A new focus comes in (docs/58): faded and grown into place, not cut.
-                NumberAnimation on opacity { id: focusFade; running: false; from: 0; to: 1; duration: 260; easing.type: Easing.OutCubic }
-                NumberAnimation on scale { id: focusGrow; running: false; from: 0.94; to: 1; duration: 260; easing.type: Easing.OutCubic }
+                // A new focus: its picture brightens in, briefly; nothing moves.
+                NumberAnimation on opacity { id: focusFade; running: false; from: 0.35; to: 1; duration: 180; easing.type: Easing.OutQuad }
             }
             Kirigami.Icon {
                 anchors.centerIn: parent
@@ -259,28 +262,33 @@ Window {
                 isMask: true
             }
         }
-        // ---- the director's screens (docs/58): a number each, tap one to put it in focus ---------------
-        Row {
-            id: switcher
+        // ---- the director's other screens (docs/58): live, in a column on the right; tap one to focus it
+        Column {
+            id: otherScreens
             visible: root.others > 0
-            anchors { top: picture.bottom; topMargin: 6; horizontalCenter: parent.horizontalCenter }
-            spacing: 6
+            anchors { right: parent.right; verticalCenter: picture.verticalCenter }
+            spacing: 4
             Repeater {
                 model: root.directing ? director.screens : []
                 delegate: Rectangle {
                     required property QtObject modelData
-                    readonly property bool focused: modelData === director.focusScreen
-                    width: 40; height: 26; radius: 13
-                    color: focused ? "#1b6fa8" : Qt.rgba(0.11, 0.12, 0.15, 0.86)
-                    border.color: Qt.rgba(1, 1, 1, focused ? 0 : 0.2)
-                    border.width: 1
-                    Behavior on color { ColorAnimation { duration: 180 } }
-                    Text {
-                        anchors.centerIn: parent
-                        text: modelData.workspace
-                        color: "white"
-                        font.pixelSize: 13
-                        font.bold: parent.focused
+                    visible: modelData !== director.focusScreen
+                    width: root.columnWidth
+                    height: visible ? Math.min(Math.round(width * 9 / 16), (root.pictureHeight - 4 * (root.others - 1)) / Math.max(1, root.others)) : 0
+                    radius: 8
+                    color: "black"
+                    clip: true
+                    PipeWire.PipeWireSourceItem {
+                        anchors.fill: parent
+                        nodeId: modelData.nodeId
+                        visible: nodeId > 0
+                    }
+                    Rectangle {  // its number
+                        anchors { left: parent.left; bottom: parent.bottom; margins: 3 }
+                        width: Math.max(height, number.implicitWidth + 6); height: number.implicitHeight + 2
+                        radius: height / 2
+                        color: Qt.rgba(0.11, 0.12, 0.15, 0.8)
+                        Text { id: number; anchors.centerIn: parent; text: modelData.workspace; color: "white"; font.pixelSize: 9 }
                     }
                     Rectangle {  // the agent at work there
                         visible: modelData.activityState === "working"
@@ -288,7 +296,7 @@ Window {
                         width: 6; height: 6; radius: 3
                         color: "#63d471"
                     }
-                    TapHandler { margin: 4; onTapped: director.setFocus(modelData.workspace) }
+                    TapHandler { onTapped: director.setFocus(modelData.workspace) }
                 }
             }
         }
@@ -297,8 +305,8 @@ Window {
             property string label: ""
             property color dot: "#63d471"
             property bool shown: false
-            anchors { horizontalCenter: parent.horizontalCenter; bottom: picture.bottom; bottomMargin: 8 }
-            width: Math.min(parent.width - 16, captionRow.implicitWidth + 20)
+            anchors { horizontalCenter: picture.horizontalCenter; bottom: picture.bottom; bottomMargin: 8 }
+            width: Math.min(picture.width - 16, captionRow.implicitWidth + 20)
             height: captionText.implicitHeight + 10
             radius: Math.min(14, height / 2)
             color: Qt.rgba(0.11, 0.12, 0.15, 0.86)
@@ -336,7 +344,7 @@ Window {
                 Text {
                     id: captionText
                     // Sized from the picture, not from the capsule (whose width follows this text).
-                    width: Math.min(implicitWidth, panel.width - 16 - 20 - 14)
+                    width: Math.min(implicitWidth, picture.width - 16 - 20 - 14)
                     text: caption.label
                     color: "white"
                     font.pixelSize: 12

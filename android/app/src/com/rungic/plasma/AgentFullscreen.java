@@ -190,7 +190,7 @@ final class AgentFullscreen implements SurfaceHolder.Callback {
         }
 
         private final Paint label = new Paint(Paint.ANTI_ALIAS_FLAG), chip = new Paint(Paint.ANTI_ALIAS_FLAG),
-            outline = new Paint(Paint.ANTI_ALIAS_FLAG);
+            outline = new Paint(Paint.ANTI_ALIAS_FLAG), dimPaint = new Paint();
         private boolean touching, regesture;
         /** A tap on another screen of the director: which, or -1. */
         private int tapSlot = -1;
@@ -202,8 +202,14 @@ final class AgentFullscreen implements SurfaceHolder.Callback {
         }
 
         /** The director moved its tiles: names redrawn, the focus's touches mapped anew. */
+        private float[][] mappedTiles;
+
         void directorChanged() {
             invalidate();
+            // Only a new layout maps the touches anew (the settling focus only redraws).
+            float[][] tiles = host.director().tiles();
+            if (tiles == mappedTiles) return;
+            mappedTiles = tiles;
             if (touching) regesture = true;
             else gestures(getWidth(), getHeight());
         }
@@ -214,10 +220,19 @@ final class AgentFullscreen implements SurfaceHolder.Callback {
             Director d = host.director();
             float[][] tiles = d.tiles();
             int[] slots = d.tileSlots();
+            if (tiles.length == 1 && d.settle() > 0) {
+                dimPaint.setAlpha(Math.round(255 * d.settle()));
+                canvas.drawRect(tileRect(tiles[0]), dimPaint);
+            }
             if (tiles.length < 2) return;
             for (int i = 0; i < tiles.length; i++) {
                 RectF r = tileRect(tiles[i]);
-                if (i == 0) canvas.drawRoundRect(r.left - dp(2), r.top - dp(2), r.right + dp(2), r.bottom + dp(2), dp(4), dp(4), outline);
+                if (i == 0) {
+                    // A new focus brightens in (Director.settle()).
+                    float dim = d.settle();
+                    if (dim > 0) { dimPaint.setAlpha(Math.round(255 * dim)); canvas.drawRect(r, dimPaint); }
+                    canvas.drawRoundRect(r.left - dp(2), r.top - dp(2), r.right + dp(2), r.bottom + dp(2), dp(4), dp(4), outline);
+                }
                 if (i > 0 && d.level() == Director.ENLARGED) continue;   // the strip is too thin for names
                 String name = d.label(slots[i]);
                 float pad = dp(6), tw = label.measureText(name);

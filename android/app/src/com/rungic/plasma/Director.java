@@ -29,8 +29,10 @@ import org.json.JSONObject;
  * director, or the user's desktop in computer mode ("desktop"): chosen in the cast controls; a new
  * TV shows the director while there is one. The host puts each tile on a layer of its own in the
  * presenter's window (NativeBridge.setDirector); the labels are drawn above it (on the TV a window
- * of its own, fullscreen AgentFullscreen's layer). A change of focus or level moves the tiles there
- * in a short animation, so the eye follows which screen went where.
+ * of its own, fullscreen AgentFullscreen's layer). A change of focus or level puts the tiles in
+ * place at once; the new focus then brightens in from a light dim (`settle()`), drawn on those
+ * layers only: moving the tiles frame by frame made the host present every screen anew each
+ * frame, and stuttered.
  */
 final class Director {
     static final int STANDARD = 0, ENLARGED = 1, SOLO = 2;
@@ -53,7 +55,8 @@ final class Director {
     private boolean fullscreen;
     private final List<Runnable> listeners = new ArrayList<>();
     private android.animation.ValueAnimator animation;
-    private static final long MOVE_MS = 280;
+    private static final long SETTLE_MS = 180;
+    private long settleStart;
     /** Width over height of the window the director is laid out in (the TV, the phone turned). */
     private float aspect = 16f / 9f;
     /** Bumped at every change: the phone's director window follows it. */
@@ -200,8 +203,8 @@ final class Director {
     }
 
     /**
-     * The host's layout and the labels for the current state; `animate`: the tiles move there from
-     * where they are (a new one grows from its centre).
+     * The host's layout and the labels for the current state, at once; `animate`: a new focus
+     * brightens in (settle()).
      */
     private void apply(boolean animate) {
         if (animation != null) animation.cancel();
@@ -222,32 +225,25 @@ final class Director {
             to = (float[][]) laid[0];
             slots = (int[]) laid[1];
         }
-        float[][] from = new float[slots.length][];
-        boolean moves = false;
-        for (int i = 0; i < slots.length; i++) {
-            float[] was = null;
-            for (int j = 0; j < tileSlots.length; j++) if (tileSlots[j] == slots[i]) was = tiles[j];
-            float[] t = to[i];
-            from[i] = was != null ? was.clone() : new float[] {t[0] + t[2] / 2, t[1] + t[3] / 2, 0, 0};
-            if (!java.util.Arrays.equals(from[i], t)) moves = true;
+        boolean newFocus = tileSlots.length > 0 && tileSlots[0] != slots[0];
+        tiles = to; tileSlots = slots;
+        if (animate && newFocus) settleStart = android.os.SystemClock.uptimeMillis();
+        send(tiles, tileSlots);
+        if (animate && newFocus) {
+            if (animation != null) animation.cancel();
+            animation = android.animation.ValueAnimator.ofFloat(0f, 1f).setDuration(SETTLE_MS);
+            animation.addUpdateListener(a -> {
+                if (labels != null) labels.invalidate();
+                for (Runnable listener : new ArrayList<>(listeners)) listener.run();
+            });
+            animation.start();
         }
-        if (!animate || !moves || tileSlots.length == 0) {
-            tiles = to; tileSlots = slots;
-            send(tiles, tileSlots);
-            return;
-        }
-        tileSlots = slots;
-        animation = android.animation.ValueAnimator.ofFloat(0f, 1f).setDuration(MOVE_MS);
-        animation.setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f));
-        animation.addUpdateListener(a -> {
-            float f = (float) a.getAnimatedValue();
-            float[][] now = new float[slots.length][4];
-            for (int i = 0; i < slots.length; i++)
-                for (int k = 0; k < 4; k++) now[i][k] = from[i][k] + (to[i][k] - from[i][k]) * f;
-            tiles = now;
-            send(tiles, slots);
-        });
-        animation.start();
+    }
+
+    /** How dim the focus is drawn over now, 0..1: a new focus starts lightly dimmed and clears. */
+    float settle() {
+        float t = (android.os.SystemClock.uptimeMillis() - settleStart) / (float) SETTLE_MS;
+        return t >= 1 ? 0 : 0.45f * (1 - t) * (1 - t);
     }
 
     /** The tiles to the host, the labels and the listeners. */
@@ -348,7 +344,11 @@ final class Director {
             for (int i = 0; tiles.length > 1 && i < tiles.length; i++) {
                 float[] t = tiles[i];
                 RectF r = new RectF(t[0] * w, t[1] * h, (t[0] + t[2]) * w, (t[1] + t[3]) * h);
-                if (i == 0) canvas.drawRoundRect(r.left - 3 * unit, r.top - 3 * unit, r.right + 3 * unit, r.bottom + 3 * unit, 6 * unit, 6 * unit, outline);
+                if (i == 0) {
+                    float dim = settle();
+                    if (dim > 0) { fill.setAlpha(Math.round(255 * dim)); canvas.drawRect(r, fill); fill.setAlpha(0xCC); }
+                    canvas.drawRoundRect(r.left - 3 * unit, r.top - 3 * unit, r.right + 3 * unit, r.bottom + 3 * unit, 6 * unit, 6 * unit, outline);
+                }
                 if (i == 0 || !small) chip(canvas, label(tileSlots[i]), r.left + 12 * unit, r.bottom - 12 * unit, unit, i == 0 ? 26 : 22);
             }
             if (android.os.SystemClock.uptimeMillis() < bannerUntil && tiles.length <= 1) {
