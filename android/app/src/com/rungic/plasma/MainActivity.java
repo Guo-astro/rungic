@@ -118,7 +118,10 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
                 // The cast button (docs/58): the TV, once picked, takes over what fullscreen showed.
                 int source = agentFullscreen.directing() ? director.focus() : fullscreenSource;
                 agentFullscreen.hide();
-                castButton(source);
+                // A tap in the app itself: its window may not hold the focus (fullscreen's layer did,
+                // and the check threw and ended the app, 2026-10-01).
+                try { castButton(source, true); }
+                catch (Exception e) { android.widget.Toast.makeText(MainActivity.this, String.valueOf(e.getMessage()), android.widget.Toast.LENGTH_LONG).show(); }
             }
             @Override public Director director() { return director; }
             @Override public void closeAgentScreen() {
@@ -566,7 +569,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     org.json.JSONObject tv(org.json.JSONObject request) throws Exception {
         boolean picking = false;
         if (request.has("content")) director.setTvDirector("director".equals(request.getString("content")));
-        if (request.optBoolean("button")) picking = castButton(request.optInt("source", 0));
+        if (request.optBoolean("button")) picking = castButton(request.optInt("source", 0), false);
         return director.state().put("picking", picking);
     }
     /**
@@ -591,10 +594,14 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         }
         return director.state().put("fullscreen", agentFullscreen.directing());
     }
-    /** The cast button of screen `source`: with a TV the cast controls; else the TV picker. True: picking. */
-    boolean castButton(int source) {
+    /**
+     * The cast button of screen `source`: with a TV the cast controls; else the TV picker. True:
+     * picking. `inApp`: tapped in the app's own views; else asked over the bridge, which needs the
+     * app in front to show anything.
+     */
+    boolean castButton(int source, boolean inApp) {
         if (castControls.available()) { castControls.openPanel(); return false; }
-        if (!hasWindowFocus()) throw new IllegalStateException("请先返回 Plasma Mobile");
+        if (!inApp && !hasWindowFocus()) throw new IllegalStateException("请先返回 Plasma Mobile");
         if (source > 0) director.setFocus(source);
         castControls.pickTv();
         return true;

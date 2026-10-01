@@ -715,4 +715,10 @@ G100 S（XT2537-4，SM6435 `_parrot_v3`），接收端TCL 85Q6H。电视这次�
 - 全屏的标准、放大、独占三级布局和名字标签正常，独占时不再残留旧图层；
 - 触摸操作、点格子切焦点、动画观感还没有人工试过。
 
+**事故（2026-10-01 23:07）**：用户在导播台全屏里点了电视按钮，APK 崩溃，回来后黑屏。
+- **原因**：`castButton` 要求主窗口有焦点（防止经平台桥在后台弹出选择列表），但全屏时焦点在全屏层的面板窗口上，于是抛出 `IllegalStateException`，在按钮回调里没人接住，整个应用退出。
+- **修复**：只有经平台桥来的请求才检查焦点；应用内的按钮回调出错时只弹 Toast。
+- **连带问题，未修**：APK 被拉起后会话重启了，KWin 和 plasmashell 都是 active，但 plasmashell 一个窗口都没有，KWin 截图是空白，屏幕全黑。手动 `systemctl --user restart plasma-plasmashell` 后恢复。这和 docs/96 的 B 不同：那次 plasmashell 停在 failed 或 inactive，这次是 active 却没有窗口，自动恢复还没覆盖。
+- 同一时刻还有几个核心转储：`rungic-workspace-stream` 是 SIGABRT，`rungic-workspace-desktop` 是 SIGSEGV（在 `QWaylandShmBuffer` 中）。都是宿主随 APK 退出、Wayland 连接断开时的连带结果。
+
 **状态**：手机全屏部分已实现。电视部分复用同一套布局，实机验收要电视在场。
