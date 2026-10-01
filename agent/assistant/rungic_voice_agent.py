@@ -114,10 +114,12 @@ WATCHERS_FRESH_S = 3         # how long the phone's foreground state is trusted
 DATA = Path.home() / '.local/share/rungic-voice-agent'
 CONFIG = Path.home() / '.config/rungic-voice-agent'
 PROMPTS = Path('/usr/share/rungic-voice-agent/prompts')
-SKILL = Path('/usr/share/rungic-voice-agent/skills/rungic-phone-desktop')
+SKILLS = Path('/usr/share/rungic-voice-agent/skills')     # one directory per skill
+SKILL = SKILLS / 'rungic-phone-desktop'
 # The user's own copies, theirs to edit at any time (the package's are only the defaults).
 USER_PROMPTS = CONFIG / 'prompts'
-USER_SKILL = Path.home() / '.codex/skills/rungic-phone-desktop'
+USER_SKILLS = Path.home() / '.codex/skills'
+USER_SKILL = USER_SKILLS / 'rungic-phone-desktop'
 SEEDED = DATA / 'instructions-seeded.json'
 BUS_NAME = 'com.rungic.VoiceAgent'
 OBJECT_PATH = '/com/rungic/VoiceAgent'
@@ -347,17 +349,20 @@ def file_hash(path):
 
 
 def sync_user_instructions():
-    """The prompts and skill are the user's to edit: copies in ~/.config/rungic-voice-agent/prompts
-    and ~/.codex/skills/rungic-phone-desktop (once a link to the package's). The package's files
-    are the defaults. A copy the user left as it was follows a new default; one they changed stays
-    theirs, and the new default goes beside it as NAME.default (dpkg's way with configuration)."""
+    """The prompts and skills are the user's to edit: copies in ~/.config/rungic-voice-agent/prompts
+    and ~/.codex/skills/<skill> (rungic-phone-desktop was once a link to the package's). The
+    package's files are the defaults. A copy the user left as it was follows a new default; one they
+    changed stays theirs, and the new default goes beside it as NAME.default (dpkg's way with
+    configuration). A default the package dropped takes its untouched copy along."""
     try:
         seeded = json.loads(SEEDED.read_text())
     except (OSError, ValueError):
         seeded = {}
     if USER_SKILL.is_symlink():
         USER_SKILL.unlink()
-    for defaults, copies in ((PROMPTS, USER_PROMPTS), (SKILL, USER_SKILL)):
+    skills = [(skill, USER_SKILLS / skill.name) for skill in sorted(SKILLS.iterdir()) if skill.is_dir()] \
+        if SKILLS.is_dir() else []
+    for defaults, copies in [(PROMPTS, USER_PROMPTS), *skills]:
         if not defaults.is_dir():
             continue
         copies.mkdir(parents=True, exist_ok=True)
@@ -374,6 +379,10 @@ def sync_user_instructions():
                     shutil.copyfile(default, copy.with_name(copy.name + '.default'))
                     log('instructions: kept the user\'s', copy, '- the new default is', copy.name + '.default')
             seeded[str(copy)] = new
+        for copy in sorted(copies.glob('*.md')):
+            if not (defaults / copy.name).exists() and str(copy) in seeded:
+                if file_hash(copy) == seeded.pop(str(copy)):
+                    copy.unlink()
     DATA.mkdir(parents=True, exist_ok=True)
     SEEDED.write_text(json.dumps(seeded, indent=1))
 
@@ -383,8 +392,10 @@ def instructions_fingerprint():
     now, and the desktop's language they name."""
     agent = USER_PROMPTS / 'agent.md'
     skill = hashlib.sha256()
-    for path in sorted(USER_SKILL.glob('*.md')):
-        skill.update(path.name.encode() + file_hash(path).encode())
+    names = sorted(path.name for path in SKILLS.iterdir() if path.is_dir()) if SKILLS.is_dir() else [USER_SKILL.name]
+    for name in names:
+        for path in sorted((USER_SKILLS / name).glob('*.md')):
+            skill.update(f'{name}/{path.name}'.encode() + file_hash(path).encode())
     return {'agent': file_hash(agent) if agent.exists() else '', 'skill': skill.hexdigest(),
             'language': desktop_language()}
 

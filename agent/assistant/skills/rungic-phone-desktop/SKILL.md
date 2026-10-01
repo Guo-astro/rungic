@@ -69,7 +69,7 @@ Use these tools for anything on screen; they act with ordinary pointer/keyboard 
 3. `desktop_window {"window_id": ..., "action": "close" | "minimize" | "maximize" | "restore"}`. The title bar belongs to the window manager: close windows this way. If `still_open` stays true after close, the app is asking something: look at it.
 4. Start GUI apps with `desktop_launch`, not from the shell: it waits for the window, returns its id and opens it where you work (a program started from the shell opens in your workspace, also while you work on the user's desktop). If it reports no window, check `desktop_windows` once and tell the user instead of retrying other ways. Also prefer these tools over `kill` or similar for apps on screen.
 
-**A team of sub-agents**: when a task has parts for different desktop apps that can be made at the same time (a game's code, art and sound) and is large enough, or the user asks for a team, read `team.md` next to this file before using `spawn_agent`.
+**A team of sub-agents**: when a task has parts that need different skills or apps and can be made at the same time (a game's code, art and sound) and is large enough, or the user asks for a team, use the `rungic-agent-team` skill before using `spawn_agent`.
 
 **Plan two** (accessibility tree + OCR + JEV: `desktop_observe`, `desktop_run`, `desktop_find_name`) is not the default and its tools are not listed unless it was chosen (`rungic-cua plan atspi`, then the voice assistant restarts). Only when the user asks for it or it is active: read `plan-two.md` next to this file.
 

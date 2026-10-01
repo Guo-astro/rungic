@@ -17,8 +17,9 @@ install -Dm644 "$V/agent-usage/codex.json" "$DESTDIR/usr/share/rungic/agent-usag
 for f in "$V"/agent-usage/icons/*.svg; do install -Dm644 "$f" "$DESTDIR/usr/share/rungic/agent-usage/icons/$(basename "$f")"; done
 install -Dm644 "$V/task_state.py" "$DESTDIR/usr/lib/rungic-voice-agent/task_state.py"
 for f in "$V"/prompts/*.md; do install -Dm644 "$f" "$DESTDIR/usr/share/rungic-voice-agent/prompts/$(basename "$f")"; done
-for f in "$V"/skills/rungic-phone-desktop/*.md; do
-    install -Dm644 "$f" "$DESTDIR/usr/share/rungic-voice-agent/skills/rungic-phone-desktop/$(basename "$f")"
+for f in "$V"/skills/*/*.md; do
+    skill=$(basename "$(dirname "$f")")
+    install -Dm644 "$f" "$DESTDIR/usr/share/rungic-voice-agent/skills/$skill/$(basename "$f")"
 done
 install -Dm644 "$V/rungic-voice-agent.service" "$DESTDIR/usr/lib/systemd/user/rungic-voice-agent.service"
 install -Dm644 "$V/rungic-voice-overlay.service" "$DESTDIR/usr/lib/systemd/user/rungic-voice-overlay.service"
