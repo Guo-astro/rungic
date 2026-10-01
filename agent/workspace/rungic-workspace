@@ -80,7 +80,9 @@ kwin=$!
 thaw() {
     DBUS_SESSION_BUS_ADDRESS="unix:path=$runtime/bus" systemctl --user thaw "app-rungicws$slot.slice" 2>/dev/null || true
 }
-trap 'stopping=1; thaw; kill $kwin $dbusd 2>/dev/null' TERM INT
+# systemd signals the whole unit at once: KWin or the bus may be gone already, and a failed kill
+# under set -e ended the script with 1 (the unit failed, 2026-10-01).
+trap 'stopping=1; thaw; kill $kwin $dbusd 2>/dev/null || true' TERM INT
 for i in $(seq 100); do
     inodes=$(ls -l /proc/$kwin/fd 2>/dev/null | sed -n 's/.*socket:\[\([0-9]*\)\].*/\1/p' | tr '\n' ' ')
     display=$(awk -v inodes=" $inodes" 'index(inodes, " " $7 " ") && $8 ~ /^\/tmp\/.X11-unix\/X/ { sub(/.*X/, "", $8); print ":" $8; exit }' /proc/net/unix)

@@ -226,12 +226,24 @@ private:
         if (state.isEmpty()) {
             return true;
         }
-        return state.value(QStringLiteral("enabled")).toBool() && QString::number(state.value(QStringLiteral("workspace")).toInt(1)) == m_slot;
+        if (!state.value(QStringLiteral("enabled")).toBool()) {
+            return false;
+        }
+        // On the TV or fullscreen: the one workspace the host presents. Else its own floating window
+        // (several workspaces' can be out at once, rungic-agent-screen).
+        if (state.value(QStringLiteral("tv")).toBool() || state.value(QStringLiteral("fullscreen")).toBool()) {
+            return QString::number(state.value(QStringLiteral("workspace")).toInt(1)) == m_slot;
+        }
+        return QProcess::execute(QStringLiteral("pgrep"), {QStringLiteral("-f"), QStringLiteral("^/usr/libexec/rungic-agent-screen-window --workspace %1$").arg(m_slot)}) == 0;
     }
 
-    // The voice agent is at work, in this workspace.
+    // An agent is at work in this workspace: a team member's runner says so (rungic-workspace-N.busy),
+    // or the voice agent's State does.
     bool agentAtWork()
     {
+        if (QFile::exists(QStringLiteral("%1/rungic-workspace-%2.busy").arg(qEnvironmentVariable("XDG_RUNTIME_DIR"), m_slot))) {
+            return true;
+        }
         QDBusMessage call = QDBusMessage::createMethodCall(QStringLiteral("com.rungic.VoiceAgent"), QStringLiteral("/com/rungic/VoiceAgent"),
                                                            QStringLiteral("com.rungic.VoiceAgent"), QStringLiteral("State"));
         const QDBusMessage reply = m_userBus->call(call, QDBus::Block, 3000);

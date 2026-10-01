@@ -35,8 +35,9 @@ Window {
     onModeChanged: agent.setWatched(mode === "window")
     property string edge: "right"
     property real px: 12
-    // Desktop mode's window above, the assistant's screen's below it: both may be out at once.
-    property real py: agent.workspace > 0 ? 330 : 110
+    // Desktop mode's window above, the assistant's screen's below it: both may be out at once. A
+    // team's workspaces 2, 3, 4 (docs/research/91) one under another from the top, all out at once.
+    property real py: agent.workspace > 1 ? 50 + (agent.workspace - 2) * 165 : agent.workspace > 0 ? 330 : 110
     property real panelWidth: 260
     property real tabY: 180
     property bool toolbarShown: false

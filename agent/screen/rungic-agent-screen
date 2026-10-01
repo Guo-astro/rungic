@@ -55,10 +55,18 @@ def bridge(request, timeout=5):
     return result
 
 
-def window_running():
-    """This screen's floating window (desktop mode's and the assistant's are two)."""
-    pattern = f'^{WINDOW} --desktop' if DESKTOP else f'^{WINDOW} --workspace'
+def window_running(slot=None):
+    """This screen's floating window (desktop mode's and the assistant's are two): workspace `slot`'s,
+    or any workspace's. Each workspace can have one out at once (docs/research/91: a team's)."""
+    pattern = (f'^{WINDOW} --desktop' if DESKTOP else f'^{WINDOW} --workspace {slot}$' if slot
+               else f'^{WINDOW} --workspace')
     return subprocess.run(['pgrep', '-f', pattern], capture_output=True).returncode == 0
+
+
+def windows_shown():
+    """The workspaces whose floating windows are out."""
+    out = subprocess.run(['pgrep', '-af', f'^{WINDOW} --workspace '], capture_output=True, text=True).stdout
+    return sorted({int(line.split()[-1]) for line in out.splitlines() if line.split()[-1].isdigit()})
 
 
 def workspace():
@@ -134,19 +142,30 @@ def status():
     return result
 
 
-def start_window():
-    """One floating window per screen: callers at the same moment (the quick setting's poll, the
-    agent's tools) take turns, and the second finds the first's window (two were started once)."""
+def start_window(slot=None):
+    """One floating window per screen (per workspace for the assistant's): callers at the same
+    moment (the quick setting's poll, the agent's tools) take turns, and the second finds the first's
+    window (two were started once). The assistant's names its workspace: its desktop file's Exec
+    says workspace 1 (the window showed workspace 1 whatever was asked, until 2026-10-01)."""
     import fcntl
     runtime = os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}'
-    with open(os.path.join(runtime, f'rungic-{OP}.lock'), 'w') as lock:
+    name = f'rungic-{OP}' + (f'-{slot}' if slot else '')
+    with open(os.path.join(runtime, f'{name}.lock'), 'w') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        if window_running():
+        if window_running(slot):
             return
-        subprocess.Popen(['kstart', '--application', APP], stdout=subprocess.DEVNULL,
-                         stderr=subprocess.DEVNULL, start_new_session=True, env=user_env())
+        if DESKTOP or not slot:
+            command = ['kstart', '--application', APP]
+        else:
+            # An app scope as kstart makes one; the same executable, so the same grants (its desktop file).
+            command = ['systemd-run', '--user', '--scope', '--collect', '--quiet', '--slice=app.slice',
+                       '--unit', f'app-{APP}-ws{slot}-{os.getpid()}{time.monotonic_ns()}', WINDOW, '--workspace', str(slot)]
+        # Nothing of the caller's: systemd-run --scope stays as the window, and an inherited pipe kept
+        # the caller (an adb shell) waiting for it.
+        subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         start_new_session=True, env=user_env())
         deadline = time.monotonic() + 5
-        while time.monotonic() < deadline and not window_running():
+        while time.monotonic() < deadline and not window_running(slot):
             time.sleep(0.1)
 
 
@@ -161,7 +180,7 @@ def ensure():
             thaw(slot)
             if state.get('workspace') != slot:
                 bridge({'op': OP, 'workspace': slot})
-        start_window()
+        start_window(None if DESKTOP else slot)
     return status()
 
 
@@ -179,7 +198,7 @@ def on():
     workspace_up(slot)
     thaw(slot)
     bridge({'op': OP, 'workspace': slot, 'enabled': True})
-    start_window()
+    start_window(slot)
     return status()
 
 
@@ -247,19 +266,39 @@ def thaw(slot):
                        env=env)
 
 
+def busy_marker(slot):
+    """While it exists an agent other than the voice agent's works in workspace `slot` (a team
+    member, docs/research/91): its window's close button only hides it, its keeper neither freezes
+    nor closes it. Whoever runs the agent writes it and removes it when the agent ends."""
+    runtime = os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}'
+    return os.path.join(runtime, f'rungic-workspace-{slot}.busy')
+
+
 def dismiss():
-    """The floating window's close button (docs/research/91): the agent at work in the workspace,
-    only hidden, and not brought back during this task; else the workspace closed, its apps asked
-    first. One that stays (unsaved work) keeps the workspace, and the user is told."""
+    """rungic-agent-screen dismiss [N]: workspace N's floating window's close button (docs/research/91).
+    An agent at work there: only hidden, and not brought back during this task; else the workspace
+    closed, its apps asked first. One that stays (unsaved work) keeps the workspace, and the user is
+    told. The assistant's screen stays on while other workspaces' windows are out."""
     if DESKTOP:
         return off()
     state = bridge({'op': OP})
-    slot = int(state.get('workspace') or os.environ.get('RUNGIC_WORKSPACE') or 1)
+    slot = int(sys.argv[2] if len(sys.argv) > 2 else state.get('workspace') or os.environ.get('RUNGIC_WORKSPACE') or 1)
+    others = [n for n in windows_shown() if n != slot]
+    hide = (lambda: status()) if others else off
     voice = voice_state()
-    if voice.get('agentBusy') and int(voice.get('workspace') or 1) == slot:
+    if (voice.get('agentBusy') and int(voice.get('workspace') or 1) == slot) or os.path.exists(busy_marker(slot)):
         open(dismissed_marker(slot), 'w').close()
-        return {**off(), 'workspace': {'closed': False, 'hidden': 'the agent is at work'}}
-    result = close(slot, force=False)
+        return {**hide(), 'workspace': {'closed': False, 'hidden': 'an agent is at work'}}
+    if others:
+        # Another window stays out: close only this workspace (close() would turn the screen off).
+        thaw(slot)
+        done = subprocess.run(['rungic-cua', 'close-workspace', str(slot)], capture_output=True, text=True, timeout=180)
+        try:
+            result = {**status(), 'workspace': json.loads(done.stdout)}
+        except ValueError:
+            result = {**status(), 'workspace': {'closed': False, 'error': (done.stderr or done.stdout).strip()[-500:]}}
+    else:
+        result = close(slot, force=False)
     if result['workspace'].get('remaining'):
         subprocess.Popen([sys.argv[0], 'notify-unsaved', str(slot), json.dumps(result['workspace'])],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)

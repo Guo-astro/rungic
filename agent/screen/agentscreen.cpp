@@ -442,7 +442,8 @@ void AgentScreen::close()
         // there (then only hidden) or an app keeps it open (the user is told). rungic-agent-screen
         // decides and does it, in a unit of its own: it outlives this window and its cgroup.
         QProcess::startDetached(QStringLiteral("systemd-run"), {QStringLiteral("--user"), QStringLiteral("--collect"), QStringLiteral("--quiet"),
-                                                                QStringLiteral("rungic-agent-screen"), QStringLiteral("dismiss")});
+                                                                QStringLiteral("rungic-agent-screen"), QStringLiteral("dismiss"),
+                                                                QString::number(m_workspace)});
     } else {
         bridge({{QStringLiteral("op"), op()}, {QStringLiteral("enabled"), false}});
     }
