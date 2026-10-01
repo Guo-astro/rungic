@@ -51,6 +51,8 @@ public final class NativeBridge {
     public static native void setDirector(int[] slots, float[] rects, int focus);
     /** The sources there are now: bit 0 the user's desktop, bit n agent workspace n. */
     public static native int liveSources();
+    /** Move the director's tile of `slot` (fractions) without a new frame: its spring (docs/58). */
+    public static native void placeTile(int slot, float x, float y, float width, float height);
     /** Whether a Wayland client (KWin, for an idle-inhibiting window) inhibits idle (docs/72). */
     public static native boolean idleInhibited();
     /** eventfd that becomes readable when idleInhibited() changes; the reader drains it. */

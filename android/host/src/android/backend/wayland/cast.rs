@@ -197,6 +197,13 @@ impl AndroidSeatRuntime {
         self.present_source(focus);
     }
 
+    /// A tile moved without a new layout (the director's spring): later frames go where it is now.
+    pub(crate) fn set_tile_rect(&mut self, slot: usize, rect: [f32; 4]) {
+        if let Some(tile) = self.tiles.iter_mut().find(|t| t.slot == slot) {
+            tile.rect = rect;
+        }
+    }
+
     /// Where source `slot` goes in the cast window: its tile, or None (the whole window).
     pub(crate) fn tile(&self, slot: usize) -> Option<[f32; 4]> {
         self.tiles.iter().find(|t| t.slot == slot).map(|t| t.rect)

@@ -102,7 +102,9 @@ Window {
                 return
             root.shownFocus = director.focus
             // The new focus's picture comes in, faded and grown, so the switch is seen.
+            stream.scale = 0.93
             focusFade.start()
+            focusSpring.start()
         }
     }
     function setFullscreen() {
@@ -250,8 +252,10 @@ Window {
                 nodeId: root.screen.nodeId
                 visible: nodeId > 0
                 // A new focus comes in (docs/58): faded and grown into place, not cut.
-                // A new focus: its picture brightens in, briefly; nothing moves.
-                NumberAnimation on opacity { id: focusFade; running: false; from: 0.35; to: 1; duration: 180; easing.type: Easing.OutQuad }
+                // A new focus breathes in: from a little smaller to its size on a spring (a light
+                // overshoot, then still), fading in quickly meanwhile (docs/58).
+                NumberAnimation on opacity { id: focusFade; running: false; from: 0.5; to: 1; duration: 140; easing.type: Easing.OutQuad }
+                SpringAnimation on scale { id: focusSpring; running: false; to: 1; spring: 6; damping: 0.32; mass: 1; epsilon: 0.001 }
             }
             Kirigami.Icon {
                 anchors.centerIn: parent

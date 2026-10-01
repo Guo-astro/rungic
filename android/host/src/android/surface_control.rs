@@ -241,6 +241,8 @@ pub(crate) struct Presenter {
     control: *mut c_void,
     visible: bool,
     next_id: u64,
+    /// The size of the buffer shown now (place() moves it without a new one).
+    buffer_size: (i32, i32),
     unclaimed: Option<u64>,
     startup_proofs: HashMap<u64, u64>,
     feedback: HashMap<u64, (Instant, Vec<Feedback>)>,
@@ -276,7 +278,7 @@ impl Presenter {
         let (complete_tx, complete_rx) = channel();
         log::info!("zero-copy: child SurfaceControl ready");
         Some(Self {
-            control, visible: false, next_id: 0, unclaimed: None, feedback: HashMap::new(),
+            control, visible: false, next_id: 0, buffer_size: (0, 0), unclaimed: None, feedback: HashMap::new(),
             startup_proofs: HashMap::new(),
             completions: HashMap::new(), ready: Vec::new(), complete_tx, complete_rx,
             in_flight: HashMap::new(), releasing: Vec::new(), tx, rx,
@@ -422,6 +424,7 @@ impl Presenter {
         destination: Option<(i32, i32, i32, i32)>,
     ) {
         let Some(set_buffer) = set_buffer_with_release() else { return };
+        self.buffer_size = buffer_size;
         let id = self.next_id;
         self.next_id += 1;
         let context = Box::into_raw(Box::new(ReleaseContext { id, tx: self.tx.clone() })) as *mut c_void;
@@ -474,6 +477,26 @@ impl Presenter {
         self.unclaimed = Some(id);
         FRAMES.fetch_add(1, Ordering::Relaxed);
         IN_FLIGHT.store((self.in_flight.len() + self.releasing.len()) as u64, Ordering::Relaxed);
+    }
+
+    /// Move the shown buffer to `destination` (x, y, width, height; turned a quarter when
+    /// `rotation` is 90) without a new frame: one transaction, no buffer (the director's spring).
+    pub fn place(&mut self, destination: (i32, i32, i32, i32), rotation: i32) {
+        let (bw, bh) = self.buffer_size;
+        if !self.visible || bw <= 0 || bh <= 0 {
+            return;
+        }
+        const ANATIVEWINDOW_TRANSFORM_ROTATE_90: i32 = 4;
+        let (x, y, w, h) = destination;
+        let full = ARect { left: 0, top: 0, right: bw, bottom: bh };
+        let place = ARect { left: x, top: y, right: x + w, bottom: y + h };
+        unsafe {
+            let txn = ASurfaceTransaction_create();
+            ASurfaceTransaction_setGeometry(txn, self.control, &full, &place,
+                if rotation == 90 { ANATIVEWINDOW_TRANSFORM_ROTATE_90 } else { 0 });
+            ASurfaceTransaction_apply(txn);
+            ASurfaceTransaction_delete(txn);
+        }
     }
 
     /// Hide the layer so the GLES compositor output underneath is visible.
