@@ -55,7 +55,8 @@ When every member is done:
 The result runs on the user's own screen only after they agree: ask (e.g. "做好了，现在在你的桌面打开给你试玩吗？") and wait.
 
 - Give it a launcher, `~/.local/share/applications/<id>.desktop` (`Type=Application`, `Name`, `Exec`, `Icon`, `Categories`), so the user can open it again from the app drawer. A Godot game: `Exec=<the Godot binary> --path <project dir>` runs the game, not the editor; take the binary from the `Exec` of `godot*.desktop` in `/usr/share/applications` or `~/.local/share/applications`.
-- Open it in the user's session: `rungic-user kstart --application <id> </dev/null >/dev/null 2>&1`. It gets the user's display and touch (a tap is a mouse click).
+- Open it in the user's session: `rungic-user kstart --application <id> </dev/null >/dev/null 2>&1`. It opens on the phone's own screen, with the user's touch (a tap is a mouse click).
+- Then get out of the way: `rungic-agent-screen off` (your workspace's floating window would cover the game). Confirm only that it runs (`pgrep -af <its command>`). Your desktop tools cannot see the phone's own screen: do not turn desktop mode on, move the window or `desktop_where desktop` to look at it, which takes the game off the user's screen (it did on 2026-10-01). The user tells you what they see.
 - Tell the user what to try and that they can describe problems; send fixes to the member that owns the part (a new sub-agent if it was closed), test again, and open the new version the same way.
 
 Finally summarize: what was made, where (project folder, launcher), how it was tested, and anything left open.
