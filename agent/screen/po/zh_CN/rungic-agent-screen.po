@@ -96,3 +96,38 @@ msgstr "{apps} 没有关闭，可能有未保存的内容，所以它的工作�
 msgctxt "@label name of an assistant's screen, %1 its number"
 msgid "Assistant Screen %1"
 msgstr "助理屏 %1"
+
+#: qml/Main.qml
+msgctxt "@info:status a team member reviews the brief"
+msgid "reviewing"
+msgstr "评审中"
+
+#: qml/Main.qml
+msgctxt "@info:status a team member works"
+msgid "working"
+msgstr "制作中"
+
+#: qml/Main.qml
+msgctxt "@info:status a team member cannot go on"
+msgid "blocked"
+msgstr "受阻"
+
+#: qml/Main.qml
+msgctxt "@info:status a team member asks"
+msgid "has a question"
+msgstr "有问题"
+
+#: qml/Main.qml
+msgctxt "@info:status a team member finished"
+msgid "done"
+msgstr "完成"
+
+#: qml/Main.qml
+msgctxt "@info:status"
+msgid "failed"
+msgstr "失败"
+
+#: qml/Main.qml
+msgctxt "@info:status a team member stopped"
+msgid "ended"
+msgstr "已结束"

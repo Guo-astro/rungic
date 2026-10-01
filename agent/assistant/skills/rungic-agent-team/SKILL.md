@@ -13,6 +13,14 @@ You are the lead: you own the brief, the decisions, the integration and what the
 - Two to four members. More members cost more coordination than they save.
 - On this phone, members using desktop apps each take a workspace of their own (see "On this phone" below).
 
+## Saying it as you go: `team_post`
+
+The user watches the team live: on the director's screens (phone and TV) each member's tile shows its role, its state and its latest words, and every post is kept in `<folder>/.team/journal.jsonl`. Agents' messages to each other are not visible to anyone, so whatever the user should see is said with the desktop tool `team_post` {role, kind, text, project}: one short sentence in the user's language, at most 80 characters.
+
+- The lead: `brief` when BRIEF.md is written (what is made, the direction in a few words); `decision` after the review (e.g. "Accepted 5 of 6 points: pixel art, 34×24 bird, 3 frames"); `done` when the result is handed over.
+- A member: `review` with its main point and how many points it has (e.g. "3 points; blocker: no style named, propose pixel art"); `progress` at real steps (a part finished, a check passed), not more than every half minute; `blocked` or `question` at once, with what is needed; `done` with what was made.
+- Not for every command, not raw logs, no paths or personal details: it is shown on a TV in the room.
+
 ## 1. Draft the brief
 
 Make a project folder (`~/Projects/<name>/`) and write `BRIEF.md`, the members' one shared truth:
@@ -37,7 +45,8 @@ what is unclear, missing or contradictory; what you would need to decide on your
 a gap); risks; whether the deliverables and checks can be met with the tools here (look, but
 make nothing). Reply with at most 8 points, each: [blocker|should|could] the problem -> your
 proposal. Say "no objections" if there are none. Write the same into .team/<role>.md with
-STATUS: reviewing. You will get the final brief and the go-ahead from the lead.
+STATUS: reviewing, and say your main point with team_post (role <role>, kind review, project
+<folder>). You will get the final brief and the go-ahead from the lead.
 ```
 
 `wait_agent` for all of them. The review is one message each, not a conversation; it takes minutes, and it is how direction gaps are caught before they become wrong work (a team once delivered soft cartoon art because the brief named no style; the user wanted pixel art).
@@ -52,7 +61,7 @@ STATUS: reviewing. You will get the final brief and the go-ahead from the lead.
 
 ## 4. Work
 
-- Give each member the go-ahead with `send_input`: "BRIEF.md is final (see Decisions). Start: make your deliverables, check them against the brief, keep .team/<role>.md current, set STATUS: done and report what you made and how you checked it. If you cannot meet the brief, set STATUS: blocked with the reason and report instead of working around it."
+- Give each member the go-ahead with `send_input`: "BRIEF.md is final (see Decisions). Start: make your deliverables, check them against the brief, keep .team/<role>.md current, say real steps with team_post (kind progress), set STATUS: done, post kind done and report what you made and how you checked it. If you cannot meet the brief, set STATUS: blocked, post kind blocked with the reason and report instead of working around it."
 - `wait_agent` for them. Answer questions and blocked members with `send_input`. Do not do their work or touch their directories.
 
 ## 5. Integrate and review

@@ -161,4 +161,11 @@
     <string name="director_standard">Standard</string>
     <string name="director_enlarged">Enlarged</string>
     <string name="director_solo">Solo</string>
+    <string name="team_reviewing">reviewing</string>
+    <string name="team_working">working</string>
+    <string name="team_blocked">blocked</string>
+    <string name="team_question">has a question</string>
+    <string name="team_done">done</string>
+    <string name="team_failed">failed</string>
+    <string name="team_ended">ended</string>
 </resources>

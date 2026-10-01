@@ -151,4 +151,11 @@
     <string name="director_standard">标准</string>
     <string name="director_enlarged">放大</string>
     <string name="director_solo">独占</string>
+    <string name="team_reviewing">评审中</string>
+    <string name="team_working">制作中</string>
+    <string name="team_blocked">受阻</string>
+    <string name="team_question">有问题</string>
+    <string name="team_done">完成</string>
+    <string name="team_failed">失败</string>
+    <string name="team_ended">已结束</string>
 </resources>

@@ -189,3 +189,45 @@ def test_all_taken(host):
         r = router.Router(WORKSPACE_ENV)
         with pytest.raises(RuntimeError, match='every agent workspace is taken'):
             r.call('desktop_launch', {'app': 'Krita'}, SUBAGENT_META)
+
+
+# ---- the team journal (team.py, docs/research/91 "实时看到团队讨论") --------------------------------
+def test_a_members_post_goes_to_the_journal_and_its_tile(host, tmp_path, monkeypatch):
+    told = []
+    monkeypatch.setattr(router.team, 'tell_app', lambda slot, entry: told.append((slot, entry['kind'])))
+    project = tmp_path / 'game'
+    with mock.patch.object(router, 'Child', FakeChild), \
+            mock.patch.object(router, 'bridge', return_value={'enabled': False, 'tv': False}):
+        r = router.Router(WORKSPACE_ENV)
+        r.call('team_post', {'role': 'art', 'kind': 'review', 'text': 'Style is missing: pixel art?',
+                             'project': str(project)}, SUBAGENT_META)
+        r.call('team_post', {'role': 'art', 'kind': 'progress', 'text': 'Bird drawn'}, SUBAGENT_META)
+    lines = [json.loads(line) for line in (project / '.team/journal.jsonl').read_text().splitlines()]
+    assert [(e['role'], e['kind'], e['workspace']) for e in lines] == [('art', 'review', 2), ('art', 'progress', 2)]
+    assert lines[0]['parent'] == 'parent'
+    tile = json.loads((host / 'rungic-agent-screen/team-ws2.json').read_text())
+    assert tile['text'] == 'Bird drawn' and told == [(2, 'review'), (2, 'progress')]
+
+
+def test_a_member_ending_silent_gets_ended(host, tmp_path, monkeypatch):
+    monkeypatch.setattr(router.team, 'tell_app', lambda slot, entry: None)
+    project = tmp_path / 'game'
+    with mock.patch.object(router, 'Child', FakeChild), \
+            mock.patch.object(router, 'bridge', return_value={'enabled': False, 'tv': False}):
+        r = router.Router(WORKSPACE_ENV)
+        r.call('team_post', {'role': 'sound', 'kind': 'progress', 'text': 'Seeds made', 'project': str(project)},
+               SUBAGENT_META)
+        r.close()
+    kinds = [json.loads(line)['kind'] for line in (project / '.team/journal.jsonl').read_text().splitlines()]
+    assert kinds == ['progress', 'ended']
+
+
+def test_the_leads_post_has_no_tile(host, tmp_path, monkeypatch):
+    monkeypatch.setattr(router.team, 'tell_app', lambda slot, entry: (_ for _ in ()).throw(AssertionError('no tile')))
+    project = tmp_path / 'game'
+    with mock.patch.object(router, 'Child', FakeChild):
+        r = router.Router(WORKSPACE_ENV)
+        r.call('team_post', {'role': 'lead', 'kind': 'decision', 'text': 'Pixel art, 3 frames', 'project': str(project)},
+               PARENT_META)
+    entry = json.loads((project / '.team/journal.jsonl').read_text())
+    assert entry['kind'] == 'decision' and 'workspace' not in entry

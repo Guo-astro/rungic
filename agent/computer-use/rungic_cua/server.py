@@ -863,6 +863,7 @@ def serve() -> None:
     router = None
     if os.environ.get('RUNGIC_WORKSPACE') and not os.environ.get('RUNGIC_CUA_CHILD'):
         from .router import CLOSE_TOOL, WHERE_TOOL, Router
+        from .team import TOOL as TEAM_TOOL
         router = Router()
     cua = None if router else Cua()
     out = sys.stdout
@@ -884,7 +885,7 @@ def serve() -> None:
                 result = {'protocolVersion': version, 'capabilities': {'tools': {}},
                           'serverInfo': {'name': 'rungic-cua', 'version': '0.1.0'}}
             elif method == 'tools/list':
-                result = {'tools': tools_for(plan()) + ([WHERE_TOOL, CLOSE_TOOL] if router else [])}
+                result = {'tools': tools_for(plan()) + ([WHERE_TOOL, CLOSE_TOOL, TEAM_TOOL] if router else [])}
             elif method == 'tools/call' and router:
                 params = request.get('params', {})
                 try:

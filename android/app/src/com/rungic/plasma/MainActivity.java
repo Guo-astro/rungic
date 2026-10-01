@@ -582,6 +582,14 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         if (request.has("focus")) director.setFocus(request.getInt("focus"));
         if (request.has("step")) director.step(request.getInt("step"));
         if (request.has("level")) director.setLevel(request.getInt("level"));
+        if (request.has("member")) {
+            org.json.JSONObject m = request.getJSONObject("member");
+            director.setMember(m.getInt("slot"), m.optString("role"), m.optString("kind"), m.optString("text"));
+        }
+        if (request.has("caption")) {
+            org.json.JSONObject c = request.getJSONObject("caption");
+            director.setCaption(c.getInt("slot"), c.optString("state", "working"), c.optString("text"));
+        }
         if (request.has("fullscreen")) {
             // The director fullscreen on the phone: its layout, as on a TV (docs/58).
             if (!request.getBoolean("fullscreen")) { if (agentFullscreen.directing()) agentFullscreen.hide(); }

@@ -220,14 +220,26 @@ final class AgentFullscreen implements SurfaceHolder.Callback {
             Director d = host.director();
             float[][] tiles = d.tiles();
             int[] slots = d.tileSlots();
-            if (tiles.length < 2) return;
+            if (tiles.length == 0) return;
+            boolean many = tiles.length > 1;
             for (int i = 0; i < tiles.length; i++) {
                 RectF r = tileRect(tiles[i]);
-                if (i == 0) {
+                if (i == 0 && many) {
+                    outline.setColor(d.needsAttention(slots[i]) ? 0xFFF0B35E : 0xFF3DAEE9);
                     canvas.drawRoundRect(r.left - dp(2), r.top - dp(2), r.right + dp(2), r.bottom + dp(2), dp(4), dp(4), outline);
                 }
-                if (i > 0 && d.level() == Director.ENLARGED) continue;   // the strip is too thin for names
-                String name = d.label(slots[i]);
+                String[] c = d.caption(slots[i]);
+                // What the focus's agent is doing, centred at its bottom (as the floating window shows it).
+                if (i == 0 && c != null && !c[1].isEmpty()) {
+                    float cw = label.measureText(c[1]), cp = dp(8);
+                    Paint.FontMetrics cm = label.getFontMetrics();
+                    float ch = cm.descent - cm.ascent;
+                    RectF cbox = new RectF((r.left + r.right) / 2 - cw / 2 - cp, r.bottom - dp(44) - ch, (r.left + r.right) / 2 + cw / 2 + cp, r.bottom - dp(44) + cp);
+                    canvas.drawRoundRect(cbox, dp(10), dp(10), chip);
+                    canvas.drawText(c[1], cbox.left + cp, cbox.bottom - cp / 2 - cm.descent, label);
+                }
+                if (!many || (i > 0 && d.level() == Director.ENLARGED)) continue;   // alone, or a strip too thin for names
+                String name = d.label(slots[i]) + (d.needsAttention(slots[i]) ? "  ⚠" : i > 0 && c != null && "working".equals(c[0]) ? "  ●" : "");
                 float pad = dp(6), tw = label.measureText(name);
                 Paint.FontMetrics m = label.getFontMetrics();
                 RectF box = new RectF(r.left + dp(6), r.bottom - dp(6) - (m.descent - m.ascent) - pad, r.left + dp(6) + tw + 2 * pad, r.bottom - dp(6));

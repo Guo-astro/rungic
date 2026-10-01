@@ -52,6 +52,10 @@ final class Director {
     private WindowManager windowManager;
     private Display display;
     private long bannerUntil;
+    /** What each workspace's agent is doing (rungic_cua.activity): state, caption, when. */
+    private final java.util.Map<Integer, String[]> captions = new java.util.HashMap<>();
+    private final java.util.Map<Integer, Long> captionTimes = new java.util.HashMap<>();
+    private static final long CAPTION_STALE_MS = 120_000, ENDING_MS = 4000;
     /** Fullscreen on the phone shows the director (it then owns the presenter, not a TV). */
     private boolean fullscreen;
     private final List<Runnable> listeners = new ArrayList<>();
@@ -176,9 +180,69 @@ final class Director {
         HostEvents.bump(HostEvents.SCREENS);
     }
 
+    /** A team member's latest post (rungic_cua.team): role, kind, text, when; by its workspace. */
+    private final java.util.Map<Integer, String[]> membersSaid = new java.util.HashMap<>();
+    private final java.util.Map<Integer, Long> memberTimes = new java.util.HashMap<>();
+
+    /** A member posted (op "director" {"member": {slot, role, kind, text}}); an empty role: gone. */
+    void setMember(int slot, String role, String kind, String text) {
+        if (role.isEmpty()) { membersSaid.remove(slot); memberTimes.remove(slot); }
+        else { membersSaid.put(slot, new String[] {role, kind, text}); memberTimes.put(slot, android.os.SystemClock.uptimeMillis()); }
+        if (labels != null) labels.invalidate();
+        for (Runnable listener : new ArrayList<>(listeners)) listener.run();
+    }
+
+    /** Needs the user or the lead: blocked or a question (its tile turns amber). */
+    boolean needsAttention(int slot) {
+        String[] m = membersSaid.get(slot);
+        return m != null && ("blocked".equals(m[1]) || "question".equals(m[1]));
+    }
+
+    /** A workspace's agent says what it is doing (op "director" {"caption": {slot, state, text}}). */
+    void setCaption(int slot, String state, String text) {
+        captions.put(slot, new String[] {state, text});
+        captionTimes.put(slot, android.os.SystemClock.uptimeMillis());
+        if (labels != null) labels.invalidate();
+        for (Runnable listener : new ArrayList<>(listeners)) listener.run();
+        // An ending shows a few seconds, then goes.
+        if (!"working".equals(state)) handler.postDelayed(() -> {
+            if (labels != null) labels.invalidate();
+            for (Runnable listener : new ArrayList<>(listeners)) listener.run();
+        }, ENDING_MS + 50);
+    }
+
+    /**
+     * {state, text} of what `slot`'s agent is doing now, or null (none, stale, an ending past): the
+     * newer of its desktop tools' caption and, in a team, its own latest words.
+     */
+    String[] caption(int slot) {
+        String[] c = captions.get(slot);
+        Long at = captionTimes.get(slot);
+        long now = android.os.SystemClock.uptimeMillis();
+        if (c != null && at != null && ("working".equals(c[0]) ? now - at > CAPTION_STALE_MS : now - at > ENDING_MS)) c = null;
+        String[] m = membersSaid.get(slot);
+        Long said = memberTimes.get(slot);
+        if (m != null && !m[2].isEmpty() && (c == null || said > at)) {
+            boolean final_ = "done".equals(m[1]) || "failed".equals(m[1]) || "ended".equals(m[1]);
+            return new String[] {final_ ? m[1] : "working", m[2]};
+        }
+        return c;
+    }
+
+    /** A tile's name: a team member's role and state ("art · 评审中"), else the screen's name. */
     String label(int slot) {
+        String[] m = membersSaid.get(slot);
+        if (m != null) {
+            int state = STATE_NAMES.getOrDefault(m[1], 0);
+            return state == 0 ? m[0] : m[0] + " · " + activity.getString(state);
+        }
         return slot == 0 ? activity.getString(R.string.tv_desktop) : activity.getString(R.string.tv_workspace, slot);
     }
+
+    private static final java.util.Map<String, Integer> STATE_NAMES = java.util.Map.of(
+        "review", R.string.team_reviewing, "progress", R.string.team_working, "blocked", R.string.team_blocked,
+        "question", R.string.team_question, "done", R.string.team_done, "failed", R.string.team_failed,
+        "ended", R.string.team_ended);
 
     private void changed(boolean banner) {
         changedVersion();
@@ -266,7 +330,7 @@ final class Director {
         try { NativeBridge.setDirector(slots, flat, presented); }
         catch (UnsatisfiedLinkError e) { NativeBridge.presentWorkspace(presented); }
         if (labels != null) labels.invalidate();
-        else if (bound && onTv() && rects.length > 1) addLabels();
+        else if (bound && onTv()) addLabels();
         for (Runnable listener : new ArrayList<>(listeners)) listener.run();
     }
 
@@ -353,13 +417,24 @@ final class Director {
             float w = getWidth(), h = getHeight(), unit = h / 1080f;
             outline.setStrokeWidth(4 * unit);
             boolean small = level == ENLARGED;
-            for (int i = 0; tiles.length > 1 && i < tiles.length; i++) {
+            boolean many = tiles.length > 1;
+            for (int i = 0; i < tiles.length; i++) {
                 float[] t = tiles[i];
                 RectF r = new RectF(t[0] * w, t[1] * h, (t[0] + t[2]) * w, (t[1] + t[3]) * h);
-                if (i == 0) {
+                if (i == 0 && many) {
+                    outline.setColor(needsAttention(tileSlots[i]) ? 0xFFF0B35E : 0xFF3DAEE9);
                     canvas.drawRoundRect(r.left - 3 * unit, r.top - 3 * unit, r.right + 3 * unit, r.bottom + 3 * unit, 6 * unit, 6 * unit, outline);
                 }
-                if (i == 0 || !small) chip(canvas, label(tileSlots[i]), r.left + 12 * unit, r.bottom - 12 * unit, unit, i == 0 ? 26 : 22);
+                String[] c = caption(tileSlots[i]);
+                boolean working = c != null && "working".equals(c[0]);
+                String mark = needsAttention(tileSlots[i]) ? "  ⚠" : working && i > 0 ? "  ●" : "";
+                if (many && (i == 0 || !small)) chip(canvas, label(tileSlots[i]) + mark, r.left + 12 * unit, r.bottom - 12 * unit, unit, i == 0 ? 26 : 22);
+                // What the focus's agent is doing, centred at its bottom, as the floating window shows it.
+                if (i == 0 && c != null && !c[1].isEmpty()) {
+                    text.setTextSize(24 * unit);
+                    float tw = text.measureText(c[1]);
+                    chip(canvas, c[1], (r.left + r.right) / 2 - tw / 2 - 12 * unit, r.bottom - 64 * unit, unit, 24);
+                }
             }
             if (android.os.SystemClock.uptimeMillis() < bannerUntil && tiles.length <= 1) {
                 chip(canvas, onTv() ? label(focus) : activity.getString(R.string.cast_tv_desktop), 32 * unit, h - 32 * unit, unit, 30);

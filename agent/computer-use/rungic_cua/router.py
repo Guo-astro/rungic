@@ -30,7 +30,7 @@ import subprocess
 import threading
 from itertools import count
 
-from . import workspace
+from . import team, workspace
 
 # Set apart in a workspace, as Plasma's desktop session has them (docs/103); the user's session's
 # values go along as RUNGIC_USER_<name>.
@@ -176,6 +176,7 @@ class Router:
         self.last: str | None = None
         self.subagent: dict | None = None    # a sub-agent's thread: {'thread', 'parent'}
         self.claimed: int | None = None      # the workspace it holds
+        self.member: dict | None = None      # its last team_post: role, kind, project (team.py)
 
     def caller(self, meta: dict | None) -> None:
         """Who calls, from the first call's _meta (Codex 0.159: x-codex-turn-metadata)."""
@@ -250,12 +251,15 @@ class Router:
             self.last = target
             data = {**self.describe(target, why), 'setting': self.override}
             return {'content': [{'type': 'text', 'text': json.dumps(data, ensure_ascii=False)}]}
+        if name == team.TOOL['name']:
+            return self.team_post(arguments)
         if name == CLOSE_TOOL['name']:
             # The child in the workspace goes with it; the next call starts both again.
             slot = self.slot
             self.drop('workspace')
             data = workspace.close(slot, force=bool(arguments.get('force')))
             if self.subagent and data.get('closed'):
+                team.clear(slot)
                 workspace.release(slot, os.getpid())
                 self.claimed = None
                 self.last = None
@@ -272,8 +276,25 @@ class Router:
             self.last = target
         return result
 
+    def team_post(self, arguments: dict) -> dict:
+        """team_post (team.py): a member's post goes on its own workspace's tile, the lead's to the journal."""
+        kind = str(arguments.get('kind') or 'progress')
+        if kind not in team.KINDS:
+            kind = 'progress'
+        entry = {'role': str(arguments.get('role') or ''), 'kind': kind, 'text': str(arguments.get('text') or '')}
+        if self.subagent:
+            entry.update(workspace=self.slot, thread=self.subagent.get('thread'), parent=self.subagent.get('parent'))
+        project = str(arguments.get('project') or (self.member or {}).get('project') or '')
+        self.member = {**entry, 'project': project}
+        data = team.post(entry, project)
+        return {'content': [{'type': 'text', 'text': json.dumps(data, ensure_ascii=False)}]}
+
     def close(self) -> None:
         for child in self.children.values():
             child.close()
+        # A member that ends without saying how: "ended" for it, so its tile does not stay at work.
+        if self.member and self.member.get('kind') not in team.FINAL:
+            ended = {k: v for k, v in self.member.items() if k != 'project'}
+            team.post({**ended, 'kind': 'ended', 'text': '', 'time': None}, self.member.get('project', ''))
         if self.claimed is not None:
             workspace.release(self.claimed, os.getpid())

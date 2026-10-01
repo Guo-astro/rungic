@@ -37,6 +37,10 @@ class AgentScreen : public QObject
     // "working" with a caption, or how it ended (done, question, failed, stopped).
     Q_PROPERTY(QString activityState READ activityState NOTIFY activityChanged)
     Q_PROPERTY(QString activityText READ activityText NOTIFY activityChanged)
+    // In a team (rungic_cua.team, docs/research/91): the member's role, and the kind of its latest
+    // post (review, progress, blocked, question, done, failed, ended), "" outside a team.
+    Q_PROPERTY(QString teamRole READ teamRole NOTIFY activityChanged)
+    Q_PROPERTY(QString teamKind READ teamKind NOTIFY activityChanged)
 
 public:
     // `workspace`: 0 desktop mode, n the assistant's screen of workspace n.
@@ -49,6 +53,8 @@ public:
     int workspace() const { return m_workspace; }
     QString activityState() const { return m_activityState; }
     QString activityText() const { return m_activityText; }
+    QString teamRole() const { return m_teamRole; }
+    QString teamKind() const { return m_teamKind; }
 
     // Input at a fraction (0..1) of the assistant's screen.
     Q_INVOKABLE void pointerMove(double fx, double fy);
@@ -101,6 +107,8 @@ private:
     QString m_activityPath;
     QString m_activityState;
     QString m_activityText;
+    QString m_teamRole;
+    QString m_teamKind;
     double m_activityTime = 0;
     // The assistant's screen shows workspace n (docs/research/91): its picture comes from
     // rungic-workspace-stream, which records that workspace's KWin. 0: desktop mode.

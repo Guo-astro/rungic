@@ -139,11 +139,29 @@ void AgentScreen::readActivity()
     const double now = QDateTime::currentMSecsSinceEpoch() / 1000.0;
     if (now - time > (state == QLatin1String("working") ? kActivityStaleS : kEndingStaleS))
         state.clear();
-    if (state == m_activityState && text == m_activityText && time == m_activityTime)
+    // In a team (rungic_cua.team): the member's role and state, and its own words when newer.
+    QString role, kind, said = text;
+    if (m_workspace > 0) {
+        QFile teamFile(m_activityPath.section(QLatin1Char('/'), 0, -2) + QStringLiteral("/team-ws%1.json").arg(m_workspace));
+        if (teamFile.open(QIODevice::ReadOnly)) {
+            const QJsonObject post = QJsonDocument::fromJson(teamFile.readAll()).object();
+            role = post.value(QStringLiteral("role")).toString();
+            kind = post.value(QStringLiteral("kind")).toString();
+            const QString words = post.value(QStringLiteral("text")).toString();
+            if (!words.isEmpty() && post.value(QStringLiteral("time")).toDouble() > time) {
+                said = words;
+                const bool ended = kind == QLatin1String("done") || kind == QLatin1String("failed") || kind == QLatin1String("ended");
+                state = ended ? kind : QStringLiteral("working");
+            }
+        }
+    }
+    if (state == m_activityState && said == m_activityText && time == m_activityTime && role == m_teamRole && kind == m_teamKind)
         return;
     m_activityState = state;
-    m_activityText = text;
+    m_activityText = said;
     m_activityTime = time;
+    m_teamRole = role;
+    m_teamKind = kind;
     Q_EMIT activityChanged();
 }
 

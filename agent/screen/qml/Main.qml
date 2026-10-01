@@ -94,6 +94,25 @@ Window {
         settle()
     }
     // ---- the director's focus changes (docs/58) ----------------------------------------------------
+    // A screen's name: in a team the member's role and state (rungic_cua.team), else its number.
+    function teamState(screen) {
+        return ({ review: i18nc("@info:status a team member reviews the brief", "reviewing"),
+                  progress: i18nc("@info:status a team member works", "working"),
+                  blocked: i18nc("@info:status a team member cannot go on", "blocked"),
+                  question: i18nc("@info:status a team member asks", "has a question"),
+                  done: i18nc("@info:status a team member finished", "done"),
+                  failed: i18nc("@info:status", "failed"),
+                  ended: i18nc("@info:status a team member stopped", "ended") })[screen.teamKind] || ""
+    }
+    function screenName(screen, short) {
+        if (screen.teamRole) {
+            const state = teamState(screen)
+            return state ? screen.teamRole + " · " + state : screen.teamRole
+        }
+        return short ? String(screen.workspace)
+                     : i18nc("@label name of an assistant's screen, %1 its number", "Assistant Screen %1", screen.workspace)
+    }
+    function needsAttention(screen) { return screen.teamKind === "blocked" || screen.teamKind === "question" }
     // Where a screen other than the focus sits in the column (0 first).
     function columnIndex(screen) {
         let at = 0
@@ -291,10 +310,11 @@ Window {
                 Rectangle {  // its number
                     visible: !tile.focused
                     anchors { left: parent.left; bottom: parent.bottom; margins: 3 }
-                    width: Math.max(height, number.implicitWidth + 6); height: number.implicitHeight + 2
+                    width: Math.max(height, number.width + 6); height: number.implicitHeight + 2
                     radius: height / 2
-                    color: Qt.rgba(0.11, 0.12, 0.15, 0.8)
-                    Text { id: number; anchors.centerIn: parent; text: tile.modelData.workspace; color: "white"; font.pixelSize: 9 }
+                    color: root.needsAttention(tile.modelData) ? Qt.rgba(0.94, 0.70, 0.37, 0.92) : Qt.rgba(0.11, 0.12, 0.15, 0.8)
+                    Text { id: number; anchors.centerIn: parent; text: root.screenName(tile.modelData, true); color: "white"; font.pixelSize: 9
+                           width: Math.min(implicitWidth, tile.width - 12); elide: Text.ElideRight }
                 }
                 Rectangle {  // the agent at work there
                     visible: !tile.focused && tile.modelData.activityState === "working"
@@ -375,7 +395,7 @@ Window {
             Text {
                 id: nameText
                 anchors.centerIn: parent
-                text: root.directing ? i18nc("@label name of an assistant's screen, %1 its number", "Assistant Screen %1", root.screen.workspace)
+                text: root.directing ? root.screenName(root.screen, false)
                     : root.screen.workspace > 0 ? i18nc("@label name of the agent's screen", "Assistant Screen") : i18nc("@label name of the user's second screen", "Desktop")
                 color: "white"
                 font.pixelSize: 12

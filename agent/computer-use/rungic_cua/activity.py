@@ -13,6 +13,8 @@ workspace's floating window shows its own agent's work). The writer's RUNGIC_WOR
 
 The assistant screen's floating window shows `text` as a caption over the picture while
 "working", and the outcome for a moment after; the voice agent speaks it as progress. A
+workspace's report also goes to the Android app (platform bridge op "director", `caption`): the
+director's tiles on the TV and fullscreen, which the app draws, show it as well (docs/58). A
 "working" state older than STALE_S means the writer went away (a tool call killed with Codex).
 """
 from __future__ import annotations
@@ -50,6 +52,23 @@ def report(text: str, *, state: str = 'working', task: str = '', image: str = ''
         temporary.write_text(json.dumps(data, ensure_ascii=False))
         os.replace(temporary, target)
     except OSError:
+        pass
+    slot = os.environ.get('RUNGIC_WORKSPACE') if workspace is None else workspace
+    if slot:
+        tell_app(int(slot), state, data['text'] if 'data' in locals() else str(text)[:80])
+
+
+def tell_app(slot: int, state: str, text: str) -> None:
+    """The caption to the Android app, for the director's tiles it draws (best effort, quick)."""
+    import socket
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
+            conn.settimeout(0.5)
+            conn.connect('/mnt/android-wayland/platform.sock')
+            conn.sendall(json.dumps({'op': 'director', 'caption': {'slot': slot, 'state': state, 'text': text}},
+                                    ensure_ascii=False).encode() + b'\n')
+            conn.recv(4096)
+    except (OSError, ValueError):
         pass
 
 
