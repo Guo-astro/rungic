@@ -783,6 +783,21 @@ G100 S（XT2537-4，SM6435 `_parrot_v3`），接收端TCL 85Q6H。电视这次�
   - 用户桌面上打开的 Sky Hop（Godot，pid 25680）的声音流被挪到了 `android_phone`；
   - 是否真的从手机出声，以及延迟大小，还要用户实听确认。手机本机这条路比默认路径多约 0.15–0.2 s（docs/59 的 FIFO 和 AudioTrack 缓冲）。
 
+**手机本机输出卡顿与延迟（2026-10-02）**：用户反馈游戏声音从手机出来了，但“一卡一卡的，还有点延迟”。
+- **测量**：
+  - Android 端这一路（APK 的 AudioTrack）没有欠载，FrmRdy 一直是满的 7200 帧（150 ms），AudioFlinger 报告延迟 274–313 ms；
+  - PulseAudio 这边，sink 延迟约 66 ms，游戏流的缓冲约 45 ms。
+- **原因**：module-pipe-sink 原来“由读取速度计时”。读取的一方是 Python 线程，后面接一个阻塞写入的 150 ms AudioTrack，sink 因此是一阵一阵地写，游戏流在 PulseAudio 一侧接不上；各级缓冲加起来约半秒。
+- **改法**：
+  - pipe-sink 加上 `use_system_clock_for_timing=yes`，由 PulseAudio 按自己的时钟匀速写；
+  - FIFO 和套接字缓冲都降到 8 KiB，每次读 10 ms；
+  - AudioTrack 缓冲改为 `max(min, 40 ms)`，用 `WRITE_NON_BLOCKING` 写，写不下的直接丢掉，让延迟有上限。
+- **一次失败**：试过 `PERFORMANCE_MODE_LOW_LATENCY`，结果这一路不再理会 `setPreferredDevice`，投屏时被送到了 PROXY，声音跑到电视上，用户发现后已撤回。
+- **结果**：
+  - 这一路回到 `AUDIO_DEVICE_OUT_SPEAKER`，FrmRdy 约 940 帧（约 20 ms），没有欠载；
+  - AudioFlinger 报告延迟约 185 ms，PulseAudio sink 约 3 ms；
+  - 用户确认声音从手机出来、不卡了，“还有点延迟，可以暂时不管”。剩下的延迟主要在 Android 扬声器输出线程。以后可以试 `USAGE_GAME`，但要先核对它不会被送到 PROXY。
+
 **事故（2026-10-01 23:07）**：用户在导播台全屏里点了电视按钮，APK 崩溃，回来后黑屏。
 - **原因**：`castButton` 要求主窗口有焦点（防止经平台桥在后台弹出选择列表），但全屏时焦点在全屏层的面板窗口上，于是抛出 `IllegalStateException`，在按钮回调里没人接住，整个应用退出。
 - **修复**：只有经平台桥来的请求才检查焦点；应用内的按钮回调出错时只弹 Toast。

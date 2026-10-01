@@ -230,9 +230,10 @@ final class CaptureBridge implements Closeable {
             final AudioTrack out=track=new AudioTrack.Builder()
                 .setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).build())
                 .setAudioFormat(new AudioFormat.Builder().setSampleRate(48000).setChannelMask(AudioFormat.CHANNEL_OUT_STEREO).setEncoding(AudioFormat.ENCODING_PCM_16BIT).build())
-                // ~150 ms: playback here is speech and media, not latency critical, and the
-                // Linux side forwards it from a Python thread that a busy phone may delay.
-                .setTransferMode(AudioTrack.MODE_STREAM).setBufferSizeInBytes(Math.max(min,28800)).build();
+                // A small buffer (~40 ms): games and apps play here too, not only speech; a blocking
+                // 150 ms buffer made a game's sounds stutter, half a second late. Not the low-latency
+                // mode: its track ignored the preferred device and went to the TV (PROXY) while casting.
+                .setTransferMode(AudioTrack.MODE_STREAM).setBufferSizeInBytes(Math.max(min,7680)).build();
             if(out.getState()!=AudioTrack.STATE_INITIALIZED)throw new IOException("Phone output unavailable");
             out.setPreferredDevice(localOutput(audio));
             callback=new AudioDeviceCallback() {
@@ -240,7 +241,7 @@ final class CaptureBridge implements Closeable {
                 @Override public void onAudioDevicesRemoved(AudioDeviceInfo[] removed) { out.setPreferredDevice(localOutput(audio)); }
             };
             audio.registerAudioDeviceCallback(callback,null);
-            socket.setReceiveBufferSize(16384);
+            socket.setReceiveBufferSize(8192);
             json(socket.getOutputStream(),new JSONObject().put("ok",true).put("rate",48000).put("channels",2).put("format","s16le"));header=true;
             socket.setSoTimeout(10000);
             out.play();
@@ -251,7 +252,9 @@ final class CaptureBridge implements Closeable {
                 pending+=count;
                 int frames=pending-pending%4;
                 if(frames==0)continue;
-                if(out.write(block,0,frames,AudioTrack.WRITE_BLOCKING)<0)throw new IOException("Phone output write failed");
+                // The Linux side runs on its own clock: what does not fit now is late, dropped (the
+                // fill stays bounded); an empty track plays silence until more comes.
+                if(out.write(block,0,frames,AudioTrack.WRITE_NON_BLOCKING)<0)throw new IOException("Phone output write failed");
                 System.arraycopy(block,frames,block,0,pending-frames);pending-=frames;
             }
         } catch(Exception e) { if(!header)json(socket.getOutputStream(),new JSONObject().put("error",e.getMessage()==null?"Phone output unavailable":e.getMessage())); }

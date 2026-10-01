@@ -181,8 +181,11 @@ def audio_priority():
 class PhoneOutput:
     """Forward the android_phone sink to the app's AudioTrack while the sink is open.
 
-    module-pipe-sink is paced by this reader and reports the FIFO fill as its
-    latency; the FIFO and socket buffers are kept small (about 85 ms each).
+    The sink runs on the system clock (use_system_clock_for_timing): PulseAudio writes at a steady
+    rate and this drains the FIFO as it comes. Paced by this reader instead (until 2026-10-02), the
+    sink wrote in bursts behind a blocking 150 ms AudioTrack: a game's sound stuttered, about half a
+    second late. The FIFO and socket buffers are small (about 40 ms each); the app's AudioTrack keeps
+    its own fill bounded (CaptureBridge.phoneOutput).
     """
 
     def __init__(self):
@@ -211,11 +214,11 @@ class PhoneOutput:
         try:
             fd = os.open(PHONE_FIFO, os.O_RDONLY | os.O_NONBLOCK | os.O_CLOEXEC)
             try:
-                fcntl.fcntl(fd, F_SETPIPE_SZ, 16384)
+                fcntl.fcntl(fd, F_SETPIPE_SZ, 8192)
             except OSError:
                 pass
             with socket.socket(socket.AF_UNIX) as client:
-                client.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 16384)
+                client.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 8192)
                 client.settimeout(3)
                 client.connect('/mnt/android-wayland/capture.sock')
                 client.sendall(b'{"op":"phone-output"}\n')
@@ -226,7 +229,7 @@ class PhoneOutput:
                     if not select.select([fd], [], [], 0.2)[0]:
                         continue
                     try:
-                        block = os.read(fd, 3840)
+                        block = os.read(fd, 1920)   # 10 ms
                     except BlockingIOError:
                         continue
                     if block:
@@ -309,6 +312,7 @@ def ensure_phone_sink():
         raise OSError('Phone output path is not a FIFO')
     module = pactl('load-module', 'module-pipe-sink', 'sink_name=' + PHONE_SINK,
                    'file=' + str(PHONE_FIFO), 'format=s16le', 'rate=48000', 'channels=2',
+                   'use_system_clock_for_timing=yes',
                    described('sink_properties', _('This Phone')))
     os.chmod(PHONE_FIFO, 0o600)
     LOG.info('phone output sink ready (module %s)', module)
