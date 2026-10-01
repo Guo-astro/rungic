@@ -30,8 +30,8 @@ import org.json.JSONObject;
  * TV shows the director while there is one. The host puts each tile on a layer of its own in the
  * presenter's window (NativeBridge.setDirector); the labels are drawn above it (on the TV a window
  * of its own, fullscreen AgentFullscreen's layer). A change of focus or level puts the tiles in
- * place at once; the new focus then breathes in on a spring, from a little smaller to its size
- * with a slight overshoot. Only its layer moves (NativeBridge.placeTile, no new frame): moving
+ * place at once; the new focus then breathes in, from a little smaller to its size, eased out
+ * (a spring's overshoot drew the eye away, the user found). Only its layer moves (NativeBridge.placeTile, no new frame): moving
  * every tile through a new layout each frame made the host present every screen anew, and
  * stuttered.
  */
@@ -56,8 +56,8 @@ final class Director {
     private boolean fullscreen;
     private final List<Runnable> listeners = new ArrayList<>();
     private android.animation.ValueAnimator animation;
-    private static final long SPRING_MS = 520;
-    private static final float SPRING_FROM = 0.93f;
+    private static final long BREATHE_MS = 260;
+    private static final float BREATHE_FROM = 0.95f;
     /** Width over height of the window the director is laid out in (the TV, the phone turned). */
     private float aspect = 16f / 9f;
     /** Bumped at every change: the phone's director window follows it. */
@@ -205,7 +205,7 @@ final class Director {
 
     /**
      * The host's layout and the labels for the current state, at once; `animate`: a new focus
-     * breathes in (spring()).
+     * breathes in (spring(), eased).
      */
     private void apply(boolean animate) {
         if (animation != null) animation.cancel();
@@ -232,20 +232,14 @@ final class Director {
         if (animate && newFocus) spring(slots[0], to[0]);
     }
 
-    /**
-     * The new focus `slot` breathes in: from SPRING_FROM of its size, about its centre, to its
-     * size on a damped spring (a light overshoot, then still).
-     */
+    /** The new focus `slot` breathes in: from BREATHE_FROM of its size, about its centre, eased out. */
     private void spring(int slot, float[] rect) {
         final float cx = rect[0] + rect[2] / 2, cy = rect[1] + rect[3] / 2;
-        final double omega = 2 * Math.PI * 2.4, zeta = 0.5, omegaD = omega * Math.sqrt(1 - zeta * zeta);
-        animation = android.animation.ValueAnimator.ofFloat(0f, 1f).setDuration(SPRING_MS);
-        animation.setInterpolator(null);
+        animation = android.animation.ValueAnimator.ofFloat(BREATHE_FROM, 1f).setDuration(BREATHE_MS);
+        animation.setInterpolator(new android.view.animation.DecelerateInterpolator(1.5f));
         animation.addUpdateListener(a -> {
             if (tileSlots.length == 0 || tileSlots[0] != slot) { a.cancel(); return; }
-            double t = a.getCurrentPlayTime() / 1000.0;
-            float scale = (float) (1 - (1 - SPRING_FROM) * Math.exp(-zeta * omega * t) * Math.cos(omegaD * t));
-            if (a.getAnimatedFraction() >= 1) scale = 1;
+            float scale = (float) a.getAnimatedValue();
             float w = rect[2] * scale, h = rect[3] * scale;
             float[] now = {cx - w / 2, cy - h / 2, w, h};
             float[][] shown = tiles.clone();

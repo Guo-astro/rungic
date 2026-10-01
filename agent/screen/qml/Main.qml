@@ -94,18 +94,16 @@ Window {
         settle()
     }
     // ---- the director's focus changes (docs/58) ----------------------------------------------------
-    property int shownFocus: 0
-    Connections {
-        target: director
-        function onChanged() {
-            if (director.focus === root.shownFocus)
-                return
-            root.shownFocus = director.focus
-            // The new focus's picture comes in, faded and grown, so the switch is seen.
-            stream.scale = 0.93
-            focusFade.start()
-            focusSpring.start()
+    // Where a screen other than the focus sits in the column (0 first).
+    function columnIndex(screen) {
+        let at = 0
+        for (const other of director.screens) {
+            if (other === screen)
+                return at
+            if (other !== director.focusScreen)
+                at++
         }
+        return 0
     }
     function setFullscreen() {
         toolbarShown = false
@@ -116,7 +114,6 @@ Window {
             root.screen.fullscreen()
     }
     Component.onCompleted: {
-        shownFocus = director ? director.focus : 0
         panelWidth = area.width * 0.72
         settle()
         followActivity()
@@ -249,63 +246,68 @@ Window {
             PipeWire.PipeWireSourceItem {
                 id: stream
                 anchors.fill: parent
-                nodeId: root.screen.nodeId
+                // The director's screens have a picture each (below), never switched.
+                nodeId: root.directing ? 0 : root.screen.nodeId
                 visible: nodeId > 0
-                // A new focus comes in (docs/58): faded and grown into place, not cut.
-                // A new focus breathes in: from a little smaller to its size on a spring (a light
-                // overshoot, then still), fading in quickly meanwhile (docs/58).
-                NumberAnimation on opacity { id: focusFade; running: false; from: 0.5; to: 1; duration: 140; easing.type: Easing.OutQuad }
-                SpringAnimation on scale { id: focusSpring; running: false; to: 1; spring: 6; damping: 0.32; mass: 1; epsilon: 0.001 }
             }
             Kirigami.Icon {
                 anchors.centerIn: parent
                 width: 32; height: 32
-                visible: !stream.visible || !stream.ready
+                visible: !root.directing && (!stream.visible || !stream.ready)
                 source: "video-display"
                 color: "#99ffffff"
                 isMask: true
             }
         }
-        // ---- the director's other screens (docs/58): live, in a column on the right; tap one to focus it
-        Column {
-            id: otherScreens
-            visible: root.others > 0
-            anchors { right: parent.right; verticalCenter: picture.verticalCenter }
-            spacing: 4
-            Repeater {
-                model: root.directing ? director.screens : []
-                delegate: Rectangle {
-                    required property QtObject modelData
-                    visible: modelData !== director.focusScreen
-                    width: root.columnWidth
-                    height: visible ? Math.min(Math.round(width * 9 / 16), (root.pictureHeight - 4 * (root.others - 1)) / Math.max(1, root.others)) : 0
-                    radius: 8
-                    color: "black"
-                    clip: true
-                    PipeWire.PipeWireSourceItem {
-                        anchors.fill: parent
-                        nodeId: modelData.nodeId
-                        visible: nodeId > 0
-                    }
-                    Rectangle {  // its number
-                        anchors { left: parent.left; bottom: parent.bottom; margins: 3 }
-                        width: Math.max(height, number.implicitWidth + 6); height: number.implicitHeight + 2
-                        radius: height / 2
-                        color: Qt.rgba(0.11, 0.12, 0.15, 0.8)
-                        Text { id: number; anchors.centerIn: parent; text: modelData.workspace; color: "white"; font.pixelSize: 9 }
-                    }
-                    Rectangle {  // the agent at work there
-                        visible: modelData.activityState === "working"
-                        anchors { right: parent.right; top: parent.top; margins: 4 }
-                        width: 6; height: 6; radius: 3
-                        color: "#63d471"
-                    }
-                    TapHandler { onTapped: director.setFocus(modelData.workspace) }
+        // ---- the director's screens (docs/58): each its own live picture, never switched, so a change
+        // of focus only moves them (switching one picture's stream showed black while it connected):
+        // the focus over the picture's place, the others in a column on the right. Tap one to focus it;
+        // the new focus breathes in, from a little smaller to its size.
+        Repeater {
+            model: root.directing ? director.screens : []
+            delegate: Item {
+                id: tile
+                required property QtObject modelData
+                readonly property bool focused: modelData === director.focusScreen
+                readonly property int place: root.columnIndex(modelData)
+                readonly property real thumbHeight: Math.min(Math.round(root.columnWidth * 9 / 16),
+                    (root.pictureHeight - 4 * (root.others - 1)) / Math.max(1, root.others))
+                readonly property real columnTop: (root.pictureHeight - (root.others * thumbHeight + (root.others - 1) * 4)) / 2
+                x: focused ? 0 : root.pictureWidth + 4
+                y: focused ? 0 : columnTop + place * (thumbHeight + 4)
+                width: focused ? root.pictureWidth : root.columnWidth
+                height: focused ? root.pictureHeight : thumbHeight
+                layer.enabled: true
+                layer.effect: MultiEffect { maskEnabled: true; maskSource: tileMask }
+                Rectangle { id: tileMask; anchors.fill: parent; radius: tile.focused ? 14 : 8; visible: false; layer.enabled: true }
+                Rectangle { anchors.fill: parent; color: "black" }
+                PipeWire.PipeWireSourceItem {
+                    anchors.fill: parent
+                    nodeId: tile.modelData.nodeId
+                    visible: nodeId > 0
                 }
+                Rectangle {  // its number
+                    visible: !tile.focused
+                    anchors { left: parent.left; bottom: parent.bottom; margins: 3 }
+                    width: Math.max(height, number.implicitWidth + 6); height: number.implicitHeight + 2
+                    radius: height / 2
+                    color: Qt.rgba(0.11, 0.12, 0.15, 0.8)
+                    Text { id: number; anchors.centerIn: parent; text: tile.modelData.workspace; color: "white"; font.pixelSize: 9 }
+                }
+                Rectangle {  // the agent at work there
+                    visible: !tile.focused && tile.modelData.activityState === "working"
+                    anchors { right: parent.right; top: parent.top; margins: 4 }
+                    width: 6; height: 6; radius: 3
+                    color: "#63d471"
+                }
+                TapHandler { enabled: !tile.focused; onTapped: director.setFocus(tile.modelData.workspace) }
+                onFocusedChanged: if (focused) breathe.restart()
+                NumberAnimation on scale { id: breathe; running: false; from: 0.95; to: 1; duration: 260; easing.type: Easing.OutCubic }
             }
         }
         Rectangle {
             id: caption
+            z: 2
             property string label: ""
             property color dot: "#63d471"
             property bool shown: false
