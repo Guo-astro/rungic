@@ -358,6 +358,53 @@ int main(int argc, char *argv[])
                   notifier.isActive() ? QStringLiteral("active") : QStringLiteral("pending"))
              .arg(freezeAfter));
 
+    // What the screens show changed (the Android app's "screens" events, platform bridge op
+    // "watch"): checked at once, so the sound follows the director's focus without the poll's delay.
+    QString screensEpoch;
+    qint64 screensSeen = -1;
+    std::function<void()> watchScreens;
+    watchScreens = [&] {
+        auto *socket = new QLocalSocket(&app);
+        auto reply = std::make_shared<QByteArray>();
+        auto done = std::make_shared<bool>(false);
+        const auto retry = [&, socket, done](int delayMs) {
+            if (*done)
+                return;
+            *done = true;
+            socket->abort();
+            socket->deleteLater();
+            QTimer::singleShot(delayMs, &app, watchScreens);
+        };
+        QObject::connect(socket, &QLocalSocket::connected, socket, [&, socket] {
+            QJsonObject request{{QStringLiteral("op"), QStringLiteral("watch")},
+                                {QStringLiteral("topics"), QJsonArray{QStringLiteral("screens")}},
+                                {QStringLiteral("timeout"), 30000}};
+            if (!screensEpoch.isEmpty()) {
+                request.insert(QStringLiteral("epoch"), screensEpoch);
+                request.insert(QStringLiteral("seen"), QJsonObject{{QStringLiteral("screens"), screensSeen}});
+            }
+            socket->write(QJsonDocument(request).toJson(QJsonDocument::Compact) + '\n');
+        });
+        QObject::connect(socket, &QLocalSocket::readyRead, socket, [&, socket, reply, retry] {
+            *reply += socket->readAll();
+            if (!reply->contains('\n'))
+                return;
+            const QJsonObject answer = QJsonDocument::fromJson(reply->trimmed()).object();
+            if (answer.isEmpty() || answer.contains(QStringLiteral("error"))) {
+                retry(5000);
+                return;
+            }
+            screensEpoch = answer.value(QStringLiteral("epoch")).toString();
+            screensSeen = answer.value(QStringLiteral("versions")).toObject().value(QStringLiteral("screens")).toInteger();
+            if (answer.value(QStringLiteral("changed")).toBool())
+                keeper.check();
+            retry(0);
+        });
+        QObject::connect(socket, &QLocalSocket::errorOccurred, socket, [retry](QLocalSocket::LocalSocketError) { retry(5000); });
+        socket->connectToServer(QStringLiteral("/mnt/android-wayland/platform.sock"));
+    };
+    watchScreens();
+
     // Shown, hidden, the agent at work or done: polled, a few seconds apart.
     QTimer timer;
     QObject::connect(&timer, &QTimer::timeout, &app, [&keeper] { keeper.check(); });

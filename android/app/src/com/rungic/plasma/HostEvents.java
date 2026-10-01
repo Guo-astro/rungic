@@ -15,12 +15,13 @@ import org.json.JSONObject;
  *
  * Topics: network (connectivity, Wi-Fi state and identity), telephony (service, signal level,
  * data), bluetooth (adapter, links, bonds, discovery), capture (desktop in front, permissions),
- * clipboard (the independent Android clipboard backend reports a change or restart).
+ * clipboard (the independent Android clipboard backend reports a change or restart), screens (what
+ * the director, the TV and fullscreen show: the workspaces' keepers move their sound at once).
  * The epoch changes with every start of the app, so a watcher that saw an older one refreshes.
  */
 final class HostEvents {
     static final String NETWORK="network", TELEPHONY="telephony", BLUETOOTH="bluetooth", CAPTURE="capture",
-        CLIPBOARD="clipboard";
+        CLIPBOARD="clipboard", SCREENS="screens";
     static final String EPOCH=UUID.randomUUID().toString();
     private static final Map<String,Long> versions=new HashMap<>();
 

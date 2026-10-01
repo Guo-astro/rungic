@@ -82,7 +82,7 @@ final class Director {
         if (fullscreen == value && !value) return;
         fullscreen = value;
         if (value && windowAspect > 0) aspect = windowAspect;
-        version++;
+        changedVersion();
         if (value) { tiles = new float[0][]; tileSlots = new int[0]; apply(false); }
     }
     boolean fullscreen() { return fullscreen; }
@@ -129,7 +129,7 @@ final class Director {
             try { NativeBridge.setDirector(tileSlots, new float[0], 0); } catch (UnsatisfiedLinkError e) { /* an older host */ }
             removeLabels();
         }
-        version++;
+        changedVersion();
     }
 
     void setFocus(int slot) {
@@ -170,12 +170,18 @@ final class Director {
                 .put("shown", on).put("heard", onTv() ? focus : -1));
     }
 
+    /** A new version of the state; the Linux side waiting for it hears at once (HostEvents). */
+    private void changedVersion() {
+        version++;
+        HostEvents.bump(HostEvents.SCREENS);
+    }
+
     String label(int slot) {
         return slot == 0 ? activity.getString(R.string.tv_desktop) : activity.getString(R.string.tv_workspace, slot);
     }
 
     private void changed(boolean banner) {
-        version++;
+        changedVersion();
         if (laidOut()) apply(true);
         else if (bound) apply(false);
         if (bound && banner) showBanner();
@@ -186,7 +192,7 @@ final class Director {
             List<Integer> before = members;
             refreshMembers();
             if (!before.equals(members)) {
-                version++;
+                changedVersion();
                 if (bound || fullscreen) apply(true);
             }
             handler.postDelayed(this, POLL_MS);

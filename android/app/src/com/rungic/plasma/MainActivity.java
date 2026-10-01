@@ -550,6 +550,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
             else if (castControls.available()) throw new IllegalStateException("a TV shows the screens");
             else { fullscreenSource = assistantWorkspace; agentFullscreen.show(); }
         }
+        if (request.length() > 1) HostEvents.bump(HostEvents.SCREENS);   // a change, not a query
         return new org.json.JSONObject().put("enabled", assistantScreen).put("workspace", assistantWorkspace)
             .put("width", AGENT_SCREEN_SIZE[0]).put("height", AGENT_SCREEN_SIZE[1])
             .put("tv", director.shown().contains(assistantWorkspace))
@@ -632,6 +633,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         }
         NativeBridge.bindCastSurface(surface, width, height, refreshMhz, rotation);
         presenterOwner = owner;
+        HostEvents.bump(HostEvents.SCREENS);
         // Fullscreen covers the phone's own picture: the host paces it down (docs/65).
         NativeBridge.setPhoneCovered("fullscreen".equals(owner));
         // The director fullscreen lays its screens out in this window.
@@ -643,6 +645,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         if (!owner.equals(presenterOwner)) return;
         if ("fullscreen".equals(owner)) director.setFullscreen(false, 0);
         NativeBridge.releaseCastSurface();
+        HostEvents.bump(HostEvents.SCREENS);
         presenterOwner = null;
         NativeBridge.setPhoneCovered(false);
     }
