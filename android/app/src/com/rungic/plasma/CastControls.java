@@ -402,6 +402,11 @@ final class CastControls {
         }));
     }
 
+    /** The cast button with a TV: the cast controls (what the TV shows, the TV, disconnect). */
+    void openPanel() {
+        if (panel.getParent() == null && session != Session.NONE) expand();
+    }
+
     private void openSheet() {
         closeResolution(false);
         collapse();
@@ -793,47 +798,72 @@ final class CastControls {
         }
     }
 
-    /** "On the TV": a chip per screen (the one shown, or the focus, selected) and the director view. */
+    /**
+     * "On the TV" (docs/58): the director (the assistant's screens; then which is in focus and how
+     * large) or the user's desktop in computer mode.
+     */
     private void addTvScreensTo(LinearLayout panel) {
-        TvScreens tv = ((MainActivity) context).tvScreens();
+        Director director = ((MainActivity) context).director();
         TextView label = text(context.getString(R.string.cast_tv_shows), 12, TEXT_DIM, true);
         label.setPadding(0, dp(14), 0, dp(6));
         panel.addView(label);
+        boolean hasDirector = !director.members().isEmpty();
+        boolean onDirector = director.onTv();
+        panel.addView(segments(new String[] {context.getString(R.string.cast_tv_director), context.getString(R.string.cast_tv_desktop)},
+            onDirector ? 0 : 1, new boolean[] {hasDirector, true}, i -> director.setTvDirector(i == 0)));
+        if (!hasDirector) {
+            TextView note = text(context.getString(R.string.cast_director_none), 12, TEXT_DIM, false);
+            note.setPadding(0, dp(6), 0, 0);
+            panel.addView(note);
+            return;
+        }
+        if (!onDirector) return;
         android.widget.HorizontalScrollView scroll = new android.widget.HorizontalScrollView(context);
         scroll.setHorizontalScrollBarEnabled(false);
+        scroll.setPadding(0, dp(10), 0, 0);
         LinearLayout chips = new LinearLayout(context);
-        for (int slot : tv.sources()) {
-            boolean on = slot == tv.source();
-            String name = tv.label(slot);
+        for (int slot : director.members()) {
+            boolean on = slot == director.focus();
+            String name = director.label(slot);
             TextView chip = text(name, 14, on ? Color.WHITE : 0xFFD0D5D9, on);
             chip.setGravity(Gravity.CENTER);
             chip.setMinHeight(dp(44));
             chip.setPadding(dp(14), 0, dp(14), 0);
             pressable(chip, round(on ? ACCENT : RAISED, 22));
             chip.setContentDescription(on ? context.getString(R.string.item_selected, name) : name);
-            chip.setOnClickListener(v -> { tv.show(slot); refresh(); });
+            chip.setOnClickListener(v -> { director.setFocus(slot); refresh(); });
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
             lp.rightMargin = dp(8);
             chips.addView(chip, lp);
         }
         scroll.addView(chips);
         panel.addView(scroll);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.topMargin = dp(10);
+        panel.addView(segments(new String[] {context.getString(R.string.director_standard), context.getString(R.string.director_enlarged),
+            context.getString(R.string.director_solo)}, director.level(), null, director::setLevel), lp);
+    }
+
+    /** A segmented control: `labels`, `selected` on, `enabled` per segment (null: all). */
+    private LinearLayout segments(String[] labels, int selected, boolean[] enabled, java.util.function.IntConsumer pick) {
         LinearLayout row = new LinearLayout(context);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0, dp(10), 0, 0);
-        LinearLayout texts = new LinearLayout(context);
-        texts.setOrientation(LinearLayout.VERTICAL);
-        texts.addView(text(context.getString(R.string.cast_director), 15, TEXT, true));
-        TextView note = text(context.getString(R.string.cast_director_note), 12, TEXT_DIM, false);
-        note.setPadding(0, dp(2), dp(8), 0);
-        texts.addView(note);
-        row.addView(texts, new LinearLayout.LayoutParams(0, -2, 1));
-        android.widget.Switch toggle = new android.widget.Switch(context);
-        toggle.setChecked(tv.director());
-        toggle.setContentDescription(context.getString(R.string.cast_director));
-        toggle.setOnCheckedChangeListener((v, checked) -> { tv.setDirector(checked); handler.post(this::refresh); });
-        row.addView(toggle);
-        panel.addView(row);
+        row.setPadding(dp(4), dp(4), dp(4), dp(4));
+        row.setBackground(round(SUNKEN, 16));
+        for (int i = 0; i < labels.length; i++) {
+            final int index = i;
+            boolean on = i == selected, usable = enabled == null || enabled[i];
+            TextView seg = text(labels[i], 14, on ? Color.WHITE : usable ? 0xFFD0D5D9 : 0xFF5C646B, on);
+            seg.setGravity(Gravity.CENTER);
+            seg.setMinHeight(dp(44));
+            pressable(seg, round(on ? ACCENT : Color.TRANSPARENT, 12));
+            seg.setEnabled(usable);
+            seg.setContentDescription(on ? context.getString(R.string.item_selected, labels[i]) : labels[i]);
+            seg.setOnClickListener(v -> { pick.accept(index); refresh(); });
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1);
+            if (i > 0) lp.leftMargin = dp(4);
+            row.addView(seg, lp);
+        }
+        return row;
     }
 
     /** Shared in-capsule bottom sheet. It stays in the Activity's own view tree. */

@@ -26,18 +26,22 @@ Window {
     id: root
     // Shown once main.cpp has made it a layer surface.
     property bool ready: false
-    visible: ready && agent.status !== "tv" && agent.status !== "fullscreen"
+    // The screen this window shows: its workspace's, or the director's focus (docs/58).
+    readonly property QtObject screen: director ? director.focusScreen : agent
+    readonly property bool directing: !!director
+    readonly property int others: directing ? director.screens.length - 1 : 0
+    visible: ready && root.screen.status !== "tv" && root.screen.status !== "fullscreen" && !(directing && director.fullscreenShown)
     title: "rungic-agent-screen"
     color: "transparent"
 
     property string mode: "window"      // window | tab
     // Tucked away, nobody sees the screen: the host renders it at a low rate (docs/65).
-    onModeChanged: agent.setWatched(mode === "window")
+    onModeChanged: root.screen.setWatched(mode === "window")
     property string edge: "right"
     property real px: 12
     // Desktop mode's window above, the assistant's screen's below it: both may be out at once. A
     // team's workspaces 2, 3, 4 (docs/research/91) one under another from the top, all out at once.
-    property real py: agent.workspace > 1 ? 50 + (agent.workspace - 2) * 165 : agent.workspace > 0 ? 330 : 110
+    property real py: directing ? 110 : root.screen.workspace > 1 ? 50 + (root.screen.workspace - 2) * 165 : root.screen.workspace > 0 ? 330 : 110
     property real panelWidth: 260
     property real tabY: 180
     property bool toolbarShown: false
@@ -45,7 +49,11 @@ Window {
     property bool pinching: false
     readonly property rect area: floater.area
     readonly property real minWidth: area.width * 0.5
-    readonly property real panelHeight: Math.round(panelWidth * 9 / 16)
+    readonly property real pictureHeight: Math.round(panelWidth * 9 / 16)
+    // The director's screens below the picture, a number each: the floating window is small, so it
+    // shows the focus alone (its layout of all the screens is fullscreen's and the TV's, docs/58).
+    readonly property real stripHeight: others < 1 ? 0 : 34
+    readonly property real panelHeight: pictureHeight + stripHeight
     readonly property int gap: 10
     readonly property int tabWidth: 26
     readonly property int tabHeight: 76
@@ -83,11 +91,28 @@ Window {
         px = edge === "left" ? 8 : area.width - panelWidth - 8
         settle()
     }
+    // ---- the director's focus changes (docs/58) ----------------------------------------------------
+    property int shownFocus: 0
+    Connections {
+        target: director
+        function onChanged() {
+            if (director.focus === root.shownFocus)
+                return
+            root.shownFocus = director.focus
+            // The new focus's picture comes in, faded and grown, so the switch is seen.
+            focusFade.start(); focusGrow.start()
+        }
+    }
     function setFullscreen() {
         toolbarShown = false
-        agent.fullscreen()
+        // The director goes fullscreen as a whole: its screens laid out (docs/58).
+        if (directing && others > 0)
+            director.fullscreen()
+        else
+            root.screen.fullscreen()
     }
     Component.onCompleted: {
+        shownFocus = director ? director.focus : 0
         panelWidth = area.width * 0.72
         settle()
         followActivity()
@@ -99,12 +124,12 @@ Window {
     // hidden, working, done, question, failed, stopped. An ending shows a few seconds, then hides.
     property string captionState: ""
     function followActivity() {
-        const state = agent.activityState
+        const state = root.screen.activityState
         captionState = ["working", "done", "question", "failed", "stopped"].indexOf(state) >= 0 ? state : ""
         if (captionState !== "" && captionState !== "working")
             endTimer.restart()
     }
-    Connections { target: agent; function onActivityChanged() { root.followActivity() } }
+    Connections { target: root.screen; function onActivityChanged() { root.followActivity() } }
     Timer { id: endTimer; interval: 4000; onTriggered: if (root.captionState !== "working") root.captionState = "" }
 
     Timer {
@@ -206,7 +231,9 @@ Window {
         Behavior on scale { NumberAnimation { duration: root.motion; easing.type: Easing.OutCubic } }
 
         Rectangle {
-            anchors.fill: parent
+            id: picture
+            anchors { left: parent.left; right: parent.right; top: parent.top }
+            height: root.pictureHeight
             radius: 14
             color: "black"
             layer.enabled: true   // rounded corners for the picture too
@@ -217,8 +244,11 @@ Window {
             PipeWire.PipeWireSourceItem {
                 id: stream
                 anchors.fill: parent
-                nodeId: agent.nodeId
+                nodeId: root.screen.nodeId
                 visible: nodeId > 0
+                // A new focus comes in (docs/58): faded and grown into place, not cut.
+                NumberAnimation on opacity { id: focusFade; running: false; from: 0; to: 1; duration: 260; easing.type: Easing.OutCubic }
+                NumberAnimation on scale { id: focusGrow; running: false; from: 0.94; to: 1; duration: 260; easing.type: Easing.OutCubic }
             }
             Kirigami.Icon {
                 anchors.centerIn: parent
@@ -229,12 +259,45 @@ Window {
                 isMask: true
             }
         }
+        // ---- the director's screens (docs/58): a number each, tap one to put it in focus ---------------
+        Row {
+            id: switcher
+            visible: root.others > 0
+            anchors { top: picture.bottom; topMargin: 6; horizontalCenter: parent.horizontalCenter }
+            spacing: 6
+            Repeater {
+                model: root.directing ? director.screens : []
+                delegate: Rectangle {
+                    required property QtObject modelData
+                    readonly property bool focused: modelData === director.focusScreen
+                    width: 40; height: 26; radius: 13
+                    color: focused ? "#1b6fa8" : Qt.rgba(0.11, 0.12, 0.15, 0.86)
+                    border.color: Qt.rgba(1, 1, 1, focused ? 0 : 0.2)
+                    border.width: 1
+                    Behavior on color { ColorAnimation { duration: 180 } }
+                    Text {
+                        anchors.centerIn: parent
+                        text: modelData.workspace
+                        color: "white"
+                        font.pixelSize: 13
+                        font.bold: parent.focused
+                    }
+                    Rectangle {  // the agent at work there
+                        visible: modelData.activityState === "working"
+                        anchors { right: parent.right; top: parent.top; margins: 4 }
+                        width: 6; height: 6; radius: 3
+                        color: "#63d471"
+                    }
+                    TapHandler { margin: 4; onTapped: director.setFocus(modelData.workspace) }
+                }
+            }
+        }
         Rectangle {
             id: caption
             property string label: ""
             property color dot: "#63d471"
             property bool shown: false
-            anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: 8 }
+            anchors { horizontalCenter: parent.horizontalCenter; bottom: picture.bottom; bottomMargin: 8 }
             width: Math.min(parent.width - 16, captionRow.implicitWidth + 20)
             height: captionText.implicitHeight + 10
             radius: Math.min(14, height / 2)
@@ -247,10 +310,10 @@ Window {
             state: root.captionState === "" ? "hidden" : root.captionState
             states: [
                 State { name: "hidden"; PropertyChanges { caption.shown: false } },
-                State { name: "working"; PropertyChanges { caption.shown: true; caption.dot: "#63d471"; caption.label: agent.activityText || i18nc("@info:status the agent is at work on this screen", "Working") } },
-                State { name: "done"; PropertyChanges { caption.shown: true; caption.dot: "#8ab4f8"; caption.label: agent.activityText ? i18nc("@info:status %1 is what the agent did", "Done · %1", agent.activityText) : i18nc("@info:status", "Done") } },
-                State { name: "question"; PropertyChanges { caption.shown: true; caption.dot: "#e0a83c"; caption.label: agent.activityText ? i18nc("@info:status %1 is the agent's question", "Needs your answer · %1", agent.activityText) : i18nc("@info:status", "Needs your answer") } },
-                State { name: "failed"; PropertyChanges { caption.shown: true; caption.dot: "#e0606d"; caption.label: agent.activityText ? i18nc("@info:status %1 is what the agent tried", "Didn't work · %1", agent.activityText) : i18nc("@info:status", "Didn't work") } },
+                State { name: "working"; PropertyChanges { caption.shown: true; caption.dot: "#63d471"; caption.label: root.screen.activityText || i18nc("@info:status the agent is at work on this screen", "Working") } },
+                State { name: "done"; PropertyChanges { caption.shown: true; caption.dot: "#8ab4f8"; caption.label: root.screen.activityText ? i18nc("@info:status %1 is what the agent did", "Done · %1", root.screen.activityText) : i18nc("@info:status", "Done") } },
+                State { name: "question"; PropertyChanges { caption.shown: true; caption.dot: "#e0a83c"; caption.label: root.screen.activityText ? i18nc("@info:status %1 is the agent's question", "Needs your answer · %1", root.screen.activityText) : i18nc("@info:status", "Needs your answer") } },
+                State { name: "failed"; PropertyChanges { caption.shown: true; caption.dot: "#e0606d"; caption.label: root.screen.activityText ? i18nc("@info:status %1 is what the agent tried", "Didn't work · %1", root.screen.activityText) : i18nc("@info:status", "Didn't work") } },
                 State { name: "stopped"; PropertyChanges { caption.shown: true; caption.dot: "#a1a9b1"; caption.label: i18nc("@info:status", "Stopped") } }
             ]
             Row {
@@ -296,14 +359,15 @@ Window {
             Text {
                 id: nameText
                 anchors.centerIn: parent
-                text: agent.workspace > 0 ? i18nc("@label name of the agent's screen", "Assistant Screen") : i18nc("@label name of the user's second screen", "Desktop")
+                text: root.directing ? i18nc("@label name of an assistant's screen, %1 its number", "Assistant Screen %1", root.screen.workspace)
+                    : root.screen.workspace > 0 ? i18nc("@label name of the agent's screen", "Assistant Screen") : i18nc("@label name of the user's second screen", "Desktop")
                 color: "white"
                 font.pixelSize: 12
             }
         }
         Rectangle {
             id: roundMask
-            anchors.fill: parent
+            anchors.fill: picture
             radius: 14
             visible: false
             layer.enabled: true
@@ -404,9 +468,9 @@ Window {
         x: Math.max(6, Math.min(root.width - width - 6, panel.x + (panel.width - width) / 2))
         y: root.barAbove ? panel.y - root.gap - height : panel.y + panel.height + root.gap
         actions: [{ icon: "view-fullscreen", act: () => root.setFullscreen() },
-                  { icon: "video-television", act: () => agent.castToTv() },
+                  { icon: "video-television", act: () => root.screen.castToTv() },
                   { icon: root.onLeftHalf ? "go-previous" : "go-next", act: () => root.tuck(root.onLeftHalf ? "left" : "right") },
-                  { icon: "window-close", act: () => agent.close() }]
+                  { icon: "window-close", act: () => root.screen.close() }]
         onUsed: root.showToolbar()
     }
 
@@ -437,7 +501,7 @@ Window {
             id: tabDot
             anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 8 }
             width: 6; height: 6; radius: 3
-            color: agent.status === "running" ? "#63d471" : "#e0a83c"
+            color: root.screen.status === "running" ? "#63d471" : "#e0a83c"
             SequentialAnimation on opacity {
                 running: root.captionState === "working" && tab.visible
                 loops: Animation.Infinite

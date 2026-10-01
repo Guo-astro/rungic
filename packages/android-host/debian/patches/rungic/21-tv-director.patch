@@ -10,15 +10,15 @@ X-Rungic-Status: Inappropriate; Android host integration
 X-Rungic-Tests: L1:android-cross-build (host); runtime: docs/58 director acceptance
 X-Rungic-Docs: docs/58; docs/research/91
 ---
- src/android/backend/smithay_backend.rs | 44 ++++++++++++++++++++++++++++++---
- src/android/backend/wayland/seat.rs    | 45 +++++++++++++++++++++++++++-------
- src/android/bridge_surface.rs          | 29 ++++++++++++++++++++++
+ src/android/backend/smithay_backend.rs | 53 +++++++++++++++++++++++++++++++---
+ src/android/backend/wayland/seat.rs    | 45 +++++++++++++++++++++++------
+ src/android/bridge_surface.rs          | 29 +++++++++++++++++++
  src/android/command_channel.rs         |  2 ++
- src/compositor.rs                      | 28 +++++++++++++++++----
- 5 files changed, 130 insertions(+), 18 deletions(-)
+ src/compositor.rs                      | 28 ++++++++++++++----
+ 5 files changed, 139 insertions(+), 18 deletions(-)
 
 diff --git a/src/android/backend/smithay_backend.rs b/src/android/backend/smithay_backend.rs
-index 1f37814..425f52a 100644
+index 1f37814..2b1c734 100644
 --- a/src/android/backend/smithay_backend.rs
 +++ b/src/android/backend/smithay_backend.rs
 @@ -686,7 +686,7 @@ fn try_zero_copy(state: &mut AndroidSmithayState, items: &mut [RenderItem]) -> b
@@ -78,7 +78,7 @@ index 1f37814..425f52a 100644
      use std::sync::atomic::Ordering::Relaxed;
      let Some(cast) = state.cast.as_mut() else { CAST_SKIPPED[0].fetch_add(1, Relaxed); return false };
      let RenderItem::DmaBuf { ref fd, fourcc, width, height, ref mut hold, ref acquire, ref mut release, .. } = item else {
-@@ -770,7 +793,20 @@ pub fn present_cast(state: &mut AndroidSmithayState, mut item: RenderItem) -> bo
+@@ -770,7 +793,29 @@ pub fn present_cast(state: &mut AndroidSmithayState, mut item: RenderItem) -> bo
      };
      let Some(hold) = hold.take() else { CAST_SKIPPED[3].fetch_add(1, Relaxed); return false };
      let acquire_fd = acquire.as_ref().and_then(|fence| fence.try_clone().ok());
@@ -92,9 +92,18 @@ index 1f37814..425f52a 100644
 +                cast.tiles.insert(slot, layer);
 +            }
 +            let (sw, sh) = (cast.size.0 as f32, cast.size.1 as f32);
-+            let place = ((x * sw).round() as i32, (y * sh).round() as i32, (w * sw).round() as i32, (h * sh).round() as i32);
 +            let layer = cast.tiles.get_mut(&slot).expect("inserted");
-+            layer.present(ahb, hold, release.take(), acquire_fd, (width, height), cast.size, 0, Some(place));
++            if cast.rotation == 90 {
++                // The layout (fractions of the window turned landscape) turned a quarter clockwise
++                // onto the portrait window (the director fullscreen on the phone, docs/58): a point
++                // (u, v) of it lands at ((1 - v) * width, u * height).
++                let place = (((1.0 - y - h) * sw).round() as i32, (x * sh).round() as i32,
++                             (h * sw).round() as i32, (w * sh).round() as i32);
++                layer.present(ahb, hold, release.take(), acquire_fd, (width, height), cast.size, 90, Some(place));
++            } else {
++                let place = ((x * sw).round() as i32, (y * sh).round() as i32, (w * sw).round() as i32, (h * sh).round() as i32);
++                layer.present(ahb, hold, release.take(), acquire_fd, (width, height), cast.size, 0, Some(place));
++            }
 +        }
 +    }
      cast.frames += 1;

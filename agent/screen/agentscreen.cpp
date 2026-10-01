@@ -205,8 +205,14 @@ void AgentScreen::poll()
         return;
     }
     m_enabled = state.value(QStringLiteral("enabled")).toBool();
-    m_onTv = state.value(QStringLiteral("tv")).toBool();
-    m_fullscreen = state.value(QStringLiteral("fullscreen")).toBool();
+    // A workspace: on the TV when the TV shows it (alone or in the director, docs/58); the
+    // assistant's screen's "tv" is about the one workspace the screen was last turned on for.
+    m_onTv = m_workspace > 0 && state.contains(QStringLiteral("tvShown"))
+        ? state.value(QStringLiteral("tvShown")).toArray().contains(m_workspace)
+        : state.value(QStringLiteral("tv")).toBool();
+    m_fullscreen = state.value(QStringLiteral("fullscreen")).toBool()
+        // The director fullscreen shows every workspace: none records its own picture meanwhile.
+        || (m_workspace > 0 && state.value(QStringLiteral("directorFullscreen")).toBool());
     if (!m_enabled) {  // turned off elsewhere (quick setting, rungic-agent-screen off)
         QCoreApplication::quit();
         return;
@@ -444,4 +450,70 @@ void AgentScreen::close()
         bridge({{QStringLiteral("op"), op()}, {QStringLiteral("enabled"), false}});
     }
     QCoreApplication::quit();
+}
+
+Director::Director(QObject *parent)
+    : QObject(parent)
+{
+    connect(&m_poll, &QTimer::timeout, this, &Director::poll);
+    m_poll.start(700);
+    poll();
+}
+
+QList<QObject *> Director::screens() const
+{
+    QList<QObject *> out;
+    for (AgentScreen *screen : m_screens)
+        out.append(screen);
+    return out;
+}
+
+void Director::poll()
+{
+    const QJsonObject state = bridge({{QStringLiteral("op"), QStringLiteral("director")}});
+    if (state.contains(QStringLiteral("error")) || state.value(QStringLiteral("version")).toInt(-2) == m_version)
+        return;
+    apply(state);
+}
+
+void Director::apply(const QJsonObject &state)
+{
+    m_version = state.value(QStringLiteral("version")).toInt();
+    QList<int> members;
+    for (const QJsonValue &value : state.value(QStringLiteral("members")).toArray())
+        members.append(value.toInt());
+    for (int slot : m_screens.keys()) {
+        if (!members.contains(slot))
+            delete m_screens.take(slot);
+    }
+    for (int slot : members) {
+        if (!m_screens.contains(slot))
+            m_screens.insert(slot, new AgentScreen(slot, this));
+    }
+    m_focus = state.value(QStringLiteral("focus")).toInt();
+    if (!m_screens.contains(m_focus))
+        m_focus = m_screens.isEmpty() ? 0 : m_screens.firstKey();
+    m_level = state.value(QStringLiteral("level")).toInt();
+    m_fullscreen = state.value(QStringLiteral("fullscreen")).toBool();
+    Q_EMIT changed();
+    // No assistant's screen left: nothing to show.
+    if (m_screens.isEmpty())
+        QCoreApplication::quit();
+}
+
+void Director::setFocus(int workspace)
+{
+    apply(bridge({{QStringLiteral("op"), QStringLiteral("director")}, {QStringLiteral("focus"), workspace}}));
+}
+
+void Director::nextLevel()
+{
+    apply(bridge({{QStringLiteral("op"), QStringLiteral("director")}, {QStringLiteral("level"), (m_level + 1) % 3}}));
+}
+
+void Director::fullscreen()
+{
+    const QJsonObject state = bridge({{QStringLiteral("op"), QStringLiteral("director")}, {QStringLiteral("fullscreen"), true}});
+    if (!state.contains(QStringLiteral("error")))
+        apply(state);
 }

@@ -222,6 +222,7 @@ final class PlatformBridge implements Closeable {
         if(op.equals("agent-screen"))return ((MainActivity)activity).agentScreen(request);
         if(op.equals("desktop-mode"))return ((MainActivity)activity).desktopMode(request);
         if(op.equals("tv"))return ((MainActivity)activity).tv(request);
+        if(op.equals("director"))return ((MainActivity)activity).directorRequest(request);
         if(!activity.hasWindowFocus())return new JSONObject().put("error","请先返回 Plasma Mobile");
         if(op.equals("display-set"))return ((MainActivity)activity).setDisplayInfo(request);
         if(op.equals("cast-test"))return ((MainActivity)activity).castTest(request);

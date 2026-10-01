@@ -10,10 +10,13 @@ host app's root tool rungic-cast through the platform bridge.
   rungic-cast modes               current video mode and receiver/source compatible modes
   rungic-cast resolution MAC/1920x1080@30 change the active video mode and reconnect
   rungic-cast disconnect          stop casting (no automatic reconnect follows)
-  rungic-cast tv [next | N | director on|off | button N]
-                                  what the TV shows (the Rungic app, docs/58): the next screen, screen N
-                                  (0 the desktop, n assistant screen n), the director view, or the cast
-                                  button of screen N (no TV yet: the app's TV picker)
+  rungic-cast tv [director | desktop | button N]
+                                  what the TV shows (the Rungic app, docs/58): the director (the assistant's
+                                  screens) or the desktop in computer mode; or the cast button of screen N
+                                  (0 computer mode): no TV yet the app's TV picker, else its cast controls
+  rungic-cast director [N | next | prev | level 0|1|2]
+                                  the director: assistant screen N in focus, the next or previous one, the
+                                  focus standard, enlarged or solo
 
 Prints the tool's JSON; exits 1 with {"error": ...} on failure.
 """
@@ -48,30 +51,44 @@ def request(args: list[str]) -> dict:
 
 def tv(args: list[str]) -> dict:
     if not args:
-        req = {}
-    elif args == ['next']:
-        req = {'next': True}
-    elif args[0] == 'director' and len(args) == 2 and args[1] in ('on', 'off'):
-        req = {'director': args[1] == 'on'}
+        req = {'op': 'tv'}
+    elif args in (['director'], ['desktop']):
+        req = {'op': 'tv', 'content': args[0]}
     elif args[0] == 'button' and len(args) == 2 and args[1].isdigit():
-        req = {'button': True, 'source': int(args[1])}
-    elif len(args) == 1 and args[0].isdigit():
-        req = {'source': int(args[0])}
+        req = {'op': 'tv', 'button': True, 'source': int(args[1])}
     else:
         raise ValueError('usage')
+    return bridge(req)
+
+
+def director(args: list[str]) -> dict:
+    if not args:
+        req = {}
+    elif args in (['next'], ['prev']):
+        req = {'step': 1 if args[0] == 'next' else -1}
+    elif args[0] == 'level' and len(args) == 2 and args[1] in ('0', '1', '2'):
+        req = {'level': int(args[1])}
+    elif len(args) == 1 and args[0].isdigit():
+        req = {'focus': int(args[0])}
+    else:
+        raise ValueError('usage')
+    return bridge({'op': 'director', **req})
+
+
+def bridge(req: dict) -> dict:
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
         conn.settimeout(10)
         conn.connect(SOCKET)
-        conn.sendall(json.dumps({'op': 'tv', **req}).encode() + b'\n')
+        conn.sendall(json.dumps(req).encode() + b'\n')
         with conn.makefile('rb') as stream:
             return json.loads(stream.readline(1 << 20))
 
 
 def main() -> int:
     args = sys.argv[1:] or ['status']
-    if args[0] == 'tv':
+    if args[0] in ('tv', 'director'):
         try:
-            result = tv(args[1:])
+            result = (tv if args[0] == 'tv' else director)(args[1:])
         except ValueError:
             print(__doc__.strip(), file=sys.stderr)
             return 2

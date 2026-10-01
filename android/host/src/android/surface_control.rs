@@ -30,6 +30,7 @@ extern "C" {
     fn ASurfaceTransaction_delete(txn: *mut c_void);
     fn ASurfaceTransaction_apply(txn: *mut c_void);
     fn ASurfaceTransaction_setVisibility(txn: *mut c_void, control: *mut c_void, visibility: i8);
+    fn ASurfaceTransaction_reparent(txn: *mut c_void, control: *mut c_void, new_parent: *mut c_void);
     fn ASurfaceTransaction_setZOrder(txn: *mut c_void, control: *mut c_void, z: i32);
     fn ASurfaceTransaction_setBufferTransparency(txn: *mut c_void, control: *mut c_void, transparency: i8);
     fn ASurfaceTransaction_setScale(txn: *mut c_void, control: *mut c_void, x: f32, y: f32);
@@ -442,8 +443,11 @@ impl Presenter {
                 ASurfaceTransaction_setOnComplete(txn, complete, on_complete);
             }
             if let Some((x, y, w, h)) = destination.filter(|_| buffer_size.0 > 0 && buffer_size.1 > 0) {
+                // `destination` is the turned picture's place when `rotation` is 90.
+                const ANATIVEWINDOW_TRANSFORM_ROTATE_90: i32 = 4;
                 let destination = ARect { left: x, top: y, right: x + w, bottom: y + h };
-                ASurfaceTransaction_setGeometry(txn, self.control, &full, &destination, 0);
+                let transform = if rotation == 90 { ANATIVEWINDOW_TRANSFORM_ROTATE_90 } else { 0 };
+                ASurfaceTransaction_setGeometry(txn, self.control, &full, &destination, transform);
             } else if rotation == 90 && buffer_size.0 > 0 && buffer_size.1 > 0 {
                 let (content_w, content_h) = (buffer_size.1 as f32, buffer_size.0 as f32);
                 let scale = (surface_size.0 as f32 / content_w).min(surface_size.1 as f32 / content_h);
@@ -502,9 +506,17 @@ impl Drop for Presenter {
                 callback.discarded();
             }
         }
-        // Releasing the control removes the layer; SurfaceFlinger then releases its
-        // buffers. Held Wayland buffers are released with it: the window is gone.
-        unsafe { ASurfaceControl_release(self.control) };
+        // Releasing our reference alone leaves the layer on screen with its last frame (a
+        // director tile dropped from the layout stayed, docs/58): hide it and take it off its
+        // parent first. SurfaceFlinger then releases its buffers; held Wayland buffers go with it.
+        unsafe {
+            let txn = ASurfaceTransaction_create();
+            ASurfaceTransaction_setVisibility(txn, self.control, 0);
+            ASurfaceTransaction_reparent(txn, self.control, std::ptr::null_mut());
+            ASurfaceTransaction_apply(txn);
+            ASurfaceTransaction_delete(txn);
+            ASurfaceControl_release(self.control);
+        }
         // AVAILABLE is left alone: a replacement presenter may already exist.
         IN_FLIGHT.store(0, Ordering::Relaxed);
     }

@@ -91,3 +91,8 @@ msgstr "助理屏还开着"
 msgctxt "@info notification, {apps} lists apps"
 msgid "{apps} did not close, maybe with unsaved work, so its workspace is still open."
 msgstr "{apps} 没有关闭，可能有未保存的内容，所以它的工作区还开着。"
+
+#: qml/Main.qml
+msgctxt "@label name of an assistant's screen, %1 its number"
+msgid "Assistant Screen %1"
+msgstr "助理屏 %1"

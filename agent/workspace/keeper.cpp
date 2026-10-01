@@ -241,10 +241,20 @@ private:
         if (!state.value(QStringLiteral("enabled")).toBool()) {
             return false;
         }
+        // The director fullscreen (docs/58): every workspace shown, only its focus heard.
+        if (state.value(QStringLiteral("directorFullscreen")).toBool()) {
+            m_heard = state.value(QStringLiteral("directorFocus")).toInt(-1) == m_slot.toInt();
+            return true;
+        }
         // Fullscreen: the one workspace the host presents. Else its own floating window
         // (several workspaces' can be out at once, rungic-agent-screen).
         if (state.value(QStringLiteral("fullscreen")).toBool()) {
             return QString::number(state.value(QStringLiteral("workspace")).toInt(1)) == m_slot;
+        }
+        // The director's window shows every workspace running (docs/58); only its focus is heard.
+        if (QProcess::execute(QStringLiteral("pgrep"), {QStringLiteral("-f"), QStringLiteral("^/usr/libexec/rungic-agent-screen-window --director")}) == 0) {
+            m_heard = state.value(QStringLiteral("directorFocus")).toInt(-1) == m_slot.toInt();
+            return true;
         }
         return QProcess::execute(QStringLiteral("pgrep"), {QStringLiteral("-f"), QStringLiteral("^/usr/libexec/rungic-agent-screen-window --workspace %1$").arg(m_slot)}) == 0;
     }

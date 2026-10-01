@@ -64,9 +64,20 @@ def window_running(slot=None):
 
 
 def windows_shown():
-    """The workspaces whose floating windows are out."""
+    """The workspaces shown on the phone: their own floating windows, or the director's (docs/58),
+    which shows every workspace running."""
     out = subprocess.run(['pgrep', '-af', f'^{WINDOW} --workspace '], capture_output=True, text=True).stdout
-    return sorted({int(line.split()[-1]) for line in out.splitlines() if line.split()[-1].isdigit()})
+    slots = {int(line.split()[-1]) for line in out.splitlines() if line.split()[-1].isdigit()}
+    if director_running():
+        try:
+            slots |= set(bridge({'op': 'director'}).get('members', []))
+        except (OSError, ValueError):
+            pass
+    return sorted(slots)
+
+
+def director_running():
+    return subprocess.run(['pgrep', '-f', f'^{WINDOW} --director'], capture_output=True).returncode == 0
 
 
 def workspace():
@@ -153,7 +164,20 @@ def start_window(slot=None):
     name = f'rungic-{OP}' + (f'-{slot}' if slot else '')
     with open(os.path.join(runtime, f'{name}.lock'), 'w') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        if window_running(slot):
+        if window_running(slot) or (slot and not DESKTOP and director_running()):
+            return
+        others = [] if DESKTOP or not slot else [n for n in windows_shown() if n != slot]
+        if others:
+            # A second workspace out: one director window for them all (docs/58) instead of a window each.
+            for n in others:
+                subprocess.run(['pkill', '-f', f'^{WINDOW} --workspace {n}$'], capture_output=True)
+            subprocess.Popen(['systemd-run', '--user', '--scope', '--collect', '--quiet', '--slice=app.slice',
+                              '--unit', f'app-{APP}-director-{os.getpid()}{time.monotonic_ns()}', WINDOW, '--director'],
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             start_new_session=True, env=user_env())
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline and not director_running():
+                time.sleep(0.1)
             return
         if DESKTOP or not slot:
             command = ['kstart', '--application', APP]
@@ -371,10 +395,11 @@ def tv(show=True):
         raise SystemExit(json.dumps({'error': 'a TV shows desktop mode anyway; rungic-cast connects one'}))
     if show:
         on()
-    # This workspace's screen (several can be out, docs/research/91), shown alone or, in the TV's
-    # director view, focused (docs/58).
-    state = bridge({'op': 'tv', 'source': workspace() if show else 0})
-    if show and not state.get('connected'):
+    # The TV shows the director with this workspace in focus (docs/58), or computer mode.
+    if show:
+        bridge({'op': 'director', 'focus': workspace()})
+    state = bridge({'op': 'tv', 'content': 'director' if show else 'desktop'})
+    if show and not state.get('tv', {}).get('connected'):
         # No TV yet: the last one, as the quick setting and the floating window connect it
         # (seconds to a minute).
         result = bridge({'op': 'cast', 'args': ['connect']}, timeout=75)

@@ -31,6 +31,11 @@ import android.widget.LinearLayout;
  * pointer) or TouchpadGestures (the finger moves the pointer, 1:1 under it when slow; docs/66). A
  * swipe up starting in its bottom strip (the phone's left edge) shows the toolbar (leave, touchpad,
  * TV, close) for three seconds, while a tap there still clicks.
+ *
+ * The director fullscreen (docs/58): the assistant's screens together, laid out as on a TV (the
+ * host puts each in its tile, Director), its focus large. Touches in the focus work it as above;
+ * a tap on another screen puts that one in focus; the toolbar's zoom button makes the focus
+ * larger (standard, enlarged, solo). The names of the screens are drawn on this layer.
  */
 final class AgentFullscreen implements SurfaceHolder.Callback {
     interface Host {
@@ -39,6 +44,8 @@ final class AgentFullscreen implements SurfaceHolder.Callback {
         void leaveFullscreen();
         void castToTv();
         void closeAgentScreen();
+        /** The director, shown fullscreen when `show(true)`. */
+        Director director();
     }
 
     private final Activity activity;
@@ -53,6 +60,9 @@ final class AgentFullscreen implements SurfaceHolder.Callback {
     private Landscape landscape;
     private boolean bound;
     private boolean touchpad;
+    /** Fullscreen shows the director (all the assistant's screens), not one. */
+    private boolean directing;
+    private final Runnable layoutChanged = () -> { if (landscape != null) landscape.directorChanged(); };
 
     AgentFullscreen(Activity activity, FrameLayout parent, int agentWidth, int agentHeight, Host host) {
         this.activity = activity;
@@ -64,9 +74,14 @@ final class AgentFullscreen implements SurfaceHolder.Callback {
     }
 
     boolean shown() { return root != null; }
+    boolean directing() { return root != null && directing; }
 
-    void show() {
+    void show() { show(false); }
+
+    void show(boolean director) {
         if (root != null) return;
+        directing = director;
+        if (directing) host.director().addListener(layoutChanged);
         root = new FrameLayout(activity);
         root.setBackgroundColor(Color.BLACK);
         surface = new SurfaceView(activity);
@@ -91,6 +106,7 @@ final class AgentFullscreen implements SurfaceHolder.Callback {
 
     void hide() {
         if (root == null) return;
+        if (directing) host.director().removeListener(layoutChanged);
         main.removeCallbacksAndMessages(null);
         activity.getWindowManager().removeView(panel);
         parent.removeView(root);  // surfaceDestroyed releases the presenter
@@ -149,6 +165,10 @@ final class AgentFullscreen implements SurfaceHolder.Callback {
             capsule.setCornerRadius(dp(23));
             toolbar.setBackground(capsule);
             toolbar.addView(button(Icon.LEAVE, host::leaveFullscreen));
+            if (directing) toolbar.addView(button(Icon.ZOOM, () -> {
+                Director d = host.director();
+                d.setLevel((d.level() + 1) % 3);
+            }));
             modeButton = new IconView(context, Icon.TOUCHPAD);
             modeButton.setOnClickListener(v -> { showToolbar(); setTouchpad(!touchpad); });
             modeButton.setLayoutParams(new LinearLayout.LayoutParams((int) dp(42), (int) dp(34)));
@@ -160,6 +180,52 @@ final class AgentFullscreen implements SurfaceHolder.Callback {
             FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(-2, (int) dp(46), Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
             lp.bottomMargin = (int) dp(20);
             addView(toolbar, lp);
+            setWillNotDraw(false);
+            label.setColor(Color.WHITE);
+            label.setTextSize(dp(12));
+            chip.setColor(Color.argb(214, 21, 24, 26));
+            outline.setStyle(Paint.Style.STROKE);
+            outline.setStrokeWidth(dp(2));
+            outline.setColor(0xFF3DAEE9);
+        }
+
+        private final Paint label = new Paint(Paint.ANTI_ALIAS_FLAG), chip = new Paint(Paint.ANTI_ALIAS_FLAG),
+            outline = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private boolean touching, regesture;
+        /** A tap on another screen of the director: which, or -1. */
+        private int tapSlot = -1;
+
+        /** The director's tile in this layer's pixels (its fractions are of the whole turned window). */
+        private RectF tileRect(float[] t) {
+            float w = getWidth(), h = getHeight();
+            return new RectF(t[0] * w, t[1] * h, (t[0] + t[2]) * w, (t[1] + t[3]) * h);
+        }
+
+        /** The director moved its tiles: names redrawn, the focus's touches mapped anew. */
+        void directorChanged() {
+            invalidate();
+            if (touching) regesture = true;
+            else gestures(getWidth(), getHeight());
+        }
+
+        @Override protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+            if (!directing) return;
+            Director d = host.director();
+            float[][] tiles = d.tiles();
+            int[] slots = d.tileSlots();
+            if (tiles.length < 2) return;
+            for (int i = 0; i < tiles.length; i++) {
+                RectF r = tileRect(tiles[i]);
+                if (i == 0) canvas.drawRoundRect(r.left - dp(2), r.top - dp(2), r.right + dp(2), r.bottom + dp(2), dp(4), dp(4), outline);
+                if (i > 0 && d.level() == Director.ENLARGED) continue;   // the strip is too thin for names
+                String name = d.label(slots[i]);
+                float pad = dp(6), tw = label.measureText(name);
+                Paint.FontMetrics m = label.getFontMetrics();
+                RectF box = new RectF(r.left + dp(6), r.bottom - dp(6) - (m.descent - m.ascent) - pad, r.left + dp(6) + tw + 2 * pad, r.bottom - dp(6));
+                canvas.drawRoundRect(box, dp(8), dp(8), chip);
+                canvas.drawText(name, box.left + pad, box.bottom - pad / 2 - m.descent, label);
+            }
         }
 
         private int fitWidth, fitHeight;
@@ -178,14 +244,26 @@ final class AgentFullscreen implements SurfaceHolder.Callback {
             gestures(height, width);
         }
 
-        /** The gestures for a `width` x `height` landscape view: the picture is fitted and centred. */
+        /**
+         * The gestures for a `width` x `height` landscape view: the picture is fitted and centred;
+         * in the director, the focus's tile is the picture.
+         */
         private void gestures(int width, int height) {
+            if (width <= 0 || height <= 0) return;
             float scale = Math.min(width / (float) agentWidth, height / (float) agentHeight);
             float left = (width - agentWidth * scale) / 2, top = (height - agentHeight * scale) / 2;
+            float[][] tiles = directing ? host.director().tiles() : new float[0][];
+            if (tiles.length > 0 && getWidth() > 0) {
+                RectF focus = tileRect(tiles[0]);
+                scale = focus.width() / agentWidth;
+                left = focus.left;
+                top = focus.top;
+            }
+            final float mapScale = scale, mapLeft = left, mapTop = top;
             float phonePxPerMm = activity.getResources().getDisplayMetrics().xdpi / 25.4f;
             DirectGestures.Mapper mapper = (x, y, mapped) -> {
-                mapped[0] = Math.max(0, Math.min(agentWidth - 1, (x - left) / scale));
-                mapped[1] = Math.max(0, Math.min(agentHeight - 1, (y - top) / scale));
+                mapped[0] = Math.max(0, Math.min(agentWidth - 1, (x - mapLeft) / mapScale));
+                mapped[1] = Math.max(0, Math.min(agentHeight - 1, (y - mapTop) / mapScale));
             };
             if (direct != null) direct.reset();
             if (pad != null) pad.reset();
@@ -228,6 +306,26 @@ final class AgentFullscreen implements SurfaceHolder.Callback {
         @Override public boolean onTouchEvent(MotionEvent e) {
             if (direct == null) return true;  // not laid out yet
             int action = e.getActionMasked();
+            touching = action != MotionEvent.ACTION_UP && action != MotionEvent.ACTION_CANCEL;
+            if (!touching && regesture) {
+                regesture = false;
+                main.post(() -> gestures(getWidth(), getHeight()));
+            }
+            // The director: a tap on another screen puts it in focus.
+            if (directing && action == MotionEvent.ACTION_DOWN) {
+                tapSlot = -1;
+                float[][] tiles = host.director().tiles();
+                int[] slots = host.director().tileSlots();
+                for (int i = 1; i < tiles.length; i++)
+                    if (tileRect(tiles[i]).contains(e.getX(), e.getY())) tapSlot = slots[i];
+                if (tapSlot >= 0) { downX = e.getX(); downY = e.getY(); return true; }
+            }
+            if (tapSlot >= 0) {
+                if (action == MotionEvent.ACTION_UP && Math.hypot(e.getX() - downX, e.getY() - downY) < swipeDistance)
+                    host.director().setFocus(tapSlot);
+                if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) tapSlot = -1;
+                return true;
+            }
             if (action == MotionEvent.ACTION_DOWN) {
                 downX = e.getX();
                 downY = e.getY();
@@ -251,7 +349,7 @@ final class AgentFullscreen implements SurfaceHolder.Callback {
         }
     }
 
-    private enum Icon { LEAVE, TOUCHPAD, TV, CLOSE }
+    private enum Icon { LEAVE, ZOOM, TOUCHPAD, TV, CLOSE }
 
     /** A white line icon on a round press highlight. */
     private final class IconView extends View {
@@ -296,6 +394,10 @@ final class AgentFullscreen implements SurfaceHolder.Callback {
                     c.drawRoundRect(new RectF(cx - s, cy - s * 0.75f, cx + s, cy + s * 0.75f), dp(2.5f), dp(2.5f), paint);
                     c.drawLine(cx - s, cy + s * 0.3f, cx + s, cy + s * 0.3f, paint);
                     c.drawLine(cx, cy + s * 0.3f, cx, cy + s * 0.75f, paint);
+                    break;
+                case ZOOM:  // a magnifier
+                    c.drawCircle(cx - s * 0.2f, cy - s * 0.2f, s * 0.6f, paint);
+                    c.drawLine(cx + s * 0.25f, cy + s * 0.25f, cx + s * 0.8f, cy + s * 0.8f, paint);
                     break;
                 case TV:
                     c.drawRoundRect(new RectF(cx - s, cy - s * 0.7f, cx + s, cy + s * 0.5f), dp(2), dp(2), paint);

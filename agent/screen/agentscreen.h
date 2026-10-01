@@ -11,6 +11,8 @@
 #pragma once
 
 #include <QFileSystemWatcher>
+#include <QJsonObject>
+#include <QMap>
 #include <QProcess>
 #include <QObject>
 #include <QPointer>
@@ -105,4 +107,51 @@ private:
     int m_workspace = 0;
     QProcess *m_workspaceStream = nullptr;
     int m_streamedWorkspace = 0;
+};
+
+// The director (导播台, docs/58): the assistant's screens together in one floating window, one of
+// them in focus, large, the others as thumbnails below it. Its state (members: the workspaces
+// running now, the focus, how large the focus is) is the Android app's, shared with the TV
+// (platform bridge op "director"); this follows it and keeps one AgentScreen per member, each
+// with its own picture.
+class Director : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(QList<QObject *> screens READ screens NOTIFY changed)
+    Q_PROPERTY(QObject *focusScreen READ focusScreen NOTIFY changed)
+    Q_PROPERTY(int focus READ focus NOTIFY changed)
+    // 0 standard, 1 enlarged (thumbnails a thin strip), 2 solo (the focus only).
+    Q_PROPERTY(int level READ level NOTIFY changed)
+    // The director is fullscreen on the phone (the Android app shows it; this window hides).
+    Q_PROPERTY(bool fullscreenShown READ fullscreenShown NOTIFY changed)
+
+public:
+    explicit Director(QObject *parent = nullptr);
+
+    QList<QObject *> screens() const;
+    QObject *focusScreen() const { return m_screens.value(m_focus); }
+    int focus() const { return m_focus; }
+    int level() const { return m_level; }
+    bool empty() const { return m_screens.isEmpty(); }
+    bool fullscreenShown() const { return m_fullscreen; }
+    // The director fullscreen on the phone (docs/58).
+    Q_INVOKABLE void fullscreen();
+
+    Q_INVOKABLE void setFocus(int workspace);
+    // Standard, enlarged, solo, standard ...
+    Q_INVOKABLE void nextLevel();
+
+Q_SIGNALS:
+    void changed();
+
+private:
+    void poll();
+    void apply(const QJsonObject &state);
+
+    QMap<int, AgentScreen *> m_screens;
+    int m_focus = 0;
+    int m_level = 0;
+    bool m_fullscreen = false;
+    int m_version = -1;
+    QTimer m_poll;
 };

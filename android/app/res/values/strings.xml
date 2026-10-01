@@ -150,11 +150,15 @@
     <string name="tv_desktop">My desktop</string>
     <string name="tv_workspace">Assistant screen %1$d</string>
     <string name="cast_tv_shows">On the TV</string>
-    <string name="cast_director">Director view</string>
-    <string name="cast_director_note">Every screen on the TV: the one you choose large, the others below. The cast button moves the focus.</string>
     <string name="cast_pick_title">Cast to a TV</string>
     <string name="cast_pick_subtitle">Choose the TV to show this screen on</string>
     <string name="cast_searching">Searching for TVs…</string>
     <string name="cast_none_found">No TV found. Make sure the TV is on and its screen mirroring (Miracast) is waiting.</string>
     <string name="cast_found">Nearby</string>
+    <string name="cast_tv_director">Director</string>
+    <string name="cast_tv_desktop">Computer mode</string>
+    <string name="cast_director_none">The director appears when an assistant screen is open.</string>
+    <string name="director_standard">Standard</string>
+    <string name="director_enlarged">Enlarged</string>
+    <string name="director_solo">Solo</string>
 </resources>

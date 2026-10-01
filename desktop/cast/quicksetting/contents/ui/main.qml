@@ -43,9 +43,10 @@ QS.QuickSetting {
     }
 
     function toggle() {
-        // Casting: the next screen on the TV (docs/58); the picker is for starting a cast.
+        // Casting: the Rungic app's cast controls (what the TV shows, docs/58); the picker starts a cast.
         if (casting) {
-            run("tv next", null);
+            MobileShellState.ShellDBusClient.closeActionDrawer();
+            run("tv button 0", null);
             return;
         }
         MobileShellState.ShellDBusClient.closeActionDrawer();
