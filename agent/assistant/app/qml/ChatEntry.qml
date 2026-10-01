@@ -107,13 +107,13 @@ Item {
                         radius: Theme.radiusInput
                         color: Theme.fill
                         clip: true
-                        Image {
+                        Picture {
                             anchors.fill: parent
                             visible: modelData.kind === "image"
                             source: modelData.kind === "image" ? "file://" + modelData.path : ""
                             sourceSize: Qt.size(240, 240)
                             fillMode: Image.PreserveAspectCrop
-                            asynchronous: true
+                            Accessible.role: Accessible.Graphic
                             Accessible.name: modelData.name
                         }
                         Row {

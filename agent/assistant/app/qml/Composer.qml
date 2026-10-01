@@ -358,13 +358,12 @@ Item {
                                         border.width: modelData.kind === "image" ? 0 : 1
                                         border.color: Theme.line
                                         clip: true
-                                        Image {
+                                        Picture {
                                             anchors.fill: parent
                                             visible: modelData.kind === "image"
                                             source: modelData.kind === "image" ? "file://" + modelData.path : ""
                                             sourceSize: Qt.size(128, 128)
                                             fillMode: Image.PreserveAspectCrop
-                                            asynchronous: true
                                         }
                                         RowLayout {
                                             anchors.fill: parent
@@ -520,12 +519,11 @@ Item {
                                     radius: 8
                                     color: Theme.fill2
                                     clip: true
-                                    Image {
+                                    Picture {
                                         anchors.fill: parent
                                         source: photo.fileUrl
                                         sourceSize: Qt.size(160, 160)
                                         fillMode: Image.PreserveAspectCrop
-                                        asynchronous: true
                                     }
                                     Rectangle {
                                         anchors.fill: parent

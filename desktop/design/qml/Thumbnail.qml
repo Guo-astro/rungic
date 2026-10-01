@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // A picture in the conversation (docs/88): shown whole at its own proportions, fitted into
-// maxWidth x maxHeight, with rounded corners; a tap is `clicked` (the app opens it large).
+// maxWidth x maxHeight, with rounded corners; a moving one (GIF, animated WebP) plays (Picture); a tap is `clicked` (the app opens it large).
 // States: loading (a quiet box of the usual size), ready, pressed, error (the file could not be
 // read: a short line with its name instead of an empty box).
 import QtQuick
@@ -54,14 +54,11 @@ T.AbstractButton {
                 maskEnabled: true
                 maskSource: corners
             }
-            Image {
+            Picture {
                 id: image
                 anchors.fill: parent
                 source: thumb.source
                 sourceSize: Qt.size(Math.round(thumb.maxWidth * 2), Math.round(thumb.maxHeight * 2))
-                fillMode: Image.PreserveAspectFit
-                asynchronous: true
-                smooth: true
             }
             Rectangle {
                 anchors.fill: parent

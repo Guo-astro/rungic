@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// A picture over the whole window (docs/88): black ground, the picture fitted; a bar on top
+// A picture over the whole window (docs/88): black ground, the picture fitted (a moving one plays); a bar on top
 // closes it or opens the file in the system's viewer (`openExternally`). A tap on the picture
 // or Back closes it. show(source, name) opens it.
 // States: loading, ready, error.
@@ -42,14 +42,11 @@ T.Popup {
             State { name: "ready"; PropertyChanges { viewer.busy: false; viewer.problem: false } },
             State { name: "error"; PropertyChanges { viewer.busy: false; viewer.problem: true } }
         ]
-        Image {
+        Picture {
             id: picture
             anchors.fill: parent
             anchors.topMargin: bar.height
             source: viewer.opened || viewer.visible ? viewer.source : ""
-            fillMode: Image.PreserveAspectFit
-            asynchronous: true
-            smooth: true
             visible: !viewer.problem
             Accessible.role: Accessible.Graphic
             Accessible.name: viewer.name
