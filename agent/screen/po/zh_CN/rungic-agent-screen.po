@@ -201,3 +201,7 @@ msgstr "桌面还开着"
 msgctxt "@info notification, {apps} lists apps"
 msgid "{apps} did not close, maybe with unsaved work, so the desktop is still open."
 msgstr "{apps} 没有关闭，可能有未保存的内容，所以桌面还开着。"
+
+msgctxt "@title:window desktop mode on the TV"
+msgid "Desktop on the TV"
+msgstr "电视上的桌面"

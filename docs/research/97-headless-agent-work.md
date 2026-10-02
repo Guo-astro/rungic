@@ -788,3 +788,33 @@ APK 进程提供：`platform.sock`、`capture.sock`、`codec.sock`、`wayland-0`
 - **键盘**：点键盘按钮后，用 `adb input text` 打出的 “dolphin” 进入了开始菜单的搜索框。
   - **未解决**：安卓输入法没有真正弹出来（`dumpsys input_method` 显示 `mInputShown=false`）。adb 的输入是直接按键，绕过了输入法，所以真实打字时能否弹出键盘还要再查。
 - **收尾**：用户的触控板设置恢复为 true；测试打开的 Dolphin 已关闭；息屏时间改回 60 秒。
+
+### 19.5 键盘被压住：输入法面板在 overlay 层最上面（2026-10-03）
+
+- **现象**：全屏时点键盘按钮，KWin 的 `VirtualKeyboard` 报告 `active=true`、`visible=true`，plasma-keyboard 也在运行，但屏幕上看不到键盘。
+- **说明**：手机上随文本框弹出的是 Linux 这边的屏幕键盘（plasma-keyboard，带 Rime）；安卓键盘要从 Rungic 菜单的“Android 键盘”切换。所以 `dumpsys input_method` 的 `mInputShown=false` 本身不说明问题。
+- **原因**：输入法面板在 KWin 里属于 OverlayLayer（`Window::belongsToLayer` 中 `isInputMethod()`），和我们的全屏窗口同一层。全屏窗口是之后才被激活、提上来的，于是盖住了键盘。
+- **修法**：KWin 补丁 `input-panel-above-overlay.patch`。在 `Workspace::constrainedStackingOrder` 里，把 OverlayLayer 中的输入法窗口排到这一层的最后（`std::stable_partition`）。需要重启用户会话的 KWin 才生效。
+
+### 19.6 电视的电脑模式和声音（2026-10-03，已实现，待电视实测）
+
+**电视**（只改 Linux，与 §17 的方向一致）：
+- 电视投电脑模式时，宿主照旧在用户 KWin 里建出 CAST 输出，并零拷贝投到电视（`sync_user_cast`，来源 0）。
+- 桌面模式的浮窗进程在 CAST 上放一个 overlay 层的图层窗口（`Floater::placeOnCast`，作用域 `rungic-agent-screen-tv`），显示 0 号的画面，盖住 Plasma Mobile 放在那里的桌面外壳。
+- 投屏控制面板的触控板，经宿主落到 CAST 上，成为这个窗口收到的鼠标移动、按键和滚轮，再按比例转进 0 号（一格滚轮 120 = 15 个轴单位）。
+- 键盘模式经 HostTextInput 提交的文字，由窗口里一个获得焦点的输入框接收，再经 `typeText`、`key` 转进 0 号。
+- 电视上看到的光标是用户 KWin 自己的，位置和 0 号的指针一一对应；0 号的画面不带指针，所以不会出现两个光标。
+- 桌面模式在电视上时，0 号的画面流继续运行，浮窗隐藏（状态为 tv）。
+
+**声音**：
+- 0 号启动后回环一直开着（`rungic-workspace-sound 0 listen`）：桌面开着就该听得到，不靠看守进程判断。
+- `audio-follow`：投屏时，电视在电脑模式（`content == 'desktop'`）就把 0 号的回环送去电视，否则留在手机。测试见 `test_audio_follow.py`。
+
+### 19.7 Agent 工具（2026-10-03）
+
+- `router.desktop_in_use()`：0 号在运行，或电视在投电脑模式，就在“用户的桌面”上工作。
+- 目标 `desktop` 的子进程改为在 0 号的环境里运行（`workspace_env(env, 0)`）；桌面模式没开时，先执行 `rungic-desktop-mode on`。`desktop_where` 返回 `workspace: 0`，以及 `rungic-workspace-env 0 COMMAND`。
+- 0 号里需要显示画面时，执行 `rungic-desktop-mode ensure`，而不是打开助理屏。
+- 发语音消息时，要求活动窗口在 Agent 当前工作的那块输出上，不再要求它在 CAST 上（以前在工作区里会误报）。
+- 提示词（`agent.md`）和技能 `rungic-phone-desktop` 都按新的桌面模式更新。
+- `test_router.py` 按新模型改写。

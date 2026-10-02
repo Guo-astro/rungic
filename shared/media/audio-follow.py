@@ -12,6 +12,9 @@ user's session between the two while a TV is connected:
   a workspace's sound (rungic-workspace-sound's loopback):
       shown on the TV (the director)                       -> android
       shown on the phone (its window, fullscreen)          -> android_phone
+  the independent desktop's (workspace 0, docs/research/97 §19.6):
+      the TV in computer mode                              -> android
+      else                                                 -> android_phone
   a sound without a window (a command, a notification)     -> where the user's desktop is: the TV
                                                               in computer mode, else the phone
 
@@ -147,6 +150,8 @@ class Follow:
             slot = loopbacks[stream['module']]
             if not casting:
                 return TV
+            if slot == 0:   # desktop mode: on the TV in computer mode
+                return TV if self.tv.get('content') == 'desktop' else PHONE
             return TV if slot in (self.tv.get('shown') or []) else PHONE
         # An app's own choice, other than the two this moves between: leave it.
         if stream['sink'] not in (TV, PHONE) or (stream['sink'] == PHONE and stream['index'] not in self.moved):

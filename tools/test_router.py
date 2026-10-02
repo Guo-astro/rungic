@@ -48,29 +48,50 @@ WORKSPACE_ENV = {'WAYLAND_DISPLAY': 'wayland-ws-1', 'RUNGIC_WORKSPACE': '1', 'DI
                  'RUNGIC_USER_DBUS_SESSION_BUS_ADDRESS': 'unix:path=/run/user/1000/bus'}
 
 
-def routed(desktop_state, name='desktop_launch', setting=None):
+def in_workspace(env, slot, run=None):
+    """router.workspace_env without rungic-workspace-env: the workspace's display and bus."""
+    return {**env, 'WAYLAND_DISPLAY': f'wayland-ws-{slot}', 'RUNGIC_WORKSPACE': str(slot),
+            'DBUS_SESSION_BUS_ADDRESS': f'unix:path=/tmp/ws-{slot}-bus'}
+
+
+def routed(desktop_state, name='desktop_launch', setting=None, desktop_on=False):
+    """`desktop_on`: the user's desktop (workspace 0, desktop mode) runs; else `rungic-desktop-mode
+    on` (a stand-in) turns it on."""
     FakeChild.made.clear()
+    running = {'on': desktop_on}
+    started = []
+
+    def run(argv, **kwargs):
+        started.append(argv)
+        running['on'] = True
+        return mock.Mock(returncode=0, stdout='', stderr='')
     with mock.patch.object(router, 'Child', FakeChild), \
-            mock.patch.object(router, 'bridge', return_value=desktop_state):
+            mock.patch.object(router, 'bridge', return_value=desktop_state), \
+            mock.patch.object(router, 'desktop_running', lambda: running['on']), \
+            mock.patch.object(router, 'workspace_env', in_workspace), \
+            mock.patch.object(router.subprocess, 'run', run):
         r = router.Router(WORKSPACE_ENV)
         told = r.call('desktop_where', {'target': setting}) if setting else None
         result = r.call(name, {'app': 'Kalk'})
     # desktop_where already said where; the next call adds nothing then.
     note = json.loads((told or result)['content'][-1]['text'])
+    note['started'] = started
     return FakeChild.made[-1], note
 
 
 def test_desktop_mode_on_works_on_the_users_desktop():
-    child, note = routed({'enabled': True, 'tv': False})
+    """The user's desktop is workspace 0 (docs/research/97 §19): the child works in it."""
+    child, note = routed({'enabled': False, 'tv': False}, desktop_on=True)
     assert note['where'] == 'desktop' and 'desktop mode is on' in note['why']
-    assert child.env['WAYLAND_DISPLAY'] == 'wayland-0'
-    assert child.env['DBUS_SESSION_BUS_ADDRESS'] == 'unix:path=/run/user/1000/bus'
-    assert 'RUNGIC_WORKSPACE' not in child.env and 'DISPLAY' not in child.env
+    assert note['workspace'] == 0 and note['shell'] == 'rungic-workspace-env 0 COMMAND'
+    assert child.env['WAYLAND_DISPLAY'] == 'wayland-ws-0' and child.env['RUNGIC_WORKSPACE'] == '0'
+    assert note['started'] == []
 
 
 def test_a_tv_showing_the_desktop_works_there():
-    _, note = routed({'enabled': False, 'tv': True})
+    child, note = routed({'enabled': False, 'tv': True})
     assert note['where'] == 'desktop' and 'TV' in note['why']
+    assert note['started'] == [['rungic-desktop-mode', 'on']] and child.env['RUNGIC_WORKSPACE'] == '0'
 
 
 def test_otherwise_its_own_workspace():
@@ -80,11 +101,13 @@ def test_otherwise_its_own_workspace():
 
 
 def test_the_users_word_wins():
-    child, note = routed({'enabled': True, 'tv': False}, setting='workspace')
+    child, note = routed({'enabled': False, 'tv': False}, setting='workspace', desktop_on=True)
     assert note['where'] == 'workspace' and note['why'] == 'the user said so'
     assert child.env['WAYLAND_DISPLAY'] == 'wayland-ws-1'
+    # "On my desktop" with desktop mode off: turned on, and worked in.
     child, note = routed({'enabled': False, 'tv': False}, setting='desktop')
-    assert note['where'] == 'desktop' and child.env['WAYLAND_DISPLAY'] == 'wayland-0'
+    assert note['where'] == 'desktop' and child.env['WAYLAND_DISPLAY'] == 'wayland-ws-0'
+    assert note['started'] == [['rungic-desktop-mode', 'on']]
 
 
 def test_no_bridge_means_the_workspace():

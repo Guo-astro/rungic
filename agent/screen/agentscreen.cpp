@@ -150,14 +150,18 @@ void AgentScreen::poll()
 void AgentScreen::update()
 {
     // Its own KWin, recorded by a helper connected to it; nothing while a TV or the APK's
-    // fullscreen presents it.
-    if (m_onTv || m_fullscreen) {
+    // fullscreen presents an assistant's screen. Desktop mode on a TV is this window's own view on
+    // the TV's output (docs/research/97 §19.5): the picture goes on.
+    const bool shownHere = m_workspace == 0 && m_onTv;
+    if ((m_onTv || m_fullscreen) && !shownHere) {
         stopWorkspaceStream();
         setStatus(m_onTv ? QStringLiteral("tv") : QStringLiteral("fullscreen"));
         return;
     }
     if (!m_workspaceStream || m_streamedWorkspace != m_workspace)
         startWorkspaceStream();
+    if (m_nodeId)
+        setStatus(shownHere ? QStringLiteral("tv") : QStringLiteral("running"));
 }
 
 void AgentScreen::startWorkspaceStream()
@@ -180,7 +184,7 @@ void AgentScreen::startWorkspaceStream()
             if (line.startsWith("node ")) {
                 m_nodeId = line.mid(5).toUInt();
                 Q_EMIT nodeIdChanged();
-                setStatus(QStringLiteral("running"));
+                setStatus(m_onTv ? QStringLiteral("tv") : QStringLiteral("running"));
                 if (m_pointerShown)
                     send(QStringLiteral("pointer-stream on"));
             } else if (line.startsWith("pointer-node ")) {

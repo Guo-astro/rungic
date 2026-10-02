@@ -9,11 +9,14 @@
 #include <QVariantList>
 
 class QQuickWindow;
+class QWindow;
 
 class Floater : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(QRect area READ area NOTIFY areaChanged)
+    // A TV shows the user's KWin's cast output (CAST-n): computer mode on it (docs/research/97 §19.5).
+    Q_PROPERTY(bool castPresent READ castPresent NOTIFY areaChanged)
 
 public:
     explicit Floater(QObject *parent = nullptr);
@@ -27,6 +30,11 @@ public:
     // Fullscreen (docs/research/97 §17.2): this surface in the overlay layer, taking the keyboard,
     // above the shell's panels; back in the top layer, without the keyboard, after.
     Q_INVOKABLE void setFullscreen(bool fullscreen);
+    bool castPresent() const;
+    // Before it is first shown: `window` a layer surface over the whole cast output, in the overlay
+    // layer (above the desktop shell the phone's KWin puts there), taking the keyboard when clicked.
+    // False when there is no cast output.
+    Q_INVOKABLE bool placeOnCast(QWindow *window);
 
 Q_SIGNALS:
     void areaChanged();

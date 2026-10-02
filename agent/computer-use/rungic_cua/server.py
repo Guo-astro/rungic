@@ -84,7 +84,7 @@ SUBTASK_SCHEMA = {
 
 TOOLS = [
     {'name': 'desktop_windows',
-     'description': 'List the open desktop windows (phone screen WL-0, TV CAST-n) and which one is active.',
+     'description': 'List the open desktop windows (in a workspace, the user\'s desktop included: its one screen; in the phone\'s session: the phone WL-0, a TV CAST-n) and which one is active.',
      'inputSchema': {'type': 'object', 'properties': {}}, 'annotations': {'readOnlyHint': True}},
     {'name': 'desktop_activate',
      'description': 'Bring a window (id from desktop_windows) to the front and make it active.',
@@ -511,9 +511,13 @@ class Cua:
 
     def _show_workspace(self) -> None:
         try:
+            slot = int(os.environ['RUNGIC_WORKSPACE'])
+            if slot == 0:
+                # The user's desktop (desktop mode, docs/research/97 §19): its floating window back if gone.
+                subprocess.run(['rungic-desktop-mode', 'ensure'], capture_output=True, timeout=30)
+                return
             state = json.loads(subprocess.run(['rungic-agent-screen', 'status'], capture_output=True, text=True,
                                               timeout=15).stdout)
-            slot = int(os.environ['RUNGIC_WORKSPACE'])
             if not state.get('enabled') or (str(state.get('workspace')) != str(slot)
                                             and slot not in state.get('windows', [])):
                 # Its own floating window; others' stay (a team's workspaces, all shown at once).
@@ -606,7 +610,8 @@ class Cua:
         audio = speech.synthesize(text, voice=str(args.get('voice') or 'marin'))
         output = self.agent_output()
         active = self.backend.kwin.windows().get('active') or {}
-        if not active.get('pid') or not str(active.get('output', '')).startswith('CAST'):
+        # On the screen the agent works on (a workspace's output, the user's desktop's included).
+        if not active.get('pid') or str(active.get('output', '')) != output:
             raise RuntimeError("open the chat on the assistant's screen first (desktop_goal), then call this")
         binary = os.path.basename(os.readlink(f"/proc/{active['pid']}/exe"))
         computer = ComputerUse(self.backend, output, active['id'])   # the chat's window

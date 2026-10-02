@@ -158,6 +158,8 @@ if [ "$slot" = 0 ]; then
     # Plasma's desktop shell (taskbar, desktop, notifications, tray), again if it ends; the desktop
     # ends when it is turned off, never for being idle.
     rungic-desktop-dirs watch "$state" >"$state/dirs.log" 2>&1 &
+    # Heard whenever it runs, where the user is (audio-follow: the TV in computer mode, else the phone).
+    [ -z "${PULSE_SINK:-}" ] || rungic-workspace-sound 0 listen || true
     # Its clipboard in step with Android's, as the phone session's is (rungic-clipboard, one per
     # display): what is copied on the phone, in an Android app or on the desktop is pasted on the others.
     ( while kill -0 $kwin 2>/dev/null; do rungic-clipboard 2>>"$state/clipboard.log"; sleep 3; done ) &

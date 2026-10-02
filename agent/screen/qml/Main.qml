@@ -249,6 +249,63 @@ Window {
         Keys.onEscapePressed: root.leaveFullscreen()
         Keys.onBackPressed: root.leaveFullscreen()
     }
+    // ---- desktop mode on a TV (docs/research/97 §19.5) ----------------------------------------------
+    // Computer mode: the TV shows the phone KWin's cast output (CAST-n, the host presents it); a
+    // surface over all of it shows the independent desktop, and the phone as the TV's touchpad and
+    // keyboard (the cast controls) reaches it: the host's pointer and text land here and go on into
+    // the desktop. The pointer seen is the phone KWin's, where the desktop's is: its picture has none.
+    readonly property bool tvWanted: !!root.screen && root.screen.workspace === 0 && root.screen.status === "tv"
+                                     && floater.castPresent
+    property var tvWindow: null
+    onTvWantedChanged: {
+        if (tvWanted && !tvWindow) {
+            tvWindow = tvComponent.createObject(root)
+        } else if (!tvWanted && tvWindow) {
+            tvWindow.destroy()
+            tvWindow = null
+        }
+    }
+    Component {
+        id: tvComponent
+        Window {
+            id: tv
+            transientParent: null
+            title: i18nc("@title:window desktop mode on the TV", "Desktop on the TV")
+            color: "black"
+            visible: false
+            Component.onCompleted: if (floater.placeOnCast(tv)) tv.visible = true
+            PipeWire.PipeWireSourceItem {
+                anchors.fill: parent
+                nodeId: root.screen ? root.screen.nodeId : 0
+                visible: nodeId > 0
+            }
+            MouseArea {
+                anchors.fill: parent
+                hoverEnabled: true
+                acceptedButtons: Qt.AllButtons
+                function code(button) { return button === Qt.RightButton ? root.btnRight : button === Qt.MiddleButton ? root.btnMiddle : root.btnLeft }
+                onPositionChanged: (mouse) => root.screen.pointerMove(mouse.x / width, mouse.y / height)
+                onPressed: (mouse) => { root.screen.pointerMove(mouse.x / width, mouse.y / height); root.screen.pointerButton(code(mouse.button), true) }
+                onReleased: (mouse) => root.screen.pointerButton(code(mouse.button), false)
+                // A notch (120) is KWin's 15 axis units; up is negative there.
+                onWheel: (wheel) => root.screen.scroll(-wheel.angleDelta.x / 8, -wheel.angleDelta.y / 8)
+            }
+            TextInput {
+                width: 1; height: 1
+                opacity: 0
+                focus: true
+                onTextEdited: if (text.length > 0) { root.screen.typeText(text); text = "" }
+                Keys.onPressed: (event) => {
+                    const code = root.keyCodes[event.key]
+                    if (code === undefined || (event.key === Qt.Key_Backspace && text.length > 0))
+                        return
+                    root.screen.key(code, true)
+                    root.screen.key(code, false)
+                    event.accepted = true
+                }
+            }
+        }
+    }
     // ---- typing into the screen (fullscreen's keyboard button, docs/research/97 §19.4) -------------
     // A field of its own, invisible, takes the phone's keyboard (the Android one, through the phone
     // KWin's input method): what it commits goes to the screen's focused field as an input method

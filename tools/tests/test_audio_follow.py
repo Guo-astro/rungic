@@ -43,6 +43,14 @@ class TargetTest(unittest.TestCase):
         self.assertEqual(self.f.target(stream(1, module='40'), loops), 'android')
         self.assertEqual(self.f.target(stream(2, module='41'), loops), 'android_phone')
 
+    def test_the_independent_desktop_on_the_tv_in_computer_mode_else_on_the_phone(self):
+        # Workspace 0, desktop mode (docs/research/97 §19.6): its loopback, module 9.
+        self.assertEqual(self.f.target(stream(3, module='9'), {'9': 0}), 'android_phone')
+        self.f.tv = {'connected': True, 'content': 'desktop', 'shown': []}
+        self.assertEqual(self.f.target(stream(3, module='9'), {'9': 0}), 'android')
+        self.f.tv = {}
+        self.assertEqual(self.f.target(stream(3, module='9'), {'9': 0}), 'android')
+
     def test_no_window_follows_the_users_desktop(self):
         self.assertEqual(self.f.target(stream(1, pid=999), {}), 'android_phone')
         self.f.tv['content'] = 'desktop'

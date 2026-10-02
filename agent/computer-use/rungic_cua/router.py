@@ -1,8 +1,8 @@
 """Where the agent works (docs/research/91): the user's desktop or its own workspace.
 
-The screens beside the phone's own are two: desktop mode (the user's desktop gets a second output,
-shown in a floating window or on the TV: casting is desktop mode on the TV) and the assistant's
-screen (the agent's own workspace, a KWin of its own). The agent works:
+The screens beside the phone's own are two: desktop mode (the user's own desktop, a KWin of its own:
+workspace 0, docs/research/97 §19, shown in a floating window or on the TV in computer mode) and the
+assistant's screen (the agent's own workspace, a KWin of its own). The agent works:
 
 - on the user's desktop while desktop mode is on or a TV shows the desktop: the user is at that
   screen and wants the work there;
@@ -45,16 +45,17 @@ logger = logging.getLogger('rungic-cua.router')
 PLATFORM = '/mnt/android-wayland/platform.sock'
 WHERE_TOOL = {
     'name': 'desktop_where',
-    'description': ("Where your desktop tools work. 'desktop': the user's desktop screen (desktop mode's floating "
-                    "window or the TV; the user watches and may use it too). 'workspace': your own workspace (the "
-                    "assistant's screen), which the user's phone never shows by itself. 'auto' (the default): the "
-                    "user's desktop while desktop mode is on or the TV shows the desktop, else your workspace. Set it "
+    'description': ("Where your desktop tools work. 'desktop': the user's desktop (desktop mode: workspace 0, "
+                    "shown in its floating window or on the TV; the user watches and may use it too; turned on if "
+                    "it is off). 'workspace': your own workspace (the assistant's screen), which the user's phone "
+                    "never shows by itself. 'auto' (the default): the user's desktop while desktop mode is on or "
+                    "the TV shows the desktop, else your workspace. Set it "
                     "when the user says where to work (\"on my desktop\", \"on the assistant's screen\", \"在我的桌面上\", "
                     "\"在助理屏上\"); it holds for this "
                     "conversation. Without `target` it only says where you work now and why, and which "
-                    "workspace is yours: start programs from your shell with `rungic-workspace-env N COMMAND` "
-                    "so that their windows open there (your shell's environment is not the workspace's). A "
-                    "sub-agent gets a workspace of its own and works only there."),
+                    "workspace it is: start programs from your shell with `rungic-workspace-env N COMMAND` "
+                    "(N 0 for the user's desktop) so that their windows open there (your shell's environment is "
+                    "not the workspace's). A sub-agent gets a workspace of its own and works only there."),
     'inputSchema': {'type': 'object', 'properties': {
         'target': {'type': 'string', 'enum': ['auto', 'desktop', 'workspace']}}},
     'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False},
@@ -122,18 +123,22 @@ def bridge(request: dict, timeout: float = 3.0) -> dict:
     return json.loads(reply)
 
 
+def desktop_running() -> bool:
+    """Desktop mode is on while the user's independent desktop (workspace 0) runs."""
+    runtime = os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}'
+    return os.path.exists(os.path.join(runtime, 'wayland-ws-0'))
+
+
 def desktop_in_use() -> tuple[bool, str]:
     """Whether the user has their desktop screen out: desktop mode on, or a TV showing it."""
+    if desktop_running():
+        return True, 'desktop mode is on'
     try:
         state = bridge({'op': 'desktop-mode'})
     except (OSError, ValueError) as error:
-        return False, f'desktop mode unknown ({error})'
-    if 'error' in state:
-        return False, f"desktop mode unknown ({state['error']})"
+        return False, f'desktop mode is off (TV unknown: {error})'
     if state.get('tv'):
         return True, 'the TV shows the desktop'
-    if state.get('enabled'):
-        return True, 'desktop mode is on'
     return False, 'desktop mode is off and no TV shows the desktop'
 
 
@@ -277,6 +282,9 @@ class Router:
             data.update(workspace=slot, shell=f'rungic-workspace-env {slot} COMMAND')
             if self.subagent:
                 data['yours'] = 'this workspace is yours alone; close it (desktop_close_workspace) when your part is done'
+        else:
+            # The user's desktop is workspace 0 (desktop mode, docs/research/97 §19).
+            data.update(workspace=0, shell='rungic-workspace-env 0 COMMAND')
         return data
 
     def drop(self, target: str) -> None:
@@ -299,7 +307,13 @@ class Router:
                     raise RuntimeError(f'workspace {slot} did not start' + (f': {why}' if why else ''))
                 env = self.env if slot == self.home else workspace_env(self.env, slot)
             else:
-                env = user_session_env(self.env)
+                # The user's desktop: workspace 0, desktop mode turned on if it is off.
+                if not desktop_running():
+                    done = subprocess.run(['rungic-desktop-mode', 'on'], capture_output=True, text=True,
+                                          env=user_session_env(self.env), timeout=60)
+                    if not desktop_running():
+                        raise RuntimeError('desktop mode did not start: ' + (done.stderr or done.stdout).strip()[-300:])
+                env = workspace_env(self.env, 0)
             child = self.children[target] = Child(env)
             address = {'DBUS_SESSION_BUS_ADDRESS': env.get('DBUS_SESSION_BUS_ADDRESS', '')}
             self.buses[target] = (address, bus_identity(address))

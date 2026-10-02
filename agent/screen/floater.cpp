@@ -9,6 +9,16 @@
 namespace
 {
 // The phone's panel, never the assistant's screen (CAST-n) or another external one.
+QScreen *castScreen()
+{
+    const auto screens = QGuiApplication::screens();
+    for (QScreen *screen : screens) {
+        if (screen->name().startsWith(QLatin1String("CAST")))
+            return screen;
+    }
+    return nullptr;
+}
+
 QScreen *phoneScreen()
 {
     const auto screens = QGuiApplication::screens();
@@ -90,4 +100,28 @@ void Floater::setFullscreen(bool fullscreen)
     layer->setKeyboardInteractivity(fullscreen ? LayerShellQt::Window::KeyboardInteractivityOnDemand
                                                : LayerShellQt::Window::KeyboardInteractivityNone);
     m_window->requestUpdate();  // the changes go with the next commit
+}
+
+bool Floater::castPresent() const
+{
+    return castScreen() != nullptr;
+}
+
+bool Floater::placeOnCast(QWindow *window)
+{
+    QScreen *cast = castScreen();
+    if (!window || !cast)
+        return false;
+    auto layer = LayerShellQt::Window::get(window);
+    layer->setScope(QStringLiteral("rungic-agent-screen-tv"));
+    layer->setLayer(LayerShellQt::Window::LayerOverlay);
+    layer->setAnchors(LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
+                                                    | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight));
+    layer->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityOnDemand);
+    layer->setExclusiveZone(-1);
+    layer->setWantsToBeOnActiveScreen(false);
+    layer->setScreen(cast);
+    window->setScreen(cast);
+    window->resize(cast->size());
+    return true;
 }
