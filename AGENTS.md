@@ -1,5 +1,11 @@
 # 用户要求与工程约定
 
+## 项目理念 / Project philosophy（用户于 2026-10-02 明确要求）
+
+先理解[Agent OS：共同工作](docs/philosophy.md#中文)。Agent 是长期存在的工作主体，工作空间承载其环境、上下文、工具与任务。设计应让人自然地参与工作过程：看见进展、理解选择的理由、遇到的问题与尝试的路径，随时讨论、调整方向、接管某一步，再把工作交还给 Agent。让人把注意力放在理解、判断、学习和创造上，是功能与交互设计的共同方向。理念描述的是项目目标，功能是否已实现仍以对应验收记录为准。
+
+Read [Agent OS: Working together](docs/philosophy.md#english). Agents are lasting participants in work; their workspaces hold their environments, context, tools and tasks. Design for people to participate naturally: see progress, understand decisions, problems and attempted approaches, discuss the work, change direction, take over a step and hand it back. Help people focus on understanding, judgment, learning and creation. This philosophy guides features and interactions; acceptance records establish which capabilities are implemented.
+
 ## SSH 自动开启（用户于 2026-09-29 明确要求）
 
 用户明确要求 SSH 自动开启。升级和排障时保留启用状态，不得根据旧文档的“默认关闭”擅自关闭 SSH 或增加关闭策略。`ssh.socket` 的开机启用与监听即是自动接入入口，`ssh.service` 可按连接触发启动。

@@ -16,6 +16,12 @@ It also comes with an AI assistant that can see, speak and act. Tell it what you
 
 **Rungic is built for agents of your choice.** The bundled assistant is a working demonstration and default implementation, currently powered by Codex. You can use another agent: the desktop, phone interfaces and system services are available independently of that choice. Integrating a replacement into the bundled assistant's voice, task and widget experience requires an adapter; there is no universal one-click switch yet.
 
+## Working together / 共同工作
+
+**Once agents become lasting participants in our work, what should the relationship between people and computers look like?** We imagine persistent workspaces where agents explore, build and learn, and people can naturally join the process: understand decisions and discoveries, discuss the work, take over a step, change direction and hand it back. The aim is to free people's attention for understanding, judgment, learning and creation. Read our [Agent OS philosophy](docs/philosophy.md#english), the direction we are building toward.
+
+**当 Agent 成为一种长期存在的工作主体之后，人和电脑之间的关系应该变成什么样？** 我们希望工作空间能长期承载 Agent 的探索与执行，也让人自然地进入创造过程：理解它为什么这样做、遇到了什么问题、尝试了哪些路径，随时讨论、接管某一步、修改方向，再把工作交还给它。让人的注意力回到理解、判断、学习和创造，是我们构建系统的方向。完整理念见[Agent OS：共同工作](docs/philosophy.md#中文)。
+
 ## Just say it
 
 <table>
