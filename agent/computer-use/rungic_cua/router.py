@@ -22,13 +22,16 @@ input, screenshots, switching apps over), and nothing here touches a desktop.
 """
 from __future__ import annotations
 
+import errno
 import json
 import logging
 import os
 import socket
 import subprocess
 import threading
+import time
 from itertools import count
+from pathlib import Path
 
 from . import team, workspace
 
@@ -71,17 +74,51 @@ CLOSE_TOOL = {
 SESSION_NAMES = {'desktop': "the user's desktop", 'workspace': 'your workspace (the assistant\'s screen)'}
 
 
+# The Android host frozen (the phone asleep, docs/research/97): one request that waited its whole
+# timeout marks it; for a minute after, requests (of every process) fail at once instead of each
+# waiting again, and one tries again after that.
+UNREACHABLE_FOR_S = 60
+
+
+def _unreachable_path() -> Path:
+    return Path(os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}') / 'rungic-host-unreachable'
+
+
+def _recently_unreachable() -> bool:
+    try:
+        return time.time() - _unreachable_path().stat().st_mtime < UNREACHABLE_FOR_S
+    except OSError:
+        return False
+
+
+def _note_reachable(reachable: bool) -> None:
+    try:
+        if reachable:
+            _unreachable_path().unlink(missing_ok=True)
+        else:
+            _unreachable_path().touch()
+    except OSError:
+        pass
+
+
 def bridge(request: dict, timeout: float = 3.0) -> dict:
-    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
-        conn.settimeout(timeout)
-        conn.connect(PLATFORM)
-        conn.sendall(json.dumps(request).encode() + b'\n')
-        reply = b''
-        while not reply.endswith(b'\n'):
-            chunk = conn.recv(65536)
-            if not chunk:
-                break
-            reply += chunk
+    if _recently_unreachable():
+        raise OSError(errno.EAGAIN, 'the Android host is not responding')
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
+            conn.settimeout(timeout)
+            conn.connect(PLATFORM)
+            conn.sendall(json.dumps(request).encode() + b'\n')
+            reply = b''
+            while not reply.endswith(b'\n'):
+                chunk = conn.recv(65536)
+                if not chunk:
+                    break
+                reply += chunk
+    except OSError:
+        _note_reachable(False)
+        raise
+    _note_reachable(True)
     return json.loads(reply)
 
 

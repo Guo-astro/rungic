@@ -26,9 +26,30 @@ qt_add_executable(rungic-workspace-stream stream.cpp)
 target_link_libraries(rungic-workspace-stream PRIVATE rungic-workspace-protocols)
 qt_add_executable(rungic-workspace-desktop desktop.cpp)
 target_link_libraries(rungic-workspace-desktop PRIVATE Qt6::Gui LayerShellQt::Interface)
+# The picture on the Android host (present.cpp): KPipeWire for the frames, EGL/GLES for the copy into
+# leased buffers, a plain Wayland client for the host.
+find_package(KPipeWire REQUIRED)
+pkg_check_modules(EGL REQUIRED IMPORTED_TARGET egl glesv2 libdrm)
+find_program(WAYLAND_SCANNER wayland-scanner REQUIRED)
+set(PRESENT_PROTOCOLS
+    stable/xdg-shell/xdg-shell
+    unstable/linux-dmabuf/linux-dmabuf-unstable-v1
+    unstable/linux-explicit-synchronization/linux-explicit-synchronization-unstable-v1)
+set(PRESENT_PROTOCOL_SOURCES)
+foreach(protocol ${PRESENT_PROTOCOLS})
+    get_filename_component(name ${protocol} NAME)
+    add_custom_command(OUTPUT ${name}-client-protocol.h ${name}-protocol.c
+        COMMAND ${WAYLAND_SCANNER} client-header ${WAYLAND_PROTOCOLS}/${protocol}.xml ${name}-client-protocol.h
+        COMMAND ${WAYLAND_SCANNER} private-code ${WAYLAND_PROTOCOLS}/${protocol}.xml ${name}-protocol.c
+        DEPENDS ${WAYLAND_PROTOCOLS}/${protocol}.xml)
+    list(APPEND PRESENT_PROTOCOL_SOURCES ${CMAKE_CURRENT_BINARY_DIR}/${name}-client-protocol.h ${CMAKE_CURRENT_BINARY_DIR}/${name}-protocol.c)
+endforeach()
+qt_add_executable(rungic-workspace-present present.cpp ${PRESENT_PROTOCOL_SOURCES})
+target_include_directories(rungic-workspace-present PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+target_link_libraries(rungic-workspace-present PRIVATE Qt6::Gui K::KPipeWire PkgConfig::EGL PkgConfig::WAYLAND_CLIENT)
 qt_add_executable(rungic-workspace-keeper keeper.cpp)
 target_link_libraries(rungic-workspace-keeper PRIVATE rungic-workspace-protocols Qt6::DBus Qt6::Network PkgConfig::WAYLAND_CLIENT)
-install(TARGETS rungic-workspace-input rungic-workspace-stream rungic-workspace-desktop rungic-workspace-keeper DESTINATION libexec)
+install(TARGETS rungic-workspace-input rungic-workspace-stream rungic-workspace-desktop rungic-workspace-keeper rungic-workspace-present DESTINATION libexec)
 install(FILES com.rungic.WorkspaceInput.desktop com.rungic.WorkspaceStream.desktop DESTINATION share/applications)
 install(PROGRAMS rungic-workspace rungic-workspace-env rungic-workspace-sound rungic-user DESTINATION bin)
 install(FILES rungic-workspace@.service DESTINATION lib/systemd/user)

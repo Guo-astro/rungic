@@ -512,9 +512,11 @@ final class Director {
 
     private final Runnable poll = new Runnable() {
         @Override public void run() {
-            List<Integer> before = members;
+            List<Integer> before = members, liveBefore = live;
             refreshMembers();
-            if (!before.equals(members)) {
+            // A headless member's picture arriving (its presenter, docs/research/97 §13) changes what
+            // the host presents and the placeholder, with the members the same.
+            if (!before.equals(members) || !liveBefore.equals(live)) {
                 changedVersion();
                 if (bound || fullscreen) apply(true);
             }

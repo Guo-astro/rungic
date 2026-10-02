@@ -17,6 +17,7 @@
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDateTime>
+#include <algorithm>
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
@@ -144,12 +145,49 @@ public:
         socket.waitForReadyRead(500);
     }
 
+    // A headless workspace shown by the host (TV, fullscreen): its presenter runs; stopped when not.
+    void present()
+    {
+        if (qEnvironmentVariable("RUNGIC_WORKSPACE_BACKEND") != QLatin1String("virtual"))
+            return;
+        const bool running = m_presenter && m_presenter->state() != QProcess::NotRunning;
+        if (m_onHost && !running) {
+            // One that ended soon after it started waits longer each time (30 s, doubled up to
+            // 5 min): a presenter that keeps failing must not be started every few seconds.
+            const qint64 now = QDateTime::currentMSecsSinceEpoch();
+            if (m_presenter && m_presenterStarted && now - m_presenterStarted < 20000) {
+                m_presenterBackoff = std::clamp<qint64>(m_presenterBackoff * 2, 30000, 300000);
+                m_presenterRetry = m_presenterStarted + m_presenterBackoff;
+                m_presenterStarted = 0;
+                note(QStringLiteral("presenter ended early: again in %1 s").arg(m_presenterBackoff / 1000));
+            } else if (m_presenterStarted) {
+                m_presenterBackoff = 15000;
+                m_presenterStarted = 0;
+            }
+            if (now < m_presenterRetry)
+                return;
+            if (!m_presenter) {
+                m_presenter = new QProcess;
+                m_presenter->setProcessChannelMode(QProcess::ForwardedChannels);
+            }
+            m_presenter->start(QStringLiteral("/usr/libexec/rungic-workspace-present"), {m_slot});
+            m_presenterStarted = now;
+            note(QStringLiteral("presenter started"));
+        } else if (!m_onHost && running) {
+            m_presenter->closeWriteChannel();  // it ends with its stdin
+            if (!m_presenter->waitForFinished(2000))
+                m_presenter->kill();
+            note(QStringLiteral("presenter stopped"));
+        }
+    }
+
     void check()
     {
         announce();
         // Being closed (rungic_cua workspace.close): its apps must answer, nothing is frozen.
         const bool closing = QFile::exists(QStringLiteral("%1/rungic-workspace-%2.closing").arg(qEnvironmentVariable("XDG_RUNTIME_DIR"), m_slot));
         const bool isShown = shown();
+        present();
         // Heard while shown, but of the TV's director view only the focus.
         const bool isHeard = isShown && m_heard;
         if (!m_soundShown || *m_soundShown != isHeard) {
@@ -249,25 +287,32 @@ private:
         if (state.isEmpty()) {
             return true;
         }
+        // The host's own picture of it (the TV, the phone's fullscreen): a headless workspace needs
+        // its presenter for that (rungic-workspace-present, docs/research/97 §13).
+        m_onHost = false;
         // On the TV: alone, or a tile of its director view (docs/58), where only the focus is heard.
         const QJsonArray onTv = state.value(QStringLiteral("tvShown")).toArray();
         if (onTv.contains(m_slot.toInt())) {
             m_heard = state.value(QStringLiteral("tvHeard")).toInt(-1) == m_slot.toInt();
+            m_onHost = true;
             return true;
         }
         m_heard = true;
-        if (!state.value(QStringLiteral("enabled")).toBool()) {
-            return false;
-        }
-        // The director fullscreen (docs/58): every workspace shown, only its focus heard.
+        // The director fullscreen (docs/58): every workspace shown, only its focus heard. Whether the
+        // assistant's screen is turned on is the floating window's matter, not the director's.
         if (state.value(QStringLiteral("directorFullscreen")).toBool()) {
             m_heard = state.value(QStringLiteral("directorFocus")).toInt(-1) == m_slot.toInt();
+            m_onHost = true;
             return true;
+        }
+        if (!state.value(QStringLiteral("enabled")).toBool()) {
+            return false;
         }
         // Fullscreen: the one workspace the host presents. Else its own floating window
         // (several workspaces' can be out at once, rungic-agent-screen).
         if (state.value(QStringLiteral("fullscreen")).toBool()) {
-            return QString::number(state.value(QStringLiteral("workspace")).toInt(1)) == m_slot;
+            m_onHost = QString::number(state.value(QStringLiteral("workspace")).toInt(1)) == m_slot;
+            return m_onHost;
         }
         // The director's window shows every workspace running (docs/58); only its focus is heard.
         if (QProcess::execute(QStringLiteral("pgrep"), {QStringLiteral("-f"), QStringLiteral("^/usr/libexec/rungic-agent-screen-window --director")}) == 0) {
@@ -348,6 +393,9 @@ private:
     bool m_wasQuiet = false;
     std::optional<bool> m_soundShown;
     bool m_heard = true;    // shown() found it heard (false: a thumbnail of the TV's director view)
+    bool m_onHost = false;  // shown() found the host showing it (TV, fullscreen)
+    QProcess *m_presenter = nullptr;
+    qint64 m_presenterStarted = 0, m_presenterRetry = 0, m_presenterBackoff = 15000;
     qint64 m_quietSince = 0;
 };
 

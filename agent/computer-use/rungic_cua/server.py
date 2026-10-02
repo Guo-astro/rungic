@@ -42,6 +42,14 @@ from .backend import LinuxAtspiBackend
 from .luna import ComputerUse
 
 logger = logging.getLogger('rungic-cua')
+
+
+def host_unreachable() -> bool:
+    """The Android host did not answer lately (router.bridge marks it for every process)."""
+    from . import router
+    return router._recently_unreachable()
+
+
 KEY_FILES = (Path.home() / '.config/rungic-cua/typesafe-api-key',
              Path.home() / '.config/rungic-voice-agent/typesafe-api-key')
 MAX_ELEMENTS_SHOWN = 150
@@ -494,6 +502,14 @@ class Cua:
         if now - getattr(self, '_shown_at', -60.0) < 10 or workspace.dismissed(os.environ['RUNGIC_WORKSPACE']):
             return
         self._shown_at = now
+        # Only the user's view: the agent's action never waits for it (a frozen Rungic app, the phone
+        # asleep, made each action wait 15 s here, docs/research/97 §13), and none while the host
+        # is known not to answer.
+        if host_unreachable():
+            return
+        threading.Thread(target=self._show_workspace, daemon=True).start()
+
+    def _show_workspace(self) -> None:
         try:
             state = json.loads(subprocess.run(['rungic-agent-screen', 'status'], capture_output=True, text=True,
                                               timeout=15).stdout)

@@ -1,5 +1,5 @@
 [Unit]
-Description=Agent workspace %i (a KWin of its own, docs/research/91)
+Description=Agent workspace %i (a KWin of its own, headless by default, docs/research/91, 97)
 # Not part of the user's graphical session: the phone's Plasma restarting (an app update, a
 # crash) must not end an agent's work (docs/research/97). The workspace ends by the agent's tools
 # or its keeper (idle, docs/research/91 §10); on the Android host it also ends with the host.

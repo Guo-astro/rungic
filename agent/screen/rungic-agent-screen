@@ -22,6 +22,7 @@ screen that is on (after the Android host restarted, say); the quick settings po
 floating windows always open on the phone, also when the agent runs this from inside its
 workspace (RUNGIC_USER_* are the user's session).
 """
+import errno
 import gettext
 import json
 import os
@@ -29,6 +30,7 @@ import socket
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 # The floating window's catalog (po/<language>/rungic-agent-screen.po), for the notification.
 _ = gettext.translation('rungic-agent-screen', fallback=True).pgettext
@@ -40,17 +42,51 @@ OP = 'desktop-mode' if DESKTOP else 'agent-screen'
 APP = 'com.rungic.DesktopMode' if DESKTOP else 'com.rungic.AgentScreen'
 
 
+# The Android host frozen (the phone asleep, docs/research/97): one request that waited its whole
+# timeout marks it; for a minute after, requests (of every process) fail at once instead of each
+# waiting again, and one tries again after that.
+UNREACHABLE_FOR_S = 60
+
+
+def _unreachable_path() :
+    return Path(os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}') / 'rungic-host-unreachable'
+
+
+def _recently_unreachable() :
+    try:
+        return time.time() - _unreachable_path().stat().st_mtime < UNREACHABLE_FOR_S
+    except OSError:
+        return False
+
+
+def _note_reachable(reachable) :
+    try:
+        if reachable:
+            _unreachable_path().unlink(missing_ok=True)
+        else:
+            _unreachable_path().touch()
+    except OSError:
+        pass
+
+
 def bridge(request, timeout=5):
-    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
-        conn.settimeout(timeout)
-        conn.connect(SOCKET)
-        conn.sendall(json.dumps(request).encode() + b'\n')
-        reply = b''
-        while not reply.endswith(b'\n'):
-            chunk = conn.recv(65536)
-            if not chunk:
-                break
-            reply += chunk
+    if _recently_unreachable():
+        raise OSError(errno.EAGAIN, 'the Android host is not responding')
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
+            conn.settimeout(timeout)
+            conn.connect(SOCKET)
+            conn.sendall(json.dumps(request).encode() + b'\n')
+            reply = b''
+            while not reply.endswith(b'\n'):
+                chunk = conn.recv(65536)
+                if not chunk:
+                    break
+                reply += chunk
+    except OSError:
+        _note_reachable(False)
+        raise
+    _note_reachable(True)
     result = json.loads(reply)
     if 'error' in result:
         raise SystemExit(json.dumps({'error': result['error']}, ensure_ascii=False))

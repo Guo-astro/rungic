@@ -330,3 +330,60 @@ APK 进程提供：`platform.sock`、`capture.sock`、`codec.sock`、`wayland-0`
 - 容器的 `/sys` 是只读的，所以单元用 `unshare --mount` 在服务自己的挂载命名空间里把 `/sys` 重新挂成可写。`ReadWritePaths=` 做不到：只读挂载下的路径它不会改成可写，实测报 EROFS。
 - **实测**：写入一个活进程的忙碌标记后，Android 侧 `/sys/power/wake_lock` 出现 `rungic_agent`；删掉标记约 5 s 后释放。
 - 有单元测试（`tools/tests/test_agent_wakelock.py`）。
+
+## 13. 第二阶段：无头工作区在电视和全屏上的画面（呈现器，2026-10-02，实机）
+
+**选型**（设计调研见本日对话，结论如下）：
+- **方案 B：每个被宿主显示的工作区一个独立的呈现器进程**。宿主不用改，宿主冻结只会卡住呈现器，工作区 KWin 不受影响。
+- 方案 A（呈现器做在 KWin 里）约 900–1400 行 KWin 补丁，线程和阻塞路径都在 KWin 里，风险最高。
+- 方案 C（让 KWin 的录屏缓冲直接用租借的 AHB）还能省一次拷贝，作为以后在方案 B 基础上的优化。
+- **同类项目**：最接近的是 wl-mirror（把另一个输出的 PipeWire 录屏画进自己的窗口）。但它画进的是自己的 EGL 窗口表面，我们要画进宿主租借的缓冲；而且它是 GPL-3.0。所以自己写一个小程序，复用 KPipeWire（LGPL，浮窗已在用）和我们 Android 后端的租借代码。
+
+**宿主对 ws-N 客户端的要求**（`android/host`，`packages/android-host`）：
+- 连接 `/mnt/android-wayland/ws-N`；
+- 在制造商为 “Rungic” 的那个工作区输出上，开一个全屏 `xdg_toplevel`；
+- 只提交从 `rungic-gpu-alloc` 租借的 XBGR8888 缓冲（宿主按 inode 认出，才走零拷贝），用 `zwp_linux_dmabuf_v1` v3 包装；
+- 每帧通过 `set_acquire_fence` 交 GPU 栅栏；按宿主的 frame callback 控制节奏。
+- 宿主的 `liveSources` 会自动把这个工作区算作有画面。
+
+**实现**：
+- **`agent/workspace/present.cpp` → `/usr/libexec/rungic-workspace-present N`**：
+  - 子进程 `rungic-workspace-stream` 录取工作区输出（指针画在画面里）并给出节点号；
+  - KPipeWire `PipeWireSourceStream` 接收 DMA-BUF 帧；
+  - GLES（Qt 的 EGL 显示）画一个外部纹理四边形，画进 3 块租借的 AHB；导出 EGL 原生栅栏后提交给宿主；
+  - 宿主要了帧、又有空闲缓冲时才画，否则丢弃该帧；
+  - 宿主的指针事件转成子进程的 `pointer`/`button`/`axis` 输入；
+  - 宿主前几次往返有 3 s 上限；宿主断开、子进程退出或 stdin 关闭时，呈现器结束。
+- **keeper**：无头工作区被电视（`tvShown`）、导播台全屏或单屏全屏显示时，启动呈现器，否则停止。导播台全屏的判断放在“助理屏是否打开”之前，因为导播台与浮窗开关无关。呈现器很快结束时，重启等待从 30 s 起翻倍，最长 5 min。
+- **APK `Director.poll`**：`live` 变了也重排，以便无头成员有了画面就换掉占位。
+- **KWin 补丁 `screencast-finish-without-implicit-sync.patch`**：GPU 节点不是 `/dev/dri` 下的 DRM 设备时（KGSL），录屏帧交给 PipeWire 前先 `glFinish`（做法同 Nvidia 和 llvmpipe）。否则消费方可能读到 GPU 没画完的帧；这也影响 Android 后端工作区的浮窗。
+
+**实测**（G100 S，测试槽 4，无头）：
+- **导播台全屏**：焦点格是工作区 4 的实时画面（Kalk、壁纸、指针），占位已消失。
+- **帧率**：工作区里放 30 fps 的测试动画，宿主呈现约 27.6 fps（10 s 内 276 帧），约 2.4 fps 因宿主没要帧或缓冲占满而丢弃。
+- **冻结**：对 APK 发 `SIGSTOP`：
+  - 工作区照常跑动画，桌面截图也成功；
+  - 呈现器只是暂停；`SIGCONT` 后同一个进程自动恢复，30 fps（10 s 内 300 帧）。
+- **退出全屏**：keeper 立即停止呈现器。
+- **第一版的坑**：
+  - Qt 在 Mesa 上默认建的是桌面 OpenGL 上下文，外部纹理扩展不可用，着色器编译失败，随后在 libgallium 里 SIGSEGV；keeper 每 3 s 重启一次，每次留下约 140 MB 的 core。
+  - 已改为显式要求 GLES，着色器链接失败就退出，keeper 加重启退避；相关 core 已清理。
+- **冻结期间 Agent 工具变慢**：上面那次截图在冻结期间用了 19 s。原因是路由和 `rungic-agent-screen` 每次请求平台桥都要等满超时（3 s、5 s）。
+  - 已改：一次请求超时或被拒后，写入 `$XDG_RUNTIME_DIR/rungic-host-unreachable`，之后 15 s 内的请求立即失败；成功一次就清除。
+
+## 14. Agent 工作区默认无头（2026-10-02）
+
+- `rungic-workspace` 默认 `RUNGIC_WORKSPACE_BACKEND=virtual`，并把实际选用的后端导出给子进程，keeper 据此决定发心跳、开呈现器。`RUNGIC_WORKSPACE_BACKEND=android` 可退回旧方式。
+- 观看方式：
+  - 浮窗和导播台窗口：PipeWire（与以前相同）；
+  - 电视和全屏：呈现器；
+  - 远程：RemoteSurface（下一步）。
+
+**默认无头的实机验收**（2026-10-02 15:20–15:35）：
+- 去掉测试 drop-in 后，工作区 1 和 4 都按默认以 `kwin_wayland --virtual` 启动，成员为 `[1, 4]`。
+- 导播台全屏：焦点格是工作区 1（KClock），缩略格是工作区 4（Kalk），两路画面都来自呈现器。
+- **APK 冻结时 Agent 工具的耗时**：
+  - 修改前每次截图要 16–19 s，原因：每次工具调用都同步等 `show_workspace` 的两个 `rungic-agent-screen` 子进程，而平台桥连接已排进 backlog、却永远等不到回复，每个请求都等满超时；
+  - 已改：`show_workspace` 放到后台线程，宿主不可达时直接跳过；不可达标记的有效期由 15 s 延长到 60 s，因为 Agent 两次调用之间常常超过 15 s；
+  - 修改后：冻结期间第一次截图 4.3 s（一次超时），之后每次约 1.0 s（含启动 MCP 进程）。
+- 测完退出全屏，呈现器随即停止；屏幕超时恢复为 60000。

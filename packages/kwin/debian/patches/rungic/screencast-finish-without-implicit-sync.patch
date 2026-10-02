@@ -1,0 +1,39 @@
+From: clawd20130 <clawd20130@gmail.com>
+Date: Fri, 2 Oct 2026 14:40:21 +0900
+Subject: Screencast: finish the GPU's work before a frame goes out on a
+ device with no implicit sync
+
+A DMA-BUF frame is handed to PipeWire after glFlush only, which leaves the ordering to implicit
+sync. A GPU node that is not a DRM device (KGSL in an Android container: the Android backend's
+and the virtual backend's named device) has none, so a consumer (the phone's floating window,
+the presenter of a headless workspace) could read a frame the GPU had not finished; as with
+Nvidia and llvmpipe, glFinish first there.
+
+Forwarded: no
+Last-Update: 2026-10-02
+X-Rungic-Status: Pending [generic: screencast on GPUs without implicit sync]
+X-Rungic-Tests: L3:workspace.headless
+X-Rungic-Docs: docs/research/97
+Origin: vendor
+---
+ src/plugins/screencast/screencaststream.cpp | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/src/plugins/screencast/screencaststream.cpp b/src/plugins/screencast/screencaststream.cpp
+index 630cf44..9d99293 100644
+--- a/src/plugins/screencast/screencaststream.cpp
++++ b/src/plugins/screencast/screencaststream.cpp
+@@ -640,8 +640,11 @@ void ScreenCastStream::record(Contents contents)
+             auto dmabuf = static_cast<DmaBufScreenCastBuffer *>(buffer);
+             dmabuf->synctimeline->moveInto(synctmeta->acquire_point, fence.takeFileDescriptor());
+         } else {
+-            // Implicit sync is broken on Nvidia and with llvmpipe
+-            if (context->glPlatform()->isNvidia() || context->isSoftwareRenderer()) {
++            // Implicit sync is broken on Nvidia and with llvmpipe, and there is none on a GPU node
++            // that is not a DRM device (Qualcomm's KGSL in an Android container): the consumer
++            // would read a frame the GPU has not finished (docs/research/97 §13).
++            const bool noImplicitSync = backend->drmDevice() && !backend->drmDevice()->path().startsWith(QLatin1String("/dev/dri/"));
++            if (context->glPlatform()->isNvidia() || context->isSoftwareRenderer() || noImplicitSync) {
+                 glFinish();
+             } else {
+                 glFlush();

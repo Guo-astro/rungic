@@ -13,10 +13,13 @@ runtime=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
 failed=$runtime/rungic-workspace-$slot.failed
 rm -f "$failed"
 fail() { echo "workspace $slot: $1" >&2; echo "$1" > "$failed"; exit 1; }
-# Headless (RUNGIC_WORKSPACE_BACKEND=virtual, docs/research/97 approach C): KWin's virtual backend
-# on the phone's GPU, with no Android host, so the workspace runs while the phone is asleep and the
-# Rungic app frozen. Its picture reaches the phone and remote viewers by screencast (PipeWire).
-backend=${RUNGIC_WORKSPACE_BACKEND:-android}
+# Headless, the default (docs/research/97): KWin's virtual backend on the phone's GPU, with no
+# Android host, so the workspace runs while the phone is asleep and the Rungic app frozen. Its
+# picture reaches the phone's windows and remote viewers by screencast (PipeWire), and the host
+# (TV, fullscreen) by its presenter (rungic-workspace-present, started by the keeper).
+# RUNGIC_WORKSPACE_BACKEND=android: on the Android host as before. Its helpers (the keeper) are told.
+backend=${RUNGIC_WORKSPACE_BACKEND:-virtual}
+export RUNGIC_WORKSPACE_BACKEND=$backend
 if [ "$backend" = virtual ]; then :; else
 [ -S "$host" ] || fail "the host does not offer $host (APK 2.14 or later)"
 # The host must answer before KWin connects: a frozen Rungic app (the phone asleep: Motorola's

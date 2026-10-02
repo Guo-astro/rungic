@@ -18,3 +18,4 @@ rungic/handset-display-size.patch
 rungic/android-workspace.patch
 rungic/phone-turns-with-android.patch
 rungic/virtual-render-device.patch
+rungic/screencast-finish-without-implicit-sync.patch
