@@ -5,6 +5,9 @@
 #include <QQuickWindow>
 #include <QRegion>
 #include <QScreen>
+#include <climits>
+#include <qpa/qplatformnativeinterface.h>
+#include <wayland-client.h>
 
 namespace
 {
@@ -61,6 +64,11 @@ void Floater::attach(QQuickWindow *window)
     window->setColor(Qt::transparent);
     fit();
     window->setMask(QRegion(0, 0, 1, 1));  // nothing takes touches until QML says what is visible
+    // Qt makes a new surface each time the window shows again: its opaque region with it.
+    connect(window, &QWindow::visibleChanged, this, [this](bool visible) {
+        if (visible && m_opaque)
+            applyOpaque();
+    });
 }
 
 QRect Floater::area() const
@@ -100,6 +108,35 @@ void Floater::setFullscreen(bool fullscreen)
     layer->setKeyboardInteractivity(fullscreen ? LayerShellQt::Window::KeyboardInteractivityOnDemand
                                                : LayerShellQt::Window::KeyboardInteractivityNone);
     m_window->requestUpdate();  // the changes go with the next commit
+}
+
+void Floater::setOpaque(bool opaque)
+{
+    m_opaque = opaque;
+    applyOpaque();
+}
+
+void Floater::applyOpaque()
+{
+    if (!m_window || !m_window->isVisible())
+        return;
+    // Qt sets an opaque region only for a window without alpha (its setOpaqueArea is private): ours,
+    // on the surface itself. Double-buffered, it goes with the next commit, the next frame's.
+    auto native = QGuiApplication::platformNativeInterface();
+    auto surface = static_cast<wl_surface *>(native ? native->nativeResourceForWindow("surface", m_window) : nullptr);
+    auto wayland = qGuiApp->nativeInterface<QNativeInterface::QWaylandApplication>();
+    if (!surface || !wayland || !wayland->compositor())
+        return;
+    if (m_opaque) {
+        // All of it, however large: KWin clips the region to the surface (a turn changes nothing).
+        wl_region *region = wl_compositor_create_region(wayland->compositor());
+        wl_region_add(region, 0, 0, INT32_MAX, INT32_MAX);
+        wl_surface_set_opaque_region(surface, region);
+        wl_region_destroy(region);
+    } else {
+        wl_surface_set_opaque_region(surface, nullptr);
+    }
+    m_window->requestUpdate();
 }
 
 bool Floater::castPresent() const

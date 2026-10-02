@@ -30,6 +30,10 @@ public:
     // Fullscreen (docs/research/97 §17.2): this surface in the overlay layer, taking the keyboard,
     // above the shell's panels; back in the top layer, without the keyboard, after.
     Q_INVOKABLE void setFullscreen(bool fullscreen);
+    // Fullscreen arrived (docs/research/97 §20): the surface opaque all over, so the phone's KWin
+    // draws nothing under it (an ARGB surface without an opaque region counts as see-through, and
+    // all of Plasma Mobile was composited under it every frame). Off before it is see-through again.
+    Q_INVOKABLE void setOpaque(bool opaque);
     bool castPresent() const;
     // Before it is first shown: `window` a layer surface over the whole cast output, in the overlay
     // layer (above the desktop shell the phone's KWin puts there), taking the keyboard when clicked.
@@ -41,6 +45,8 @@ Q_SIGNALS:
 
 private:
     void fit();
+    void applyOpaque();
 
     QQuickWindow *m_window = nullptr;
+    bool m_opaque = false;
 };

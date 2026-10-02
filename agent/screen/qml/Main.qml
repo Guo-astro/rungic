@@ -158,7 +158,19 @@ Window {
     // screen's picture always has the agent's pointer).
     readonly property bool pointerWanted: full && !leaving && fullscreenSettings.touchpad
                                           && !!root.screen && root.screen.workspace === 0
-    onPointerWantedChanged: if (root.screen) root.screen.setPointerShown(pointerWanted)
+    // Its picture goes a moment after it is not wanted: the picture without the pointer, paused under
+    // it (a second screencast for nothing, docs/research/97 §20), has to have a frame again first.
+    property bool pointerHeld: false
+    onPointerWantedChanged: {
+        if (pointerWanted) {
+            pointerRelease.stop()
+            pointerHeld = true
+        } else {
+            pointerRelease.restart()
+        }
+    }
+    Timer { id: pointerRelease; interval: 400; onTriggered: root.pointerHeld = false }
+    onPointerHeldChanged: if (root.screen) root.screen.setPointerShown(pointerHeld)
     // Fullscreen's touch mode, remembered (the APK's agent_fullscreen_touchpad).
     Settings {
         id: fullscreenSettings
@@ -167,6 +179,10 @@ Window {
         property bool touchpad: false
     }
     property bool morphing: false        // layout changes at once: the picture's transform moves it
+    // Arrived: opaque all over (the background under everything), so the phone's KWin draws nothing
+    // of Plasma Mobile under it (docs/research/97 §20); see-through again from the moment it leaves.
+    readonly property bool opaque: full && !leaving && !morphing && visible && backdrop.opacity >= 1
+    onOpaqueChanged: floater.setOpaque(opaque)
     // The picture's transform: from where it was (relative to its new place) at 0, to none at 1.
     property real morphX: 0
     property real morphY: 0
@@ -391,6 +407,17 @@ Window {
     }
     Connections { target: root.screen; function onActivityChanged() { root.followActivity() } }
     Timer { id: endTimer; interval: 4000; onTriggered: if (root.captionState !== "working") root.captionState = "" }
+    // The dots breathe (1.4 s from bright to dim and back) in ten steps a second, not at every frame
+    // of the phone's screen: each frame of this window has the phone's KWin composite the whole
+    // screen again (docs/research/97 §20).
+    property real breath: 1
+    Timer {
+        interval: 100
+        repeat: true
+        running: root.captionState === "working" && (caption.visible || tab.visible)
+        onTriggered: root.breath = 0.5 + 0.5 * Math.cos(Date.now() / 1400 * 2 * Math.PI)
+        onRunningChanged: if (!running) root.breath = 1
+    }
 
     Timer {
         id: hideTimer
@@ -495,6 +522,7 @@ Window {
 
     // ---- fullscreen's background: the wallpaper, blurred and dimmed (rungic-agent-screen background)
     Rectangle {
+        id: backdrop
         anchors.fill: parent
         color: root.edgeToEdge ? "black" : "#101215"
         opacity: root.full && !root.leaving ? 1 : 0
@@ -563,7 +591,8 @@ Window {
             // screens bring their own black (below): this one would stay behind a focus breathing
             // in, a black shadow around it.
             color: root.directing || (stream.visible && stream.ready) ? "transparent" : "black"
-            layer.enabled: true   // rounded corners for the picture too
+            // Rounded corners for the picture too; none edge to edge, nor its offscreen pass.
+            layer.enabled: root.pictureRadius > 0
             layer.effect: MultiEffect {
                 maskEnabled: true
                 maskSource: roundMask
@@ -573,7 +602,9 @@ Window {
                 anchors.fill: parent
                 // The director's screens have a picture each (below), never switched.
                 nodeId: root.directing ? 0 : root.screen.nodeId
-                visible: nodeId > 0
+                // Receiving only while seen (KPipeWire pauses a hidden one): not while the window is
+                // hidden (on a TV) or the pointer's picture covers it.
+                visible: nodeId > 0 && root.visible && !(root.pointerWanted && pointerStream.ready)
             }
             // Fullscreen's touchpad mode: the same picture with the system's pointer drawn in, over
             // the one without, shown once it has a frame (no black while it starts) and hidden before
@@ -581,7 +612,7 @@ Window {
             PipeWire.PipeWireSourceItem {
                 id: pointerStream
                 anchors.fill: parent
-                nodeId: root.pointerWanted ? root.screen.pointerNodeId : 0
+                nodeId: root.pointerHeld ? root.screen.pointerNodeId : 0
                 // Visible to receive at all (KPipeWire takes frames only while it is), seen once ready.
                 visible: nodeId > 0
                 opacity: ready ? 1 : 0
@@ -589,7 +620,7 @@ Window {
             Kirigami.Icon {
                 anchors.centerIn: parent
                 width: 32; height: 32
-                visible: !root.directing && (!stream.visible || !stream.ready)
+                visible: !root.directing && (!stream.visible || !stream.ready) && !(pointerStream.visible && pointerStream.ready)
                 source: "video-display"
                 color: "#99ffffff"
                 isMask: true
@@ -695,13 +726,7 @@ Window {
                     anchors.verticalCenter: parent.verticalCenter
                     width: 7; height: 7; radius: 3.5
                     color: caption.dot
-                    SequentialAnimation on opacity {
-                        running: root.captionState === "working" && caption.visible
-                        loops: Animation.Infinite
-                        onRunningChanged: if (!running) captionDot.opacity = 1
-                        NumberAnimation { to: 0.3; duration: 700; easing.type: Easing.InOutSine }
-                        NumberAnimation { to: 1; duration: 700; easing.type: Easing.InOutSine }
-                    }
+                    opacity: root.captionState === "working" ? 0.3 + 0.7 * root.breath : 1
                 }
                 Text {
                     id: captionText
@@ -929,13 +954,7 @@ Window {
             anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 8 }
             width: 6; height: 6; radius: 3
             color: root.screen.status === "running" ? "#63d471" : "#e0a83c"
-            SequentialAnimation on opacity {
-                running: root.captionState === "working" && tab.visible
-                loops: Animation.Infinite
-                onRunningChanged: if (!running) tabDot.opacity = 1
-                NumberAnimation { to: 0.25; duration: 700; easing.type: Easing.InOutSine }
-                NumberAnimation { to: 1; duration: 700; easing.type: Easing.InOutSine }
-            }
+            opacity: root.captionState === "working" ? 0.25 + 0.75 * root.breath : 1
         }
         TapHandler { onTapped: root.expand() }
         DragHandler {
