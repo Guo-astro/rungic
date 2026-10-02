@@ -58,8 +58,9 @@ if [ "$slot" = 0 ]; then
     rungic-desktop-dirs build "$state"
     export XDG_DATA_HOME="$state/data" XDG_STATE_HOME="$state/state"
     mkdir -p "$XDG_STATE_HOME"
-    # A desktop's programs, not the phone's: Plasma Mobile's shell and form factor stay with it.
-    unset PLASMA_DEFAULT_SHELL PLASMA_PLATFORM
+    # A desktop's programs, not the phone's: Plasma Mobile's shell and form factor stay with it,
+    # and Qt Quick's mobile controls (Kirigami's isMobile layouts).
+    unset PLASMA_DEFAULT_SHELL PLASMA_PLATFORM QT_QUICK_CONTROLS_MOBILE
 else
     [ -e "$state/config/kdeglobals" ] || ln -s "$RUNGIC_USER_CONFIG_HOME/kdeglobals" "$state/config/kdeglobals"
 fi

@@ -1,0 +1,49 @@
+From: Rungic <noreply@rungic.invalid>
+Date: Sat, 3 Oct 2026 02:40:18 +0900
+Subject: Desktops of Rungic's workspaces load no mobile configuration
+MIME-Version: 1.0
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+In the independent desktop and the agents' workspaces (RUNGIC_WORKSPACE set) Firefox is a desktop browser: the mobile defaults, user agent, sheets and about:mobile are not loaded.
+
+Origin: vendor
+Forwarded: no
+Last-Update: 2026-10-03
+X-Rungic-Status: Inappropriate; Rungic session layout
+X-Rungic-Tests: L0:source-replay; L1:firefox-installed-files; runtime: user agent in workspace 0 and on the phone (docs/research/97 §19.8)
+X-Rungic-Docs: docs/73; docs/research/97-headless-agent-work.md
+---
+ src/mobile-config-autoconfig.js | 12 +++++++++++-
+ 1 file changed, 11 insertions(+), 1 deletion(-)
+
+diff --git a/src/mobile-config-autoconfig.js b/src/mobile-config-autoconfig.js
+index e898a8e..f3e5f65 100644
+--- a/src/mobile-config-autoconfig.js
++++ b/src/mobile-config-autoconfig.js
+@@ -17,6 +17,12 @@ const { FileUtils } =
+ var g_chromeDir; // nsIFile object for the "chrome" dir in user's profile
+ var g_logFileStream;
+ 
++// Rungic: the independent desktop and the agents' workspaces (RUNGIC_WORKSPACE set, docs/research/97
++// §19) are desktops of 1920x1080; Firefox there is a desktop browser, with Firefox's own user agent.
++// What boot.sys.mjs sets lives only in the running process (default prefs, registered sheets), so the
++// profile they share with the phone needs no cleaning when Firefox moves between them.
++const RUNGIC_DESKTOP = getenv("RUNGIC_WORKSPACE") !== "";
++
+ 
+ function write_line(ostream, line) {
+     line = line + "\n"
+@@ -104,7 +110,11 @@ try {
+     const chromeManifest =
+         new FileUtils.File("/usr/lib/mobile-config-firefox/chrome.manifest");
+ 
+-    if(chromeManifest.exists()){
++    if (RUNGIC_DESKTOP) {
++        // mobile-config-prefs.js (a defaults file, read everywhere) asks for touch density.
++        defaultPref("browser.uidensity", 0);
++        log("Rungic workspace " + getenv("RUNGIC_WORKSPACE") + ": a desktop, mobile configuration not loaded");
++    } else if(chromeManifest.exists()){
+         Components.manager.QueryInterface(Ci.nsIComponentRegistrar)
+             .autoRegister(chromeManifest);
+         ChromeUtils.importESModule(

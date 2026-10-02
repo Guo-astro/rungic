@@ -940,6 +940,10 @@ def serve() -> None:
         router.close()
 
 
+# Plasma Mobile's form factor, set in the phone's session (startplasmamobile).
+PHONE_ONLY = ('PLASMA_DEFAULT_SHELL', 'PLASMA_PLATFORM', 'QT_QUICK_CONTROLS_MOBILE')
+
+
 def import_session_environment() -> None:
     """Codex starts MCP servers with a handful of variables. Take the graphical
     session's environment from the systemd user manager, as the desktop does when
@@ -947,8 +951,10 @@ def import_session_environment() -> None:
     here found no display and never showed a window. In an agent workspace (docs/research/91)
     the session bus is the workspace's own, without systemd: ask on the user's (without
     XDG_DATA_DIRS kstart found no application and hung); the workspace's display and bus,
-    already set, stay."""
+    already set, stay. In the independent desktop (workspace 0) the phone's form factor stays out,
+    as rungic-workspace-env leaves it."""
     env = dict(os.environ)
+    phone_only = PHONE_ONLY if env.get('RUNGIC_WORKSPACE') == '0' else ()
     if env.get('RUNGIC_USER_DBUS_SESSION_BUS_ADDRESS') or env.get('RUNGIC_WORKSPACE'):
         runtime = env.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}'
         env['DBUS_SESSION_BUS_ADDRESS'] = env.get('RUNGIC_USER_DBUS_SESSION_BUS_ADDRESS') or f'unix:path={runtime}/bus'
@@ -958,7 +964,8 @@ def import_session_environment() -> None:
                              capture_output=True, text=True, timeout=5, env=env).stdout
         for item in json.loads(out)['data']:
             key, _sep, value = item.partition('=')
-            os.environ.setdefault(key, value)
+            if key not in phone_only:
+                os.environ.setdefault(key, value)
     except (OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
         logger.warning('session environment unavailable: %s', error)
 

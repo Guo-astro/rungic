@@ -29,6 +29,11 @@ export KDE_FULL_SESSION=true KDE_SESSION_VERSION=6
 # probe) and left their session bus deaf.
 export PLASMA_INTEGRATION_USE_PORTAL=0
 unset QT_QPA_PLATFORMTHEME
+# The independent desktop's programs are a desktop's, as rungic-workspace starts it: a caller from
+# the phone's session (systemd's environment) brings Plasma Mobile's form factor.
+if [ "$slot" = 0 ]; then
+    unset PLASMA_DEFAULT_SHELL PLASMA_PLATFORM QT_QUICK_CONTROLS_MOBILE
+fi
 # Its sound in its own sink, while there is one (rungic-workspace-sound).
 if pactl list short sinks 2>/dev/null | cut -f2 | grep -qx "rungic_ws$slot"; then
     export PULSE_SINK=rungic_ws$slot

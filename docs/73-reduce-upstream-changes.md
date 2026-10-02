@@ -168,7 +168,7 @@ plasma-settings `+rungic3`删除`android-hardware-settings`补丁：蜂窝、蓝
 | `packages/android-host` | Winland `4269ec048e83133102d00464fd4c23af44d84707`的`native`子树，树哈希`1403bf57e8df1b8b87adf2497b99230c75e2235e` | 按原仓库提交顺序重放为19条补丁，记录原提交；7个自有新增模块移到`plasma/android-host/src/`作为overlay |
 | `packages/smithay` | 同一Winland提交的`native/lib/smithay`子树，树哈希`ddc78efe6616bcce50ce6fecf7560385f6a78212` | 5个修改文件，按原功能提交保存为3条补丁：文本输入、输出节拍、workspace |
 | `packages/winit` | 同一Winland提交的`native/lib/winit`子树，树哈希`96a7a370234c7691e6147dbef3251bf357a5228f` | 与所用基线一致，无本地补丁 |
-| `packages/mobile-config-firefox` | postmarketOS `5.4.1`发行归档，SHA256在recipe中 | 1条补丁保留Android 16 / Mobile默认UA，其余运行文件保持上游原样 |
+| `packages/mobile-config-firefox` | postmarketOS `5.4.1`发行归档，SHA256在recipe中 | 2条补丁：保留Android 16 / Mobile默认UA；工作区（`RUNGIC_WORKSPACE`非空，即独立桌面和Agent工作区）中不加载移动配置（2026-10-03，docs/research/97 §19.8）。其余运行文件保持上游原样 |
 
 Smithay/Winit固定的是**Winland当时带入的子树**，不是仅凭Cargo版本号宣称等同于官方发布版；recipe同时记录实际来源和原项目地址。分别维护配方使以后升级某个依赖时可以独立核对，而本轮没有混入换基线工作。相比继续直接入库，该方式能单独审查本地差异；相比立刻切换官方最新版本，它保持本机已使用的输入。
 

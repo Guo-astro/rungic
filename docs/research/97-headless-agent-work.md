@@ -834,3 +834,30 @@ APK 进程提供：`platform.sock`、`capture.sock`、`codec.sock`、`wayland-0`
 - **新问题**：全屏画面是在窗口里转成横向的，而屏幕键盘仍按手机竖屏排布，用户横握手机时键盘是侧着的。待处理。
 - 收尾：键盘已收起、已退出全屏；用户的触控板设置仍为 true。
 - 电视的电脑模式由用户实测。
+
+### 19.8 独立桌面和工作区里的 Firefox 用桌面版配置（2026-10-03，用户确认方案，已实现，待实机验收）
+
+用户要求：投屏和独立桌面里的 Firefox 应该是桌面版配置，以免被网站跳到移动版网页；手机上继续用移动版。用户确认 Agent 工作区（1–9 号）也一起用桌面版。
+
+**现状（读源码，mobile-config-firefox 5.4.1）**：
+- 移动版配置全部由 Firefox 每次启动时执行的 `mobile-config-autoconfig.js` 加载 `boot.sys.mjs` 完成：安卓 UA 和按站点改写 UA、触摸相关默认值、样式表、标签计数、`about:mobile`。
+- 这些都只存在于运行中的进程里（默认分支的设置、运行时注册的样式），不写进 `prefs.js`。所以两边共用一个配置目录，每次启动各自决定，切换时不需要清理。
+- 唯一的例外是静态的 `defaults/pref/mobile-config-prefs.js` 里的 `browser.uidensity=2`，两边都会读到。
+
+**做法**：
+- 补丁 `packages/mobile-config-firefox/debian/patches/rungic/desktop-session.patch`：`getenv("RUNGIC_WORKSPACE")` 非空时不加载移动配置，并把 `browser.uidensity` 的默认值改回 0；配置目录 `chrome/mobile-config-firefox.log` 里会记一行。
+- 用 `RUNGIC_WORKSPACE` 判断，而不是 `PLASMA_PLATFORM`：后者由 `startplasma` 同步进 systemd 用户环境，会串进工作区；`RUNGIC_WORKSPACE` 从不写进 systemd 环境，`switch.py` 把应用交回手机时也会去掉它。
+
+**顺带修正（实机确认存在）**：0 号的 plasmashell 环境里有 `QT_QUICK_CONTROLS_MOBILE=true`，KDE 应用会按手机布局显示。
+- `rungic-workspace` 和 `rungic-workspace-env` 在 0 号去掉 `PLASMA_DEFAULT_SHELL`、`PLASMA_PLATFORM` 和 `QT_QUICK_CONTROLS_MOBILE`。
+- `rungic_cua/server.py` 的 `import_session_environment()` 原来会从 systemd 环境用 `setdefault` 把这些变量补回去，现在在 0 号跳过（`PHONE_ONLY`）。
+- 1–9 号工作区的这几个变量不变。
+
+**待实机验收**：
+- 0 号和工作区里：`navigator.userAgent` 是 Firefox 自己的 Linux UA，`navigator.maxTouchPoints` 为 0，没有 `about:mobile`，地址栏在顶部。
+- 切回手机：安卓 UA 和底部工具栏恢复。来回各切两次。
+- 注意事项：
+  - 用户在 `about:mobile` 或 `about:config` 里改过的设置（例如竖排标签）两边都生效。
+  - 网站记在 cookie 或 service worker 里的“移动版”可能还会跳，清该站数据即可。
+  - Firefox 不能在两边同时运行（`switch.py` 先关后开）。
+
