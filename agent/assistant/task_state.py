@@ -226,6 +226,10 @@ class TurnState:
             tool = item.get('tool', '')
             if tool.startswith('desktop_'):
                 text = _("Work on the assistant's screen")
+            elif tool == 'team_post':
+                # A team's post (docs/research/91 §14): what it said, the board has the rest.
+                said = (item.get('arguments') or {}).get('text') or ''
+                text = _('Tell the team: {text}').format(text=said) if said else _('Tell the team')
             else:
                 text = _('Use the tool {tool}').format(tool=tool)
             activity = 'screen' if tool.startswith('desktop_') else 'tool'

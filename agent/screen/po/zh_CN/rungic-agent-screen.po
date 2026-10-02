@@ -131,3 +131,53 @@ msgstr "失败"
 msgctxt "@info:status a team member stopped"
 msgid "ended"
 msgstr "已结束"
+
+#: qml/Main.qml qml/TeamBoard.qml
+msgctxt "@label the team's board in the director"
+msgid "Team board"
+msgstr "团队看板"
+
+#: qml/TeamBoard.qml
+msgctxt "@info:status the team's phase"
+msgid "Brief"
+msgstr "简报"
+
+#: qml/TeamBoard.qml
+msgctxt "@info:status the team's phase"
+msgid "In review"
+msgstr "评审中"
+
+#: qml/TeamBoard.qml
+msgctxt "@info:status the team's phase"
+msgid "At work"
+msgstr "制作中"
+
+#: qml/TeamBoard.qml
+msgctxt "@info:status the team's phase"
+msgid "Done"
+msgstr "完成"
+
+#: qml/TeamBoard.qml
+msgctxt "@info:status the team's phase"
+msgid "Failed"
+msgstr "失败"
+
+#: qml/TeamBoard.qml
+msgctxt "@info:status the lead writes the brief"
+msgid "briefing"
+msgstr "写简报"
+
+#: qml/TeamBoard.qml
+msgctxt "@info:status the lead decides"
+msgid "deciding"
+msgstr "定稿中"
+
+#: qml/TeamBoard.qml
+msgctxt "@label the lead's result"
+msgid "Result"
+msgstr "结果"
+
+#: qml/TeamBoard.qml
+msgctxt "@label the lead's decision"
+msgid "Decision"
+msgstr "决定"

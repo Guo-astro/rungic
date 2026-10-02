@@ -162,6 +162,14 @@
     <string name="team_briefing">写简报</string>
     <string name="team_deciding">定稿中</string>
     <string name="tile_not_open">还没打开应用</string>
+    <string name="board_name">团队看板</string>
+    <string name="phase_brief">简报</string>
+    <string name="phase_review">评审中</string>
+    <string name="phase_working">制作中</string>
+    <string name="phase_done">完成</string>
+    <string name="phase_failed">失败</string>
+    <string name="board_decision">决定</string>
+    <string name="board_result">结果</string>
     <string name="tag_brief">简报</string>
     <string name="tag_review">评审</string>
     <string name="tag_decision">决定</string>

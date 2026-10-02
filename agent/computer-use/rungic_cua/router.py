@@ -160,6 +160,21 @@ class Child:
             self.process.kill()
 
 
+def bus_identity(env: dict) -> int:
+    """The session bus `env` talks to, as its socket's inode: a workspace started again has a new
+    bus, and a child connected to the old one only answers "The connection is closed"."""
+    address = env.get('DBUS_SESSION_BUS_ADDRESS', '')
+    path = address.split('path=', 1)[1].split(',', 1)[0] if 'path=' in address else ''
+    try:
+        return os.stat(path).st_ino if path else 0
+    except OSError:
+        return 0
+
+
+# A child whose bus went away (its workspace started again) answers with this.
+STALE_BUS = 'The connection is closed'
+
+
 def workspace_env(env: dict, slot: int, run=subprocess.run) -> dict:
     """`env` moved into workspace `slot`: what rungic-workspace-env sets (the user's session goes
     along as RUNGIC_USER_*, already in `env`)."""
@@ -173,6 +188,7 @@ class Router:
         self.home = int(self.env.get('RUNGIC_WORKSPACE') or 1)   # the parent's workspace
         self.override = 'auto'
         self.children: dict[str, Child] = {}
+        self.buses: dict[str, tuple] = {}    # each child's session bus: (address env, socket inode)
         self.last: str | None = None
         self.subagent: dict | None = None    # a sub-agent's thread: {'thread', 'parent'}
         self.claimed: int | None = None      # the workspace it holds
@@ -233,6 +249,11 @@ class Router:
 
     def child(self, target: str) -> Child:
         child = self.children.get(target)
+        bus = self.buses.get(target)
+        if child is not None and child.alive() and bus and bus[1] and bus_identity(bus[0]) != bus[1]:
+            # Its workspace started again (a new bus): the child's connection is to the old one.
+            self.drop(target)
+            child = None
         if child is None or not child.alive():
             if target == 'workspace':
                 slot = self.slot
@@ -242,6 +263,8 @@ class Router:
             else:
                 env = user_session_env(self.env)
             child = self.children[target] = Child(env)
+            address = {'DBUS_SESSION_BUS_ADDRESS': env.get('DBUS_SESSION_BUS_ADDRESS', '')}
+            self.buses[target] = (address, bus_identity(address))
         return child
 
     def call(self, name: str, arguments: dict, meta: dict | None = None) -> dict:
@@ -274,6 +297,10 @@ class Router:
             self.at_work()
             self.follow_murmur()
         result = self.child(target).request('tools/call', {'name': name, 'arguments': arguments})
+        if result.get('isError') and any(STALE_BUS in str(c.get('text', '')) for c in result.get('content', [])):
+            # A bus gone under the child: once more with a new child.
+            self.drop(target)
+            result = self.child(target).request('tools/call', {'name': name, 'arguments': arguments})
         if target != self.last:
             # The agent learns where it works whenever that changes.
             note = self.describe(target, why)

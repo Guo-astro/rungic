@@ -11,12 +11,18 @@ appended to <project>/.team/journal.jsonl (the team's record, kept with its work
 with a workspace, its latest state written to <runtime>/rungic-agent-screen/team-wsN.json and told to
 the Android app: the director's tiles show the member's role, state and latest words (phone and TV).
 An agent that ends without saying done, blocked or failed gets "ended" posted for it.
+
+Every post also updates the team's board (<runtime>/rungic-agent-screen/team-board.json, told to the
+app as {"op": "director", "board": …}): the brief, the phase (review, working, done), each member's
+latest state and words, the reviews, the lead's decision and result. The director shows it as a tile
+of its own, and the assistant's conversation that leads the team shows it as a card (docs/research/91 §14).
 """
 from __future__ import annotations
 
 import json
 import os
 import socket
+import subprocess
 import time
 from pathlib import Path
 
@@ -48,8 +54,111 @@ def state_path(slot) -> Path:
     return _runtime() / 'rungic-agent-screen' / f'team-ws{slot}.json'
 
 
+def board_path() -> Path:
+    return _runtime() / 'rungic-agent-screen' / 'team-board.json'
+
+
+BOARD_POSTS_KEPT = 40
+REVIEWS_KEPT = 8
+
+
+def lead_of(entry: dict) -> str:
+    """The team an entry belongs to, named by its lead's thread: a member's parent, the lead itself."""
+    return str(entry.get('parent') or entry.get('thread') or '')
+
+
+def apply_to_board(board: dict | None, entry: dict, project: str = '') -> dict:
+    """The board after `entry`. A brief from another lead starts a new board."""
+    lead = lead_of(entry)
+    kind, role, text = entry.get('kind', ''), entry.get('role', ''), entry.get('text', '')
+    is_lead = not entry.get('parent')
+    now = entry.get('time') or time.time()
+    if not board or (lead and board.get('lead') and board['lead'] != lead and kind == 'brief' and is_lead):
+        board = {'lead': lead, 'project': project, 'title': '', 'phase': 'brief', 'members': [], 'reviews': [],
+                 'decision': '', 'result': '', 'started': now, 'updated': now, 'posts': []}
+    board = {**board, 'members': [dict(m) for m in board.get('members', [])],
+             'reviews': list(board.get('reviews', [])), 'posts': list(board.get('posts', []))}
+    if lead and not board.get('lead'):
+        board['lead'] = lead
+    if project and not board.get('project'):
+        board['project'] = project
+    member = next((m for m in board['members'] if m.get('role') == role), None)
+    if member is None:
+        member = {'role': role, 'lead': is_lead, 'slot': entry.get('workspace') or 0, 'kind': '', 'text': '', 'time': now}
+        board['members'].insert(0, member) if is_lead else board['members'].append(member)
+    member['kind'] = kind
+    if entry.get('workspace'):
+        member['slot'] = entry['workspace']
+    if text or not entry.get('silent'):
+        member['text'], member['time'] = text, now
+    if entry.get('silent'):
+        board['updated'] = now
+        return board
+    if is_lead and kind == 'brief':
+        board['title'], board['phase'] = text, 'review'
+    elif kind == 'review':
+        board['reviews'] = [r for r in board['reviews'] if r.get('role') != role][-(REVIEWS_KEPT - 1):] + [{'role': role, 'text': text}]
+        if board.get('phase') == 'brief':
+            board['phase'] = 'review'
+    elif is_lead and kind == 'decision':
+        # Decided: the lead is at work with the others (not still "deciding").
+        board['decision'], board['phase'] = text, 'working'
+        # Decided: everyone is at work now, the lead too (no one is still "reviewing").
+        for m in board['members']:
+            if m.get('kind') in ('review', 'brief', 'decision'):
+                m['kind'] = 'progress'
+        member['kind'] = 'progress'
+    elif is_lead and kind in ('done', 'failed'):
+        board['result'], board['phase'] = text, kind
+    elif board.get('phase') in ('brief', 'review') and not is_lead and kind in ('progress', 'done'):
+        board['phase'] = 'working'
+    board['posts'] = (board['posts'] + [{'role': role, 'kind': kind, 'text': text, 'time': now,
+                                         'workspace': entry.get('workspace') or 0}])[-BOARD_POSTS_KEPT:]
+    board['updated'] = now
+    return board
+
+
+def update_board(entry: dict, project: str = '') -> dict | None:
+    """Apply `entry` to the board file and tell the app. Never raises."""
+    try:
+        target = board_path()
+        try:
+            board = json.loads(target.read_text())
+        except (OSError, ValueError):
+            board = None
+        if board is None and entry.get('silent'):
+            return None
+        board = apply_to_board(board, entry, project)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_suffix('.tmp')
+        temporary.write_text(json.dumps(board, ensure_ascii=False))
+        os.replace(temporary, target)
+    except OSError:
+        return None
+    _send({'op': 'director', 'board': {k: v for k, v in board.items() if k != 'posts'}})
+    if not entry.get('silent'):
+        # One workspace's window and the board: the director shows them together.
+        try:
+            subprocess.Popen(['rungic-agent-screen', 'team'], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL, start_new_session=True)
+        except OSError:
+            pass
+    return board
+
+
+def _send(request: dict) -> None:
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
+            conn.settimeout(0.5)
+            conn.connect('/mnt/android-wayland/platform.sock')
+            conn.sendall(json.dumps(request, ensure_ascii=False).encode() + b'\n')
+            conn.recv(4096)
+    except (OSError, ValueError):
+        pass
+
+
 def post(entry: dict, project: str = '') -> dict:
-    """Append `entry` to the project's journal, show it on the member's tile. Never raises."""
+    """Append `entry` to the project's journal, show it on the member's tile and the board. Never raises."""
     entry = {**entry, 'time': entry.get('time') or time.time(),
              'text': ' '.join(str(entry.get('text', '')).split())[:TEXT_MAX]}
     written = None
@@ -73,20 +182,14 @@ def post(entry: dict, project: str = '') -> dict:
         except OSError:
             pass
         tell_app(int(slot), entry)
+    update_board(entry, project)
     return {'posted': True, 'journal': written}
 
 
 def tell_app(slot: int, entry: dict) -> None:
     """The member's state to the Android app, for the director's tiles it draws (best effort)."""
-    try:
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
-            conn.settimeout(0.5)
-            conn.connect('/mnt/android-wayland/platform.sock')
-            member = {'slot': slot, 'role': entry.get('role', ''), 'kind': entry.get('kind', ''), 'text': entry.get('text', '')}
-            conn.sendall(json.dumps({'op': 'director', 'member': member}, ensure_ascii=False).encode() + b'\n')
-            conn.recv(4096)
-    except (OSError, ValueError):
-        pass
+    member = {'slot': slot, 'role': entry.get('role', ''), 'kind': entry.get('kind', ''), 'text': entry.get('text', '')}
+    _send({'op': 'director', 'member': member})
 
 
 def clear(slot) -> None:
@@ -112,8 +215,10 @@ def update_state(entry: dict) -> None:
         temporary.write_text(json.dumps(merged, ensure_ascii=False))
         os.replace(temporary, target)
     except (OSError, ValueError):
-        pass
+        merged = entry
     tell_app(int(slot), {**entry, 'text': ''})
+    if merged.get('role'):
+        update_board({**merged, 'silent': True, 'text': ''})
 
 
 # ---- the murmur: what an agent is doing, from its own session log ------------------------------

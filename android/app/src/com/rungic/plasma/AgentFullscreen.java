@@ -340,6 +340,8 @@ final class AgentFullscreen implements SurfaceHolder.Callback {
                 if (e.getPointerCount() == 1 && Math.hypot(up, side) <= swipeDistance) return true;
                 stripDecided = true;  // not the toolbar: the gestures take it from here
             }
+            // The board in focus: no screen under it takes touches (the toolbar's swipe still works).
+            if (directing && host.director().focus() == Director.BOARD) return true;
             return touchpad ? pad.onTouchEvent(e) : direct.onTouchEvent(e);
         }
     }

@@ -105,6 +105,8 @@ Window {
                   ended: i18nc("@info:status a team member stopped", "ended") })[screen.teamKind] || ""
     }
     function screenName(screen, compact) {
+        if (screen.workspace === 100)
+            return i18nc("@label the team's board in the director", "Team board")
         if (screen.teamRole) {
             const state = teamState(screen)
             return state ? screen.teamRole + " · " + state : screen.teamRole
@@ -119,7 +121,7 @@ Window {
         for (const other of director.screens) {
             if (other === screen)
                 return at
-            if (other !== director.focusScreen)
+            if (other !== director.focusTile)
                 at++
         }
         return 0
@@ -289,7 +291,8 @@ Window {
             delegate: Item {
                 id: tile
                 required property QtObject modelData
-                readonly property bool focused: modelData === director.focusScreen
+                readonly property bool focused: modelData === director.focusTile
+                readonly property bool isBoard: modelData.workspace === 100
                 readonly property int place: root.columnIndex(modelData)
                 readonly property real thumbHeight: Math.min(Math.round(root.columnWidth * 9 / 16),
                     (root.pictureHeight - 4 * (root.others - 1)) / Math.max(1, root.others))
@@ -307,9 +310,14 @@ Window {
                     nodeId: tile.modelData.nodeId
                     visible: nodeId > 0
                 }
+                Loader {  // the team's board (rungic_cua.team): drawn here, no picture
+                    anchors.fill: parent
+                    active: tile.isBoard
+                    sourceComponent: TeamBoard { board: tile.modelData.board; compact: !tile.focused }
+                }
                 Text {  // a member whose workspace is not open yet (docs/58): its name for now
                     anchors.centerIn: parent
-                    visible: tile.modelData.nodeId === 0
+                    visible: tile.modelData.nodeId === 0 && !tile.isBoard
                     text: root.screenName(tile.modelData, !tile.focused)
                     color: Qt.rgba(1, 1, 1, 0.7)
                     font.pixelSize: tile.focused ? 16 : 9
@@ -353,7 +361,8 @@ Window {
             opacity: shown ? 1 : 0
             visible: opacity > 0.01
             Behavior on opacity { NumberAnimation { duration: 180 } }
-            state: root.captionState === "" ? "hidden" : root.captionState
+            // The board in focus says it all itself: no screen's caption over it.
+            state: root.captionState === "" || (root.directing && director.focus === 100) ? "hidden" : root.captionState
             states: [
                 State { name: "hidden"; PropertyChanges { caption.shown: false } },
                 State { name: "working"; PropertyChanges { caption.shown: true; caption.dot: "#63d471"; caption.label: root.screen.activityText || i18nc("@info:status the agent is at work on this screen", "Working") } },

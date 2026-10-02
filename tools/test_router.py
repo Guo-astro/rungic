@@ -13,11 +13,13 @@ import pytest  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
-def workspace_up():
+def workspace_up(tmp_path):
     """The workspace counts as running (workspace.ensure would start it); no murmur thread follows
-    a session log (team.Murmur)."""
+    a session log (team.Murmur); the board goes to a temporary file, nothing to the app."""
     with mock.patch.object(router.workspace, 'ensure', return_value=True), \
-            mock.patch.object(router.team, 'Murmur', mock.MagicMock()):
+            mock.patch.object(router.team, 'Murmur', mock.MagicMock()), \
+            mock.patch.object(router.team, 'board_path', lambda: tmp_path / 'team-board.json'), \
+            mock.patch.object(router.team, '_send', lambda request: None):
         yield
 
 
@@ -262,3 +264,79 @@ def test_a_chain_is_described_by_its_step_not_its_last_word():
     assert d('mkdir -p .team && cat > BRIEF.md <<EOF') == 'Write BRIEF.md'
     assert d('cd ~/Projects/x && python3 check.py') == 'Run check.py'
     assert d("grep -E 'godot|ardour|krita' apps.txt | head") == 'Read apps.txt'
+
+
+# ---- the board: the whole team at a glance (team.apply_to_board) -----------------------------------
+LEAD = 'lead-thread'
+
+
+def run_board(*entries):
+    board = None
+    for entry in entries:
+        board = router.team.apply_to_board(board, {'time': 1.0, **entry}, '/p')
+    return board
+
+
+def test_the_board_follows_a_team_from_brief_to_done():
+    b = run_board(
+        {'role': 'lead', 'kind': 'brief', 'text': 'Pixel Flappy', 'thread': LEAD, 'workspace': 1},
+        {'role': 'art', 'kind': 'review', 'text': '2 points: layers', 'thread': 'a', 'parent': LEAD, 'workspace': 3},
+        {'role': 'game', 'kind': 'review', 'text': 'No objections', 'thread': 'g', 'parent': LEAD, 'workspace': 2})
+    assert b['phase'] == 'review' and b['title'] == 'Pixel Flappy' and b['lead'] == LEAD
+    assert [r['role'] for r in b['reviews']] == ['art', 'game']
+    assert [m['role'] for m in b['members']] == ['lead', 'art', 'game'] and b['members'][0]['lead']
+    b = router.team.apply_to_board(b, {'role': 'lead', 'kind': 'decision', 'text': 'All accepted', 'thread': LEAD}, '/p')
+    assert b['phase'] == 'working' and b['decision'] == 'All accepted'
+    assert [m['kind'] for m in b['members']] == ['progress', 'progress', 'progress'], 'all at work once decided'
+    b = router.team.apply_to_board(b, {'role': 'art', 'kind': 'review', 'text': '', 'thread': 'a', 'parent': LEAD,
+                                       'workspace': 3, 'silent': True}, '')
+    assert b['members'][1]['text'] == '2 points: layers', 'a silent update keeps the words'
+    b = router.team.apply_to_board(b, {'role': 'lead', 'kind': 'done', 'text': 'Ready to play', 'thread': LEAD}, '/p')
+    assert b['phase'] == 'done' and b['result'] == 'Ready to play' and len(b['posts']) == 5
+
+
+def test_a_new_leads_brief_starts_a_new_board():
+    b = run_board({'role': 'lead', 'kind': 'brief', 'text': 'One', 'thread': LEAD},
+                  {'role': 'lead', 'kind': 'done', 'text': 'Done', 'thread': LEAD},
+                  {'role': 'lead', 'kind': 'brief', 'text': 'Two', 'thread': 'other'})
+    assert b['title'] == 'Two' and b['phase'] == 'review' and b['result'] == '' and len(b['posts']) == 1
+
+
+def test_a_post_updates_the_board_file(host):
+    with mock.patch.object(router, 'Child', FakeChild):
+        r = router.Router(WORKSPACE_ENV)
+        r.call('team_post', {'role': 'lead', 'kind': 'brief', 'text': 'Card', 'project': str(host / 'card')}, PARENT_META)
+    board = json.loads(router.team.board_path().read_text())
+    assert board['title'] == 'Card' and board['project'] == str(host / 'card')
+
+
+# ---- a workspace started again: its child's bus is gone (2026-10-02, the phone dozed) ------------
+def test_a_child_on_a_bus_gone_is_replaced(host, tmp_path, monkeypatch):
+    bus = tmp_path / 'ws-bus'
+    bus.write_text('')
+    env = {**WORKSPACE_ENV, 'DBUS_SESSION_BUS_ADDRESS': f'unix:path={bus}'}
+    FakeChild.made.clear()
+    with mock.patch.object(router, 'Child', FakeChild):
+        r = router.Router(env)
+        r.call('desktop_windows', {}, PARENT_META)
+        r.call('desktop_windows', {}, PARENT_META)
+        assert len(FakeChild.made) == 1
+        fresh = tmp_path / 'ws-bus.new'       # the workspace's bus made anew (a new inode)
+        fresh.write_text('')
+        fresh.replace(bus)
+        r.call('desktop_windows', {}, PARENT_META)
+        assert len(FakeChild.made) == 2
+
+
+def test_a_closed_connection_is_tried_once_more_with_a_new_child(host, monkeypatch):
+    class Stale(FakeChild):
+        def request(self, method, params):
+            self.calls.append(params['name'])
+            if len(FakeChild.made) == 1:
+                return {'isError': True, 'content': [{'type': 'text', 'text': 'Error: g-io-error-quark: The connection is closed (18)'}]}
+            return {'content': [{'type': 'text', 'text': '{"ok": true}'}]}
+    FakeChild.made.clear()
+    with mock.patch.object(router, 'Child', Stale):
+        r = router.Router(WORKSPACE_ENV)
+        result = r.call('desktop_windows', {}, PARENT_META)
+    assert len(FakeChild.made) == 2 and not result.get('isError')

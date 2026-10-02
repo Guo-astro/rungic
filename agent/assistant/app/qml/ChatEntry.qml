@@ -79,6 +79,7 @@ Item {
             case "work": return work
             case "call": return call
             case "approval": return approval
+            case "team": return team
             case "setup": return setup
             case "marker": return marker
             case "error": return errorLine
@@ -698,6 +699,149 @@ Item {
                 }
             }
             PillButton { text: i18nc("@action:button", "Go to settings"); onClicked: entry.openSettings(entry.command) }
+        }
+    }
+
+    // A team led from this conversation (docs/research/91 §14), as the director's board shows it:
+    // the phase, the brief, each member's state and latest words, the reviews, the decision, the result.
+    Component {
+        id: team
+        Outlined {
+            id: teamBox
+            readonly property var board: entry.task ? JSON.parse(entry.task) : ({})
+            readonly property var members: board.members || []
+            readonly property var reviews: board.reviews || []
+            readonly property bool reviewing: board.phase === "brief" || board.phase === "review"
+            function dotColor(kind) {
+                if (kind === "blocked" || kind === "question") return "#f0b35e"
+                if (kind === "failed") return "#e0606d"
+                if (!kind || kind === "ended") return "#8b97a3"
+                return "#63d471"
+            }
+            function stateName(kind) {
+                return ({ review: i18nc("@info:status a team member reviews the brief", "reviewing"),
+                          progress: i18nc("@info:status a team member works", "working"),
+                          blocked: i18nc("@info:status a team member cannot go on", "blocked"),
+                          question: i18nc("@info:status a team member asks", "has a question"),
+                          done: i18nc("@info:status a team member finished", "done"),
+                          failed: i18nc("@info:status a team member failed", "failed"),
+                          ended: i18nc("@info:status a team member stopped", "ended"),
+                          brief: i18nc("@info:status the lead writes the brief", "briefing"),
+                          decision: i18nc("@info:status the lead decides", "deciding") })[kind] || ""
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                Text {
+                    text: i18nc("@title a team of agents at work", "Team")
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.bodySize
+                    font.weight: Font.DemiBold
+                    color: Theme.text
+                }
+                Rectangle {
+                    visible: phaseText.text !== ""
+                    implicitWidth: phaseText.implicitWidth + 14
+                    implicitHeight: phaseText.implicitHeight + 4
+                    radius: height / 2
+                    color: teamBox.board.phase === "failed" ? "#e0606d"
+                         : (teamBox.board.phase === "working" || teamBox.board.phase === "done") ? "#63d471" : "#3daee9"
+                    Text {
+                        id: phaseText
+                        anchors.centerIn: parent
+                        text: ({ brief: i18nc("@info:status the team's phase", "Brief"),
+                                 review: i18nc("@info:status the team's phase", "In review"),
+                                 working: i18nc("@info:status the team's phase", "At work"),
+                                 done: i18nc("@info:status the team's phase", "Done"),
+                                 failed: i18nc("@info:status the team's phase", "Failed") })[teamBox.board.phase] || ""
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.labelSize
+                        font.weight: Font.DemiBold
+                        color: "#0a1016"
+                    }
+                }
+                Item { Layout.fillWidth: true }
+            }
+            Text {
+                Layout.fillWidth: true
+                visible: text !== ""
+                text: teamBox.board.title || ""
+                wrapMode: Text.Wrap
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.bodySize
+                color: Theme.text
+            }
+            Repeater {
+                model: teamBox.members
+                delegate: RowLayout {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    spacing: 8
+                    Rectangle {
+                        Layout.alignment: Qt.AlignTop
+                        Layout.topMargin: 6
+                        implicitWidth: 8; implicitHeight: 8; radius: 4
+                        color: teamBox.dotColor(modelData.kind)
+                    }
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 1
+                        Text {
+                            Layout.fillWidth: true
+                            text: (modelData.role || "") + (teamBox.stateName(modelData.kind) ? "  ·  " + teamBox.stateName(modelData.kind) : "")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.metaSize
+                            font.weight: Font.DemiBold
+                            color: Theme.text
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            visible: text !== ""
+                            text: modelData.text || ""
+                            wrapMode: Text.Wrap
+                            maximumLineCount: 3
+                            elide: Text.ElideRight
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.metaSize
+                            color: Theme.dim
+                        }
+                    }
+                }
+            }
+            // The reviews: in full while the team reviews, then folded under the decision.
+            Text {
+                visible: !teamBox.reviewing && teamBox.reviews.length > 0
+                text: entry.expanded ? i18nc("@action:button hide the team's reviews", "Hide reviews")
+                                     : i18ncp("@action:button show the team's reviews", "Show %1 review", "Show %1 reviews", teamBox.reviews.length)
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.labelSize
+                color: Theme.link
+                TapHandler { onTapped: entry.model.setProperty(entry.index, "expanded", !entry.expanded) }
+            }
+            Repeater {
+                model: teamBox.reviewing || entry.expanded ? teamBox.reviews : []
+                delegate: Text {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    text: i18nc("@info a team member's review: %1 the member, %2 what it said", "%1: %2", modelData.role, modelData.text)
+                    wrapMode: Text.Wrap
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.metaSize
+                    color: Theme.dim
+                }
+            }
+            Text {
+                Layout.fillWidth: true
+                visible: !!(teamBox.board.result || teamBox.board.decision)
+                text: teamBox.board.result
+                    ? i18nc("@info the lead's result for the team's work", "Result: %1", teamBox.board.result)
+                    : i18nc("@info the lead's decision after the reviews", "Decision: %1", teamBox.board.decision || "")
+                wrapMode: Text.Wrap
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.metaSize
+                font.weight: Font.DemiBold
+                color: Theme.text
+            }
         }
     }
 

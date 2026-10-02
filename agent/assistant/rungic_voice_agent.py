@@ -49,6 +49,7 @@ sys.path.insert(1, '/usr/lib/rungic-cua')
 import shutil
 import socket
 import task_state
+import team_feed
 import model_catalog
 import codex_install
 import media_frames
@@ -858,6 +859,11 @@ class VoiceAgent:
             log('instructions: defaults not copied:', error)
         self.start_server()
         GLib.timeout_add_seconds(30, self.idle_check)
+        # A team led from a conversation (docs/research/91 §14): its board there, its milestones heard.
+        self.team = team_feed.Feed()
+        self.team_notes = {}
+        self.team_note_signal = 0
+        GLib.timeout_add_seconds(2, self.team_tick)
         # A newer Codex: looked for a minute after start and then every few hours; Settings shows it.
         GLib.timeout_add_seconds(60, lambda: self.look_for_codex_update() and False)
         GLib.timeout_add_seconds(codex_install.CHECK_EVERY_S, self.look_for_codex_update)
@@ -1730,6 +1736,63 @@ class VoiceAgent:
     def watcher_gone(self, sender):
         self.watchers.pop(sender, None)
 
+    # ---- a team's board in the conversation leading it (team_feed, docs/research/91 §14) ----
+    def team_tick(self):
+        board, new = self.team.poll()
+        lead = (board or {}).get('lead') or ''
+        if not board or lead not in self.store.index:
+            return True
+        self.emit({'type': 'team', 'conversation': lead, 'board': team_feed.card(board)})
+        facts, notes = [], []
+        for post in new:
+            said = team_feed.milestone(post, board)
+            if said and said['say']:
+                facts.append(said['say'])
+            if said and said['notify']:
+                notes.append((post, said))
+        if facts and self.realtime and self.thread_id == lead and not self.call_in_progress():
+            threading.Thread(target=self.speak_progress, args=(team_feed.spoken(facts),), daemon=True).start()
+        if notes and not self.user_watching():
+            post, said = next((n for n in notes if n[1]['urgent']), notes[-1])
+            self.team_notify(lead, board, post, said['urgent'])
+        return True
+
+    def team_notify(self, conversation, board, post, urgent):
+        """A system notification that opens the conversation (only what needs the user, or the end)."""
+        role, text, kind = post.get('role', ''), post.get('text', ''), post.get('kind', '')
+        if kind == 'question':
+            title = _('{role} has a question').format(role=role)
+        elif kind == 'blocked':
+            title = _('{role} is blocked').format(role=role)
+        elif kind == 'failed':
+            title = _('{role} failed').format(role=role)
+        else:
+            title, text = _('Your team is done'), board.get('result') or text
+        try:
+            connection = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+            if not self.team_note_signal:
+                self.team_note_signal = connection.signal_subscribe(
+                    'org.freedesktop.Notifications', 'org.freedesktop.Notifications', 'ActionInvoked',
+                    '/org/freedesktop/Notifications', None, Gio.DBusSignalFlags.NONE, self.team_note_action)
+            hints = {'desktop-entry': GLib.Variant('s', 'com.rungic.VoiceAssistant'),
+                     'urgency': GLib.Variant('y', 2 if urgent else 1)}
+            reply = connection.call_sync(
+                'org.freedesktop.Notifications', '/org/freedesktop/Notifications', 'org.freedesktop.Notifications',
+                'Notify', GLib.Variant('(susssasa{sv}i)', (_('Voice Assistant'), 0, 'com.rungic.VoiceAssistant',
+                                                          title, text, ['default', _('Open')], hints, -1)),
+                GLib.VariantType.new('(u)'), Gio.DBusCallFlags.NONE, 5000, None)
+            self.team_notes[reply.unpack()[0]] = conversation
+            log('team notify:', title)
+        except GLib.Error as error:
+            log('team notify', error.message)
+
+    def team_note_action(self, _connection, _sender, _path, _interface, _signal, params):
+        note, _action = params.unpack()
+        conversation = self.team_notes.pop(note, None)
+        if conversation:
+            subprocess.Popen(['rungic-voice-assistant', '--conversation', conversation],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+
     # ---- the turn in words (task_state, docs/89) ----------------------------------------
     def task_changed(self):
         """The card changed: tell the app, a few times a second at most."""
@@ -1991,7 +2054,7 @@ class VoiceAgent:
         elif kind == 'mcpToolCall':
             # Desktop operations (rungic-desktop MCP) shown like command cards.
             arguments = item.get('arguments') or {}
-            label = arguments.get('goal') or arguments.get('app') or arguments.get('window_id') or ''
+            label = arguments.get('goal') or arguments.get('app') or arguments.get('window_id') or arguments.get('text') or ''
             output = ''
             if item.get('error'):
                 output = str(item['error'].get('message', item['error']))

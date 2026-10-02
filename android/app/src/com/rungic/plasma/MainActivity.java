@@ -116,7 +116,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
             @Override public void leaveFullscreen() { agentFullscreen.hide(); }
             @Override public void castToTv() {
                 // The cast button (docs/58): the TV, once picked, takes over what fullscreen showed.
-                int source = agentFullscreen.directing() ? director.focus() : fullscreenSource;
+                int source = agentFullscreen.directing() ? director.focusPicture() : fullscreenSource;
                 agentFullscreen.hide();
                 // A tap in the app itself: its window may not hold the focus (fullscreen's layer did,
                 // and the check threw and ended the app, 2026-10-01).
@@ -556,7 +556,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
             .put("tv", director.shown().contains(assistantWorkspace))
             .put("fullscreen", agentFullscreen.shown() && fullscreenSource == assistantWorkspace)
             .put("tvShown", new org.json.JSONArray(director.shown()))
-            .put("tvHeard", director.onTv() ? director.focus() : -1)
+            .put("tvHeard", director.onTv() && director.focus() != Director.BOARD ? director.focus() : -1)
             .put("directorFocus", director.focus())
             .put("directorFullscreen", agentFullscreen.directing());
     }
@@ -587,6 +587,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
             org.json.JSONObject m = request.getJSONObject("member");
             director.setMember(m.getInt("slot"), m.optString("role"), m.optString("kind"), m.optString("text"));
         }
+        if (request.has("board")) director.setBoard(request.getJSONObject("board"));
         if (request.has("caption")) {
             org.json.JSONObject c = request.getJSONObject("caption");
             director.setCaption(c.getInt("slot"), c.optString("state", "working"), c.optString("text"));
@@ -598,7 +599,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
             else if (director.members().isEmpty()) throw new IllegalStateException("no assistant's screen is open");
             else if (!agentFullscreen.directing()) {
                 agentFullscreen.hide();
-                fullscreenSource = director.focus();
+                fullscreenSource = director.focusPicture();
                 agentFullscreen.show(true);
             }
         }
@@ -636,7 +637,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         director.prepareBackground(width, height, rotation);
         // Its source first (the desktop, or a workspace), so the host makes no output for the other.
         if ("tv".equals(owner)) NativeBridge.presentWorkspace(director.tvSource());
-        else if (agentFullscreen.directing()) NativeBridge.presentWorkspace(director.focus());
+        else if (agentFullscreen.directing()) NativeBridge.presentWorkspace(director.focusPicture());
         else {
             // Fullscreen shows one screen: no director layout left from a TV.
             try { NativeBridge.setDirector(new int[0], new float[0], fullscreenSource); }

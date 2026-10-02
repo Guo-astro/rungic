@@ -498,3 +498,31 @@ msgstr "无效的建议卡片"
 
 msgid "Busy with another task or a call; open this suggestion again later"
 msgstr "正在处理其他任务或通话，请稍后再打开这条建议"
+
+#: rungic_voice_agent.py
+msgid "{role} has a question"
+msgstr "{role} 有问题要问你"
+
+#: rungic_voice_agent.py
+msgid "{role} is blocked"
+msgstr "{role} 卡住了"
+
+#: rungic_voice_agent.py
+msgid "{role} failed"
+msgstr "{role} 失败了"
+
+#: rungic_voice_agent.py
+msgid "Your team is done"
+msgstr "团队完成了"
+
+#: rungic_voice_agent.py
+msgid "Open"
+msgstr "打开"
+
+#: task_state.py
+msgid "Tell the team: {text}"
+msgstr "告诉团队：{text}"
+
+#: task_state.py
+msgid "Tell the team"
+msgstr "告诉团队"

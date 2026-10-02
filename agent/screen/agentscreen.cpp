@@ -473,6 +473,7 @@ void AgentScreen::close()
 Director::Director(QObject *parent)
     : QObject(parent)
 {
+    m_board = new BoardTile(this);
     connect(&m_poll, &QTimer::timeout, this, &Director::poll);
     m_poll.start(700);
     poll();
@@ -483,7 +484,23 @@ QList<QObject *> Director::screens() const
     QList<QObject *> out;
     for (AgentScreen *screen : m_screens)
         out.append(screen);
+    if (m_boardShown)
+        out.append(m_board);
     return out;
+}
+
+QObject *Director::focusTile() const
+{
+    if (m_focus == BoardTile::kSlot && m_boardShown)
+        return m_board;
+    return m_screens.value(m_focus);
+}
+
+QObject *Director::focusScreen() const
+{
+    if (m_focus == BoardTile::kSlot)
+        return m_screens.isEmpty() ? nullptr : m_screens.first();
+    return m_screens.value(m_focus);
 }
 
 void Director::poll()
@@ -500,6 +517,8 @@ void Director::apply(const QJsonObject &state)
     QList<int> members;
     for (const QJsonValue &value : state.value(QStringLiteral("members")).toArray())
         members.append(value.toInt());
+    m_boardShown = members.removeAll(BoardTile::kSlot) > 0;
+    m_board->setBoard(state.value(QStringLiteral("board")).toObject().toVariantMap());
     for (int slot : m_screens.keys()) {
         if (!members.contains(slot))
             delete m_screens.take(slot);
@@ -509,7 +528,7 @@ void Director::apply(const QJsonObject &state)
             m_screens.insert(slot, new AgentScreen(slot, this));
     }
     m_focus = state.value(QStringLiteral("focus")).toInt();
-    if (!m_screens.contains(m_focus))
+    if (!m_screens.contains(m_focus) && !(m_focus == BoardTile::kSlot && m_boardShown))
         m_focus = m_screens.isEmpty() ? 0 : m_screens.firstKey();
     m_level = state.value(QStringLiteral("level")).toInt();
     m_fullscreen = state.value(QStringLiteral("fullscreen")).toBool();

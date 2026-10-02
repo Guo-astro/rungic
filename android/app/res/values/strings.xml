@@ -172,6 +172,14 @@
     <string name="team_briefing">writing the brief</string>
     <string name="team_deciding">deciding</string>
     <string name="tile_not_open">App not open yet</string>
+    <string name="board_name">Team board</string>
+    <string name="phase_brief">Brief</string>
+    <string name="phase_review">In review</string>
+    <string name="phase_working">At work</string>
+    <string name="phase_done">Done</string>
+    <string name="phase_failed">Failed</string>
+    <string name="board_decision">Decision</string>
+    <string name="board_result">Result</string>
     <string name="tag_brief">Brief</string>
     <string name="tag_review">Review</string>
     <string name="tag_decision">Decision</string>

@@ -37,6 +37,10 @@ import org.json.JSONObject;
  */
 final class Director {
     static final int STANDARD = 0, ENLARGED = 1, SOLO = 2;
+    /** The team's board (rungic_cua.team): a tile of the director's own, drawn here, no workspace's. */
+    static final int BOARD = 100;
+    /** A finished team's board stays this long after its last post. */
+    private static final long BOARD_KEPT_MS = 10 * 60_000;
     private static final long POLL_MS = 1000, BANNER_MS = 2500;
 
     private final Activity activity;
@@ -162,7 +166,17 @@ final class Director {
     void removeListener(Runnable listener) { listeners.remove(listener); }
 
     /** The source the TV's presenter shows first (0 the user's desktop, n workspace n). */
-    int tvSource() { return onTv() ? focus : 0; }
+    int tvSource() { return onTv() ? picture(focus) : 0; }
+
+    /** The focus's picture: the focus, or for the board the first screen beside it. */
+    int focusPicture() { return picture(focus); }
+
+    /** `slot`, or for the board (no picture of its own) the first screen beside it. */
+    private int picture(int slot) {
+        if (slot != BOARD) return slot;
+        for (int m : members) if (m != BOARD) return m;
+        return 0;
+    }
 
     /** Workspaces on the TV now (the focus first). */
     List<Integer> shown() {
@@ -230,8 +244,58 @@ final class Director {
         return new JSONObject().put("members", all).put("focus", focus).put("level", level)
             .put("version", version)
             .put("tv", new JSONObject().put("connected", bound).put("content", onTv() ? "director" : bound ? "desktop" : JSONObject.NULL)
-                .put("shown", on).put("heard", onTv() ? focus : -1));
+                .put("shown", on).put("heard", onTv() && focus != BOARD ? focus : -1))
+            .put("board", board());
     }
+
+    // ---- the team's board ---------------------------------------------------------------------
+    private JSONObject board;
+
+    /** The team's board (op "director" {"board": …}): brief, phase, members, decision, result. */
+    void setBoard(JSONObject value) {
+        board = value;
+        List<Integer> before = members;
+        refreshMembers();
+        // A new version either way: the phone's director window draws the board too.
+        changedVersion();
+        if (!before.equals(members) && (bound || fullscreen)) apply(true);
+        redraw();
+        // A finished board leaves once it is old.
+        handler.postDelayed(this::refreshBoard, BOARD_KEPT_MS + 1000);
+    }
+
+    private void refreshBoard() {
+        List<Integer> before = members;
+        refreshMembers();
+        if (!before.equals(members)) { changedVersion(); if (bound || fullscreen) apply(true); redraw(); }
+    }
+
+    /** The board while its team works, and for a while after it finished. */
+    JSONObject board() {
+        if (board == null) return null;
+        String phase = board.optString("phase");
+        boolean over = "done".equals(phase) || "failed".equals(phase);
+        long updated = (long) (board.optDouble("updated", 0) * 1000);
+        if (over && System.currentTimeMillis() - updated > BOARD_KEPT_MS) return null;
+        return board;
+    }
+
+    String phaseName(String phase) {
+        int id = PHASE_NAMES.getOrDefault(phase, 0);
+        return id == 0 ? "" : activity.getString(id);
+    }
+
+    private static final java.util.Map<String, Integer> PHASE_NAMES = java.util.Map.of(
+        "brief", R.string.phase_brief, "review", R.string.phase_review, "working", R.string.phase_working,
+        "done", R.string.phase_done, "failed", R.string.phase_failed);
+
+    /** A member's kind on the board, as a state's name (as the tiles name it). */
+    String kindName(String kind) {
+        int id = STATE_NAMES.getOrDefault("progress".equals(kind) ? "working" : kind, 0);
+        return id == 0 ? "" : activity.getString(id);
+    }
+
+    String boardText(int id) { return activity.getString(id); }
 
     /** A new version of the state; the Linux side waiting for it hears at once (HostEvents). */
     private void changedVersion() {
@@ -330,6 +394,7 @@ final class Director {
 
     /** A tile's name: a member's role, else the screen's. */
     String screenName(int slot) {
+        if (slot == BOARD) return activity.getString(R.string.board_name);
         String[] m = membersSaid.get(slot);
         if (m != null) return m[0];
         return slot == 0 ? activity.getString(R.string.tv_desktop) : activity.getString(R.string.tv_workspace, slot);
@@ -435,6 +500,7 @@ final class Director {
         for (java.util.Map.Entry<Integer, String[]> m : membersSaid.entrySet())
             if (!found.contains(m.getKey()) && !"ended".equals(m.getValue()[1])) found.add(m.getKey());
         found.sort(Integer::compare);
+        if (board() != null && !found.isEmpty()) found.add(BOARD);
         members = found;
         // A focus that closed: the first member left.
         if (!members.isEmpty() && !members.contains(focus)) focus = members.get(0);
@@ -482,7 +548,8 @@ final class Director {
             float[][] shown = tiles.clone();
             shown[0] = now;
             tiles = shown;
-            try { NativeBridge.placeTile(slot, now[0], now[1], now[2], now[3]); } catch (UnsatisfiedLinkError e) { a.cancel(); }
+            if (slot != BOARD)
+                try { NativeBridge.placeTile(slot, now[0], now[1], now[2], now[3]); } catch (UnsatisfiedLinkError e) { a.cancel(); }
             if (labels != null) labels.invalidate();
             for (Runnable listener : new ArrayList<>(listeners)) listener.run();
         });
@@ -491,10 +558,18 @@ final class Director {
 
     /** The tiles to the host, the labels and the listeners. */
     private void send(float[][] rects, int[] slots) {
-        float[] flat = new float[rects.length * 4];
-        for (int i = 0; i < rects.length; i++) System.arraycopy(rects[i], 0, flat, 4 * i, 4);
-        int presented = slots.length > 0 ? slots[0] : tvSource();
-        try { NativeBridge.setDirector(slots, flat, presented); }
+        // The board is drawn by the labels: the host lays out the workspaces only.
+        int n = 0;
+        for (int slot : slots) if (slot != BOARD) n++;
+        int[] hostSlots = new int[n];
+        float[] flat = new float[n * 4];
+        for (int i = 0, j = 0; i < slots.length; i++) {
+            if (slots[i] == BOARD) continue;
+            hostSlots[j] = slots[i];
+            System.arraycopy(rects[i], 0, flat, 4 * j++, 4);
+        }
+        int presented = hostSlots.length > 0 ? hostSlots[0] : tvSource();
+        try { NativeBridge.setDirector(hostSlots, flat, presented); }
         catch (UnsatisfiedLinkError e) { NativeBridge.presentWorkspace(presented); }
         if (labels != null) labels.invalidate();
         else if (bound && onTv()) addLabels();

@@ -13,6 +13,8 @@ phone, fullscreen, or on the TV:
       kept the workspace open (unsaved work).
       `tv`: show it on the TV instead of the desktop, connecting the TV if none is (`notv` gives
       the TV back to the desktop).
+      `team`: a team's board went up (rungic_cua.team): a workspace's window becomes the director,
+      which shows the board beside it.
 
 Each prints one JSON object. `on` turns the screen on and opens its floating window; `off` turns
 it off and the window quits by itself. `ensure` is `status` that also brings back the window of a
@@ -74,6 +76,17 @@ def windows_shown():
         except (OSError, ValueError):
             pass
     return sorted(slots)
+
+
+BOARD = 100  # the team's board, a tile of the director's own (the app's Director.BOARD)
+
+
+def board_shown():
+    """A team's board is up: with it, even one workspace makes two tiles (docs/research/91 §14)."""
+    try:
+        return BOARD in bridge({'op': 'director'}).get('members', [])
+    except (OSError, ValueError):
+        return False
 
 
 def director_running():
@@ -220,13 +233,15 @@ def start_window(slot=None):
     name = f'rungic-{OP}' + (f'-{slot}' if slot else '')
     with open(os.path.join(runtime, f'{name}.lock'), 'w') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        if window_running(slot) or (slot and not DESKTOP and director_running()):
+        team = bool(slot) and not DESKTOP and not director_running() and board_shown()
+        if (window_running(slot) or (slot and not DESKTOP and director_running())) and not team:
             return
-        others = [] if DESKTOP or not slot else [n for n in windows_shown() if n != slot]
-        if others:
-            # A second workspace out: one director window for them all (docs/58) instead of a window each.
+        others = [] if DESKTOP or not slot else [n for n in windows_shown() if n not in (slot, BOARD)]
+        if others or team:
+            # A second workspace out, or a team's board beside one: one director window for them all
+            # (docs/58) instead of a window each.
             background()
-            for n in others:
+            for n in [*others, slot]:
                 subprocess.run(['pkill', '-f', f'^{WINDOW} --workspace {n}$'], capture_output=True)
             subprocess.Popen(['systemd-run', '--user', '--scope', '--collect', '--quiet', '--slice=app.slice',
                               '--unit', f'app-{APP}-director-{os.getpid()}{time.monotonic_ns()}', WINDOW, '--director'],
@@ -469,13 +484,23 @@ def tv(show=True):
     return status()
 
 
+def team():
+    """A team's board went up (rungic_cua.team): a workspace's window becomes the director."""
+    if DESKTOP or director_running() or not bridge({'op': OP}).get('enabled'):
+        return {'director': director_running()}
+    shown = [n for n in windows_shown() if n != BOARD]
+    if shown:
+        start_window(shown[0])
+    return {'director': director_running()}
+
+
 def main():
     command = sys.argv[1] if len(sys.argv) > 1 else 'status'
     if command == 'toggle':
         command = 'off' if bridge({'op': OP})['enabled'] else 'on'
     actions = {'on': on, 'off': off, 'close': close, 'dismiss': dismiss, 'notify-unsaved': notify_unsaved,
                'status': status, 'ensure': ensure, 'tv': tv, 'notv': lambda: tv(False),
-               'workspace-stopped': workspace_stopped, 'background': background}
+               'workspace-stopped': workspace_stopped, 'background': background, 'team': team}
     if command not in actions:
         raise SystemExit(__doc__)
     print(json.dumps(actions[command](), ensure_ascii=False))

@@ -230,6 +230,19 @@ QtObject {
             entries.setProperty(root.workAt, "task", JSON.stringify(card))
             break
         }
+        case "team": {
+            // A team led from this conversation (docs/research/91 §14): one card per team, kept current.
+            const board = e.board || {}
+            const id = (board.lead || "") + ":" + (board.started || 0)
+            for (let i = entries.count - 1; i >= 0; i--) {
+                if (entries.get(i).kind === "team" && entries.get(i).itemId === id) {
+                    entries.setProperty(i, "task", JSON.stringify(board))
+                    return
+                }
+            }
+            entries.append(entry({ kind: "team", itemId: id, task: JSON.stringify(board), started: board.started || e.time || 0 }))
+            break
+        }
         case "agent-finished":
             if (root.workAt >= 0) {
                 if (entries.get(root.workAt).status !== "stopped") entries.setProperty(root.workAt, "status", "done")
