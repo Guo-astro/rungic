@@ -1,0 +1,8 @@
+[Unit]
+Description=The device's screens over RDP: one RemoteSurface Host (docs/research/97)
+# Not part of the graphical session: the phone's UI restarting must not cut a viewer off a workspace.
+
+[Service]
+ExecStart=/usr/bin/rungic-remote run
+Restart=on-failure
+RestartSec=5

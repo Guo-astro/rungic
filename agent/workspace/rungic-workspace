@@ -1,5 +1,7 @@
 #!/bin/sh
 # rungic-workspace N: agent workspace N (docs/research/91), a KWin of its own on the Android host.
+# N 0: the independent desktop (desktop mode, docs/research/97 §19): the user's own desktop in a KWin
+# of its own, with Plasma's desktop shell, the user's settings and data, for as long as it is on.
 #
 # Its own D-Bus session, its own Wayland socket (wayland-ws-N), its own Xwayland, its own KWin
 # settings; its only output is the one the host offers on /mnt/android-wayland/ws-N, which the
@@ -7,7 +9,7 @@
 # lands there and nowhere else; its input never touches the phone's.
 set -eu
 slot=${1:?usage: rungic-workspace N}
-case "$slot" in [1-9]) ;; *) echo "workspace: a slot 1..9" >&2; exit 2 ;; esac
+case "$slot" in [0-9]) ;; *) echo "workspace: a slot 0..9" >&2; exit 2 ;; esac
 host=/mnt/android-wayland/ws-$slot
 runtime=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
 failed=$runtime/rungic-workspace-$slot.failed
@@ -48,7 +50,19 @@ export FD_KGSL_DMABUF_UBWC=1
 state=${XDG_STATE_HOME:-$HOME/.local/state}/rungic-workspaces/$slot
 mkdir -p "$state/config"
 export RUNGIC_USER_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
-[ -e "$state/config/kdeglobals" ] || ln -s "$RUNGIC_USER_CONFIG_HOME/kdeglobals" "$state/config/kdeglobals"
+if [ "$slot" = 0 ]; then
+    # The desktop shares the user's settings and data with the phone's session, all but each
+    # session's own (KWin's and the shell's, whose file names are fixed, its daemons', the clipboard
+    # history): links to the user's files, kept in step while it runs (rungic-desktop-dirs).
+    export RUNGIC_USER_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+    rungic-desktop-dirs build "$state"
+    export XDG_DATA_HOME="$state/data" XDG_STATE_HOME="$state/state"
+    mkdir -p "$XDG_STATE_HOME"
+    # A desktop's programs, not the phone's: Plasma Mobile's shell and form factor stay with it.
+    unset PLASMA_DEFAULT_SHELL PLASMA_PLATFORM
+else
+    [ -e "$state/config/kdeglobals" ] || ln -s "$RUNGIC_USER_CONFIG_HOME/kdeglobals" "$state/config/kdeglobals"
+fi
 export XDG_CONFIG_HOME="$state/config"
 # A desktop's window behaviour, not the phone's: Plasma Mobile's configuration leaves the search
 # path, the workspace defaults come first (defaults/kwinrc).
@@ -92,8 +106,11 @@ fi
 bus=$runtime/rungic-workspace-$slot.bus
 rm -f "$state/bus" "$state/display" "$bus"
 # Its own configuration: the workspace's accessibility bus (rungic-workspace-a11y) must not take
-# the user's over.
-dbus-daemon --config-file=/usr/share/rungic-workspace/dbus-1/session.conf --nofork --nopidfile \
+# the user's over; the desktop's passes the secret service to the user's session (rungic-bus-forward:
+# one ksecretd for the passwords' files).
+conf=session.conf
+[ "$slot" != 0 ] || conf=desktop.conf
+dbus-daemon --config-file=/usr/share/rungic-workspace/dbus-1/$conf --nofork --nopidfile \
     --address="unix:path=$bus" &
 dbusd=$!
 for i in $(seq 50); do [ -S "$bus" ] && break; sleep 0.1; done
@@ -128,9 +145,28 @@ done
 echo "$DBUS_SESSION_BUS_ADDRESS" > "$state/bus"
 # Its wallpaper: without Plasma's shell an empty workspace is transparent.
 while [ ! -S "$runtime/wayland-ws-$slot" ] && kill -0 $kwin 2>/dev/null; do sleep 0.1; done
-/usr/libexec/rungic-workspace-desktop &
-# Its apps frozen while nobody uses it, the workspace closed after long (keeper.cpp).
-/usr/libexec/rungic-workspace-keeper "$slot" 2>"$state/keeper.log" &
+# One of the device's screens for remote viewing (RemoteSurface's screen registry, docs/research/97
+# §15): the device's one RDP Host lists it and a viewer switches to it. Removed when it stops.
+screens=$runtime/remote-surface/screens.d
+mkdir -p "$screens"
+name="Assistant screen $slot" kind=workspace
+[ "$slot" != 0 ] || { name="Computer desktop" kind=desktop; }
+printf '{"version": 1, "id": "ws-%s", "name": "%s", "kind": "%s", "order": %s, "wayland": "%s", "dbus": "%s", "desktop": "plasma", "resizable": false, "wake": false, "available": true, "reason": ""}\n' \
+    "$slot" "$name" "$kind" "$slot" "$runtime/wayland-ws-$slot" "$DBUS_SESSION_BUS_ADDRESS" > "$screens/.ws-$slot.json.tmp"
+mv "$screens/.ws-$slot.json.tmp" "$screens/ws-$slot.json"
+if [ "$slot" = 0 ]; then
+    # Plasma's desktop shell (taskbar, desktop, notifications, tray), again if it ends; the desktop
+    # ends when it is turned off, never for being idle.
+    rungic-desktop-dirs watch "$state" >"$state/dirs.log" 2>&1 &
+    ( while kill -0 $kwin 2>/dev/null; do
+          plasmashell -p org.kde.plasma.desktop --no-respawn >"$state/plasmashell.log" 2>&1
+          sleep 2
+      done ) &
+else
+    /usr/libexec/rungic-workspace-desktop &
+    # Its apps frozen while nobody uses it, the workspace closed after long (keeper.cpp).
+    /usr/libexec/rungic-workspace-keeper "$slot" 2>"$state/keeper.log" &
+fi
 status=0
 wait $kwin || status=$?
 # Stopped (systemctl stop, the workspace closed): the wait above ends at the signal with 143;

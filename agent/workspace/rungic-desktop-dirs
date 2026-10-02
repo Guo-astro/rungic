@@ -1,0 +1,121 @@
+#!/usr/bin/env python3
+"""rungic-desktop-dirs build|watch STATE: the independent desktop's view of the user's files
+(docs/research/97 §19.2).
+
+The independent desktop (workspace 0, rungic-workspace) is another session of the same user: its
+programs share the user's settings and data with the phone's, except for what each session must
+keep for itself. Its XDG_CONFIG_HOME and XDG_DATA_HOME are STATE/config and STATE/data: every entry
+of the user's ~/.config and ~/.local/share is a symbolic link there, so both sessions read and write
+the same files, but for PRIVATE ones, the desktop's own:
+
+- KWin's and the shell's state, whose names are fixed by their programs (kwinrc, plasmashellrc,
+  the desktop layout), and the session's own daemons' (global shortcuts, activities, kded);
+- the clipboard history (each session's own; their clipboards are kept in step, rungic-clipboard).
+
+  build   the two directories, from scratch for the shared entries
+  watch   keep them in step, every few seconds: an entry the desktop created in its directory
+          (a program's first settings) moves to the user's and becomes a link; one the phone's
+          session created appears as a link. Private entries are left alone.
+"""
+import os
+import shutil
+import sys
+import time
+from pathlib import Path
+
+HOME = Path.home()
+CONFIG = Path(os.environ.get('RUNGIC_USER_CONFIG_HOME') or os.environ.get('XDG_CONFIG_HOME') or HOME / '.config')
+DATA = Path(os.environ.get('RUNGIC_USER_DATA_HOME') or os.environ.get('XDG_DATA_HOME') or HOME / '.local/share')
+
+PRIVATE = {
+    'config': {
+        # Names fixed by their programs: the phone's KWin and Plasma Mobile write the same.
+        'kwinrc', 'kwinoutputconfig.json', 'plasmashellrc', 'plasma-org.kde.plasma.desktop-appletsrc',
+        # This session's daemons.
+        'kglobalshortcutsrc', 'kactivitymanagerdrc', 'kactivitymanagerd-statsrc', 'kactivitymanagerd-pluginsrc',
+        'kded5rc', 'kded6rc', 'ksmserverrc',
+        # The phone's own layers (XDG_CONFIG_DIRS of Plasma Mobile), not the desktop's.
+        'plasma-mobile', 'kdedefaults', 'plasmamobilerc',
+    },
+    'data': {
+        'kactivitymanagerd', 'klipper', 'kscreen',
+    },
+}
+INTERVAL_S = 3
+SETTLE_S = 10
+
+
+def pairs(state: Path):
+    return (('config', CONFIG, state / 'config'), ('data', DATA, state / 'data'))
+
+
+def link(source: Path, target: Path) -> None:
+    try:
+        target.symlink_to(source)
+    except FileExistsError:
+        pass
+
+
+def build(state: Path) -> None:
+    for kind, user, mirror in pairs(state):
+        user.mkdir(parents=True, exist_ok=True)
+        mirror.mkdir(parents=True, exist_ok=True)
+        # The shared entries anew (one the user removed goes); the private ones kept.
+        for entry in mirror.iterdir():
+            if entry.is_symlink():
+                entry.unlink()
+        for entry in user.iterdir():
+            if entry.name not in PRIVATE[kind] and not (mirror / entry.name).exists():
+                link(entry, mirror / entry.name)
+
+
+def step(state: Path) -> list[str]:
+    """One round of `watch`: what it moved or linked."""
+    done = []
+    for kind, user, mirror in pairs(state):
+        for entry in list(mirror.iterdir()):
+            # Locks and a save's temporary file are a moment's (KConfig, QSaveFile): never moved.
+            if entry.name in PRIVATE[kind] or entry.name.endswith('.lock'):
+                continue
+            if entry.is_symlink():
+                if not os.path.lexists(user / entry.name):
+                    entry.unlink()          # removed on the phone's side
+                    done.append(f'unlinked {kind}/{entry.name}')
+                continue
+            # Made here (a program's first settings, or written over the link): the user's from now on,
+            # once it has been left alone a while. A program writing through the link never gets here.
+            if time.time() - entry.lstat().st_mtime < SETTLE_S:
+                continue
+            shared = user / entry.name
+            if shared.exists() and shared.is_dir() != entry.is_dir():
+                continue
+            if entry.is_dir() and shared.is_dir():
+                continue                    # both have one: left as they are
+            os.replace(entry, shared) if not entry.is_dir() else shutil.move(str(entry), str(shared))
+            link(shared, entry)
+            done.append(f'shared {kind}/{entry.name}')
+        for entry in user.iterdir():
+            if entry.name not in PRIVATE[kind] and not os.path.lexists(mirror / entry.name):
+                link(entry, mirror / entry.name)
+                done.append(f'linked {kind}/{entry.name}')
+    return done
+
+
+def main() -> None:
+    if len(sys.argv) != 3 or sys.argv[1] not in ('build', 'watch'):
+        raise SystemExit(__doc__)
+    state = Path(sys.argv[2])
+    if sys.argv[1] == 'build':
+        build(state)
+        return
+    while True:
+        try:
+            for line in step(state):
+                print(line, flush=True)
+        except OSError as error:    # an entry gone between listing and moving: next round
+            print(f'watch: {error}', file=sys.stderr, flush=True)
+        time.sleep(INTERVAL_S)
+
+
+if __name__ == '__main__':
+    main()

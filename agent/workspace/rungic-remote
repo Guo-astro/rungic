@@ -1,0 +1,219 @@
+#!/usr/bin/env python3
+"""rungic-remote: the device's screens over RDP, one Host for all of them (docs/research/97 §15).
+
+  rungic-remote on [--address ADDR]   start the device's RDP Host (port 3390)
+  rungic-remote off                   stop it
+  rungic-remote status                its state (the Host's own status)
+  rungic-remote screens               the screens it offers, and which one is shown
+  rungic-remote select ID             show screen ID to the connected viewer (desktop, ws-N)
+  rungic-remote run                   what rungic-remote.service runs
+
+One RemoteSurface Host (~/github/RemoteSurface: a Swift RDP server, zkde_screencast + fake
+input, H.264) serves every screen of the device: the phone's own desktop and each agent workspace
+(headless KWins, running while the phone sleeps). A viewer sees the list when it connects and
+switches between them; nothing switches by itself. The screens come from RemoteSurface's
+screen registry ($XDG_RUNTIME_DIR/remote-surface/screens.d): each workspace writes its entry
+(rungic-workspace), and this service keeps the phone desktop's, unavailable while the Rungic app
+does not answer (the phone asleep: its desktop gives no picture then).
+
+The configuration and credentials are private (~/.config/rungic-remote, 0600): TLS with a
+self-signed certificate, the user "rungic" and a random password, printed once by `on`. The Host
+listens on loopback unless an address is given (e.g. the VPN's): nothing is offered to the
+network by default. It is not part of the graphical session: the phone's UI restarting does not
+cut a viewer off a workspace.
+"""
+import json
+import os
+import secrets
+import signal
+import socket
+import subprocess
+import sys
+import threading
+import time
+from pathlib import Path
+
+HOME = Path.home()
+CANDIDATES = [os.environ.get('RUNGIC_REMOTE_HOST', ''),
+              str(HOME / '.local/share/remote-surface-host/current/bin/remote-surface-host'),
+              '/usr/lib/remote-surface-host/bin/remote-surface-host']
+DESKTOP = HOME / '.local/share/applications/com.rungic.RemoteHost.desktop'
+CONFIG = HOME / '.config/rungic-remote'
+PORT = 3390
+UNIT = 'rungic-remote.service'
+UNREACHABLE_FOR_S = 60   # rungic_cua.router's mark of a host that did not answer
+
+
+def runtime() -> Path:
+    return Path(os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}')
+
+
+def registry() -> Path:
+    return runtime() / 'remote-surface' / 'screens.d'
+
+
+def control_socket() -> str:
+    return str(runtime() / 'rungic-remote.sock')
+
+
+def host_binary() -> str:
+    found = next((c for c in CANDIDATES if c and os.access(c, os.X_OK)), '')
+    if not found:
+        raise SystemExit(json.dumps({'error': 'RemoteSurface Host is not installed', 'looked': [c for c in CANDIDATES if c]}))
+    return found
+
+
+def authorize(binary: str) -> None:
+    """Every KWin of the user (the phone's, each workspace's) grants screencast and fake input to
+    the executable a desktop file names (by its canonical path)."""
+    DESKTOP.parent.mkdir(parents=True, exist_ok=True)
+    text = ('[Desktop Entry]\nType=Application\nName=Rungic remote screens\n'
+            'Comment=The device\'s screens over RDP (docs/research/97)\n'
+            f'Exec={binary}\nNoDisplay=true\n'
+            'X-KDE-Wayland-Interfaces=org_kde_kwin_fake_input,zkde_screencast_unstable_v1\n')
+    if not DESKTOP.exists() or DESKTOP.read_text() != text:
+        DESKTOP.write_text(text)
+
+
+def configure(address: str | None) -> tuple[Path, str | None]:
+    """The Host's configuration; a new password only the first time (returned then)."""
+    CONFIG.mkdir(parents=True, exist_ok=True)
+    os.chmod(CONFIG, 0o700)
+    config = CONFIG / 'host.json'
+    key, cert = CONFIG / 'server-key.pem', CONFIG / 'server-cert.pem'
+    if not key.exists() or not cert.exists():
+        old = os.umask(0o077)
+        try:
+            subprocess.run(['openssl', 'req', '-x509', '-newkey', 'rsa:3072', '-nodes', '-days', '825',
+                            '-subj', '/CN=rungic', '-keyout', str(key), '-out', str(cert)],
+                           check=True, capture_output=True)
+        finally:
+            os.umask(old)
+    password = None
+    data = json.loads(config.read_text()) if config.exists() else {}
+    if not data.get('password'):
+        password = secrets.token_urlsafe(18)
+        data['password'] = password
+    data.update({'port': PORT, 'username': data.get('username') or 'rungic',
+                 'certificate': str(cert), 'privateKey': str(key), 'monitor': 0,
+                 'framesPerSecond': data.get('framesPerSecond', 30), 'quality': data.get('quality', 75),
+                 'screens': {'registry': str(registry()), 'switchTimeoutSeconds': 4}})
+    data['address'] = address or data.get('address') or '127.0.0.1'
+    temporary = config.with_suffix('.tmp')
+    old = os.umask(0o077)
+    try:
+        temporary.write_text(json.dumps(data, indent=2))
+    finally:
+        os.umask(old)
+    os.replace(temporary, config)
+    os.chmod(config, 0o600)
+    return config, password
+
+
+def phone_answers() -> tuple[bool, str]:
+    """Whether the phone's desktop can give a picture: the Rungic app answers (its KWin's host)."""
+    try:
+        if time.time() - (runtime() / 'rungic-host-unreachable').stat().st_mtime < UNREACHABLE_FOR_S:
+            return False, 'The phone is asleep'
+    except OSError:
+        pass
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
+            conn.settimeout(2)
+            conn.connect('/mnt/android-wayland/platform.sock')
+            conn.sendall(b'{"op": "status"}\n')
+            if json.loads(conn.makefile('rb').readline() or b'null'):
+                return True, ''
+    except (OSError, ValueError):
+        pass
+    return False, 'The phone is asleep'
+
+
+def write_desktop_entry() -> None:
+    available, reason = phone_answers()
+    entry = {'version': 1, 'id': 'desktop', 'name': 'Phone desktop', 'kind': 'desktop', 'order': 0,
+             'wayland': str(runtime() / 'wayland-0'), 'dbus': f'unix:path={runtime()}/bus',
+             'desktop': 'plasma', 'resizable': False, 'wake': False,
+             'available': available, 'reason': reason}
+    target = registry() / 'desktop.json'
+    target.parent.mkdir(parents=True, exist_ok=True)
+    text = json.dumps(entry, ensure_ascii=False)
+    try:
+        if target.read_text() == text:
+            return
+    except OSError:
+        pass
+    temporary = target.parent / '.desktop.json.tmp'
+    temporary.write_text(text)
+    os.replace(temporary, target)
+
+
+def run() -> None:
+    binary = host_binary()
+    authorize(binary)
+    configure(None)
+    env = dict(os.environ)
+    # Software H.264 on a GPU with no DRM render node (KGSL): the capture is read back.
+    env.setdefault('RSH_CAPTURE_ENCODER', 'software')
+    env.setdefault('RSH_CAPTURE_DMABUF', '0')
+    write_desktop_entry()
+    host = subprocess.Popen([binary, 'serve', '--config', str(CONFIG / 'host.json'), '--socket', control_socket()], env=env)
+
+    def stop(*_):
+        host.terminate()
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
+
+    def keep_desktop():
+        while host.poll() is None:
+            write_desktop_entry()
+            time.sleep(2)
+    threading.Thread(target=keep_desktop, daemon=True).start()
+    code = host.wait()
+    (registry() / 'desktop.json').unlink(missing_ok=True)
+    sys.exit(code)
+
+
+def control(*command: str) -> dict:
+    done = subprocess.run([host_binary(), *command, '--socket', control_socket()],
+                          capture_output=True, text=True, timeout=15)
+    try:
+        return json.loads(done.stdout)
+    except ValueError:
+        return {'output': done.stdout.strip(), 'error': done.stderr.strip()[-300:]}
+
+
+def main() -> None:
+    args = sys.argv[1:]
+    if not args:
+        raise SystemExit(__doc__)
+    command = args[0]
+    if command == 'run':
+        run()
+    elif command == 'on':
+        address = args[args.index('--address') + 1] if '--address' in args else None
+        host_binary()
+        config, password = configure(address)
+        subprocess.run(['systemctl', '--user', 'restart', UNIT], check=True)
+        data = json.loads(config.read_text())
+        out = {'address': data['address'], 'port': data['port'], 'username': data['username']}
+        if password:
+            out['password'] = password
+            out['note'] = 'shown once; it is in ' + str(config)
+        print(json.dumps(out, ensure_ascii=False))
+    elif command == 'off':
+        subprocess.run(['systemctl', '--user', 'stop', UNIT], check=False)
+        print(json.dumps({'stopped': True}))
+    elif command == 'status':
+        active = subprocess.run(['systemctl', '--user', 'is-active', UNIT], capture_output=True, text=True).stdout.strip()
+        print(json.dumps({'service': active, 'host': control('status') if active == 'active' else None}, ensure_ascii=False))
+    elif command == 'screens':
+        print(json.dumps(control('screens'), ensure_ascii=False))
+    elif command == 'select' and len(args) == 2:
+        print(json.dumps(control('select-screen', args[1]), ensure_ascii=False))
+    else:
+        raise SystemExit(__doc__)
+
+
+if __name__ == '__main__':
+    main()

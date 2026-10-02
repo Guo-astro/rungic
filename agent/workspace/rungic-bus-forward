@@ -1,0 +1,110 @@
+#!/usr/bin/env python3
+"""rungic-bus-forward NAME...: D-Bus services of the user's session, offered on another session bus
+(docs/research/97 §19.2).
+
+The independent desktop (rungic-desktop) has a session bus of its own, and what it starts there
+runs a second time beside the phone's session. For some services that must not be: the secret
+service (ksecretd) keeps the user's passwords in files both copies would write. This program owns
+NAMEs on this bus ($DBUS_SESSION_BUS_ADDRESS) and passes every call made to them, unchanged, to
+the same names on the user's bus ($RUNGIC_USER_BUS, else $XDG_RUNTIME_DIR/bus), which starts the
+real service there if needed; the replies come back, and the signals the service emits there are
+emitted here too. Callers see one service; its objects, sessions and prompts are the user's.
+
+Started by D-Bus activation of any of the names (the desktop bus's service files point here).
+It ends when this bus goes.
+"""
+import os
+import sys
+
+import gi
+
+gi.require_version('Gio', '2.0')
+from gi.repository import Gio, GLib  # noqa: E402
+
+CALL_TIMEOUT_MS = 120_000   # a prompt (unlock the wallet) waits for the user
+
+
+def user_bus_address() -> str:
+    runtime = os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}'
+    return os.environ.get('RUNGIC_USER_BUS') or f'unix:path={runtime}/bus'
+
+
+class Forward:
+    def __init__(self, names: list[str]):
+        self.names = names
+        self.here = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+        self.there = Gio.DBusConnection.new_for_address_sync(
+            user_bus_address(),
+            Gio.DBusConnectionFlags.AUTHENTICATION_CLIENT | Gio.DBusConnectionFlags.MESSAGE_BUS_CONNECTION,
+            None, None)
+        self.loop = GLib.MainLoop()
+        self.here.connect('closed', lambda *_: self.loop.quit())
+        self.here.add_filter(self.incoming)
+        # Signals of the service there (whatever its unique name, it may restart): emitted here.
+        self.owners: dict[str, str] = {}
+        for name in names:
+            self.there.signal_subscribe(name, None, None, None, None, Gio.DBusSignalFlags.NONE, self.signal)
+            Gio.bus_own_name_on_connection(self.here, name, Gio.BusNameOwnerFlags.NONE, None, None)
+
+    # The filter runs on GDBus's worker thread: the forwarding is done on the main loop.
+    def incoming(self, connection, message, is_incoming):
+        if not is_incoming or message.get_message_type() != Gio.DBusMessageType.METHOD_CALL:
+            return message
+        destination = message.get_destination()
+        if destination != self.here.get_unique_name() and destination not in self.names:
+            return message
+        GLib.idle_add(self.forward, message)
+        return None
+
+    def forward(self, message):
+        destination = message.get_destination()
+        target = destination if destination in self.names else self.names[0]
+        call = Gio.DBusMessage.new_method_call(target, message.get_path(), message.get_interface(), message.get_member())
+        if message.get_body() is not None:   # an empty body is none at all
+            call.set_body(message.get_body())
+        if message.get_unix_fd_list() is not None:
+            call.set_unix_fd_list(message.get_unix_fd_list())
+        flags = message.get_flags()
+        call.set_flags(flags)
+        if flags & Gio.DBusMessageFlags.NO_REPLY_EXPECTED:
+            self.there.send_message(call, Gio.DBusSendMessageFlags.NONE)
+            return False
+        self.there.send_message_with_reply(call, Gio.DBusSendMessageFlags.NONE, CALL_TIMEOUT_MS, None,
+                                           self.answered, message)
+        return False
+
+    def answered(self, connection, result, message):
+        try:
+            reply = connection.send_message_with_reply_finish(result)
+        except GLib.Error as error:
+            name = Gio.dbus_error_get_remote_error(error) or 'org.freedesktop.DBus.Error.Failed'
+            Gio.DBusError.strip_remote_error(error)
+            self.here.send_message(message.new_method_error_literal(name, error.message), Gio.DBusSendMessageFlags.NONE)
+            return
+        # An error reply is a reply too (only local failures raise): passed on with its name and body.
+        if reply.get_message_type() == Gio.DBusMessageType.ERROR:
+            answer = message.new_method_error_literal(reply.get_error_name(), '')
+        else:
+            answer = message.new_method_reply()
+        if reply.get_body() is not None:
+            answer.set_body(reply.get_body())
+        if reply.get_unix_fd_list() is not None:
+            answer.set_unix_fd_list(reply.get_unix_fd_list())
+        self.here.send_message(answer, Gio.DBusSendMessageFlags.NONE)
+
+    def signal(self, connection, sender, path, interface, member, parameters):
+        self.here.emit_signal(None, path, interface, member, parameters)
+
+    def run(self):
+        self.loop.run()
+
+
+def main():
+    names = sys.argv[1:]
+    if not names:
+        raise SystemExit(__doc__)
+    Forward(names).run()
+
+
+if __name__ == '__main__':
+    main()

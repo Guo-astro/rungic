@@ -26,8 +26,10 @@ up)
     unload loopback
     unload sink
     # A value with spaces: quoted for the module arguments ('…'), then for the property list ("…").
+    description="Agent workspace $slot"
+    [ "$slot" != 0 ] || description="Computer desktop"
     pactl load-module module-null-sink sink_name="$sink" \
-        "sink_properties='device.description=\"Agent workspace $slot\"'" >/dev/null
+        "sink_properties='device.description=\"$description\"'" >/dev/null
     ;;
 down)
     unload loopback
