@@ -11,14 +11,8 @@
 #include <QJsonObject>
 #include <QLocalSocket>
 #include <QProcess>
-#include <QScreen>
 #include <QThread>
-#include <QWaylandClientExtensionTemplate>
-#include <QtGui/qscreen_platform.h>
 #include <unistd.h>
-
-#include "qwayland-fake-input.h"
-#include "qwayland-zkde-screencast-unstable-v1.h"
 
 namespace
 {
@@ -27,12 +21,6 @@ const QString kSocket = QStringLiteral("/mnt/android-wayland/platform.sock");
 // an ending is news only for a moment (the window shows it a few seconds).
 constexpr double kActivityStaleS = 120;
 constexpr double kEndingStaleS = 10;
-// No pointer in the picture: asking for it embedded makes KWin show the pointer, which then sat on the
-// phone's own screen as a black square (the host draws its cursor surface without alpha).
-constexpr uint kPointerHidden = 1;
-// The pointer drawn in: fullscreen's touchpad mode only (setPointerShown). The host now draws no
-// cursor on the phone's screen while it is touched (touch input mode), so no square there.
-constexpr uint kPointerEmbedded = 2;
 
 // One request on the platform bridge; `timeoutMs` covers a TV connection (up to a minute).
 QJsonObject bridge(const QJsonObject &request, int timeoutMs = 3000)
@@ -50,73 +38,10 @@ QJsonObject bridge(const QJsonObject &request, int timeoutMs = 3000)
 }
 }
 
-class ScreencastStream : public QObject, public QtWayland::zkde_screencast_stream_unstable_v1
-{
-    Q_OBJECT
-public:
-    explicit ScreencastStream(struct ::zkde_screencast_stream_unstable_v1 *stream)
-        : zkde_screencast_stream_unstable_v1(stream)
-    {
-    }
-    ~ScreencastStream() override
-    {
-        if (object())
-            close();
-    }
-Q_SIGNALS:
-    void created(uint node);
-    void failed(const QString &error);
-    void closedByCompositor();
-
-protected:
-    void zkde_screencast_stream_unstable_v1_created(uint32_t node) override { Q_EMIT created(node); }
-    void zkde_screencast_stream_unstable_v1_failed(const QString &error) override { Q_EMIT failed(error); }
-    void zkde_screencast_stream_unstable_v1_closed() override { Q_EMIT closedByCompositor(); }
-};
-
-class Screencasting : public QWaylandClientExtensionTemplate<Screencasting>, public QtWayland::zkde_screencast_unstable_v1
-{
-public:
-    Screencasting()
-        : QWaylandClientExtensionTemplate<Screencasting>(1)
-    {
-        initialize();
-    }
-    ~Screencasting() override
-    {
-        if (object())
-            destroy();
-    }
-};
-
-class FakeInput : public QWaylandClientExtensionTemplate<FakeInput>, public QtWayland::org_kde_kwin_fake_input
-{
-public:
-    FakeInput()
-        : QWaylandClientExtensionTemplate<FakeInput>(4)
-    {
-        initialize();
-    }
-};
-
-#include "agentscreen.moc"
-
 AgentScreen::AgentScreen(int workspace, QObject *parent)
     : QObject(parent)
     , m_workspace(workspace)
-    , m_screencasting(std::make_unique<Screencasting>())
-    , m_input(std::make_unique<FakeInput>())
 {
-    connect(qGuiApp, &QGuiApplication::screenAdded, this, &AgentScreen::update);
-    connect(qGuiApp, &QGuiApplication::screenRemoved, this, &AgentScreen::update);
-    // The phone turning landscape widens its output over the assistant's screen.
-    const auto watch = [this](QScreen *screen) {
-        connect(screen, &QScreen::geometryChanged, this, [this] { QTimer::singleShot(300, this, &AgentScreen::keepApart); });
-    };
-    for (QScreen *screen : QGuiApplication::screens())
-        watch(screen);
-    connect(qGuiApp, &QGuiApplication::screenAdded, this, watch);
-    connect(m_screencasting.get(), &Screencasting::activeChanged, this, &AgentScreen::update);
     connect(&m_poll, &QTimer::timeout, this, &AgentScreen::poll);
     m_poll.start(1500);
     // The caption: rungic-cua replaces the file by renaming, which changes the directory.
@@ -185,154 +110,54 @@ void AgentScreen::setStatus(const QString &status)
     Q_EMIT statusChanged();
 }
 
-QSize AgentScreen::outputSize() const
-{
-    if (m_workspace > 0)
-        return QSize(1920, 1080);
-    QScreen *output = agentOutput();
-    return output ? output->geometry().size() : QSize(1920, 1080);
-}
-
-QScreen *AgentScreen::agentOutput() const
-{
-    const auto screens = QGuiApplication::screens();
-    for (QScreen *screen : screens) {
-        if (screen->name().startsWith(QLatin1String("CAST")))
-            return screen;
-    }
-    return nullptr;
-}
-
-// Outputs that overlap in KWin's space show the same windows: after the phone turned landscape (360
-// -> 800 wide) its home screen appeared inside the assistant's screen. Nothing rearranges the outputs
-// then, so move the assistant's screen next to the phone's.
-void AgentScreen::keepApart()
-{
-    if (m_workspace > 0)    // desktop mode's window looks after its output
-        return;
-    QScreen *agent = agentOutput();
-    if (!agent)
-        return;
-    const auto screens = QGuiApplication::screens();
-    for (QScreen *screen : screens) {
-        if (screen == agent || !screen->geometry().intersects(agent->geometry()))
-            continue;
-        const QRect phone = screen->geometry();
-        const QString position = QStringLiteral("output.%1.position.%2,%3").arg(agent->name()).arg(phone.right() + 1).arg(phone.top());
-        qInfo() << "agent screen: overlaps" << screen->name() << "- kscreen-doctor" << position;
-        QProcess::startDetached(QStringLiteral("kscreen-doctor"), {position});
-        return;
-    }
-}
-
 void AgentScreen::poll()
 {
     if (m_activityState == QLatin1String("working"))
         readActivity();  // goes stale when nothing reports any more
+    if (m_workspace == 0) {
+        // Desktop mode is on while the independent desktop runs (rungic-desktop-mode, docs/research/97
+        // §19); the bridge only says whether a TV shows it (computer mode), and may not answer.
+        const QString runtime = qEnvironmentVariable("XDG_RUNTIME_DIR", QStringLiteral("/run/user/%1").arg(getuid()));
+        if (!QFile::exists(runtime + QStringLiteral("/wayland-ws-0"))) {
+            QCoreApplication::quit();
+            return;
+        }
+        m_onTv = bridge({{QStringLiteral("op"), op()}}).value(QStringLiteral("tv")).toBool();
+        update();
+        return;
+    }
     const QJsonObject state = bridge({{QStringLiteral("op"), op()}});
     if (state.contains(QStringLiteral("error"))) {
         setStatus(QStringLiteral("error: ") + state.value(QStringLiteral("error")).toString());
         return;
     }
     m_enabled = state.value(QStringLiteral("enabled")).toBool();
-    // A workspace: on the TV when the TV shows it (alone or in the director, docs/58); the
-    // assistant's screen's "tv" is about the one workspace the screen was last turned on for.
-    m_onTv = m_workspace > 0 && state.contains(QStringLiteral("tvShown"))
+    // On the TV when the TV shows it (alone or in the director, docs/58); the assistant's screen's
+    // "tv" is about the one workspace the screen was last turned on for.
+    m_onTv = state.contains(QStringLiteral("tvShown"))
         ? state.value(QStringLiteral("tvShown")).toArray().contains(m_workspace)
         : state.value(QStringLiteral("tv")).toBool();
     m_fullscreen = state.value(QStringLiteral("fullscreen")).toBool()
         // The director fullscreen shows every workspace: none records its own picture meanwhile.
-        || (m_workspace > 0 && state.value(QStringLiteral("directorFullscreen")).toBool());
+        || state.value(QStringLiteral("directorFullscreen")).toBool();
     if (!m_enabled) {  // turned off elsewhere (quick setting, rungic-agent-screen off)
         QCoreApplication::quit();
         return;
     }
-    // The host forgets it when it restarts or the screen is turned on again.
-    if (state.contains(QStringLiteral("watched")) && state.value(QStringLiteral("watched")).toBool() != m_watched)
-        reportWatched();
     update();
-}
-
-void AgentScreen::setWatched(bool watched)
-{
-    if (m_watched == watched)
-        return;
-    m_watched = watched;
-    reportWatched();
-}
-
-void AgentScreen::reportWatched()
-{
-    // Only desktop mode's output is paced by who watches it (docs/65).
-    if (m_workspace > 0)
-        return;
-    bridge({{QStringLiteral("op"), op()}, {QStringLiteral("watched"), m_watched}});
 }
 
 void AgentScreen::update()
 {
-    // An agent workspace (docs/research/91): its own KWin, recorded by a helper connected to it.
-    if (m_workspace > 0) {
-        if (m_stream)  // the assistant's own screen was shown until now
-            stopStream();
-        if (m_onTv || m_fullscreen) {
-            stopWorkspaceStream();
-            setStatus(m_onTv ? QStringLiteral("tv") : QStringLiteral("fullscreen"));
-            return;
-        }
-        if (!m_workspaceStream || m_streamedWorkspace != m_workspace) {
-            startWorkspaceStream();
-        }
-        return;
-    }
-    stopWorkspaceStream();
-    QScreen *output = agentOutput();
-    if (!output) {
-        stopStream();
-        setStatus(QStringLiteral("waiting for the screen"));
-        return;
-    }
-    if (m_onTv || m_fullscreen) {  // the TV or the phone's fullscreen shows it: no recording, the window hides
-        stopStream();
+    // Its own KWin, recorded by a helper connected to it; nothing while a TV or the APK's
+    // fullscreen presents it.
+    if (m_onTv || m_fullscreen) {
+        stopWorkspaceStream();
         setStatus(m_onTv ? QStringLiteral("tv") : QStringLiteral("fullscreen"));
         return;
     }
-    if (m_stream && m_streamed == output)
-        return;
-    startStream();
-}
-
-void AgentScreen::startStream()
-{
-    stopStream();
-    QScreen *output = agentOutput();
-    auto wayland = output ? output->nativeInterface<QNativeInterface::QWaylandScreen>() : nullptr;
-    if (!wayland || !m_screencasting->isActive()) {
-        setStatus(QStringLiteral("waiting for KWin"));
-        return;
-    }
-    m_stream = std::make_unique<ScreencastStream>(m_screencasting->stream_output(wayland->output(), kPointerHidden));
-    m_streamed = output;
-    setStatus(QStringLiteral("connecting"));
-    connect(m_stream.get(), &ScreencastStream::created, this, [this](uint node) {
-        m_nodeId = node;
-        Q_EMIT nodeIdChanged();
-        setStatus(QStringLiteral("running"));
-        updatePointerStream();
-        // The pointer belongs to the assistant's screen; left on the phone's it shows there.
-        if (!m_pointerPlaced) {
-            m_pointerPlaced = true;
-            pointerMove(0.5, 0.5);
-        }
-    });
-    connect(m_stream.get(), &ScreencastStream::failed, this, [this](const QString &error) {
-        setStatus(QStringLiteral("error: ") + error);
-        stopStream();
-    });
-    connect(m_stream.get(), &ScreencastStream::closedByCompositor, this, [this] {
-        stopStream();
-        QTimer::singleShot(500, this, &AgentScreen::update);
-    });
+    if (!m_workspaceStream || m_streamedWorkspace != m_workspace)
+        startWorkspaceStream();
 }
 
 void AgentScreen::startWorkspaceStream()
@@ -341,7 +166,11 @@ void AgentScreen::startWorkspaceStream()
     m_streamedWorkspace = m_workspace;
     m_workspaceStream = new QProcess(this);
     m_workspaceStream->setProgram(QStringLiteral("rungic-workspace-env"));
-    m_workspaceStream->setArguments({QString::number(m_workspace), QStringLiteral("/usr/libexec/rungic-workspace-stream")});
+    QStringList arguments{QString::number(m_workspace), QStringLiteral("/usr/libexec/rungic-workspace-stream")};
+    // Desktop mode's picture without the pointer: the touches are the pointer there.
+    if (m_workspace == 0)
+        arguments << QStringLiteral("--pointer-hidden");
+    m_workspaceStream->setArguments(arguments);
     m_workspaceStream->setProcessChannelMode(QProcess::ForwardedErrorChannel);
     setStatus(QStringLiteral("connecting"));
     QProcess *process = m_workspaceStream;
@@ -352,6 +181,11 @@ void AgentScreen::startWorkspaceStream()
                 m_nodeId = line.mid(5).toUInt();
                 Q_EMIT nodeIdChanged();
                 setStatus(QStringLiteral("running"));
+                if (m_pointerShown)
+                    send(QStringLiteral("pointer-stream on"));
+            } else if (line.startsWith("pointer-node ")) {
+                m_pointerNodeId = line.mid(13).toUInt();
+                Q_EMIT pointerNodeIdChanged();
             } else if (line.startsWith("error ")) {
                 setStatus(QStringLiteral("error: ") + QString::fromUtf8(line.mid(6)));
             }
@@ -366,6 +200,10 @@ void AgentScreen::startWorkspaceStream()
         if (m_nodeId) {
             m_nodeId = 0;
             Q_EMIT nodeIdChanged();
+        }
+        if (m_pointerNodeId) {
+            m_pointerNodeId = 0;
+            Q_EMIT pointerNodeIdChanged();
         }
         // The workspace went or restarted: try again at the next poll.
         m_streamedWorkspace = 0;
@@ -389,6 +227,16 @@ void AgentScreen::stopWorkspaceStream()
         m_nodeId = 0;
         Q_EMIT nodeIdChanged();
     }
+    if (m_pointerNodeId) {
+        m_pointerNodeId = 0;
+        Q_EMIT pointerNodeIdChanged();
+    }
+}
+
+void AgentScreen::send(const QString &line)
+{
+    if (m_workspaceStream)
+        m_workspaceStream->write((line + QLatin1Char('\n')).toUtf8());
 }
 
 void AgentScreen::setPointerShown(bool shown)
@@ -396,53 +244,18 @@ void AgentScreen::setPointerShown(bool shown)
     if (m_workspace > 0 || shown == m_pointerShown)
         return;
     m_pointerShown = shown;
-    updatePointerStream();
+    send(shown ? QStringLiteral("pointer-stream on") : QStringLiteral("pointer-stream off"));
 }
 
-void AgentScreen::updatePointerStream()
+void AgentScreen::typeText(const QString &text)
 {
-    if (!m_pointerShown || !m_stream || !m_streamed) {
-        dropPointerStream();
-        return;
-    }
-    if (m_pointerStream)
-        return;
-    auto wayland = m_streamed->nativeInterface<QNativeInterface::QWaylandScreen>();
-    if (!wayland || !m_screencasting->isActive())
-        return;
-    m_pointerStream = std::make_unique<ScreencastStream>(m_screencasting->stream_output(wayland->output(), kPointerEmbedded));
-    ScreencastStream *stream = m_pointerStream.get();
-    connect(stream, &ScreencastStream::created, this, [this](uint node) {
-        m_pointerNodeId = node;
-        Q_EMIT pointerNodeIdChanged();
-    });
-    // Gone: the window keeps the picture without the pointer. Not deleted inside its own signal.
-    const auto gone = [this, stream] {
-        if (m_pointerStream.get() == stream)
-            QTimer::singleShot(0, this, &AgentScreen::dropPointerStream);
-    };
-    connect(stream, &ScreencastStream::failed, this, gone);
-    connect(stream, &ScreencastStream::closedByCompositor, this, gone);
+    if (!text.isEmpty())
+        send(QStringLiteral("text ") + QString::fromLatin1(text.toUtf8().toBase64()));
 }
 
-void AgentScreen::dropPointerStream()
+void AgentScreen::key(int code, bool pressed)
 {
-    m_pointerStream.reset();
-    if (m_pointerNodeId) {
-        m_pointerNodeId = 0;
-        Q_EMIT pointerNodeIdChanged();
-    }
-}
-
-void AgentScreen::stopStream()
-{
-    dropPointerStream();
-    m_stream.reset();
-    m_streamed = nullptr;
-    if (m_nodeId) {
-        m_nodeId = 0;
-        Q_EMIT nodeIdChanged();
-    }
+    send(QStringLiteral("key %1 %2").arg(code).arg(pressed ? 1 : 0));
 }
 
 QString AgentScreen::backgroundFile() const
@@ -454,48 +267,20 @@ QString AgentScreen::backgroundFile() const
 
 void AgentScreen::pointerMove(double fx, double fy)
 {
-    if (m_workspaceStream) {
-        m_workspaceStream->write(QStringLiteral("pointer %1 %2\n").arg(fx).arg(fy).toUtf8());
-        return;
-    }
-    QScreen *output = agentOutput();
-    if (!output || !m_input->isActive())
-        return;
-    if (!m_authenticated) {
-        m_input->authenticate(QStringLiteral("Assistant screen"), QStringLiteral("Touches in the floating window"));
-        m_authenticated = true;
-    }
-    const QRect g = output->geometry();
-    const double x = g.x() + qBound(0.0, fx, 1.0) * (g.width() - 1);
-    const double y = g.y() + qBound(0.0, fy, 1.0) * (g.height() - 1);
-    m_input->pointer_motion_absolute(wl_fixed_from_double(x), wl_fixed_from_double(y));
+    send(QStringLiteral("pointer %1 %2").arg(fx).arg(fy));
 }
 
 void AgentScreen::pointerButton(int button, bool pressed)
 {
-    if (m_workspaceStream) {
-        m_workspaceStream->write(QStringLiteral("button %1 %2\n").arg(button).arg(pressed ? 1 : 0).toUtf8());
-        return;
-    }
-    if (m_input->isActive())
-        m_input->button(uint(button), pressed ? 1 : 0);
+    send(QStringLiteral("button %1 %2").arg(button).arg(pressed ? 1 : 0));
 }
 
 void AgentScreen::scroll(double dx, double dy)
 {
-    if (m_workspaceStream) {
-        if (dy != 0)
-            m_workspaceStream->write(QStringLiteral("axis 0 %1\n").arg(dy).toUtf8());
-        if (dx != 0)
-            m_workspaceStream->write(QStringLiteral("axis 1 %1\n").arg(dx).toUtf8());
-        return;
-    }
-    if (!m_input->isActive())
-        return;
     if (dy != 0)
-        m_input->axis(0, wl_fixed_from_double(dy));  // vertical
+        send(QStringLiteral("axis 0 %1").arg(dy));
     if (dx != 0)
-        m_input->axis(1, wl_fixed_from_double(dx));
+        send(QStringLiteral("axis 1 %1").arg(dx));
 }
 
 void AgentScreen::castToTv()
@@ -531,7 +316,9 @@ void AgentScreen::close()
                                                                 QStringLiteral("rungic-agent-screen"), QStringLiteral("dismiss"),
                                                                 QString::number(m_workspace)});
     } else {
-        bridge({{QStringLiteral("op"), op()}, {QStringLiteral("enabled"), false}});
+        // Desktop mode: the independent desktop closes, its apps asked first (rungic-desktop-mode).
+        QProcess::startDetached(QStringLiteral("systemd-run"), {QStringLiteral("--user"), QStringLiteral("--collect"), QStringLiteral("--quiet"),
+                                                                QStringLiteral("rungic-desktop-mode"), QStringLiteral("dismiss")});
     }
     QCoreApplication::quit();
 }

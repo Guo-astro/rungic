@@ -11,6 +11,16 @@
 //   pointer FX FY     pointer to that point of the output (fractions 0..1)
 //   button CODE 0|1   Linux button code, released or pressed
 //   axis 0|1 VALUE    vertical or horizontal scroll, in pointer axis units
+//   key CODE 0|1      Linux key code, released or pressed (the phone's keyboard: Enter, Backspace...)
+//   text BASE64       text typed on the phone, committed to the focused field as an input method
+//                     does (KWin's VirtualKeyboard.commitText on the workspace's bus)
+//
+// --pointer-hidden (the independent desktop, workspace 0, docs/research/97 §19): the picture
+// without the pointer, the user's touches being the pointer there; `pointer-stream on` adds a
+// second picture with the pointer drawn in (fullscreen's touchpad mode), printed as
+// "pointer-node <id>", and `pointer-stream off` ends it ("pointer-node 0").
+#include <QDBusMessage>
+#include <QDBusConnection>
 #include <QGuiApplication>
 #include <QScreen>
 #include <QSocketNotifier>
@@ -77,7 +87,9 @@ int main(int argc, char *argv[])
     FakeInput input;
     bool authenticated = false;
     std::unique_ptr<Stream> stream;
-    constexpr uint embedded = 2;    // the pointer drawn into the picture
+    std::unique_ptr<Stream> pointerStream;
+    constexpr uint hidden = 1, embedded = 2;    // the pointer left out of the picture, or drawn in
+    const bool pointerHidden = app.arguments().contains(QStringLiteral("--pointer-hidden"));
 
     auto start = [&]() {
         QScreen *screen = QGuiApplication::primaryScreen();
@@ -85,7 +97,7 @@ int main(int argc, char *argv[])
         if (stream || !wayland || !screencasting.isActive()) {
             return;
         }
-        stream = std::make_unique<Stream>(screencasting.stream_output(wayland->output(), embedded));
+        stream = std::make_unique<Stream>(screencasting.stream_output(wayland->output(), pointerHidden ? hidden : embedded));
         QObject::connect(stream.get(), &Stream::created, &app, [](uint node) {
             std::cout << "node " << node << std::endl;
         });
@@ -100,8 +112,53 @@ int main(int argc, char *argv[])
     QObject::connect(&screencasting, &Screencasting::activeChanged, &app, start);
     QObject::connect(&app, &QGuiApplication::primaryScreenChanged, &app, start);
     start();
+    // The picture with the pointer, beside the one without (no flash of black while it starts).
+    auto pointerPicture = [&](bool on) {
+        QScreen *screen = QGuiApplication::primaryScreen();
+        auto wayland = screen ? screen->nativeInterface<QNativeInterface::QWaylandScreen>() : nullptr;
+        if (!on || !wayland || !screencasting.isActive()) {
+            if (pointerStream) {
+                pointerStream.reset();
+                std::cout << "pointer-node 0" << std::endl;
+            }
+            return;
+        }
+        if (pointerStream) {
+            return;
+        }
+        pointerStream = std::make_unique<Stream>(screencasting.stream_output(wayland->output(), embedded));
+        QObject::connect(pointerStream.get(), &Stream::created, &app, [](uint node) {
+            std::cout << "pointer-node " << node << std::endl;
+        });
+        // Gone: the picture without the pointer stays. Not deleted inside its own signal.
+        const auto gone = [&pointerStream, &app, stream = pointerStream.get()] {
+            QMetaObject::invokeMethod(&app, [&pointerStream, stream] {
+                if (pointerStream.get() == stream) {
+                    pointerStream.reset();
+                    std::cout << "pointer-node 0" << std::endl;
+                }
+            }, Qt::QueuedConnection);
+        };
+        QObject::connect(pointerStream.get(), &Stream::failed, &app, gone);
+        QObject::connect(pointerStream.get(), &Stream::closedByCompositor, &app, gone);
+    };
     auto command = [&](const QStringList &words) {
-        if (words.isEmpty() || !input.isActive()) {
+        if (words.isEmpty()) {
+            return;
+        }
+        if (words[0] == QLatin1String("pointer-stream") && words.size() == 2) {
+            pointerPicture(words[1] == QLatin1String("on"));
+            return;
+        }
+        if (words[0] == QLatin1String("text") && words.size() == 2) {
+            // As an input method commits it (text-input v1/v2/v3, else key events): any language.
+            QDBusMessage call = QDBusMessage::createMethodCall(QStringLiteral("org.kde.KWin"), QStringLiteral("/VirtualKeyboard"),
+                                                               QStringLiteral("org.kde.kwin.VirtualKeyboard"), QStringLiteral("commitText"));
+            call << QString::fromUtf8(QByteArray::fromBase64(words[1].toLatin1()));
+            QDBusConnection::sessionBus().send(call);
+            return;
+        }
+        if (!input.isActive()) {
             return;
         }
         if (!authenticated) {
@@ -121,6 +178,8 @@ int main(int argc, char *argv[])
             input.button(words[1].toUInt(), words[2].toUInt());
         } else if (words[0] == QLatin1String("axis") && words.size() == 3) {
             input.axis(words[1].toUInt(), wl_fixed_from_double(words[2].toDouble()));
+        } else if (words[0] == QLatin1String("key") && words.size() == 3) {
+            input.keyboard_key(words[1].toUInt(), words[2].toUInt());
         }
     };
     QByteArray pending;

@@ -41,8 +41,6 @@ Window {
 
     property string mode: "window"      // window | tab | fullscreen
     readonly property bool full: mode === "fullscreen"
-    // Tucked away, nobody sees the screen: the host renders it at a low rate (docs/65).
-    onModeChanged: if (root.screen) root.screen.setWatched(mode !== "tab")
     property string edge: "right"
     property real px: 12
     // Desktop mode's window above, the assistant's screen's below it: both may be out at once. A
@@ -246,9 +244,45 @@ Window {
     }
     // Esc leaves fullscreen (the window takes the keyboard while fullscreen).
     Item {
+        id: escapeKey
         focus: true
         Keys.onEscapePressed: root.leaveFullscreen()
         Keys.onBackPressed: root.leaveFullscreen()
+    }
+    // ---- typing into the screen (fullscreen's keyboard button, docs/research/97 §19.4) -------------
+    // A field of its own, invisible, takes the phone's keyboard (the Android one, through the phone
+    // KWin's input method): what it commits goes to the screen's focused field as an input method
+    // commits it (any language), and is cleared; the keys it does not type (Backspace on an empty
+    // field, Enter, arrows...) go there as keys. Linux key codes (input-event-codes.h).
+    readonly property var keyCodes: ({
+        [Qt.Key_Backspace]: 14, [Qt.Key_Return]: 28, [Qt.Key_Enter]: 28, [Qt.Key_Tab]: 15, [Qt.Key_Escape]: 1,
+        [Qt.Key_Left]: 105, [Qt.Key_Right]: 106, [Qt.Key_Up]: 103, [Qt.Key_Down]: 108, [Qt.Key_Delete]: 111,
+        [Qt.Key_Home]: 102, [Qt.Key_End]: 107, [Qt.Key_PageUp]: 104, [Qt.Key_PageDown]: 109 })
+    property bool typing: false
+    onFullChanged: if (!full) typing = false
+    onTypingChanged: {
+        if (typing) {
+            keyboardField.forceActiveFocus()
+            Qt.inputMethod.show()
+        } else {
+            escapeKey.forceActiveFocus()
+            Qt.inputMethod.hide()
+        }
+    }
+    TextInput {
+        id: keyboardField
+        width: 1; height: 1
+        opacity: 0
+        enabled: root.typing
+        onTextEdited: if (text.length > 0) { root.screen.typeText(text); text = "" }
+        Keys.onPressed: (event) => {
+            const code = root.keyCodes[event.key]
+            if (code === undefined || (event.key === Qt.Key_Backspace && text.length > 0))
+                return
+            root.screen.key(code, true)
+            root.screen.key(code, false)
+            event.accepted = true
+        }
     }
     Component.onCompleted: {
         panelWidth = area.width * 0.72
@@ -753,6 +787,8 @@ Window {
               // Touchpad or direct touch (the APK's fullscreen had it; remembered).
               .concat([{ icon: "input-touchpad", checked: fullscreenSettings.touchpad,
                          act: () => { fullscreenSettings.touchpad = !fullscreenSettings.touchpad } }])
+              // The phone's keyboard into the screen.
+              .concat([{ icon: "input-keyboard", checked: root.typing, act: () => { root.typing = !root.typing } }])
               .concat([{ icon: "video-television", act: () => { root.leaveFullscreen(); root.screen.castToTv() } },
                        { icon: "window-close", act: () => { root.leaveFullscreen(); root.screen.close() } }])
             : [{ icon: "view-fullscreen", act: () => root.setFullscreen() },

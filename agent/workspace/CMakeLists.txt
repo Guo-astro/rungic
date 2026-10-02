@@ -23,7 +23,7 @@ target_include_directories(rungic-workspace-protocols PUBLIC ${CMAKE_CURRENT_BIN
 qt_add_executable(rungic-workspace-input input.cpp)
 target_link_libraries(rungic-workspace-input PRIVATE rungic-workspace-protocols PkgConfig::XKB)
 qt_add_executable(rungic-workspace-stream stream.cpp)
-target_link_libraries(rungic-workspace-stream PRIVATE rungic-workspace-protocols)
+target_link_libraries(rungic-workspace-stream PRIVATE rungic-workspace-protocols Qt6::DBus)
 qt_add_executable(rungic-workspace-desktop desktop.cpp)
 target_link_libraries(rungic-workspace-desktop PRIVATE Qt6::Gui LayerShellQt::Interface)
 # The picture on the Android host (present.cpp): KPipeWire for the frames, EGL/GLES for the copy into

@@ -1,13 +1,12 @@
 // A screen beside the phone's own, as seen from the Linux side (docs/65, docs/research/91): one
 // floating window each.
 //
-// - Desktop mode (workspace 0): the Android host keeps a second output of the user's desktop
-//   (KWin names it CAST-n). This object records it through KWin's zkde_screencast (a PipeWire node
-//   the floating window shows) while no TV or fullscreen presents it, and forwards the window's
-//   touches into it with KWin's fake input. Both protocols are restricted: KWin grants them to
-//   this executable through its desktop file (X-KDE-Wayland-Interfaces).
-// - The assistant's screen (workspace n): the agent's own KWin; rungic-workspace-stream records it.
-// The platform bridge says whether the screen is on and whether a TV or fullscreen shows it.
+// - Desktop mode (workspace 0): the user's independent desktop, a KWin of its own (docs/research/97
+//   §19), on while it runs; its picture without the pointer (the touches are the pointer), and a
+//   second one with it while fullscreen's touchpad mode asks.
+// - The assistant's screen (workspace n): the agent's own KWin, the agent's pointer drawn in.
+// rungic-workspace-stream records each and takes the window's touches and typing into it. The
+// platform bridge says whether a TV shows the screen, and whether the assistant's screen is on.
 #pragma once
 
 #include <QFileSystemWatcher>
@@ -21,10 +20,6 @@
 #include <QVariantMap>
 #include <memory>
 
-class QScreen;
-class Screencasting;
-class ScreencastStream;
-class FakeInput;
 
 class AgentScreen : public QObject
 {
@@ -69,21 +64,22 @@ public:
     Q_INVOKABLE void castToTv();
     // The blurred wallpaper under the director's fullscreen (rungic-agent-screen background).
     Q_INVOKABLE QString backgroundFile() const;
-    // The size of the output it shows, in the pixels of its pointer and scroll: a workspace's KWin
-    // is 1920x1080 (rungic-workspace), desktop mode's the CAST output's.
-    Q_INVOKABLE QSize outputSize() const;
+    // The size of the output it shows, in the pixels of its pointer and scroll: every workspace's
+    // KWin is 1920x1080 (rungic-workspace).
+    Q_INVOKABLE QSize outputSize() const { return QSize(1920, 1080); }
     // Fullscreen's touchpad mode shows the system's pointer (docs/research/97 §17.4): desktop mode
-    // opens a second stream of its output with the pointer drawn in (pointerNodeId), the first one
-    // left as it is. An assistant's screen's picture has the pointer already: nothing to do.
+    // records a second picture with the pointer drawn in (pointerNodeId), the first one left as it
+    // is. An assistant's screen's picture has the pointer already: nothing to do.
     Q_INVOKABLE void setPointerShown(bool shown);
+    // Typing on the phone into the focused field: text as an input method commits it, and keys
+    // (Linux key codes: Enter, Backspace, arrows...) pressed or released.
+    Q_INVOKABLE void typeText(const QString &text);
+    Q_INVOKABLE void key(int code, bool pressed);
     // Fullscreen on the phone: the Android host presents the output itself (zero-copy), and this
     // window hides and stops recording until it leaves fullscreen.
     Q_INVOKABLE void fullscreen();
-    // Turn the assistant's screen off and quit.
+    // Turn the screen off and quit.
     Q_INVOKABLE void close();
-    // Whether the window shows the picture (false: tucked into the edge). The host renders the
-    // screen at a low rate while nobody looks at it (docs/65).
-    Q_INVOKABLE void setWatched(bool watched);
 
 Q_SIGNALS:
     void statusChanged();
@@ -94,24 +90,13 @@ Q_SIGNALS:
 private:
     void poll();
     void update();
-    void startStream();
-    void stopStream();
     void setStatus(const QString &status);
     QString op() const;     // the platform bridge's request for this screen
-    QScreen *agentOutput() const;
-    void keepApart();
-    void reportWatched();
     void readActivity();
     void startWorkspaceStream();
     void stopWorkspaceStream();
+    void send(const QString &line);   // a command to rungic-workspace-stream
 
-    std::unique_ptr<Screencasting> m_screencasting;
-    std::unique_ptr<FakeInput> m_input;
-    std::unique_ptr<ScreencastStream> m_stream;
-    QPointer<QScreen> m_streamed;
-    void updatePointerStream();
-    void dropPointerStream();
-    std::unique_ptr<ScreencastStream> m_pointerStream;
     uint m_pointerNodeId = 0;
     bool m_pointerShown = false;
     QTimer m_poll;
@@ -120,9 +105,6 @@ private:
     bool m_enabled = true;
     bool m_onTv = false;
     bool m_fullscreen = false;
-    bool m_authenticated = false;
-    bool m_pointerPlaced = false;
-    bool m_watched = true;
     QFileSystemWatcher m_activityWatcher;
     QString m_activityPath;
     QString m_activityState;

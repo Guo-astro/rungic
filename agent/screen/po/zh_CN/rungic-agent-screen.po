@@ -181,3 +181,23 @@ msgstr "结果"
 msgctxt "@label the lead's decision"
 msgid "Decision"
 msgstr "决定"
+
+msgctxt "@title the desktop mode window"
+msgid "Desktop mode"
+msgstr "桌面模式"
+
+msgctxt "@action:button show the desktop again"
+msgid "View"
+msgstr "查看"
+
+msgctxt "@action:button close the desktop losing unsaved work"
+msgid "Close without saving"
+msgstr "不保存，直接关闭"
+
+msgctxt "@title notification"
+msgid "The desktop is still open"
+msgstr "桌面还开着"
+
+msgctxt "@info notification, {apps} lists apps"
+msgid "{apps} did not close, maybe with unsaved work, so the desktop is still open."
+msgstr "{apps} 没有关闭，可能有未保存的内容，所以桌面还开着。"
