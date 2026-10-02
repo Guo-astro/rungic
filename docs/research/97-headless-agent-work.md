@@ -311,3 +311,22 @@ APK 进程提供：`platform.sock`、`capture.sock`、`codec.sock`、`wayland-0`
 1. **工作区随用户会话一起停止**：工作区单元有 `PartOf=graphical-session.target`，装 APK 等原因重启 Plasma 会话时，无头工作区也一起停掉。无头的 Agent 工作不该因为手机界面重启而中断，要把无头工作区和用户图形会话的生命周期分开（待做）。
 2. **APK 文件名**：另一个会话把版本号提到了 2.29，构建输出变成 `Rungic-2.29.apk`。第一次装成了旧的 2.28，所以心跳没被处理。安装前要核对输出文件名和时间。
 3. **调用顺序**：已有工作区 1 的浮窗时，给工作区 1 再调 `rungic-agent-screen on` 不会切换到导播台。要给新工作区调（`RUNGIC_WORKSPACE=4`），这与 Agent 工具的实际调用一致。
+
+## 12. 工作区独立于用户会话；Agent 忙时保持唤醒（2026-10-02，实机）
+
+**工作区与用户会话分开**：`rungic-workspace@.service` 去掉了 `PartOf=graphical-session.target`。
+- 以前装 APK 或 Plasma 崩溃导致用户会话重启时，Agent 工作区会一起停掉（§11 中实际发生过）。
+- 现在工作区只由 Agent 工具和 keeper（空闲冻结、长时间空闲后关闭）结束。
+- Android 后端的工作区在宿主断开时自己退出（133），再由 `Restart=on-failure` 重连。
+
+**息屏后系统其实没挂起，只是碰巧**：
+- 深度空闲 4 分钟内 `suspend_stats/success` 一次没增加。
+- 原因是 `audioserver` 一直持有 `AudioMix` 部分 wakelock，归属 uid 10348，推测是 Termux PulseAudio 常开的音频流。
+- 所以此前息屏时 Agent 还能继续，只是碰巧。这条常开音频流本身也耗电，另立问题处理。
+
+**`rungic-agent-wakelock`**（容器里的 root 系统服务，`agent/workspace/`）：
+- 每 5 s 检查忙碌标记：`/run/user/*/rungic-workspace-*.busy`（工作区认领）和 `rungic-agent.busy`（语音助手在跑 turn 或后台 turn 时写入，结束时删除），只认持有者进程还活着的标记。
+- 有忙碌就写内核 wakelock `rungic_agent`，带 60 s 超时，每 5 s 续一次；服务自己挂了，锁最多 60 s 后自动失效。没有忙碌就立即 `wake_unlock`。
+- 容器的 `/sys` 是只读的，所以单元用 `unshare --mount` 在服务自己的挂载命名空间里把 `/sys` 重新挂成可写。`ReadWritePaths=` 做不到：只读挂载下的路径它不会改成可写，实测报 EROFS。
+- **实测**：写入一个活进程的忙碌标记后，Android 侧 `/sys/power/wake_lock` 出现 `rungic_agent`；删掉标记约 5 s 后释放。
+- 有单元测试（`tools/tests/test_agent_wakelock.py`）。

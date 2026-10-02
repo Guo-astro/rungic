@@ -1984,6 +1984,7 @@ class VoiceAgent:
         elif method == 'turn/started':
             self.turn_id = (params.get('turn') or {}).get('id')
             self.agent_busy = True
+            mark_agent_busy(True)
             if self.phone:
                 self.phone._write({"type": "command", "method": "ExternalBusy", "args": {"busy": True}})
             self.turn_started = self.last_voice = time.monotonic()
@@ -2004,6 +2005,7 @@ class VoiceAgent:
                 self.emit({'type': 'error', 'text': error.get('message', _("The agent couldn't finish this task"))})
             self.turn_id = None
             self.agent_busy = False
+            mark_agent_busy(bool(self.background))
             if self.phone:
                 self.phone._write({"type": "command", "method": "ExternalBusy", "args": {"busy": bool(self.background)}})
             self.agent_idle_since = time.monotonic()
@@ -3140,6 +3142,19 @@ class Service:
                 invocation.return_dbus_error('com.rungic.VoiceAgent.Error', str(error))
         # Codex calls block; keep the main loop (audio, D-Bus) responsive.
         threading.Thread(target=run, daemon=True).start()
+
+
+def mark_agent_busy(busy):
+    """While a turn runs, the phone stays awake (rungic-agent-wakelock, docs/research/97): the
+    assistant's own marker beside the workspaces' (rungic-workspace-N.busy)."""
+    path = Path(os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}') / 'rungic-agent.busy'
+    try:
+        if busy:
+            path.write_text(json.dumps({'pid': os.getpid(), 'since': time.time()}))
+        else:
+            path.unlink(missing_ok=True)
+    except OSError as error:
+        log('busy marker', error)
 
 
 def platform_request(request, timeout=1.0):

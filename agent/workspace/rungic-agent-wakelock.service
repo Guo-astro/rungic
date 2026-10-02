@@ -1,0 +1,12 @@
+[Unit]
+Description=Keep the phone awake while an agent works (docs/research/97)
+
+[Service]
+# /sys is read-only in the container: writable in this service's own mount namespace only, for
+# the kernel wakelock (ReadWritePaths= leaves a path under a read-only mount read-only).
+ExecStart=/usr/bin/unshare --mount --propagation private /bin/sh -c 'mount -o remount,bind,rw /sys || mount -o remount,rw /sys; exec /usr/libexec/rungic-agent-wakelock'
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

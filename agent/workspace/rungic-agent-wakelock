@@ -1,0 +1,84 @@
+#!/usr/bin/env python3
+"""rungic-agent-wakelock: the phone stays awake while an agent works (docs/research/97 §12).
+
+Agents work with the phone locked and the screen off. Android lets the system suspend then
+(nothing of ours held it awake; a sound stream left open happened to), and an agent's network,
+apps and workspace stop with it. While any agent is at work this holds a kernel wakelock, as
+root in the container, never through the Rungic app (frozen while the phone sleeps):
+
+  at work: a workspace held by an agent ($XDG_RUNTIME_DIR/rungic-workspace-N.busy, rungic_cua
+  workspace.claim) or the assistant's own turn ($XDG_RUNTIME_DIR/rungic-agent.busy), each
+  {"pid": n, ...} of a live process.
+
+The lock is taken with a 60 s timeout and renewed every 5 s, so it ends on its own if this
+service does. /sys is read-only in the container; the unit remounts it writable in this service's
+own mount namespace only.
+"""
+import glob
+import json
+import os
+import signal
+import sys
+import time
+
+LOCK, UNLOCK = '/sys/power/wake_lock', '/sys/power/wake_unlock'
+NAME = 'rungic_agent'
+RUNTIME = os.environ.get('RUNGIC_WAKELOCK_RUNTIME', '/run/user')
+EVERY_S = 5
+TIMEOUT_NS = 60 * 10**9
+
+
+def alive(pid) -> bool:
+    try:
+        os.kill(int(pid), 0)
+        return True
+    except (OSError, ValueError, TypeError):
+        return False
+
+
+def busy() -> list[str]:
+    """The live holders' marker files."""
+    out = []
+    for path in glob.glob(f'{RUNTIME}/*/rungic-workspace-*.busy') + glob.glob(f'{RUNTIME}/*/rungic-agent.busy'):
+        try:
+            if alive(json.load(open(path)).get('pid')):
+                out.append(os.path.basename(path))
+        except (OSError, ValueError, AttributeError):
+            pass
+    return out
+
+
+def write(path, value) -> bool:
+    try:
+        with open(path, 'w') as f:
+            f.write(value)
+        return True
+    except OSError as error:
+        print(f'{path}: {error}', file=sys.stderr, flush=True)
+        return False
+
+
+def main():
+    held = False
+
+    def release(*_):
+        if held:
+            write(UNLOCK, NAME)
+        sys.exit(0)
+    signal.signal(signal.SIGTERM, release)
+    signal.signal(signal.SIGINT, release)
+    while True:
+        holders = busy()
+        if holders:
+            if write(LOCK, f'{NAME} {TIMEOUT_NS}') and not held:
+                print('held for ' + ', '.join(holders), flush=True)
+            held = True
+        elif held:
+            write(UNLOCK, NAME)
+            held = False
+            print('released', flush=True)
+        time.sleep(EVERY_S)
+
+
+if __name__ == '__main__':
+    main()
