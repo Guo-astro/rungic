@@ -209,3 +209,4 @@ Current delivery direction: prepare the Android/GKI base once when compatible, b
 | [92-agent-task-speed.md](research/92-agent-task-speed.md) | Why tasks like Blender modelling are slow, and how other agents speed them up (2026-09-30) |
 | [93-xwayland-kgsl-gpu.md](research/93-xwayland-kgsl-gpu.md) | X11 apps on the GPU with KGSL: approaches for Xwayland (2026-09-30) |
 | [94-mesa-base.md](research/94-mesa-base.md) | The Mesa base: the lfdevs branch or upstream with our own patches (2026-09-30) |
+| [101-full-duplex-phone-mode.md](101-full-duplex-phone-mode.md) | Agent phone mode: GPT Realtime, task control and shared communication audio (2026-10-02) |

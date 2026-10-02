@@ -127,6 +127,19 @@ QtObject {
     function apply(e, live) {
         if (e.time && e.type !== "state") root.lastTime = e.time
         switch (e.type) {
+        case "phone-task": {
+            const t = e.task
+            let at = -1
+            for (let i = entries.count - 1; i >= 0; --i) if (entries.get(i).kind === "phone-task" && entries.get(i).itemId === t.taskId) { at = i; break }
+            const fields = {kind: "phone-task", itemId: t.taskId, text: t.text || "", status: t.status || "interrupted", output: t.result || "", task: JSON.stringify(t.question || {}), started: t.created || 0}
+            if (at < 0) entries.append(entry(fields))
+            else for (const key in fields) entries.setProperty(at, key, fields[key])
+            return
+        }
+        case "phone-notice":
+            entries.append(entry({kind: "marker", text: e.text || ""})); return
+        case "phone-task-detail": return
+
         // Transcripts stream per segment (e.id): the user's transcription often ends
         // after the reply has begun, so a delta finds its own bubble by id, and the
         // finished text replaces that bubble where it stands (docs/59).

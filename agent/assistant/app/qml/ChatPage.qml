@@ -11,12 +11,14 @@ import com.rungic.voiceassistant
 
 Item {
     id: page
+    property var phone: ({sessionId: "", phase: "closed", muted: false})
     property string conversationId: ""        // "" = new, not created yet
     property string initialTitle: ""
     property bool loaded: true
     property bool creating: false             // the agent is creating this new conversation
     property var afterCreate: []              // what waits for it
     readonly property string screenName: Window.window ? Window.window.screen.name : ""
+    Component.onCompleted: AgentClient.request("PhoneSnapshot")
 
     ChatModel { id: chat }
     readonly property alias model: chat
@@ -56,16 +58,23 @@ Item {
                 page.afterCreate = []
                 for (const then of waiting) then()
                 drawer.refresh()
+                AgentClient.request("PhoneSnapshot")
                 return
             }
             if (opened.conversation !== page.conversationId) return
             chat.load(opened)
+            AgentClient.request("PhoneSnapshot")
             view.follow = true
             view.positionViewAtEnd()
             page.loaded = true
         }
         function onEvent(json) {
             const e = JSON.parse(json)
+            if (e.type === "phone-state") {
+                page.phone = e
+                for (const task of (e.tasks || [])) if (task.conversation === page.conversationId) chat.apply({type: "phone-task", task: task}, true)
+                return
+            }
             if (e.conversation && e.conversation !== page.conversationId) return
             if (e.type === "level") { composer.micLevel = e.db; return }
             // Codex restarted (a new key or sign-in) or the whole service did: this conversation
@@ -74,6 +83,14 @@ Item {
             if (e.type === "preferences" || e.type === "account" || e.type === "install" || e.type === "agent-model" || e.type === "codex-update") return
             chat.apply(e, true)
             if (e.type !== "state") Qt.callLater(view.stickToEnd)
+        }
+        function onReplied(method, json) {
+            const result = JSON.parse(json)
+            if (result.error) { chat.apply({type: "error", text: result.error}, true); return }
+            if (method === "PhoneSnapshot") {
+                page.phone = result
+                for (const task of (result.tasks || [])) if (task.conversation === page.conversationId) chat.apply({type: "phone-task", task: task}, true)
+            }
         }
         function onFailed(message) { chat.apply({ type: "error", text: message }, true) }
         function onTextReady(json) { composer.dictated(JSON.parse(json).text || "") }
@@ -122,7 +139,7 @@ Item {
     ListView {
         id: view
         readonly property real column: Math.min(width - Theme.gutter * 2, Theme.readingWidth)
-        anchors { left: parent.left; right: parent.right; top: top.bottom; bottom: composer.top }
+        anchors { left: parent.left; right: parent.right; top: top.bottom; bottom: phoneBar.top }
         clip: true
         // Short threads sit just above the composer.
         topMargin: Math.max(8, height - contentHeight - bottomMargin)
@@ -163,7 +180,7 @@ Item {
 
     // ---- a new conversation: a question and a few things to try ----------------------
     ColumnLayout {
-        anchors { left: parent.left; right: parent.right; top: top.bottom; bottom: composer.top }
+        anchors { left: parent.left; right: parent.right; top: top.bottom; bottom: phoneBar.top }
         anchors.leftMargin: 16
         anchors.rightMargin: 16
         // Only while the composer is a plain bar: typing, the + panel or a hold take its room.
@@ -202,7 +219,7 @@ Item {
 
     // Scrolled away from the end: a way back.
     PillButton {
-        anchors { horizontalCenter: parent.horizontalCenter; bottom: composer.top; bottomMargin: 8 }
+        anchors { horizontalCenter: parent.horizontalCenter; bottom: phoneBar.top; bottomMargin: 8 }
         visible: !view.follow && !view.atYEnd && view.contentHeight > view.height
         iconName: "chevron-down"
         text: i18nc("@action:button scroll to the end of the thread", "Jump to latest")
@@ -214,13 +231,57 @@ Item {
         ensure(() => AgentClient.sendText(text, JSON.stringify(attachments)))
     }
 
+    Column {
+        id: phoneBar
+        anchors {left: parent.left; right: parent.right; bottom: composer.top}
+        width: parent.width
+        spacing: 6
+        Text {
+            anchors.horizontalCenter: parent.horizontalCenter
+            visible: !!page.phone.sessionId
+            text: page.phone.phase === "connecting" ? i18nc("@info:status", "Connecting phone mode…")
+                  : page.phone.conversation !== page.conversationId ? i18nc("@info:status", "Phone mode in another conversation")
+                  : page.phone.muted ? i18nc("@info:status", "Microphone muted") : i18nc("@info:status", "Phone mode · Listening")
+            color: Theme.dim
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.metaSize
+        }
+        Flow {
+            width: parent.width - 24
+            anchors.horizontalCenter: parent.horizontalCenter
+            spacing: 6
+            PillButton {
+                visible: !page.phone.sessionId
+                text: i18nc("@action:button", "Phone mode")
+                enabled: chat.callPhase !== "user" && !chat.inCall
+                onClicked: page.ensure(() => AgentClient.request("StartPhoneMode", [page.conversationId]))
+            }
+            PillButton {
+                visible: !!page.phone.sessionId
+                text: page.phone.muted ? i18nc("@action:button", "Unmute") : i18nc("@action:button", "Mute")
+                onClicked: AgentClient.request("SetPhoneMuted", [page.phone.sessionId, !page.phone.muted])
+            }
+            PillButton {
+                visible: !!page.phone.sessionId
+                text: i18nc("@action:button", "Stop speaking")
+                onClicked: AgentClient.request("StopSpeaking", [page.phone.sessionId])
+            }
+            PillButton {
+                visible: !!page.phone.sessionId
+                negative: true
+                text: i18nc("@action:button", "Hang up")
+                onClicked: AgentClient.request("StopPhoneMode", [page.phone.sessionId])
+            }
+        }
+    }
+
     Composer {
         id: composer
         anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
         chat: chat
         busy: page.busy
         speaking: page.speaking
-        canTalk: chat.callPhase !== "user"
+        canTalk: chat.callPhase !== "user" && !page.phone.sessionId && !(page.phone.tasks || []).some(t => ["queued", "starting", "running", "stopping", "waiting_input"].indexOf(t.status) >= 0)
         onTalkPressed: {
             view.follow = true
             view.positionViewAtEnd()

@@ -67,6 +67,7 @@ class FakeServer:
 class CurationTests(unittest.TestCase):
     def setUp(self):
         self.agent = VoiceAgent()
+        self.agent.phone = None
         # Curation's model (docs/98): CURATE_MODEL, or the account's default when it is gone.
         self.agent.curate_model = Mock(return_value='test-model')
         self.agent.catalog = Mock()
@@ -109,6 +110,20 @@ class CurationTests(unittest.TestCase):
             elif schema.get('type') == 'array':
                 check(schema['items'])
         check(namespace['CURATE_SCHEMA'])
+
+    def test_curation_cannot_bypass_phone_task_tools(self):
+        self.agent.phone = Mock()
+        self.agent.phone.notification.return_value = False
+        self.agent.phone._task_settings.return_value = {'config': {
+            'mcp_servers.rungic-desktop.enabled': False,
+            'mcp_servers.external-writer.enabled': False,
+            'model_reasoning_effort': 'high'}}
+        self.agent.server = server = FakeServer(self.agent)
+        self.assertEqual(self.agent.curate(self.input), CARDS)
+        config = server.params('thread/start')['config']
+        self.assertFalse(config['mcp_servers.rungic-desktop.enabled'])
+        self.assertFalse(config['mcp_servers.external-writer.enabled'])
+        self.assertEqual(config['model_reasoning_effort'], 'low')
 
     def test_unavailable_signed_out_busy_and_bad_input(self):
         self.agent.server = None

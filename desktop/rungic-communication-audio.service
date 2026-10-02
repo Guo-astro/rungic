@@ -1,0 +1,12 @@
+[Unit]
+Description=Shared Android communication audio profile
+PartOf=graphical-session.target
+After=pulseaudio.service
+
+[Service]
+ExecStart=/usr/bin/rungic-communication-audio
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

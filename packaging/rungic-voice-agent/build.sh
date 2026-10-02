@@ -3,9 +3,13 @@ V=$SRC/agent/assistant
 cmake -S "$V/app" -B "$V/app/build" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_CXX_FLAGS=-g1
 cmake --build "$V/app/build" -j"${JOBS:-4}"
 DESTDIR="$DESTDIR" cmake --install "$V/app/build"
+cmake -S "$V/session" -B "$V/session/build" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PREFIX=/usr
+cmake --build "$V/session/build" -j"${JOBS:-4}"
+ctest --test-dir "$V/session/build" --output-on-failure
+DESTDIR="$DESTDIR" cmake --install "$V/session/build"
 install -Dm755 "$V/rungic_voice_agent.py" "$DESTDIR/usr/bin/rungic-voice-agent"
 install -Dm644 "$V/call_proxy.py" "$DESTDIR/usr/lib/rungic-voice-agent/call_proxy.py"
-for f in cellular_audio cellular_call call_backends voice_i18n model_catalog codex_install media_frames; do install -Dm644 "$V/$f.py" "$DESTDIR/usr/lib/rungic-voice-agent/$f.py"; done
+for f in phone_session cellular_audio cellular_call call_backends voice_i18n model_catalog codex_install media_frames; do install -Dm644 "$V/$f.py" "$DESTDIR/usr/lib/rungic-voice-agent/$f.py"; done
 # The service's words in the desktop's language (voice_i18n): po/<lang>/rungic-voice-agent.po.
 for po in "$V"/po/*/rungic-voice-agent.po; do
     lang=$(basename "$(dirname "$po")")

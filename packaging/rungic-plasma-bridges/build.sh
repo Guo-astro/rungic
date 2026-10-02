@@ -30,3 +30,7 @@ done
 for unit in rungic-plasma-media rungic-plasma-clipboard rungic-plasma-audio-follow; do
     install -Dm644 "$SRC/desktop/$unit.service" "$DESTDIR/usr/lib/systemd/user/$unit.service"
 done
+
+g++ -std=gnu++20 -O2 -g1 -o "$DESTDIR/usr/bin/rungic-communication-audio" "$SRC/shared/media/communication-audio.cpp" \
+    $(pkg-config --cflags --libs Qt6Core Qt6Network gstreamer-1.0 gstreamer-app-1.0)
+install -Dm644 "$SRC/desktop/rungic-communication-audio.service" "$DESTDIR/usr/lib/systemd/user/rungic-communication-audio.service"

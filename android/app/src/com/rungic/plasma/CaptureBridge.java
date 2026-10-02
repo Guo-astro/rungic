@@ -8,6 +8,8 @@ import android.graphics.ImageFormat;
 import android.hardware.camera2.*;
 import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.*;
+import android.media.audiofx.AcousticEchoCanceler;
+import android.media.audiofx.NoiseSuppressor;
 import android.net.*;
 import android.os.*;
 import android.util.Range;
@@ -26,16 +28,17 @@ final class CaptureBridge implements Closeable {
     private final Activity activity;
     private final File path;
     private final CameraManager cameras;
-    private final ExecutorService clients=Executors.newFixedThreadPool(4);
+    private final ExecutorService clients=Executors.newFixedThreadPool(6);
     private final Set<LocalSocket> sockets=ConcurrentHashMap.newKeySet();
-    private final Semaphore slots=new Semaphore(4);
+    private final Semaphore slots=new Semaphore(6);
     private final AtomicBoolean microphoneBusy=new AtomicBoolean();
     private final AtomicBoolean cameraBusy=new AtomicBoolean();
     private final AtomicBoolean phoneOutputBusy=new AtomicBoolean();
+    private final ConcurrentHashMap<String,CommunicationOutput> communicationOutputs=new ConcurrentHashMap<>();
     private final Object permissionLock=new Object();
     private volatile CountDownLatch permissionResult;
     private volatile boolean visible, running;
-    private boolean micActive, cameraActive;
+    private volatile boolean micActive, cameraActive;
     private LocalSocket bound;
     private LocalServerSocket server;
 
@@ -95,9 +98,11 @@ final class CaptureBridge implements Closeable {
         // asked every second, a camera service round trip per camera each time).
         if(cameraList==null)cameraList=listCameras();
         return new JSONObject().put("version",1).put("visible",visible).put("microphonePermission",activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED)
+            .put("microphoneActive",micActive).put("cameraActive",cameraActive)
             .put("cameraPermission",activity.checkSelfPermission(Manifest.permission.CAMERA)==PackageManager.PERMISSION_GRANTED)
             .put("cameraDenied",activity.getPreferences(Activity.MODE_PRIVATE).getBoolean("denied-camera",false))
-            .put("microphoneDenied",activity.getPreferences(Activity.MODE_PRIVATE).getBoolean("denied-microphone",false)).put("cameras",cameraList);
+            .put("microphoneDenied",activity.getPreferences(Activity.MODE_PRIVATE).getBoolean("denied-microphone",false))
+            .put("communication",new JSONObject().put("version",1).put("active",!communicationOutputs.isEmpty()).put("aecAvailable",AcousticEchoCanceler.isAvailable()).put("playbackCursor",true)).put("cameras",cameraList);
     }
     private JSONArray listCameras() throws Exception {
         JSONArray list=new JSONArray();
@@ -165,6 +170,11 @@ final class CaptureBridge implements Closeable {
                 case "microphone": microphone(socket);break;
                 case "camera":camera(socket,request.getString("id"));break;
                 case "phone-output":phoneOutput(socket);break;
+                case "communication-output":communicationOutput(socket,request.getString("sessionId"));break;
+                case "communication-microphone":
+                    if(!communicationOutputs.containsKey(communicationSession(request.getString("sessionId"))))throw new IOException("Communication session ended");
+                    microphone(socket,true);break;
+                case "communication-control":communicationControl(socket,request.getString("sessionId"));break;
                 default:throw new IOException("Unsupported capture operation");
             }
         } catch(Exception e) {
@@ -179,19 +189,28 @@ final class CaptureBridge implements Closeable {
         try { android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO); } catch(Exception ignored) {}
     }
     private void microphone(LocalSocket socket) throws Exception {
+        microphone(socket,false);
+    }
+    private void microphone(LocalSocket socket,boolean communication) throws Exception {
         audioPriority();
         if(!microphoneBusy.compareAndSet(false,true))throw new IOException("麦克风正在使用中");
-        AudioRecord recorder=null;boolean active=false,header=false;
+        AudioRecord recorder=null;AcousticEchoCanceler aec=null;NoiseSuppressor ns=null;boolean active=false,header=false;
         try {
             ensurePermission(Manifest.permission.RECORD_AUDIO);
             int min=AudioRecord.getMinBufferSize(48000,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT);
             if(min<0)throw new IOException("Unsupported microphone format");
-            recorder=new AudioRecord.Builder().setAudioSource(MediaRecorder.AudioSource.MIC)
+            recorder=new AudioRecord.Builder().setAudioSource(communication?MediaRecorder.AudioSource.VOICE_COMMUNICATION:MediaRecorder.AudioSource.MIC)
                 .setAudioFormat(new AudioFormat.Builder().setSampleRate(48000).setChannelMask(AudioFormat.CHANNEL_IN_MONO).setEncoding(AudioFormat.ENCODING_PCM_16BIT).build())
                 .setBufferSizeInBytes(Math.max(min,9600)).build();
             if(recorder.getState()!=AudioRecord.STATE_INITIALIZED)throw new IOException("Microphone unavailable");
+            if(communication) {
+                if(AcousticEchoCanceler.isAvailable()) { aec=AcousticEchoCanceler.create(recorder.getAudioSessionId());if(aec!=null)aec.setEnabled(true); }
+                if(NoiseSuppressor.isAvailable()) { ns=NoiseSuppressor.create(recorder.getAudioSessionId());if(ns!=null)ns.setEnabled(true); }
+            }
             captureState(true,true);active=true;recorder.startRecording();
-            json(socket.getOutputStream(),new JSONObject().put("ok",true).put("rate",48000).put("channels",1).put("format","s16le"));header=true;
+            JSONObject spec=new JSONObject().put("ok",true).put("rate",48000).put("channels",1).put("format","s16le");
+            if(communication)spec.put("aec",aec!=null&&aec.getEnabled());
+            json(socket.getOutputStream(),spec);header=true;
             byte[] block=new byte[1920];
             while(running && visible) {
                 int count=recorder.read(block,0,block.length,AudioRecord.READ_BLOCKING);
@@ -201,9 +220,102 @@ final class CaptureBridge implements Closeable {
         } catch(Exception e) { if(!header)json(socket.getOutputStream(),new JSONObject().put("error",e.getMessage()==null?"Microphone unavailable":e.getMessage())); }
         finally {
             android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_DEFAULT);   // a pool thread: others use it next
-            if(recorder!=null) { try { recorder.stop(); } catch(Exception ignored) {}recorder.release(); }
+            if(recorder!=null) { try { recorder.stop(); } catch(Exception ignored) {} }
+            if(aec!=null)aec.release();if(ns!=null)ns.release();
+            if(recorder!=null)recorder.release();
             if(active)try { captureState(true,false); } catch(Exception ignored) {}
             microphoneBusy.set(false);
+        }
+    }
+    /** An exclusive communication stream, with epochs fencing queued PCM after interruption. */
+    private static final class CommunicationOutput {
+        final AudioTrack track;
+        long epoch=1,written;
+        CommunicationOutput(AudioTrack track) { this.track=track; }
+        synchronized int write(long generation,byte[] pcm,int offset,int count) {
+            if(generation!=epoch)return count;
+            int n=track.write(pcm,offset,count,AudioTrack.WRITE_NON_BLOCKING);
+            if(n>0)written+=n/2;
+            return n;
+        }
+        synchronized JSONObject position() throws JSONException {
+            return new JSONObject().put("ok",true).put("epoch",epoch)
+                .put("playedFrames",Integer.toUnsignedLong(track.getPlaybackHeadPosition())).put("writtenFrames",written).put("rate",48000);
+        }
+        synchronized JSONObject flush(long generation) throws Exception {
+            JSONObject result=position();
+            if(generation<=epoch)throw new IOException("Stale playback generation");
+            track.pause();track.flush();epoch=generation;written=0;track.play();
+            return result.put("newEpoch",epoch);
+        }
+    }
+    private static String communicationSession(String session) throws IOException {
+        if(!session.matches("[A-Za-z0-9_-]{1,80}"))throw new IOException("Invalid communication session");
+        return session;
+    }
+    private void communicationOutput(LocalSocket socket,String session) throws Exception {
+        communicationSession(session);audioPriority();
+        if(!phoneOutputBusy.compareAndSet(false,true))throw new IOException("Phone output busy");
+        AudioManager audio=activity.getSystemService(AudioManager.class);AudioTrack track=null;
+        boolean header=false,modeSet=false;int oldMode=audio.getMode();
+        CommunicationOutput stream=null;
+        try {
+            if(!visible)throw new IOException("Open Plasma before starting communication audio");
+            if(oldMode!=AudioManager.MODE_NORMAL)throw new IOException("A phone call is using communication audio");
+            audio.setMode(AudioManager.MODE_IN_COMMUNICATION);modeSet=true;
+            int[] order={AudioDeviceInfo.TYPE_WIRED_HEADSET,AudioDeviceInfo.TYPE_USB_HEADSET,AudioDeviceInfo.TYPE_BUILTIN_SPEAKER};
+            for(int type:order) {
+                boolean selected=false;
+                for(AudioDeviceInfo device:audio.getAvailableCommunicationDevices())if(device.getType()==type) {
+                    selected=audio.setCommunicationDevice(device);if(selected)break;
+                }
+                if(selected)break;
+            }
+            int min=AudioTrack.getMinBufferSize(48000,AudioFormat.CHANNEL_OUT_MONO,AudioFormat.ENCODING_PCM_16BIT);
+            if(min<0)throw new IOException("Communication output format unavailable");
+            track=new AudioTrack.Builder().setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
+                .setAudioFormat(new AudioFormat.Builder().setSampleRate(48000).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).setEncoding(AudioFormat.ENCODING_PCM_16BIT).build())
+                .setTransferMode(AudioTrack.MODE_STREAM).setBufferSizeInBytes(Math.max(min,9600)).build();
+            if(track.getState()!=AudioTrack.STATE_INITIALIZED)throw new IOException("Communication output unavailable");
+            stream=new CommunicationOutput(track);communicationOutputs.put(session,stream);HostEvents.bump(HostEvents.CAPTURE);track.play();
+            json(socket.getOutputStream(),new JSONObject().put("ok",true).put("rate",48000).put("channels",1).put("format","s16le").put("version",1));header=true;
+            DataInputStream in=new DataInputStream(socket.getInputStream());socket.setSoTimeout(0);
+            while(running&&visible) {
+                long generation=in.readLong();int count=in.readInt();
+                if(count<=0||count>9600||(count%2)!=0)throw new IOException("Invalid communication PCM frame");
+                byte[] pcm=new byte[count];in.readFully(pcm);int offset=0;
+                while(offset<count&&running&&visible) {
+                    int n=stream.write(generation,pcm,offset,count-offset);
+                    if(n<0)throw new IOException("Communication output write failed");
+                    if(n==0)Thread.sleep(2);else offset+=n;
+                }
+            }
+        } catch(Exception e) { if(!header)json(socket.getOutputStream(),new JSONObject().put("error",e.getMessage()==null?"Communication unavailable":e.getMessage())); }
+        finally {
+            if(stream!=null){communicationOutputs.remove(session,stream);HostEvents.bump(HostEvents.CAPTURE);}
+            if(track!=null) { try { track.stop(); } catch(Exception ignored) {}track.release(); }
+            if(modeSet) { audio.clearCommunicationDevice();if(audio.getMode()==AudioManager.MODE_IN_COMMUNICATION)audio.setMode(oldMode); }
+            phoneOutputBusy.set(false);android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_DEFAULT);
+        }
+    }
+    private void communicationControl(LocalSocket socket,String session) throws Exception {
+        communicationSession(session);CommunicationOutput stream=communicationOutputs.get(session);
+        if(stream==null)throw new IOException("Communication output not ready");
+        json(socket.getOutputStream(),new JSONObject().put("ok",true).put("version",1));
+        BufferedReader in=new BufferedReader(new InputStreamReader(socket.getInputStream(),StandardCharsets.UTF_8));
+        String line;
+        while(running&&visible&&(line=in.readLine())!=null) {
+            if(line.length()>4096)throw new IOException("Control request too large");
+            JSONObject req=new JSONObject(line);JSONObject result;
+            try {
+                if(communicationOutputs.get(session)!=stream)throw new IOException("Communication session ended");
+                String op=req.getString("op");
+                if(op.equals("position"))result=stream.position();
+                else if(op.equals("flush"))result=stream.flush(req.getLong("epoch"));
+                else throw new IOException("Unsupported communication control");
+            } catch(Exception e) { result=new JSONObject().put("error",e.getMessage()); }
+            result.put("id",req.optInt("id"));json(socket.getOutputStream(),result);
         }
     }
     /** The phone's own output: a wired/USB/Bluetooth headset if one is connected, else the speaker. */

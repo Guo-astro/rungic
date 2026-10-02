@@ -75,6 +75,7 @@ Item {
         width: entry.mine ? Math.min(implicitWidth, entry.column * 0.78) : entry.column
         sourceComponent: {
             switch (entry.kind) {
+            case "phone-task": return phoneTask
             case "work": return work
             case "call": return call
             case "approval": return approval
@@ -82,6 +83,67 @@ Item {
             case "marker": return marker
             case "error": return errorLine
             default: return entry.mine ? bubble : speech
+            }
+        }
+    }
+
+    Component {
+        id: phoneTask
+        Outlined {
+            id: taskBox
+            property var answers: ({})
+            readonly property var question: entry.task ? JSON.parse(entry.task) : ({})
+            readonly property bool active: ["queued", "starting", "running", "stopping", "waiting_input"].indexOf(entry.status) >= 0
+            Body { text: entry.text; Layout.fillWidth: true }
+            Text {
+                text: ({queued: i18nc("@info:status", "Queued"), starting: i18nc("@info:status", "Starting"),
+                        running: i18nc("@info:status", "Working"), stopping: i18nc("@info:status", "Stopping…"),
+                        waiting_input: i18nc("@info:status", "Waiting for your answer"),
+                        completed: i18nc("@info:status", "Completed"), stopped: i18nc("@info:status", "Stopped"),
+                        failed: i18nc("@info:status", "Failed"), interrupted: i18nc("@info:status", "Interrupted")})[entry.status] || entry.status
+                color: Theme.dim
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.metaSize
+            }
+            Body { visible: !!entry.output; text: entry.output; Layout.fillWidth: true }
+            Repeater {
+                model: taskBox.question.questions || []
+                delegate: ColumnLayout {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    Body {text: modelData.question; Layout.fillWidth: true}
+                    Flow {
+                        Layout.fillWidth: true
+                        spacing: 6
+                        Repeater {
+                            model: modelData.options || []
+                            delegate: PillButton {
+                                required property var modelData
+                                text: modelData.label
+                                onClicked: { answerField.text = modelData.label; taskBox.answers[answerField.questionId] = [modelData.label] }
+                            }
+                        }
+                    }
+                    QQC2.TextField {
+                        id: answerField
+                        readonly property string questionId: modelData.id
+                        Layout.fillWidth: true
+                        echoMode: modelData.isSecret ? TextInput.Password : TextInput.Normal
+                        onTextEdited: taskBox.answers[questionId] = [text]
+                    }
+                }
+            }
+            PillButton {
+                visible: entry.status === "waiting_input"
+                text: i18nc("@action:button", "Send answer")
+                onClicked: AgentClient.request("AnswerTask", [entry.itemId, JSON.stringify(taskBox.answers)])
+            }
+            Flow {
+                Layout.fillWidth: true
+                visible: taskBox.active
+                spacing: 8
+                PillButton {text: i18nc("@action:button", "Focus task"); onClicked: AgentClient.request("FocusTask", [entry.itemId])}
+                PillButton {text: i18nc("@action:button", "Stop task"); negative: true; enabled: entry.status !== "stopping"; onClicked: AgentClient.request("StopTaskById", [entry.itemId])}
             }
         }
     }

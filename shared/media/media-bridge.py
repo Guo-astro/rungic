@@ -439,7 +439,7 @@ def main():
                     LOG.warning('audio server unavailable: %s', error)
                     recheck_at = now + 3
             permission = not (info.get('microphoneDenied') and not info.get('microphonePermission'))
-            microphone.set_wanted(bool(recording and info.get('visible') and permission))
+            microphone.set_wanted(bool(recording and info.get('visible') and permission and not (info.get('communication') or {}).get('active')))
             phone.set_wanted(phone_state != 'SUSPENDED')
             # Cameras and the microphone retry a failed start after a few seconds.
             WAKE.wait(max(0.05, min(2, recheck_at - time.monotonic())))

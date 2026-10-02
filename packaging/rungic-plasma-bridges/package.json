@@ -19,16 +19,21 @@
     "desktop/rungic-plasma-modem.service",
     "desktop/rungic-plasma-media.service",
     "desktop/rungic-plasma-clipboard.service",
-    "desktop/rungic-plasma-audio-follow.service"
+    "desktop/rungic-plasma-audio-follow.service",
+    "shared/media/communication-audio.cpp",
+    "desktop/rungic-communication-audio.service"
   ],
-  "depends": "rungic-plasma-config, python3, python3-gi, python3-dbus, gir1.2-adw-1, pulseaudio-utils, pipewire, bluedevil",
+  "depends": "rungic-plasma-config, python3, python3-gi, python3-dbus, gir1.2-adw-1, pulseaudio-utils, pipewire, bluedevil, gstreamer1.0-plugins-bad",
   "build_depends": [
     "libpipewire-0.3-dev",
     "libjson-glib-dev",
     "libyuv-dev",
     "pkgconf",
     "g++",
-    "gettext"
+    "gettext",
+    "qt6-base-dev",
+    "libgstreamer1.0-dev",
+    "libgstreamer-plugins-base1.0-dev"
   ],
   "description": "Plasma Mobile on Android: Android bridges\nThe Android device panel, clipboard, Wi-Fi and network for NetworkManager clients,\nBluetooth for BlueZ clients (bluedevil), the mobile network\nfor ModemManager clients, the\nmicrophone and camera bridge (PipeWire camera sources from Android frames), the\naudio route switch and sound that follows its picture while casting.",
   "units": {
@@ -40,7 +45,8 @@
     "user": [
       "rungic-plasma-media.service",
       "rungic-plasma-clipboard.service",
-      "rungic-plasma-audio-follow.service"
+      "rungic-plasma-audio-follow.service",
+      "rungic-communication-audio.service"
     ]
   },
   "obsolete": [

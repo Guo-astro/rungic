@@ -1248,3 +1248,87 @@ msgstr "用于 Codex 登录覆盖不到的地方：语音对话（Codex 连接�
 msgctxt "@label how Codex is signed in"
 msgid "Codex sign-in"
 msgstr "Codex 登录方式"
+
+msgctxt "@action:button"
+msgid "Phone mode"
+msgstr "电话模式"
+
+msgctxt "@info:status"
+msgid "Connecting phone mode…"
+msgstr "正在连接电话模式…"
+
+msgctxt "@info:status"
+msgid "Phone mode in another conversation"
+msgstr "正在另一对话中通话"
+
+msgctxt "@info:status"
+msgid "Microphone muted"
+msgstr "麦克风已静音"
+
+msgctxt "@info:status"
+msgid "Phone mode · Listening"
+msgstr "电话模式 · 正在聆听"
+
+msgctxt "@action:button"
+msgid "Unmute"
+msgstr "取消静音"
+
+msgctxt "@action:button"
+msgid "Mute"
+msgstr "静音"
+
+msgctxt "@action:button"
+msgid "Stop speaking"
+msgstr "停止播报"
+
+msgctxt "@action:button"
+msgid "Hang up"
+msgstr "挂断"
+
+msgctxt "@action:button"
+msgid "Focus task"
+msgstr "关注此任务"
+
+msgctxt "@action:button"
+msgid "Stop task"
+msgstr "停止任务"
+
+msgctxt "@action:button"
+msgid "Send answer"
+msgstr "发送回答"
+
+msgctxt "@info:status"
+msgid "Queued"
+msgstr "等待执行"
+
+msgctxt "@info:status"
+msgid "Starting"
+msgstr "正在启动"
+
+msgctxt "@info:status"
+msgid "Working"
+msgstr "正在执行"
+
+msgctxt "@info:status"
+msgid "Stopping…"
+msgstr "正在停止…"
+
+msgctxt "@info:status"
+msgid "Waiting for your answer"
+msgstr "等待你的回答"
+
+msgctxt "@info:status"
+msgid "Completed"
+msgstr "已完成"
+
+msgctxt "@info:status"
+msgid "Stopped"
+msgstr "已停止"
+
+msgctxt "@info:status"
+msgid "Failed"
+msgstr "执行失败"
+
+msgctxt "@info:status"
+msgid "Interrupted"
+msgstr "执行中断"

@@ -584,3 +584,11 @@ USB G100 已部署 `20260930.12`：suggestions `0.452`、voice-agent `0.453`、d
 2026-09-30 堆叠手势更新：USB G100 `20260930.13` / suggestions **0.461**，其他组件保持 `.12` 基线。桌面堆叠内上滑下一张、下滑上一张，提供页码、跟手动画、短拖动/首尾回弹；标题与间隙承担外层组列表滚动，手势归属在按下时固定。当前成员按 ID 保持，刷新/动画期间不跳卡，移除当前项回到剩余第一项。点正面进入当前记录，顶部数量进入组列表；只对停稳可见的成员回写展示回执。部署后明确重新加载建议服务、桌面和助理 UI。24 项 C++、40 项事项的指针/QML 集成，以及真实两张、隔离三张/多组、刷新/移除、正确跳转与回执、快速连续滑动、原生长按编辑和壁纸抽屉实测通过。临时数据与环境覆盖已清除，原结果/计划/提醒保留；完整证据和默认 smoke 范围说明见 [主动建议记录](proactive-system-care.md)。
 
 2026-09-30 简报层更新（离线实现，未部署）：账本 → C++ `Care::Briefing`（实质变化触发、防抖/间隔/每日上限、严格校验、确定性回退）→ VoiceAgent `Curate`（ephemeral 只读 Codex 回合，`outputSchema` 严格 JSON）→ D-Bus `Briefing/Curate/OpenCard/DismissCard/CardPresented` → QML `SuggestionsClient.cards/briefing`。卡片通知替代逐记录通知；打开卡片经 VoiceAgent `OpenBriefingCard` 开新对话。设计、协议核验与隐私边界见 [96 篇](96-agent-curated-briefing.md)。
+
+## 2026-10-02：共享 communication profile 与 Agent 电话模式
+
+标准链路为 `Agent/GStreamer 或 pacat/parecord → PulseAudio android_communication / android_communication_microphone → C++ rungic-communication-audio → 私有 capture.sock → Android VOICE_COMMUNICATION AudioTrack/AudioRecord`。控制通过用户私有 `rungic-communication.sock`，单 owner、session/epoch、flush 和 playback-head cursor；物理采集使用 Android AEC/NS，缺硬件 AEC 时复用共享 WebRTC DSP。普通 android_microphone 的消费者复用同一采集，media-bridge 根据 communication.active 避免重复开 AudioRecord。静音关闭物理采集并保留播放，Plasma 隐藏关闭 capture sockets。
+
+G100 ZY32M9MRVP / Android 16 / APK 2.29 开发版通过标准 PA 客户端检查：静音播放、连续 PCM、恢复与关闭、第二个 owner 拒绝、epoch 更新；flush 控制确认约 108–109 ms。实机采集测试 PCM 全零，不能据此证明真人识别或回声消除效果；声学延迟、软件 AEC 回退、其他机型和蓝牙仍待验。首次原生 Agent 再取消静音暴露 DSP 两个 appsink 等待彼此 preroll，修正为独立 async=false、sync=false 并先协商 echo reference；最终原生客户端已通过无播放时恢复采集、真实 Realtime 回应播放、停止播报 epoch 更新、静音释放麦克风和挂断后清理。真人声音、回声效果和声学 P95 仍未验收。完整包版本、独立云端/本地/实机证据和回退见 [101 篇](../101-full-duplex-phone-mode.md)。
+
+任务执行走常驻 C++ 协调器 → 现有 VoiceAgent 的认证 Codex app-server → 按任务绑定的 thread/turn。桌面 MCP 的任务 worker 有独立进程组与租约，不结束用户 GUI；后台简报禁用 MCP。真实挂断后任务继续、明确取消等待实际结束、Android Settings 遮挡后停话音而保留任务并要求显式恢复均通过。部署保留 SSH 自动启用；用户要求的 10% 音量由现有 phone sink 继承到新 communication sink。

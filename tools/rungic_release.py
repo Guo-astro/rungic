@@ -463,6 +463,7 @@ def apt_install(info, record):
 # such a change unless allowed. The source is this project's own, local and trusted.
 apt-get -q update --allow-releaseinfo-change {APT_OURS} >/dev/null
 systemd-run --unit={unit} --wait --pipe --collect --quiet -p TimeoutStartSec=3600 \\
+  --setenv=http_proxy=http://192.168.5.45:6152 --setenv=https_proxy=http://192.168.5.45:6152 \\
   --setenv=DEBIAN_FRONTEND=noninteractive \\
   apt-get -q -y --allow-downgrades --allow-change-held-packages --no-install-recommends \\
   -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install {meta_of(version)}={version} {pins} 2>&1

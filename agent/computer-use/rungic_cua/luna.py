@@ -40,6 +40,10 @@ EFFORT = os.environ.get('RUNGIC_CUA_EFFORT', 'low')
 API = 'https://api.openai.com/v1/responses'
 SCREENSHOT = os.environ.get('RUNGIC_SCREENSHOT', '/usr/libexec/rungic-screenshot')
 ABORT_FILE = Path(os.environ.get('XDG_RUNTIME_DIR', f'/run/user/{os.getuid()}')) / 'rungic-clicker' / 'abort'
+# Phone-mode workers have a private cancellation domain. Legacy stop files must
+# never cancel an unrelated native task (the wrapper revokes its own lease).
+if os.environ.get('RUNGIC_TASK_ID'):
+    ABORT_FILE = ABORT_FILE.parent / ('abort-' + os.environ['RUNGIC_TASK_ID'])
 SETTLE_S = 0.5          # after a batch, before the screenshot: animations and repaints
 BTN_MIDDLE, BTN_FORWARD, BTN_BACK = 0x112, 0x115, 0x116
 RAW_MODES = {4: 'BGRX', 5: 'BGRA', 6: 'BGRA', 16: 'RGBX', 17: 'RGBA', 18: 'RGBA'}   # rungic-screenshot's QImage formats

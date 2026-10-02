@@ -140,7 +140,15 @@ INTERFACE = '''
     <method name="Interrupt"/>
     <method name="StopTask"/>
     <method name="Approve"><arg type="s" direction="in"/><arg type="s" direction="in"/></method>
-    <method name="State"><arg type="s" direction="out"/></method>
+    <method name="StartPhoneMode"><arg name="conversationId" type="s" direction="in"/><arg name="result" type="s" direction="out"/></method>
+  <method name="StopPhoneMode"><arg name="sessionId" type="s" direction="in"/><arg name="result" type="s" direction="out"/></method>
+  <method name="SetPhoneMuted"><arg name="sessionId" type="s" direction="in"/><arg name="muted" type="b" direction="in"/><arg name="result" type="s" direction="out"/></method>
+  <method name="StopSpeaking"><arg name="sessionId" type="s" direction="in"/><arg name="result" type="s" direction="out"/></method>
+  <method name="FocusTask"><arg name="taskId" type="s" direction="in"/><arg name="result" type="s" direction="out"/></method>
+  <method name="StopTaskById"><arg name="taskId" type="s" direction="in"/><arg name="result" type="s" direction="out"/></method>
+  <method name="AnswerTask"><arg type="s" direction="in"/><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
+  <method name="PhoneSnapshot"><arg name="result" type="s" direction="out"/></method>
+  <method name="State"><arg type="s" direction="out"/></method>
     <method name="CallCapabilities"><arg type="s" direction="out"/></method>
     <method name="StartCall"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
     <method name="CallCommand"><arg type="s" direction="in"/></method>
@@ -838,6 +846,8 @@ class VoiceAgent:
         # Codex turns in threads of our own that no conversation shows (briefing curation):
         # thread id -> BackgroundTurn, fed by on_notification.
         self.background = {}
+        self.phone = None
+        self.phone_starting = False
         self.curation_lock = threading.Lock()
         self.server = None
         # The workspace comes up with the service, ready before the first task needs it.
@@ -870,6 +880,8 @@ class VoiceAgent:
     def restart_server(self):
         """A new key, sign-in or installation: Codex reads them when it starts. The open
         conversation is closed; the app reopens it (agent-restarted)."""
+        if self.phone:
+            self.phone.command("BackendReset")
         with self.lock:
             open_id = self.thread_id
             self.close_conversation()
@@ -912,6 +924,8 @@ class VoiceAgent:
         event.setdefault('time', time.time())
         conversation = event.get('conversation') or self.thread_id
         if conversation:
+            if event.get('type') == 'message' and event.get('role') == 'user':
+                self.store.touch(conversation, event.get('text', ''))
             event.setdefault('conversation', conversation)
             suggestion = self.store.index.get(conversation, {}).get('suggestion')
             if suggestion:
@@ -962,6 +976,49 @@ class VoiceAgent:
                              'connectedAt': getattr(self.call, 'connected_at', 0),
                              'privateVoiceInstructions': self.call.private_voice_instructions,
                              'independentMonitor': self.call.independent_monitor} if call_phase else None}
+
+    def phone_session(self):
+        from phone_session import PhoneSession
+        with self.lock:
+            if self.phone is None:
+                self.phone = PhoneSession(lambda: self.server, self.thread_settings, self.emit,
+                    lambda: platform_request({'op': 'status'}).get('foreground', False),
+                    lambda: prompt('phone.md') + language_note(),
+                    lambda: desktop_language().split('_')[0].split('-')[0], history=self.store.history)
+                threading.Thread(target=lambda: self.phone.command('Reconcile'), daemon=True).start()
+            return self.phone
+
+    def phone_command(self, method, args):
+        phone = self.phone_session()
+        if method == 'StartPhoneMode':
+            if self.needs_setup(True):
+                raise RuntimeError('Finish voice and Codex setup before starting phone mode')
+            if self.call and self.call.phase in ('agent', 'user'):
+                raise RuntimeError('End the current call before starting phone mode')
+            if not args.get('conversationId'):
+                raise RuntimeError('Open a conversation first')
+            # Release legacy audio on its owning GLib thread. Task execution stays live.
+            ready = threading.Event()
+            def release():
+                self.cancel_talking()
+                if self.recorder is not None:
+                    self.recorder.set_state(Gst.State.NULL)
+                    self.recorder = None
+                self.stop_audio()
+                ready.set()
+                return False
+            GLib.idle_add(release)
+            if not ready.wait(5):
+                raise RuntimeError('Audio could not be released')
+            self.phone_starting = True
+            with self.lock:
+                self.stop_realtime()
+            phone.command('ExternalBusy', {'busy': self.agent_busy or bool(self.background)})
+            try:
+                return phone.start(args['conversationId'])
+            finally:
+                self.phone_starting = False
+        return phone.command(method, args)
 
     # ---- conversations ----------------------------------------------------------
     def thread_settings(self):
@@ -1123,6 +1180,8 @@ class VoiceAgent:
         log('instructions: updated', thread_id, '(' + ', '.join(k for k in now if had.get(k) != now[k]) + ')')
 
     def open_conversation(self, thread_id, connect=True):
+        if self.phone and self.phone.snapshot.get("sessionId"):
+            connect = False
         """Open a conversation. What the app shows comes from our own store and returns at
         once; the Codex thread is resumed in the background (docs/59): only talking needs it,
         and resuming reads the whole rollout (2.7 s for one of 8 MB, screenshots included)."""
@@ -1193,12 +1252,14 @@ class VoiceAgent:
         resumed.set()
 
     def start_realtime(self):
+        if self.phone_starting or (self.phone and self.phone.snapshot.get("sessionId")):
+            return
         # The thread must be resumed in Codex first (open_conversation resumes it behind).
         thread_id, resumed = self.thread_id, self.resumed
         if not resumed.wait(60) or self.thread_id != thread_id:
             return
         with self.lock:
-            if self.realtime or self.realtime_starting or not self.thread_id or not self.server:
+            if self.phone_starting or (self.phone and self.phone.snapshot.get("sessionId")) or self.realtime or self.realtime_starting or not self.thread_id or not self.server:
                 return
             if not openai_key():
                 return
@@ -1222,7 +1283,7 @@ class VoiceAgent:
             self.realtime_starting = False   # never started: the next press tries again
 
     def stop_realtime(self):
-        if self.realtime and self.thread_id:
+        if (self.realtime or self.realtime_starting) and self.thread_id:
             try:
                 self.server.call('thread/realtime/stop', {'threadId': self.thread_id}, timeout=5)
             except Exception:
@@ -1304,7 +1365,8 @@ class VoiceAgent:
                 # The realtime model's own prompt is given when its session starts.
                 log('instructions: realtime prompt changed; restarting its session')
                 threading.Thread(target=lambda: (self.stop_realtime(), self.start_realtime()), daemon=True).start()
-        if not self.agent_busy and not self.call and time.monotonic() - self.agent_idle_since > RESTORE_APPS_S \
+        phone_busy = self.phone and any(t.get("status") in ("queued", "starting", "running", "stopping", "waiting_input") for t in self.phone.snapshot.get("tasks", []))
+        if not phone_busy and not self.agent_busy and not self.call and time.monotonic() - self.agent_idle_since > RESTORE_APPS_S \
                 and SWITCHED_APPS.exists() and SWITCHED_APPS.read_text().strip() not in ('', '{}'):
             threading.Thread(target=restore_apps, daemon=True).start()
         if self.realtime and not self.talking and not self.agent_busy \
@@ -1346,6 +1408,8 @@ class VoiceAgent:
         return False
 
     def start_talking(self, sink=None):
+        if self.phone and (self.phone.snapshot.get("sessionId") or any(t.get("status") in ("queued", "starting", "running", "stopping", "waiting_input") for t in self.phone.snapshot.get("tasks", []))):
+            return False
         if self.call and self.call.active and not self.call.private_voice_instructions:
             self.call.emit({'type': 'call-note', 'text': _('During a phone call, give the assistant instructions in '
                                                            'text, or tap “Take over”.')})
@@ -1771,6 +1835,7 @@ class VoiceAgent:
         GLib.idle_add(send)
 
     def on_notification(self, method, params):
+        phone_owned = self.phone and self.phone.notification(method, params)
         if method == 'turn/started':
             self.usage_accounts[(params.get('threadId'), (params.get('turn') or {}).get('id'))] = self.usage_identity()
         if method in ('turn/started', 'turn/completed', 'account/rateLimits/updated', 'account/updated',
@@ -1790,6 +1855,8 @@ class VoiceAgent:
             threading.Thread(target=self.warm_catalog, daemon=True).start()
         elif method == 'account/rateLimits/updated':
             pass  # told above
+        elif phone_owned:
+            return
         elif method == 'model/rerouted' and params.get('threadId') == self.thread_id:
             # Codex handed the turn to another model (capacity, safety): the task card says so.
             log('model rerouted:', params.get('fromModel'), '->', params.get('toModel'), params.get('reason'))
@@ -1851,6 +1918,8 @@ class VoiceAgent:
         elif method == 'turn/started':
             self.turn_id = (params.get('turn') or {}).get('id')
             self.agent_busy = True
+            if self.phone:
+                self.phone._write({"type": "command", "method": "ExternalBusy", "args": {"busy": True}})
             self.turn_started = self.last_voice = time.monotonic()
             with self.turn_lock:
                 self.turn = task_state.TurnState()
@@ -1869,6 +1938,8 @@ class VoiceAgent:
                 self.emit({'type': 'error', 'text': error.get('message', _("The agent couldn't finish this task"))})
             self.turn_id = None
             self.agent_busy = False
+            if self.phone:
+                self.phone._write({"type": "command", "method": "ExternalBusy", "args": {"busy": bool(self.background)}})
             self.agent_idle_since = time.monotonic()
             forget_screen_dismissal()
             if getattr(self, 'model_pending', False):
@@ -1942,6 +2013,8 @@ class VoiceAgent:
                        'final': item.get('phase') == 'final_answer'})
 
     def on_request(self, request_id, method, params):
+        if self.phone and self.phone.request(request_id, method, params):
+            return
         if method in ('item/commandExecution/requestApproval', 'item/fileChange/requestApproval'):
             approval = f'a{request_id}'
             self.approvals[approval] = request_id
@@ -1974,6 +2047,8 @@ class VoiceAgent:
         return capabilities(key_configured=configured)
 
     def start_call(self, params):
+        if self.phone and self.phone.snapshot.get("sessionId"):
+            self.phone.command("StopPhoneMode", {"sessionId": self.phone.snapshot["sessionId"]})
         with self.call_start_lock:
             return self._start_call(params)
 
@@ -2322,10 +2397,17 @@ class VoiceAgent:
         thread_id = None
         turn = BackgroundTurn()
         try:
+            curation_config = {'model_reasoning_effort': CURATE_EFFORT}
+            if self.phone:
+                # A filesystem read-only sandbox cannot constrain an MCP server.
+                # Background curation must not bypass a phone task's tool lease.
+                curation_config.update({key: value for key, value in
+                    self.phone._task_settings('curation', True)['config'].items()
+                    if key.startswith('mcp_servers.') and key.endswith('.enabled')})
             started = server.call('thread/start', {
                 'model': self.curate_model(), 'ephemeral': True, 'cwd': str(Path.home()),
                 'sandbox': 'read-only', 'approvalPolicy': 'never',
-                'config': {'model_reasoning_effort': CURATE_EFFORT},
+                'config': curation_config,
                 'developerInstructions': CURATE_INSTRUCTIONS + language_note()}, timeout=30)
             thread_id = started['thread']['id']
             self.background[thread_id] = turn
@@ -2395,6 +2477,10 @@ class VoiceAgent:
         """A typed message (with images or files): an agent turn of its own, started
         directly (turn/start); while one runs, Codex steers it with this instead. `hidden` goes
         to the agent after the message but isn't shown in the chat."""
+        phone_active = self.phone and self.phone.snapshot.get('sessionId') and self.phone.snapshot.get('conversation') == self.thread_id
+        if phone_active and not attachments and not hidden:
+            self.phone.command('SendPhoneText', {'conversationId': self.thread_id, 'text': text})
+            return
         text = text.strip()
         paths = [a['path'] for a in attachments if a.get('path')]
         if self.call and self.call.active and text and not paths:
@@ -2438,7 +2524,12 @@ class VoiceAgent:
             turn['model'] = agent['model']
             if agent['effort']:
                 turn['effort'] = agent['effort']
-        self.server.call('turn/start', turn)
+        phone_work = self.phone and any(t.get('conversation') == self.thread_id and t.get('status') in ('queued', 'starting', 'running', 'stopping', 'waiting_input') for t in self.phone.snapshot.get('tasks', []))
+        phone_route = self.phone and (self.phone.snapshot.get('sessionId') or any(t.get('status') in ('queued', 'starting', 'running', 'stopping', 'waiting_input') for t in self.phone.snapshot.get('tasks', [])))
+        if phone_route:
+            self.phone.command('SubmitTask', {'conversationId': self.thread_id, 'text': text or 'Attachments', 'input': items})
+        else:
+            self.server.call('turn/start', turn)
 
     def talk_to_text(self):
         """The hold ended over "转文字": what was said comes back as text to edit; nothing
@@ -2455,6 +2546,9 @@ class VoiceAgent:
         return call_proxy.simplified(text)
 
     def read_aloud(self, text):
+        if self.phone and self.phone.snapshot.get("sessionId"):
+            self.emit({"type": "phone-notice", "text": "Ask in phone mode to read this answer"}, keep=False)
+            return
         """"朗读": the voice reads an answer out (the realtime session speaks it)."""
         if not self.thread_id or not text.strip():
             return
@@ -2867,7 +2961,14 @@ class Service:
         def run():
             try:
                 result = None
-                if method == 'ListConversations':
+                if method in ('StartPhoneMode', 'StopPhoneMode', 'SetPhoneMuted', 'StopSpeaking', 'FocusTask', 'StopTaskById', 'AnswerTask', 'PhoneSnapshot'):
+                    names = {'StartPhoneMode': ['conversationId'], 'StopPhoneMode': ['sessionId'],
+                             'SetPhoneMuted': ['sessionId', 'muted'], 'StopSpeaking': ['sessionId'],
+                             'FocusTask': ['taskId'], 'StopTaskById': ['taskId'], 'AnswerTask': ['taskId', 'answers'], 'PhoneSnapshot': []}
+                    values = dict(zip(names[method], args))
+                    if method == 'AnswerTask': values['answers'] = json.loads(values['answers'])
+                    result = json.dumps(agent.phone_command(method, values), ensure_ascii=False)
+                elif method == 'ListConversations':
                     result = json.dumps(agent.store.listing(agent.assistant_id()), ensure_ascii=False)
                 elif method == 'OpenConversation':
                     result = json.dumps(agent.open_conversation(args[0]), ensure_ascii=False)
