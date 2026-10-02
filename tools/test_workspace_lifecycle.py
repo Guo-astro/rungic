@@ -229,3 +229,32 @@ def test_the_keeper_is_told_while_a_workspace_closes(tmp_path):
         workspace.close(1, run=run)
         assert not workspace.closing_marker(1).exists()
     assert seen == [True, True]          # thawed at the start and right before the stop, the marker there
+
+
+# ---- the phone asleep: the Rungic app frozen (docs/research/97) -------------------------------------
+def test_a_start_that_failed_ends_the_wait_at_once_and_says_why(tmp_path, monkeypatch):
+    monkeypatch.setenv('XDG_RUNTIME_DIR', str(tmp_path))
+    started = []
+
+    def run(argv, **kwargs):
+        started.append(argv)
+        workspace.failure_path(3).write_text('the Android host is not responding\n')
+        return subprocess.CompletedProcess(argv, 0, '', '')
+    with mock.patch.object(workspace, 'ready', return_value=False):
+        assert workspace.ensure(3, wait=30, run=run) is False
+    assert started and workspace.failure(3) == 'the Android host is not responding'
+
+
+def test_the_agent_hears_why_its_workspace_did_not_start(tmp_path, monkeypatch):
+    monkeypatch.setenv('XDG_RUNTIME_DIR', str(tmp_path))
+    workspace.failure_path(1).write_text('the Android host is not responding')
+    with mock.patch.object(router, 'Child', FakeChild), \
+            mock.patch.object(router, 'bridge', return_value={'enabled': False, 'tv': False}), \
+            mock.patch.object(workspace, 'ensure', return_value=False):
+        r = router.Router(ENV)
+        try:
+            r.call('desktop_windows', {})
+        except RuntimeError as error:
+            assert 'not responding' in str(error)
+        else:
+            raise AssertionError('no error')

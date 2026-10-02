@@ -6,6 +6,7 @@
 #define _GNU_SOURCE
 #include "codec-client.h"
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <sys/un.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -43,7 +44,12 @@ static int connect_broker(void) {
  int fd=socket(AF_UNIX,SOCK_STREAM|SOCK_CLOEXEC,0);if(fd<0)return -1;
  struct sockaddr_un addr={.sun_family=AF_UNIX};
  strcpy(addr.sun_path,"/mnt/android-wayland/codec.sock");
+ /* A frozen Rungic app (the phone asleep, docs/research/97) stops accepting: once its backlog is
+  * full a blocking connect waited forever. A Unix connect waits for SO_SNDTIMEO at most. */
+ struct timeval wait={.tv_sec=2},none={0};
+ setsockopt(fd,SOL_SOCKET,SO_SNDTIMEO,&wait,sizeof(wait));
  if(connect(fd,(struct sockaddr *)&addr,sizeof(addr)) || put32(fd,MAGIC)) {int e=errno;close(fd);errno=e;return -1;}
+ setsockopt(fd,SOL_SOCKET,SO_SNDTIMEO,&none,sizeof(none));
  broker=fd;return 0;
 }
 static void before_fork(void){pthread_mutex_lock(&broker_lock);}

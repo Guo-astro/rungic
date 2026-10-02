@@ -258,7 +258,8 @@ class Router:
             if target == 'workspace':
                 slot = self.slot
                 if not workspace.ensure(slot):
-                    raise RuntimeError(f'workspace {slot} did not start')
+                    why = workspace.failure(slot)
+                    raise RuntimeError(f'workspace {slot} did not start' + (f': {why}' if why else ''))
                 env = self.env if slot == self.home else workspace_env(self.env, slot)
             else:
                 env = user_session_env(self.env)

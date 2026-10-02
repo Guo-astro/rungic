@@ -1726,7 +1726,10 @@ class VoiceAgent:
             return False
         shown, checked = self.foreground
         if time.monotonic() - checked > WATCHERS_FRESH_S:
-            shown = platform_request({'op': 'status'}).get('foreground', True)
+            # No answer is not "shown": the phone is asleep (its app frozen, docs/research/97) and
+            # nobody sees the chat, so what needs the user goes out as a notification.
+            reply = platform_request({'op': 'status'})
+            shown = reply.get('foreground', True) if reply else False
             self.foreground = (shown, time.monotonic())
         return bool(shown)
 

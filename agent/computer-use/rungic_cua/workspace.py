@@ -103,15 +103,43 @@ def ready(slot) -> bool:
     return bool(bus) and (_runtime() / f'wayland-ws-{slot}').exists()
 
 
+def failure_path(slot) -> Path:
+    return Path(os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}') / f'rungic-workspace-{slot}.failed'
+
+
+def failure(slot) -> str:
+    """Why the workspace's last start failed (rungic-workspace wrote it), or ''."""
+    try:
+        return failure_path(slot).read_text().strip()
+    except OSError:
+        return ''
+
+
 def ensure(slot, wait: float = 10.0, run=subprocess.run) -> bool:
-    """Start the workspace unless it runs; True once it is ready."""
+    """Start the workspace unless it runs; True once it is ready, False at once when its start
+    failed (failure() says why)."""
     deadline = time.monotonic() + wait
     started = False
+    since = time.time()
+    checked = 0.0
     while not ready(slot):
         if not started:
+            # A unit that failed before (its restarts used up) would refuse the start: a new attempt.
+            run(['systemctl', '--user', 'reset-failed', unit(slot)], capture_output=True, timeout=10, env=user_env())
             run(['systemctl', '--user', 'start', '--no-block', unit(slot)], capture_output=True, timeout=10,
                 env=user_env())
             started = True
+        try:
+            if failure_path(slot).stat().st_mtime >= since - 1:
+                return False
+        except OSError:
+            pass
+        if time.monotonic() - checked >= 1:
+            checked = time.monotonic()
+            state = run(['systemctl', '--user', 'is-failed', unit(slot)], capture_output=True, text=True,
+                        timeout=10, env=user_env()).stdout.strip()
+            if state == 'failed':
+                return False
         if time.monotonic() > deadline:
             return False
         time.sleep(0.2)

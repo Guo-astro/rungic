@@ -40,7 +40,23 @@ def validate_result(command: str, result: dict) -> dict:
     return result
 
 
+def host_answers() -> bool:
+    """The Rungic app answers at all: asleep (frozen, docs/research/97) it takes connections and
+    never replies, and a cast command waited its whole 350 s for nothing."""
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
+            conn.settimeout(3)
+            conn.connect(SOCKET)
+            conn.sendall(b'{"op": "status"}\n')
+            with conn.makefile('rb') as stream:
+                return bool(json.loads(stream.readline(1 << 20) or b'null'))
+    except (OSError, ValueError):
+        return False
+
+
 def request(args: list[str]) -> dict:
+    if not host_answers():
+        return {'error': 'The phone is asleep or Rungic is not responding', 'code': 'host-unreachable'}
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
         conn.settimeout(350)
         conn.connect(SOCKET)

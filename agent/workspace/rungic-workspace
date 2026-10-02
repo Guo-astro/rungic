@@ -9,7 +9,25 @@ set -eu
 slot=${1:?usage: rungic-workspace N}
 case "$slot" in [1-9]) ;; *) echo "workspace: a slot 1..9" >&2; exit 2 ;; esac
 host=/mnt/android-wayland/ws-$slot
-[ -S "$host" ] || { echo "workspace $slot: the host does not offer $host (APK 2.14 or later)" >&2; exit 1; }
+runtime=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+failed=$runtime/rungic-workspace-$slot.failed
+rm -f "$failed"
+fail() { echo "workspace $slot: $1" >&2; echo "$1" > "$failed"; exit 1; }
+[ -S "$host" ] || fail "the host does not offer $host (APK 2.14 or later)"
+# The host must answer before KWin connects: a frozen Rungic app (the phone asleep: Motorola's
+# freezer, docs/research/97) takes the connection but never the first roundtrip, and KWin and every
+# app started in it would hang there with no end.
+python3 - <<'PROBE' || fail "the Android host is not responding (the phone is asleep or Rungic is frozen, docs/research/97)"
+import json, socket, sys
+try:
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as c:
+        c.settimeout(3)
+        c.connect('/mnt/android-wayland/platform.sock')
+        c.sendall(b'{"op": "status"}\n')
+        sys.exit(0 if json.loads(c.makefile('rb').readline() or b'null') else 1)
+except (OSError, ValueError):
+    sys.exit(1)
+PROBE
 
 # The GPU as the phone's KWin has it (desktop/kwin): Mesa's KGSL driver, and the host's output
 # buffers in Adreno UBWC, which KWin cannot render into without FD_KGSL_DMABUF_UBWC (EGL_BAD_MATCH).
@@ -62,7 +80,6 @@ fi
 # again after it restarted (dbus-run-session's address changed with every start, and they failed
 # with "Could not connect"). KWin starts its Xwayland on the first X client and picks a free
 # display itself; the X socket it listens on is written to $state/display for rungic-workspace-env.
-runtime=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
 bus=$runtime/rungic-workspace-$slot.bus
 rm -f "$state/bus" "$state/display" "$bus"
 # Its own configuration: the workspace's accessibility bus (rungic-workspace-a11y) must not take
