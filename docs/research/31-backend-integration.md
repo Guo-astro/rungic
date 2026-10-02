@@ -592,3 +592,7 @@ USB G100 已部署 `20260930.12`：suggestions `0.452`、voice-agent `0.453`、d
 G100 ZY32M9MRVP / Android 16 / APK 2.29 开发版通过标准 PA 客户端检查：静音播放、连续 PCM、恢复与关闭、第二个 owner 拒绝、epoch 更新；flush 控制确认约 108–109 ms。实机采集测试 PCM 全零，不能据此证明真人识别或回声消除效果；声学延迟、软件 AEC 回退、其他机型和蓝牙仍待验。首次原生 Agent 再取消静音暴露 DSP 两个 appsink 等待彼此 preroll，修正为独立 async=false、sync=false 并先协商 echo reference；最终原生客户端已通过无播放时恢复采集、真实 Realtime 回应播放、停止播报 epoch 更新、静音释放麦克风和挂断后清理。真人声音、回声效果和声学 P95 仍未验收。完整包版本、独立云端/本地/实机证据和回退见 [101 篇](../101-full-duplex-phone-mode.md)。
 
 任务执行走常驻 C++ 协调器 → 现有 VoiceAgent 的认证 Codex app-server → 按任务绑定的 thread/turn。桌面 MCP 的任务 worker 有独立进程组与租约，不结束用户 GUI；后台简报禁用 MCP。真实挂断后任务继续、明确取消等待实际结束、Android Settings 遮挡后停话音而保留任务并要求显式恢复均通过。部署保留 SSH 自动启用；用户要求的 10% 音量由现有 phone sink 继承到新 communication sink。
+
+## 2026-10-03：系统监视器传感器（GPU、磁盘）
+
+链路：系统监视器 / System Monitor 小组件 → 会话 D-Bus `org.kde.ksystemstats1`（手机会话与工作区 0 各有一个按需激活的 ksystemstats）→ GPU 插件 `LinuxKgslGpu` → `/sys/class/kgsl/kgsl-3d0/{gpu_model,gpu_clock_stats,gpubusy,temp,devfreq/*}` → KGSL → Adreno 710；磁盘插件（Solid 无卷时）→ `/proc/self/mountinfo` + `statvfs` + `/proc/diskstats` → `rungic-root`（userdata 上 loop 的 ext4 镜像）与 `userdata`（f2fs）。只在传感器被订阅时读 sysfs；不读 `devfreq/gpu_load`（读后重置调频器统计）。没有按进程的 GPU 使用率（KGSL 无 DRM fdinfo），不提供显存与功耗。实现与验收见 [104 篇](../104-system-monitor-gpu-disks.md)。

@@ -158,3 +158,9 @@ python3 tools/rungic_dev.py reset [rungic-design]                     # 回到�
 - 安装成功，apt 校验通过；`plasma-mobile` 在 `session_restart` 里，会话按规则重启，报告 “Plasma Mobile ready”。
 - 完整性 `drift` 是早已存在的 `/usr/lib/rungic-cua/rungic_cua/keyring.py`（不属于任何包），与这次无关。
 
+
+## 新加入 `rebuilt` 的组件（2026-10-03）
+
+- 问题：已装发布里没有的组件（例如刚加入 `rebuilt` 的 `ksystemstats`，发布 `20260930.10` 不含它），原来 `deploy` 直接拒绝：“the installed release has none of its packages”。
+- 现在：这类组件以手机上已装的发行版版本为基准，覆盖记录里写 `base`（如 `6.6.6-0ubuntu0.1`）；再次部署沿用第一次记下的 `base`；`reset` 时把它按该版本装回（`apt-get install 包=版本`），而不是留在开发版本。离线测试 `test_component_new_to_the_release`、`test_reset_restores_the_distribution_build`。
+- 实测：2026-10-03 部署 `ksystemstats`（增量构建 54 s），apt 校验通过；reset 路径尚未在实机执行。见 docs/104。

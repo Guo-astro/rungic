@@ -1,0 +1,654 @@
+From: clawd20130 <clawd20130@gmail.com>
+Date: Sat, 3 Oct 2026 03:39:37 +0900
+Subject: GPU plugin: Qualcomm Adreno through the KGSL driver
+
+Android kernels drive the Adreno GPU with the downstream KGSL driver: there is /dev/kgsl-3d0 and
+/sys/class/kgsl/kgsl-3d0, but no DRM device, so the Linux backend found no GPU, gpu/all/usage did
+not exist and System Monitor's Overview and History pages said "This page is missing some
+sensors" (docs/104).
+LinuxBackend now adds a LinuxKgslGpu when /sys/class/kgsl/kgsl-3d0/gpu_model is readable:
+name from gpu_model ("Adreno710v1" -> "Adreno 710"); usage from the growth of the cumulative busy
+microseconds of gpu_clock_stats over the elapsed time (gpubusy, the busy share of the last powered
+second, when that is unreadable; never devfreq/gpu_load, which resets the governor's statistics on
+read); frequency from devfreq/cur_freq within available_frequencies; temperature from temp
+(millidegrees). The memory is unified, so no video memory figures; no power. Files are read only
+for subscribed sensors. Parsing in KgslStats with tests (kgsltest, values from an Adreno 710).
+
+Forwarded: no
+Last-Update: 2026-10-03
+X-Rungic-Status: Pending [generic for KGSL kernels; upstream MR !149 covers msm DRM only]
+X-Rungic-Tests: L1:kgsltest
+X-Rungic-Docs: docs/104
+---
+ plugins/gpu/CMakeLists.txt           |   2 +-
+ plugins/gpu/KgslStats.cpp            | 114 +++++++++++++++++++++
+ plugins/gpu/KgslStats.h              |  52 ++++++++++
+ plugins/gpu/LinuxBackend.cpp         |  19 ++++
+ plugins/gpu/LinuxKgslGpu.cpp         | 123 ++++++++++++++++++++++
+ plugins/gpu/LinuxKgslGpu.h           |  40 ++++++++
+ plugins/gpu/autotests/CMakeLists.txt |   5 +
+ plugins/gpu/autotests/kgsl.cpp       | 193 +++++++++++++++++++++++++++++++++++
+ 8 files changed, 547 insertions(+), 1 deletion(-)
+ create mode 100644 plugins/gpu/KgslStats.cpp
+ create mode 100644 plugins/gpu/KgslStats.h
+ create mode 100644 plugins/gpu/LinuxKgslGpu.cpp
+ create mode 100644 plugins/gpu/LinuxKgslGpu.h
+ create mode 100644 plugins/gpu/autotests/kgsl.cpp
+
+diff --git a/plugins/gpu/CMakeLists.txt b/plugins/gpu/CMakeLists.txt
+index 0283a89..946aebf 100644
+--- a/plugins/gpu/CMakeLists.txt
++++ b/plugins/gpu/CMakeLists.txt
+@@ -9,7 +9,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
+ endif()
+ 
+ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+-    target_sources(ksystemstats_plugin_gpu PRIVATE LinuxAmdGpu.cpp LinuxIntelGpu.cpp LinuxNvidiaGpu.cpp LinuxBackend.cpp NvidiaGpu.cpp NvidiaSmiProcess.cpp)
++    target_sources(ksystemstats_plugin_gpu PRIVATE LinuxAmdGpu.cpp LinuxIntelGpu.cpp LinuxKgslGpu.cpp KgslStats.cpp LinuxNvidiaGpu.cpp LinuxBackend.cpp NvidiaGpu.cpp NvidiaSmiProcess.cpp)
+ 
+     add_executable(ksystemstats_intel_helper IntelHelper.cpp)
+     configure_file(IntelHelperLocation.h.cmake IntelHelperLocation.h)
+diff --git a/plugins/gpu/KgslStats.cpp b/plugins/gpu/KgslStats.cpp
+new file mode 100644
+index 0000000..c0fabbf
+--- /dev/null
++++ b/plugins/gpu/KgslStats.cpp
+@@ -0,0 +1,114 @@
++/*
++ * SPDX-FileCopyrightText: 2026 Rungic
++ *
++ * SPDX-License-Identifier: GPL-2.0-only OR GPL-3.0-only OR LicenseRef-KDE-Accepted-GPL
++ */
++
++#include "KgslStats.h"
++
++#include <QRegularExpression>
++
++#include <algorithm>
++
++namespace Kgsl
++{
++QString modelName(const QByteArray &gpuModel)
++{
++    const QString model = QString::fromLatin1(gpuModel).trimmed();
++    static const QRegularExpression adreno(QStringLiteral("^Adreno(\\d+)v\\d+$"));
++    const auto match = adreno.match(model);
++    if (match.hasMatch()) {
++        return QStringLiteral("Adreno %1").arg(match.captured(1));
++    }
++    return model;
++}
++
++std::optional<quint64> unsignedValue(const QByteArray &input)
++{
++    const QByteArray number = input.trimmed();
++    if (number.isEmpty() || !std::all_of(number.cbegin(), number.cend(), [](char c) {
++            return c >= '0' && c <= '9';
++        })) {
++        return std::nullopt;
++    }
++    bool ok = false;
++    const quint64 value = number.toULongLong(&ok);
++    if (!ok) {
++        return std::nullopt;
++    }
++    return value;
++}
++
++std::optional<quint64> clockStatsBusyMicroseconds(const QByteArray &clockStats)
++{
++    const auto fields = clockStats.simplified().split(' ');
++    quint64 sum = 0;
++    int count = 0;
++    for (const QByteArray &field : fields) {
++        if (field.isEmpty()) {
++            continue;
++        }
++        const auto value = unsignedValue(field);
++        if (!value) {
++            return std::nullopt;
++        }
++        sum += *value;
++        count++;
++    }
++    if (count == 0) {
++        return std::nullopt;
++    }
++    return sum;
++}
++
++std::optional<double> gpubusyPercent(const QByteArray &gpubusy)
++{
++    const auto fields = gpubusy.simplified().split(' ');
++    if (fields.size() != 2) {
++        return std::nullopt;
++    }
++    const auto busy = unsignedValue(fields[0]);
++    const auto total = unsignedValue(fields[1]);
++    if (!busy || !total) {
++        return std::nullopt;
++    }
++    if (*total == 0) {
++        return 0.0;
++    }
++    return std::clamp(static_cast<double>(*busy) * 100.0 / static_cast<double>(*total), 0.0, 100.0);
++}
++
++QList<quint64> frequencies(const QByteArray &input)
++{
++    QList<quint64> result;
++    const auto fields = input.simplified().split(' ');
++    for (const QByteArray &field : fields) {
++        if (const auto value = unsignedValue(field)) {
++            result.append(*value);
++        }
++    }
++    return result;
++}
++
++std::optional<double> BusySampler::sample(quint64 busyMicroseconds, qint64 elapsedNanoseconds)
++{
++    if (!m_hasBaseline || busyMicroseconds < m_previous) {
++        m_previous = busyMicroseconds;
++        m_hasBaseline = true;
++        return std::nullopt;
++    }
++    const quint64 busy = busyMicroseconds - m_previous;
++    m_previous = busyMicroseconds;
++    if (elapsedNanoseconds <= 0) {
++        return std::nullopt;
++    }
++    const double percent = static_cast<double>(busy) * 1000.0 * 100.0 / static_cast<double>(elapsedNanoseconds);
++    return std::clamp(percent, 0.0, 100.0);
++}
++
++void BusySampler::reset()
++{
++    m_previous = 0;
++    m_hasBaseline = false;
++}
++}
+diff --git a/plugins/gpu/KgslStats.h b/plugins/gpu/KgslStats.h
+new file mode 100644
+index 0000000..e641048
+--- /dev/null
++++ b/plugins/gpu/KgslStats.h
+@@ -0,0 +1,52 @@
++/*
++ * SPDX-FileCopyrightText: 2026 Rungic
++ *
++ * SPDX-License-Identifier: GPL-2.0-only OR GPL-3.0-only OR LicenseRef-KDE-Accepted-GPL
++ */
++
++#pragma once
++
++#include <QByteArray>
++#include <QList>
++#include <QString>
++
++#include <optional>
++
++// Parsing of the Qualcomm KGSL (msm_kgsl, downstream Adreno driver) sysfs
++// files under /sys/class/kgsl/kgsl-3d0. Kept free of I/O so it can be tested
++// with fixtures.
++namespace Kgsl
++{
++// "Adreno710v1" -> "Adreno 710"; anything else is returned trimmed as is.
++QString modelName(const QByteArray &gpuModel);
++
++// gpu_clock_stats: cumulative busy time in microseconds per power level,
++// separated by spaces. Returns the sum over all levels.
++std::optional<quint64> clockStatsBusyMicroseconds(const QByteArray &clockStats);
++
++// gpubusy: "<busy> <total>" of the last completed ~1 s window of powered
++// time. Returns the busy percentage of that window (0 when total is 0).
++std::optional<double> gpubusyPercent(const QByteArray &gpubusy);
++
++// A single unsigned integer, as in devfreq/cur_freq or temp.
++std::optional<quint64> unsignedValue(const QByteArray &input);
++
++// devfreq/available_frequencies: frequencies in Hz separated by spaces.
++QList<quint64> frequencies(const QByteArray &input);
++
++// Turns a monotonic busy-time counter into a usage percentage over the
++// elapsed wall time between two samples.
++class BusySampler
++{
++public:
++    // The first sample after construction or reset() only sets the baseline
++    // and returns nothing. A counter that went backwards also restarts the
++    // baseline.
++    std::optional<double> sample(quint64 busyMicroseconds, qint64 elapsedNanoseconds);
++    void reset();
++
++private:
++    quint64 m_previous = 0;
++    bool m_hasBaseline = false;
++};
++}
+diff --git a/plugins/gpu/LinuxBackend.cpp b/plugins/gpu/LinuxBackend.cpp
+index ee6104d..c91fe8d 100644
+--- a/plugins/gpu/LinuxBackend.cpp
++++ b/plugins/gpu/LinuxBackend.cpp
+@@ -10,8 +10,11 @@
+ 
+ #include <libudev.h>
+ 
++#include <algorithm>
++
+ #include "LinuxAmdGpu.h"
+ #include "LinuxIntelGpu.h"
++#include "LinuxKgslGpu.h"
+ #include "LinuxNvidiaGpu.h"
+ #include "debug.h"
+ 
+@@ -74,6 +77,22 @@ void LinuxBackend::start()
+     }
+ 
+     udev_enumerate_unref(enumerate);
++
++    // Qualcomm Adreno on Android kernels: the downstream KGSL driver has no DRM
++    // device, only /dev/kgsl-3d0 and its sysfs class directory.
++    const QString kgslPath = QStringLiteral("/sys/class/kgsl/kgsl-3d0");
++    if (LinuxKgslGpu::isPresent(kgslPath)) {
++        int number = 0;
++        while (std::any_of(m_devices.cbegin(), m_devices.cend(), [number](GpuDevice *device) {
++            return device->id() == QStringLiteral("gpu%1").arg(number);
++        })) {
++            number++;
++        }
++        auto gpu = new LinuxKgslGpu{QStringLiteral("gpu%1").arg(number), i18nc("@title %1 is GPU number", "GPU %1", number + 1), kgslPath};
++        gpu->initialize();
++        m_devices.append(gpu);
++        Q_EMIT deviceAdded(gpu);
++    }
+ }
+ 
+ void LinuxBackend::stop()
+diff --git a/plugins/gpu/LinuxKgslGpu.cpp b/plugins/gpu/LinuxKgslGpu.cpp
+new file mode 100644
+index 0000000..b26d89c
+--- /dev/null
++++ b/plugins/gpu/LinuxKgslGpu.cpp
+@@ -0,0 +1,123 @@
++/*
++ * SPDX-FileCopyrightText: 2026 Rungic
++ *
++ * SPDX-License-Identifier: GPL-2.0-only OR GPL-3.0-only OR LicenseRef-KDE-Accepted-GPL
++ */
++
++#include "LinuxKgslGpu.h"
++
++#include <QFile>
++
++#include <algorithm>
++
++#include <systemstats/SensorProperty.h>
++
++LinuxKgslGpu::LinuxKgslGpu(const QString &id, const QString &name, const QString &sysfsPath)
++    : GpuDevice(id, name)
++    , m_path(sysfsPath)
++{
++}
++
++bool LinuxKgslGpu::isPresent(const QString &sysfsPath)
++{
++    QFile model(sysfsPath + QStringLiteral("/gpu_model"));
++    return model.open(QIODevice::ReadOnly) && !model.readAll().trimmed().isEmpty();
++}
++
++QByteArray LinuxKgslGpu::read(const QString &relativePath) const
++{
++    QFile file(m_path + QLatin1Char('/') + relativePath);
++    if (!file.open(QIODevice::ReadOnly)) {
++        return {};
++    }
++    // sysfs files are at most a page; QFile::readAll() on them may stop early.
++    return file.read(4096);
++}
++
++void LinuxKgslGpu::initialize()
++{
++    GpuDevice::initialize();
++
++    m_nameProperty->setValue(Kgsl::modelName(read(QStringLiteral("gpu_model"))));
++
++    // The range of the hardware; devfreq/min_freq and max_freq are the
++    // current policy and can change at run time.
++    auto frequencies = Kgsl::frequencies(read(QStringLiteral("devfreq/available_frequencies")));
++    if (frequencies.isEmpty()) {
++        for (const QString &file : {QStringLiteral("devfreq/min_freq"), QStringLiteral("devfreq/max_freq")}) {
++            if (const auto value = Kgsl::unsignedValue(read(file))) {
++                frequencies.append(*value);
++            }
++        }
++    }
++    if (!frequencies.isEmpty()) {
++        const auto [min, max] = std::minmax_element(frequencies.cbegin(), frequencies.cend());
++        m_coreFrequencyProperty->setMin(*min / 1'000'000.0);
++        m_coreFrequencyProperty->setMax(*max / 1'000'000.0);
++    }
++
++    m_usageProperty->setValue(0.0);
++    connect(m_usageProperty, &KSysGuard::SensorProperty::subscribedChanged, this, [this](bool subscribed) {
++        if (subscribed) {
++            restartUsage();
++        }
++    });
++}
++
++void LinuxKgslGpu::restartUsage()
++{
++    m_sampler.reset();
++    if (m_clockStatsReadable) {
++        if (const auto busy = Kgsl::clockStatsBusyMicroseconds(read(QStringLiteral("gpu_clock_stats")))) {
++            m_sampler.sample(*busy, 0);
++        } else {
++            m_clockStatsReadable = false;
++        }
++    }
++    m_usageTimer.start();
++}
++
++void LinuxKgslGpu::updateUsage()
++{
++    if (m_clockStatsReadable) {
++        // Cumulative busy microseconds per power level; reading it makes the
++        // driver add the hardware counters accumulated so far.
++        const auto busy = Kgsl::clockStatsBusyMicroseconds(read(QStringLiteral("gpu_clock_stats")));
++        const qint64 elapsed = m_usageTimer.nsecsElapsed();
++        m_usageTimer.restart();
++        if (busy) {
++            if (const auto percent = m_sampler.sample(*busy, elapsed)) {
++                m_usageProperty->setValue(*percent);
++            }
++            return;
++        }
++        m_clockStatsReadable = false;
++    }
++    // The last ~1 s window of powered time; the driver clears it when the GPU
++    // is off, so an idle GPU reads 0. (Never devfreq/gpu_load: reading it
++    // resets the governor's own statistics.)
++    if (const auto percent = Kgsl::gpubusyPercent(read(QStringLiteral("gpubusy")))) {
++        m_usageProperty->setValue(*percent);
++    }
++}
++
++void LinuxKgslGpu::update()
++{
++    if (m_usageProperty->isSubscribed()) {
++        updateUsage();
++    }
++    if (m_coreFrequencyProperty->isSubscribed()) {
++        if (const auto hertz = Kgsl::unsignedValue(read(QStringLiteral("devfreq/cur_freq")))) {
++            m_coreFrequencyProperty->setValue(*hertz / 1'000'000.0);
++        }
++    }
++    if (m_temperatureProperty->isSubscribed()) {
++        // Millidegrees, the hottest of the GPU's thermal zones; 0 without any.
++        const auto milli = Kgsl::unsignedValue(read(QStringLiteral("temp")));
++        if (milli && *milli > 0) {
++            m_temperatureProperty->setValue(*milli / 1000.0);
++        }
++    }
++}
++
++#include "moc_LinuxKgslGpu.cpp"
+diff --git a/plugins/gpu/LinuxKgslGpu.h b/plugins/gpu/LinuxKgslGpu.h
+new file mode 100644
+index 0000000..d575309
+--- /dev/null
++++ b/plugins/gpu/LinuxKgslGpu.h
+@@ -0,0 +1,40 @@
++/*
++ * SPDX-FileCopyrightText: 2026 Rungic
++ *
++ * SPDX-License-Identifier: GPL-2.0-only OR GPL-3.0-only OR LicenseRef-KDE-Accepted-GPL
++ */
++
++#pragma once
++
++#include "GpuDevice.h"
++#include "KgslStats.h"
++
++#include <QElapsedTimer>
++
++// A Qualcomm Adreno GPU driven by the downstream KGSL driver (Android kernels:
++// /dev/kgsl-3d0, no DRM render node). Everything comes from sysfs:
++// /sys/class/kgsl/kgsl-3d0/{gpu_model,gpu_clock_stats,gpubusy,temp} and its
++// devfreq directory. The memory is shared with the CPU, so the video memory
++// and memory frequency sensors stay empty; the driver reports no power.
++class LinuxKgslGpu : public GpuDevice
++{
++    Q_OBJECT
++
++public:
++    LinuxKgslGpu(const QString &id, const QString &name, const QString &sysfsPath);
++
++    static bool isPresent(const QString &sysfsPath);
++
++    void initialize() override;
++    void update() override;
++
++private:
++    QByteArray read(const QString &relativePath) const;
++    void restartUsage();
++    void updateUsage();
++
++    QString m_path;
++    Kgsl::BusySampler m_sampler;
++    QElapsedTimer m_usageTimer;
++    bool m_clockStatsReadable = true;
++};
+diff --git a/plugins/gpu/autotests/CMakeLists.txt b/plugins/gpu/autotests/CMakeLists.txt
+index f256852..6795643 100644
+--- a/plugins/gpu/autotests/CMakeLists.txt
++++ b/plugins/gpu/autotests/CMakeLists.txt
+@@ -5,3 +5,8 @@ ecm_add_test(nvidia.cpp ../NvidiaSmiProcess.cpp
+     TEST_NAME nvidiatest
+     LINK_LIBRARIES Qt::Test
+ )
++
++ecm_add_test(kgsl.cpp ../KgslStats.cpp ../LinuxKgslGpu.cpp ../GpuDevice.cpp
++    TEST_NAME kgsltest
++    LINK_LIBRARIES Qt::Test KF6::I18n KSysGuard::SystemStats
++)
+diff --git a/plugins/gpu/autotests/kgsl.cpp b/plugins/gpu/autotests/kgsl.cpp
+new file mode 100644
+index 0000000..bb20038
+--- /dev/null
++++ b/plugins/gpu/autotests/kgsl.cpp
+@@ -0,0 +1,193 @@
++/*
++    SPDX-FileCopyrightText: 2026 Rungic
++
++    SPDX-License-Identifier: GPL-2.0-only OR GPL-3.0-only OR LicenseRef-KDE-Accepted-GPL
++*/
++
++#include <QDir>
++#include <QFile>
++#include <QTemporaryDir>
++#include <QTest>
++
++#include <systemstats/SensorProperty.h>
++
++#include "../KgslStats.h"
++#include "../LinuxKgslGpu.h"
++
++// Values read from /sys/class/kgsl/kgsl-3d0 of an Adreno 710 (Motorola
++// XT2537, Android 16, gfx-kernel.lnx.15.0) on 2026-10-03.
++static const QByteArray adreno710ClockStats = "7603584471 3417620194 884482783 2648244955 11343366934 3267221696 21997648518 \n";
++static const QByteArray adreno710Frequencies = "816000000 734000000 650000000 600000000 500000000 345000000 295000000\n";
++
++class KgslTest : public QObject
++{
++    Q_OBJECT
++private Q_SLOTS:
++    void testModelName_data();
++    void testModelName();
++    void testClockStats();
++    void testGpubusy_data();
++    void testGpubusy();
++    void testFrequencies();
++    void testSampler();
++    void testDevice();
++    void testDeviceGpubusyFallback();
++};
++
++void KgslTest::testModelName_data()
++{
++    QTest::addColumn<QByteArray>("input");
++    QTest::addColumn<QString>("expected");
++    QTest::newRow("adreno710") << QByteArray("Adreno710v1\n") << QStringLiteral("Adreno 710");
++    QTest::newRow("adreno740v2") << QByteArray("Adreno740v2") << QStringLiteral("Adreno 740");
++    QTest::newRow("other") << QByteArray(" Something 9 \n") << QStringLiteral("Something 9");
++    QTest::newRow("empty") << QByteArray("") << QString();
++}
++
++void KgslTest::testModelName()
++{
++    QFETCH(QByteArray, input);
++    QFETCH(QString, expected);
++    QCOMPARE(Kgsl::modelName(input), expected);
++}
++
++void KgslTest::testClockStats()
++{
++    QCOMPARE(Kgsl::clockStatsBusyMicroseconds(adreno710ClockStats),
++             std::optional<quint64>(7603584471ULL + 3417620194ULL + 884482783ULL + 2648244955ULL + 11343366934ULL + 3267221696ULL + 21997648518ULL));
++    QCOMPARE(Kgsl::clockStatsBusyMicroseconds("0 0 0\n"), std::optional<quint64>(0));
++    QCOMPARE(Kgsl::clockStatsBusyMicroseconds(""), std::nullopt);
++    QCOMPARE(Kgsl::clockStatsBusyMicroseconds("12 x 3"), std::nullopt);
++}
++
++void KgslTest::testGpubusy_data()
++{
++    QTest::addColumn<QByteArray>("input");
++    QTest::addColumn<double>("expected");
++    QTest::addColumn<bool>("valid");
++    // The driver prints "%7d %7d\n"
++    QTest::newRow("busy") << QByteArray(" 938819 1008623\n") << 938819.0 * 100.0 / 1008623.0 << true;
++    QTest::newRow("off") << QByteArray("      0       0\n") << 0.0 << true;
++    QTest::newRow("garbage") << QByteArray("n/a") << 0.0 << false;
++}
++
++void KgslTest::testGpubusy()
++{
++    QFETCH(QByteArray, input);
++    QFETCH(double, expected);
++    QFETCH(bool, valid);
++    const auto result = Kgsl::gpubusyPercent(input);
++    QCOMPARE(result.has_value(), valid);
++    if (valid) {
++        QCOMPARE(*result, expected);
++    }
++}
++
++void KgslTest::testFrequencies()
++{
++    const auto frequencies = Kgsl::frequencies(adreno710Frequencies);
++    QCOMPARE(frequencies.size(), 7);
++    QCOMPARE(frequencies.first(), 816000000ULL);
++    QCOMPARE(frequencies.last(), 295000000ULL);
++    QCOMPARE(Kgsl::unsignedValue("345000000\n"), std::optional<quint64>(345000000));
++    QCOMPARE(Kgsl::unsignedValue("-5\n"), std::nullopt);
++}
++
++void KgslTest::testSampler()
++{
++    Kgsl::BusySampler sampler;
++    QCOMPARE(sampler.sample(1000, 0), std::nullopt); // baseline
++    // 250 ms busy in 500 ms
++    QCOMPARE(sampler.sample(251000, 500'000'000), std::optional<double>(50.0));
++    // nothing busy
++    QCOMPARE(sampler.sample(251000, 500'000'000), std::optional<double>(0.0));
++    // more busy time than elapsed time (timer jitter) is clamped
++    QCOMPARE(sampler.sample(851000, 500'000'000), std::optional<double>(100.0));
++    // a counter that went backwards restarts the baseline
++    QCOMPARE(sampler.sample(10, 500'000'000), std::nullopt);
++    QCOMPARE(sampler.sample(5010, 10'000'000), std::optional<double>(50.0));
++    sampler.reset();
++    QCOMPARE(sampler.sample(9000, 500'000'000), std::nullopt);
++}
++
++static void writeFile(const QString &path, const QByteArray &contents)
++{
++    QDir().mkpath(QFileInfo(path).path());
++    QFile file(path);
++    QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
++    file.write(contents);
++}
++
++static void makeSysfs(const QString &root)
++{
++    writeFile(root + QStringLiteral("/gpu_model"), "Adreno710v1\n");
++    writeFile(root + QStringLiteral("/gpubusy"), "  50000  100000\n");
++    writeFile(root + QStringLiteral("/temp"), "34600\n");
++    writeFile(root + QStringLiteral("/devfreq/available_frequencies"), adreno710Frequencies);
++    writeFile(root + QStringLiteral("/devfreq/cur_freq"), "345000000\n");
++}
++
++void KgslTest::testDevice()
++{
++    QTemporaryDir dir;
++    QVERIFY(dir.isValid());
++    const QString root = dir.path();
++    QVERIFY(!LinuxKgslGpu::isPresent(root));
++    makeSysfs(root);
++    writeFile(root + QStringLiteral("/gpu_clock_stats"), "1000 0 0\n");
++    QVERIFY(LinuxKgslGpu::isPresent(root));
++
++    LinuxKgslGpu gpu(QStringLiteral("gpu0"), QStringLiteral("GPU 1"), root);
++    gpu.initialize();
++
++    QCOMPARE(gpu.sensor(QStringLiteral("name"))->value().toString(), QStringLiteral("Adreno 710"));
++    auto frequency = gpu.sensor(QStringLiteral("coreFrequency"));
++    QCOMPARE(frequency->info().min, 295.0);
++    QCOMPARE(frequency->info().max, 816.0);
++
++    // Unsubscribed sensors are not read.
++    gpu.update();
++    QCOMPARE(frequency->value().toDouble(), 0.0);
++    QCOMPARE(gpu.sensor(QStringLiteral("temperature"))->value().toDouble(), 0.0);
++
++    frequency->subscribe();
++    gpu.sensor(QStringLiteral("temperature"))->subscribe();
++    gpu.update();
++    QCOMPARE(frequency->value().toDouble(), 345.0);
++    QCOMPARE(gpu.sensor(QStringLiteral("temperature"))->value().toDouble(), 34.6);
++
++    // Usage: the baseline is taken on subscription, the next update gives
++    // the busy share of the elapsed time.
++    auto usage = gpu.sensor(QStringLiteral("usage"));
++    usage->subscribe();
++    QTest::qWait(200);
++    writeFile(root + QStringLiteral("/gpu_clock_stats"), "1000 0 200000000\n"); // far more than elapsed
++    gpu.update();
++    QCOMPARE(usage->value().toDouble(), 100.0);
++    QTest::qWait(200);
++    gpu.update(); // unchanged counter: idle
++    QCOMPARE(usage->value().toDouble(), 0.0);
++
++    // The memory is unified: no video memory figures are made up.
++    QVERIFY(!gpu.sensor(QStringLiteral("totalVram"))->value().isValid() || gpu.sensor(QStringLiteral("totalVram"))->value().toLongLong() == 0);
++    QVERIFY(!gpu.sensor(QStringLiteral("usedVram"))->value().isValid() || gpu.sensor(QStringLiteral("usedVram"))->value().toLongLong() == 0);
++}
++
++void KgslTest::testDeviceGpubusyFallback()
++{
++    QTemporaryDir dir;
++    QVERIFY(dir.isValid());
++    const QString root = dir.path();
++    makeSysfs(root); // without gpu_clock_stats
++
++    LinuxKgslGpu gpu(QStringLiteral("gpu0"), QStringLiteral("GPU 1"), root);
++    gpu.initialize();
++    auto usage = gpu.sensor(QStringLiteral("usage"));
++    usage->subscribe();
++    gpu.update();
++    QCOMPARE(usage->value().toDouble(), 50.0);
++}
++
++QTEST_GUILESS_MAIN(KgslTest)
++
++#include "kgsl.moc"

@@ -1,0 +1,3 @@
+relax-plasma-internal-build-deps.patch
+rungic/kgsl-gpu.patch
+rungic/disks-mountinfo-fallback.patch

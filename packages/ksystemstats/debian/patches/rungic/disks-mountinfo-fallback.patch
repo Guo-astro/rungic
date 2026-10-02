@@ -1,0 +1,722 @@
+From: clawd20130 <clawd20130@gmail.com>
+Date: Sat, 3 Oct 2026 03:39:37 +0900
+Subject: Disks plugin: mounted file systems from mountinfo when Solid finds
+ no volumes
+
+In a container without udev, UDisks2 or /dev nodes for the disks Solid lists no storage volumes,
+so there were no disk/<id>/* sensors and disk/all/* stayed empty: System Monitor's Overview said
+"This page is missing some sensors" for its Disks face and the Disk Usage widget had nothing to
+show (docs/104). When Solid yields no volume the plugin now
+takes the file systems on block devices from /proc/self/mountinfo: pseudo file systems, tmpfs,
+FUSE and overlays are left out, as are read-only images; a device mounted at several places (the
+data partition bind mounted many times) counts once, at "/", a whole-file-system mount, the
+mount holding the home folder or the shortest. The id is the device-mapper name ("rungic-root",
+"userdata"; stable across boots, unlike dm-N) or the kernel name; the name is "System" for /,
+"Home" for the volume of the home folder, otherwise the mount point (zh_CN translated). Sizes come
+from statvfs, read and write rates from /proc/diskstats as before. Parsing and selection in
+MountInfo with tests (mountinfotest, fixtures from the Rungic container and a btrfs desktop).
+
+Forwarded: no
+Last-Update: 2026-10-03
+X-Rungic-Status: Pending [generic for containers without udev; check upstream master first]
+X-Rungic-Tests: L1:mountinfotest
+X-Rungic-Docs: docs/104
+---
+ plugins/disks/CMakeLists.txt                       |   6 +-
+ plugins/disks/MountInfo.cpp                        | 159 +++++++++++++++++++++
+ plugins/disks/MountInfo.h                          |  49 +++++++
+ plugins/disks/autotests/CMakeLists.txt             |   7 +
+ .../disks/autotests/fixtures/mountinfo-btrfs.txt   |   9 ++
+ .../fixtures/mountinfo-btrfs.txt.license}          |   0
+ .../autotests/fixtures/mountinfo-container.txt     |  36 +++++
+ .../fixtures/mountinfo-container.txt.license}      |   0
+ plugins/disks/autotests/mountinfo.cpp              |  98 +++++++++++++
+ plugins/disks/disks.cpp                            | 128 +++++++++++++++--
+ plugins/disks/disks.h                              |   1 +
+ po/zh_CN/ksystemstats_plugins.po                   |  12 ++
+ 12 files changed, 495 insertions(+), 10 deletions(-)
+ create mode 100644 plugins/disks/MountInfo.cpp
+ create mode 100644 plugins/disks/MountInfo.h
+ create mode 100644 plugins/disks/autotests/CMakeLists.txt
+ create mode 100644 plugins/disks/autotests/fixtures/mountinfo-btrfs.txt
+ copy plugins/{cpu/autotests/fixtures/linux_amd64_cpuinfo.txt.license => disks/autotests/fixtures/mountinfo-btrfs.txt.license} (100%)
+ create mode 100644 plugins/disks/autotests/fixtures/mountinfo-container.txt
+ copy plugins/{cpu/autotests/fixtures/linux_amd64_cpuinfo.txt.license => disks/autotests/fixtures/mountinfo-container.txt.license} (100%)
+ create mode 100644 plugins/disks/autotests/mountinfo.cpp
+
+diff --git a/plugins/disks/CMakeLists.txt b/plugins/disks/CMakeLists.txt
+index bc84ba6..d998c43 100644
+--- a/plugins/disks/CMakeLists.txt
++++ b/plugins/disks/CMakeLists.txt
+@@ -2,7 +2,7 @@
+ # SPDX-FileCopyrightText: 2020 David Redondo <kde@david-redondo.de>
+ # SPDX-FileCopyrightText: 2021 Arjen Hiemstra <ahiemstra@heimr.nl>
+ 
+-add_library(ksystemstats_plugin_disk MODULE  disks.cpp)
++add_library(ksystemstats_plugin_disk MODULE  disks.cpp MountInfo.cpp)
+ target_link_libraries(ksystemstats_plugin_disk Qt::Core KF6::CoreAddons KF6::I18n KF6::KIOCore KF6::Solid KSysGuard::SystemStats)
+ 
+ if (CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
+@@ -10,3 +10,7 @@ if (CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
+ endif()
+ 
+ install(TARGETS ksystemstats_plugin_disk DESTINATION ${KSYSTEMSTATS_PLUGIN_INSTALL_DIR})
++
++if (BUILD_TESTING)
++    add_subdirectory(autotests)
++endif()
+diff --git a/plugins/disks/MountInfo.cpp b/plugins/disks/MountInfo.cpp
+new file mode 100644
+index 0000000..8f215ef
+--- /dev/null
++++ b/plugins/disks/MountInfo.cpp
+@@ -0,0 +1,159 @@
++/*
++    SPDX-FileCopyrightText: 2026 Rungic
++
++    SPDX-License-Identifier: GPL-2.0-only OR GPL-3.0-only OR LicenseRef-KDE-Accepted-GPL
++*/
++
++#include "MountInfo.h"
++
++#include <QHash>
++
++#include <algorithm>
++
++namespace MountInfo
++{
++static QString unescape(const QByteArray &field)
++{
++    QByteArray result;
++    result.reserve(field.size());
++    for (qsizetype i = 0; i < field.size(); ++i) {
++        if (field[i] == '\\' && i + 3 < field.size()) {
++            const QByteArray octal = field.mid(i + 1, 3);
++            bool ok = false;
++            const int value = octal.toInt(&ok, 8);
++            if (ok && octal.size() == 3 && value < 256) {
++                result.append(char(value));
++                i += 3;
++                continue;
++            }
++        }
++        result.append(field[i]);
++    }
++    return QString::fromLocal8Bit(result);
++}
++
++QList<Mount> parse(const QByteArray &mountinfo)
++{
++    QList<Mount> mounts;
++    const auto lines = mountinfo.split('\n');
++    for (const QByteArray &line : lines) {
++        // 36 35 98:0 /mnt1 /mnt2 rw,noatime master:1 - ext3 /dev/root rw,errors=continue
++        const auto fields = line.split(' ');
++        const qsizetype separator = fields.indexOf("-");
++        if (fields.size() < 6 || separator < 6 || separator + 2 >= fields.size()) {
++            continue;
++        }
++        const auto device = fields[2].split(':');
++        if (device.size() != 2) {
++            continue;
++        }
++        bool majorOk = false;
++        bool minorOk = false;
++        Mount mount;
++        mount.major = device[0].toUInt(&majorOk);
++        mount.minor = device[1].toUInt(&minorOk);
++        if (!majorOk || !minorOk) {
++            continue;
++        }
++        mount.root = unescape(fields[3]);
++        mount.mountPoint = unescape(fields[4]);
++        mount.fsType = unescape(fields[separator + 1]);
++        mount.source = unescape(fields[separator + 2]);
++        mounts.append(mount);
++    }
++    return mounts;
++}
++
++static bool contains(const QString &mountPoint, const QString &path)
++{
++    if (path.isEmpty()) {
++        return false;
++    }
++    if (mountPoint == QLatin1String("/")) {
++        return true;
++    }
++    return path == mountPoint || path.startsWith(mountPoint + QLatin1Char('/'));
++}
++
++QList<Volume> volumes(const QList<Mount> &mounts, const QString &homePath)
++{
++    static const QStringList readOnlyImages = {QStringLiteral("squashfs"), QStringLiteral("erofs"), QStringLiteral("iso9660")};
++
++    QList<quint64> order;
++    QHash<quint64, QList<Mount>> byDevice;
++    for (const Mount &mount : mounts) {
++        // btrfs mounts show the anonymous device of the file system (major 0).
++        const bool blockDevice = mount.major != 0 || (mount.fsType == QLatin1String("btrfs") && mount.source.startsWith(QLatin1String("/dev/")));
++        if (!blockDevice || readOnlyImages.contains(mount.fsType)) {
++            continue;
++        }
++        const quint64 key = (quint64(mount.major) << 32) | mount.minor;
++        if (!byDevice.contains(key)) {
++            order.append(key);
++        }
++        byDevice[key].append(mount);
++    }
++
++    // Lower is better.
++    auto rank = [&homePath](const Mount &mount) {
++        if (mount.mountPoint == QLatin1String("/")) {
++            return 0;
++        }
++        if (mount.root == QLatin1String("/")) {
++            return 1;
++        }
++        if (contains(mount.mountPoint, homePath)) {
++            return 2;
++        }
++        return 3;
++    };
++
++    QList<Volume> result;
++    for (const quint64 key : std::as_const(order)) {
++        const auto &candidates = byDevice[key];
++        const Mount best = *std::min_element(candidates.cbegin(), candidates.cend(), [&rank](const Mount &a, const Mount &b) {
++            const int rankA = rank(a);
++            const int rankB = rank(b);
++            if (rankA != rankB) {
++                return rankA < rankB;
++            }
++            if (a.mountPoint.size() != b.mountPoint.size()) {
++                return a.mountPoint.size() < b.mountPoint.size();
++            }
++            return a.mountPoint < b.mountPoint;
++        });
++        Volume volume;
++        volume.major = best.major;
++        volume.minor = best.minor;
++        volume.mountPoint = best.mountPoint;
++        volume.fsType = best.fsType;
++        volume.source = best.source;
++        result.append(volume);
++    }
++
++    // The home folder belongs to the device mounted deepest on its path.
++    Volume *home = nullptr;
++    qsizetype homeDepth = -1;
++    for (Volume &volume : result) {
++        for (const Mount &mount : std::as_const(byDevice[(quint64(volume.major) << 32) | volume.minor])) {
++            if (contains(mount.mountPoint, homePath) && mount.mountPoint.size() > homeDepth) {
++                home = &volume;
++                homeDepth = mount.mountPoint.size();
++            }
++        }
++    }
++    if (home && home->mountPoint != QLatin1String("/")) {
++        home->holdsHome = true;
++    }
++
++    std::stable_sort(result.begin(), result.end(), [](const Volume &a, const Volume &b) {
++        const bool rootA = a.mountPoint == QLatin1String("/");
++        const bool rootB = b.mountPoint == QLatin1String("/");
++        if (rootA != rootB) {
++            return rootA;
++        }
++        return a.mountPoint < b.mountPoint;
++    });
++    return result;
++}
++}
+diff --git a/plugins/disks/MountInfo.h b/plugins/disks/MountInfo.h
+new file mode 100644
+index 0000000..a43ad13
+--- /dev/null
++++ b/plugins/disks/MountInfo.h
+@@ -0,0 +1,49 @@
++/*
++    SPDX-FileCopyrightText: 2026 Rungic
++
++    SPDX-License-Identifier: GPL-2.0-only OR GPL-3.0-only OR LicenseRef-KDE-Accepted-GPL
++*/
++
++#pragma once
++
++#include <QByteArray>
++#include <QList>
++#include <QString>
++
++// The mounted file systems as the kernel lists them in /proc/self/mountinfo,
++// for systems where Solid sees no storage volumes (a container without
++// /dev nodes for the disks, udev or UDisks2).
++namespace MountInfo
++{
++struct Mount {
++    quint32 major = 0;
++    quint32 minor = 0;
++    QString root; // the directory of the file system mounted here ("/" for all of it)
++    QString mountPoint;
++    QString fsType;
++    QString source;
++};
++
++struct Volume {
++    quint32 major = 0;
++    quint32 minor = 0;
++    QString mountPoint; // where its size is asked for
++    QString fsType;
++    QString source;
++    bool holdsHome = false; // the home folder is on it (and it is not "/")
++};
++
++// One entry per line; lines that do not parse are skipped. Octal escapes
++// (\040 for a space) are decoded.
++QList<Mount> parse(const QByteArray &mountinfo);
++
++// The file systems on block devices, each device once even when it is
++// mounted (or bind mounted) at several places: pseudo file systems, tmpfs,
++// FUSE and overlays have no block device (major 0; btrfs, which shows an
++// anonymous major 0 device, counts when its source is a /dev path) and are
++// left out, as are read-only images (squashfs, erofs, iso9660). The mount point used for a
++// device is "/" if it is mounted there, else one where its whole file system
++// is mounted, else the one holding homePath, else the shortest. "/" comes
++// first, then by mount point.
++QList<Volume> volumes(const QList<Mount> &mounts, const QString &homePath);
++}
+diff --git a/plugins/disks/autotests/CMakeLists.txt b/plugins/disks/autotests/CMakeLists.txt
+new file mode 100644
+index 0000000..834f20c
+--- /dev/null
++++ b/plugins/disks/autotests/CMakeLists.txt
+@@ -0,0 +1,7 @@
++# SPDX-License-Identifier: BSD-2-Clause
++# SPDX-FileCopyrightText: 2026 Rungic
++
++ecm_add_test(mountinfo.cpp ../MountInfo.cpp
++    TEST_NAME mountinfotest
++    LINK_LIBRARIES Qt::Test
++)
+diff --git a/plugins/disks/autotests/fixtures/mountinfo-btrfs.txt b/plugins/disks/autotests/fixtures/mountinfo-btrfs.txt
+new file mode 100644
+index 0000000..3a68079
+--- /dev/null
++++ b/plugins/disks/autotests/fixtures/mountinfo-btrfs.txt
+@@ -0,0 +1,9 @@
++22 1 0:21 / /proc rw,nosuid,nodev,noexec,relatime shared:5 - proc proc rw
++23 1 0:22 / /sys rw,nosuid,nodev,noexec,relatime shared:6 - sysfs sysfs rw
++1 0 0:35 /@ / rw,noatime shared:1 - btrfs /dev/nvme0n1p2 rw,compress=zstd:1,ssd,space_cache=v2,subvolid=256,subvol=/@
++30 1 0:35 /@home /home rw,noatime shared:40 - btrfs /dev/nvme0n1p2 rw,compress=zstd:1,ssd,space_cache=v2,subvolid=257,subvol=/@home
++31 1 259:1 / /boot/efi rw,relatime shared:42 - vfat /dev/nvme0n1p1 rw,fmask=0077,dmask=0077
++32 1 7:3 / /snap/core22/1380 ro,nodev,relatime shared:44 - squashfs /dev/loop3 ro,errors=continue
++33 1 8:17 / /media/user/My\040Disk rw,nosuid,nodev,relatime shared:50 - ext4 /dev/sdb1 rw
++34 1 0:45 / /run/user/1000 rw,nosuid,nodev,relatime shared:60 - tmpfs tmpfs rw,size=1600000k,mode=700,uid=1000,gid=1000
++35 1 0:46 / /mnt/overlay rw,relatime shared:61 - overlay overlay rw,lowerdir=/a,upperdir=/b,workdir=/c
+diff --git a/plugins/cpu/autotests/fixtures/linux_amd64_cpuinfo.txt.license b/plugins/disks/autotests/fixtures/mountinfo-btrfs.txt.license
+similarity index 100%
+copy from plugins/cpu/autotests/fixtures/linux_amd64_cpuinfo.txt.license
+copy to plugins/disks/autotests/fixtures/mountinfo-btrfs.txt.license
+diff --git a/plugins/disks/autotests/fixtures/mountinfo-container.txt b/plugins/disks/autotests/fixtures/mountinfo-container.txt
+new file mode 100644
+index 0000000..76d671b
+--- /dev/null
++++ b/plugins/disks/autotests/fixtures/mountinfo-container.txt
+@@ -0,0 +1,36 @@
++11230 7754 254:7 / / rw,nodev,noatime shared:20 - ext4 /dev/block/dm-7 rw,seclabel
++11233 11230 0:147 / /dev rw,relatime shared:57 - tmpfs none rw,seclabel,size=492k,mode=755
++11234 11230 0:148 / /proc rw,nosuid,nodev,noexec,relatime shared:65 - proc proc rw
++11235 11234 0:148 /sys /proc/sys ro,relatime shared:66 - proc proc rw
++11236 11234 0:148 /sysrq-trigger /proc/sysrq-trigger ro,relatime shared:67 - proc proc rw
++11237 11230 0:24 / /sys ro,relatime shared:68 - sysfs sysfs rw,seclabel
++11238 11230 0:149 / /tmp rw,nosuid,nodev,relatime shared:70 - tmpfs tmpfs rw,seclabel
++11239 11230 0:150 / /run rw,nosuid,nodev,relatime shared:71 - tmpfs tmpfs rw,seclabel,mode=755
++11242 11233 0:274 / /dev/.lxc/proc rw,relatime shared:59 - proc proc rw
++11243 11233 0:24 / /dev/.lxc/sys rw,relatime shared:60 - sysfs sys rw,seclabel
++11244 11230 0:182 /0/Plasma /mnt/android-shared rw,nosuid,nodev,noexec,noatime shared:72 - fuse /dev/fuse rw,lazytime,user_id=0,group_id=0,allow_other
++11245 11230 254:53 /data/com.rungic.plasma/files/tmp /mnt/android-wayland rw,nosuid,nodev,noatime shared:73 - f2fs /dev/block/dm-53 rw,lazytime,seclabel,background_gc=on,nogc_merge,discard,discard_unit=block,user_xattr,inline_xattr,acl,inline_data,inline_dentry,flush_merge,barrier,extent_cache,mode=adaptive,active_logs=6,reserve_root=32768,resuid=0,resgid=1065,inlinecrypt,alloc_mode=default,checkpoint_merge,fsync_mode=nobarrier,memory=normal,errors=continue,lookup_mode=perf
++11246 11230 254:53 /data/com.termux/files/usr/tmp/rungic-plasma-audio /mnt/android-audio ro,nosuid,nodev,noatime shared:74 - f2fs /dev/block/dm-53 rw,lazytime,seclabel,background_gc=on,nogc_merge,discard,discard_unit=block,user_xattr,inline_xattr,acl,inline_data,inline_dentry,flush_merge,barrier,extent_cache,mode=adaptive,active_logs=6,reserve_root=32768,resuid=0,resgid=1065,inlinecrypt,alloc_mode=default,checkpoint_merge,fsync_mode=nobarrier,memory=normal,errors=continue,lookup_mode=perf
++11247 11230 254:53 /adb/rungic-lxc/runtime/var/lib/lxc/plasma/state/host /var/lib/rungic-host rw,nosuid,nodev,noatime shared:75 - f2fs /dev/block/dm-53 rw,lazytime,seclabel,background_gc=on,nogc_merge,discard,discard_unit=block,user_xattr,inline_xattr,acl,inline_data,inline_dentry,flush_merge,barrier,extent_cache,mode=adaptive,active_logs=6,reserve_root=32768,resuid=0,resgid=1065,inlinecrypt,alloc_mode=default,checkpoint_merge,fsync_mode=nobarrier,memory=normal,errors=continue,lookup_mode=perf
++14315 11233 0:20 /kgsl-3d0 /dev/kgsl-3d0 rw,nosuid,relatime shared:61 - tmpfs tmpfs rw,seclabel,size=3830624k,nr_inodes=957656,mode=755
++14325 11233 0:20 /dma_heap/system /dev/dma_heap/system rw,nosuid,relatime shared:62 - tmpfs tmpfs rw,seclabel,size=3830624k,nr_inodes=957656,mode=755
++14518 11230 254:53 /adb/rungic-lxc/runtime/var/lib/lxc/plasma/state/home /home rw,nosuid,nodev,noatime shared:76 - f2fs /dev/block/dm-53 rw,lazytime,seclabel,background_gc=on,nogc_merge,discard,discard_unit=block,user_xattr,inline_xattr,acl,inline_data,inline_dentry,flush_merge,barrier,extent_cache,mode=adaptive,active_logs=6,reserve_root=32768,resuid=0,resgid=1065,inlinecrypt,alloc_mode=default,checkpoint_merge,fsync_mode=nobarrier,memory=normal,errors=continue,lookup_mode=perf
++14519 11230 254:53 /adb/rungic-lxc/runtime/var/lib/lxc/plasma/state/rungic-cores /var/lib/rungic-cores rw,nosuid,nodev,noatime shared:77 - f2fs /dev/block/dm-53 rw,lazytime,seclabel,background_gc=on,nogc_merge,discard,discard_unit=block,user_xattr,inline_xattr,acl,inline_data,inline_dentry,flush_merge,barrier,extent_cache,mode=adaptive,active_logs=6,reserve_root=32768,resuid=0,resgid=1065,inlinecrypt,alloc_mode=default,checkpoint_merge,fsync_mode=nobarrier,memory=normal,errors=continue,lookup_mode=perf
++14520 11230 254:53 /adb/rungic-lxc/runtime/var/lib/lxc/plasma/state/rungic-apt /var/lib/rungic-apt rw,nosuid,nodev,noatime shared:78 - f2fs /dev/block/dm-53 rw,lazytime,seclabel,background_gc=on,nogc_merge,discard,discard_unit=block,user_xattr,inline_xattr,acl,inline_data,inline_dentry,flush_merge,barrier,extent_cache,mode=adaptive,active_logs=6,reserve_root=32768,resuid=0,resgid=1065,inlinecrypt,alloc_mode=default,checkpoint_merge,fsync_mode=nobarrier,memory=normal,errors=continue,lookup_mode=perf
++14521 11230 254:53 /adb/rungic-lxc/runtime/var/lib/lxc/plasma/state/rungic-cores /var/lib/moto-cores rw,nosuid,nodev,noatime shared:79 - f2fs /dev/block/dm-53 rw,lazytime,seclabel,background_gc=on,nogc_merge,discard,discard_unit=block,user_xattr,inline_xattr,acl,inline_data,inline_dentry,flush_merge,barrier,extent_cache,mode=adaptive,active_logs=6,reserve_root=32768,resuid=0,resgid=1065,inlinecrypt,alloc_mode=default,checkpoint_merge,fsync_mode=nobarrier,memory=normal,errors=continue,lookup_mode=perf
++14522 11230 254:53 /adb/rungic-lxc/runtime/var/lib/lxc/plasma/state/rungic-apt /var/lib/moto-apt rw,nosuid,nodev,noatime shared:80 - f2fs /dev/block/dm-53 rw,lazytime,seclabel,background_gc=on,nogc_merge,discard,discard_unit=block,user_xattr,inline_xattr,acl,inline_data,inline_dentry,flush_merge,barrier,extent_cache,mode=adaptive,active_logs=6,reserve_root=32768,resuid=0,resgid=1065,inlinecrypt,alloc_mode=default,checkpoint_merge,fsync_mode=nobarrier,memory=normal,errors=continue,lookup_mode=perf
++14709 11230 254:53 /adb/rungic-lxc/runtime/var/lib/lxc/plasma/state/host /var/lib/moto-host rw,nosuid,nodev,noatime shared:81 - f2fs /dev/block/dm-53 rw,lazytime,seclabel,background_gc=on,nogc_merge,discard,discard_unit=block,user_xattr,inline_xattr,acl,inline_data,inline_dentry,flush_merge,barrier,extent_cache,mode=adaptive,active_logs=6,reserve_root=32768,resuid=0,resgid=1065,inlinecrypt,alloc_mode=default,checkpoint_merge,fsync_mode=nobarrier,memory=normal,errors=continue,lookup_mode=perf
++14710 11237 0:32 / /sys/fs/cgroup rw,nosuid,nodev,noexec,relatime shared:69 - cgroup2 none rw,memory_recursiveprot
++14711 11233 0:275 / /dev/pts rw,nosuid,noexec,relatime shared:63 - devpts devpts rw,seclabel,gid=5,mode=620,ptmxmode=666,max=16
++14712 11233 0:275 /ptmx /dev/ptmx rw,nosuid,noexec,relatime shared:64 - devpts devpts rw,seclabel,gid=5,mode=620,ptmxmode=666,max=16
++7760 11235 0:147 /.lxc-boot-id /proc/sys/kernel/random/boot_id ro,nosuid,nodev,noexec,relatime shared:57 - tmpfs none rw,seclabel,size=492k,mode=755
++7759 11233 0:273 / /dev/shm rw,nosuid,nodev,relatime shared:58 - tmpfs tmpfs rw,seclabel
++10378 11235 0:148 /sys/user /proc/sys/user rw,relatime shared:66 - proc proc rw
++10384 11239 0:276 / /run/rungic-proc rw,nosuid,nodev,noexec,relatime shared:82 - proc proc rw
++10733 11239 0:296 / /run/credentials/systemd-journald.service rw,nosuid,nodev,noexec,relatime,nosymfollow shared:85 - tmpfs none ro,seclabel,size=1024k,nr_inodes=1024,mode=700,noswap
++10734 11233 0:146 / /dev/mqueue rw,nosuid,nodev,noexec,relatime shared:86 - mqueue mqueue rw,seclabel
++10735 11237 0:39 / /sys/fs/fuse/connections rw,nosuid,nodev,noexec,relatime shared:87 - fusectl fusectl rw
++10736 11237 0:12 / /sys/kernel/tracing rw,nosuid,nodev,noexec,relatime shared:88 - tracefs tracefs rw,seclabel,gid=3012
++10801 14518 0:333 / /home/user/Shared rw,nosuid,nodev,noexec,relatime shared:179 - fuse.bindfs /mnt/android-shared rw,user_id=0,group_id=0,default_permissions,allow_other
++15236 11239 0:416 / /run/user/1000 rw,nosuid,nodev,relatime shared:181 - tmpfs tmpfs rw,seclabel,size=770288k,nr_inodes=192572,mode=700,uid=1000,gid=1000
++6242 15236 0:262 / /run/user/1000/doc rw,nosuid,nodev,relatime shared:236 - fuse.portal portal rw,user_id=1000,group_id=1000
+diff --git a/plugins/cpu/autotests/fixtures/linux_amd64_cpuinfo.txt.license b/plugins/disks/autotests/fixtures/mountinfo-container.txt.license
+similarity index 100%
+copy from plugins/cpu/autotests/fixtures/linux_amd64_cpuinfo.txt.license
+copy to plugins/disks/autotests/fixtures/mountinfo-container.txt.license
+diff --git a/plugins/disks/autotests/mountinfo.cpp b/plugins/disks/autotests/mountinfo.cpp
+new file mode 100644
+index 0000000..ece7644
+--- /dev/null
++++ b/plugins/disks/autotests/mountinfo.cpp
+@@ -0,0 +1,98 @@
++/*
++    SPDX-FileCopyrightText: 2026 Rungic
++
++    SPDX-License-Identifier: GPL-2.0-only OR GPL-3.0-only OR LicenseRef-KDE-Accepted-GPL
++*/
++
++#include <QFile>
++#include <QTest>
++
++#include "../MountInfo.h"
++
++class MountInfoTest : public QObject
++{
++    Q_OBJECT
++private Q_SLOTS:
++    void testParse();
++    void testContainer();
++    void testBtrfsDesktop();
++    void testEmpty();
++
++private:
++    static QByteArray fixture(const QString &name);
++};
++
++QByteArray MountInfoTest::fixture(const QString &name)
++{
++    QFile file(QFINDTESTDATA(QStringLiteral("fixtures/") + name));
++    if (!file.open(QIODevice::ReadOnly)) {
++        return {};
++    }
++    return file.readAll();
++}
++
++void MountInfoTest::testParse()
++{
++    const auto mounts = MountInfo::parse(fixture(QStringLiteral("mountinfo-btrfs.txt")));
++    QCOMPARE(mounts.size(), 9);
++    QCOMPARE(mounts[2].major, 0u);
++    QCOMPARE(mounts[2].minor, 35u);
++    QCOMPARE(mounts[2].root, QStringLiteral("/@"));
++    QCOMPARE(mounts[2].mountPoint, QStringLiteral("/"));
++    QCOMPARE(mounts[2].fsType, QStringLiteral("btrfs"));
++    QCOMPARE(mounts[2].source, QStringLiteral("/dev/nvme0n1p2"));
++    // \040 is a space; optional fields of any number before the "-"
++    QCOMPARE(mounts[6].mountPoint, QStringLiteral("/media/user/My Disk"));
++    QCOMPARE(mounts[6].major, 8u);
++    QCOMPARE(mounts[6].minor, 17u);
++
++    QCOMPARE(MountInfo::parse("garbage\n\n1 2 3\n").size(), 0);
++}
++
++// An LXC container on Android (Rungic): the root file system is an ext4
++// image behind device mapper (dm-7), the f2fs data partition (dm-53) is bind
++// mounted many times, /home among them; /dev, /run and the shared storage are
++// tmpfs and FUSE.
++void MountInfoTest::testContainer()
++{
++    const auto volumes = MountInfo::volumes(MountInfo::parse(fixture(QStringLiteral("mountinfo-container.txt"))), QStringLiteral("/home/user"));
++    QCOMPARE(volumes.size(), 2);
++
++    QCOMPARE(volumes[0].major, 254u);
++    QCOMPARE(volumes[0].minor, 7u);
++    QCOMPARE(volumes[0].mountPoint, QStringLiteral("/"));
++    QCOMPARE(volumes[0].fsType, QStringLiteral("ext4"));
++    QCOMPARE(volumes[0].source, QStringLiteral("/dev/block/dm-7"));
++    QVERIFY(!volumes[0].holdsHome);
++
++    QCOMPARE(volumes[1].major, 254u);
++    QCOMPARE(volumes[1].minor, 53u);
++    QCOMPARE(volumes[1].mountPoint, QStringLiteral("/home"));
++    QCOMPARE(volumes[1].fsType, QStringLiteral("f2fs"));
++    QVERIFY(volumes[1].holdsHome);
++}
++
++void MountInfoTest::testBtrfsDesktop()
++{
++    const auto volumes = MountInfo::volumes(MountInfo::parse(fixture(QStringLiteral("mountinfo-btrfs.txt"))), QStringLiteral("/home/user"));
++    QCOMPARE(volumes.size(), 3);
++    // Both subvolumes are one file system; "/" represents it and holds the
++    // home folder too, so no volume is marked as "Home".
++    QCOMPARE(volumes[0].mountPoint, QStringLiteral("/"));
++    QCOMPARE(volumes[0].minor, 35u);
++    QVERIFY(!volumes[0].holdsHome);
++    QCOMPARE(volumes[1].mountPoint, QStringLiteral("/boot/efi"));
++    QCOMPARE(volumes[2].mountPoint, QStringLiteral("/media/user/My Disk"));
++    QVERIFY(!volumes[1].holdsHome);
++    QVERIFY(!volumes[2].holdsHome);
++    // The snap's squashfs, tmpfs and the overlay are not listed.
++}
++
++void MountInfoTest::testEmpty()
++{
++    QVERIFY(MountInfo::volumes({}, QStringLiteral("/home/user")).isEmpty());
++}
++
++QTEST_GUILESS_MAIN(MountInfoTest)
++
++#include "mountinfo.moc"
+diff --git a/plugins/disks/disks.cpp b/plugins/disks/disks.cpp
+index b4e8a3d..d97e602 100644
+--- a/plugins/disks/disks.cpp
++++ b/plugins/disks/disks.cpp
+@@ -12,8 +12,13 @@
+ #include <libgeom.h>
+ #endif
+ 
++#include <QDir>
++#include <QFile>
++#include <QFileInfo>
+ #include <QUrl>
+ 
++#include <sys/statvfs.h>
++
+ #include <KIO/FileSystemFreeSpaceJob>
+ #include <KLocalizedString>
+ #include <KPluginFactory>
+@@ -29,11 +34,15 @@
+ #include <systemstats/SensorContainer.h>
+ #include <systemstats/SensorObject.h>
+ 
++#include "MountInfo.h"
++
+ class VolumeObject : public KSysGuard::SensorObject
+ {
+     Q_OBJECT
+ public:
+     VolumeObject(const Solid::Device &device, KSysGuard::SensorContainer *parent);
++    // A file system found in /proc/self/mountinfo, without Solid.
++    VolumeObject(const QString &id, const QString &displayName, const QString &volumeMountPoint, quint64 size, KSysGuard::SensorContainer *parent);
+     bool isRootDevice() const;
+     void update();
+     void setBytes(quint64 read, quint64 written, qint64 elapsedTime);
+@@ -42,6 +51,14 @@ public:
+     const QString mountPoint;
+ private:
+     static QString idHelper(const Solid::Device &device);
++    VolumeObject(const QString &id,
++                 const QString &displayName,
++                 const QString &volumeUdi,
++                 const QString &volumeMountPoint,
++                 quint64 size,
++                 bool partitionTable,
++                 bool fromMountInfo,
++                 KSysGuard::SensorContainer *parent);
+ 
+     KSysGuard::SensorProperty *m_name = nullptr;
+     KSysGuard::SensorProperty *m_total = nullptr;
+@@ -52,6 +69,7 @@ private:
+     quint64 m_bytesRead = 0;
+     quint64 m_bytesWritten = 0;
+     bool m_rootDevice = false;
++    const bool m_fromMountInfo = false;
+ };
+ 
+ QString VolumeObject::idHelper(const Solid::Device &device)
+@@ -68,17 +86,40 @@ QString VolumeObject::idHelper(const Solid::Device &device)
+ }
+ 
+ VolumeObject::VolumeObject(const Solid::Device &device, KSysGuard::SensorContainer* parent)
+-    : SensorObject(idHelper(device), device.displayName(),  parent)
+-    , udi(device.udi())
+-    , mountPoint(device.is<Solid::StorageAccess>() ? device.as<Solid::StorageAccess>()->filePath() : QString())
++    : VolumeObject(idHelper(device),
++                   device.displayName(),
++                   device.udi(),
++                   device.is<Solid::StorageAccess>() ? device.as<Solid::StorageAccess>()->filePath() : QString(),
++                   device.as<Solid::StorageVolume>()->size(),
++                   device.as<Solid::StorageVolume>()->usage() == Solid::StorageVolume::PartitionTable,
++                   false,
++                   parent)
+ {
+-    auto volume = device.as<Solid::StorageVolume>();
++}
+ 
+-    m_name = new KSysGuard::SensorProperty("name", i18nc("@title", "Name"), device.displayName(), this);
++VolumeObject::VolumeObject(const QString &id, const QString &displayName, const QString &volumeMountPoint, quint64 size, KSysGuard::SensorContainer *parent)
++    : VolumeObject(id, displayName, QString(), volumeMountPoint, size, false, true, parent)
++{
++}
++
++VolumeObject::VolumeObject(const QString &id,
++                           const QString &displayName,
++                           const QString &volumeUdi,
++                           const QString &volumeMountPoint,
++                           quint64 size,
++                           bool partitionTable,
++                           bool fromMountInfo,
++                           KSysGuard::SensorContainer *parent)
++    : SensorObject(id, displayName, parent)
++    , udi(volumeUdi)
++    , mountPoint(volumeMountPoint)
++    , m_fromMountInfo(fromMountInfo)
++{
++    m_name = new KSysGuard::SensorProperty("name", i18nc("@title", "Name"), displayName, this);
+     m_name->setShortName(i18nc("@title", "Name"));
+     m_name->setVariantType(QVariant::String);
+ 
+-    m_total = new KSysGuard::SensorProperty("total", i18nc("@title", "Total Space"), volume->size(), this);
++    m_total = new KSysGuard::SensorProperty("total", i18nc("@title", "Total Space"), size, this);
+     m_total->setPrefix(name());
+     m_total->setShortName(i18nc("@title Short for 'Total Space'", "Total"));
+     m_total->setUnit(KSysGuard::UnitByte);
+@@ -96,20 +137,20 @@ VolumeObject::VolumeObject(const Solid::Device &device, KSysGuard::SensorContain
+     m_writeRate->setUnit(KSysGuard::UnitByteRate);
+     m_writeRate->setVariantType(QVariant::Double);
+ 
+-    if (volume->usage() != Solid::StorageVolume::PartitionTable) {
++    if (!partitionTable) {
+         m_used = new KSysGuard::SensorProperty("used", i18nc("@title", "Used Space"), this);
+         m_used->setPrefix(name());
+         m_used->setShortName(i18nc("@title Short for 'Used Space'", "Used"));
+         m_used->setUnit(KSysGuard::UnitByte);
+         m_used->setVariantType(QVariant::ULongLong);
+-        m_used->setMax(volume->size());
++        m_used->setMax(size);
+ 
+         m_free = new KSysGuard::SensorProperty("free", i18nc("@title", "Free Space"), this);
+         m_free->setPrefix(name());
+         m_free->setShortName(i18nc("@title Short for 'Free Space'", "Free"));
+         m_free->setUnit(KSysGuard::UnitByte);
+         m_free->setVariantType(QVariant::ULongLong);
+-        m_free->setMax(volume->size());
++        m_free->setMax(size);
+ 
+         auto usedPercent = new KSysGuard::PercentageSensor(this, "usedPercent", i18nc("@title", "Percentage Used"));
+         usedPercent->setPrefix(name());
+@@ -134,6 +175,19 @@ void VolumeObject::update()
+         // skip non-mounted partitions
+         return;
+     }
++    if (m_fromMountInfo) {
++        struct statvfs info;
++        if (statvfs(QFile::encodeName(mountPoint).constData(), &info) == 0) {
++            const quint64 size = quint64(info.f_blocks) * info.f_frsize;
++            const quint64 available = quint64(info.f_bavail) * info.f_frsize;
++            m_total->setValue(size);
++            m_free->setValue(available);
++            m_free->setMax(size);
++            m_used->setValue(size - available);
++            m_used->setMax(size);
++        }
++        return;
++    }
+     auto job = KIO::fileSystemFreeSpace(QUrl::fromLocalFile(mountPoint));
+     connect(job, &KJob::result, this, [this, job]() {
+         if (!job->error()) {
+@@ -167,6 +221,9 @@ DisksPlugin::DisksPlugin(QObject *parent, const QVariantList &args)
+     for (const auto &storageVolume : storageVolumes) {
+        addDevice(storageVolume);
+     }
++    if (m_volumesByDevice.isEmpty()) {
++        addMountInfoVolumes();
++    }
+     connect(Solid::DeviceNotifier::instance(), &Solid::DeviceNotifier::deviceAdded, this, [this] (const QString &udi) {
+             addDevice(Solid::Device(udi));
+     });
+@@ -258,6 +315,59 @@ void DisksPlugin::createAccessibleVolumeObject(const Solid::Device &device)
+     m_volumesByDevice.insert(block->device(), new VolumeObject(device,  containers()[0]));
+ }
+ 
++// Without udev or UDisks2 (in a container) Solid finds no storage volumes;
++// take the mounted file systems on block devices from the kernel instead.
++void DisksPlugin::addMountInfoVolumes()
++{
++#if defined Q_OS_LINUX
++    QFile mountinfo(QStringLiteral("/proc/self/mountinfo"));
++    if (!mountinfo.open(QIODevice::ReadOnly)) {
++        return;
++    }
++    auto container = containers()[0];
++    const auto volumes = MountInfo::volumes(MountInfo::parse(mountinfo.readAll()), QDir::homePath());
++    for (const auto &volume : volumes) {
++        struct statvfs info;
++        if (statvfs(QFile::encodeName(volume.mountPoint).constData(), &info) != 0 || info.f_blocks == 0) {
++            continue;
++        }
++        const QString sysfs = QStringLiteral("/sys/dev/block/%1:%2").arg(volume.major).arg(volume.minor);
++        // The kernel's name, as /proc/diskstats lists the device.
++        QString kernelName = QFileInfo(volume.source).fileName();
++        QFile uevent(sysfs + QStringLiteral("/uevent"));
++        if (uevent.open(QIODevice::ReadOnly)) {
++            for (const QByteArray &line : uevent.readAll().split('\n')) {
++                if (line.startsWith("DEVNAME=")) {
++                    kernelName = QString::fromLocal8Bit(line.mid(8));
++                }
++            }
++        }
++        // A device-mapper name ("userdata") is stable across boots, dm-N is not.
++        QString id;
++        QFile dmName(sysfs + QStringLiteral("/dm/name"));
++        if (dmName.open(QIODevice::ReadOnly)) {
++            id = QString::fromLocal8Bit(dmName.readAll().trimmed());
++        }
++        if (id.isEmpty()) {
++            id = kernelName;
++        }
++        id.replace(QLatin1Char('/'), QLatin1Char('_'));
++        const QString device = QStringLiteral("/dev/") + kernelName;
++        if (id.isEmpty() || kernelName.isEmpty() || m_volumesByDevice.contains(device) || container->object(id)) {
++            continue;
++        }
++
++        QString name = volume.mountPoint;
++        if (volume.mountPoint == QLatin1String("/")) {
++            name = i18nc("@title the file system mounted at /", "System");
++        } else if (volume.holdsHome) {
++            name = i18nc("@title the file system holding the home folder", "Home");
++        }
++        m_volumesByDevice.insert(device, new VolumeObject(id, name, volume.mountPoint, quint64(info.f_blocks) * info.f_frsize, container));
++    }
++#endif
++}
++
+ void DisksPlugin::addAggregateSensors()
+ {
+     auto container = containers()[0];
+diff --git a/plugins/disks/disks.h b/plugins/disks/disks.h
+index 36e48cd..8267afd 100644
+--- a/plugins/disks/disks.h
++++ b/plugins/disks/disks.h
+@@ -37,6 +37,7 @@ public:
+ private:
+     void addDevice(const Solid::Device &device);
+     void addAggregateSensors();
++    void addMountInfoVolumes();
+     void createAccessibleVolumeObject(const Solid::Device &device);
+ 
+     QHash<QString, VolumeObject*> m_volumesByDevice;
+diff --git a/po/zh_CN/ksystemstats_plugins.po b/po/zh_CN/ksystemstats_plugins.po
+index 88710ec..a99f4e5 100644
+--- a/po/zh_CN/ksystemstats_plugins.po
++++ b/po/zh_CN/ksystemstats_plugins.po
+@@ -406,6 +406,18 @@ msgctxt "@title"
+ msgid "All Disks"
+ msgstr "所有磁盘"
+ 
++#: disks/disks.cpp
++#, kde-format
++msgctxt "@title the file system mounted at /"
++msgid "System"
++msgstr "系统"
++
++#: disks/disks.cpp
++#, kde-format
++msgctxt "@title the file system holding the home folder"
++msgid "Home"
++msgstr "主目录"
++
+ #: disks/disks.cpp:317
+ #, kde-format
+ msgctxt "@title, Short for `Percentage Free"

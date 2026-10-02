@@ -91,6 +91,26 @@ class UpstreamTests(unittest.TestCase):
         self.assertEqual(rungic_dev.release_binaries(self.COMPONENTS['plasma-mobile'], base),
                          ['plasma-mobile', 'plasma-mobile-tweaks'])
 
+    def test_component_new_to_the_release(self):
+        # ksystemstats joined "rebuilt" after the installed release: its distribution build is the base
+        component = {'packages': ['ksystemstats']}
+        self.assertEqual(rungic_dev.release_binaries(component, RELEASE['packages']), [])
+        installed = {'ksystemstats': '6.6.6-0ubuntu0.1', 'kwin-wayland': '6.6.5-0+rungic8'}
+        self.assertEqual(rungic_dev.distribution_bases(component, installed, {}), {'ksystemstats': '6.6.6-0ubuntu0.1'})
+        # a second overlay keeps the first one's base, not the overlay it finds installed
+        installed = {'ksystemstats': '6.6.6-0ubuntu0.1+rungic1+dev20261003t040000.abc1234'}
+        earlier = {'ksystemstats': {'version': installed['ksystemstats'], 'base': '6.6.6-0ubuntu0.1'}}
+        self.assertEqual(rungic_dev.distribution_bases(component, installed, earlier), {'ksystemstats': '6.6.6-0ubuntu0.1'})
+        self.assertEqual(rungic_dev.distribution_bases(component, {}, {}), {})
+
+    def test_reset_restores_the_distribution_build(self):
+        before = {'ksystemstats': {'version': '6.6.6-0ubuntu0.1+rungic1+dev1', 'base': '6.6.6-0ubuntu0.1'},
+                  'rungic-design': {'version': '0.510+dev1'}}
+        self.assertEqual(rungic_dev.restored(before, {'rungic-design': before['rungic-design']}),
+                         {'ksystemstats': '6.6.6-0ubuntu0.1'})
+        self.assertEqual(rungic_dev.restored(before, {}), {'ksystemstats': '6.6.6-0ubuntu0.1'})
+        self.assertEqual(rungic_dev.restored(before, before), {})
+
     def test_versions_with_an_epoch(self):
         dev = rungic_dev.dev_version('4:6.6.6-0ubuntu0.1+rungic9', '20261001t040000', 'abc1234', False)
         self.assertTrue(newer(dev, '4:6.6.6-0ubuntu0.1+rungic9'))

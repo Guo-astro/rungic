@@ -188,8 +188,9 @@ def build(names, host, stamp, record):
     components = upstream_components()
     own, upstream = resolve(names, definitions, components)
     overrides = {}
+    earlier = info.get('dev', {}).get('overrides', {})
     for name in upstream:
-        overrides.update(build_upstream(name, components[name], base_packages, stamp, commit, record))
+        overrides.update(build_upstream(name, components[name], base_packages, stamp, commit, record, earlier))
     for name in own:
         pkg = definitions[name]
         dirty = package_dirty(pkg)
@@ -233,13 +234,26 @@ def release_binaries(component, base_packages):
     return [b for b in component.get('packages', []) if b in base_packages]
 
 
-def build_upstream(name, component, base_packages, stamp, commit, record):
+def distribution_bases(component, installed, earlier):
+    """A component new to the release (in "rebuilt" since the installed release was built, docs/104)
+    replaces its packages as installed from the distribution. -> {package: the version a reset goes
+    back to}: kept from an earlier override of it, else the installed one."""
+    return {b: earlier[b]['base'] if 'base' in earlier.get(b, {}) else installed[b]
+            for b in component.get('packages', []) if b in installed}
+
+
+def build_upstream(name, component, base_packages, stamp, commit, record, earlier=None):
     """Development .debs of an upstream component's release packages, in POOL. -> {package: override}"""
     import build_on_device
     host = build_on_device.host
     binaries = release_binaries(component, base_packages)
+    bases = {}
     if not binaries:
-        raise SystemExit(f'{name}: the installed release has none of its packages {component.get("packages")}')
+        bases = distribution_bases(component, rungic_release.installed_versions(), earlier or {})
+        binaries = list(bases)
+    if not binaries:
+        raise SystemExit(f'{name}: neither the installed release nor the phone has any of its packages '
+                         f'{component.get("packages")}')
     dirty = upstream_dirty(name)
     version = dev_version(component['version'], stamp, commit, dirty)
     print(f'building {name} {version} (upstream, on {host.name}): {" ".join(binaries)}', flush=True)
@@ -277,7 +291,7 @@ def build_upstream(name, component, base_packages, stamp, commit, record):
             take(f'{work}/{symbols}', POOL / (symbols[:-5] + '.deb' if symbols.endswith('.ddeb') else symbols))
         overrides[binary] = {'version': version, 'commit': git('rev-parse', 'HEAD'), 'dirty': dirty,
                              'built': datetime.datetime.now().isoformat(timespec='seconds'), 'file': debs[0],
-                             'component': name}
+                             'component': name, **({'base': bases[binary]} if binary in bases else {})}
     record.step('build', package=name, version=version, mode=mode, binaries=binaries,
                 seconds=round(time.time() - started))
     return overrides
@@ -290,6 +304,11 @@ def resolve(names, definitions, components):
         raise SystemExit(f'no package or upstream component {", ".join(unknown)} (packaging/, release/packages.json '
                          f'"rebuilt" with packages/<name>)')
     return [n for n in names if n in definitions], [n for n in names if n not in definitions]
+
+
+def restored(before, after):
+    """Removed overrides of packages outside the release -> {package: its distribution version}."""
+    return {n: o['base'] for n, o in before.items() if n not in after and 'base' in o}
 
 
 def reset_names(names, overrides):
@@ -358,9 +377,10 @@ def verify(info, record):
     return not problems
 
 
-def apply(info, record, restart):
+def apply(info, record, restart, restore=None):
     """Install the development release `info` (with its repository in POOL) or, when it has no
-    overrides left, the base release again."""
+    overrides left, the base release again. restore: packages outside the release that removed
+    overrides replaced, with the distribution's version to go back to."""
     version, current = installed_release()
     before = rungic_release.installed_versions()
     (record.dir / 'before.json').write_text(json.dumps({'release': version, 'packages': before}, indent=1) + '\n')
@@ -381,7 +401,8 @@ def apply(info, record, restart):
         # the exact versions named, whatever the pins say.
         base = info['version']
         target = next((r for r in rungic_release.releases() if r['version'] == base), None) or info
-    ok, tail = rungic_release.apt_install(target, record.dir)
+    ok, tail = rungic_release.apt_install({**target, 'packages': {**target['packages'], **(restore or {})}}
+                                          if restore else target, record.dir)
     record.step('install', ok=ok, version=target['version'])
     if not ok:
         # apt left the previous versions installed: put the previous overlay's configuration back.
@@ -430,12 +451,13 @@ def reset(names, restart):
     overrides = dict(info['dev']['overrides'])
     for name in reset_names(names, overrides) if names else list(overrides):
         overrides.pop(name, None)
+    restore = restored(info['dev']['overrides'], overrides)
     if overrides:
         new = overlay_info(info, overrides, stamp_now())
     else:
         base, base_packages = base_of(info)
         new = {**{k: v for k, v in info.items() if k != 'dev'}, 'version': base, 'packages': base_packages}
-    return apply(new, record, restart)
+    return apply(new, record, restart, restore)
 
 
 def status():

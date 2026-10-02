@@ -105,6 +105,12 @@
         "xdg-desktop-portal-kde"
       ]
     },
+    "ksystemstats": {
+      "source": "packages/ksystemstats",
+      "packages": [
+        "ksystemstats"
+      ]
+    },
     "wl-clipboard": {
       "source": "packages/wl-clipboard",
       "packages": [

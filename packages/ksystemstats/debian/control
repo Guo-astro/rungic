@@ -1,0 +1,42 @@
+Source: ksystemstats
+Section: kde
+Priority: optional
+Maintainer: Kubuntu Developers <kubuntu-devel@lists.ubuntu.com>
+XSBC-Original-Maintainer: Debian Qt/KDE Maintainers <debian-qt-kde@lists.debian.org>
+Uploaders: Aurélien COUDERC <coucouf@debian.org>,
+           Patrick Franz <deltaone@debian.org>,
+Build-Depends: cmake (>= 3.16~),
+               debhelper-compat (= 13),
+               dh-sequence-kf6,
+               extra-cmake-modules (>= 6.22.0~),
+               gettext,
+               libcap-dev [linux-any],
+               libcap2-bin [linux-any],
+               libdrm-dev,
+               libkf6coreaddons-dev (>= 6.22.0~),
+               libkf6crash-dev (>= 6.22.0~),
+               libkf6i18n-dev (>= 6.22.0~),
+               libkf6kio-dev (>= 6.22.0~),
+               libkf6networkmanagerqt-dev (>= 6.22.0~) [linux-any],
+               libkf6solid-dev (>= 6.22.0~),
+               libksysguard-dev (>= 4:6.6.4~),
+               libnl-3-dev [linux-any],
+               libnl-route-3-dev [linux-any],
+               libsensors-dev [linux-any],
+               libudev-dev [linux-any],
+               pkgconf,
+               qt6-base-dev (>= 6.10.0~),
+Standards-Version: 4.7.0
+Homepage: https://www.kde.org/
+Vcs-Browser: https://code.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/ksystemstats
+Vcs-Git: https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/ksystemstats
+Rules-Requires-Root: no
+
+Package: ksystemstats
+Architecture: any
+Depends: ${misc:Depends}, ${shlibs:Depends},
+Recommends: libksysguard-bin,
+Breaks: ksysguard (<< 4:5.21.80),
+Replaces: ksysguard (<< 4:5.21.80),
+Description: plugin based system monitoring daemon
+ KSystemStats is a daemon that collects statistics about the running system.

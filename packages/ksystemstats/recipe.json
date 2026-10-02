@@ -1,0 +1,16 @@
+{
+ "comment": "Pinned upstream of the ksystemstats source package (docs/71, docs/104): Ubuntu's 6.6.6-0ubuntu0.1; packages/ksystemstats/debian replaces its debian/ (Ubuntu's packaging plus our patches under debian/patches/rungic).",
+ "kind": "ubuntu",
+ "source": "ksystemstats",
+ "version": "6.6.6-0ubuntu0.1",
+ "series": "resolute-updates",
+ "git_ubuntu_tag": "import/6.6.6-0ubuntu0.1",
+ "upstream": "https://invent.kde.org/plasma/ksystemstats",
+ "licenses": "see LICENSES",
+ "files": {
+  "ksystemstats_6.6.6-0ubuntu0.1.dsc": "5cab390a67c5bb1b0f4c875965a978fa32359673f87ee64efe7ce8e6f5fa7a8e",
+  "ksystemstats_6.6.6.orig.tar.xz": "a18924429810c4e1394516f8d4489f1cc4732bd3b452b0c3b0967f37d1c603fa",
+  "ksystemstats_6.6.6-0ubuntu0.1.debian.tar.xz": "64b3967ac8c46b755cd734acef35f643b56b0056901c3fb1c877481d5a823703"
+ },
+ "fetch": "https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/ksystemstats/6.6.6-0ubuntu0.1/{file}"
+}

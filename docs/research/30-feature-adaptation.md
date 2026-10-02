@@ -222,3 +222,7 @@ USB G100 已部署 `20260930.12`：suggestions `0.452`、voice-agent `0.453`、d
 2026-09-30 用量接口通用化（未部署）：Agent → 描述文件 `rungic/agent-usage/providers/<id>.json`（D-Bus 方法或读取命令）→ C++ `Care::Usage` 按提供方与账户分区 → `AgentUsage` schema 2（`providers[]` 与 `primary`）/`RecordTokens`/`ProviderChanged`/`UsageChanged` → widget 与用量页。Codex 通过 VoiceAgent `Usage` 与 `RecordTokens` 接入；Claude Code 读取器只从会话记录计 token、从文档化 statusline 取额度。新增 Agent 只需安装描述文件与适配器，服务和组件不改代码。离线与构建机集成测试通过，实机未验收；详见 [95 篇](95-agent-usage-providers.md)。
 
 2026-09-30 堆叠手势更新：USB G100 `20260930.13` / suggestions **0.461**，其他组件保持 `.12` 基线。桌面堆叠内上滑下一张、下滑上一张，提供页码、跟手动画、短拖动/首尾回弹；标题与间隙承担外层组列表滚动，手势归属在按下时固定。当前成员按 ID 保持，刷新/动画期间不跳卡，移除当前项回到剩余第一项。点正面进入当前记录，顶部数量进入组列表；只对停稳可见的成员回写展示回执。部署后明确重新加载建议服务、桌面和助理 UI。24 项 C++、40 项事项的指针/QML 集成，以及真实两张、隔离三张/多组、刷新/移除、正确跳转与回执、快速连续滑动、原生长按编辑和壁纸抽屉实测通过。临时数据与环境覆盖已清除，原结果/计划/提醒保留；完整证据和默认 smoke 范围说明见 [主动建议记录](proactive-system-care.md)。
+
+## 2026-10-03：系统监视器的 GPU 与磁盘
+
+系统监视器“概览”“历史”页提示缺少传感器：ksystemstats 的 GPU 插件只认 DRM 设备，本机 Adreno 710 由 KGSL 驱动、没有 DRM 节点；磁盘插件只用 Solid，容器里没有 udev/UDisks2，列不出卷。在共享层修：`packages/ksystemstats`（Ubuntu 6.6.6-0ubuntu0.1 + 两条补丁）给 GPU 插件加 KGSL 设备（使用率取 `gpu_clock_stats` 增量、频率取 devfreq、温度取 `temp`，显存与功耗不提供），给磁盘插件加 Solid 无卷时的 `/proc/self/mountinfo` 后备（`System`=`rungic-root`、`Home`=`userdata`，statvfs 容量、diskstats 速率）。所有读 `org.kde.ksystemstats1` 的程序（系统监视器、System Monitor 与 Disk Usage 小组件）都受益，不改页面。离线测试、实机结果与剩余边界见 [104 篇](../104-system-monitor-gpu-disks.md)。
