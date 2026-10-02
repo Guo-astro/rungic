@@ -9,8 +9,9 @@
 // fingers pinch it between half and the full width of the phone; a pinch never tucks it. A tap, a drag or a pinch shows a toolbar of
 // icons below the picture, a small gap away (above it near the bottom of the screen), which hides a
 // few seconds later.
-// Fullscreen (docs/research/97 §17): this window goes above Plasma Mobile's panels (which stay where
-// they are, covered) and the picture morphs from its floating place to the whole screen, on the
+// Fullscreen (docs/research/97 §17, §21): the picture and its controls move into an ordinary
+// fullscreen window, an app to KWin and Plasma Mobile (whose panels hide for it; what goes above a
+// fullscreen app goes above it), and morph there from the floating place to the whole screen, on the
 // blurred wallpaper. On a portrait screen the window's content is turned a quarter (the phone held
 // sideways, its top to the left), not the phone: the desktop and its apps stay as they are; the picture as large as fits, the director's other screens in its column. The
 // finger works the screen in the picture (FullTouch: tap, long press, drag, two-finger scroll); a
@@ -147,13 +148,33 @@ Window {
         }
         return 0
     }
-    // ---- fullscreen (docs/research/97 §17) --------------------------------------------------------
-    // In and out without a seam (§17.2), in this one window: it goes above the shell's panels
-    // (floater.setFullscreen), the stage is laid out for fullscreen at once, and the picture morphs
-    // from its floating place, size and angle to fullscreen's while the background fades in over
-    // everything. Leaving plays it backwards, and the window goes back under the panels at the end.
+    // ---- fullscreen (docs/research/97 §17, §21) ---------------------------------------------------
+    // Its own window (fullWindow): an ordinary fullscreen window, so KWin's and the shell's stacking
+    // works for it as for any fullscreen app (a layer surface in the overlay layer, as it was, covered
+    // the keyboard, the dialogs and the notifications meant to be above one, §21). The stage (picture,
+    // controls, touches, keyboard) moves into it and back. Neither way shows a frame without the
+    // picture: the window the stage leaves keeps a still of it (the handoff) until the window it goes
+    // to has drawn it, which costs ~110 ms there the first time (§17.2). Then the picture morphs from
+    // its floating place, size and angle to fullscreen's while the background fades in; leaving plays
+    // it backwards, and the fullscreen window goes after.
     property string backgroundUrl: ""
     property bool leaving: false         // the way back is playing
+    property bool entering: false        // the fullscreen window maps; the stage not in it yet
+    property bool stageInFull: false     // the stage is in the fullscreen window
+    // Where the picture was on the screen when fullscreen started: where the morph starts.
+    property var enterFrom: null
+    // A still of the picture in the window the stage left, where the picture was on the screen, kept
+    // there ("floater" or "full") until the other window has drawn the picture.
+    property string handoffIn: ""
+    property string handoffUrl: ""
+    property var handoffGrab: null       // its url is good while the grab is kept
+    property rect handoffRect: Qt.rect(0, 0, 0, 0)
+    // Frames the window the stage went to draws before the still goes (handover()).
+    property int handoffFrames: 0
+    property var handoffDone: null
+    // The fullscreen window has a frame on the screen: until then it is not (on the phone its first
+    // frame came ~0.6 s after it was shown, and the stage was gone from both windows meanwhile).
+    property bool fullDrawn: false
     // The system's pointer in the picture: fullscreen's touchpad mode on desktop mode (an assistant's
     // screen's picture always has the agent's pointer).
     readonly property bool pointerWanted: full && !leaving && fullscreenSettings.touchpad
@@ -182,7 +203,7 @@ Window {
     // Arrived: opaque all over (the background under everything), so the phone's KWin draws nothing
     // of Plasma Mobile under it (docs/research/97 §20); see-through again from the moment it leaves.
     readonly property bool opaque: full && !leaving && !morphing && visible && backdrop.opacity >= 1
-    onOpaqueChanged: floater.setOpaque(opaque)
+    onOpaqueChanged: floater.setOpaque(fullWindow, opaque)
     // The picture's transform: from where it was (relative to its new place) at 0, to none at 1.
     property real morphX: 0
     property real morphY: 0
@@ -190,20 +211,73 @@ Window {
     property real morphScale: 1
     property real morphT: 1
     function setFullscreen() {
-        if (full)
+        if (full || entering || morphing)
             return
         toolbarShown = false
         backgroundUrl = root.screen.backgroundFile()
         const centre = panel.mapToItem(null, panel.width / 2, panel.height / 2)
-        const from = { x: centre.x, y: centre.y, width: panel.width, angle: 0 }
-        floater.setFullscreen(true)
-        morphing = true
-        mode = "fullscreen"
-        morphTo(from)
-        morphAnim.from = 0
-        morphAnim.to = 1
-        morphAnim.restart()
+        enterFrom = { x: centre.x, y: centre.y, width: panel.width, angle: 0 }
+        const at = panel.mapToItem(null, 0, 0)
+        entering = true
+        console.info("fullscreen: entering")
+        const grabbing = panel.grabToImage(result => {
+            console.info("fullscreen: still taken, the fullscreen window maps")
+            if (!root.entering)
+                return
+            root.handoffGrab = result
+            root.handoffUrl = result.url
+            root.handoffRect = Qt.rect(at.x, at.y, panel.width, panel.height)
+            root.handoffIn = "floater"
+            floater.showFullscreen(fullWindow)
+            root.fullWindowReady()
+        })
+        if (!grabbing) {
+            console.warn("fullscreen: no still of the picture")
+            entering = false
+        }
     }
+    // The fullscreen window is on the screen at its size: the stage goes in, laid out for fullscreen
+    // and transformed to where the picture was; the morph starts once it is drawn there.
+    function fullWindowReady() {
+        if (!entering || stageInFull || !fullWindow.visible || !fullDrawn
+                || fullWindow.width !== area.width || fullWindow.height !== area.height)
+            return
+        console.info("fullscreen: the stage goes into the fullscreen window", fullWindow.width, fullWindow.height)
+        morphing = true
+        stageInFull = true
+        mode = "fullscreen"
+        morphTo(enterFrom)
+        handover(fullWindow, () => {
+            console.info("fullscreen: drawn there, the morph starts")
+            root.entering = false
+            morphAnim.from = 0
+            morphAnim.to = 1
+            morphAnim.restart()
+        })
+    }
+    // The still goes after `window` has drawn two more frames: the frame the change was synced into
+    // is then on the screen (frameSwapped comes queued from the render thread).
+    function handover(window, done) {
+        handoffFrames = 2
+        handoffDone = done
+        window.update()
+    }
+    function frameDrawn(window) {
+        if (handoffFrames <= 0 || window !== (stageInFull ? fullWindow : root))
+            return
+        if (--handoffFrames > 0) {
+            window.update()
+            return
+        }
+        handoffIn = ""
+        handoffUrl = ""
+        handoffGrab = null
+        const done = handoffDone
+        handoffDone = null
+        if (done)
+            done()
+    }
+    onFrameSwapped: frameDrawn(root)
     // The transform that puts the picture, laid out where it is now, where `from` says on the screen.
     function morphTo(from) {
         const here = Qt.point(panel.x + panel.width / 2, panel.y + panel.height / 2)
@@ -222,7 +296,7 @@ Window {
         return { x: Math.round(px) + w / 2, y: Math.round(py) + h / 2, width: w, angle: 0 }
     }
     function leaveFullscreen() {
-        if (!full || leaving)
+        if (!full || leaving || entering)
             return
         toolbarShown = false
         fullTouch.reset()
@@ -233,15 +307,52 @@ Window {
         morphAnim.to = 0
         morphAnim.restart()
     }
+    // The way back has played: a still where the picture now is, in the fullscreen window, while the
+    // stage goes back to this one; the fullscreen window goes once this one has drawn it.
     function leaveNow() {
+        const to = windowedCentre()
+        const height = panel.height * morphScale
+        panel.grabToImage(result => {
+            if (!root.leaving)
+                return
+            root.handoffGrab = result
+            root.handoffUrl = result.url
+            root.handoffRect = Qt.rect(to.x - to.width / 2, to.y - height / 2, to.width, height)
+            root.handoffIn = "full"
+            root.backToWindow()
+            root.handover(root, () => {
+                console.info("fullscreen: left")
+                fullWindow.hide()
+                root.morphing = false
+            })
+        })
+    }
+    function backToWindow() {
+        stageInFull = false
         mode = "window"
         morphT = 1
         morphX = morphY = morphAngle = 0
         morphScale = 1
         leaving = false
-        floater.setFullscreen(false)
-        Qt.callLater(() => { root.morphing = false })
     }
+    // Out at once, without the way back: this window hidden (a TV shows the screen) or the
+    // fullscreen window closed before it arrived.
+    function dropFullscreen() {
+        if (!full && !entering)
+            return
+        morphAnim.stop()
+        entering = false
+        handoffFrames = 0
+        handoffDone = null
+        handoffIn = ""
+        handoffUrl = ""
+        handoffGrab = null
+        fullTouch.reset()
+        backToWindow()
+        morphing = false
+        fullWindow.hide()
+    }
+    onVisibleChanged: if (!visible) dropFullscreen()
     NumberAnimation {
         id: morphAnim
         target: root
@@ -258,12 +369,84 @@ Window {
             root.showToolbar(1000)
         }
     }
-    // Esc leaves fullscreen (the window takes the keyboard while fullscreen).
-    Item {
-        id: escapeKey
-        focus: true
-        Keys.onEscapePressed: root.leaveFullscreen()
-        Keys.onBackPressed: root.leaveFullscreen()
+    // ---- the fullscreen window (§21): the stage in it while fullscreen; the keyboard is its ---------
+    Window {
+        id: fullWindow
+        transientParent: null
+        title: root.screen && root.screen.workspace === 0 ? i18nc("@label name of the user's second screen", "Desktop")
+                                                           : i18nc("@label name of the agent's screen", "Assistant Screen")
+        flags: Qt.FramelessWindowHint
+        color: "transparent"
+        visible: false
+        onVisibleChanged: if (!visible) root.fullDrawn = false
+        onWidthChanged: root.fullWindowReady()
+        onHeightChanged: root.fullWindowReady()
+        onFrameSwapped: {
+            root.frameDrawn(fullWindow)
+            if (visible && !root.fullDrawn) {
+                root.fullDrawn = true
+                root.fullWindowReady()
+            }
+        }
+        // Closed from outside (the task switcher): back to the floating window, the screen kept on.
+        onClosing: (close) => {
+            close.accepted = false
+            if (root.full)
+                root.leaveFullscreen()
+            else
+                root.dropFullscreen()
+        }
+        // Esc leaves fullscreen.
+        Item {
+            id: escapeKey
+            focus: true
+            Keys.onEscapePressed: root.leaveFullscreen()
+            Keys.onBackPressed: root.leaveFullscreen()
+        }
+        TextInput {
+            id: keyboardField
+            width: 1; height: 1
+            opacity: 0
+            enabled: root.typing
+            // Always empty: no capital at its start, no prediction of what it never keeps.
+            inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText | Qt.ImhNoTextHandles
+            onTextEdited: {
+                if (text.length === 0)
+                    return
+                const held = !!root.keyboard && (root.keyboard.ctrl || root.keyboard.alt)
+                const code = root.letterCodes[text.toLowerCase()]
+                if (held && code !== undefined)
+                    root.sendKey(code)
+                else
+                    root.screen.typeText(text)
+                text = ""
+            }
+            Keys.onPressed: (event) => {
+                const code = root.keyCodes[event.key]
+                if (code === undefined || (event.key === Qt.Key_Backspace && text.length > 0))
+                    return
+                root.sendKey(code)
+                event.accepted = true
+            }
+        }
+        Image {  // the still of the picture on the way back (leaveNow)
+            z: 10
+            visible: root.handoffIn === "full"
+            source: visible ? root.handoffUrl : ""
+            cache: false
+            x: root.handoffRect.x; y: root.handoffRect.y
+            width: root.handoffRect.width; height: root.handoffRect.height
+        }
+    }
+    // The still of the picture until the fullscreen window has drawn it (setFullscreen); over the
+    // floating window's own picture meanwhile, and alone once the stage has gone.
+    Image {
+        z: 10
+        visible: root.handoffIn === "floater"
+        source: visible ? root.handoffUrl : ""
+        cache: false
+        x: root.handoffRect.x; y: root.handoffRect.y
+        width: root.handoffRect.width; height: root.handoffRect.height
     }
     // ---- desktop mode on a TV (docs/research/97 §19.5) ----------------------------------------------
     // Computer mode: the TV shows the phone KWin's cast output (CAST-n, the host presents it); a
@@ -325,7 +508,8 @@ Window {
         }
     }
     // ---- typing into the screen (fullscreen's keyboard button, docs/research/97 §19.4, §19.9) --------
-    // A field of its own, invisible, takes the window's keyboard (FloatingKeyboard, in the stage):
+    // A field of its own (keyboardField, in the fullscreen window), invisible, takes the window's
+    // keyboard (FloatingKeyboard, in the stage):
     // what it commits goes to the screen's focused field as an input method commits it (any
     // language), and is cleared; the keys it does not type (Backspace on an empty field, Enter,
     // arrows...) go there as keys. Linux key codes (input-event-codes.h).
@@ -360,32 +544,6 @@ Window {
         } else {
             escapeKey.forceActiveFocus()
             Qt.inputMethod.hide()
-        }
-    }
-    TextInput {
-        id: keyboardField
-        width: 1; height: 1
-        opacity: 0
-        enabled: root.typing
-        // Always empty: no capital at its start, no prediction of what it never keeps.
-        inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText | Qt.ImhNoTextHandles
-        onTextEdited: {
-            if (text.length === 0)
-                return
-            const held = !!root.keyboard && (root.keyboard.ctrl || root.keyboard.alt)
-            const code = root.letterCodes[text.toLowerCase()]
-            if (held && code !== undefined)
-                root.sendKey(code)
-            else
-                root.screen.typeText(text)
-            text = ""
-        }
-        Keys.onPressed: (event) => {
-            const code = root.keyCodes[event.key]
-            if (code === undefined || (event.key === Qt.Key_Backspace && text.length > 0))
-                return
-            root.sendKey(code)
-            event.accepted = true
         }
     }
     Component.onCompleted: {
@@ -425,20 +583,20 @@ Window {
         onTriggered: if (root.dragging || root.pinching) restart(); else root.toolbarShown = false
     }
 
-    // Only what is visible takes touches.
+    // Only what is visible takes touches; fullscreen's are the fullscreen window's.
     function updateMask() {
         const rects = []
-        if (full)
-            rects.push(Qt.rect(0, 0, width, height))
+        if (stageInFull || entering)
+            ;
         else if (mode === "window")
             rects.push(Qt.rect(panel.x, panel.y, panel.width, panel.height))
         else if (mode === "tab")
             rects.push(Qt.rect(tab.x, tab.y, tab.width, tab.height))
-        if (toolbar.visible && !full)
+        if (toolbar.visible && !full && !entering)
             rects.push(Qt.rect(toolbar.x, toolbar.y, toolbar.width, toolbar.height))
         floater.setInputRects(rects)
     }
-    readonly property string maskKey: [mode, panel.x, panel.y, panel.width, panel.height, tab.x, tab.y,
+    readonly property string maskKey: [mode, stageInFull, entering, panel.x, panel.y, panel.width, panel.height, tab.x, tab.y,
                                        toolbar.visible, toolbar.x, toolbar.y, width, height].join()
     onMaskKeyChanged: Qt.callLater(updateMask)
 
@@ -509,6 +667,8 @@ Window {
 
     Item {
         id: stage
+        // In the fullscreen window while fullscreen (§21), in this one otherwise.
+        parent: root.stageInFull ? fullWindow.contentItem : root.contentItem
         // Fullscreen on a portrait screen: landscape, turned a quarter clockwise about its centre.
         // Touches reach the items inside in their own (turned) coordinates.
         readonly property bool turned: root.full && !!parent && parent.height > parent.width

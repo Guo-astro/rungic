@@ -52,7 +52,7 @@ void Floater::attach(QQuickWindow *window)
     auto layer = LayerShellQt::Window::get(window);
     layer->setScope(QStringLiteral("rungic-agent-screen"));
     // Top: above apps, below the shell's overlays (control center, lock screen, OSDs) and Plasma
-    // Mobile's panels. Fullscreen raises it above them (setFullscreen).
+    // Mobile's panels. Fullscreen is another window (showFullscreen).
     layer->setLayer(LayerShellQt::Window::LayerTop);
     layer->setAnchors(LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
                                                     | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight));
@@ -64,11 +64,6 @@ void Floater::attach(QQuickWindow *window)
     window->setColor(Qt::transparent);
     fit();
     window->setMask(QRegion(0, 0, 1, 1));  // nothing takes touches until QML says what is visible
-    // Qt makes a new surface each time the window shows again: its opaque region with it.
-    connect(window, &QWindow::visibleChanged, this, [this](bool visible) {
-        if (visible && m_opaque)
-            applyOpaque();
-    });
 }
 
 QRect Floater::area() const
@@ -94,41 +89,30 @@ void Floater::setInputRects(const QVariantList &rects)
     m_window->setMask(region.isEmpty() ? QRegion(0, 0, 1, 1) : region);
 }
 
-void Floater::setFullscreen(bool fullscreen)
+void Floater::showFullscreen(QWindow *window)
 {
-    if (!m_window)
+    if (!window)
         return;
-    auto layer = LayerShellQt::Window::get(m_window);
-    // Overlay, as Plasma Mobile's panels, and taking the keyboard (Esc leaves): KWin activates a
-    // layer surface that starts taking it, and activating raises it above the others of its layer,
-    // the panels too (a layer change alone left it under them). The panels see no fullscreen app,
-    // so they do not slide away: they are only covered. One window throughout: a second one for
-    // fullscreen took ~110 ms to draw the picture the first time, and it was gone meanwhile.
-    layer->setLayer(fullscreen ? LayerShellQt::Window::LayerOverlay : LayerShellQt::Window::LayerTop);
-    layer->setKeyboardInteractivity(fullscreen ? LayerShellQt::Window::KeyboardInteractivityOnDemand
-                                               : LayerShellQt::Window::KeyboardInteractivityNone);
-    m_window->requestUpdate();  // the changes go with the next commit
+    // Not a layer surface in the overlay layer, as it was (§17.2): there it was above everything
+    // the shell and KWin put over a fullscreen app, and what appeared later went under it (§21).
+    // Qt asks for fullscreen before the first commit, so the first configure is the whole screen.
+    window->setScreen(phoneScreen());
+    window->showFullScreen();
 }
 
-void Floater::setOpaque(bool opaque)
+void Floater::setOpaque(QWindow *window, bool opaque)
 {
-    m_opaque = opaque;
-    applyOpaque();
-}
-
-void Floater::applyOpaque()
-{
-    if (!m_window || !m_window->isVisible())
+    if (!window || !window->isVisible())
         return;
     // Qt sets an opaque region only for a window without alpha (its setOpaqueArea is private): ours,
     // on the surface itself. Double-buffered, it goes with the next commit, the next frame's.
     auto native = QGuiApplication::platformNativeInterface();
-    auto surface = static_cast<wl_surface *>(native ? native->nativeResourceForWindow("surface", m_window) : nullptr);
+    auto surface = static_cast<wl_surface *>(native ? native->nativeResourceForWindow("surface", window) : nullptr);
     auto wayland = qGuiApp->nativeInterface<QNativeInterface::QWaylandApplication>();
     if (!surface || !wayland || !wayland->compositor())
         return;
-    if (m_opaque) {
-        // All of it, however large: KWin clips the region to the surface (a turn changes nothing).
+    if (opaque) {
+        // All of it, however large: KWin clips the region to the surface.
         wl_region *region = wl_compositor_create_region(wayland->compositor());
         wl_region_add(region, 0, 0, INT32_MAX, INT32_MAX);
         wl_surface_set_opaque_region(surface, region);
@@ -136,7 +120,7 @@ void Floater::applyOpaque()
     } else {
         wl_surface_set_opaque_region(surface, nullptr);
     }
-    m_window->requestUpdate();
+    window->requestUpdate();
 }
 
 bool Floater::castPresent() const
