@@ -158,13 +158,22 @@ if [ "$slot" = 0 ]; then
     # Plasma's desktop shell (taskbar, desktop, notifications, tray), again if it ends; the desktop
     # ends when it is turned off, never for being idle.
     rungic-desktop-dirs watch "$state" >"$state/dirs.log" 2>&1 &
-    # Heard whenever it runs, where the user is (audio-follow: the TV in computer mode, else the phone).
-    [ -z "${PULSE_SINK:-}" ] || rungic-workspace-sound 0 listen || true
+    # Heard whenever it runs, where the user is (audio-follow: the TV in computer mode, else the phone);
+    # its loopback back if the sound server lost it.
+    if [ -n "${PULSE_SINK:-}" ]; then
+        ( while kill -0 $kwin 2>/dev/null; do rungic-workspace-sound 0 listen || true; sleep 30; done ) &
+    fi
     # Its clipboard in step with Android's, as the phone session's is (rungic-clipboard, one per
     # display): what is copied on the phone, in an Android app or on the desktop is pasted on the others.
     ( while kill -0 $kwin 2>/dev/null; do rungic-clipboard 2>>"$state/clipboard.log"; sleep 3; done ) &
     ( while kill -0 $kwin 2>/dev/null; do
-          plasmashell -p org.kde.plasma.desktop --no-respawn >"$state/plasmashell.log" 2>&1
+          # Its layout set first (rungic-desktop-plasma: the volume applet shows the phone's devices);
+          # a layout the shell has just made lacks it, and the shell starts once more.
+          rungic-desktop-plasma >>"$state/plasmashell.log" 2>&1 || true
+          plasmashell -p org.kde.plasma.desktop --no-respawn >"$state/plasmashell.log" 2>&1 &
+          shell=$!
+          ( sleep 20; ! rungic-desktop-plasma --needed || kill $shell ) &
+          wait $shell
           sleep 2
       done ) &
 else

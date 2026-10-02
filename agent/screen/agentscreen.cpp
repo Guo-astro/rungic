@@ -187,9 +187,14 @@ void AgentScreen::startWorkspaceStream()
                 setStatus(m_onTv ? QStringLiteral("tv") : QStringLiteral("running"));
                 if (m_pointerShown)
                     send(QStringLiteral("pointer-stream on"));
+                if (m_tvShown)
+                    send(QStringLiteral("tv-stream on"));
             } else if (line.startsWith("pointer-node ")) {
                 m_pointerNodeId = line.mid(13).toUInt();
                 Q_EMIT pointerNodeIdChanged();
+            } else if (line.startsWith("tv-node ")) {
+                m_tvNodeId = line.mid(8).toUInt();
+                Q_EMIT tvNodeIdChanged();
             } else if (line.startsWith("error ")) {
                 setStatus(QStringLiteral("error: ") + QString::fromUtf8(line.mid(6)));
             }
@@ -208,6 +213,10 @@ void AgentScreen::startWorkspaceStream()
         if (m_pointerNodeId) {
             m_pointerNodeId = 0;
             Q_EMIT pointerNodeIdChanged();
+        }
+        if (m_tvNodeId) {
+            m_tvNodeId = 0;
+            Q_EMIT tvNodeIdChanged();
         }
         // The workspace went or restarted: try again at the next poll.
         m_streamedWorkspace = 0;
@@ -235,6 +244,10 @@ void AgentScreen::stopWorkspaceStream()
         m_pointerNodeId = 0;
         Q_EMIT pointerNodeIdChanged();
     }
+    if (m_tvNodeId) {
+        m_tvNodeId = 0;
+        Q_EMIT tvNodeIdChanged();
+    }
 }
 
 void AgentScreen::send(const QString &line)
@@ -249,6 +262,14 @@ void AgentScreen::setPointerShown(bool shown)
         return;
     m_pointerShown = shown;
     send(shown ? QStringLiteral("pointer-stream on") : QStringLiteral("pointer-stream off"));
+}
+
+void AgentScreen::setTvShown(bool shown)
+{
+    if (shown == m_tvShown)
+        return;
+    m_tvShown = shown;
+    send(shown ? QStringLiteral("tv-stream on") : QStringLiteral("tv-stream off"));
 }
 
 void AgentScreen::typeText(const QString &text)

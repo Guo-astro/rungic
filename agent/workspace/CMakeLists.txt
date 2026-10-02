@@ -52,7 +52,7 @@ target_link_libraries(rungic-workspace-keeper PRIVATE rungic-workspace-protocols
 install(TARGETS rungic-workspace-input rungic-workspace-stream rungic-workspace-desktop rungic-workspace-keeper rungic-workspace-present DESTINATION libexec)
 install(FILES com.rungic.WorkspaceInput.desktop com.rungic.WorkspaceStream.desktop DESTINATION share/applications)
 install(PROGRAMS rungic-workspace rungic-workspace-env rungic-workspace-sound rungic-user rungic-remote
-    rungic-bus-forward rungic-desktop-dirs DESTINATION bin)
+    rungic-bus-forward rungic-desktop-dirs rungic-desktop-plasma DESTINATION bin)
 install(FILES rungic-workspace@.service rungic-remote.service DESTINATION lib/systemd/user)
 install(FILES defaults/kwinrc DESTINATION share/rungic-workspace/defaults)
 install(PROGRAMS rungic-workspace-a11y rungic-agent-wakelock DESTINATION libexec)

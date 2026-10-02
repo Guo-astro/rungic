@@ -29,6 +29,8 @@ class AgentScreen : public QObject
     // Desktop mode's picture with the system's pointer drawn in, while asked for (setPointerShown):
     // fullscreen's touchpad mode. 0 when there is none (yet).
     Q_PROPERTY(uint pointerNodeId READ pointerNodeId NOTIFY pointerNodeIdChanged)
+    // Desktop mode on a TV: a picture of its own for the TV's view (setTvShown), 0 until it starts.
+    Q_PROPERTY(uint tvNodeId READ tvNodeId NOTIFY tvNodeIdChanged)
     Q_PROPERTY(bool onTv READ onTv NOTIFY statusChanged)
     // 0: desktop mode's window; n: the assistant's screen of workspace n.
     Q_PROPERTY(int workspace READ workspace CONSTANT)
@@ -49,6 +51,7 @@ public:
     QString status() const { return m_status; }
     uint nodeId() const { return m_nodeId; }
     uint pointerNodeId() const { return m_pointerNodeId; }
+    uint tvNodeId() const { return m_tvNodeId; }
     bool onTv() const { return m_onTv; }
     int workspace() const { return m_workspace; }
     QString activityState() const { return m_activityState; }
@@ -71,6 +74,9 @@ public:
     // records a second picture with the pointer drawn in (pointerNodeId), the first one left as it
     // is. An assistant's screen's picture has the pointer already: nothing to do.
     Q_INVOKABLE void setPointerShown(bool shown);
+    // The TV's view of desktop mode wants a picture: a fresh stream, which starts with a frame (a
+    // second consumer of the running one waited for the screen to change, up to a minute).
+    Q_INVOKABLE void setTvShown(bool shown);
     // Typing on the phone into the focused field: text as an input method commits it, and keys
     // (Linux key codes: Enter, Backspace, arrows...) pressed or released.
     Q_INVOKABLE void typeText(const QString &text);
@@ -85,6 +91,7 @@ Q_SIGNALS:
     void statusChanged();
     void nodeIdChanged();
     void pointerNodeIdChanged();
+    void tvNodeIdChanged();
     void activityChanged();
 
 private:
@@ -98,6 +105,8 @@ private:
     void send(const QString &line);   // a command to rungic-workspace-stream
 
     uint m_pointerNodeId = 0;
+    uint m_tvNodeId = 0;
+    bool m_tvShown = false;
     bool m_pointerShown = false;
     QTimer m_poll;
     QString m_status = QStringLiteral("starting");

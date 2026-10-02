@@ -18,7 +18,8 @@
 // --pointer-hidden (the independent desktop, workspace 0, docs/research/97 §19): the picture
 // without the pointer, the user's touches being the pointer there; `pointer-stream on` adds a
 // second picture with the pointer drawn in (fullscreen's touchpad mode), printed as
-// "pointer-node <id>", and `pointer-stream off` ends it ("pointer-node 0").
+// "pointer-node <id>", and `pointer-stream off` ends it ("pointer-node 0"). `tv-stream on|off`
+// likewise a picture of its own for the TV ("tv-node <id>").
 #include <QDBusMessage>
 #include <QDBusConnection>
 #include <QGuiApplication>
@@ -28,6 +29,7 @@
 #include <QWaylandClientExtensionTemplate>
 #include <QtGui/qscreen_platform.h>
 #include <iostream>
+#include <map>
 #include <memory>
 #include <unistd.h>
 
@@ -87,7 +89,6 @@ int main(int argc, char *argv[])
     FakeInput input;
     bool authenticated = false;
     std::unique_ptr<Stream> stream;
-    std::unique_ptr<Stream> pointerStream;
     constexpr uint hidden = 1, embedded = 2;    // the pointer left out of the picture, or drawn in
     const bool pointerHidden = app.arguments().contains(QStringLiteral("--pointer-hidden"));
 
@@ -112,42 +113,48 @@ int main(int argc, char *argv[])
     QObject::connect(&screencasting, &Screencasting::activeChanged, &app, start);
     QObject::connect(&app, &QGuiApplication::primaryScreenChanged, &app, start);
     start();
-    // The picture with the pointer, beside the one without (no flash of black while it starts).
-    auto pointerPicture = [&](bool on) {
+    // Other pictures of the same output, beside the first (no flash of black while one starts):
+    // "pointer" with the pointer drawn in (fullscreen's touchpad mode), "tv" a fresh one for the TV
+    // (a newly connected consumer of a running stream gets no frame until the screen changes: the
+    // TV stayed black for up to a minute, until the clock turned; a new stream starts with one).
+    std::map<std::string, std::unique_ptr<Stream>> extra;
+    auto picture = [&](const std::string &name, bool on) {
         QScreen *screen = QGuiApplication::primaryScreen();
         auto wayland = screen ? screen->nativeInterface<QNativeInterface::QWaylandScreen>() : nullptr;
+        auto &slot = extra[name];
         if (!on || !wayland || !screencasting.isActive()) {
-            if (pointerStream) {
-                pointerStream.reset();
-                std::cout << "pointer-node 0" << std::endl;
+            if (slot) {
+                slot.reset();
+                std::cout << name << "-node 0" << std::endl;
             }
             return;
         }
-        if (pointerStream) {
+        if (slot) {
             return;
         }
-        pointerStream = std::make_unique<Stream>(screencasting.stream_output(wayland->output(), embedded));
-        QObject::connect(pointerStream.get(), &Stream::created, &app, [](uint node) {
-            std::cout << "pointer-node " << node << std::endl;
+        slot = std::make_unique<Stream>(screencasting.stream_output(wayland->output(), name == "pointer" ? embedded : hidden));
+        QObject::connect(slot.get(), &Stream::created, &app, [name](uint node) {
+            std::cout << name << "-node " << node << std::endl;
         });
-        // Gone: the picture without the pointer stays. Not deleted inside its own signal.
-        const auto gone = [&pointerStream, &app, stream = pointerStream.get()] {
-            QMetaObject::invokeMethod(&app, [&pointerStream, stream] {
-                if (pointerStream.get() == stream) {
-                    pointerStream.reset();
-                    std::cout << "pointer-node 0" << std::endl;
+        // Gone: the others stay. Not deleted inside its own signal.
+        const auto gone = [&extra, &app, name, stream = slot.get()] {
+            QMetaObject::invokeMethod(&app, [&extra, name, stream] {
+                auto &current = extra[name];
+                if (current.get() == stream) {
+                    current.reset();
+                    std::cout << name << "-node 0" << std::endl;
                 }
             }, Qt::QueuedConnection);
         };
-        QObject::connect(pointerStream.get(), &Stream::failed, &app, gone);
-        QObject::connect(pointerStream.get(), &Stream::closedByCompositor, &app, gone);
+        QObject::connect(slot.get(), &Stream::failed, &app, gone);
+        QObject::connect(slot.get(), &Stream::closedByCompositor, &app, gone);
     };
     auto command = [&](const QStringList &words) {
         if (words.isEmpty()) {
             return;
         }
-        if (words[0] == QLatin1String("pointer-stream") && words.size() == 2) {
-            pointerPicture(words[1] == QLatin1String("on"));
+        if ((words[0] == QLatin1String("pointer-stream") || words[0] == QLatin1String("tv-stream")) && words.size() == 2) {
+            picture(words[0] == QLatin1String("pointer-stream") ? "pointer" : "tv", words[1] == QLatin1String("on"));
             return;
         }
         if (words[0] == QLatin1String("text") && words.size() == 2) {

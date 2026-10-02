@@ -258,6 +258,8 @@ Window {
                                      && floater.castPresent
     property var tvWindow: null
     onTvWantedChanged: {
+        if (root.screen)
+            root.screen.setTvShown(tvWanted)
         if (tvWanted && !tvWindow) {
             tvWindow = tvComponent.createObject(root)
         } else if (!tvWanted && tvWindow) {
@@ -276,7 +278,7 @@ Window {
             Component.onCompleted: if (floater.placeOnCast(tv)) tv.visible = true
             PipeWire.PipeWireSourceItem {
                 anchors.fill: parent
-                nodeId: root.screen ? root.screen.nodeId : 0
+                nodeId: root.screen ? root.screen.tvNodeId : 0
                 visible: nodeId > 0
             }
             MouseArea {

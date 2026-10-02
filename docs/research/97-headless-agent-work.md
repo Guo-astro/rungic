@@ -796,7 +796,7 @@ APK 进程提供：`platform.sock`、`capture.sock`、`codec.sock`、`wayland-0`
 - **原因**：输入法面板在 KWin 里属于 OverlayLayer（`Window::belongsToLayer` 中 `isInputMethod()`），和我们的全屏窗口同一层。全屏窗口是之后才被激活、提上来的，于是盖住了键盘。
 - **修法**：KWin 补丁 `input-panel-above-overlay.patch`。在 `Workspace::constrainedStackingOrder` 里，把 OverlayLayer 中的输入法窗口排到这一层的最后（`std::stable_partition`）。需要重启用户会话的 KWin 才生效。
 
-### 19.6 电视的电脑模式和声音（2026-10-03，已实现，待电视实测）
+### 19.6 电视的电脑模式和声音（2026-10-03，已实现，用户实测中）
 
 **电视**（只改 Linux，与 §17 的方向一致）：
 - 电视投电脑模式时，宿主照旧在用户 KWin 里建出 CAST 输出，并零拷贝投到电视（`sync_user_cast`，来源 0）。
@@ -809,6 +809,15 @@ APK 进程提供：`platform.sock`、`capture.sock`、`codec.sock`、`wayland-0`
 **声音**：
 - 0 号启动后回环一直开着（`rungic-workspace-sound 0 listen`）：桌面开着就该听得到，不靠看守进程判断。
 - `audio-follow`：投屏时，电视在电脑模式（`content == 'desktop'`）就把 0 号的回环送去电视，否则留在手机。测试见 `test_audio_follow.py`。
+
+**用户第一次电视实测（2026-10-03）发现的问题与修正**：
+- **电视黑屏约 30 秒才出画面**：电视窗口原来接的是浮窗已在用的那条 0 号画面流。KWin 的屏幕录制流给新加入的接收方不补发当前帧，要等到下一次画面变化（例如时钟走到下一分钟）才有第一帧。改为电视单独开一条新流（`rungic-workspace-stream` 的 `tv-stream on|off` → `tv-node N`，与指针流同样是附加流；`AgentScreen::setTvShown`、`tvNodeId`），新流一建立就有首帧。已部署，浮窗进程已重启，待用户复测。
+- **桌面投到电视后没有声音**：0 号的回环不存在。0 号是在 `listen` 那一行加入之前启动的，之后没有补建。现场执行 `rungic-workspace-sound 0 listen` 后，回环在 0 号的 sink（安卓输出，投屏时即电视）上播放。`rungic-workspace` 为 0 号加了一个每 30 秒检查的保持循环，回环丢了会补上。
+- **声音面板里没有输入和输出设备**：plasma-pa 6.6 的 `showVirtualDevices` 默认为 false，只列有声卡的设备。手机上的所有输入和输出都是虚拟的（安卓通道、管道、各工作区的 null sink），所以一个都不显示。Plasma 6.6 把系统托盘里的小程序放在托盘自己的配置组里，Plasma 脚本接口访问不到，因此直接写布局文件。
+  - 新增 `rungic-desktop-plasma`，在 0 号环境中运行，给所有音量小程序写入 `showVirtualDevices=true`。
+  - 运行时机：在 plasmashell 启动前写入，因为外壳运行中改的文件会在它退出时被覆盖。外壳第一次生成布局后 20 秒，用 `--needed` 检查；仍缺这项设置时，停掉外壳，由循环重新启动（这时会补写）。
+  - 注意：手动运行必须带 0 号的 `XDG_CONFIG_HOME`。一次未带该变量的手动运行写进了手机自己的布局文件，已删除那一项。
+  - 现场已写入（0 号布局文件第 91 行），外壳已重启，待用户确认面板里能看到设备。测试见 `test_desktop_plasma.py`。
 
 ### 19.7 Agent 工具（2026-10-03）
 
