@@ -15,6 +15,14 @@
 
 int main(int argc, char *argv[])
 {
+    // Fullscreen's keyboard is the window's own (FloatingKeyboard, docs/research/97 §19.9): Qt Virtual
+    // Keyboard, in the window and turned with the picture, with the phone keyboard's layouts and Rime
+    // (rungic-plasma-input, its dictionary shared with the phone's: one keyboard in use at a time).
+    // So this process has no Wayland text-input: text the phone KWin's input method commits to it
+    // (the TV's keyboard mode) comes as keys.
+    qputenv("QT_IM_MODULE", "qtvirtualkeyboard");
+    qputenv("QT_VIRTUALKEYBOARD_DESKTOP_DISABLE", "1");
+    qputenv("QT_VIRTUALKEYBOARD_LAYOUT_PATH", "/usr/share/rungic-rime/plasma/keyboard/layouts");
     QGuiApplication app(argc, argv);
     int workspace = 0;
     const QStringList args = app.arguments();
@@ -40,6 +48,7 @@ int main(int argc, char *argv[])
     // Texts follow the Plasma language (catalog rungic-agent-screen, po/).
     KLocalizedString::setApplicationDomain("rungic-agent-screen");
     QQmlApplicationEngine engine;
+    engine.addImportPath(QStringLiteral("/usr/lib/rungic-rime/qml"));   // Rungic.Rime, for the Chinese layout
     KLocalization::setupLocalizedContext(&engine);
     engine.rootContext()->setContextProperty(QStringLiteral("agent"), single);
     engine.rootContext()->setContextProperty(QStringLiteral("director"), director.get());

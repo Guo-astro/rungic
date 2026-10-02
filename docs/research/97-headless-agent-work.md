@@ -835,7 +835,7 @@ APK 进程提供：`platform.sock`、`capture.sock`、`codec.sock`、`wayland-0`
 - 收尾：键盘已收起、已退出全屏；用户的触控板设置仍为 true。
 - 电视的电脑模式由用户实测。
 
-### 19.8 独立桌面和工作区里的 Firefox 用桌面版配置（2026-10-03，用户确认方案，已实现，待实机验收）
+### 19.8 独立桌面和工作区里的 Firefox 用桌面版配置（2026-10-03，用户确认方案，已实现，后台实测通过）
 
 用户要求：投屏和独立桌面里的 Firefox 应该是桌面版配置，以免被网站跳到移动版网页；手机上继续用移动版。用户确认 Agent 工作区（1–9 号）也一起用桌面版。
 
@@ -853,7 +853,12 @@ APK 进程提供：`platform.sock`、`capture.sock`、`codec.sock`、`wayland-0`
 - `rungic_cua/server.py` 的 `import_session_environment()` 原来会从 systemd 环境用 `setdefault` 把这些变量补回去，现在在 0 号跳过（`PHONE_ONLY`）。
 - 1–9 号工作区的这几个变量不变。
 
-**待实机验收**：
+**手机上后台实测（2026-10-03，临时配置目录，无头模式，不碰用户的配置和屏幕）**：
+- `RUNGIC_WORKSPACE=3`：UA 为 `Mozilla/5.0 (X11; Linux x86_64; rv:156.0) Gecko/20100101 Firefox/156.0`，`maxTouchPoints` 为 0；配置目录的日志里有“Rungic workspace 3: a desktop, mobile configuration not loaded”。（Firefox 在所有 Linux 上都把平台报成 x86_64。）
+- 不设该变量（手机）：UA 为 `Android 16; Mobile`，`maxTouchPoints` 为 1，和以前一样。
+- 用户的 Firefox 和独立桌面需要重启后才用上新配置；0 号的环境变量修正要等 0 号重启。
+
+**仍待用户实测**：
 - 0 号和工作区里：`navigator.userAgent` 是 Firefox 自己的 Linux UA，`navigator.maxTouchPoints` 为 0，没有 `about:mobile`，地址栏在顶部。
 - 切回手机：安卓 UA 和底部工具栏恢复。来回各切两次。
 - 注意事项：
@@ -861,3 +866,35 @@ APK 进程提供：`platform.sock`、`capture.sock`、`codec.sock`、`wayland-0`
   - 网站记在 cookie 或 service worker 里的“移动版”可能还会跳，清该站数据即可。
   - Firefox 不能在两边同时运行（`switch.py` 先关后开）。
 
+
+### 19.9 全屏的浮动键盘（2026-10-03，用户确认方案，已实现，离屏测试通过，待用户实测）
+
+用户反馈：桌面模式全屏时，弹出的键盘方向不对（从手机竖屏的底部弹出），而且即使转过来也不好用。要求：方向跟随窗口旋转；做成像安卓平板浮动输入法那样可拖动的浮窗。
+
+**调查（读源码，未在手机上测）**：
+- 现在弹出的是系统键盘 plasma-keyboard 6.6.6，由 KWin 摆放：只有“铺满屏宽”一个尺寸选项；浮动模式在上游只是停滞的草稿 MR !36；另有 MR !109 准备用自己的引擎替换 Qt VKB。
+- KWin 的 `InputPanelV1Window::resetPosition` 只会把键盘放在屏幕底部（toplevel）或输入光标下（overlay），没有旋转和自由放置。
+- 要让系统键盘旋转和浮动，得同时改 plasma-keyboard 和 KWin，而“画面在窗口里旋转”是我们全屏窗口自己的设计（§17.1），所以键盘放在窗口里做，不改共享层。
+
+**做法**：
+- 全屏窗口自带键盘：`agent/screen/qml/FloatingKeyboard.qml`，用 Qt Virtual Keyboard 的 `InputPanel`，放在会旋转的 `stage` 里，方向自然跟随画面。
+  - 进程启动时设 `QT_IM_MODULE=qtvirtualkeyboard`、`QT_VIRTUALKEYBOARD_DESKTOP_DISABLE=1`，布局路径指向 rungic-plasma-input 的布局（`/usr/share/rungic-rime/plasma/keyboard/layouts`），并加入 `Rungic.Rime` 的导入路径。中文用的是与手机键盘相同的 Rime 插件和布局；语言取 `plasmakeyboardrc` 的 `enabledLocales`。
+  - 样式暂用 Qt 内置的 default：plasma-keyboard 的 Breeze 样式依赖编译在 plasma-keyboard 程序里的 `org.kde.plasma.keyboard` 模块，别的进程加载不了。
+- 浮动：
+  - 默认约一块手机键盘宽（舞台高度的 1.05 倍，最多舞台宽度的一半）。拖顶部一栏移动，松手吸附到底部中间或两角。
+  - 双指缩放，范围是舞台宽度的 0.34–0.8；放大超过上限就停靠成整宽，停靠时缩小又浮起来。
+  - 大小、位置、是否停靠记在 `~/.config/rungic-agent-screenrc`，桌面模式和助理屏分开记。
+  - 默认位置离底边 52 像素，留出上滑呼出工具栏的区域。
+- 顶部一栏：Esc、Tab、Ctrl、Alt（点一下保持，作用于下一个键后松开）、四个方向键、停靠/浮动切换、收起；中间显示正在输入的拼音。按住 Ctrl 或 Alt 时，字母和数字按键码发送（Ctrl+C、Alt+F4 等）。
+- 隐藏输入框设 `ImhNoAutoUppercase | ImhNoPredictiveText`：它总是空的，否则每个字母都会被当作句首大写。
+- 用户词库：与手机键盘共用一份（`~/.local/share/plasma-rime`，用户决定，同一时间只有一个键盘在用）。librime 的用户词库是独占锁的 LevelDB，所以 Rime 插件改为只在键盘使用时持有会话、用完释放（见 docs/41 同日一节）。
+- 代价：这个进程不再有 Wayland text-input，手机 KWin 输入法提交给它的文字（电视的键盘模式，`commitHostText`）会由 KWin 改成按键送来。
+
+**手机上离屏测试（2026-10-03，`agent/screen/tests/tst_floating_keyboard.qml`，qmltestrunner，临时 Rime 目录）**：键盘加载正常，语言为 zh_CN；在 2400×1080 的舞台里宽 1134、高 434，位于底部中间、离底边 52；输入 `nihao` 时显示拼音 `ni hao`，空格上屏“你好”。部署后已重启桌面模式的浮窗进程。
+
+**待实机验收**：
+- 全屏横握：键盘方向正确；拖动、吸附、缩放、停靠正常；按键不会漏到下面的画面（FullTouch）。
+- 中英文输入、候选、退格、回车、方向键、Ctrl+C/V 进到独立桌面；收起键盘或退出全屏后键盘消失；助理屏全屏同样可用。
+- 手机键盘不会同时弹出。
+- 电视的键盘模式：英文、中文和表情仍能送达（KWin 按键回退路径）。
+- 内存：窗口进程加载键盘后的增量。

@@ -308,15 +308,33 @@ Window {
             }
         }
     }
-    // ---- typing into the screen (fullscreen's keyboard button, docs/research/97 §19.4) -------------
-    // A field of its own, invisible, takes the phone's keyboard (the Android one, through the phone
-    // KWin's input method): what it commits goes to the screen's focused field as an input method
-    // commits it (any language), and is cleared; the keys it does not type (Backspace on an empty
-    // field, Enter, arrows...) go there as keys. Linux key codes (input-event-codes.h).
+    // ---- typing into the screen (fullscreen's keyboard button, docs/research/97 §19.4, §19.9) --------
+    // A field of its own, invisible, takes the window's keyboard (FloatingKeyboard, in the stage):
+    // what it commits goes to the screen's focused field as an input method commits it (any
+    // language), and is cleared; the keys it does not type (Backspace on an empty field, Enter,
+    // arrows...) go there as keys. Linux key codes (input-event-codes.h).
     readonly property var keyCodes: ({
         [Qt.Key_Backspace]: 14, [Qt.Key_Return]: 28, [Qt.Key_Enter]: 28, [Qt.Key_Tab]: 15, [Qt.Key_Escape]: 1,
         [Qt.Key_Left]: 105, [Qt.Key_Right]: 106, [Qt.Key_Up]: 103, [Qt.Key_Down]: 108, [Qt.Key_Delete]: 111,
         [Qt.Key_Home]: 102, [Qt.Key_End]: 107, [Qt.Key_PageUp]: 104, [Qt.Key_PageDown]: 109 })
+    // With the keyboard's Ctrl or Alt held, a letter or digit goes as its key (Ctrl+C, Alt+F4...).
+    readonly property var letterCodes: ({
+        q: 16, w: 17, e: 18, r: 19, t: 20, y: 21, u: 22, i: 23, o: 24, p: 25, a: 30, s: 31, d: 32, f: 33, g: 34,
+        h: 35, j: 36, k: 37, l: 38, z: 44, x: 45, c: 46, v: 47, b: 48, n: 49, m: 50,
+        "1": 2, "2": 3, "3": 4, "4": 5, "5": 6, "6": 7, "7": 8, "8": 9, "9": 10, "0": 11, " ": 57 })
+    readonly property Item keyboard: keyboardLoader.item
+    // A key into the screen, with the keyboard's held Ctrl and Alt (let go after it).
+    function sendKey(code) {
+        const mods = !keyboard ? [] : [].concat(keyboard.ctrl ? [29] : [], keyboard.alt ? [56] : [])
+        mods.forEach(m => root.screen.key(m, true))
+        root.screen.key(code, true)
+        root.screen.key(code, false)
+        mods.reverse().forEach(m => root.screen.key(m, false))
+        if (keyboard) {
+            keyboard.ctrl = false
+            keyboard.alt = false
+        }
+    }
     property bool typing: false
     onFullChanged: if (!full) typing = false
     onTypingChanged: {
@@ -333,13 +351,24 @@ Window {
         width: 1; height: 1
         opacity: 0
         enabled: root.typing
-        onTextEdited: if (text.length > 0) { root.screen.typeText(text); text = "" }
+        // Always empty: no capital at its start, no prediction of what it never keeps.
+        inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText | Qt.ImhNoTextHandles
+        onTextEdited: {
+            if (text.length === 0)
+                return
+            const held = !!root.keyboard && (root.keyboard.ctrl || root.keyboard.alt)
+            const code = root.letterCodes[text.toLowerCase()]
+            if (held && code !== undefined)
+                root.sendKey(code)
+            else
+                root.screen.typeText(text)
+            text = ""
+        }
         Keys.onPressed: (event) => {
             const code = root.keyCodes[event.key]
             if (code === undefined || (event.key === Qt.Key_Backspace && text.length > 0))
                 return
-            root.screen.key(code, true)
-            root.screen.key(code, false)
+            root.sendKey(code)
             event.accepted = true
         }
     }
@@ -829,6 +858,19 @@ Window {
         onToolbarWanted: root.showToolbar()
         onToolbarToggled: root.toolbarShown ? (root.toolbarShown = false) : root.showToolbar()
         onTileTapped: (screen) => director.setFocus(screen.workspace)
+    }
+
+    // ---- fullscreen's own keyboard (docs/research/97 §19.9): turned with the stage, floating --------
+    Loader {
+        id: keyboardLoader
+        active: root.typing
+        sourceComponent: FloatingKeyboard {
+            area: stage
+            place: root.screen && root.screen.workspace === 0 ? "desktop" : "screens"
+            composing: keyboardField.preeditText
+            onKeyWanted: (code) => root.sendKey(code)
+            onHideWanted: root.typing = false
+        }
     }
 
     Toolbar {
