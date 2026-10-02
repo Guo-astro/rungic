@@ -162,6 +162,7 @@
     <string name="team_briefing">写简报</string>
     <string name="team_deciding">定稿中</string>
     <string name="tile_not_open">还没打开应用</string>
+    <string name="tile_headless">在后台运行</string>
     <string name="board_name">团队看板</string>
     <string name="phase_brief">简报</string>
     <string name="phase_review">评审中</string>

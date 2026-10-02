@@ -171,11 +171,41 @@ final class Director {
     /** The focus's picture: the focus, or for the board the first screen beside it. */
     int focusPicture() { return picture(focus); }
 
-    /** `slot`, or for the board (no picture of its own) the first screen beside it. */
+    /**
+     * `slot` if the host has its picture, else the first screen beside it that it has (the board,
+     * a headless workspace and a member not open yet have none here).
+     */
     private int picture(int slot) {
-        if (slot != BOARD) return slot;
-        for (int m : members) if (m != BOARD) return m;
-        return 0;
+        if (live.contains(slot)) return slot;
+        for (int m : members) if (live.contains(m)) return m;
+        return slot == BOARD ? 0 : slot;
+    }
+
+    // ---- headless workspaces (KWin's virtual backend, docs/research/97) -----------------------------
+    /** When each headless workspace last said it runs (its keeper, op "director" {"alive": n}). */
+    private final java.util.Map<Integer, Long> headless = new java.util.HashMap<>();
+    private static final long HEADLESS_FRESH_MS = 10_000;
+
+    /** Workspace `slot` runs with no surface on the host: a member all the same. */
+    void alive(int slot) {
+        if (slot <= 0 || slot >= 31) return;
+        boolean known = headless.containsKey(slot);
+        headless.put(slot, android.os.SystemClock.uptimeMillis());
+        if (!known) {
+            List<Integer> before = members;
+            refreshMembers();
+            if (!before.equals(members)) {
+                changedVersion();
+                if (bound || fullscreen) apply(true);
+                redraw();
+            }
+        }
+    }
+
+    /** A member running headless: its picture is not here (the Linux side records it). */
+    boolean headless(int slot) {
+        Long at = headless.get(slot);
+        return at != null && !live.contains(slot) && android.os.SystemClock.uptimeMillis() - at < HEADLESS_FRESH_MS;
     }
 
     /** Workspaces on the TV now (the focus first). */
@@ -405,7 +435,9 @@ final class Director {
         return membersSaid.containsKey(slot) && !name.isEmpty() ? name.substring(0, Math.min(1, name.length())).toUpperCase() : String.valueOf(slot);
     }
 
-    String notOpenText() { return activity.getString(R.string.tile_not_open); }
+    String notOpenText(int slot) {
+        return activity.getString(headless(slot) ? R.string.tile_headless : R.string.tile_not_open);
+    }
 
     String tagName(String kind) {
         int id = TAG_NAMES.getOrDefault(kind, R.string.tag_progress);
@@ -496,6 +528,10 @@ final class Director {
         List<Integer> found = new ArrayList<>();
         for (int slot = 1; slot < 31; slot++) if ((mask & (1 << slot)) != 0) found.add(slot);
         live = new ArrayList<>(found);
+        // A headless workspace, heard from lately.
+        long now = android.os.SystemClock.uptimeMillis();
+        headless.values().removeIf(at -> now - at >= HEADLESS_FRESH_MS);
+        for (int slot : headless.keySet()) if (!found.contains(slot)) found.add(slot);
         // A team member that spoke shows before its workspace opens (a placeholder tile).
         for (java.util.Map.Entry<Integer, String[]> m : membersSaid.entrySet())
             if (!found.contains(m.getKey()) && !"ended".equals(m.getValue()[1])) found.add(m.getKey());

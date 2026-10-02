@@ -70,7 +70,7 @@ final class DirectorArt {
                 canvas.restore();
                 continue;
             }
-            if (!d.live(slot)) placeholder(canvas, r, u * scale, d.initial(slot), d.notOpenText());
+            if (!d.live(slot)) placeholder(canvas, r, u * scale, d.initial(slot), d.notOpenText(slot));
             if (focus && many) {
                 outline.setColor(d.needsAttention(slot) ? AMBER : BLUE);
                 outline.setStrokeWidth(4 * u);

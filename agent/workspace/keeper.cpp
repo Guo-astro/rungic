@@ -127,8 +127,26 @@ public:
         check();
     }
 
+    // A headless workspace (KWin's virtual backend, docs/research/97): the Android host has no surface
+    // of it, so the app's director would not count it; this tells it the workspace runs, a few seconds
+    // apart (an app started again or thawed learns it again). Never waits on a frozen app.
+    void announce()
+    {
+        if (qEnvironmentVariable("RUNGIC_WORKSPACE_BACKEND") != QLatin1String("virtual"))
+            return;
+        QLocalSocket socket;
+        socket.connectToServer(QStringLiteral("/mnt/android-wayland/platform.sock"));
+        if (!socket.waitForConnected(500))
+            return;
+        socket.write(QJsonDocument(QJsonObject{{QStringLiteral("op"), QStringLiteral("director")},
+                                               {QStringLiteral("alive"), m_slot.toInt()}}).toJson(QJsonDocument::Compact) + '\n');
+        socket.waitForBytesWritten(500);
+        socket.waitForReadyRead(500);
+    }
+
     void check()
     {
+        announce();
         // Being closed (rungic_cua workspace.close): its apps must answer, nothing is frozen.
         const bool closing = QFile::exists(QStringLiteral("%1/rungic-workspace-%2.closing").arg(qEnvironmentVariable("XDG_RUNTIME_DIR"), m_slot));
         const bool isShown = shown();

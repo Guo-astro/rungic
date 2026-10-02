@@ -588,6 +588,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
             director.setMember(m.getInt("slot"), m.optString("role"), m.optString("kind"), m.optString("text"));
         }
         if (request.has("board")) director.setBoard(request.getJSONObject("board"));
+        if (request.has("alive")) director.alive(request.getInt("alive"));
         if (request.has("caption")) {
             org.json.JSONObject c = request.getJSONObject("caption");
             director.setCaption(c.getInt("slot"), c.optString("state", "working"), c.optString("text"));

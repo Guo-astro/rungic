@@ -172,6 +172,7 @@
     <string name="team_briefing">writing the brief</string>
     <string name="team_deciding">deciding</string>
     <string name="tile_not_open">App not open yet</string>
+    <string name="tile_headless">Running in the background</string>
     <string name="board_name">Team board</string>
     <string name="phase_brief">Brief</string>
     <string name="phase_review">In review</string>
