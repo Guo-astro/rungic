@@ -387,3 +387,355 @@ APK 进程提供：`platform.sock`、`capture.sock`、`codec.sock`、`wayland-0`
   - 已改：`show_workspace` 放到后台线程，宿主不可达时直接跳过；不可达标记的有效期由 15 s 延长到 60 s，因为 Agent 两次调用之间常常超过 15 s；
   - 修改后：冻结期间第一次截图 4.3 s（一次超时），之后每次约 1.0 s（含启动 MCP 进程）。
 - 测完退出全屏，呈现器随即停止；屏幕超时恢复为 60000。
+
+## 15. 远程观看：RemoteSurface Host（2026-10-02）
+
+**用户要求**：整台设备只有一个 RDP Host，权限在工作区之上，不为每个工作区各开一个；连接时客户端知道设备上有哪些屏幕（手机桌面、各 Agent 工作区，以后还有导播台），观看端可以直接切换。
+
+**ARM64 构建**（Mac mini，独立容器 `remotesurface-build`，镜像与 `rungic-build` 相同，没有动 `rungic-build`）：
+- 工具链：Swift 6.4.0 `ubuntu2604-aarch64`，GPG 签名有效。
+- FreeRDP：另编了共享库形式的 FreeRDP 3.31.0（只开 server）供 Host 链接。原因：`native/build.sh` 只产出静态客户端库，而 Ubuntu 26.04 的 freerdp3-dev 已是 3.32.0，与 Host 要求的版本不符。
+- 测试全部通过。产物在 `.work/remotesurface/dist-arm64/`（90 MB，自带 Swift 运行库和 FreeRDP）；手机容器已有它需要的其余运行库（FFmpeg 8.0.1、libx264、ICU、PipeWire 等）。
+- 需要提给 RemoteSurface 的问题：`host/build.sh:28`/`:178` 写死 x86_64（只影响 ASan 和 Weston）；`host/native/CMakeLists.txt` 写死 FreeRDP 3.31.0；`native/build.sh` 在装有 libopus-dev 时客户端构建失败；`pipewire_capture` 测试在 aarch64 上不稳定（14 次失败 8 次）。
+
+**单工作区冒烟测试**（实测）：
+- 在工作区 1（无头）的环境里运行 Host，监听回环 3391，经 `adb forward` 映射到 K8 的 13391，用 K8 上的 RemoteSurface 客户端连接。
+- 结果：TLS 加凭据认证通过；1920×1080，libx264 软件编码（没有 DRM 渲染节点，自动退回软件），持续约 27 fps，几十秒内确认 823 帧。
+- 测完已断开，并关闭 K8 上的客户端和手机上的测试 Host。
+
+**设计**（调研结论，未实现）：
+- **会话内切换屏幕，不重连**：
+  - Plasma 后端改为按端点（Wayland socket、会话总线）创建，连接带超时；
+  - 切换时先接通新屏幕，等到它的第一个 keyframe 再提交，然后停掉旧屏幕；约 4 s 内没有 keyframe 就回复失败，保留原屏幕，所以冻结的手机桌面不会造成黑屏；
+  - 切换时重置帧准入、按住的键、光标序号和码率等设置。
+- **屏幕列表和切换的通道**：复用现有 `RemoteSurface::Session` 通道，加 `screens` 功能（hello 里给出列表；请求 `{"command":"screen","id":…}`；列表变化时 Host 主动推送）。客户端在会话面板加 Screen 组，并加 Agent 命令和 `rsctl screens`/`rsctl screen`。
+- **屏幕从哪来**：Rungic 维护注册目录 `$XDG_RUNTIME_DIR/remote-surface/screens.d/<id>.json`，Host 每秒读一次；格式由 RemoteSurface 定义，Host 里不写 Rungic 专有逻辑。
+  - 工作区启动时写条目、停止时删除；
+  - 手机桌面的条目由 Rungic 根据“宿主不可达”标记，写明当前是否可用。
+- **授权**：KWin 按可执行文件的规范路径匹配桌面文件，所以 `~/.local/share/applications` 下一个桌面文件就覆盖所有 KWin。
+- **部署**：一个 `rungic-remote.service`，运行在用户会话里，单端口。
+- **预估规模**：Host 约 1000–1200 行，协议和客户端约 500–700 行，Rungic 侧约 150–250 行。
+- **之前写的 `rungic-remote@N`**：每个工作区一个 Host，方向不对，已作废，没有提交。
+
+## 16. 设计：手机浮窗的画面也由宿主图层显示（2026-10-02，已放弃，见 §17）
+
+**目标**：手机上的显示路径（浮窗、导播台窗口）和电视、全屏统一走“呈现器 → 宿主图层”，PipeWire 只留给远程观看。浮窗因此少一次拷贝，也不必每个成员各开一路录屏。
+
+**难点是同帧**：浮窗在用户的 KWin 里逐帧移动（拖动、捏合、收边、呼吸动画、圆角、字幕胶囊和编号压在画面上）。如果宿主图层按单独的消息摆放，拖动时画面会落后于窗口。
+
+**方案**：用 KWin 现成的叠加层机制，并且只用“底层加挖洞”（underlay）一种方式。
+- KWin 6.6 已有叠加层的分配、挖洞（含圆角）、设备坐标换算和失败回退。让 Android 后端把宿主的子 SurfaceControl 当作 KWin 的叠加层（新增 `HostSourceLayer`），层级在桌面层之下。
+- 浮窗为每块画面放一个占位子表面（在窗口表面之下，单像素黑缓冲，用 `wp_viewport` 定大小），通过新协议 `rungic_host_picture_v1.set_source(slot)` 和 `set_corner_radius` 声明“这里显示宿主画面槽 N”。KWin 把它作为 underlay，在桌面帧上挖一个带圆角的透明洞。
+- KWin 把子表面位置、viewport 和槽号，随同一次桌面 commit 交给宿主（同步子表面，加上宿主协议 `rungic_host_source_v1`）。宿主在**同一个 `ASurfaceTransaction`** 里提交桌面缓冲（有洞时改为半透明）和各画面图层的位置、alpha、显隐。所以拖动不会差帧。
+- 画面图层的内容直接来自现有的呈现器（ws-N），工作区出帧时，用户的 KWin 和浮窗都不必醒来。
+- 字幕胶囊、编号、工具栏和 KWin 画在上层的东西，都靠挖洞自然叠在画面上，不必把客户端界面拆成多层。
+- **NDK 限制**：Android 16 的 NDK 没有图层圆角接口，所以圆角只能靠 KWin 挖洞时的圆角 alpha。
+- **同类做法**：Android SurfaceView（窗口挖洞、内容在下层）、Chromium 的 SurfaceControl underlay、KWin DRM 后端的 overlay/underlay，都是同一个模型。
+
+**回退**：KWin 不提供协议、呈现器没连上、或零拷贝关闭时，浮窗照旧用 PipeWire。宿主冻结时手机桌面本身也停了，没有可回退的；解冻后自动恢复。
+
+**改动**（估计约 1.5–1.7 千行）：
+| 部分 | 内容 | 估计 |
+|---|---|---|
+| KWin | 新补丁 `android-host-pictures.patch`：协议和服务端；放宽叠加层候选条件；`importHostSource`；洞的 alpha；`HostSourceLayer`；`hostScale` 位置修正 | 约 500 行 |
+| 宿主 Rust | `render_phone` 沿子表面树收集宿主画面；多层共用一个事务；背景色层；只换缓冲的提交；画面路由和节奏 | 约 600 行 |
+| APK | `agent-screen` 的回复增加 `live`、`phone` 字段，并触发 SCREENS 事件 | 约 30 行 |
+| 浮窗 | `HostPicture` QML 类型，在 Qt 渲染线程里驱动占位子表面；宿主模式下画面区域透明；回退判断 | 约 400 行 |
+| keeper | 手机显示时也启动呈现器 | 约 30 行 |
+
+**风险**（大多待实测）：
+- 缩略图从 1920 缩到约 190 设备像素，可能超出显示硬件的缩放上限，SurfaceFlinger 会退回 GPU 合成。对策：缩略图由呈现器租小缓冲。
+- 硬件图层数可能不够。
+- KWin 的叠加层分配全有或全无，失败时画面区域会短暂变黑。
+- KWin 自己的截图或录屏里，画面区域是黑的。
+- 必须按 docs/57 的教训，用 GPU 合成路径复验一次。
+
+**实机测试**：会显示在用户屏幕上，要先约时间：
+- 同帧：拖动、捏合、收边时录屏逐帧比较；
+- 合成方式：`dumpsys SurfaceFlinger`；
+- 强制 GPU 合成；
+- 回退：杀呈现器、对 APK SIGSTOP、重装 APK；
+- 效率：和 PipeWire 路径对比 CPU、GPU 和带宽。
+
+
+## 17. 方向调整：浮窗、全屏和电视导播台全部放在 Linux 里（2026-10-02，用户决定）
+
+**用户要求**：浮窗、放大的浮窗和它们的全屏模式，都在 Linux 系统里完成。将来 Linux 发行版运行在 PC 上时，这些功能可以直接用。
+
+**结论**：§16 的“宿主图层”方案只适用于 Android，已停止。KWin 侧和宿主侧的两个实现子代理已经叫停，未完成的改动全部撤销，没有进入仓库。
+
+**新的分工**：
+- **Linux 负责**：
+  - 浮窗，以及导播台窗口的浮窗、放大和全屏三种形态，都由同一个 QML 窗口完成；
+  - 团队看板（`TeamBoard.qml`）、格子布局和焦点切换都在这个窗口里；
+  - 全屏时的触摸转发，沿用浮窗现有的输入方式（fake input）。
+- **电视**：是 KWin 的第二个输出（桌面模式的 CAST 输出；在 PC 上就是外接显示器）。
+  - 电视显示导播台 = 导播台窗口全屏放在这个输出上；
+  - 电脑模式 = 不放。
+  - 投屏控件里“导播台 / 电脑模式”的切换改为控制这件事。
+- **Android（Rungic 应用）只负责**：把 KWin 的输出帧零拷贝放到手机屏幕和电视上（已有）。导播台的状态、布局和绘制（`Director.java`、`DirectorArt`、`AgentFullscreen` 的导播台部分、宿主的电视格子图层 21-tv-director、呈现器）逐步退役。
+- **代价**：
+  - 工作区画面要经用户的 KWin 合成一次，多一次 GPU 拷贝；以后可用 KWin 标准的直接扫描、叠加层把这次拷贝省掉（在 PC 上本来就有）。
+  - 横屏全屏要由 KWin 旋转输出，或请求 Android 旋转，不能由窗口自己强制。
+  - 声音跟随焦点要改由 Linux 侧的导播台提供焦点。
+
+**顺序**：
+1. 导播台窗口在手机上全屏（Linux）；
+2. 电视走 CAST 输出加导播台窗口；
+3. 声音跟随和 keeper 的显示判断改用 Linux 侧状态；
+4. 退役 Android 侧的导播台、全屏和呈现器；
+5. 视情况做叠加层优化。
+
+远程观看的硬件编码，等 RemoteSurface 多屏合并后再做。§16 第 2 项“录屏直接进借来的内存”在新方向下不再需要，取消。
+
+### 17.1 第 1 步：浮窗的全屏在 Linux 里（2026-10-02，实机验证）
+
+**做法**（`agent/screen/qml/Main.qml`）：
+- 浮窗新增第三种形态 `fullscreen`，与 window、tab 并列。全屏按钮不再调用 APK 的 `fullscreen`（AgentFullscreen）。
+- 进入全屏时，画面、触摸层和工具栏（`stage`）整体移进同一进程的一个**普通全屏窗口**（xdg_toplevel），退出时移回浮窗的图层窗口。
+  - 实测：图层窗口即使改到 overlay 层，也压不住 Plasma Mobile 的状态栏和导航栏；对普通全屏窗口，桌面会自动收起面板。PC 上的 Plasma 同理。
+  - PipeWire 画面项在两个窗口之间移动后照常出画。
+- **不转手机，转窗口内容**：全屏窗口比宽更高（手机竖屏）时，`stage` 绕中心顺时针转 90 度，等于手机向左横放时的横屏画面。
+  - 手机本身、桌面和其他应用不转，没有整机转屏动画，也不需要任何恢复步骤。
+  - 触摸坐标由 Qt 换算到转后的方向，转发代码不用改。
+  - 横屏显示器（PC）上不转。
+  - 曾先试过经平台桥临时横屏（`orientation` 加 temporary/restore）；用户指出只转浮窗即可，已改回，APK 的这部分改动也已撤销。
+- 背景用壁纸的模糊图，即 `rungic-agent-screen background` 另写的 `$XDG_RUNTIME_DIR/rungic-agent-screen/director-background.jpg`。
+- 画面按 16:9 放到最大。导播台的其他屏幕排在右侧一列；缩放按钮沿用导播台的三级 `level`：标准、放大（列宽 15%）、单独（不显示列）。
+- 触摸规则与 APK 的 DirectGestures（docs/66）一致：
+  - 点按 = 左键；长按 = 右键；按住移动 = 从按下处开始拖动；
+  - 双指点按 = 右键，三指点按 = 中键；双指移动 = 自然滚动（按工作区 1080 像素换算）。
+  - 点其他格子 = 切换焦点；点画面旁边，或从底边上滑（转后即手机左边缘）= 显示工具栏（退出、缩放、电视、关闭）。底边的点按仍是点击。
+- 离开全屏的方式：
+  - 工具栏的退出按钮；
+  - PC 上按 Esc；
+  - 仅限助手屏：全屏窗口失去焦点 0.4 秒以上（切到别的应用、主页手势）。
+    - 桌面模式不用这条规则：它的第二块屏幕属于用户自己的 KWin，在全屏里点一下就会激活那块屏幕上的窗口。
+    - 用户实测：沿用这条规则时，桌面模式全屏随便一点就退回了浮窗。
+- 浮窗和全屏同属一个程序，助手屏（`--workspace N`）和桌面模式（`--desktop`）共用。桌面模式的全屏是用户的第二块屏幕，应当铺满（用户要求）：
+  - 不留边距、不要圆角，不显示壁纸和阴影，16:9 以外的部分是黑边；
+  - 点黑边呼出工具栏。
+- 浮窗画面下方加了柔和阴影（Qt 6.9 起的 `RectangularShadow`）。
+- 浮窗位置和尺寸取整：落在小数像素时，画面边上露出过一条底下的黑底（用户发现）。黑底现在也只在还没有画面时显示。
+  - 安卓的返回键由 Rungic 应用自己处理（打开它的菜单），菜单会让全屏窗口失去焦点，因此同样退出全屏。
+- 修了一个旧问题：屏幕尺寸变化时，`onAreaChanged` 先于派生值 `minWidth` 更新执行，横屏转回竖屏会把浮窗撑到横屏宽度的一半。`settle()` 改为直接按 `area` 计算。
+
+**实机验收**（G100 S，工作区 1，无头 KWin，Dolphin 在工作区内）：
+- 进入全屏：面板收起、画面铺满、手机方向保持竖屏（`mCurrentRotation=ROTATION_0`）。
+- 转后的长按：右键菜单出现在手指所在的文件上。
+- 横屏版本中的点按和拖动（指针落点准确，拖动框选了 3 项）：在转手机的那一版上测的；转内容之后只复测了长按。
+- 工具栏退出：回到浮窗，浮窗保持原来的位置和大小。
+
+**未验证**：
+- 双指滚动和多指点按（adb 只能模拟单指）；
+- 导播台（多个屏幕）的全屏布局和缩放；
+- PC 上的 Esc。
+
+**暂未移植**：按重力感应选择向左或向右横放。触控板模式和惯性滚动见 §17.3。
+
+### 17.2 进出全屏无缝过渡（2026-10-02，用户要求）
+
+**用户反馈的问题**：
+- 进入全屏时，画面从左下角斜着滑进来；
+- 状态栏和导航栏先显示，再消失。
+
+**原因**：
+- 当时的全屏是一个普通全屏窗口。Plasma Mobile 的两个面板在 overlay 层，它们发现“当前应用全屏”后才自己滑走（`containments/panel`、`taskpanel` 的 `fullscreen` 状态）。
+- 新窗口刚出现时还不是全屏尺寸，画面先按错误尺寸排了一次，又用位置动画滑过去。
+- 浮窗原来的位置放进转过的坐标系后，对应的是屏幕上另一个地方，所以看起来是从角落斜着进来。
+
+**过程中试过、但放弃的做法**：另开一个 overlay 层窗口来显示全屏。
+- 实测（WAYLAND_DEBUG）：新窗口空的第一帧约 49 ms 画出；画面移进去之后，第一次连同画面一起画却又用了约 112 ms（要第一次建立画面流纹理、特效和着色器）。
+- 这段时间里画面两边都不在，录屏可见浮窗消失了十几帧。
+
+**最终做法：同一个窗口完成全部过渡**（`Floater::setFullscreen`）：
+- **进入**：
+  - 浮窗切到 overlay 层，并声明接收键盘（OnDemand）。
+  - 按 KWin 6.6.6 源码：图层窗口开始接收键盘时会被激活（`handleAcceptsFocusChanged` → `activateWindow`），激活会无条件把它提到同层最上面（`raiseWindow`），因此盖在面板上面。
+  - 只改图层不接收键盘时，KWin 会把它放到活动窗口下面，仍在面板之下，这就是之前那次尝试失败的原因。
+- **面板不动**：面板看不到“全屏应用”，不会滑走，只是被盖住；背景淡入时它们随之被遮住。
+- **变形动画**：布局立即换成全屏；画面通过变换（平移、缩放、旋转），从浮窗的位置、大小和角度连续变到全屏，耗时 0.32 秒，OutCubic 缓动。背景同时淡入。
+- **退出**：动画反着播放，结束时画面正好回到浮窗的位置，再切回 top 层、不再接收键盘。
+- **细节**：变形开始时工具栏立即隐藏（否则会跟着画面一起转）；桌面模式全屏没有阴影，阴影改为淡出。
+- **电脑上**：Esc 退出全屏。
+
+**取舍**：
+- 全屏期间 Plasma 的下拉和主页手势不可用，因为面板被盖住了；
+- 退出全屏后，键盘焦点不会自动交还给之前的应用（KWin 没有这样做），要点一下应用才恢复。
+
+### 17.3 与 APK 全屏逐项对齐（2026-10-02，用户指出漏了触控板切换）
+
+**教训**：做 Linux 全屏时只移植了直接触摸，把 APK 全屏已有的触控板模式记成了“暂未移植”。用户发现工具栏上的切换没了。替换旧机制前，必须先把旧实现的功能逐项列出来再对照，见下表。
+
+| APK AgentFullscreen 的功能 | Linux（`qml/FullTouch.qml`、`Main.qml`） |
+|---|---|
+| 工具栏：退出、缩放（导播台）、触控板开关、电视、关闭 | 相同；触控板开关选中时高亮 |
+| 触控板模式（TouchpadGestures）：libinput 的轻点状态机——轻点单击、点两下双击、点后按住拖动（按过轻点时限也算拖动）、双指或三指轻点右键或中键、双指滚动 | 移植，状态和时限相同（轻点 180 ms，拖动等待 160 ms） |
+| 指针加速（PointerTransfer）：libinput 触控板曲线（低于 7 mm/s 降到 1/3，7–130 mm/s 为 1:1，最高约 5.3 倍）；速度取最近 60 ms 的最小二乘直线，停顿超过 40 ms 截断；按辛普森法求平均 | 移植；单位由 `Screen.pixelDensity` 换成毫米 |
+| 模式记在 `agent_fullscreen_touchpad` | 记在 `~/.config/rungic-agent-screenrc` 的 `[Fullscreen] touchpad` |
+| 移动阈值 1.3 mm，按每根手指相对自己的按下点计算 | 相同（`TouchPoint.startX/startY`） |
+| 长按时限等于 `ViewConfiguration.getLongPressTimeout()` | 400 ms（Android 12 起的默认值） |
+| 点击按下后 40 ms 再抬起（面板的应用启动器认不出同一瞬间的按下和抬起） | 相同 |
+| 双指滚动松手后惯性滚动（宿主的 scrollStop） | 在客户端实现：取最近 80 ms 的速度，每 16 ms 衰减到 94% |
+| 从底边上滑呼出工具栏，3 秒后隐藏；底边的点按仍是点击 | 相同 |
+| 导播台：点其他屏幕切焦点；看板在焦点时不转发触摸 | 相同 |
+| 导播台：各屏幕的名字按电视样式画出（DirectorArt） | 浮窗格子自带的标签（非焦点格子的编号或角色、状态点、焦点的说明条） |
+
+**新增**：
+- 直接触摸模式下，点画面旁边可以显示或隐藏工具栏；
+- 进入全屏后工具栏先显示 1 秒，再淡出并向底边滑出（用户要求，用来告诉用户工具栏在哪里）。
+
+## 18. 边缘手势与安卓系统手势的冲突（2026-10-02，调研，尚未实机验证）
+
+**用户要求**：边缘第一次滑动只交给 Linux（全屏工具栏、Plasma 的状态栏下拉、底部面板），安卓什么都不显示；1~2 秒内再滑一次，才交给安卓（返回、通知栏、回到主页）。
+
+**源码调研结论**（AOSP android15/16-release、Launcher3 android16-release；Moto 的 SystemUI 和桌面是闭源的，都需要实机核对）：
+- **系统怎么判断边缘滑动**：Rungic 用的是 `hide(systemBars())` 加 `BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE`。系统的 `SystemGesturesPointerEventListener` 只观察、不拦截：从边缘 24 dp 内开始、移动 24 dp 以上、500 ms 以内算一次边缘滑动。对这种设置的应用，系统只把系统栏临时显示出来，触摸并不交给状态栏。
+- **第一次滑动**：
+  - 底边：Launcher 判定“导航栏已隐藏且不允许忽略”，交给不拦截触摸的 `ResetGestureInputConsumer`，整段触摸都到应用；
+  - 左右边：导航栏隐藏时返回手势被禁用（`isBackGestureDisabled`）；
+  - 顶边：触摸也全部到应用。
+  - 但系统栏会半透明地显示约 2.25 秒（`AutoHideControllerImpl`）；用户点了栏外区域则 350 ms 后隐藏。
+- **第二次滑动（系统栏还在显示时）**：底边执行回主页手势；左右边执行返回（此时会无视应用设的排除区）；顶边拉出通知栏。
+- **结论**：原生安卓本来就是“第一次给应用、第二次给系统”，只是第一次会把系统栏显示出来。
+- **用户说的 (a)**：全屏里从“底部”，也就是手机左边缘，上滑就触发返回。按原生代码，系统栏隐藏时第一次不可能触发返回。可能的原因有三：那其实是第二次滑动；Moto 改了这部分；或者当时系统栏并没有隐藏（例如输入法或对话框让系统栏重新显示了）。
+- **手势排除区**（`setSystemGestureExclusionRects`）：
+  - 只能用于左右边；
+  - 导航栏处于这种临时隐藏状态时，不受每条边 200 dp 的限制；
+  - 系统栏显示期间排除区会被忽略；
+  - 增删大约在下一帧生效。
+  - 顶边和底边，应用无法排除。
+- **有 root 时可选的手段**：
+  - `IStatusBarService.disable/disable2`（root 可调用）或 `cmd statusbar send-disable-flag`：
+    - 可以关掉通知栏下拉（`statusbar-expansion`），以及回主页加最近任务（必须 `home` 和 `recents` 都关）；
+    - 还可以把系统栏内容清空（`system-icons`、`clock`、`notification-icons`）；
+    - 关不掉系统栏的显示本身，也关不掉返回手势。
+  - 用 `send-disable-flag` 设的状态挂在 system_server 的固定 token 上：应用崩溃后不会自动恢复，而且对全机生效。`disable` 则可以用我们应用的 Binder 作为 token，应用一死就自动解除。
+- **排除掉的手段**：屏幕固定或锁定任务（太重，又不拦主页手势）；`policy_control`（Android 12 起已删除）；切换导航模式（全局生效，要几秒）；调试属性。
+- **同类项目**：Termux:X11、Moonlight、bVNC 都只靠原生的沉浸模式，没有自己做“两段式”。
+
+**拟定方案**（待用户确认、实机验证）：
+- **不需要 root 的部分**：
+  - 应用自己按系统同样的阈值识别边缘滑动。第一次交给 Linux，并打开约 1.5 秒的“交给安卓”窗口；窗口内的第二次交给安卓。
+  - 左右边：沉浸状态下整条边都设为排除区，第二次滑动时由应用自己执行返回时的动作（左边打开菜单，右边发 Alt+Left）。
+  - 剩下的问题：第一次滑动时半透明系统栏仍会闪现。
+- **需要 root 的部分（可选，实现“第一次安卓什么都不显示”）**：
+  - Rungic 在前台时，由常驻 root 助手用应用的 Binder 作为 token 调用 `disable`：清空系统栏内容，关掉回主页、最近任务和通知栏下拉；
+  - 第一次滑动后立即解除，让第二次滑动生效；
+  - 应用暂停、失去焦点或退出时一律恢复；应用一死，token 失效，自动解除。
+
+**需要实机核对的项目**：
+- Moto 上的侧边配置、各项阈值和自动隐藏时长（看 `dumpsys activity service com.android.systemui` 和桌面的 TouchInteractionService）；
+- 每条边第一次滑动时，触摸实际交给了哪个窗口（`getevent` 加 `dumpsys input`）；
+- root 标志的显示效果和切换延迟；
+- 崩溃以后能否恢复；
+- 输入法打开时、手机旋转后的表现。
+
+## 19. 方案：桌面模式改为独立的 KWin（2026-10-03，用户决定，待确认细节）
+
+**决定**：桌面模式不再是用户 KWin 里的第二块输出 CAST-n，改为和助理屏一样的独立 KWin。原因：
+- 同一个 KWin 里的中转窗口会被 KWin 当作“别的应用”：一碰就关菜单（`PopupInputFilter::touchDown`）、抢走焦点；
+- 独立的 KWin 天然没有这个问题，输入从外面送进去，和真鼠标、真副屏一样。
+
+**现状**（梳理结果，详见当时的调查）：
+- **桌面模式**：
+  - APK 的 `desktop-mode` 让宿主给用户 KWin 一块 Cast 输出（`cast.rs` `sync_user_cast`）；
+  - Plasma Mobile 的 external-screen 补丁在第二块屏上放一个桌面外壳（Folder View 桌面加任务栏）；
+  - 浮窗和全屏用 `zkde_screencast` 录这块输出，用 fake input 送鼠标；
+  - 电视的“电脑模式”就是呈现这块输出（来源 0）。
+- **助理屏工作区**：
+  - `kwin_wayland --virtual`（1920×1080，KGSL）；
+  - 私有 D-Bus 和私有 `XDG_CONFIG_HOME`；
+  - 里面只有壁纸（`rungic-workspace-desktop`），没有 plasmashell、通知、剪贴板同步和输入法；
+  - 画面流带指针，输入走 fake input（只有鼠标，没有键盘）；电视通过呈现器。
+- **依赖 CAST 的地方**：
+  - `rungic_cua` 的 `desktop_in_use`、`launch` 的 CAST 前缀、`agent_output`；
+  - `audio-follow` 按窗口是否在 CAST 上分配声音；
+  - 验收里的 `desktop_mode_output`、提示词和技能文档；
+  - §17 计划中“电视等于 CAST 输出加导播台窗口”这一点。
+
+**拟定方案（分阶段）**：
+1. **桌面实例**：
+   - 新增一种独立的 KWin，例如 `rungic-desktop.service`。复用工作区的启动方式：virtual 后端、KGSL、私有总线，Wayland socket 为 `wayland-desktop`。
+   - 里面运行完整的 Plasma 桌面外壳（plasmashell 的桌面版，带任务栏、通知、系统托盘）。
+   - 用户配置与手机共享，桌面布局单独保存。
+   - 生命周期随桌面模式开关，不会因闲置被关闭。
+2. **浮窗和全屏**：
+   - 改用工作区那种画面流（`rungic-workspace-stream` 的同一套）；
+   - 触摸屏模式下画面不带光标，触控板模式下带系统光标；流的指针模式可切换，切换时不闪黑。
+   - 输入从外面送进这个实例。
+3. **键盘和输入法**：把安卓输入法的文字和按键送进桌面实例（经它的输入法或虚拟键盘接口）。助理屏以后也可以复用这条路。
+4. **电视**：“电脑模式”改为呈现桌面实例，和工作区同一套呈现路径；导播台不变。§17 中“电视等于 CAST 输出”的设想相应修改。
+5. **剪贴板和声音**：
+   - 剪贴板在手机会话和桌面实例之间双向同步；
+   - 声音沿用工作区的独立声道，桌面模式显示在哪里，声音就跟到哪里。
+6. **应用**：
+   - 在桌面实例里打开的应用就在桌面实例里运行；
+   - 微信、Firefox 这类同时只能运行一份的应用，在两边之间切换时沿用 `switch.py` 的“关掉再在另一边打开”；
+   - 手机上的应用不能再直接拖到桌面屏。
+7. **收尾**：
+   - 更新 `rungic_cua`、`audio-follow`、验收、提示词和文档；
+   - Plasma Mobile 的 external-screen 补丁保留，供接真显示器或在电脑上使用；
+   - Linux 全屏和光标的在途改动按新结构收拢；为 CAST 加的第二路录屏流不再需要。
+
+**待用户确认**：剪贴板同步、应用规则、配置共享、电视电脑模式、生命周期（见当天对话）。
+
+### 19.1 原型（2026-10-03，实机，用 9 号工作区临时验证）
+
+**用户确认**：剪贴板双向同步；应用在哪个实例打开就在哪里运行，单实例应用用 switch.py 的方式在两边切换；应用配置共用，桌面布局单独保存；电视“电脑模式”投独立桌面；生命周期随桌面模式开关（关闭时请应用退出，有未保存内容则通知、不强关）。
+
+**做法**：
+- 在工作区 KWin 里启动 `plasmashell -p org.kde.plasma.desktop --no-respawn`；
+- `XDG_CONFIG_HOME` 指向私有目录，里面链接用户 `~/.config` 的全部文件，只排除 `plasmashellrc`、`kwinrc`、`kwinoutputconfig.json`、`plasma-org.kde.plasma.desktop-appletsrc`、`plasma-mobile/`、`kdedefaults/`；
+- `XDG_CONFIG_DIRS` 去掉 plasma-mobile 那一层；去掉 `PLASMA_DEFAULT_SHELL` 和 `PLASMA_PLATFORM`。
+
+**为什么 plasmashell 必须用私有配置目录**：它的程序名在 `main.cpp` 的 `KAboutData` 里固定为 "plasmashell"，所以 `plasmashellrc`（面板尺寸、屏幕编号与接口的对应）和手机的移动版外壳是同一个文件，会互相覆盖。KWin 的 `kwinrc` 在 `main.cpp` 里同样写死了文件名。
+
+**结果**：
+- 完整的桌面起来了：开始菜单、固定的应用、图标任务管理器（Dolphin 运行时显示为活动）、托盘、时钟，壁纸和用户的相同。
+- 私有总线按需拉起了：通知（plasmashell）、klipper、门户（kde、gtk、kwallet）、kded6、ActivityManager、kglobalaccel、ksecretd（密码库）、plasma-nm、bluez-obex、dconf、StatusNotifierWatcher 等。
+
+**发现的问题**：
+1. ~~窗口盖住任务栏~~：**不是问题**，是截图方式造成的假象。`rungic-cua screenshot` 默认只截活动窗口（`server.py` `screenshot(scope='window')`），再按整屏尺寸输出。用 KWin 脚本打印的窗口信息：
+   - 任务栏是 dock，层级 3，位于 y=1018，高 62；
+   - Dolphin 是普通窗口，层级 2，最大化后为 1920×1034；
+   - 最大化可用区域给任务栏留出了底部。
+2. **重复的会话服务共用同一份数据**：
+   - ksecretd（密码库文件）有两个实例同时运行，有损坏数据的风险；
+   - kactivitymanagerd 共用同一个数据库；
+   - klipper 共用同一份历史文件；
+   - kglobalaccel、plasma-nm 也各起了一份。
+   - 需要逐项决定：转发到手机会话（密码库必须只有一个实例），还是给桌面实例单独一份（活动、klipper 历史），或者禁用。
+3. 日志里 `org.kde.plasma.icontasks` 缺少 `ui/main.qml`，但任务栏能正常工作，待查原因。
+
+### 19.2 0 号工作区：独立桌面（2026-10-03，实机验收）
+
+**身份**：独立桌面就是工作区 0。宿主、APK 和导播台里，0 号本来就代表“电脑模式”；`rungic-workspace-env 0`、声音、无障碍总线等工具都能直接复用。
+
+**和助理屏工作区的不同**（`rungic-workspace`，slot 0 分支）：
+- 配置和数据：`XDG_CONFIG_HOME`、`XDG_DATA_HOME` 都是镜像目录（`rungic-desktop-dirs`）。
+  - 里面每一项都是指向用户 `~/.config`、`~/.local/share` 的链接；
+  - 例外是桌面独有的几项：KWin 和桌面外壳的状态（文件名写死，手机的 KWin 和 Plasma Mobile 也写同名文件）、全局快捷键、活动数据、kded、klipper 历史、kscreen，以及手机专用的 plasma-mobile 配置层。
+  - `watch` 每 3 秒同步一次：桌面这边新建、并且已经放置 10 秒的文件挪回用户目录，再换成链接；手机那边新增或删除的文件，桌面这边跟着增删链接。
+  - 实测 KConfig（`kwriteconfig6`）会顺着链接写，链接保留，写的就是用户的原文件。
+  - `XDG_STATE_HOME`、`XDG_CACHE_HOME` 是桌面私有的。
+- 去掉 `PLASMA_DEFAULT_SHELL`、`PLASMA_PLATFORM`，所以桌面里的程序按桌面形态运行。
+- 桌面外壳：运行 `plasmashell -p org.kde.plasma.desktop`，退出后自动重启；不启用看守进程（不冻结，也不因闲置关闭）。
+- 总线：`dbus/desktop.conf`。服务目录 `desktop-services` 排在最前，把 `org.freedesktop.secrets`、`org.kde.kwalletd6`、`org.kde.kwalletd5`、`org.kde.secretservicecompat` 和 kwallet 门户后端交给 `rungic-bus-forward`。
+- `rungic-bus-forward`：在桌面总线上占住这些名字，每个调用原样转给用户总线上的同名服务（需要时由那边启动），回复、错误和信号原样转回。测试见 `tools/tests/test_bus_forward.py`：两条真实总线，覆盖调用、错误名和信息、自省、信号。
+- RemoteSurface 屏幕登记：`ws-0`，名称 "Computer desktop"，类型 desktop。
+
+**实机验收**（G100 S，0 号以无头方式运行，不显示在手机上）：
+- 单元处于 active；plasmashell 在运行；截图里有完整的桌面（任务栏、开始菜单、固定应用、托盘、时钟、用户壁纸）。
+- 在桌面总线和手机总线上查询 `org.freedesktop.Secret.Service.Collections`，结果相同；桌面那边占用该名字的是 `rungic-bus-forward`；整台手机只有 1 个 ksecretd。
+- 活动数据库在桌面私有目录；`kdeglobals` 链接到用户文件；`kwinrc` 是桌面私有的。
+- 停止单元后，相关进程全部退出。
+- 内存：0 号运行时手机可用内存约 2.5 GB。
+
+**下一步**：
+- 剪贴板双向同步；
+- 键盘和输入法；
+- 把桌面模式的开关、浮窗、全屏接到 0 号，按规则处理光标；
+- 电视的电脑模式改投 0 号；
+- 声音跟随，以及适配看守进程；
+- 更新 `rungic_cua` 等依赖。
