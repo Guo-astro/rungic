@@ -818,3 +818,10 @@ APK 进程提供：`platform.sock`、`capture.sock`、`codec.sock`、`wayland-0`
 - 发语音消息时，要求活动窗口在 Agent 当前工作的那块输出上，不再要求它在 CAST 上（以前在工作区里会误报）。
 - 提示词（`agent.md`）和技能 `rungic-phone-desktop` 都按新的桌面模式更新。
 - `test_router.py` 按新模型改写。
+
+**实机验收（2026-10-03 01:15 之后，会话重启以加载 KWin 补丁）**：
+- `rungic_plasma.py restart-session` 报告 “Desktop did not become ready”，但会话实际已重启：KWin 新启动，plasmashell 在运行，桌面模式浮窗自动恢复（0 号不属于图形会话，重启期间一直在运行）。
+- 全屏后点键盘按钮：屏幕键盘出现在全屏画面上面（`VirtualKeyboard.visible=true`，截图可见），补丁生效。
+- **新问题**：全屏画面是在窗口里转成横向的，而屏幕键盘仍按手机竖屏排布，用户横握手机时键盘是侧着的。待处理。
+- 收尾：键盘已收起、已退出全屏；用户的触控板设置仍为 true。
+- 电视的电脑模式由用户实测。
