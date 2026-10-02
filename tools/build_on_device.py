@@ -33,6 +33,7 @@ import io
 import json
 import os
 import re
+import shlex
 import subprocess
 import tarfile
 import time
@@ -94,10 +95,17 @@ class MacMini:
     SSH = ['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', 'choukevin@macmini.wire.net']
     DOCKER = '/usr/local/bin/docker'
     CONTAINER = 'rungic-build'
-    # The phone reaches the build container directly over the LAN with its own restricted key
-    # (tools/pq/rungic-transfer, docs/71): put DIR / get FILE under /root/rungic-build.
-    PHONE_SSH = ('ssh -i /root/.ssh/id_ed25519_buildhost -o BatchMode=yes -o ConnectTimeout=10 '
-                 '-o StrictHostKeyChecking=accept-new choukevin@192.168.5.45')
+    # The phone reaches the build container directly with its own restricted key
+    # (tools/pq/rungic-transfer, docs/71): put DIR / get FILE under /root/rungic-build. Devices
+    # that reach each other directly exchange files directly (AGENTS.md): over wire.net or the
+    # LAN, whichever answers (ssh's own failure is 255). Not macmini.wire.net: the container's
+    # DNS answers it with public addresses. A shell command, used as `{PHONE_SSH} get FILE`.
+    PHONE_HOSTS = ('10.77.0.20', '192.168.5.45')
+    PHONE_SSH = ("sh -c 'for h in " + ' '.join(PHONE_HOSTS) + "; do "
+                 "ssh -i /root/.ssh/id_ed25519_buildhost -o BatchMode=yes -o ConnectTimeout=5 "
+                 "-o StrictHostKeyChecking=accept-new choukevin@$h \"$@\"; rc=$?; [ $rc = 255 ] || exit $rc; "
+                 "done; exit 255' rungic-buildhost")
+    DEV_POOL = 'dev-pool'               # under BASE: built files kept for the phone (rungic_dev.py)
     ready = False
     proxy_env = None
 
@@ -201,6 +209,30 @@ class MacMini:
             if len(data) == int(size) and hashlib.sha256(data).hexdigest() == digest:
                 return
         raise rungic_device.DeviceError(f'{path}: copy from {self.name} incomplete ({len(data)} of {size} bytes)')
+
+    def keep_for_phone(self, path, name):
+        """Keep a built .deb in the container as DEV_POOL/name, for the phone to take straight from
+        here (rungic_release.sync_repo): -> {'path', 'size', 'sha256', 'stanza'}, its entry of a
+        flat repository's Packages (Filename ./name, as rungic_release.index writes)."""
+        self.ensure()
+        pool = f'{BASE}/{self.DEV_POOL}'
+        out = self.out(f'''set -e
+mkdir -p {pool}/.scan && cd {pool}/.scan && rm -f ./*.deb
+cp {path} ../{name}.part && mv ../{name}.part ../{name} && ln ../{name} {name}
+stat -c %s {name}; sha256sum < {name} | cut -d" " -f1
+dpkg-scanpackages -m . /dev/null 2>/dev/null
+rm -f {name}''', 600)
+        size, digest, stanza = out.split('\n', 2)
+        if f'Filename: ./{name}' not in stanza:
+            raise rungic_device.DeviceError(f'{name}: no Packages entry from dpkg-scanpackages')
+        return {'path': f'{self.DEV_POOL}/{name}', 'size': int(size), 'sha256': digest.strip(),
+                'stanza': stanza.strip('\n') + '\n\n'}
+
+    def prune_kept(self, keep):
+        """Remove the files kept for the phone but those named."""
+        names = ' '.join(shlex.quote(n) for n in sorted(keep))
+        self.run(f'''cd {BASE}/{self.DEV_POOL} 2>/dev/null || exit 0
+for f in *.deb; do [ -e "$f" ] || continue; case " {names} " in *" $f "*) ;; *) rm -f "$f";; esac; done''', 120)
 
     def background(self, component, steps):
         work = f'{BASE}/{component}'

@@ -156,6 +156,25 @@ def installed_release():
     return version, info
 
 
+def taker(host):
+    """Where the build host's .debs go: a Mac mini keeps them, and the phone takes them straight from
+    it at sync (AGENTS.md: devices that reach each other exchange files directly; through this
+    computer a 67 MB package took 2-10 minutes). Here only <deb>.remote, its Packages entry and
+    checksum. None: fetched here as before (a build on the phone)."""
+    if not hasattr(host, 'keep_for_phone'):
+        return None
+
+    def take(remote, target):
+        kept = host.keep_for_phone(remote, target.name)
+        Path(str(target) + rungic_release.REMOTE).write_text(json.dumps(kept, ensure_ascii=False) + '\n')
+        target.unlink(missing_ok=True)
+    return take
+
+
+def in_pool(name):
+    return (POOL / name).exists() or (POOL / (name + rungic_release.REMOTE)).exists()
+
+
 def build(names, host, stamp, record):
     """Development .debs of `names` from the working tree, in POOL. -> {name: override}"""
     import build_on_device
@@ -176,7 +195,7 @@ def build(names, host, stamp, record):
         dirty = package_dirty(pkg)
         version = dev_version(base_packages.get(name, '0'), stamp, commit, dirty)
         print(f'building {name} {version} ({pkg["build"]}{", on " + host if pkg["build"] == "device" else ""})', flush=True)
-        dev = {'version': version, 'dest': POOL}
+        dev = {'version': version, 'dest': POOL, 'take': taker(build_on_device.host)}
         started = time.time()
         deb = (rungic_package.build_host(pkg, None, dev) if pkg['build'] == 'host'
                else rungic_package.build_device(pkg, None, build_on_device.host.jobs, dev))
@@ -247,14 +266,15 @@ def build_upstream(name, component, base_packages, stamp, commit, record):
     file_version = version.split(':', 1)[-1]
     listing = host.out(f'cd {work} && ls *_{file_version}_*.deb *_{file_version}_*.ddeb 2>/dev/null || true').split()
     POOL.mkdir(parents=True, exist_ok=True)
+    take = taker(host) or host.get
     overrides = {}
     for binary in binaries:
         debs = [f for f in listing if f.startswith(f'{binary}_') and f.endswith('.deb')]
         if not debs:
             raise SystemExit(f'{name}: the build made no {binary}_{file_version} package')
-        host.get(f'{work}/{debs[0]}', POOL / debs[0])
+        take(f'{work}/{debs[0]}', POOL / debs[0])
         for symbols in (f for f in listing if f.startswith(f'{binary}-dbgsym_')):
-            host.get(f'{work}/{symbols}', POOL / (symbols[:-5] + '.deb' if symbols.endswith('.ddeb') else symbols))
+            take(f'{work}/{symbols}', POOL / (symbols[:-5] + '.deb' if symbols.endswith('.ddeb') else symbols))
         overrides[binary] = {'version': version, 'commit': git('rev-parse', 'HEAD'), 'dirty': dirty,
                              'built': datetime.datetime.now().isoformat(timespec='seconds'), 'file': debs[0],
                              'component': name}
@@ -286,6 +306,16 @@ def prune(info):
     for deb in POOL.glob('*.deb'):
         if deb.name not in keep:
             deb.unlink()
+    kept = rungic_release.kept_files(POOL)
+    for name in set(kept) - keep:
+        (POOL / (name + rungic_release.REMOTE)).unlink()
+    if kept:
+        # And on the build host, what the phone has taken already for earlier overlays.
+        import build_on_device
+        try:
+            build_on_device.MacMini().prune_kept(set(kept) & keep)
+        except (DeviceError, OSError, subprocess.SubprocessError) as error:
+            print(f'build host not pruned: {error}', flush=True)
 
 
 def restarts(info, before, after, restart, record):
@@ -382,7 +412,7 @@ def deploy(names, host, restart):
     earlier = info.get('dev', {}).get('overrides', {})
     if set(earlier) - set(overrides):
         # Earlier overrides stay: their .debs are still in the pool (a reset takes them back).
-        missing = [n for n in set(earlier) - set(overrides) if not (POOL / earlier[n]['file']).exists()]
+        missing = [n for n in set(earlier) - set(overrides) if not in_pool(earlier[n]['file'])]
         if missing:
             raise SystemExit(f'earlier overrides {missing} are not in {POOL} any more: deploy or reset them too')
     new = overlay_info(info, {**earlier, **overrides}, stamp)

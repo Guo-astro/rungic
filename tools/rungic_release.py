@@ -52,6 +52,7 @@ from rungic_device import DeviceError, WORKSPACE, out, push, run
 SPEC = WORKSPACE / 'release/packages.json'
 APT = WORKSPACE / '.work/apt'
 POOL = APT / 'repo'                  # flat repository: .debs, Packages, Release
+REMOTE = '.remote'   # <name>.deb.remote: a .deb kept on the build host for the phone (tools/rungic_dev.py)
 RELEASES = APT / 'releases'          # <version>.json: what each metapackage pins
 DEPLOY = WORKSPACE / '.work/deploy'
 HISTORY = DEPLOY / 'history.json'
@@ -262,6 +263,9 @@ def index(pool=None, label='rungic'):
                    'apt-ftparchive']
     packages = subprocess.run([*archive, 'packages', '.'], cwd=POOL, capture_output=True,
                               check=True).stdout
+    # .debs kept on the build host for the phone (REMOTE): their entries, made where they are.
+    for kept in sorted(POOL.glob('*.deb' + REMOTE)):
+        packages += json.loads(kept.read_text())['stanza'].encode()
     (POOL / 'Packages').write_bytes(packages)
     (POOL / 'Packages.gz').write_bytes(gzip.compress(packages, mtime=0))
     (POOL / 'Packages.xz').write_bytes(lzma.compress(packages))
@@ -392,13 +396,37 @@ def integrity_summary():
     return report
 
 
+def kept_files(pool):
+    """name -> its record, for the .debs of `pool` kept on the build host (REMOTE)."""
+    return {p.name[:-len(REMOTE)]: json.loads(p.read_text()) for p in pool.glob('*.deb' + REMOTE)}
+
+
+def fetch_kept(kept, device_repo):
+    """The phone takes the .debs kept on the build host straight from it (AGENTS.md: devices that
+    reach each other exchange files directly), checked by size and SHA-256, three tries each."""
+    import build_on_device
+    lines = ['set -e', f'cd {device_repo}', 'take() {', '  for try in 1 2 3; do',
+             f'    {build_on_device.MacMini.PHONE_SSH} get "$2" > "$1.part" || true',
+             '    if [ "$(stat -c %s "$1.part")" = "$3" ] && [ "$(sha256sum < "$1.part" | cut -d" " -f1)" = "$4" ]; then',
+             '      mv "$1.part" "$1"; return 0; fi', '  done', '  rm -f "$1.part"; echo "$1: not taken from the build host" >&2; return 1', '}']
+    lines += [f'take {shlex.quote(name)} {shlex.quote(k["path"])} {k["size"]} {k["sha256"]}'
+              for name, k in sorted(kept.items())]
+    run('\n'.join(lines), 'container', timeout=600 + 120 * len(kept))
+
+
 def sync_repo(pool=None, device_repo=None):
     """Mirror .work/apt/repo to /var/lib/rungic-apt: push missing .debs, replace the index.
-    pool and device_repo: the development overlay's repositories (tools/rungic_dev.py)."""
+    pool and device_repo: the development overlay's repositories (tools/rungic_dev.py), where a
+    .deb may be kept on the build host (REMOTE): the phone takes it from there."""
     POOL, DEVICE_REPO = pool or globals()['POOL'], device_repo or globals()['DEVICE_REPO']
     listing = run(f'mkdir -p {DEVICE_REPO} && cd {DEVICE_REPO} && ls -1', 'container').stdout.split()
-    local = {p.name for p in POOL.iterdir() if p.is_file()}
-    send = sorted((local - set(listing)) | {'Packages', 'Packages.gz', 'Packages.xz', 'Release'})
+    kept = kept_files(POOL)
+    here = {p.name for p in POOL.iterdir() if p.is_file() and not p.name.endswith(REMOTE)}
+    local = here | set(kept)
+    fetch = {name: k for name, k in kept.items() if name not in listing}
+    if fetch:
+        fetch_kept(fetch, DEVICE_REPO)
+    send = sorted((here - set(listing)) | {'Packages', 'Packages.gz', 'Packages.xz', 'Release'})
     remove = sorted(set(listing) - local)
     buffer = io.BytesIO()
     with tarfile.open(fileobj=buffer, mode='w') as tar:
@@ -413,7 +441,7 @@ def sync_repo(pool=None, device_repo=None):
 chown -R root:root {DEVICE_REPO}; chmod 755 {DEVICE_REPO}
 cd {DEVICE_REPO} && rm -f {' '.join(map(shlex.quote, remove)) or '/dev/null/none 2>/dev/null || true'}''',
         'container', check=False)
-    return {'sent': len(send), 'removed': len(remove)}
+    return {'sent': len(send), 'fetched': len(fetch), 'removed': len(remove)}
 
 
 def ensure_apt_source():

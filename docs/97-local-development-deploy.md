@@ -45,6 +45,14 @@
 - **构建**：
   - `rungic_package.py` 的 `build_host` 和 `build_device` 新增开发模式：直接用工作区的内容，包括未提交的改动，以及 git 不忽略的新文件；版本由调用方给出。
   - 产物放到 `.work/apt/dev`，不进入发布仓库，也不写 `project-builds.json`。
+- **传输：手机直接从 Mac mini 取包（2026-10-03，用户要求；AGENTS.md“设备之间直接传输”）**：
+  - Mac mini 上构建的包（项目包、上游组件及其 dbgsym）不再拉回 K8：构建容器把它们留在 `/root/rungic-build/dev-pool/`，生成该包的 Packages 条目（`dpkg-scanpackages`）、大小和 SHA-256。
+  - K8 的 `.work/apt/dev` 里只放 `<包>.deb.remote` 记录；`rungic_release.index` 把这些条目并进 Packages。
+  - 同步时手机经受限密钥（`tools/pq/rungic-transfer get`）直接取，依次试 wire.net（`10.77.0.20`）和局域网（`192.168.5.45`）地址。每个文件核对大小和 SHA-256，最多三次。小文件（开发元包、在 K8 构建的包、索引）仍由 K8 发送。
+  - 被新覆盖替换掉的包，在 `prune` 时从 K8 的记录和 Mac mini 的 `dev-pool` 一并删掉。
+  - 原因：rungic-cua 有 67 MB（带 OCR 用的 OpenCV 和模型）。经 K8 中转时，Mac mini → K8 只有 0.1–0.5 MB/s，K8 → 手机又要 2.5–3 分钟；2026-10-03 一次 K8 → 手机的 tar 还中途断开（`Unexpected EOF`）。手机直接取实测约 12 MB/s，67 MB 用 5.6 秒。
+  - 在手机上构建（`--host phone`）时照旧取回 K8。
+  - 实测（2026-10-03，rungic-firefox、rungic-agent-screen、rungic-cua）：同步一步 25 秒（手机取 4 个包，K8 发 6 个小文件），此前同样三个包要 3 分多钟；rungic-cua 的构建一步 104 秒，此前含拉回 K8 为 224–622 秒。整次部署约 5.5 分钟，此前约 21 分钟。剩下较长的是安装后的验证（约 76 秒）。
 - **开发元包**：`rungic-release=<发布>+dev<UTC 时间>`。
   - 依赖取发布的全部精确依赖，只把被覆盖的包换成开发版本。它和发布元包一样带 `Protected: yes`。
   - 其中的 `/usr/share/rungic/release.json` 记录基线发布及其包清单（`dev.base`、`dev.base_packages`），以及每个覆盖的版本、提交、是否 dirty 和构建时间。

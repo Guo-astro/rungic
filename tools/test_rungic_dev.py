@@ -121,5 +121,94 @@ class UpstreamTests(unittest.TestCase):
         self.assertTrue(all(c['source'].startswith('packages/') and c.get('version') for c in components.values()))
 
 
+class KeptOnBuildHostTests(unittest.TestCase):
+    """A Mac mini keeps the .debs it built; the phone takes them straight from it (AGENTS.md)."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.pool = Path(self.temp.name)
+        self.addCleanup(self.temp.cleanup)
+
+    def test_taker_leaves_a_record_not_the_deb(self):
+        class Host:
+            def keep_for_phone(self, path, name):
+                return {'path': f'dev-pool/{name}', 'size': 3, 'sha256': 'ab', 'stanza': f'Package: x\nFilename: ./{name}\n\n'}
+        take = rungic_dev.taker(Host())
+        take('/root/rungic-build/packages/x/x_1_arm64.deb', self.pool / 'x_1_arm64.deb')
+        self.assertFalse((self.pool / 'x_1_arm64.deb').exists())
+        self.assertEqual(json.loads((self.pool / 'x_1_arm64.deb.remote').read_text())['path'], 'dev-pool/x_1_arm64.deb')
+        self.assertIsNone(rungic_dev.taker(object()))       # a build on the phone: fetched here as before
+
+    def test_sync_sends_what_is_here_and_the_phone_takes_the_rest(self):
+        for name in ('meta_1_all.deb', 'Packages', 'Packages.gz', 'Packages.xz', 'Release'):
+            (self.pool / name).write_text(name)
+        (self.pool / 'big_1_arm64.deb.remote').write_text(json.dumps({'path': 'dev-pool/big_1_arm64.deb', 'size': 9,
+                                                                    'sha256': 'cd', 'stanza': ''}))
+        sent, fetched, scripts = [], [], []
+
+        def run(script, level, **kwargs):
+            scripts.append(script)
+            return subprocess.CompletedProcess(script, 0, 'old_1_arm64.deb\n' if 'ls -1' in script else '', '')
+
+        def extract(archive, dest):
+            import tarfile
+            with tarfile.open(archive) as tar:
+                sent.extend(tar.getnames())
+        saved = (rungic_release.run, rungic_release.fetch_kept, rungic_release.rungic_device.extract_in_container)
+        rungic_release.run = run
+        rungic_release.fetch_kept = lambda kept, repo: fetched.extend(kept)
+        rungic_release.rungic_device.extract_in_container = extract
+        try:
+            result = rungic_release.sync_repo(self.pool, '/var/lib/rungic-apt-dev')
+        finally:
+            rungic_release.run, rungic_release.fetch_kept, rungic_release.rungic_device.extract_in_container = saved
+        self.assertEqual(fetched, ['big_1_arm64.deb'])
+        self.assertIn('meta_1_all.deb', sent)
+        self.assertFalse([n for n in sent if n.endswith('.remote') or n.startswith('big_')])
+        self.assertEqual(result, {'sent': 5, 'fetched': 1, 'removed': 1})
+        self.assertIn('old_1_arm64.deb', scripts[-1])          # the phone's stale file goes
+
+    def test_fetch_checks_size_and_hash_over_either_way(self):
+        scripts = []
+        saved = rungic_release.run
+        rungic_release.run = lambda script, level, **kwargs: scripts.append(script)
+        try:
+            rungic_release.fetch_kept({'big_1_arm64.deb': {'path': 'dev-pool/big_1_arm64.deb', 'size': 9, 'sha256': 'cd'}},
+                                      '/var/lib/rungic-apt-dev')
+        finally:
+            rungic_release.run = saved
+        self.assertIn('take big_1_arm64.deb dev-pool/big_1_arm64.deb 9 cd', scripts[0])
+        self.assertIn('10.77.0.20 192.168.5.45', scripts[0])
+        self.assertIn('sha256sum', scripts[0])
+
+    def test_index_has_the_kept_entries(self):
+        (self.pool / 'big_1_arm64.deb.remote').write_text(json.dumps(
+            {'stanza': 'Package: big\nVersion: 1\nArchitecture: arm64\nFilename: ./big_1_arm64.deb\nSize: 9\n\n'}))
+        rungic_release.index(self.pool, 'rungic-dev')
+        self.assertIn('Filename: ./big_1_arm64.deb', (self.pool / 'Packages').read_text())
+
+    def test_prune_drops_old_records(self):
+        info = rungic_dev.overlay_info(RELEASE, {'rungic-design': {'version': '0.510+dev1', 'file': 'rungic-design_0.510+dev1_arm64.deb'}}, '1')
+        for name in ('rungic-design_0.510+dev1_arm64.deb', 'rungic-design_0.510+dev0_arm64.deb'):
+            (self.pool / (name + rungic_release.REMOTE)).write_text('{}')
+        saved_pool, saved_mac = rungic_dev.POOL, rungic_dev_build_host()
+        rungic_dev.POOL = self.pool
+        pruned = []
+        import build_on_device
+        build_on_device.MacMini.prune_kept = lambda self, keep: pruned.append(keep)
+        try:
+            rungic_dev.prune(info)
+        finally:
+            rungic_dev.POOL = saved_pool
+            build_on_device.MacMini.prune_kept = saved_mac
+        self.assertEqual(sorted(p.name for p in self.pool.iterdir()), ['rungic-design_0.510+dev1_arm64.deb.remote'])
+        self.assertEqual(pruned, [{'rungic-design_0.510+dev1_arm64.deb'}])
+
+
+def rungic_dev_build_host():
+    import build_on_device
+    return build_on_device.MacMini.prune_kept
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -265,7 +265,9 @@ def record(pkg, version, deb, tree):
 
 def build_host(pkg, tree, dev=None):
     """dev: {'version': ..., 'dest': Path} for a development build (tools/rungic_dev.py): the working
-    tree as it is, that version, the .deb in dest; nothing goes to the release pool or its records."""
+    tree as it is, that version, the .deb in dest; nothing goes to the release pool or its records.
+    A device build's dev may have 'take': take(path on the build host, dest / name) instead of
+    copying the .deb here."""
     epoch = git('log', '-1', '--format=%ct')
     work = Path(tempfile.mkdtemp(dir=WORKSPACE / '.work/cache', prefix=f"{pkg['name']}-"))
     try:
@@ -475,6 +477,9 @@ dpkg-deb --root-owner-group -Zxz --build dbgsym {dbg_name} >/dev/null''', 'conta
         debs.append(dbg_name)
     dest = dev['dest'] if dev else rungic_release.POOL
     for deb in debs:
+        if dev and dev.get('take'):
+            dev['take'](f'{base}/{deb}', dest / deb)   # kept where it is, for the phone (rungic_dev.py)
+            continue
         local = WORKSPACE / f'.work/cache/{deb}'
         host.get(f'{base}/{deb}', local)
         shutil.move(local, dest / deb)
