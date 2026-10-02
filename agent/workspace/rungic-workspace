@@ -13,6 +13,11 @@ runtime=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
 failed=$runtime/rungic-workspace-$slot.failed
 rm -f "$failed"
 fail() { echo "workspace $slot: $1" >&2; echo "$1" > "$failed"; exit 1; }
+# Headless (RUNGIC_WORKSPACE_BACKEND=virtual, docs/research/97 approach C): KWin's virtual backend
+# on the phone's GPU, with no Android host, so the workspace runs while the phone is asleep and the
+# Rungic app frozen. Its picture reaches the phone and remote viewers by screencast (PipeWire).
+backend=${RUNGIC_WORKSPACE_BACKEND:-android}
+if [ "$backend" = virtual ]; then :; else
 [ -S "$host" ] || fail "the host does not offer $host (APK 2.14 or later)"
 # The host must answer before KWin connects: a frozen Rungic app (the phone asleep: Motorola's
 # freezer, docs/research/97) takes the connection but never the first roundtrip, and KWin and every
@@ -28,6 +33,7 @@ try:
 except (OSError, ValueError):
     sys.exit(1)
 PROBE
+fi
 
 # The GPU as the phone's KWin has it (desktop/kwin): Mesa's KGSL driver, and the host's output
 # buffers in Adreno UBWC, which KWin cannot render into without FD_KGSL_DMABUF_UBWC (EGL_BAD_MATCH).
@@ -89,8 +95,15 @@ dbus-daemon --config-file=/usr/share/rungic-workspace/dbus-1/session.conf --nofo
 dbusd=$!
 for i in $(seq 50); do [ -S "$bus" ] && break; sleep 0.1; done
 export DBUS_SESSION_BUS_ADDRESS="unix:path=$bus"
-kwin_wayland --android-host --android-workspace --wayland-display="$host" \
-    --socket "wayland-ws-$slot" --xwayland --no-lockscreen --no-global-shortcuts --no-kactivities &
+if [ "$backend" = virtual ]; then
+    # The size the host gives a workspace (the app's AGENT_SCREEN_SIZE); the GPU named, as KGSL is
+    # not a DRM device (KWin's virtual-render-device patch).
+    RUNGIC_KWIN_RENDER_DEVICE=/dev/kgsl-3d0 kwin_wayland --virtual --width 1920 --height 1080 \
+        --socket "wayland-ws-$slot" --xwayland --no-lockscreen --no-global-shortcuts --no-kactivities &
+else
+    kwin_wayland --android-host --android-workspace --wayland-display="$host" \
+        --socket "wayland-ws-$slot" --xwayland --no-lockscreen --no-global-shortcuts --no-kactivities &
+fi
 kwin=$!
 # Stopped while its keeper had frozen the apps: thawed first, or they would not end on their signal.
 # (On the user's bus: this one's has no systemd.)

@@ -1,0 +1,98 @@
+From: clawd20130 <clawd20130@gmail.com>
+Date: Fri, 2 Oct 2026 12:55:45 +0900
+Subject: Virtual backend: render on a named GPU node that is not a DRM device
+
+RUNGIC_KWIN_RENDER_DEVICE names the GPU node the virtual backend renders on (e.g. KGSL's
+/dev/kgsl-3d0 in an Android container): libdrm does not list such a node, so the backend found no
+device and fell back to QPainter (no screencast, no ScreenShot2, no dmabuf). The EGL display is
+told the node (EGL cannot tell on a non-DRM device) and clients get zwp_linux_dmabuf_v1 v3 at
+most, as with the Android backend: v4 and later name the render node as main device, which
+clients' Mesa cannot use. Unset, nothing changes.
+
+Agent workspaces use it to run with no Android host, so they keep working while the phone is
+asleep and the Rungic app frozen (docs/research/97, approach C).
+
+Forwarded: no
+Last-Update: 2026-10-02
+X-Rungic-Status: Pending [generic: virtual backend on non-DRM GPU nodes]
+X-Rungic-Tests: L3:workspace.headless
+X-Rungic-Docs: docs/research/97
+Origin: vendor
+---
+ src/backends/virtual/virtual_backend.cpp     | 23 +++++++++++++++++++++++
+ src/backends/virtual/virtual_backend.h       |  3 +++
+ src/backends/virtual/virtual_egl_backend.cpp |  4 +++-
+ 3 files changed, 29 insertions(+), 1 deletion(-)
+
+diff --git a/src/backends/virtual/virtual_backend.cpp b/src/backends/virtual/virtual_backend.cpp
+index 93f8a00..f639ac6 100644
+--- a/src/backends/virtual/virtual_backend.cpp
++++ b/src/backends/virtual/virtual_backend.cpp
+@@ -21,8 +21,19 @@
+ namespace KWin
+ {
+ 
++// A GPU that is not a DRM device (Qualcomm's KGSL in an Android container): libdrm does not list
++// it, so it is named. Agent workspaces render there with no Android host (docs/research/97).
++static QString namedRenderDevice()
++{
++    return qEnvironmentVariable("RUNGIC_KWIN_RENDER_DEVICE");
++}
++
+ static std::unique_ptr<DrmDevice> findRenderDevice()
+ {
++    if (const QString named = namedRenderDevice(); !named.isEmpty()) {
++        return DrmDevice::open(named);
++    }
++
+ #if !HAVE_LIBDRM_FAUX
+ #if defined(Q_OS_LINUX)
+     // Workaround for libdrm being unaware of faux bus.
+@@ -102,6 +113,18 @@ DrmDevice *VirtualBackend::drmDevice() const
+     return m_drmDevice.get();
+ }
+ 
++QString VirtualBackend::renderDevicePath() const
++{
++    return namedRenderDevice();
++}
++
++int VirtualBackend::maxLinuxDmabufVersion() const
++{
++    // v4 and later name the render node as clients' main device; clients' Mesa cannot use a KGSL
++    // node (the Android backend's rule, src/backends/android).
++    return namedRenderDevice().isEmpty() ? OutputBackend::maxLinuxDmabufVersion() : 3;
++}
++
+ std::unique_ptr<QPainterBackend> VirtualBackend::createQPainterBackend()
+ {
+     return std::make_unique<VirtualQPainterBackend>(this);
+diff --git a/src/backends/virtual/virtual_backend.h b/src/backends/virtual/virtual_backend.h
+index ca9b526..08d6972 100644
+--- a/src/backends/virtual/virtual_backend.h
++++ b/src/backends/virtual/virtual_backend.h
+@@ -58,6 +58,9 @@ public:
+     EglDisplay *sceneEglDisplayObject() const override;
+ 
+     DrmDevice *drmDevice() const;
++    /// The GPU node named by RUNGIC_KWIN_RENDER_DEVICE (a non-DRM node such as KGSL), or empty.
++    QString renderDevicePath() const;
++    int maxLinuxDmabufVersion() const override;
+ 
+ Q_SIGNALS:
+     void virtualOutputsSet(bool countChanged);
+diff --git a/src/backends/virtual/virtual_egl_backend.cpp b/src/backends/virtual/virtual_egl_backend.cpp
+index 40c4288..cdfceca 100644
+--- a/src/backends/virtual/virtual_egl_backend.cpp
++++ b/src/backends/virtual/virtual_egl_backend.cpp
+@@ -128,7 +128,9 @@ bool VirtualEglBackend::initializeEgl()
+             }
+         }
+ 
+-        m_backend->setEglDisplay(EglDisplay::create(eglGetPlatformDisplayEXT(EGL_PLATFORM_GBM_KHR, m_backend->drmDevice()->gbmDevice(), nullptr)));
++        // A named device: EGL cannot tell which node it is (Mesa reports a software device on KGSL).
++        m_backend->setEglDisplay(EglDisplay::create(eglGetPlatformDisplayEXT(EGL_PLATFORM_GBM_KHR, m_backend->drmDevice()->gbmDevice(), nullptr),
++                                                    true, m_backend->renderDevicePath()));
+     }
+ 
+     auto display = m_backend->sceneEglDisplayObject();

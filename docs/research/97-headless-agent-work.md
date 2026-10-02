@@ -260,3 +260,33 @@ APK 进程提供：`platform.sock`、`capture.sock`、`codec.sock`、`wayland-0`
 - Plasma 会话随后正常。
 - 中途还修了 `ensure` 的一处问题：单元之前失败过、自动重启次数用完后，新的 `start` 会被 systemd 拒绝，脚本根本不运行，`ensure` 因此等满超时。现在先 `reset-failed` 再启动，单元一进入 failed 状态就停止等待。
 - **没有在实机上验证的**：`codec-client.c` 的超时（编译通过，没有构造 backlog 排满的场景）；`user_watching()` 的通知路径（还要在锁屏下实测团队通知）。
+
+## 10. 方案 C 第一步：无头工作区实机实验（2026-10-02 13:55–14:10）
+
+**实现**：
+- **KWin 补丁** `packages/kwin/debian/patches/rungic/virtual-render-device.patch`：设置 `RUNGIC_KWIN_RENDER_DEVICE` 后，virtual 后端打开指定的 GPU 节点，EGL 显示用这个节点，客户端最多拿到 dmabuf v3；不设置时行为不变。
+- **工作区脚本**：`RUNGIC_WORKSPACE_BACKEND=virtual` 时，以 `kwin_wayland --virtual --width 1920 --height 1080` 启动，`RUNGIC_KWIN_RENDER_DEVICE=/dev/kgsl-3d0`，不检查、不探测宿主。默认仍是 Android 后端。
+- **实验方式**：用 systemd drop-in 只给测试槽位 3 和 4 打开，测完已删除。
+- 测试脚本在 `.work/diag/headless/`。
+
+**结果**（实测）：
+
+| 项目 | 结果 |
+|---|---|
+| 启动 | 1.4 s 就绪 |
+| KWin 渲染 | OpenGL ES 3.2，渲染器 FD710（GPU，不是软件渲染） |
+| Xwayland | GLX 直接渲染，FD710，OpenGL 4.6 core |
+| 桌面工具（经 `rungic-cua mcp`，与 Agent 相同的路径） | `desktop_launch` 启动 Kalk 6.7 s；`desktop_windows` 看到它在 `Virtual-0` 上；`desktop_screenshot` 0.3 s |
+| 录屏（`rungic-workspace-stream` 的 PipeWire 节点） | 手动 `pw-link` 接到 GStreamer：指针每 30 ms 动一次时，2.05 s 收到 60 帧（约 29 fps）；存下的帧画面正确：壁纸、Kalk 窗口、指针，没有撕裂或黑块 |
+| 内存 | 无头 KWin RSS 约 152 MB；同时运行的 Android 后端工作区 KWin 约 142 MB |
+| **APK 冻结时** | 实验中途手机进入 Dozing，APK 冻结（平台桥 `EAGAIN`）。无头工作区照样启动、截图、录屏，正是方案 C 要的效果 |
+
+**注意**：
+- 本机 WirePlumber 0.5.13 加 PipeWire 1.6.2 不让 GStreamer 的 `pipewiresrc` 按 id、serial 或名字连到 KWin 的录屏节点（报 “target not found”）。Android 后端工作区也一样，与无头无关。生产中的浮窗经 KPipeWire 消费，不受影响。测试时用 `autoconnect=false` 加 `pw-link`。
+- 浮窗程序（`rungic-agent-screen-window`）先问 APK 平台桥，桥不通时不会去取画面。
+
+**还没做**：
+1. **导播台、浮窗、电视要知道无头工作区**：现在成员列表来自宿主的 `liveSources`，无头工作区不在里面。成员状态和画面要改由 Linux 侧提供，APK 只是其中一个呈现端。
+2. **默认启用无头**：先解决第 1 条，并确认浮窗和电视的观看体验，再把 Agent 工作区默认改为无头。
+3. 第二阶段的零拷贝（§5.3）；RemoteSurface Host（§5.4）；Agent 忙时持有的 wakelock（§6）。
+4. 没有核对 dmabuf v3：手机上没装 `wayland-info`。
