@@ -1,0 +1,37 @@
+From: clawd20130 <clawd20130@gmail.com>
+Date: Sat, 3 Oct 2026 01:30:04 +0900
+Subject: Stacking: the input method's panel stays above its layer's other
+ windows
+
+The on-screen keyboard is in the overlay layer, as are layer-shell surfaces that ask for it
+(Plasma Mobile's panels, a fullscreen view raised above them). One raised after the keyboard
+showed covered it: it was there (VirtualKeyboard.visible) but not seen. The input method's
+windows now come last in the overlay layer.
+
+Forwarded: no
+Last-Update: 2026-10-03
+X-Rungic-Status: Pending [generic: an overlay surface should not hide the keyboard]
+X-Rungic-Tests: none at L3 yet (gap): the fullscreen keyboard on the phone, by hand
+X-Rungic-Docs: docs/research/97
+Origin: vendor
+---
+ src/layers.cpp | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/src/layers.cpp b/src/layers.cpp
+index 29f4086..b36a03a 100644
+--- a/src/layers.cpp
++++ b/src/layers.cpp
+@@ -585,6 +585,12 @@ QList<Window *> Workspace::constrainedStackingOrder()
+         windows[layer] << window;
+     }
+ 
++    // The input method's panel above everything else of its layer: an overlay surface raised later
++    // (a fullscreen view above the shell's panels) must not cover the keyboard it asked for.
++    std::stable_partition(windows[OverlayLayer].begin(), windows[OverlayLayer].end(), [](Window *window) {
++        return !window->isInputMethod();
++    });
++
+     QList<Window *> stacking;
+     stacking.reserve(unconstrained_stacking_order.count());
+     for (uint layer = FirstLayer; layer < NumLayers; ++layer) {
