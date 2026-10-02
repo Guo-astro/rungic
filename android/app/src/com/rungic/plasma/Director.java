@@ -217,7 +217,12 @@ final class Director {
         return out;
     }
 
-    /** A TV's window is bound (on `display`) or gone. A new TV shows the director while there is one. */
+    /**
+     * A TV's window is bound (on `display`) or gone. A new TV shows the director while there is one,
+     * unless it was asked for something else before it came (desktop mode's cast button: computer
+     * mode, 2026-10-02; forcing the director here sent the assistant's screens instead): the choice
+     * goes back to the director when a TV goes.
+     */
     void bound(boolean value, Display on) {
         bound = value;
         display = on;
@@ -227,11 +232,11 @@ final class Director {
                 aspect = mode.getPhysicalWidth() / (float) Math.max(1, mode.getPhysicalHeight());
             }
             refreshMembers();
-            tvDirector = true;
             tiles = new float[0][]; tileSlots = new int[0];
             apply(false);
             showBanner();
         } else {
+            tvDirector = true;
             tiles = new float[0][]; tileSlots = new int[0];
             try { NativeBridge.setDirector(tileSlots, new float[0], 0); } catch (UnsatisfiedLinkError e) { /* an older host */ }
             removeLabels();

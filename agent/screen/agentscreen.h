@@ -31,6 +31,9 @@ class AgentScreen : public QObject
     Q_OBJECT
     Q_PROPERTY(QString status READ status NOTIFY statusChanged)
     Q_PROPERTY(uint nodeId READ nodeId NOTIFY nodeIdChanged)
+    // Desktop mode's picture with the system's pointer drawn in, while asked for (setPointerShown):
+    // fullscreen's touchpad mode. 0 when there is none (yet).
+    Q_PROPERTY(uint pointerNodeId READ pointerNodeId NOTIFY pointerNodeIdChanged)
     Q_PROPERTY(bool onTv READ onTv NOTIFY statusChanged)
     // 0: desktop mode's window; n: the assistant's screen of workspace n.
     Q_PROPERTY(int workspace READ workspace CONSTANT)
@@ -50,6 +53,7 @@ public:
 
     QString status() const { return m_status; }
     uint nodeId() const { return m_nodeId; }
+    uint pointerNodeId() const { return m_pointerNodeId; }
     bool onTv() const { return m_onTv; }
     int workspace() const { return m_workspace; }
     QString activityState() const { return m_activityState; }
@@ -63,6 +67,15 @@ public:
     Q_INVOKABLE void scroll(double dx, double dy);
     // Hand the screen to the TV last cast to (the host keeps the output; only its frames move).
     Q_INVOKABLE void castToTv();
+    // The blurred wallpaper under the director's fullscreen (rungic-agent-screen background).
+    Q_INVOKABLE QString backgroundFile() const;
+    // The size of the output it shows, in the pixels of its pointer and scroll: a workspace's KWin
+    // is 1920x1080 (rungic-workspace), desktop mode's the CAST output's.
+    Q_INVOKABLE QSize outputSize() const;
+    // Fullscreen's touchpad mode shows the system's pointer (docs/research/97 §17.4): desktop mode
+    // opens a second stream of its output with the pointer drawn in (pointerNodeId), the first one
+    // left as it is. An assistant's screen's picture has the pointer already: nothing to do.
+    Q_INVOKABLE void setPointerShown(bool shown);
     // Fullscreen on the phone: the Android host presents the output itself (zero-copy), and this
     // window hides and stops recording until it leaves fullscreen.
     Q_INVOKABLE void fullscreen();
@@ -75,6 +88,7 @@ public:
 Q_SIGNALS:
     void statusChanged();
     void nodeIdChanged();
+    void pointerNodeIdChanged();
     void activityChanged();
 
 private:
@@ -95,6 +109,11 @@ private:
     std::unique_ptr<FakeInput> m_input;
     std::unique_ptr<ScreencastStream> m_stream;
     QPointer<QScreen> m_streamed;
+    void updatePointerStream();
+    void dropPointerStream();
+    std::unique_ptr<ScreencastStream> m_pointerStream;
+    uint m_pointerNodeId = 0;
+    bool m_pointerShown = false;
     QTimer m_poll;
     QString m_status = QStringLiteral("starting");
     uint m_nodeId = 0;

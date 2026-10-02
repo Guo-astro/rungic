@@ -9,13 +9,18 @@
 // fingers pinch it between half and the full width of the phone; a pinch never tucks it. A tap, a drag or a pinch shows a toolbar of
 // icons below the picture, a small gap away (above it near the bottom of the screen), which hides a
 // few seconds later.
-// Fullscreen: the Android host presents the assistant's screen over the whole phone itself (the APK's
-// AgentFullscreen: zero-copy, turned a quarter for the phone held sideways, its own touch handling
-// and toolbar); this window hides meanwhile, as it does while a TV shows the screen.
+// Fullscreen (docs/research/97 §17): this window goes above Plasma Mobile's panels (which stay where
+// they are, covered) and the picture morphs from its floating place to the whole screen, on the
+// blurred wallpaper. On a portrait screen the window's content is turned a quarter (the phone held
+// sideways, its top to the left), not the phone: the desktop and its apps stay as they are; the picture as large as fits, the director's other screens in its column. The
+// finger works the screen in the picture (FullTouch: tap, long press, drag, two-finger scroll); a
+// swipe up from the bottom edge or a tap beside the picture shows the toolbar (leave, zoom, TV, close).
+// All of it Linux: no Android view, so a PC's desktop gets the same.
 // Tab: a handle on the edge; tap to bring the window back, drag to slide it along the edge.
 // Caption (docs/88): while the assistant works on this screen, what it is doing now sits over the
 // bottom of the picture (its dot breathes on the tab); how it ended shows for a few seconds.
 // While a TV or the phone's fullscreen presents the screen everything hides; then it comes back.
+import QtCore
 import QtQuick
 import QtQuick.Effects
 import QtQuick.Window
@@ -30,13 +35,14 @@ Window {
     readonly property QtObject screen: director ? director.focusScreen : agent
     readonly property bool directing: !!director
     readonly property int others: directing ? director.screens.length - 1 : 0
-    visible: ready && root.screen.status !== "tv" && root.screen.status !== "fullscreen" && !(directing && director.fullscreenShown)
+    visible: ready && !!root.screen && root.screen.status !== "tv" && root.screen.status !== "fullscreen" && !(directing && director.fullscreenShown)
     title: "rungic-agent-screen"
     color: "transparent"
 
-    property string mode: "window"      // window | tab
+    property string mode: "window"      // window | tab | fullscreen
+    readonly property bool full: mode === "fullscreen"
     // Tucked away, nobody sees the screen: the host renders it at a low rate (docs/65).
-    onModeChanged: root.screen.setWatched(mode === "window")
+    onModeChanged: if (root.screen) root.screen.setWatched(mode !== "tab")
     property string edge: "right"
     property real px: 12
     // Desktop mode's window above, the assistant's screen's below it: both may be out at once. A
@@ -50,10 +56,23 @@ Window {
     readonly property rect area: floater.area
     readonly property real minWidth: area.width * 0.5
     // The director's other screens in a column on the right of its focus, live and small (docs/58),
-    // as fullscreen and the TV lay them out.
-    readonly property real columnWidth: others < 1 ? 0 : Math.round(panelWidth * 0.24)
-    readonly property real pictureWidth: panelWidth - (others < 1 ? 0 : columnWidth + 4)
+    // as the TV lays them out. Fullscreen, the zoom button makes the focus larger: standard,
+    // enlarged, alone (the director's level).
+    readonly property real columnRatio: others < 1 ? 0 : !full ? 0.24 : [0.24, 0.15, 0][director.level] ?? 0.24
+    // Desktop mode fullscreen is the user's second screen filling the phone, edge to edge: no
+    // margin, corners, wallpaper or shadow (those are the assistant's screens' look); black bars
+    // where the phone is longer than 16:9, and a tap there shows the toolbar.
+    readonly property bool edgeToEdge: full && root.screen.workspace === 0
+    // Fullscreen, as large as fits the phone with a margin.
+    readonly property int fullMargin: edgeToEdge ? 0 : 12
+    readonly property real fullWidth: Math.min(stage.width - 2 * fullMargin,
+        ((stage.height - 2 * fullMargin) * 16 / 9 + (columnRatio > 0 ? 4 : 0)) / (1 - columnRatio))
+    // Whole pixels: a picture at a fraction of one showed a line of the black under it (2026-10-02).
+    readonly property real shownWidth: full ? Math.floor(fullWidth) : Math.round(panelWidth)
+    readonly property real columnWidth: columnRatio === 0 ? 0 : Math.round(shownWidth * columnRatio)
+    readonly property real pictureWidth: shownWidth - (columnRatio === 0 ? 0 : columnWidth + 4)
     readonly property real pictureHeight: Math.round(pictureWidth * 9 / 16)
+    readonly property int pictureRadius: edgeToEdge ? 0 : 14
     readonly property real stripHeight: 0
     readonly property real panelHeight: pictureHeight + stripHeight
     readonly property int gap: 10
@@ -61,6 +80,7 @@ Window {
     readonly property int tabHeight: 76
     readonly property int btnLeft: 0x110
     readonly property int btnRight: 0x111
+    readonly property int btnMiddle: 0x112
     readonly property int motion: 240
     // The toolbar goes above the picture when there is no room below it.
     readonly property bool barAbove: py + panelHeight + gap + toolbar.height + 12 > area.height
@@ -68,16 +88,19 @@ Window {
 
     // Keep the window on the screen (animated back after a drag or a turn of the phone).
     function settle() {
-        panelWidth = Math.max(minWidth, Math.min(area.width, panelWidth))
+        // From the area itself: in onAreaChanged, minWidth may still hold the old area's (turned back
+        // from landscape, the window grew to half the landscape width, 2026-10-02).
+        panelWidth = Math.max(area.width * 0.5, Math.min(area.width, panelWidth))
         px = Math.max(0, Math.min(area.width - panelWidth, px))
         py = Math.max(0, Math.min(area.height - panelHeight, py))
         tabY = Math.max(0, Math.min(area.height - tabHeight, tabY))
     }
     // Show the toolbar; it hides by itself a few seconds after the last touch.
-    function showToolbar() {
-        if (mode !== "window")
+    function showToolbar(ms) {
+        if (mode === "tab")
             return
         toolbarShown = true
+        hideTimer.interval = ms || 3000
         hideTimer.restart()
     }
     function tuck(side) {
@@ -126,13 +149,106 @@ Window {
         }
         return 0
     }
+    // ---- fullscreen (docs/research/97 §17) --------------------------------------------------------
+    // In and out without a seam (§17.2), in this one window: it goes above the shell's panels
+    // (floater.setFullscreen), the stage is laid out for fullscreen at once, and the picture morphs
+    // from its floating place, size and angle to fullscreen's while the background fades in over
+    // everything. Leaving plays it backwards, and the window goes back under the panels at the end.
+    property string backgroundUrl: ""
+    property bool leaving: false         // the way back is playing
+    // The system's pointer in the picture: fullscreen's touchpad mode on desktop mode (an assistant's
+    // screen's picture always has the agent's pointer).
+    readonly property bool pointerWanted: full && !leaving && fullscreenSettings.touchpad
+                                          && !!root.screen && root.screen.workspace === 0
+    onPointerWantedChanged: if (root.screen) root.screen.setPointerShown(pointerWanted)
+    // Fullscreen's touch mode, remembered (the APK's agent_fullscreen_touchpad).
+    Settings {
+        id: fullscreenSettings
+        location: StandardPaths.writableLocation(StandardPaths.ConfigLocation) + "/rungic-agent-screenrc"
+        category: "Fullscreen"
+        property bool touchpad: false
+    }
+    property bool morphing: false        // layout changes at once: the picture's transform moves it
+    // The picture's transform: from where it was (relative to its new place) at 0, to none at 1.
+    property real morphX: 0
+    property real morphY: 0
+    property real morphAngle: 0
+    property real morphScale: 1
+    property real morphT: 1
     function setFullscreen() {
+        if (full)
+            return
         toolbarShown = false
-        // The director goes fullscreen as a whole: its screens laid out (docs/58).
-        if (directing && others > 0)
-            director.fullscreen()
-        else
-            root.screen.fullscreen()
+        backgroundUrl = root.screen.backgroundFile()
+        const centre = panel.mapToItem(null, panel.width / 2, panel.height / 2)
+        const from = { x: centre.x, y: centre.y, width: panel.width, angle: 0 }
+        floater.setFullscreen(true)
+        morphing = true
+        mode = "fullscreen"
+        morphTo(from)
+        morphAnim.from = 0
+        morphAnim.to = 1
+        morphAnim.restart()
+    }
+    // The transform that puts the picture, laid out where it is now, where `from` says on the screen.
+    function morphTo(from) {
+        const here = Qt.point(panel.x + panel.width / 2, panel.y + panel.height / 2)
+        const there = stage.mapFromItem(null, from.x, from.y)
+        morphX = there.x - here.x
+        morphY = there.y - here.y
+        morphAngle = from.angle - stage.rotation
+        morphScale = from.width / panel.width
+        morphT = 0
+    }
+    // The floating window's picture on the screen, as the window lays it out.
+    function windowedCentre() {
+        const w = Math.round(panelWidth)
+        const column = others < 1 ? 0 : Math.round(w * 0.24) + 4
+        const h = Math.round((w - column) * 9 / 16)
+        return { x: Math.round(px) + w / 2, y: Math.round(py) + h / 2, width: w, angle: 0 }
+    }
+    function leaveFullscreen() {
+        if (!full || leaving)
+            return
+        toolbarShown = false
+        fullTouch.reset()
+        leaving = true
+        morphing = true
+        morphTo(windowedCentre())
+        morphAnim.from = 1
+        morphAnim.to = 0
+        morphAnim.restart()
+    }
+    function leaveNow() {
+        mode = "window"
+        morphT = 1
+        morphX = morphY = morphAngle = 0
+        morphScale = 1
+        leaving = false
+        floater.setFullscreen(false)
+        Qt.callLater(() => { root.morphing = false })
+    }
+    NumberAnimation {
+        id: morphAnim
+        target: root
+        property: "morphT"
+        duration: 320
+        easing.type: Easing.OutCubic
+        onFinished: {
+            if (root.leaving) {
+                root.leaveNow()
+                return
+            }
+            root.morphing = false
+            // Where the toolbar is: it shows a second on arriving, then fades and slides away.
+            root.showToolbar(1000)
+        }
+    }
+    // Esc leaves fullscreen (the window takes the keyboard while fullscreen).
+    Item {
+        focus: true
+        Keys.onEscapePressed: root.leaveFullscreen()
+        Keys.onBackPressed: root.leaveFullscreen()
     }
     Component.onCompleted: {
         panelWidth = area.width * 0.72
@@ -163,11 +279,13 @@ Window {
     // Only what is visible takes touches.
     function updateMask() {
         const rects = []
-        if (mode === "window")
+        if (full)
+            rects.push(Qt.rect(0, 0, width, height))
+        else if (mode === "window")
             rects.push(Qt.rect(panel.x, panel.y, panel.width, panel.height))
         else if (mode === "tab")
             rects.push(Qt.rect(tab.x, tab.y, tab.width, tab.height))
-        if (toolbar.visible)
+        if (toolbar.visible && !full)
             rects.push(Qt.rect(toolbar.x, toolbar.y, toolbar.width, toolbar.height))
         floater.setInputRects(rects)
     }
@@ -187,8 +305,12 @@ Window {
         opacity: shown ? 1 : 0
         scale: shown ? 1 : 0.9
         visible: opacity > 0.01
-        transform: Translate { y: bar.shown ? 0 : bar.slide }
-        Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+        // Fades and slides in and out together.
+        transform: Translate {
+            y: bar.shown ? 0 : bar.slide
+            Behavior on y { NumberAnimation { duration: bar.shown ? 180 : 280; easing.type: Easing.OutCubic } }
+        }
+        Behavior on opacity { NumberAnimation { duration: bar.shown ? 180 : 280; easing.type: Easing.OutCubic } }
         Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
 
         // Touches on the capsule stay here, between the buttons too.
@@ -213,7 +335,10 @@ Window {
                     Rectangle {
                         anchors.centerIn: parent
                         width: parent.height - 8; height: width; radius: width / 2
-                        color: Qt.rgba(1, 1, 1, press.pressed ? 0.22 : 0)
+                        // Pressed, or on (a switch: the touchpad mode).
+                        color: Qt.rgba(1, 1, 1, press.pressed ? 0.22 : modelData.checked ? 0.16 : 0)
+                        border.color: modelData.checked ? Qt.rgba(1, 1, 1, 0.35) : "transparent"
+                        border.width: 1
                         Behavior on color { ColorAnimation { duration: 90 } }
                     }
                     Kirigami.Icon {
@@ -233,34 +358,89 @@ Window {
         }
     }
 
+    Item {
+        id: stage
+        // Fullscreen on a portrait screen: landscape, turned a quarter clockwise about its centre.
+        // Touches reach the items inside in their own (turned) coordinates.
+        readonly property bool turned: root.full && !!parent && parent.height > parent.width
+        readonly property real outerWidth: parent ? parent.width : 0
+        readonly property real outerHeight: parent ? parent.height : 0
+        width: turned ? outerHeight : outerWidth
+        height: turned ? outerWidth : outerHeight
+        x: (outerWidth - width) / 2
+        y: (outerHeight - height) / 2
+        rotation: turned ? 90 : 0
+
+    // ---- fullscreen's background: the wallpaper, blurred and dimmed (rungic-agent-screen background)
+    Rectangle {
+        anchors.fill: parent
+        color: root.edgeToEdge ? "black" : "#101215"
+        opacity: root.full && !root.leaving ? 1 : 0
+        visible: opacity > 0.01
+        Behavior on opacity { NumberAnimation { duration: 320; easing.type: Easing.OutCubic } }
+        Image {
+            anchors.fill: parent
+            visible: !root.edgeToEdge
+            source: root.backgroundUrl
+            fillMode: Image.PreserveAspectCrop
+            cache: false
+            asynchronous: true
+        }
+    }
+
     // ---- picture ---------------------------------------------------------------------------------
     Item {
         id: panel
         readonly property bool tucked: root.mode === "tab"
-        x: tucked ? (root.edge === "left" ? -width * 0.6 : root.width - width * 0.4) : root.px
-        y: tucked ? root.tabY + root.tabHeight / 2 - height / 2 : root.py
-        width: root.panelWidth
+        x: root.full ? Math.round((stage.width - width) / 2)
+           : tucked ? (root.edge === "left" ? -width * 0.6 : stage.width - width * 0.4) : Math.round(root.px)
+        y: root.full ? Math.round((stage.height - height) / 2)
+           : tucked ? root.tabY + root.tabHeight / 2 - height / 2 : Math.round(root.py)
+        width: root.shownWidth
         height: root.panelHeight
-        opacity: root.mode === "window" ? 1 : 0
+        opacity: root.mode !== "tab" ? 1 : 0
         scale: tucked ? 0.6 : 1
         visible: opacity > 0.01
         // Follow the finger exactly while it is down; glide everywhere else.
-        Behavior on x { enabled: !root.dragging && !root.pinching; NumberAnimation { duration: root.motion; easing.type: Easing.OutCubic } }
-        Behavior on y { enabled: !root.dragging && !root.pinching; NumberAnimation { duration: root.motion; easing.type: Easing.OutCubic } }
-        Behavior on width { enabled: !root.pinching; NumberAnimation { duration: root.motion; easing.type: Easing.OutCubic } }
-        Behavior on height { enabled: !root.pinching; NumberAnimation { duration: root.motion; easing.type: Easing.OutCubic } }
+        Behavior on x { enabled: !root.dragging && !root.pinching && !root.morphing; NumberAnimation { duration: root.motion; easing.type: Easing.OutCubic } }
+        Behavior on y { enabled: !root.dragging && !root.pinching && !root.morphing; NumberAnimation { duration: root.motion; easing.type: Easing.OutCubic } }
+        Behavior on width { enabled: !root.pinching && !root.morphing; NumberAnimation { duration: root.motion; easing.type: Easing.OutCubic } }
+        Behavior on height { enabled: !root.pinching && !root.morphing; NumberAnimation { duration: root.motion; easing.type: Easing.OutCubic } }
+        // Into and out of fullscreen: from where the picture was to where it is laid out (above).
+        transform: [
+            Scale {
+                origin.x: panel.width / 2; origin.y: panel.height / 2
+                xScale: root.morphScale + (1 - root.morphScale) * root.morphT
+                yScale: xScale
+            },
+            Rotation { origin.x: panel.width / 2; origin.y: panel.height / 2; angle: root.morphAngle * (1 - root.morphT) },
+            Translate { x: root.morphX * (1 - root.morphT); y: root.morphY * (1 - root.morphT) }
+        ]
         Behavior on opacity { NumberAnimation { duration: root.motion } }
         Behavior on scale { NumberAnimation { duration: root.motion; easing.type: Easing.OutCubic } }
 
+        // A soft shadow under the picture: it floats above the phone's screen.
+        RectangularShadow {
+            anchors.fill: picture
+            opacity: root.edgeToEdge && !root.leaving ? 0 : 1
+            visible: opacity > 0.01
+            Behavior on opacity { NumberAnimation { duration: 320; easing.type: Easing.OutCubic } }
+            radius: root.pictureRadius
+            offset.y: 6
+            blur: 28
+            spread: 0
+            color: Qt.rgba(0, 0, 0, 0.45)
+        }
         Rectangle {
             id: picture
             anchors { left: parent.left; top: parent.top }
             width: root.pictureWidth
             height: root.pictureHeight
-            radius: 14
-            // The director's screens bring their own black (below): this one would stay behind a
-            // focus breathing in, a black shadow around it.
-            color: root.directing ? "transparent" : "black"
+            radius: root.pictureRadius
+            // Black only until there is a picture (it showed at the picture's edge). The director's
+            // screens bring their own black (below): this one would stay behind a focus breathing
+            // in, a black shadow around it.
+            color: root.directing || (stream.visible && stream.ready) ? "transparent" : "black"
             layer.enabled: true   // rounded corners for the picture too
             layer.effect: MultiEffect {
                 maskEnabled: true
@@ -272,6 +452,15 @@ Window {
                 // The director's screens have a picture each (below), never switched.
                 nodeId: root.directing ? 0 : root.screen.nodeId
                 visible: nodeId > 0
+            }
+            // Fullscreen's touchpad mode: the same picture with the system's pointer drawn in, over
+            // the one without, shown once it has a frame (no black while it starts) and hidden before
+            // it goes. Touchscreen mode and the floating window have no pointer.
+            PipeWire.PipeWireSourceItem {
+                id: pointerStream
+                anchors.fill: parent
+                nodeId: root.pointerWanted ? root.screen.pointerNodeId : 0
+                visible: root.pointerWanted && nodeId > 0 && ready
             }
             Kirigami.Icon {
                 anchors.centerIn: parent
@@ -287,6 +476,7 @@ Window {
         // the focus over the picture's place, the others in a column on the right. Tap one to focus it;
         // the new focus breathes in, from a little smaller to its size.
         Repeater {
+            id: tiles
             model: root.directing ? director.screens : []
             delegate: Item {
                 id: tile
@@ -301,6 +491,7 @@ Window {
                 y: focused ? 0 : columnTop + place * (thumbHeight + 4)
                 width: focused ? root.pictureWidth : root.columnWidth
                 height: focused ? root.pictureHeight : thumbHeight
+                visible: focused || root.columnWidth > 0
                 layer.enabled: true
                 layer.effect: MultiEffect { maskEnabled: true; maskSource: tileMask }
                 Rectangle { id: tileMask; anchors.fill: parent; radius: tile.focused ? 14 : 8; visible: false; layer.enabled: true }
@@ -340,7 +531,7 @@ Window {
                     width: 6; height: 6; radius: 3
                     color: "#63d471"
                 }
-                TapHandler { enabled: !tile.focused; onTapped: director.setFocus(tile.modelData.workspace) }
+                TapHandler { enabled: !tile.focused && !root.full; onTapped: director.setFocus(tile.modelData.workspace) }
                 onFocusedChanged: if (focused) breathe.restart()
                 NumberAnimation on scale { id: breathe; running: false; from: 0.95; to: 1; duration: 260; easing.type: Easing.OutCubic }
             }
@@ -423,7 +614,7 @@ Window {
         Rectangle {
             id: roundMask
             anchors.fill: picture
-            radius: 14
+            radius: root.pictureRadius
             visible: false
             layer.enabled: true
         }
@@ -431,6 +622,7 @@ Window {
         // One finger moves, two pinch; a tap shows or hides the toolbar.
         DragHandler {
             id: drag
+            enabled: !root.full
             target: null
             maximumPointCount: 1
             property point offset
@@ -486,6 +678,7 @@ Window {
         }
         PinchHandler {
             id: pinch
+            enabled: !root.full
             target: null
             // The fingers it took, by id and press time (Android reuses the ids), until a drag ends.
             property var fingers: ({})
@@ -513,19 +706,59 @@ Window {
                 root.py = centre.y - root.panelHeight / 2
             }
         }
-        TapHandler { onTapped: root.toolbarShown ? (root.toolbarShown = false) : root.showToolbar() }
+        TapHandler { enabled: !root.full; onTapped: root.toolbarShown ? (root.toolbarShown = false) : root.showToolbar() }
+    }
+
+    // ---- fullscreen's touches (FullTouch: the APK's gestures, direct or touchpad) -----------------
+    FullTouch {
+        id: fullTouch
+        anchors.fill: parent
+        enabled: root.full && !root.morphing
+        visible: root.full
+        target: root.screen
+        picture: Qt.rect(panel.x + picture.x, panel.y + picture.y, picture.width, picture.height)
+        output: root.screen ? root.screen.outputSize() : Qt.size(1920, 1080)
+        touchpad: fullscreenSettings.touchpad
+        // The team's board in focus: no screen under it.
+        inert: root.directing && director.focus === 100
+        tileAt: function (point) {
+            if (!root.directing)
+                return null
+            for (let i = 0; i < tiles.count; i++) {
+                const tile = tiles.itemAt(i)
+                if (tile && tile.visible && !tile.focused && within(Qt.rect(panel.x + tile.x, panel.y + tile.y, tile.width, tile.height), point))
+                    return tile.modelData
+            }
+            return null
+        }
+        onToolbarWanted: root.showToolbar()
+        onToolbarToggled: root.toolbarShown ? (root.toolbarShown = false) : root.showToolbar()
+        onTileTapped: (screen) => director.setFocus(screen.workspace)
     }
 
     Toolbar {
         id: toolbar
-        shown: root.toolbarShown && root.mode === "window"
-        slide: root.barAbove ? 8 : -8
-        x: Math.max(6, Math.min(root.width - width - 6, panel.x + (panel.width - width) / 2))
-        y: root.barAbove ? panel.y - root.gap - height : panel.y + panel.height + root.gap
-        actions: [{ icon: "view-fullscreen", act: () => root.setFullscreen() },
-                  { icon: "video-television", act: () => root.screen.castToTv() },
-                  { icon: root.onLeftHalf ? "go-previous" : "go-next", act: () => root.tuck(root.onLeftHalf ? "left" : "right") },
-                  { icon: "window-close", act: () => root.screen.close() }]
+        // Gone at once when the picture starts to morph (it would turn with the stage).
+        visible: opacity > 0.01 && !root.morphing
+        shown: root.toolbarShown && root.mode !== "tab"
+        // Fullscreen: in from and out to the bottom edge, further.
+        slide: root.full ? 28 : root.barAbove ? 8 : -8
+        x: root.full ? Math.round((stage.width - width) / 2)
+           : Math.max(6, Math.min(stage.width - width - 6, panel.x + (panel.width - width) / 2))
+        y: root.full ? stage.height - height - 20
+           : root.barAbove ? panel.y - root.gap - height : panel.y + panel.height + root.gap
+        actions: root.full
+            ? [{ icon: "view-restore", act: () => root.leaveFullscreen() }]
+              .concat(root.directing && root.others > 0 ? [{ icon: "zoom-in", act: () => director.nextLevel() }] : [])
+              // Touchpad or direct touch (the APK's fullscreen had it; remembered).
+              .concat([{ icon: "input-touchpad", checked: fullscreenSettings.touchpad,
+                         act: () => { fullscreenSettings.touchpad = !fullscreenSettings.touchpad } }])
+              .concat([{ icon: "video-television", act: () => { root.leaveFullscreen(); root.screen.castToTv() } },
+                       { icon: "window-close", act: () => { root.leaveFullscreen(); root.screen.close() } }])
+            : [{ icon: "view-fullscreen", act: () => root.setFullscreen() },
+               { icon: "video-television", act: () => root.screen.castToTv() },
+               { icon: root.onLeftHalf ? "go-previous" : "go-next", act: () => root.tuck(root.onLeftHalf ? "left" : "right") },
+               { icon: "window-close", act: () => root.screen.close() }]
         onUsed: root.showToolbar()
     }
 
@@ -535,7 +768,7 @@ Window {
         readonly property bool shown: root.mode === "tab"
         width: root.tabWidth
         height: root.tabHeight
-        x: root.edge === "left" ? (shown ? 0 : -width) : (shown ? root.width - width : root.width)
+        x: root.edge === "left" ? (shown ? 0 : -width) : (shown ? stage.width - width : stage.width)
         y: root.tabY
         opacity: shown ? 1 : 0
         visible: opacity > 0.01
@@ -574,5 +807,6 @@ Window {
             onCentroidChanged: if (active)
                 root.tabY = Math.max(0, Math.min(root.area.height - root.tabHeight, centroid.scenePosition.y - offset))
         }
+    }
     }
 }

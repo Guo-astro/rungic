@@ -117,6 +117,8 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
             @Override public void castToTv() {
                 // The cast button (docs/58): the TV, once picked, takes over what fullscreen showed.
                 int source = agentFullscreen.directing() ? director.focusPicture() : fullscreenSource;
+                // The TV shows what fullscreen showed: the director, or computer mode (source 0).
+                director.setTvDirector(agentFullscreen.directing() || source > 0);
                 agentFullscreen.hide();
                 // A tap in the app itself: its window may not hold the focus (fullscreen's layer did,
                 // and the check threw and ended the app, 2026-10-01).
@@ -134,7 +136,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         });
         director = new Director(this);
         castDesktop = new CastDesktop(this, () -> initialized, () -> desktopMode ? AGENT_SCREEN_SIZE : null, bound -> {
-            // A TV that goes away forgets what it showed: the next one shows the desktop.
+            // A TV that goes away forgets what it showed: the next one shows the director (Director.bound).
             director.bound(bound, castDesktop.display());
             castControls.setAvailable(bound);
             // The TV takes the assistant's screen from fullscreen (it bound the presenter first).
@@ -565,7 +567,9 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
      * "tv" (docs/58): what the TV shows. {"content": "director" | "desktop"} the director (the
      * assistant's screens) or the user's desktop in computer mode; {"button": true, "source": n}
      * the cast button of screen n (0 computer mode): with a TV the cast controls, else the TV
-     * picker, the picked TV then showing the director (n in focus) or computer mode.
+     * picker, the picked TV then showing the director (n in focus) or computer mode. A window's
+     * button sends "content" with it (what that window shows); the cast quick setting does not,
+     * and only opens the controls.
      */
     org.json.JSONObject tv(org.json.JSONObject request) throws Exception {
         boolean picking = false;
@@ -612,9 +616,10 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
      * app in front to show anything.
      */
     boolean castButton(int source, boolean inApp) {
+        // Workspace `source` in the director's focus, a TV already there too.
+        if (source > 0) director.setFocus(source);
         if (castControls.available()) { castControls.openPanel(); return false; }
         if (!inApp && !hasWindowFocus()) throw new IllegalStateException("请先返回 Plasma Mobile");
-        if (source > 0) director.setFocus(source);
         castControls.pickTv();
         return true;
     }

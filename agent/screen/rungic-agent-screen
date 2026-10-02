@@ -2,9 +2,9 @@
 """The screens beside the phone's own (docs/65, docs/research/91), each in a floating window on the
 phone, fullscreen, or on the TV:
 
-  rungic-desktop-mode on | off | toggle | status | ensure        desktop mode: the user's desktop
-      gets a second output (KWin's CAST-n), a full desktop. A TV shows it: casting is desktop mode
-      on the TV.
+  rungic-desktop-mode on | off | toggle | status | ensure | tv   desktop mode: the user's desktop
+      gets a second output (KWin's CAST-n), a full desktop. A TV shows it (computer mode) or the
+      director; `tv` puts computer mode on the TV, connecting one if none is.
   rungic-agent-screen on | off | close [--force] | toggle | status | ensure [tv]   the assistant's
       screen: the agent's own workspace, `rungic-workspace@N` ($RUNGIC_WORKSPACE, else 1), started
       when needed. `off` hides it and the workspace goes on; `close` also closes the workspace and
@@ -22,7 +22,6 @@ screen that is on (after the Android host restarted, say); the quick settings po
 floating windows always open on the phone, also when the agent runs this from inside its
 workspace (RUNGIC_USER_* are the user's session).
 """
-import errno
 import gettext
 import json
 import os
@@ -43,8 +42,10 @@ APP = 'com.rungic.DesktopMode' if DESKTOP else 'com.rungic.AgentScreen'
 
 
 # The Android host frozen (the phone asleep, docs/research/97): one request that waited its whole
-# timeout marks it; for a minute after, requests (of every process) fail at once instead of each
-# waiting again, and one tries again after that.
+# timeout marks it; for a minute after, requests here wait a second only. They still try: these
+# are the user's (the quick setting, the floating window), and failing at once for that minute
+# left desktop mode deaf to its switch after the phone woke (2026-10-02). An answer clears the mark
+# for every process (rungic_cua.router fails at once while it is there).
 UNREACHABLE_FOR_S = 60
 
 
@@ -71,7 +72,7 @@ def _note_reachable(reachable) :
 
 def bridge(request, timeout=5):
     if _recently_unreachable():
-        raise OSError(errno.EAGAIN, 'the Android host is not responding')
+        timeout = min(timeout, 1)
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
             conn.settimeout(timeout)
@@ -255,8 +256,21 @@ def background():
         image.resize((960, 540), Image.BICUBIC).save(data, 'JPEG', quality=86)
     except (OSError, ImportError, ValueError) as error:
         return {'background': None, 'error': str(error)}
-    sent = bridge({'op': 'director', 'background': base64.b64encode(data.getvalue()).decode()})
-    return {'background': len(data.getvalue()), 'from': source, 'sent': 'error' not in sent}
+    # The director window's own fullscreen draws it too (docs/research/97 §17).
+    runtime = os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}'
+    target = Path(runtime) / 'rungic-agent-screen' / 'director-background.jpg'
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_suffix('.tmp')
+        temporary.write_bytes(data.getvalue())
+        os.replace(temporary, target)
+    except OSError:
+        pass
+    try:
+        sent = bridge({'op': 'director', 'background': base64.b64encode(data.getvalue()).decode()})
+    except OSError:
+        sent = {'error': 'the app does not answer'}
+    return {'background': len(data.getvalue()), 'from': source, 'file': str(target), 'sent': 'error' not in sent}
 
 
 def start_window(slot=None):
@@ -497,17 +511,17 @@ def notify_unsaved():
 
 
 def tv(show=True):
-    """The assistant's screen on the TV instead of the desktop (or back to the desktop). The TV's
-    source is set first and a TV is connected if none is: the TV shows the assistant's screen
-    from its first frame, never the desktop on the way (it took a connect, then a switch)."""
-    if DESKTOP:
-        raise SystemExit(json.dumps({'error': 'a TV shows desktop mode anyway; rungic-cast connects one'}))
-    if show:
+    """The assistant's screen on the TV instead of the desktop (or back to the desktop); desktop
+    mode's `tv`: computer mode on the TV (a new TV shows the director otherwise, docs/58). The TV's
+    source is set first and a TV is connected if none is: the TV shows that screen from its first
+    frame, never another on the way (it took a connect, then a switch)."""
+    if DESKTOP and not show:
+        raise SystemExit(json.dumps({'error': "notv is the assistant's screen's: the TV shows computer mode then"}))
+    if show and not DESKTOP:
         on()
-    # The TV shows the director with this workspace in focus (docs/58), or computer mode.
-    if show:
+        # The TV shows the director with this workspace in focus (docs/58), or computer mode.
         bridge({'op': 'director', 'focus': workspace()})
-    state = bridge({'op': 'tv', 'content': 'director' if show else 'desktop'})
+    state = bridge({'op': 'tv', 'content': 'director' if show and not DESKTOP else 'desktop'})
     if show and not state.get('tv', {}).get('connected'):
         # No TV yet: the last one, as the quick setting and the floating window connect it
         # (seconds to a minute).

@@ -38,7 +38,8 @@ void Floater::attach(QQuickWindow *window)
     m_window = window;
     auto layer = LayerShellQt::Window::get(window);
     layer->setScope(QStringLiteral("rungic-agent-screen"));
-    // Top: above apps and panels, below the shell's overlays (control center, lock screen, OSDs).
+    // Top: above apps, below the shell's overlays (control center, lock screen, OSDs) and Plasma
+    // Mobile's panels. Fullscreen raises it above them (setFullscreen).
     layer->setLayer(LayerShellQt::Window::LayerTop);
     layer->setAnchors(LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
                                                     | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight));
@@ -73,4 +74,20 @@ void Floater::setInputRects(const QVariantList &rects)
         region += rect.toRectF().toAlignedRect();
     // An empty mask means "everywhere" to Qt: keep one pixel instead when nothing is shown.
     m_window->setMask(region.isEmpty() ? QRegion(0, 0, 1, 1) : region);
+}
+
+void Floater::setFullscreen(bool fullscreen)
+{
+    if (!m_window)
+        return;
+    auto layer = LayerShellQt::Window::get(m_window);
+    // Overlay, as Plasma Mobile's panels, and taking the keyboard (Esc leaves): KWin activates a
+    // layer surface that starts taking it, and activating raises it above the others of its layer,
+    // the panels too (a layer change alone left it under them). The panels see no fullscreen app,
+    // so they do not slide away: they are only covered. One window throughout: a second one for
+    // fullscreen took ~110 ms to draw the picture the first time, and it was gone meanwhile.
+    layer->setLayer(fullscreen ? LayerShellQt::Window::LayerOverlay : LayerShellQt::Window::LayerTop);
+    layer->setKeyboardInteractivity(fullscreen ? LayerShellQt::Window::KeyboardInteractivityOnDemand
+                                               : LayerShellQt::Window::KeyboardInteractivityNone);
+    m_window->requestUpdate();  // the changes go with the next commit
 }

@@ -24,6 +24,9 @@ public:
     QRect area() const;
     // Rectangles (x, y, width, height) that take touches; the rest passes through.
     Q_INVOKABLE void setInputRects(const QVariantList &rects);
+    // Fullscreen (docs/research/97 §17.2): this surface in the overlay layer, taking the keyboard,
+    // above the shell's panels; back in the top layer, without the keyboard, after.
+    Q_INVOKABLE void setFullscreen(bool fullscreen);
 
 Q_SIGNALS:
     void areaChanged();

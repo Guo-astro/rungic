@@ -6,6 +6,7 @@
 #include <QFile>
 #include <QGuiApplication>
 #include <QJsonArray>
+#include <QUrl>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLocalSocket>
@@ -29,6 +30,9 @@ constexpr double kEndingStaleS = 10;
 // No pointer in the picture: asking for it embedded makes KWin show the pointer, which then sat on the
 // phone's own screen as a black square (the host draws its cursor surface without alpha).
 constexpr uint kPointerHidden = 1;
+// The pointer drawn in: fullscreen's touchpad mode only (setPointerShown). The host now draws no
+// cursor on the phone's screen while it is touched (touch input mode), so no square there.
+constexpr uint kPointerEmbedded = 2;
 
 // One request on the platform bridge; `timeoutMs` covers a TV connection (up to a minute).
 QJsonObject bridge(const QJsonObject &request, int timeoutMs = 3000)
@@ -181,6 +185,14 @@ void AgentScreen::setStatus(const QString &status)
     Q_EMIT statusChanged();
 }
 
+QSize AgentScreen::outputSize() const
+{
+    if (m_workspace > 0)
+        return QSize(1920, 1080);
+    QScreen *output = agentOutput();
+    return output ? output->geometry().size() : QSize(1920, 1080);
+}
+
 QScreen *AgentScreen::agentOutput() const
 {
     const auto screens = QGuiApplication::screens();
@@ -306,6 +318,7 @@ void AgentScreen::startStream()
         m_nodeId = node;
         Q_EMIT nodeIdChanged();
         setStatus(QStringLiteral("running"));
+        updatePointerStream();
         // The pointer belongs to the assistant's screen; left on the phone's it shows there.
         if (!m_pointerPlaced) {
             m_pointerPlaced = true;
@@ -378,14 +391,65 @@ void AgentScreen::stopWorkspaceStream()
     }
 }
 
+void AgentScreen::setPointerShown(bool shown)
+{
+    if (m_workspace > 0 || shown == m_pointerShown)
+        return;
+    m_pointerShown = shown;
+    updatePointerStream();
+}
+
+void AgentScreen::updatePointerStream()
+{
+    if (!m_pointerShown || !m_stream || !m_streamed) {
+        dropPointerStream();
+        return;
+    }
+    if (m_pointerStream)
+        return;
+    auto wayland = m_streamed->nativeInterface<QNativeInterface::QWaylandScreen>();
+    if (!wayland || !m_screencasting->isActive())
+        return;
+    m_pointerStream = std::make_unique<ScreencastStream>(m_screencasting->stream_output(wayland->output(), kPointerEmbedded));
+    ScreencastStream *stream = m_pointerStream.get();
+    connect(stream, &ScreencastStream::created, this, [this](uint node) {
+        m_pointerNodeId = node;
+        Q_EMIT pointerNodeIdChanged();
+    });
+    // Gone: the window keeps the picture without the pointer. Not deleted inside its own signal.
+    const auto gone = [this, stream] {
+        if (m_pointerStream.get() == stream)
+            QTimer::singleShot(0, this, &AgentScreen::dropPointerStream);
+    };
+    connect(stream, &ScreencastStream::failed, this, gone);
+    connect(stream, &ScreencastStream::closedByCompositor, this, gone);
+}
+
+void AgentScreen::dropPointerStream()
+{
+    m_pointerStream.reset();
+    if (m_pointerNodeId) {
+        m_pointerNodeId = 0;
+        Q_EMIT pointerNodeIdChanged();
+    }
+}
+
 void AgentScreen::stopStream()
 {
+    dropPointerStream();
     m_stream.reset();
     m_streamed = nullptr;
     if (m_nodeId) {
         m_nodeId = 0;
         Q_EMIT nodeIdChanged();
     }
+}
+
+QString AgentScreen::backgroundFile() const
+{
+    const QString runtime = qEnvironmentVariable("XDG_RUNTIME_DIR", QStringLiteral("/run/user/%1").arg(getuid()));
+    const QString file = runtime + QStringLiteral("/rungic-agent-screen/director-background.jpg");
+    return QFile::exists(file) ? QUrl::fromLocalFile(file).toString() : QString();
 }
 
 void AgentScreen::pointerMove(double fx, double fy)
@@ -436,10 +500,12 @@ void AgentScreen::scroll(double dx, double dy)
 
 void AgentScreen::castToTv()
 {
-    // The cast button (docs/58): no TV yet, the Rungic app's TV picker, the picked TV then showing
-    // this window's screen; a TV, the next screen on it.
+    // The cast button (docs/58): the TV shows this window's screen, computer mode for desktop mode's
+    // and the director (this one in focus) for an assistant's; no TV yet, the Rungic app's TV picker
+    // first, a TV, its controls. "source" alone left a desktop mode's TV on the director (2026-10-02).
     const QJsonObject state = bridge({{QStringLiteral("op"), QStringLiteral("tv")}, {QStringLiteral("button"), true},
-                                      {QStringLiteral("source"), m_workspace}});
+                                      {QStringLiteral("source"), m_workspace},
+                                      {QStringLiteral("content"), m_workspace > 0 ? QStringLiteral("director") : QStringLiteral("desktop")}});
     if (state.contains(QStringLiteral("error")))
         setStatus(state.value(QStringLiteral("error")).toString());
 }
