@@ -49,7 +49,7 @@ enabledLocales=zh_CN,en_US
 
 默认方案为 `luna_pinyin_simp`，用户词频和定制配置位于 `~/.local/share/plasma-rime/`，目录权限 0700，离线处理。`default.custom.yaml` 首次创建，此后不覆盖用户修改。隐藏密码字段不交给 Rime；敏感字段关闭词频学习。暂未预装雾凇等第三方词库，也未承诺任意方案免适配。
 
-候选列表直接使用 Rime 顺序，不手动插入拼音候选；拼音显示在预编辑区。选词、空格、退格和标点经过同一个 Rime 会话处理，切换字段时按 Qt 的 reset/update 契约清理状态。当前候选读取上限 200 项。
+候选列表直接使用 Rime 顺序，不手动插入拼音候选；拼音显示在预编辑区。选词、空格、退格和标点经过同一个 Rime 会话处理，切换字段时按 Qt 的 reset/update 契约清理状态。当前候选读取上限 200 项。会话只在使用键盘时存在，见文末 2026-10-03 一节。
 
 ## 已验收与边界
 
@@ -75,3 +75,47 @@ enabledLocales=zh_CN,en_US
 修复后再验切换语言、横竖屏、输入 `nihao`、首候选“你好”和提交，没有新的LanguagePopup失效对象日志或输入法崩溃。证据：`rime-final-nihao.png`、`rime-menu-fixed.png`。英语切换仍保留；默认中文方案仅为朙月简体拼音，未来可单独评估雾凇拼音，不在本轮未经验证替换词库。
 
 整机重启后再次验收：点Plasma入口自动启动，默认简体中文；真实触屏`nihao`首候选“你好”，键盘PID266持续运行，无新的输入法CrashExit或LanguagePopup错误。截图`rime-after-reboot-nihao.png`。
+
+## 2026-10-03：两个键盘进程共用一份用户词库
+
+**原因。** 全屏远程桌面窗口（`agent/screen`）将内嵌 Qt VKB 的 InputPanel 并加载同一个 `Rungic.Rime` 插件。用户决定两边共用同一份用户词库 `~/.local/share/plasma-rime`：在一处学到的词，另一处也排在前面。`luna_pinyin.userdb` 是 LevelDB，同一时间只允许一个进程打开（`LOCK` 文件的 fcntl 写锁）。旧实现在构造输入法时建会话、析构时才销毁，plasma-keyboard 只要加载了中文布局就一直占着词库，键盘收起也不释放；另一进程会打不开词库。2026-10-03 实机核对时 plasma-keyboard 没有打开 `plasma-rime` 下的文件（当时可能未加载中文布局），因此尚无实机冲突记录。
+
+**源码核对**（librime 1.16.1、LevelDB 1.23、Qt VKB 6.10.2、plasma-keyboard 6.6.6，副本在 `.work/src-ref/`、`.work/pq/plasma-keyboard`）：
+
+- `UserDictionaryComponent::Create` 的 `db_pool_` 只保存 weak_ptr；最后一个会话销毁时 `LevelDb` 析构、`Close()`，同步释放 `LOCK`。`ConfigComponentBase::GetConfigData`、`DictionaryComponent` 的方案配置和词典缓存也是 weak_ptr：全部会话关闭后，下次建会话要重新加载。
+- **打开失败不能交给 librime 降级。** `UserDictionary::Load` 打开失败时安排 `userdb_recovery_task`。`UserDbRecoveryTask::Run` 先执行 `leveldb::RepairDB`：LevelDB 1.23 的 `repair.cc` 不取 `LOCK`，会改写 MANIFEST、把日志移到 `lost/`；修复失败还会把目录改名为 `.old` 后重建。对另一进程正打开的词库执行这些会损坏它。因此，在本进程确认可以独占词库之前，任何会话都不能尝试打开它。
+- `create_session` 先按 `schema_list`/`user.yaml` 建默认方案（`Switcher::CreateSchema`）。翻译器在建引擎时通过 `UserDictionaryComponent::Create` 读取 `<命名空间>/enable_user_dict`；`schema_open` 与会话的 `Schema` 共用同一份内存配置。
+- Qt VKB 的 `PlatformInputContext::updateInputPanelVisible` 在面板隐藏，或焦点对象不再接受输入时发出 `QInputMethod::visibleChanged`。plasma-keyboard 收到 KWin 的 deactivate 时先 `reset()`，没有上下文时再 `setVisible(false)`；键盘上的收起键走同一路径。
+- `Keyboard.qml` 的 `updateInputMethod` 由最先显示的页面调用自己的 `createInputMethod()`，`sharedLayouts` 内的页面共用该实例。数字字段（`ImhPreferNumbers` → `symbolMode`）先显示 `symbols` 页。Ubuntu 的 Qt VKB 插件只有 Hangul、Hunspell、Thai，没有 Pinyin 和手写。
+
+**改动**（`desktop/rime/`）：
+
+- 第一个需要 Rime 的键才建会话；没有组合时，Backspace、Enter、Esc 不建会话。不在切到拼音模式时建：每次键盘显示都会切模式，只显示不打字的键盘也会占用词库。
+- 没有组合时，面板隐藏（包括失焦）立即关闭会话；面板一直显示时，5 秒无键（`idleInterval`）后关闭。组合中（有预编辑或候选）不关闭；`reset`、提交或选词后重新计时。
+- 目录锁 `rungic-userdb.lock`（flock，进程内计数）。只有持锁时才建“共享会话”（使用词库）；关闭最后一个共享会话后，先 `join_maintenance_thread` 再放锁。拿到目录锁后，再用 `F_GETLK` 检查 `*.userdb/LOCK` 是否被不取目录锁的进程持有（例如升级后仍运行旧插件的 plasma-keyboard）。
+- 拿不到锁时建“访客会话”：建会话期间在内存中关闭各方案翻译器的 `enable_user_dict`，建完立即恢复。访客会话可以输入中文，但不学习，也读不到已学词。之后每个词的间隙重试共享会话，下次建会话也会重试。启动时探测配置是否共享，探测不通过就不建访客会话（按键按英文上屏）。
+- 常驻一个方案配置句柄，会话关闭后不必重新解析方案 YAML。
+- `layouts.py` 同时替换 `symbols.qml`，并断言 `zh_CN` 下不再有页面创建 `PinyinInputMethod`。此前数字字段先打开 symbols 页时，会报 `PinyinInputMethod is not a type`，随后改用 Qt 默认输入法（Hunspell），直到切到字母页才建 Rime，标点因此为半角。
+- `rungic-rime-check` 未设 `RUNGIC_RIME_USER_DIR` 时改用临时目录（旧版会把 300 次组合写进真实词库）。它新增会话生命周期、两进程共享、外来锁和耗时检查。`tests/run.sh` 负责构建并运行该检查和 `tests/tst_session.qml`（offscreen Qt VKB）；`tools/tests/test_plasma_rime.py` 汇总调用。
+
+**离线验证**（K8-Plus x86_64，Docker 内 Ubuntu 26.04 的 librime 1.16.1 / Qt 6.10.2，非实机）：
+
+- `rungic-rime-check` 全部通过：无会话时没有打开的 `LOCK`，会话期间有 1 个，关闭后归零；本进程持锁时，另一进程得到访客会话，可输入“你好”，且不打开词库；释放后对方得到共享会话，本进程选出的“式”在对方排第一；外来 fcntl 锁同样得到访客会话，词库目录文件不变，没有 `lost/`。
+- `tst_session.qml` 7 项通过：symbols 页先出现时也创建 Rime（`,` → `，`）；只显示键盘不建会话；隐藏、失焦或空闲时关闭；组合中隐藏不关闭，`reset` 后关闭。旧 `symbols.qml` 作对照时，第 1 项失败并出现 `PinyinInputMethod is not a type`。
+- 建会话加第一个键的耗时：用户目录在 tmpfs 上首次 2.3 ms、重开中位数 2.2 ms；在 ext4/NVMe 上首次 35.5 ms、重开中位数 19.4 ms。LevelDB 每次打开都会写新的 MANIFEST/CURRENT 并 fsync，这部分受文件系统限制。不缓存方案配置时，tmpfs 上约 5.8 ms；会话常驻时约 0.4 ms。
+
+**实机结果（2026-10-03，开发覆盖 rungic-plasma-input 0.510+dev20261002t182059）**：
+
+- 部署时不重启会话，只对 plasma-keyboard 发 SIGTERM。KWin 把信号退出视为崩溃，会自动重启输入法（`InputMethod` 的 `CrashExit` 分支，20 秒内少于 5 次）。新进程 02:25:24 启动；桌面模式浮窗也已重启，以便加载新插件。
+- 容器内 `rungic-rime-check`（用户目录在 `~/.cache`，与 `~/.local/share` 同一文件系统）全部通过：访客会话、释放后转为共享会话、两进程互通学到的词、外来锁不触发修复。
+- 耗时：建会话加第一个键，首次 24.6 ms，重开中位数 13.5 ms，不需要预建会话。
+
+**仍待用户实测**（以下第 1、2 步已完成，其余需要在界面上操作）：
+
+1. 用 `tools/rungic_dev.py deploy rungic-plasma-input` 装开发覆盖，并确认 plasma-keyboard 进程是部署后启动的（`ps -o pid,lstart -C plasma-keyboard`）。旧进程会一直持有词库，新进程只能用访客会话。
+2. 耗时：在容器内执行 `mkdir -p ~/.cache/rime-check && RUNGIC_RIME_USER_DIR=$HOME/.cache/rime-check /usr/libexec/rungic-rime-check`。目录要与 `~/.local/share` 在同一文件系统，不能用 tmpfs 的 `/tmp`。记录 `time:` 行；如果重开中位数明显超过 50 ms，再考虑在面板显示时预建会话或延长空闲时间。
+3. 释放：在手机键盘上输入中文，期间 `ls -l /proc/$(pgrep -x plasma-keyboard)/fd | grep plasma-rime` 应能看到 `luna_pinyin.userdb/LOCK` 和 `rungic-userdb.lock`；收起键盘后两项消失。键盘保持显示且 5 秒不按键，两项也应消失。不打字时，`flock -n ~/.local/share/plasma-rime/rungic-userdb.lock true` 应返回 0；组合中应返回 1。
+4. 数字字段先打开 symbols 页，输入 `,` 得到 `，`，日志中没有 `PinyinInputMethod is not a type`。
+5. 收起再打开键盘后，刚选过的非首位候选仍排第一，说明会话关闭时已写盘。全屏键盘接入后，再在两边交替输入同一拼音核对共享；对方持有词库时，本边应能输入中文但不学习。
+
+**剩余风险**：访客会话依赖 librime 方案配置缓存共享这一实现细节。启动时虽有探测，升级 librime 后仍须重新核对 `UserDictionary::Load` 的恢复逻辑和配置缓存。访客会话的引擎只在建立时读取开关；VKB 不发送切换方案的热键，所以不会重建翻译器。两个进程在 rime-data 升级后同时启动时，可能并发执行 `workspace_update` 写 `build/`，这是原有风险，现在两进程更容易遇到。实机上的 fsync 延迟未知。全屏键盘须加载同一插件、不设 `RUNGIC_RIME_USER_DIR`，并通过 `QInputMethod` 显示和隐藏面板；否则只能等空闲超时释放。

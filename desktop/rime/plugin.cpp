@@ -1,21 +1,53 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Public Qt Virtual Keyboard input-method API; no KWin or Qt private ABI.
+#include <QGuiApplication>
+#include <QInputMethod>
 #include <QQmlExtensionPlugin>
+#include <QTimer>
 #include <QVirtualKeyboardAbstractInputMethod>
 #include <QVirtualKeyboardInputContext>
 #include <QVirtualKeyboardInputEngine>
 #include <QVirtualKeyboardSelectionListModel>
 #include "runtime.h"
+// rime_api.h defines these as macros; they would break moc output (QMetaType::Bool).
+#undef Bool
+#undef True
+#undef False
 
+// A librime session, and with it the shared user dictionary (runtime.h), exists only while the
+// keyboard is in use: opened by the first key Rime has to see, closed once nothing is being
+// composed and the panel is hidden or no key came for idleInterval ms (docs/41, 2026-10-03).
 class RimeInputMethod : public QVirtualKeyboardAbstractInputMethod {
     Q_OBJECT
+    // For tests and diagnostics: whether a session is open, and whether it is a shared one.
+    Q_PROPERTY(bool sessionOpen READ sessionOpen NOTIFY sessionChanged)
+    Q_PROPERTY(bool sessionShared READ sessionShared NOTIFY sessionChanged)
+    Q_PROPERTY(int idleInterval READ idleInterval WRITE setIdleInterval NOTIFY idleIntervalChanged)
     using Engine = QVirtualKeyboardInputEngine;
     using Model = QVirtualKeyboardSelectionListModel;
-    RimeApi *api = nullptr;
-    RimeSessionId session = 0;
+    RimeRuntime &rime = RimeRuntime::instance();
+    RimeApi *api = rime.api;
+    RimeRuntime::Session session;
+    QTimer idle;
     Engine::InputMode mode = Engine::InputMode::Pinyin;
     QStringList candidates;
     bool composing = false;
+
+    bool ensureSession() {
+        // A guest session moves to the user dictionary between words once it is free again.
+        if (session.id && !session.shared && !composing) {
+            RimeRuntime::Session shared;
+            if (rime.open(shared, true)) { rime.close(session); session = shared; emit sessionChanged(); }
+        }
+        if (!session.id && rime.open(session)) emit sessionChanged();
+        return session.id;
+    }
+    void release() {
+        if (!session.id || composing) return;   // finishing or resetting the composition restarts the timer
+        rime.close(session);
+        emit sessionChanged();
+    }
+    void used() { if (session.id) idle.start(); }
 
     void clearCandidates() {
         composing = false;
@@ -26,11 +58,11 @@ class RimeInputMethod : public QVirtualKeyboardAbstractInputMethod {
 
     void refresh() {
         auto context = inputContext();
-        if (!context || !session) return;
+        if (!context || !session.id) return;
         // Read commits before notifying Qt: commit() can synchronously reset us.
         RIME_STRUCT(RimeCommit, commit);
         QString text;
-        if (api->get_commit(session, &commit)) {
+        if (api->get_commit(session.id, &commit)) {
             text = QString::fromUtf8(commit.text);
             api->free_commit(&commit);
         }
@@ -38,13 +70,13 @@ class RimeInputMethod : public QVirtualKeyboardAbstractInputMethod {
 
         QString preedit;
         RIME_STRUCT(RimeContext, state);
-        if (api->get_context(session, &state)) {
+        if (api->get_context(session.id, &state)) {
             preedit = QString::fromUtf8(state.composition.preedit);
             api->free_context(&state);
         }
         candidates.clear();
         RimeCandidateListIterator iterator{};
-        if (api->candidate_list_begin(session, &iterator)) {
+        if (api->candidate_list_begin(session.id, &iterator)) {
             while (candidates.size() < 200 && api->candidate_list_next(&iterator))
                 candidates.append(QString::fromUtf8(iterator.candidate.text));
             api->candidate_list_end(&iterator);
@@ -57,30 +89,36 @@ class RimeInputMethod : public QVirtualKeyboardAbstractInputMethod {
 
 public:
     explicit RimeInputMethod(QObject *parent = nullptr) : QVirtualKeyboardAbstractInputMethod(parent) {
-        api = RimeRuntime::instance().api;
-        session = api->create_session();
-        if (session) {
-            api->select_schema(session, "luna_pinyin_simp");
-            api->set_option(session, "ascii_mode", false);
-            api->set_option(session, "simplification", true);
-        }
+        idle.setSingleShot(true);
+        idle.setInterval(5000);
+        connect(&idle, &QTimer::timeout, this, &RimeInputMethod::release);
+        // Hiding covers focus loss too: Qt hides the panel when no focused item accepts input,
+        // and plasma-keyboard hides it when KWin deactivates the text input.
+        if (auto im = QGuiApplication::inputMethod())
+            connect(im, &QInputMethod::visibleChanged, this, [this] {
+                if (!QGuiApplication::inputMethod()->isVisible() && session.id) idle.start(0);
+            });
     }
-    ~RimeInputMethod() override { if (session) api->destroy_session(session); }
+    ~RimeInputMethod() override { rime.close(session); }
+    bool sessionOpen() const { return session.id; }
+    bool sessionShared() const { return session.shared; }
+    int idleInterval() const { return idle.interval(); }
+    void setIdleInterval(int ms) { if (ms != idle.interval()) { idle.setInterval(ms); emit idleIntervalChanged(); } }
+
     QList<Engine::InputMode> inputModes(const QString &) override {
-        return session ? QList<Engine::InputMode>{Engine::InputMode::Pinyin, Engine::InputMode::Latin}
-                       : QList<Engine::InputMode>{Engine::InputMode::Latin};
+        return rime.ready ? QList<Engine::InputMode>{Engine::InputMode::Pinyin, Engine::InputMode::Latin}
+                          : QList<Engine::InputMode>{Engine::InputMode::Latin};
     }
     bool setInputMode(const QString &, Engine::InputMode next) override {
         if (next != mode) reset();
         mode = next;
-        return mode == Engine::InputMode::Latin || session;
+        return mode == Engine::InputMode::Latin || rime.ready;
     }
     bool setTextCase(Engine::TextCase) override { return true; }
     bool keyEvent(Qt::Key key, const QString &text, Qt::KeyboardModifiers modifiers) override {
-        if (!session || !inputContext() || mode != Engine::InputMode::Pinyin) return false;
+        if (!rime.ready || !inputContext() || mode != Engine::InputMode::Pinyin) return false;
         const auto hints = inputContext()->inputMethodHints();
         if (hints.testFlag(Qt::ImhHiddenText)) { reset(); return false; }
-        api->set_option(session, "_no_learning", hints.testFlag(Qt::ImhSensitiveData));
         if (modifiers & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier)) return false;
 
         int symbol = 0;
@@ -92,11 +130,16 @@ public:
 
         // Non-ASCII punctuation belongs to the layout. Finish composing first.
         if (!symbol) {
-            if (!text.isEmpty() && composing) { api->commit_composition(session); refresh(); }
+            if (!text.isEmpty() && composing) { api->commit_composition(session.id); refresh(); used(); }
             return false;
         }
-        const bool handled = api->process_key(session, symbol, 0);
+        // Editing keys reach Rime only during a composition; they need no session otherwise.
+        if (!composing && symbol > 0xff00) return false;
+        if (!ensureSession()) return false;
+        api->set_option(session.id, "_no_learning", hints.testFlag(Qt::ImhSensitiveData));
+        const bool handled = api->process_key(session.id, symbol, 0);
         refresh();
+        used();
         return handled;
     }
     QList<Model::Type> selectionLists() override { return {Model::Type::WordCandidateList}; }
@@ -110,19 +153,26 @@ public:
         return {};
     }
     void selectionListItemSelected(Model::Type type, int index) override {
-        if (type == Model::Type::WordCandidateList && session && index >= 0 && index < candidates.size()) {
-            api->select_candidate(session, index);
+        if (type == Model::Type::WordCandidateList && session.id && index >= 0 && index < candidates.size()) {
+            api->select_candidate(session.id, index);
             refresh();
+            used();
         }
     }
     // Qt contract: reset must not write to the input context.
     void reset() override {
-        if (session) api->clear_composition(session);
+        if (session.id) api->clear_composition(session.id);
         clearCandidates();
+        used();
     }
     void update() override {
-        if (session && composing) { api->commit_composition(session); refresh(); }
+        if (session.id && composing) { api->commit_composition(session.id); refresh(); }
+        used();
     }
+
+signals:
+    void sessionChanged();
+    void idleIntervalChanged();
 };
 
 class RungicRimePlugin : public QQmlExtensionPlugin {
