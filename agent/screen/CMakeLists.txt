@@ -17,3 +17,6 @@ install(TARGETS rungic-agent-screen-window DESTINATION libexec)
 # plasma_com.rungic.quicksetting.desktopmode.po (the quick setting; Plasma Mobile gives each quick
 # setting the domain plasma_<plugin id>).
 ki18n_install(po)
+# The fullscreen keyboard's style (FloatingKeyboard), where Qt Virtual Keyboard looks for styles:
+# QtQuick/VirtualKeyboard/Styles/<name>/style.qml under an import path of the window's own.
+install(FILES vkb/rungic/style.qml DESTINATION lib/rungic-agent-screen/qml/QtQuick/VirtualKeyboard/Styles/rungic)

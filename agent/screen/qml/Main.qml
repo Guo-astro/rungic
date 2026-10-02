@@ -907,7 +907,8 @@ Window {
         slide: root.full ? 28 : root.barAbove ? 8 : -8
         x: root.full ? Math.round((stage.width - width) / 2)
            : Math.max(6, Math.min(stage.width - width - 6, panel.x + (panel.width - width) / 2))
-        y: root.full ? stage.height - height - 20
+        // Fullscreen: above the keyboard while it is at the bottom.
+        y: root.full ? (root.keyboard ? Math.min(stage.height - height - 20, root.keyboard.y - height - 8) : stage.height - height - 20)
            : root.barAbove ? panel.y - root.gap - height : panel.y + panel.height + root.gap
         actions: root.full
             ? [{ icon: "view-restore", act: () => root.leaveFullscreen() }]

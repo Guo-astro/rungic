@@ -49,6 +49,7 @@ int main(int argc, char *argv[])
     KLocalizedString::setApplicationDomain("rungic-agent-screen");
     QQmlApplicationEngine engine;
     engine.addImportPath(QStringLiteral("/usr/lib/rungic-rime/qml"));   // Rungic.Rime, for the Chinese layout
+    engine.addImportPath(QStringLiteral("/usr/lib/rungic-agent-screen/qml"));   // the keyboard's style
     KLocalization::setupLocalizedContext(&engine);
     engine.rootContext()->setContextProperty(QStringLiteral("agent"), single);
     engine.rootContext()->setContextProperty(QStringLiteral("director"), director.get());
