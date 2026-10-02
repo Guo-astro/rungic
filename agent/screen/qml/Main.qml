@@ -494,7 +494,9 @@ Window {
                 id: pointerStream
                 anchors.fill: parent
                 nodeId: root.pointerWanted ? root.screen.pointerNodeId : 0
-                visible: root.pointerWanted && nodeId > 0 && ready
+                // Visible to receive at all (KPipeWire takes frames only while it is), seen once ready.
+                visible: nodeId > 0
+                opacity: ready ? 1 : 0
             }
             Kirigami.Icon {
                 anchors.centerIn: parent

@@ -327,7 +327,9 @@ MultiPointTouchArea {
         if (now.length === 0 || toToolbar)
             return
         const c = centroid(now)
-        if (fromStrip && !moved && now.length === 1) {
+        // A touch from the bottom edge is held back until it shows its way (as the APK's): up, the
+        // toolbar; anything else, the gestures, from where it started. A tap there still clicks.
+        if (fromStrip && now.length === 1) {
             const up = start.y - c.y, side = Math.abs(c.x - start.x)
             if (up > swipeMm * pxPerMm && up > side) {
                 toToolbar = true
@@ -335,6 +337,11 @@ MultiPointTouchArea {
                 toolbarWanted()
                 return
             }
+            if (Math.hypot(up, side) <= swipeMm * pxPerMm)
+                return
+            fromStrip = false
+        } else if (fromStrip) {
+            fromStrip = false   // a second finger: not the toolbar
         }
         if (!moved && travelled(now)) {
             moved = true
