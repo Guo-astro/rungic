@@ -1060,3 +1060,170 @@ APK 进程提供：`platform.sock`、`capture.sock`、`codec.sock`、`wayland-0`
 - 任务切换、锁屏、键盘弹出正常；
 - Qt 应用在背后时每秒“曝光一次”的开销；
 - 用户实际使用中的观察。
+
+## 21. 窗口层级：全屏盖住授权框等系统窗口（2026-10-03，分析，未改代码）
+
+**现象（用户报告）**：桌面模式浮窗进入全屏后，0 号里的应用请求 root 权限（polkit），密码框被盖在全屏下面。§19.5 的屏幕键盘是同一类问题，当时只用 KWin 补丁单独修了输入法这一种窗口。
+
+### 21.1 授权框从哪里弹出来（实机，2026-10-03）
+
+- 整台手机只有一个 polkit 代理：`plasma-polkit-agent.service` 里的 `polkit-kde-authentication-agent-1`，环境为 `WAYLAND_DISPLAY=wayland-0`、用户总线、`XDG_SESSION_ID=c126`，也就是手机会话。
+- 0 号（`rungic-workspace@0`）和助理屏工作区的进程都在 `user@1000.service` 下，`XDG_SESSION_ID` 同样是 c126。docs/83 已经实测过：这类进程的请求会回落到用户的显示会话。所以独立桌面里任何应用要授权，密码框都由手机会话的代理画在**手机的 KWin** 上，不在 0 号桌面里。
+- 手机外观（`org.kde.breeze.mobile`）的 `systemdialog/SystemDialog.qml` 是 `Qt.FramelessWindowHint | Qt.Dialog`，`showMaximized()`，背景半透明压暗。它是普通的 xdg_toplevel。
+- 同类的路由：0 号的密码库（`org.freedesktop.secrets`、kwallet）经 `rungic-bus-forward` 转到手机会话（§19.2），所以解锁提示同样出现在手机 KWin 上。
+- 顺带发现：1 号工作区的私有总线上另有一个 `ksecretd`（pid 3458），这与 §19.2 写的“整台手机只有 1 个 ksecretd”不符；目前只有 0 号做了转发。这是 §19.1 提到的数据损坏风险，另行处理。
+
+### 21.2 KWin 怎样排层（源码，kwin 6.6.6、plasma-mobile 6.6.5）
+
+KWin 的层从低到高（`effect/globals.h`）：Desktop、Below、Normal、Above、Notification、**Active**（处于活动状态的全屏窗口）、Popup、CriticalNotification、OnScreenDisplay、**Overlay**。
+
+- layer-shell 的四层对应关系（`LayerShellV1Window::belongsToLayer`）：background → Desktop，bottom → Below，**top → Above，overlay → Overlay**。
+- Overlay 层里还有：输入法、KWin 内部窗口、画中画（`Window::belongsToLayer`）。
+- Plasma Mobile 自己的外壳界面全部是 layer-shell overlay：状态栏和导航栏（`containments/panel`、`taskpanel`，`setWindowLayer(LayerOverlay)`）、通知弹窗、音量提示、控制中心（ActionDrawer）、操作按钮。Rungic 的语音助手浮层（`agent/assistant/app/overlay.cpp`）、投屏选择（`CastPicker.qml`）也在 overlay。
+- 在 Plasma Mobile 的设计里，**overlay 层是外壳**，位于所有应用之上，全屏应用也不例外。全屏应用是 Active 层的普通窗口，面板看到“当前窗口全屏”（`windowMaximizedTracker.isCurrentWindowFullscreen`）后自己转成 hidden，只留一条触摸带，用来下拉。
+
+**我们的全屏**（`Floater::setFullscreen`，§17.2）：浮窗这个 layer surface 切到 overlay，并声明接收键盘。KWin 因此激活它，激活时会把它提到 Overlay 层最上面。结果是两层问题：
+
+1. **跨层**：Normal 到 OnScreenDisplay 各层的窗口，永远在它下面。授权框（Normal）、门户的对话框、密码库解锁、各类严重通知和 OSD 都在这里，也包括 PC 上 Plasma 桌面的同类窗口。
+2. **同层**：`Workspace::addWaylandWindow` 对不要键盘、不会被激活的新窗口调用 `restackWindowUnderActive`。活动窗口和新窗口在同一层时，新窗口放到活动窗口**下面**。我们的全屏正是 Overlay 层的活动窗口，所以之后出现的 Plasma Mobile 通知弹窗、音量提示、Rungic 语音助手浮层都会被压在下面。键盘（§19.5）就是这样被压住的（输入面板不接收键盘焦点）。只有要键盘、会被激活的 overlay 窗口（例如 CastPicker）能浮上来。
+
+**根本原因**：全屏在语义上是“一个全屏应用”。我们为了盖住面板、又不触发面板的滑出动画，把它声明成了外壳最高层的一部分，并抢到了同层的最上面。KWin 和 Plasma 按标准层级为“全屏应用之上”预留的所有窗口，都因此被盖住。逐个窗口打补丁（输入法、授权框、通知、OSD……）没有尽头；在 PC 上的 Plasma 桌面也会遇到同样的问题，这不符合 §17 的“PC 上直接可用”。
+
+### 21.3 影响面（源码推断；授权框和键盘是用户实际遇到的）
+
+| 窗口 | 所在层 | 现在（overlay 全屏） | 改成标准全屏（Active 层）后 |
+|---|---|---|---|
+| polkit 授权框（手机外观） | Normal，会被激活 | 被盖住；还会抢走键盘焦点 | 被激活后全屏退到 Normal，授权框在上面；关闭后焦点回到全屏 |
+| 门户对话框、kwallet 解锁（手机会话） | Normal | 被盖住 | 同上 |
+| 屏幕键盘 plasma-keyboard | Overlay，输入法 | 原本被盖住，现靠补丁 `input-panel-above-overlay` | 天然在上面，这一用途不再需要补丁 |
+| Plasma Mobile 通知弹窗、音量提示 | Overlay，不要键盘 | 新出现时被压在下面 | 在上面（Plasma Mobile 对全屏应用的设计行为） |
+| Rungic 语音助手浮层 | Overlay，不要键盘 | 被压在下面 | 在上面 |
+| CastPicker | Overlay，要键盘 | 被激活后浮在上面 | 在上面 |
+| Plasma Mobile 状态栏和导航栏 | Overlay | 被盖住，下拉和主页手势失效（§17.2 的取舍） | 看到全屏后自己隐藏，留触摸带下拉；与 §18 边缘手势的分工要重新核对 |
+| 浮动键盘（§19.9） | 在全屏窗口里面 | 正常 | 不变 |
+| 锁屏 | 安卓锁屏，在整个 Linux 输出之上 | 不受影响 | 不变 |
+
+电视上的 `placeOnCast` 也是整块输出的 overlay surface，属于同一类。
+
+### 21.4 方向
+
+**A. 全屏改用标准全屏：xdg_toplevel `set_fullscreen`（建议）**
+- KWin 的规则就是为这种情况设计的：只有活动时才在 Active 层，被别的窗口激活就退下；Popup、严重通知、OSD、外壳和输入法都在它上面。
+- Plasma Mobile 和 PC 上的 Plasma 都按全屏应用对待它，不用为任何一种系统窗口单独处理。§19.5 的补丁在这一用途上可以考虑去掉。
+- §20.1 的遮挡降帧针对的是“最上面、不透明、盖满整个输出的窗口”，对 toplevel 同样有效。
+- 要解决 §17.2 当初放弃它的两个原因：
+  - 新窗口要从第一次 configure 起就是全屏尺寸，即先设置全屏状态再首次提交，不能先按普通尺寸排一次版；
+  - 画面交接：全屏窗口用同一个 PipeWire 节点再开一路消费，等它画出第一帧带画面的内容后，浮窗才藏起画面，变形动画在全屏窗口里从浮窗的位置开始。这样不会出现 §17.2 里“两边都没有画面”的十几帧。
+- 面板会按 Plasma Mobile 的方式滑走，能否与变形动画同时进行、看起来自然，要上机看。如果不自然，改的是 Plasma Mobile 面板对所有全屏应用的隐藏方式，属于共享层。
+- 失去焦点的规则（§17.1：助理屏 0.4 秒退出）要重新设计：授权框弹出不应该把全屏退回浮窗。
+
+**B. 保留 overlay，在 KWin 里加一条“全屏 layer surface”规则（不建议）**
+- 要在 KWin 里重新实现一遍 Active 层的语义，还要逐一区分 Overlay 层里的面板、通知、OSD，哪些该在上、哪些该在下。
+- Plasma Mobile 的面板看不到 layer surface 的“全屏”，必须另改外壳。
+- PC 上的 Plasma 也要带这个补丁。这仍然是在为一个非标准窗口重造标准机制。
+
+**另一层：提示该出现在哪块屏幕上（与 A/B 无关，同样要做）**
+- 0 号的授权框、密码库解锁现在画在手机上，并且是手机外观。电视的电脑模式、RemoteSurface 远程观看 `ws-0` 时，人看不到它们，桌面就会卡在等授权。
+- 规则应当是：**提示出现在发起它的应用所在的那块屏幕上**；没有人在看的无头工作区，转到手机。
+- polkit 每个会话只能注册一个代理，而 `user@1000` 下的进程都回落到同一个显示会话，标准的“按会话选代理”区分不了 0 号。可能的做法是只注册一个代理，按请求里的 `polkit.subject-pid` 所属的 cgroup（`rungic-workspace@N.service`）把请求交给对应显示上的界面。这一项还没有调研上游和类似项目，未开始选型。
+
+**待做**：用户选定方向后，先查 KDE / GNOME 上“画中画转全屏”的已有实现，以及 polkit 多显示代理的上游状态，再动手。验收时按 21.3 的表逐项实测：授权框、通知、音量提示、语音助手、键盘、面板下拉，以及 PC（或无头 KWin）上的 Esc 和授权框。
+
+### 21.5 用户决定与调研（2026-10-03）
+
+**用户决定**：全屏改成标准全屏窗口；先调研再实现。
+
+**用户追问：桌面是横的，授权框为什么不横着出来？**
+- 全屏的横屏是窗口自己把内容转了 90 度（§17.1，只转浮窗、不转手机）。手机 KWin 的输出始终是竖屏 1080×2400，手机会话里的窗口都按竖屏排。
+- 授权框由手机会话唯一的 polkit 代理画在手机 KWin 上（21.1），不属于 0 号的横屏桌面（1920×1080），所以是竖的，还是手机外观。§19.9 的浮动键盘要放在全屏窗口里自己画，也是这个原因。
+- 结论：标准全屏只能让授权框露出来。要它横着出现，得让 0 号发起的提示画在 0 号里面（21.4 的“另一层”）。手机会话自己的通知和音量提示在全屏上仍然是竖的，除非全屏时真的转动手机的输出。这一条用户之前否决过（§17.1），这次没有改。
+
+**调研：标准全屏能不能做到无缝进出**（源码，未上机）
+- **画中画转全屏，别的项目怎么做**：KWin 6.6.6 自带的 xx-pip-v1 是独立的窗口角色（`xx_pip_shell_v1.get_pip`），只有移动、缩放和 origin，没有全屏；`Window::belongsToLayer` 把它放在 Overlay。浏览器、播放器的画中画也都是另开一个窗口，全屏时用 xdg_toplevel 的 `set_fullscreen`。没有找到“同一个表面从画中画切到标准全屏”的做法，所以浮窗和全屏必须是两个窗口。
+- **第一帧就是全屏尺寸**：
+  - Qt 6.10.2 的 `QWaylandXdgSurface::Toplevel` 在构造时调用 `requestWindowStates(window->windowStates())`，因此 `showFullScreen()` 会在第一次提交之前就发出 `set_fullscreen(output)`（qtbase `qwaylandxdgshell.cpp`）。
+  - KWin 的 `XdgToplevelWindow::initialize` 在第一次 configure 时就执行 `setFullScreen(... initialFullScreenMode ...)`。
+  - 所以 §17.1 那次“新窗口先按错误尺寸排一次版”的问题可以避免：等窗口拿到全屏尺寸后，再把舞台移进去。
+- **画面移到另一个窗口后多快出图**：KPipeWire 6.6.4 的 `PipeWireSourceItem::itemChange(ItemSceneChange)` 会释放旧纹理并标记重建；`updatePaintNode` 用最后一帧 dmabuf 的参数重新导入（`m_createNextTexture`）。所以不用等工作区出下一帧，新窗口的下一帧就有画面。§17.2 实测的约 110 ms，是新窗口第一次建立纹理、特效和着色器的开销。
+- **做法**：
+  - 交接期间，离开的那个窗口留一张画面静帧（`grabToImage`），放在画面原来的位置；
+  - 新窗口画出两帧之后，才撤掉静帧、开始变形；
+  - 全屏窗口在活动时位于 Active 层，比浮窗所在的 Above 层高，所以静帧和新画面叠在同一位置，看不出交接。
+- **会变的行为**（Plasma Mobile 6.6.5 源码）：
+  - 全屏窗口是一个应用：面板看到当前窗口全屏（`isCurrentWindowFullscreen`）后转为 hidden，并留一条触摸带（`containments/panel` 的 `updateTouchArea`，约一个 gridUnit），从顶边可以下拉。
+  - 它会出现在任务切换器里，也能被切走；从任务切换器关闭它，改为回到浮窗，不关掉屏幕本身。
+  - 原来的 overlay 方案下，全屏期间不能下拉、不能回主页（§17.2 的取舍），这一条不再成立。顶边触摸带与全屏里的触摸会不会冲突，以及与 §18 边缘手势的分工，要上机核对。
+
+**调研：授权框能不能出现在 0 号里**（源码，未实现）
+- polkit 127（`polkitbackendinteractiveauthority.c` `get_authentication_agent_for_subject`）只有两种选法：
+  - 按请求进程（必须精确等于注册的那个进程）；
+  - 按会话。0 号和手机的进程同属会话 c126，按会话分不开。
+- 每个请求的 details 里带有 `polkit.subject-pid` 和 `polkit.caller-pid`（同一文件的 `add_pid`）。代理可以据此查到请求进程在哪个显示上：KIO 从 0 号启动的应用在 `app.slice` 下，cgroup 看不出属于哪个工作区，所以要看进程环境里的 `WAYLAND_DISPLAY`。
+- polkit-kde-agent 6.6.4 的 `PolicyKitListener::initiateAuthentication` 只在自己的显示上建 `QuickAuthDialog`。它的 `org.kde.Polkit1AuthAgent` 接口只用来把对话框挂到请求方的窗口上（xdg-foreign），不能换显示；一个 Qt 进程也只连得上一个 Wayland 显示。
+- 可行的方向：仍由手机会话的代理注册，它按 `subject-pid` 判断，把来自 0 号的请求转给 0 号里运行的同一个代理界面。真正的密码校验由 polkit-agent-helper-1 凭 cookie 完成，与在哪个进程里显示无关。
+- 本轮没有找到上游或类似项目里“一个会话、多块显示”的 polkit 代理实现，只能记为“本轮未找到”，不等于不存在。密码库解锁提示（经 `rungic-bus-forward` 转到手机的 ksecretd）属于同一类问题，尚未调研。
+
+
+### 21.6 实现：全屏是一个标准全屏窗口（2026-10-03，已部署为开发覆盖；无头实测和手机上的桌面模式实测通过，部分项目待测）
+
+**做法**（`agent/screen/qml/Main.qml`、`floater.cpp`）：
+- 浮窗仍是原来的 layer surface（top 层、不接收键盘）。`Floater::setFullscreen` 不再切换图层，已删除。
+- 新增 `fullWindow`：一个普通的 QML `Window`（无边框、透明）。`Floater::showFullscreen` 把它放到手机屏幕上并调用 `showFullScreen()`。
+  - 窗口标题沿用“桌面”和“助理屏”。app_id 就是程序本来的 `com.rungic.DesktopMode` 或 `com.rungic.AgentScreen`，所以任务切换器里显示的是它们。
+- 舞台（画面、工具栏、FullTouch、浮动键盘）的 `parent` 绑定到 `stageInFull`：全屏时放在 `fullWindow` 里，否则放在浮窗里。
+  - 键盘焦点相关的 `escapeKey` 和 `keyboardField` 移进了 `fullWindow`，因为浮窗从不接收键盘。
+- **进入**：
+  1. `grabToImage` 截下浮窗里的画面，作为静帧放在原位；
+  2. 显示全屏窗口；
+  3. 窗口拿到全屏尺寸后，舞台移进去，按全屏排版，再变换回浮窗的位置；
+  4. 全屏窗口画完两帧后撤掉静帧，开始 0.32 秒的变形动画。
+- **退出**：动画反向播放。结束时在全屏窗口里留一张静帧，舞台回到浮窗；浮窗画完两帧后，隐藏全屏窗口。
+- **从外部关闭**（例如任务切换器）：改为退出全屏、回到浮窗，不关掉屏幕本身。浮窗被隐藏时（比如投到电视上），全屏直接撤掉，不播动画（`dropFullscreen`）。
+- 不透明区域（§20）改为设在全屏窗口上（`Floater::setOpaque(window, …)`）。
+- 关键步骤写 `console.info` 日志，前缀为 `fullscreen:`。
+
+**无头实测**（G100 S，2026-10-03 05:45–06:05；临时的 9 号工作区，在它的显示上运行新版 `--desktop`，画面是 0 号桌面；手机屏幕上的浮窗没有重启）：
+- 进入全屏后，KWin 的堆叠顺序里多出“桌面”（`com.rungic.DesktopMode`）：layer 5（Active）、fullScreen、active，尺寸 1920×1080。截图里 0 号桌面铺满。
+- 弹出一个 GTK 对话框（会被激活，作用与授权框相同）：
+  - 全屏窗口退到 layer 2（Normal），对话框排在它上面，截图可见；
+  - 点“取消”后，全屏窗口回到 layer 5 并重新成为活动窗口。
+- Esc 退出全屏：全屏窗口隐藏，浮窗回到原来的位置和大小。
+- 三次进出全屏，从点按到开始变形分别是 174、127、148 ms。第一次是截静帧 42 ms、映射 32 ms、新窗口画出 100 ms，后两次映射只要约 10 ms。
+- 测试环境的坑：
+  - `--workspace 9` 的浮窗会在几秒内正常退出：Rungic 应用没有登记 9 号助理屏，平台桥报告未开启，按设计退出。所以改用 `--desktop` 测。
+  - fake input 的点击要在同一个 `WorkspaceInput` 会话里先移动、再点，点完等一会儿再关闭；否则松开事件会丢。
+- 清理：测试窗口和对话框已结束，9 号工作区已停止，临时文件已删除。
+
+**部署**：`rungic_dev.py deploy rungic-agent-screen --restart never`，开发覆盖 `0.510+dev20261002t214954.e6693dd.dirty`，`apt=ok`。没有重启用户手机上的桌面模式浮窗，因此手机屏幕上仍在运行旧版，直到浮窗进程重启。
+
+**手机上的桌面模式实测**（2026-10-03 06:11–06:27，G100 S，用户同意重启桌面模式浮窗并在屏幕上测试；测试前确认屏幕上没有触点，即 `ABS_MT_TRACKING_ID=-1`；截图和录屏在 `.work/verify/20261003-fullscreen-phone/`）：
+- **进入全屏**：画面转成横屏、铺满屏幕，Plasma Mobile 的状态栏和导航栏自己收起。手机 KWin 的堆叠顺序：
+  - `com.rungic.DesktopMode`：layer 5（Active），fullScreen，active；
+  - Plasma Mobile 的两个面板：layer 9（Overlay），处于隐藏状态。
+- **授权框**：
+  - 发起方式：从 0 号的环境发起 `pkcheck --action-id org.freedesktop.hostname1.get-product-uuid --process $$ --allow-user-interaction`。这个命令只询问授权，不做任何事。它要经 `systemd-run --user --scope` 放进 `user@1000.service`，和 0 号里真实启动的应用一样；直接从 adb 启动的进程不属于任何会话，polkit 会回答“no agent is available”。
+  - 手机外观的 “Authentication Required” 显示在全屏桌面之上（`4-auth.png`）。堆叠顺序：全屏窗口退到 layer 2，`polkit-kde-authentication-agent-1` 在它上面并处于活动状态。授权框是竖屏的，与 21.5 的分析一致。
+  - 授权框弹出期间，状态栏和导航栏重新出现，因为当前窗口已不是全屏窗口。
+  - 点密码框后，plasma-keyboard 显示在最下面，授权框随之上移（`8-s.png`）。
+  - 点“取消”后，`pkcheck` 返回 Not authorized，没有授予任何权限；全屏窗口回到 layer 5 并重新成为活动窗口，面板再次收起。
+- **交接**：
+  - 第一版有缺陷：舞台在全屏窗口刚 `visible` 时就移了过去，但手机上全屏窗口约 0.6 秒后才出第一帧。录屏里浮窗位置的画面消失了约 0.6 秒，变形动画也大半没被看到（`fs-enter.mp4` 第 26 帧）。9 号工作区里这一步很快，所以没有发现。
+  - 修法：等全屏窗口真正画出第一帧（`frameSwapped`）之后，才把舞台移进去；浮窗里的静帧一直留到全屏窗口把画面画出来（`handoffIn`）。
+  - 修改后再录一次（第一次进入，`fs-enter2.mp4`）：浮窗位置没有亮度突跳，静帧停留两帧之后开始变形，没有空白帧。日志里从点按到开始变形共 153 ms：截静帧 22 ms、全屏窗口第一帧 67 ms、画出画面 64 ms。
+- **退出全屏**（从左边缘滑出工具栏，点退出；`fs-leave.mp4`）：画面连续地变回浮窗位置，没有空白帧，浮窗的位置和大小不变。
+- **和原来 overlay 方案在观感上的不同**（都是 Plasma Mobile 对全屏应用的标准行为）：
+  - 进入时，状态栏和导航栏在变形开始后约 0.1 秒才收起；
+  - 退出时，主屏先显示模糊的壁纸，等全屏窗口隐藏后，主屏内容再淡入。
+- **收尾**：浮窗已经用 `rungic-desktop-mode ensure` 以正常方式重启，处于普通窗口状态，与测试前相同（位置是默认值，测试前的拖动位置没有保存）；临时脚本和日志已删除。
+- **部署**：修复后的开发覆盖为 `0.510+dev20261002t222124.e6693dd.dirty`，`apt=ok`。完整性检查是 drift：有 21 个开发覆盖和 2 个不属于任何包的 `/usr` 文件，前两次部署时就已如此。
+
+**仍待实测**：
+- 顶边触摸带下拉；在任务切换器里切走和切回；从任务切换器关闭。
+- 输入密码通过授权后回到全屏（本次只测了取消）。
+- 浮动键盘、Ctrl/Alt 组合键、手机键盘的文字提交。
+- 直接触摸模式下点黑边呼出工具栏（本次是触控板模式）。
+- 触控板模式下的指针画面；投电视；§20 的不透明区域和遮挡降帧仍然生效。
+
+**后续**：
+- `input-panel-above-overlay.patch`（§19.5）只是为原来的 overlay 全屏加的。手机实测确认键盘照常显示在新的全屏之上后，按“缩小补丁”的原则移除。
+- 授权框出现在 0 号里（21.5 的方向）另行实现。
