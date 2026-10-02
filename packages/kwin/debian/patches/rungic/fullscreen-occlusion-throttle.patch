@@ -1,0 +1,620 @@
+From: clawd20130 <clawd20130@gmail.com>
+Date: Sat, 3 Oct 2026 04:19:47 +0900
+Subject: Scene: windows covered by one opaque window over the whole output
+ get frame callbacks once a second
+MIME-Version: 1.0
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+A window whose opaque region covers an entire output (a fullscreen view, our floating window in
+fullscreen) hides every window below it there, and the occlusion culling already paints none of
+them. They still got a frame callback with every frame of the output, and each of their commits
+scheduled one: a program animating behind kept the output compositing identical frames at full
+rate (on the phone ~70 handed to Android per second).
+
+Per output, the frame now finds the topmost window that the occlusion culling would let cover the
+whole output (not translucent, not transformed, untransformed screen) and marks the windows below
+it that lie within the output, except those rendered offscreen (thumbnails, window screencasts),
+input method and lock screen windows. A marked window gets no frame callbacks with the output's
+frames and its damage and commits schedule none (RenderView::scheduleRepaint); its repaints are
+kept. A heartbeat sends it frame callbacks once a second, so that clients waiting for one
+(eglSwapBuffers, FIFO) carry on slowly, and also notices a cover that changed without a frame. A
+ping sends them at once, so that a client blocked in eglSwapBuffers answers in time. When the
+cover goes, the next frame paints the windows below with their collected repaints and sends their
+frame callbacks. Partly covered windows are not affected.
+
+Similar upstream: draft MR !9732 (stop driving fully occluded windows, no low-rate callbacks);
+Weston 14, wlroots, mutter send none to occluded surfaces; Smithay compositors about 1 Hz.
+
+Forwarded: no
+Last-Update: 2026-10-03
+X-Rungic-Status: Pending [generic: upstream draft !9732 goes further (any occlusion, no heartbeat); this one only the whole-output case]
+X-Rungic-Tests: L1:testFullscreenOcclusion; L1:full suite against the earlier baseline; L3 by hand (docs/research/97 §20.1: renders per second with an animation behind the fullscreen floating window)
+X-Rungic-Docs: docs/research/97
+Origin: vendor
+---
+ autotests/integration/CMakeLists.txt               |   1 +
+ .../integration/fullscreen_occlusion_test.cpp      | 215 +++++++++++++++++++++
+ src/scene/item.cpp                                 |  30 ++-
+ src/scene/item.h                                   |  15 +-
+ src/scene/scene.cpp                                |   5 +
+ src/scene/windowitem.cpp                           |   7 +
+ src/scene/workspacescene.cpp                       | 129 +++++++++++++
+ src/scene/workspacescene.h                         |  17 ++
+ src/xdgshellwindow.cpp                             |   8 +
+ 9 files changed, 423 insertions(+), 4 deletions(-)
+ create mode 100644 autotests/integration/fullscreen_occlusion_test.cpp
+
+diff --git a/autotests/integration/CMakeLists.txt b/autotests/integration/CMakeLists.txt
+index 7f3e594..0282e93 100644
+--- a/autotests/integration/CMakeLists.txt
++++ b/autotests/integration/CMakeLists.txt
+@@ -131,6 +131,7 @@ integrationTest(NAME testLayerShellV1Window SRCS layershellv1window_test.cpp)
+ integrationTest(NAME testVirtualDesktop SRCS virtual_desktop_test.cpp)
+ integrationTest(NAME testXdgShellWindowRules SRCS xdgshellwindow_rules_test.cpp)
+ integrationTest(NAME testIdleInhibition SRCS idle_inhibition_test.cpp)
++integrationTest(NAME testFullscreenOcclusion SRCS fullscreen_occlusion_test.cpp)
+ integrationTest(NAME testDontCrashReinitializeCompositor SRCS dont_crash_reinitialize_compositor.cpp BUILTIN_EFFECTS)
+ integrationTest(NAME testNoGlobalShortcuts SRCS no_global_shortcuts_test.cpp LIBS KF6::GlobalAccel)
+ integrationTest(NAME testPlacement SRCS placement_test.cpp)
+diff --git a/autotests/integration/fullscreen_occlusion_test.cpp b/autotests/integration/fullscreen_occlusion_test.cpp
+new file mode 100644
+index 0000000..1a380de
+--- /dev/null
++++ b/autotests/integration/fullscreen_occlusion_test.cpp
+@@ -0,0 +1,215 @@
++/*
++    KWin - the KDE window manager
++    This file is part of the KDE project.
++
++    SPDX-FileCopyrightText: 2026 clawd20130 <clawd20130@gmail.com>
++
++    SPDX-License-Identifier: GPL-2.0-or-later
++*/
++#include "kwin_wayland_test.h"
++
++#include "core/backendoutput.h"
++#include "core/output.h"
++#include "core/renderloop.h"
++#include "effect/effectloader.h"
++#include "wayland_server.h"
++#include "window.h"
++#include "workspace.h"
++
++#include <KConfigGroup>
++#include <KWayland/Client/surface.h>
++
++#include <QElapsedTimer>
++#include <QSignalSpy>
++
++using namespace KWin;
++using namespace std::chrono_literals;
++
++static const QString s_socketName = QStringLiteral("wayland_test_kwin_fullscreen_occlusion-0");
++
++// A window below one whose opaque content covers the whole output gets frame callbacks only once
++// a second and its commits make the output composite nothing; partly covered windows and windows
++// below a translucent one are not affected.
++class TestFullscreenOcclusion : public QObject
++{
++    Q_OBJECT
++private Q_SLOTS:
++    void initTestCase();
++    void init();
++    void cleanup();
++
++    void testCoveredWindowThrottled();
++    void testTranslucentCover();
++    void testPartialCover();
++    void testPingCoveredWindow();
++};
++
++void TestFullscreenOcclusion::initTestCase()
++{
++    qRegisterMetaType<KWin::Window *>();
++    QVERIFY(waylandServer()->init(s_socketName));
++
++    // no effects: an opening animation transforms the covering window for a while
++    auto config = KSharedConfig::openConfig(QString(), KConfig::SimpleConfig);
++    KConfigGroup plugins(config, QStringLiteral("Plugins"));
++    const auto builtinNames = EffectLoader().listOfKnownEffects();
++    for (const QString &name : builtinNames) {
++        plugins.writeEntry(name + QStringLiteral("Enabled"), false);
++    }
++    config->sync();
++    kwinApp()->setConfig(config);
++
++    kwinApp()->start();
++    Test::setOutputConfig({
++        Rect(0, 0, 1280, 1024),
++    });
++}
++
++void TestFullscreenOcclusion::init()
++{
++    QVERIFY(Test::setupWaylandConnection());
++}
++
++void TestFullscreenOcclusion::cleanup()
++{
++    Test::destroyWaylandConnection();
++}
++
++// The client draws its next frame whenever the compositor says the last one was shown.
++static void animate(KWayland::Client::Surface *surface, const QSize &size)
++{
++    QObject::connect(surface, &KWayland::Client::Surface::frameRendered, surface, [surface, size]() {
++        surface->setupFrameCallback();
++        Test::render(surface, size, Qt::blue);
++        Test::flushWaylandConnection();
++    });
++    surface->setupFrameCallback();
++    Test::render(surface, size, Qt::blue);
++    Test::flushWaylandConnection();
++}
++
++static int framesIn(KWayland::Client::Surface *surface, std::chrono::milliseconds duration)
++{
++    QSignalSpy spy(surface, &KWayland::Client::Surface::frameRendered);
++    QElapsedTimer elapsed;
++    elapsed.start();
++    while (elapsed.elapsed() < duration.count()) {
++        spy.wait(duration.count() - elapsed.elapsed());
++    }
++    qDebug() << "frame callbacks in" << duration.count() << "ms:" << spy.count();
++    return spy.count();
++}
++
++static Window *showFullscreen(KWayland::Client::Surface *surface, Test::XdgToplevel *toplevel, QImage::Format format)
++{
++    QSignalSpy toplevelConfigureRequestedSpy(toplevel, &Test::XdgToplevel::configureRequested);
++    QSignalSpy surfaceConfigureRequestedSpy(toplevel->xdgSurface(), &Test::XdgSurface::configureRequested);
++    toplevel->set_fullscreen(nullptr);
++    surface->commit(KWayland::Client::Surface::CommitFlag::None);
++    if (!surfaceConfigureRequestedSpy.wait()) {
++        return nullptr;
++    }
++    toplevel->xdgSurface()->ack_configure(surfaceConfigureRequestedSpy.last().at(0).value<quint32>());
++    return Test::renderAndWaitForShown(surface, toplevelConfigureRequestedSpy.last().at(0).value<QSize>(), Qt::red, format);
++}
++
++void TestFullscreenOcclusion::testCoveredWindowThrottled()
++{
++    std::unique_ptr<KWayland::Client::Surface> surface(Test::createSurface());
++    std::unique_ptr<Test::XdgToplevel> toplevel(Test::createXdgToplevelSurface(surface.get()));
++    Window *window = Test::renderAndWaitForShown(surface.get(), QSize(100, 50), Qt::blue);
++    QVERIFY(window);
++    animate(surface.get(), QSize(100, 50));
++    QVERIFY(framesIn(surface.get(), 500ms) >= 15);
++
++    // an opaque fullscreen window on top
++    std::unique_ptr<KWayland::Client::Surface> coverSurface(Test::createSurface());
++    std::unique_ptr<Test::XdgToplevel> coverToplevel(Test::createXdgToplevelSurface(coverSurface.get(), Test::CreationSetup::CreateOnly));
++    Window *cover = showFullscreen(coverSurface.get(), coverToplevel.get(), QImage::Format_RGB32);
++    QVERIFY(cover);
++    QVERIFY(cover->isFullScreen());
++    QTest::qWait(100);
++
++    QSignalSpy presentedSpy(window->output()->backendOutput()->renderLoop(), &RenderLoop::framePresented);
++    const int coveredFrames = framesIn(surface.get(), 2500ms);
++    QVERIFY2(coveredFrames >= 1 && coveredFrames <= 4, qPrintable(QString::number(coveredFrames)));
++    QVERIFY2(presentedSpy.count() <= 1, qPrintable(QString::number(presentedSpy.count())));
++
++    // uncovered: its pending frame callback at once, then the full rate again
++    QSignalSpy frameSpy(surface.get(), &KWayland::Client::Surface::frameRendered);
++    QElapsedTimer elapsed;
++    elapsed.start();
++    coverToplevel.reset();
++    coverSurface.reset();
++    QVERIFY(Test::waitForWindowClosed(cover));
++    if (frameSpy.isEmpty()) {
++        QVERIFY(frameSpy.wait(500));
++    }
++    QVERIFY2(elapsed.elapsed() < 300, qPrintable(QString::number(elapsed.elapsed())));
++    QVERIFY(framesIn(surface.get(), 500ms) >= 15);
++}
++
++void TestFullscreenOcclusion::testTranslucentCover()
++{
++    std::unique_ptr<KWayland::Client::Surface> surface(Test::createSurface());
++    std::unique_ptr<Test::XdgToplevel> toplevel(Test::createXdgToplevelSurface(surface.get()));
++    QVERIFY(Test::renderAndWaitForShown(surface.get(), QSize(100, 50), Qt::blue));
++    animate(surface.get(), QSize(100, 50));
++
++    // a fullscreen window with alpha and no opaque region does not hide what is below it
++    std::unique_ptr<KWayland::Client::Surface> coverSurface(Test::createSurface());
++    std::unique_ptr<Test::XdgToplevel> coverToplevel(Test::createXdgToplevelSurface(coverSurface.get(), Test::CreationSetup::CreateOnly));
++    Window *cover = showFullscreen(coverSurface.get(), coverToplevel.get(), QImage::Format_ARGB32_Premultiplied);
++    QVERIFY(cover);
++    QTest::qWait(100);
++    QVERIFY(framesIn(surface.get(), 500ms) >= 15);
++}
++
++void TestFullscreenOcclusion::testPartialCover()
++{
++    std::unique_ptr<KWayland::Client::Surface> surface(Test::createSurface());
++    std::unique_ptr<Test::XdgToplevel> toplevel(Test::createXdgToplevelSurface(surface.get()));
++    Window *window = Test::renderAndWaitForShown(surface.get(), QSize(100, 50), Qt::blue);
++    QVERIFY(window);
++    animate(surface.get(), QSize(100, 50));
++
++    // an opaque window hiding all of it, but not the whole output: no change
++    std::unique_ptr<KWayland::Client::Surface> coverSurface(Test::createSurface());
++    std::unique_ptr<Test::XdgToplevel> coverToplevel(Test::createXdgToplevelSurface(coverSurface.get()));
++    Window *cover = Test::renderAndWaitForShown(coverSurface.get(), QSize(400, 300), Qt::red, QImage::Format_RGB32);
++    QVERIFY(cover);
++    cover->move(window->pos() - QPointF(50, 50));
++    QVERIFY(cover->frameGeometry().contains(window->frameGeometry()));
++    QTest::qWait(100);
++    QVERIFY(framesIn(surface.get(), 500ms) >= 15);
++}
++
++void TestFullscreenOcclusion::testPingCoveredWindow()
++{
++    std::unique_ptr<KWayland::Client::Surface> surface(Test::createSurface());
++    std::unique_ptr<Test::XdgToplevel> toplevel(Test::createXdgToplevelSurface(surface.get()));
++    Window *window = Test::renderAndWaitForShown(surface.get(), QSize(100, 50), Qt::blue);
++    QVERIFY(window);
++    animate(surface.get(), QSize(100, 50));
++
++    std::unique_ptr<KWayland::Client::Surface> coverSurface(Test::createSurface());
++    std::unique_ptr<Test::XdgToplevel> coverToplevel(Test::createXdgToplevelSurface(coverSurface.get(), Test::CreationSetup::CreateOnly));
++    QVERIFY(showFullscreen(coverSurface.get(), coverToplevel.get(), QImage::Format_RGB32));
++    QTest::qWait(100);
++
++    // just after a heartbeat, the next one is a second away
++    QSignalSpy frameSpy(surface.get(), &KWayland::Client::Surface::frameRendered);
++    QVERIFY(frameSpy.wait(1500));
++    QTest::qWait(200);
++    frameSpy.clear();
++
++    // a client waiting for its frame callback could not answer a ping in time: it gets it now
++    QElapsedTimer elapsed;
++    elapsed.start();
++    window->closeWindow();
++    QVERIFY(frameSpy.wait(500));
++    QVERIFY2(elapsed.elapsed() < 150, qPrintable(QString::number(elapsed.elapsed())));
++}
++
++WAYLANDTEST_MAIN(TestFullscreenOcclusion)
++#include "fullscreen_occlusion_test.moc"
+diff --git a/src/scene/item.cpp b/src/scene/item.cpp
+index fe600b2..e63943e 100644
+--- a/src/scene/item.cpp
++++ b/src/scene/item.cpp
+@@ -700,16 +700,40 @@ void Item::removeEffect()
+     m_effectCount--;
+ }
+ 
+-void Item::collectItems(QList<QPointer<Item>> &list, LogicalOutput *filter)
++void Item::collectItems(QList<QPointer<Item>> &list, RenderView *view, LogicalOutput *filter)
+ {
+     // The visibility of the item itself is not checked here to be able to paint hidden items for
+     // things like screncasts or thumbnails
+     list.push_back(this);
+     for (const auto child : std::as_const(m_childItems)) {
++        // a window covered in this view gets its frame callbacks from WorkspaceScene's heartbeat
++        if (view && child->m_coveredIn == view) {
++            continue;
++        }
+         if (child->explicitVisible() && workspace()->outputAt(child->mapToScene(child->boundingRect()).center()) == filter) {
+-            child->collectItems(list, filter);
++            child->collectItems(list, view, filter);
++        }
++    }
++}
++
++const RenderView *Item::coveredIn() const
++{
++    return m_coveredIn;
++}
++
++void Item::setCoveredIn(const RenderView *view)
++{
++    m_coveredIn = view;
++}
++
++bool Item::isCoveredIn(const RenderView *view) const
++{
++    for (const Item *item = this; item; item = item->m_parentItem) {
++        if (item->m_coveredIn && item->m_coveredIn == view) {
++            return true;
+         }
+     }
++    return false;
+ }
+ 
+ void Item::framePainted(RenderView *view, LogicalOutput *output, OutputFrame *frame, std::chrono::milliseconds timestamp)
+@@ -720,7 +744,7 @@ void Item::framePainted(RenderView *view, LogicalOutput *output, OutputFrame *fr
+     // of a window, applying blur changes or similar
+     QList<QPointer<Item>> list;
+     list.reserve(100);
+-    collectItems(list, output);
++    collectItems(list, view, output);
+     for (QPointer<Item> item : list) {
+         if (item) {
+             item->handleFramePainted(output, frame, timestamp);
+diff --git a/src/scene/item.h b/src/scene/item.h
+index 852438d..684b0f9 100644
+--- a/src/scene/item.h
++++ b/src/scene/item.h
+@@ -164,9 +164,21 @@ public:
+     void addEffect();
+     void removeEffect();
+ 
+-    void collectItems(QList<QPointer<Item>> &list, LogicalOutput *filter);
++    void collectItems(QList<QPointer<Item>> &list, RenderView *view, LogicalOutput *filter);
+     void framePainted(RenderView *view, LogicalOutput *output, OutputFrame *frame, std::chrono::milliseconds timestamp);
+ 
++    /**
++     * The view whose output this item, a window, is entirely covered in by an opaque window
++     * above it (set by WorkspaceScene). Its commits and damage schedule no frame of that view;
++     * WorkspaceScene sends its frame callbacks at a low rate.
++     */
++    const RenderView *coveredIn() const;
++    void setCoveredIn(const RenderView *view);
++    /**
++     * @returns whether this item or one of its ancestors is covered in @a view
++     */
++    bool isCoveredIn(const RenderView *view) const;
++
+     bool isAncestorOf(const Item *item) const;
+     /**
+      * @returns if this Item or any of its children have contents to be rendered
+@@ -238,6 +250,7 @@ private:
+     RenderingIntent m_renderingIntent = RenderingIntent::Perceptual;
+     PresentationModeHint m_presentationHint = PresentationModeHint::VSync;
+     int m_effectCount = 0;
++    const RenderView *m_coveredIn = nullptr;
+ };
+ 
+ } // namespace KWin
+diff --git a/src/scene/scene.cpp b/src/scene/scene.cpp
+index 70dc69a..cc70d79 100644
+--- a/src/scene/scene.cpp
++++ b/src/scene/scene.cpp
+@@ -58,6 +58,11 @@ void RenderView::scheduleRepaint(Item *item)
+     if (!m_layer) {
+         return;
+     }
++    // Nothing of a covered window can be seen in this view: keep its repaints for when it is
++    // uncovered, but let them not cause a frame.
++    if (item && item->isCoveredIn(this)) {
++        return;
++    }
+     m_layer->scheduleRepaint(item);
+ }
+ 
+diff --git a/src/scene/windowitem.cpp b/src/scene/windowitem.cpp
+index f2a48f7..8bfa0de 100644
+--- a/src/scene/windowitem.cpp
++++ b/src/scene/windowitem.cpp
+@@ -193,6 +193,13 @@ void WindowItem::updateVisibility()
+     if (m_window->readyForPainting()) {
+         m_window->setSuspended(!visible && !m_window->isOffscreenRendering());
+     }
++
++    // A window covered by a fullscreen one gets frame callbacks only once a second; one now shown
++    // elsewhere (thumbnail, window screencast) needs them at full rate again: the output's next
++    // frame works out the coverage anew.
++    if (visible && coveredIn()) {
++        scheduleSceneRepaint(boundingRect());
++    }
+ }
+ 
+ void WindowItem::updateGeometry()
+diff --git a/src/scene/workspacescene.cpp b/src/scene/workspacescene.cpp
+index 2e9d5b4..dc9df56 100644
+--- a/src/scene/workspacescene.cpp
++++ b/src/scene/workspacescene.cpp
+@@ -106,6 +106,8 @@ WorkspaceScene::WorkspaceScene(std::unique_ptr<ItemRenderer> renderer)
+     connect(Cursors::self(), &Cursors::hiddenChanged, this, &WorkspaceScene::updateCursor);
+     connect(Cursors::self(), &Cursors::positionChanged, this, &WorkspaceScene::updateCursor);
+     updateCursor();
++
++    connect(&m_coveredFrameTimer, &QTimer::timeout, this, &WorkspaceScene::sendCoveredFrameCallbacks);
+ }
+ 
+ WorkspaceScene::~WorkspaceScene()
+@@ -504,6 +506,7 @@ double WorkspaceScene::desiredHdrHeadroom() const
+ 
+ void WorkspaceScene::frame(SceneView *delegate, OutputFrame *frame)
+ {
++    updateCoverage(delegate);
+     LogicalOutput *logicalOutput = delegate->logicalOutput();
+     const auto frameTime = std::chrono::duration_cast<std::chrono::milliseconds>(logicalOutput->backendOutput()->renderLoop()->lastPresentationTimestamp());
+     m_containerItem->framePainted(delegate, logicalOutput, frame, frameTime);
+@@ -626,6 +629,132 @@ static void addOpaqueRegionRecursive(SceneView *view, Item *item, const std::opt
+     }
+ }
+ 
++// A window whose opaque content covers a whole output hides every window below it there, and
++// KWin's occlusion culling already paints none of them. Those windows get no frame callbacks with
++// the output's frames and their commits and damage schedule none (RenderView::scheduleRepaint):
++// a program animating behind a fullscreen window no longer keeps the output compositing identical
++// frames. A heartbeat sends them frame callbacks once a second, so that clients waiting for one
++// (eglSwapBuffers, FIFO) are not stalled. Only a single window covering the entire output counts:
++// partly covered windows are not affected.
++static constexpr std::chrono::milliseconds s_coveredFrameInterval(1000);
++
++WorkspaceScene::Coverage WorkspaceScene::findCoverage(SceneView *delegate) const
++{
++    Coverage coverage;
++    // the windows painted, from the bottom, with what effects did to them in this frame
++    if (painted_delegate != delegate || (m_paintContext.mask & (PAINT_SCREEN_TRANSFORMED | PAINT_SCREEN_WITH_TRANSFORMED_WINDOWS))) {
++        return coverage;
++    }
++    const Rect deviceRect = delegate->deviceRect();
++    const RectF viewport = delegate->viewport();
++    for (int i = m_paintContext.phase2Data.size() - 1; i >= 0; --i) {
++        const Phase2Data &data = m_paintContext.phase2Data[i];
++        // the same conditions as the occlusion culling in paintSimpleScreen()
++        if (data.mask & (PAINT_WINDOW_TRANSLUCENT | PAINT_WINDOW_TRANSFORMED)) {
++            continue;
++        }
++        const bool canCover = delegate->shouldRenderItem(data.item->surfaceItem())
++            || delegate->shouldRenderHole(data.item->surfaceItem());
++        if (!canCover || !data.deviceOpaque.contains(deviceRect)) {
++            continue;
++        }
++        coverage.cover = data.item;
++        for (int j = 0; j < i; ++j) {
++            WindowItem *item = m_paintContext.phase2Data[j].item;
++            const Window *window = item->window();
++            // rendered elsewhere at their own rate: thumbnails, window screencasts
++            if (window->isOffscreenRendering() || window->isInputMethod() || window->isLockScreen() || window->isLockScreenOverlay()) {
++                continue;
++            }
++            // nothing of it may be shown on another output
++            if (!viewport.contains(item->mapToScene(item->boundingRect()))) {
++                continue;
++            }
++            coverage.covered.append(item);
++        }
++        break;
++    }
++    return coverage;
++}
++
++void WorkspaceScene::updateCoverage(SceneView *delegate)
++{
++    Coverage next = findCoverage(delegate);
++    auto it = m_coverage.find(delegate);
++    if (it == m_coverage.end()) {
++        if (next.covered.isEmpty()) {
++            return;
++        }
++        it = m_coverage.insert(delegate, Coverage{});
++        connect(delegate, &QObject::destroyed, this, [this, delegate]() {
++            forgetCoverage(delegate);
++        });
++    }
++    // uncovered windows get their frame callbacks with this frame, and their repaints were
++    // collected in it
++    for (const QPointer<WindowItem> &item : std::as_const(it->covered)) {
++        if (item && item->coveredIn() == delegate && !next.covered.contains(item)) {
++            item->setCoveredIn(nullptr);
++        }
++    }
++    for (const QPointer<WindowItem> &item : std::as_const(next.covered)) {
++        item->setCoveredIn(delegate);
++    }
++    *it = next;
++
++    const bool anyCovered = std::ranges::any_of(m_coverage, [](const Coverage &coverage) {
++        return !coverage.covered.isEmpty();
++    });
++    if (!anyCovered) {
++        m_coveredFrameTimer.stop();
++    } else if (!m_coveredFrameTimer.isActive()) {
++        m_coveredFrameTimer.start(s_coveredFrameInterval);
++    }
++}
++
++void WorkspaceScene::forgetCoverage(SceneView *delegate)
++{
++    const Coverage coverage = m_coverage.take(delegate);
++    for (const QPointer<WindowItem> &item : coverage.covered) {
++        if (item && item->coveredIn() == delegate) {
++            item->setCoveredIn(nullptr);
++        }
++    }
++}
++
++static bool stillCovers(SceneView *view, WindowItem *cover)
++{
++    if (!cover || !cover->isVisible() || cover->window()->opacity() != 1.0 || view->shouldHideWindow(cover->window())) {
++        return false;
++    }
++    Region opaque;
++    addOpaqueRegionRecursive(view, cover, std::nullopt, opaque);
++    return opaque.contains(view->deviceRect());
++}
++
++void WorkspaceScene::sendCoveredFrameCallbacks()
++{
++    const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch());
++    const QList<SceneView *> views = m_coverage.keys();
++    for (SceneView *view : views) {
++        const auto it = m_coverage.constFind(view);
++        if (it == m_coverage.constEnd() || it->covered.isEmpty()) {
++            continue;
++        }
++        if (!stillCovers(view, it->cover)) {
++            // the cover went away or turned translucent without a frame of this output;
++            // the next frame finds out what is visible now
++            view->addDeviceRepaint(view->deviceRect());
++        }
++        const QList<QPointer<WindowItem>> covered = it->covered;
++        for (const QPointer<WindowItem> &item : covered) {
++            if (item) {
++                item->framePainted(nullptr, view->logicalOutput(), nullptr, timestamp);
++            }
++        }
++    }
++}
++
+ void WorkspaceScene::preparePaintSimpleScreen()
+ {
+     for (WindowItem *windowItem : std::as_const(stacking_order)) {
+diff --git a/src/scene/workspacescene.h b/src/scene/workspacescene.h
+index 26745c8..d805dd4 100644
+--- a/src/scene/workspacescene.h
++++ b/src/scene/workspacescene.h
+@@ -12,6 +12,10 @@
+ #include "core/renderviewport.h"
+ #include "scene/scene.h"
+ 
++#include <QHash>
++#include <QPointer>
++#include <QTimer>
++
+ namespace KWin
+ {
+ 
+@@ -117,6 +121,19 @@ private:
+     std::unique_ptr<Item> m_overlayItem;
+     std::unique_ptr<DragAndDropIconItem> m_dndIcon;
+     std::unique_ptr<CursorItem> m_cursorItem;
++
++    // Windows below one whose opaque content covers a whole output (see updateCoverage)
++    struct Coverage
++    {
++        QPointer<WindowItem> cover;
++        QList<QPointer<WindowItem>> covered;
++    };
++    Coverage findCoverage(SceneView *delegate) const;
++    void updateCoverage(SceneView *delegate);
++    void forgetCoverage(SceneView *delegate);
++    void sendCoveredFrameCallbacks();
++    QHash<SceneView *, Coverage> m_coverage;
++    QTimer m_coveredFrameTimer;
+ };
+ 
+ } // namespace
+diff --git a/src/xdgshellwindow.cpp b/src/xdgshellwindow.cpp
+index 4f4b2d3..3e3cc23 100644
+--- a/src/xdgshellwindow.cpp
++++ b/src/xdgshellwindow.cpp
+@@ -20,6 +20,7 @@
+ #include "input.h"
+ #include "killprompt.h"
+ #include "placement.h"
++#include "scene/windowitem.h"
+ #include "tiles/tilemanager.h"
+ #include "utils/subsurfacemonitor.h"
+ #include "virtualdesktops.h"
+@@ -1232,6 +1233,13 @@ void XdgToplevelWindow::sendPing(PingReason reason)
+ 
+     const quint32 serial = shell->ping(surface);
+     m_pings.insert(serial, reason);
++
++    // Covered by a fullscreen window, it gets frame callbacks once a second, and its client may wait
++    // for the next one in eglSwapBuffers: send them now, so that it can answer within the timeout.
++    if (WindowItem *item = windowItem(); item && item->coveredIn()) {
++        const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch());
++        item->framePainted(nullptr, output(), nullptr, timestamp);
++    }
+ }
+ 
+ std::optional<QPointF> XdgToplevelWindow::initialPosition(const std::optional<XdgToplevelSessionData> &session) const

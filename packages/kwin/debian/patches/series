@@ -20,3 +20,4 @@ rungic/phone-turns-with-android.patch
 rungic/virtual-render-device.patch
 rungic/screencast-finish-without-implicit-sync.patch
 rungic/input-panel-above-overlay.patch
+rungic/fullscreen-occlusion-throttle.patch

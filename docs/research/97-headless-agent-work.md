@@ -942,4 +942,59 @@ APK 进程提供：`platform.sock`、`capture.sock`、`codec.sock`、`wayland-0`
 - 协议核对：`WAYLAND_DEBUG=client` 下，全屏到位后有 `set_opaque_region(wl_region)`，开始退出时有 `set_opaque_region(nil)`。
 - 进入、退出全屏仍然无缝；触控板模式进出没有空白或闪烁。
 
-**未做（第 3 项，等测量后再定）**：KWin 补丁，把被不透明窗口完全盖住的窗口的帧回调降到约 1 Hz。只在背后有程序在动时才省电。
+**第 3 项**：见 §20.1。
+
+### 20.1 第 3 项：KWin 对整屏被盖住的窗口降帧（2026-10-03，用户决定范围，已实现，L1 通过，实机待测）
+
+用户决定的范围：只在一个输出**整个**被**单个**不透明、未变换、完全可见的窗口盖住时降帧（我们的全屏浮窗，或任何不透明区域覆盖整个输出的应用/全屏窗口）。桌面窗口之间的部分遮挡行为完全不变。
+
+**调研（读源码，2026-10-03；未在这些合成器上实测）**：
+- KWin：master（`392e8c07`，2026-10-01）和 6.6.6 都没有按遮挡停帧回调。
+  - `Window::maybeSendFrameCallback`（MR !3450，Plasma 5.27）只服务离屏渲染：缩略图、窗口录屏、保留的 X11 窗口。它只在窗口项不可见（最小化、隐藏、别的桌面）时按满刷新率发，不管遮挡。
+  - 最接近的是草稿 MR [!9732](https://invent.kde.org/plasma/kwin/-/merge_requests/9732)（“stop driving fully occluded windows”，2026-08，未合并）：复用遮挡剔除，任何被完全遮挡的窗口都不再安排帧、不发帧回调，没有低频兜底；它自己记下的缺口有：带 alpha 的窗口（Konsole）永远不算不透明，多输出、门户录屏未测。
+  - 前身是 [!9712](https://invent.kde.org/plasma/kwin/-/merge_requests/9712)。评审里 Xaver Hugl 建议“一开始就不要为被遮挡的窗口安排帧”。另有 [!3256](https://invent.kde.org/plasma/kwin/-/merge_requests/3256)（2022，WIP）和 [Bug 467032](https://bugs.kde.org/show_bug.cgi?id=467032)。
+- 其他合成器：
+  - Weston 14（[MR 1524](https://gitlab.freedesktop.org/wayland/weston/-/merge_requests/1524)）：不可见的表面不发帧回调和呈现反馈，没有兜底。后果是 `weston-simple-egl` 被盖住时停住（issue 1044）。
+  - wlroots 0.16（[MR 3554](https://gitlab.freedesktop.org/wlroots/wlroots/-/merge_requests/3554)）：只给可见缓冲区发 frame done，只有可见的损坏才安排帧。sway 同样。
+  - mutter（MR 918、2662、3019）：不给被遮住的 actor 发；全遮住 3 秒后发 xdg `suspended`；FIFO 屏障每次舞台更新都放行。
+  - Smithay 系（niri、cosmic-comp）：被遮挡的表面约 995 ms 发一次，与本方案相同。
+- 客户端停在等帧回调时的表现：
+  - Qt 6.10：100 ms 收不到回调（`QT_WAYLAND_FRAME_CALLBACK_TIMEOUT`）就把窗口当作未曝光，Qt Quick 停画；迟到的回调会重新曝光、画一帧。按 1 Hz 发时，Qt 窗口每秒“曝光一次再取消”。
+  - GTK4：帧时钟无超时，就按回调频率跑，即 1 fps。
+  - Mesa EGL：交换间隔为 1 时 `eglSwapBuffers` 无超时地等回调，所以必须有低频兜底。
+  - Mesa Vulkan：有 fifo-v1 时，KWin 6.6 的 FIFO 兜底定时器（≥30 Hz）放行屏障。
+  - Firefox：1 秒没有 vsync 才算被遮挡（推断，未测）。
+  - Chromium：跟随 `suspended`。
+- 已知坑：KWin 的 xdg ping 500 ms 未回应就标记“无响应”，1 秒弹出强杀提示。被盖住、在 `eglSwapBuffers` 里等回调的客户端回答不了，所以 ping 时要立刻发回调。
+
+**设计（`packages/kwin/debian/patches/rungic/fullscreen-occlusion-throttle.patch`）**：
+- 判定在每个输出的主视图每帧结束时做（`WorkspaceScene::frame` → `updateCoverage`），用这一帧 `prePaint` 留下的结果，条件与 `paintSimpleScreen` 的遮挡剔除相同：
+  - 屏幕没有变换；
+  - 从上往下找第一个窗口：未被特效设为半透明或变换，能遮挡（`shouldRenderItem`/`shouldRenderHole`），并且它的设备坐标不透明区（窗口不透明度为 1 时才有）包含整个输出。
+- 它下面、包围矩形完全在这个输出内的窗口记为“被盖住”（`Item::setCoveredIn(view)`）。离屏渲染的窗口（缩略图、窗口录屏）、输入法、锁屏窗口除外。
+- 被盖住的窗口：
+  - 这个输出的帧不再给它们发帧回调（`Item::collectItems` 跳过）；
+  - 它们的提交和损坏不再为这个输出安排帧（`RenderView::scheduleRepaint` 跳过），但重绘区域照常累积。
+- 心跳：每秒发一次帧回调（`framePainted(nullptr, …)`，与 `maybeSendFrameCallback` 相同，会放行 FIFO 屏障，呈现反馈在下一次提交时 discarded）。心跳同时检查遮盖窗口是否还在、是否仍然不透明（为了没有新帧的变化），不是就补一次整屏重绘。
+- ping（关闭、聚焦）被盖住的窗口时立刻发帧回调（`XdgToplevelWindow::sendPing`）。
+- 被盖住的窗口开始离屏渲染（缩略图、录屏）时，`WindowItem::updateVisibility` 安排一次场景重绘，下一帧重新判定。
+- 遮盖结束（窗口消失、撤销不透明区、变半透明、特效变换、层叠改变）都会产生一帧。这一帧里重新判定，下面的窗口用累积的重绘区域画出，并立刻收到积压的帧回调，所以退出全屏时背后的程序马上恢复。
+- 部分遮挡：只要没有一个窗口盖满整个输出，就什么都不做。输出录屏（FilteredSceneView）和叠加层视图不参与判定。
+- 与上游草稿 !9732 的区别：只处理整屏覆盖，保留 1 Hz 心跳和 ping 时立即发，改动集中在 `scene/` 的六个文件和 `xdgshellwindow.cpp`。
+
+**L1（2026-10-03，主机 x86 构建环境 `rungic-build-kwin:26.04`，xvfb，`.work/hostbuild/kwin`）**：
+- 打补丁后的 KWin 全部编译通过。
+- 新增集成测试 `testFullscreenOcclusion` 6/6 通过，连跑 3 次结果一致。测试客户端每收到一次帧回调就画下一帧：
+  - 未遮盖时 500 ms 收到 28–29 次；
+  - 被不透明全屏窗口盖住时 2.5 s 只收到 2 次，期间输出呈现帧数 ≤1；
+  - 遮盖窗口关闭后 300 ms 内收到回调，500 ms 内恢复到 29–30 次；
+  - 遮盖窗口带 alpha 时 31 次，被一个不透明但不满屏的窗口完全挡住时 31–32 次（不受影响）；
+  - 刚收到心跳后被 ping，150 ms 内收到帧回调。
+- 全套 158 个测试（xvfb，串行）：134 个通过。失败的 24 个与 2026-09-26 基线（`.work/hostbuild/kwin-final-xvfb-failed.txt`）是同一组程序。逐个运行看失败的函数，都是环境原因：没有服务端装饰插件（`isDecorated()`）、光标主题、锁屏界面、X11。没有与帧回调或重绘调度有关的失败。
+
+**实机待测**（部署后按 §20 的场景用同一脚本 `perf.py` + `.work/diag/fullscreen-pause/sample.py`，每项约 12 秒）：
+- 预期：
+  - 盖住的手机界面后面 60 帧动画：手机每秒合成约 0–1，动画约 1 fps，SurfaceFlinger 和 APK 的 CPU 接近静止；
+  - 0 号里 60 帧动画：与 §20 相同；
+  - 退出全屏后，背后的程序立刻恢复满帧率。
+- 还要看：Plasma Mobile 面板、主屏在全屏期间和退出时没有残影或旧画面；任务切换、锁屏、键盘弹出正常。
