@@ -138,6 +138,7 @@ features:
       - agent/assistant/app/qml/AssistantOverlay.qml
       - agent/assistant/rungic-voice-overlay.service
       - agent/assistant/com.rungic.VoiceAssistant.service
+      - tools/tests/test_assistant_overlay.py
     docs: [docs/67-home-assistant.md, docs/87-agent-app-redesign.md]
 
   - id: agent.chat-app
@@ -209,6 +210,7 @@ features:
       - agent/assistant/app/qml/SettingsPage.qml
       - agent/assistant/app/qml/SettingsFrame.qml
       - agent/assistant/com.rungic.VoiceAssistant.desktop
+      - tools/tests/assistant_qml.py
     docs: [docs/59-voice-agent.md, docs/87-agent-app-redesign.md, docs/67-home-assistant.md]
 
   - id: agent.attachments
