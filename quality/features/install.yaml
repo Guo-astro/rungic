@@ -88,6 +88,7 @@ features:
       - tools/ci/build_host_seed.py
       - tools/ci/test_firstboot_cast.py
       - .agents/skills/rungic-three-stage-image/
+      - tools/ci/test_standalone_guards.py
     docs:
       - docs/75-image-build-separation.md
       - docs/91-x70-independent-install.md
@@ -117,6 +118,7 @@ features:
         text: 等待解锁时提示先解锁手机、解锁后自动继续；三分钟没有新阶段时只提示“较长时间未收到新的阶段状态”，不判为失败。
       - id: E5
         text: 准备期间可以返回 Android，再打开时接着显示当前阶段。
+        gap: 返回 Android 再打开时的阶段显示由 MainActivity/StartupScreen 的生命周期决定，离线 Java 测试只覆盖状态文件的读取（FirstBootStateTest）；82 篇把“安装中进入/退出 Rungic”列为待做的首启场景，尚无实机记录
       - id: E6
         text: 清除 Rungic 应用数据后再打开，不用重启手机：已完成的安装重新发布状态并直接放行，进行中的安装交给首启脚本，复用底座上的旧 product 种子不会让它一直等待。
         evidence:
@@ -212,6 +214,7 @@ features:
           - {doc: docs/82-first-run-ux-refactor.md, date: 2026-09-28, note: "G100 保留账户的候选 APK：显示确认后 loading 移除"}
       - id: E2
         text: 显示确认 60 秒没有到达时显示可恢复的“显示未确认”，可以重新检查，不强行放行。
+        gap: 显示确认超时的处理在 MainActivity（framePoll）里，依赖 Android 的 Activity、Surface 和 NativeBridge，离线 Java 测试只编译 FirstBootState；需要 Android 仪器测试，或实机首装时让显示反馈不到达（82 篇“后续整包必须覆盖的场景”第 4 条）
       - id: E3
         text: 首次进入直接到 Plasma 桌面，不出现 Plasma Mobile 欢迎向导；需要时仍可手动打开向导。
         evidence:
@@ -222,6 +225,7 @@ features:
           - {doc: docs/82-first-run-ux-refactor.md, date: 2026-09-28, note: "通知为“Rungic 正在运行”"}
       - id: E5
         text: 关闭会话前确认并说明会结束 Linux 应用；切到 Android 时会话继续运行。
+        gap: 关闭会话的确认对话框在 MainActivity 的宿主菜单里（AlertDialog），离线无法运行；82 篇只记录了切到 Android 后返回（2026-09-28），没有关闭会话确认的实机记录
     pitfalls:
       - text: 显示确认只证明手机图形输出链路，画面可能还是启动画面，不代表桌面服务和应用都已可交互。不支持帧时间反馈的设备会显示确认超时，不能假定与 G100 等价。
         docs: [docs/82-first-run-ux-refactor.md]
@@ -272,6 +276,7 @@ features:
       - system/config/etc/ssh/sshd_config.d/10-rungic.conf
       - system/config/usr/lib/systemd/system/sshd-keygen.service.d/rungic.conf
       - tools/ci/rungic-firstboot.sh
+      - tools/system/tests/ssh_login.py
     docs:
       - docs/83-service-policy.md
       - docs/research/g100-system-update-20260929.md
@@ -476,6 +481,7 @@ features:
       - packaging/rungic-plasma-session/
       - packaging/rungic-plasma-config/
       - tools/ci/build_host_seed.py
+      - tools/ci/test_container_control.py
     docs:
       - docs/61-delivery-diagnostics-plan.md
 
@@ -582,6 +588,7 @@ features:
       - tools/rebrand.py
       - tools/rungic_cutover.py
       - tools/test_rebrand_user.py
+      - tools/ci/test_rebrand_residue.py
     docs:
       - docs/70-rungic-rebrand.md
 
@@ -616,6 +623,7 @@ features:
       - tools/test_prepare_stock.py
       - tools/ci/preflight.py
       - .agents/skills/rungic-three-stage-image/
+      - tools/ci/test_device_preflight.py
     docs:
       - docs/01-device.md             # G100 S 的硬件与分区身份
       - docs/77-g100-three-ci-assessment.md
@@ -718,6 +726,7 @@ features:
       - system/ubuntu-excluded-packages.txt
       - system/ubuntu-build-packages.txt
       - system/config/etc/dpkg/dpkg.cfg.d/zz-rungic-apps
+      - tools/system/tests/rootfs_image.py
     docs:
       - docs/75-image-build-separation.md
       - docs/94-build-fingerprints.md

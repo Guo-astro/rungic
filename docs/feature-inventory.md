@@ -4,7 +4,7 @@
 
 以产品功能和用户场景为骨架：每条功能是用户能感知的一件事；“体验”是它必须做到的，每条都标明由什么检查（自动测试、实机验收、人工验证或已登记的缺口）。数据在 `quality/`，规则见 [quality/README.md](../quality/README.md)。
 
-共 160 条功能、663 条体验，其中 519 条有检查。
+共 160 条功能、663 条体验，其中 553 条有检查。
 
 ## Agent 能力
 
@@ -1113,12 +1113,12 @@ Linux 应用用手机的相机拍照录像，用手机的扬声器和麦克风�
 
 `delivery.build-hosts` · Linux 系统功能 — 设备包和上游组件在 Mac mini 的 Ubuntu 26.04 ARM64 容器里构建（手机为后备），产物进发布或开发仓库。
 
-- **E1** 默认构建机是 Mac mini，速度远快于手机：KWin 含 LTO 的完整构建约 6 分钟，手机上一小时以上；构建期间手机不受影响。（人工）
-- **E2** 增量构建只重编改动的文件：源码树用 rsync --checksum 同步，未改文件保留时间戳，保留上次的 obj 树。（人工）
+- **E1** 默认构建机是 Mac mini，速度远快于手机：KWin 含 LTO 的完整构建约 6 分钟，手机上一小时以上；构建期间手机不受影响。（单元测试、人工；只能在手机上看：构建耗时取决于 Mac mini 与手机的硬件，只能在两台机器上实测；默认构建机和不碰手机由单元测试检查）
+- **E2** 增量构建只重编改动的文件：源码树用 rsync --checksum 同步，未改文件保留时间戳，保留上次的 obj 树。（单元测试、人工）
 - **E3** 与构建机之间的每次传输都核对大小与 SHA-256，不一致就重试，不会把截断的包收进仓库。（单元测试、人工）
-- **E4** 手机用自己的受限密钥直连构建机，只能 put/get /root/rungic-build 下的相对路径，其他命令、绝对路径和 .. 都被拒绝。（人工）
-- **E5** Mac mini 上的构建结果与手机上的完整构建逐文件一致（ELF 去掉 build-id 与 debuglink 后比较），差异只来自可解释的原因。（人工）
-- **E6** 构建容器里每条联网命令都带上 Mac mini 的系统代理（scutil 读取，以 host.docker.internal 代替本机地址）。（**未检查**）
+- **E4** 手机用自己的受限密钥直连构建机，只能 put/get /root/rungic-build 下的相对路径，其他命令、绝对路径和 .. 都被拒绝。（单元测试、人工）
+- **E5** Mac mini 上的构建结果与手机上的完整构建逐文件一致（ELF 去掉 build-id 与 debuglink 后比较），差异只来自可解释的原因。（人工；只能在手机上看：要在手机容器里做一次完整构建（一小时以上）再与 Mac mini 的产物逐文件比较；系统测试只有 Mac mini 一台构建环境，替代不了手机上的那一份）
+- **E6** 构建容器里每条联网命令都带上 Mac mini 的系统代理（scutil 读取，以 host.docker.internal 代替本机地址）。（单元测试）
 
 注意：
 - 经 ssh 执行的命令和 Docker 容器都不会自动使用 Mac mini 的系统代理（Surge 127.0.0.1:6152），要显式传入；容器 DNS 把 macmini.wire.net 解析成公网地址，手机直连要用 10.77.0.20 或 192.168.5.45。 [AGENTS.md](../AGENTS.md) [docs/71-upstream-patch-queue.md](../docs/71-upstream-patch-queue.md)
@@ -1132,9 +1132,9 @@ Linux 应用用手机的相机拍照录像，用手机的扬声器和麦克风�
 
 `delivery.dev-env` · Linux 系统功能 — dev-setup.sh 建开发用 Python，work-env.sh 把缓存和构建输出引到 .work/，Android 交叉编译器包装脚本可由环境变量指向本机工具链。
 
-- **E1** source tools/work-env.sh 之后 Python 字节码缓存、Cargo 输出都在 .work/ 下，并启用 .work/venv；源码目录里不出现缓存。（**未检查**）
-- **E2** sh tools/dev-setup.sh 一次装好开发用 Python（PySide6、pytest）并打印 PySide6 版本；这些依赖只用于原型和测试，不进入镜像或软件包。（**未检查**）
-- **E3** Android 交叉编译器（tools/toolchains/android-clang、android-clang++）可由 RUNGIC_ANDROID_CLANG、RUNGIC_ANDROID_SYSROOT 等变量指向本机的 clang 与 sysroot。（**未检查**）
+- **E1** source tools/work-env.sh 之后 Python 字节码缓存、Cargo 输出都在 .work/ 下，并启用 .work/venv；源码目录里不出现缓存。（单元测试）
+- **E2** sh tools/dev-setup.sh 一次装好开发用 Python（PySide6、pytest）并打印 PySide6 版本；这些依赖只用于原型和测试，不进入镜像或软件包。（单元测试）
+- **E3** Android 交叉编译器（tools/toolchains/android-clang、android-clang++）可由 RUNGIC_ANDROID_CLANG、RUNGIC_ANDROID_SYSROOT 等变量指向本机的 clang 与 sysroot。（单元测试）
 
 注意：
 - 交叉编译器包装脚本的默认路径写死在 /home/kevinzhow/android-kernel；SDK/NDK、Rust 依赖和 Android 链接库要另行准备，源码齐备不等于任意机器一键构建。 [docs/52-git-repository-scope.md](../docs/52-git-repository-scope.md) [docs/53-remote-system-development.md](../docs/53-remote-system-development.md)
@@ -1146,8 +1146,8 @@ Linux 应用用手机的相机拍照录像，用手机的扬声器和麦克风�
 
 `delivery.design-gallery` · Linux 系统功能 — design_gallery.py 把设计系统每个控件的各种状态渲染成浅色、深色两套图，本机离线或在手机上都能做，用于界面改动的前后对照。
 
-- **E1** local 在本机用 PySide6 渲染 desktop/design/qml，每节浅深两张图并拼成 sheet.png；--rev 渲染某个提交的 QML，用于改动前后对照。（人工）
-- **E2** phone 以桌面用户、offscreen 平台运行已安装的 rungic-design-gallery，不在用户屏幕上开窗口，截图取回本机。（人工）
+- **E1** local 在本机用 PySide6 渲染 desktop/design/qml，每节浅深两张图并拼成 sheet.png；--rev 渲染某个提交的 QML，用于改动前后对照。（单元测试、人工）
+- **E2** phone 以桌面用户、offscreen 平台运行已安装的 rungic-design-gallery，不在用户屏幕上开窗口，截图取回本机。（单元测试、人工）
 
 注意：
 - software 后端不画 MultiEffect，Thumbnail 和 LivePicture 的示例图是空的；这不是回退，这类控件要在真实会话里另行确认。 [.agents/skills/rungic-dev-release/SKILL.md](../.agents/skills/rungic-dev-release/SKILL.md) [docs/87-agent-app-redesign.md](../docs/87-agent-app-redesign.md)
@@ -1158,9 +1158,9 @@ Linux 应用用手机的相机拍照录像，用手机的扬声器和麦克风�
 
 `delivery.offline-tests` · Linux 系统功能 — tools/run-tests.sh 在开发机上一次跑完 pytest、APK 的纯 Java 测试和 shell 语法检查，不碰手机。
 
-- **E1** 一条命令跑完全部离线测试（tools/ci、tools、tools/tests、system/account 的 pytest，APK 纯 Java 测试，已跟踪 sh 脚本的语法），最后列出失败的部分或报告全部通过。（**未检查**）
-- **E2** 离线测试碰不到手机：任何测试一旦走到 rungic_device 的 adb 调用就直接失败。（**未检查**）
-- **E3** 没有 PySide6 时跳过需要它的 QML 测试，并提示 sh tools/dev-setup.sh。（**未检查**）
+- **E1** 一条命令跑完全部离线测试（tools/ci、tools、tools/tests、system/account 的 pytest，APK 纯 Java 测试，已跟踪 sh 脚本的语法），最后列出失败的部分或报告全部通过。（单元测试）
+- **E2** 离线测试碰不到手机：任何测试一旦走到 rungic_device 的 adb 调用就直接失败。（单元测试）
+- **E3** 没有 PySide6 时跳过需要它的 QML 测试，并提示 sh tools/dev-setup.sh。（单元测试）
 
 注意：
 - 2026-09-30 一个部署测试走到了没有被替换的 rungic_device.run，删掉了真手机上的开发覆盖；之后 conftest.py 给 tools/ 下所有测试加了 adb 保护。 [docs/97-local-development-deploy.md](../docs/97-local-development-deploy.md)
@@ -1174,7 +1174,7 @@ Linux 应用用手机的相机拍照录像，用手机的扬声器和麦克风�
 
 经由接口：`platform-bridge`
 
-- **E1** tools/system_test.py 在 Mac mini 的一次性 arm64 容器里用工作区的代码构建并运行系统测试，不碰手机；结果逐条写进 .work/system-tests/。（人工）
+- **E1** tools/system_test.py 在 Mac mini 的一次性 arm64 容器里用工作区的代码构建并运行系统测试，不碰手机；结果逐条写进 .work/system-tests/。（单元测试、人工）
 - **E2** 接口契约（quality/contracts/）给出每个查询和使用方依赖的回复字段；替身按契约回答并记下请求，同一份契约在手机上核对提供方。（单元测试）
 - **E3** Linux 程序都经 RUNGIC_PLATFORM_SOCKET 找平台桥，测试可以换成替身；不设时仍是手机上的路径。（单元测试）
 
@@ -1192,11 +1192,11 @@ Linux 应用用手机的相机拍照录像，用手机的扬声器和麦克风�
 
 `delivery.packaging` · Linux 系统功能 — rungic_package.py 从 packaging/<名>/ 构建本项目的 rungic-* 包（主机或 ARM64 构建机），装到 /usr、/etc 的标准位置，带依赖、维护脚本和调试符号。
 
-- **E1** 发布构建只用已提交的内容：包的路径里有未提交改动就拒绝构建；版本为 0.<提交数>，同一提交重建内容不同时加 +bN；路径没变的包不重建，list 显示 current、stale 或 uncommitted。（**未检查**）
+- **E1** 发布构建只用已提交的内容：包的路径里有未提交改动就拒绝构建；版本为 0.<提交数>，同一提交重建内容不同时加 +bN；路径没变的包不重建，list 显示 current、stale 或 uncommitted。（单元测试）
 - **E2** 包声明的输入（paths、upstream 配方及其 overlay）都存在，build.sh 从仓库读取的文件都在声明里，所以改了任何输入，这个包都会被判为需要重建。（单元测试）
-- **E3** 升级、卸载重装都保留管理员对单元的启用或禁用选择；维护脚本只启用不覆盖禁用，obsolete 里的链接只在悬空时删除。（人工）
-- **E4** 改名的包对旧名写 Conflicts 和 Replaces，安装时继承旧单元的启用状态；按精确版本部署时 apt 自动移走旧名的包。（人工）
-- **E5** 设备包带 dpkg-shlibdeps 生成的库依赖，并按 build-id 拆出 -dbgsym，供崩溃符号化使用。（人工）
+- **E3** 升级、卸载重装都保留管理员对单元的启用或禁用选择；维护脚本只启用不覆盖禁用，obsolete 里的链接只在悬空时删除。（系统测试、人工）
+- **E4** 改名的包对旧名写 Conflicts 和 Replaces，安装时继承旧单元的启用状态；按精确版本部署时 apt 自动移走旧名的包。（单元测试、系统测试、人工）
+- **E5** 设备包带 dpkg-shlibdeps 生成的库依赖，并按 build-id 拆出 -dbgsym，供崩溃符号化使用。（单元测试、人工）
 
 注意：
 - 旧的生成器把单元启用链接列为 obsolete，每次升级都删一遍；运行中的会话掩盖了问题，直到容器重启后会话起不来（发布 20260926.7）。 [docs/61-delivery-diagnostics-plan.md](../docs/61-delivery-diagnostics-plan.md)
@@ -1209,12 +1209,12 @@ Linux 应用用手机的相机拍照录像，用手机的扬声器和麦克风�
 
 `delivery.release-deploy` · Linux 系统功能 — rungic_release.py 把一次发布做成精确依赖全部包的元包 rungic-release=<YYYYMMDD.N>，部署到手机（预检、记录、同步、安装、重启、复核），失败自动退回，也能回到上一个发布。
 
-- **E1** 部署在临时单元里按精确版本安装发布的全部包，成功后把每个包钉在发布版本（1001），元包带 Protected：Discover 不把我们的包显示为“有更新”，也不能顺带卸掉元包；不在发布里的 Ubuntu 包照常更新。（人工）
-- **E2** rollback 回到上一个发布：按包精确降级，需要时重启会话。（人工）
+- **E1** 部署在临时单元里按精确版本安装发布的全部包，成功后把每个包钉在发布版本（1001），元包带 Protected：Discover 不把我们的包显示为“有更新”，也不能顺带卸掉元包；不在发布里的 Ubuntu 包照常更新。（单元测试、人工）
+- **E2** rollback 回到上一个发布：按包精确降级，需要时重启会话。（单元测试、人工）
 - **E3** 安装之后任何一步出错或验收失败，先保存证据包，再回到部署前的快照，部署改过的 Android 侧文件也恢复原样。（单元测试、人工）
 - **E4** 发布记录的 Android 侧源文件在构建发布之后被改动时，部署在建快照之前就中止。（单元测试）
-- **E5** 部署后改动自动生效：变化的系统服务（service_restart）、正在运行的桌面用户服务（user_restart，plasmashell 最后）按规则重启，需要时重启整个会话；没在运行的单元不启动。（人工）
-- **E6** status 给出手机上的发布、它的 git 提交、与仓库是否一致、rootfs 快照状态和开发覆盖；每次部署在 .work/deploy/<时间>-<版本>/ 留下逐步记录和 result。（**未检查**）
+- **E5** 部署后改动自动生效：变化的系统服务（service_restart）、正在运行的桌面用户服务（user_restart，plasmashell 最后）按规则重启，需要时重启整个会话；没在运行的单元不启动。（单元测试、人工）
+- **E6** status 给出手机上的发布、它的 git 提交、与仓库是否一致、rootfs 快照状态和开发覆盖；每次部署在 .work/deploy/<时间>-<版本>/ 留下逐步记录和 result。（单元测试）
 - **E7** 增量发布装到 Android 侧的文件，与完整镜像的 host seed 路径和权限一致。（单元测试）
 
 注意：
@@ -1234,9 +1234,9 @@ Linux 应用用手机的相机拍照录像，用手机的扬声器和麦克风�
 
 - **E1** 部署先停容器建快照，重启后等会话稳定再安装；验收失败时自动合并回快照，回滚后发布和 dpkg 状态都是部署前的版本。（单元测试、人工）
 - **E2** rungic_release.py commit 丢弃快照，rootfs 回到 linear，容器重新启动并就绪。（人工）
-- **E3** 家目录、崩溃报告目录和本地 APT 仓库放在快照之外，回滚不会丢掉它们。（**未检查**）
+- **E3** 家目录、崩溃报告目录和本地 APT 仓库放在快照之外，回滚不会丢掉它们。（单元测试）
 - **E4** 镜像 rootfs 不比目录慢：容器启动到会话就绪 8.2 秒（目录 11.2 秒），读写速度和合成器帧时间在同一水平。（人工）
-- **E5** 快照回滚后比较内核的 ext4 错误数并跑完整性检查，结果写进部署记录。（**未检查**）
+- **E5** 快照回滚后比较内核的 ext4 错误数并跑完整性检查，结果写进部署记录。（单元测试）
 
 注意：
 - 2026-09-27 一次快照回滚没有恢复被重写的块，ext4 出现 76 个目录损坏，根因至今未查明；在查明之前退回优先按包回滚（部署上一个发布）。 [docs/70-rungic-rebrand.md](../docs/70-rungic-rebrand.md)
@@ -1255,10 +1255,10 @@ Linux 应用用手机的相机拍照录像，用手机的扬声器和麦克风�
 
 - **E1** 每次部署后自动跑冒烟验收（会话、单元、新崩溃、显示、输入、相机、空闲抑制、播放、录音），几分钟内给出结果。（人工）
 - **E2** 失败的场景自动重跑一次，重跑通过的记为 flaky，不算失败。（人工）
-- **E3** 每个场景结束时恢复它改过的东西（无障碍开关、显示缩放和模式、录下的文件），不留在用户手机上。（**未检查**）
+- **E3** 每个场景结束时恢复它改过的东西（无障碍开关、显示缩放和模式、录下的文件），不留在用户手机上。（单元测试）
 - **E4** 指标与较早发布的最新报告比较；合成器 paint 或呈现间隔 p95 比上一发布劣化超过 15% 即判失败。（实机验收、人工）
 - **E5** 部署和验收期间出现已知签名以外的崩溃即失败；安装之前发生的崩溃不算到新发布上。（实机验收）
-- **E6** 报告写到 .work/acceptance/<发布>/<时间>/report.json，并列出自动结果不能替代的人工项（画质、声学、音画同步、拼音手感、投屏）。（**未检查**）
+- **E6** 报告写到 .work/acceptance/<发布>/<时间>/report.json，并列出自动结果不能替代的人工项（画质、声学、音画同步、拼音手感、投屏）。（单元测试）
 
 注意：
 - 验收前先看 dumpsys input 的 touchingPointers 为空：一次屏幕右下持续的实体触摸让注入的滑动成了多指手势，快捷设置拉不下来。 [docs/73-reduce-upstream-changes.md](../docs/73-reduce-upstream-changes.md)
@@ -1275,7 +1275,7 @@ Linux 应用用手机的相机拍照录像，用手机的扬声器和麦克风�
 - **E1** 输入相同就复用缓存；改无关的文档或换输入所在位置不会让组件失效。（单元测试）
 - **E2** 源码、依赖、工具、参数、目标架构、文件模式或符号链接任何一项变化，都得到新的输入指纹和新的缓存目录。（单元测试）
 - **E3** 产物损坏、缺记录、构建中输入被改、构建失败时绝不发布或命中缓存；伪造记录、越界输出路径和与固定摘要不符的二进制输入都被拒绝。（单元测试）
-- **E4** 真实组件第二次调用同一执行器全部命中，输入指纹和产物摘要不变。（人工）
+- **E4** 真实组件第二次调用同一执行器全部命中，输入指纹和产物摘要不变。（单元测试、人工）
 
 注意：
 - 起因是旧投屏 JAR 被混入新镜像（docs/86）；按组件类别决定“强制重编或默认复用”都不可靠，只能按实际输入判断。 [docs/94-build-fingerprints.md](../docs/94-build-fingerprints.md)
@@ -1298,7 +1298,7 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 - **E2** 已知噪声（bpf-firewall、runuser 会话、binder 释放等）只计数不显示，并注明原因，不让 Agent 每次重新诊断。（人工）
 - **E3** screenshot 约 5 秒取回（设备上写文件再 pull），返回 540px 预览，原图留在 .work/diag。（人工）
 - **E4** snapshot 一次调用把状态、日志窗口、崩溃和截图写进 .work/diag/<时间>-<标签>/ 的证据包。（人工）
-- **E5** 只读工具不改变设备状态并标为 read-only；改变状态的操作（按控件操作、无障碍开关）单列。（**未检查**）
+- **E5** 只读工具不改变设备状态并标为 read-only；改变状态的操作（按控件操作、无障碍开关）单列。（单元测试）
 - **E6** MCP 客户端经 stdio 能列出并调用全部工具（adb 子进程不吞调用者的 stdin）。（人工）
 
 注意：
@@ -1313,12 +1313,12 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 `delivery.crash-reports` · Linux 系统功能 — 桌面程序崩溃时自动留下带回溯、build-id、所属包、发布和签名的报告，coredumpctl 和 MCP 都能看；按签名归并，在构建机上符号化。
 
-- **E1** 桌面程序（KDE 的与非 KDE 的）崩溃后自动留下报告和 core，journal 里有一条 err 级记录，coredumpctl list/info/debug 能直接使用；Android 的 core_pattern 和目录不受影响。（人工）
-- **E2** crash_groups 按签名归并：次数、首次与最近出现时间、所属发布，并能筛出某个发布之后新出现的签名。（实机验收、人工）
-- **E3** 符号化在构建机上做：手机只给出报告、映射文件和 core，回溯与签名写回手机；手机不会因此内存耗尽、失去 VPN。（人工）
-- **E4** 每个签名最多保留 2 个 core，一个循环崩溃不会挤掉其他崩溃的现场；采集服务限 768 MiB 内存。（人工）
-- **E5** 持有凭据的服务（语音助手、codex app-server）不产生 core。（人工）
-- **E6** 早于当前发布安装时间的崩溃记为 version null 并注明 before，不算到新发布上。（**未检查**）
+- **E1** 桌面程序（KDE 的与非 KDE 的）崩溃后自动留下报告和 core，journal 里有一条 err 级记录，coredumpctl list/info/debug 能直接使用；Android 的 core_pattern 和目录不受影响。（单元测试、人工）
+- **E2** crash_groups 按签名归并：次数、首次与最近出现时间、所属发布，并能筛出某个发布之后新出现的签名。（单元测试、实机验收、人工）
+- **E3** 符号化在构建机上做：手机只给出报告、映射文件和 core，回溯与签名写回手机；手机不会因此内存耗尽、失去 VPN。（单元测试、人工）
+- **E4** 每个签名最多保留 2 个 core，一个循环崩溃不会挤掉其他崩溃的现场；采集服务限 768 MiB 内存。（单元测试、人工）
+- **E5** 持有凭据的服务（语音助手、codex app-server）不产生 core。（单元测试、人工）
+- **E6** 早于当前发布安装时间的崩溃记为 version null 并注明 before，不算到新发布上。（单元测试）
 
 注意：
 - 不要装 drkonqi：KCrash 找得到它时改走 DrKonqi 并以 _exit(253) 结束，KDE 程序不再留下 core；确需时同时设 KCRASH_DUMP_ONLY=1。 [docs/61-delivery-diagnostics-plan.md](../docs/61-delivery-diagnostics-plan.md)
@@ -1335,7 +1335,7 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 经由接口：`kwin-android-host`
 
 - **E1** 一份追踪里同时看到 KWin 的 Paint→GpuWait→Import 区间、宿主的 queueBuffer 和 SurfaceFlinger 呈现，以及各进程的 CPU 与 GPU 时间。（人工）
-- **E2** KWin 的 FTrace 标记只在录制期间打开，录完恢复原状态。（**未检查**）
+- **E2** KWin 的 FTrace 标记只在录制期间打开，录完恢复原状态。（单元测试）
 - **E3** 每次 GPU 提交的执行时间来自 KGSL retire 事件的常开计数器（19.2 MHz），与事件时间差一致。（人工）
 
 注意：
@@ -1350,10 +1350,10 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 `delivery.integrity` · Linux 系统功能 — rungic-integrity（MCP 工具 integrity）只读核对容器 rootfs 与 dpkg、发布元包和本机配置清单是否一致，部署前后各跑一次。
 
-- **E1** 一次只读检查给出 clean、drift 或 development 的结论，并逐项列出：被改或缺失的包文件、本项目的 divert、无主文件、属主与模式异常、本机配置是否在、该启用的单元、用户配置里强制软件渲染的覆盖。（人工）
-- **E2** 结果里没有噪声：dpkg 的 path-exclude 规则生效，最小化镜像本来就没装的文件不报。（人工）
-- **E3** 认识开发覆盖：release.dev 列出基线和覆盖，state 为 development，开发覆盖自己写的 apt 文件不算无主文件。（人工）
-- **E4** 本机配置与凭据（代理、音频 cookie、账户、API Key）只按路径、属主、权限声明和检查，不保存内容。（**未检查**）
+- **E1** 一次只读检查给出 clean、drift 或 development 的结论，并逐项列出：被改或缺失的包文件、本项目的 divert、无主文件、属主与模式异常、本机配置是否在、该启用的单元、用户配置里强制软件渲染的覆盖。（系统测试、人工）
+- **E2** 结果里没有噪声：dpkg 的 path-exclude 规则生效，最小化镜像本来就没装的文件不报。（系统测试、人工）
+- **E3** 认识开发覆盖：release.dev 列出基线和覆盖，state 为 development，开发覆盖自己写的 apt 文件不算无主文件。（系统测试、人工）
+- **E4** 本机配置与凭据（代理、音频 cookie、账户、API Key）只按路径、属主、权限声明和检查，不保存内容。（系统测试）
 
 注意：
 - 曾发现容器 /、/usr 属 UID 1000 且模式 775，桌面用户等于拿到容器 root（暂存树带着构建者 UID 解包）；ownership 检查就是为此加的。 [docs/55-agent-native-debugging.md](../docs/55-agent-native-debugging.md)
@@ -1367,9 +1367,9 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 经由接口：`host-input`
 
-- **E1** 按名称找到控件并操作（按下、点击、填文字）：打开抽屉找到 Calculator 启动，在 Kalk 里按 C、7、+、8、= 得到 15，全程不用固定坐标。（实机验收、人工）
-- **E2** 无障碍按需开启，运行中的 Qt 程序约 2 秒内注册，不用重启；用完关闭并记录状态。（人工）
-- **E3** 没有动作的元素（启动器图标、自绘键盘）按“窗口原点＋元素中心”换算到物理坐标，经 Android 输入点击。（人工）
+- **E1** 按名称找到控件并操作（按下、点击、填文字）：打开抽屉找到 Calculator 启动，在 Kalk 里按 C、7、+、8、= 得到 15，全程不用固定坐标。（系统测试、实机验收、人工）
+- **E2** 无障碍按需开启，运行中的 Qt 程序约 2 秒内注册，不用重启；用完关闭并记录状态。（系统测试、人工）
+- **E3** 没有动作的元素（启动器图标、自绘键盘）按“窗口原点＋元素中心”换算到物理坐标，经 Android 输入点击。（单元测试、人工）
 
 注意：
 - 会话刚重启时抽屉搜索结果不进 AT-SPI 树；快捷设置折叠时未显示的磁贴仍报告 showing；plasma-keyboard 的面板坐标与屏幕有偏移；Kirigami 搜索框没有 EditableText 接口。 [docs/55-agent-native-debugging.md](../docs/55-agent-native-debugging.md)
@@ -1383,10 +1383,10 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 经由接口：`kwin-android-host`、`audio`、`camera`
 
-- **E1** idle-probe 持有空闲抑制期间手机屏幕保持常亮（冒烟验收 idle.inhibit 用它）。（实机验收、人工）
-- **E2** 输入探针只记录提交文字的长度和是否有中文，不记录文字本身。（**未检查**）
-- **E3** rungic-fs-audit 对每个目录跑桌面程序依赖的文件操作，列出哪些不可用、影响哪类程序；必需项失败时退出码为 1。（人工）
-- **E4** 媒体复现脚本能稳定复现并对照问题：pa-gap 测出 Qt 原版缓冲参数下的播放断点，camerabin-record 测出相机录像被截短。（人工）
+- **E1** idle-probe 持有空闲抑制期间手机屏幕保持常亮（冒烟验收 idle.inhibit 用它）。（实机验收、人工；只能在手机上看：屏幕常亮是宿主 APK 把 KWin 经 zwp_idle_inhibitor_v1 转来的空闲抑制变成窗口 FLAG_KEEP_SCREEN_ON 的结果；无头 KWin 没有 Android 后端和屏幕，熄不熄屏只有手机能看出（验收 idle.inhibit））
+- **E2** 输入探针只记录提交文字的长度和是否有中文，不记录文字本身。（单元测试）
+- **E3** rungic-fs-audit 对每个目录跑桌面程序依赖的文件操作，列出哪些不可用、影响哪类程序；必需项失败时退出码为 1。（单元测试、人工）
+- **E4** 媒体复现脚本能稳定复现并对照问题：pa-gap 测出 Qt 原版缓冲参数下的播放断点，camerabin-record 测出相机录像被截短。（人工；只能在手机上看：复现的是手机上的媒体问题：pa-gap 录 Android 音频桥的 android.monitor，camerabin-record 用 Android 摄像头 rungic.camera.0；断点和截短来自 Android 音频与相机的时序，系统测试容器里没有这些后端）
 
 注意：
 - 三个 probe 的源码原先只在手机的 /opt 里，2026-09-26 才收进仓库；新探针一开始就放进仓库。 [docs/61-delivery-diagnostics-plan.md](../docs/61-delivery-diagnostics-plan.md)
@@ -1399,9 +1399,9 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 `delivery.phone-access` · 依赖安卓 — rungic_device.py 找到手机并把脚本送到 Android、Android root、容器 root 或桌面用户执行；rungic_plasma.py、rungic_lxc.py 是对应的命令行；enter 程序是 Android 侧进入 LXC 控制环境的入口。
 
 - **E1** 按硬件序列号在所有 adb 设备里找到手机，无线调试端口变化不用改配置；RUNGIC_ADB、RUNGIC_SERIAL、RUNGIC_TRANSPORT 或 .work/device.env 可以指定。（人工）
-- **E2** 脚本经 stdin 送到四个层级执行，没有多层引号，退出码原样返回。（**未检查**）
+- **E2** 脚本经 stdin 送到四个层级执行，没有多层引号，退出码原样返回。（单元测试）
 - **E3** 回滚到改名前的发布后，工具先找 Rungic 名称、找不到再用旧名称，部署、验收和诊断照样可用。（人工）
-- **E4** enter 程序在私有挂载命名空间里进入 LXC 运行环境，不在 Android 原来的挂载命名空间挂载任何东西；build_enter.sh 用 NDK 静态编译。（**未检查**）
+- **E4** enter 程序在私有挂载命名空间里进入 LXC 运行环境，不在 Android 原来的挂载命名空间挂载任何东西；build_enter.sh 用 NDK 静态编译。（缺口：enter 程序只能以 Android root 运行：路径写死为 /data/adb/rungic-lxc/runtime、/storage 与 /data/user，unshare/pivot_root 需要 CAP_SYS_ADMIN；开发机禁止非特权 user namespace（apparmor_restrict_unprivileged_userns=1），系统测试容器没有 SYS_ADMIN，也没有 NDK；还没有按日期记录的实机核对）
 
 注意：
 - 多个 adb server 或多台手机同时在线时，先 adb devices -l 核对端口和序列号，之后每条命令都带精确序列号；adb server 是共用的，不能 kill-server。 [AGENTS.md](../AGENTS.md)
@@ -1425,8 +1425,8 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 - **E4** git 子树配方核对所选子树的树哈希；换了子树不复用旧归档；排除项消失或路径越出所选子树时失败，要求复核。（单元测试）
 - **E5** verify 把打好补丁的源码与参照树比较，无法解析的符号链接算作差异，不会误报一致。（单元测试）
 - **E6** tests 列出补丁与测试的对应矩阵，只写了计划的测试不算覆盖，没有测试的补丁列为缺口。（单元测试）
-- **E7** prepare 再 export 往返不改变补丁内容；export 只写回我们的主题和 series，Ubuntu 原有补丁保持原样。（人工）
-- **E8** Android 宿主及其 Smithay、Winit 依赖只组装在 .work/ 内，组装结果与迁移前直接维护的源码逐项一致。（人工）
+- **E7** prepare 再 export 往返不改变补丁内容；export 只写回我们的主题和 series，Ubuntu 原有补丁保持原样。（单元测试、人工）
+- **E8** Android 宿主及其 Smithay、Winit 依赖只组装在 .work/ 内，组装结果与迁移前直接维护的源码逐项一致。（单元测试、人工）
 
 注意：
 - 不以提交上游作为手段（评审周期过长）：必须保留的修改长期作为补丁维护，能在自有组件、扩展点或共享服务里解决的不改上游；升级时先核对新版本是否已包含我们的修复，已包含的删除。 [docs/73-reduce-upstream-changes.md](../docs/73-reduce-upstream-changes.md) [AGENTS.md](../AGENTS.md)
@@ -1456,10 +1456,10 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 `delivery.repo-scope` · Linux 系统功能 — 私有仓库只同步源码、文档、基准数据和来源记录；本地产物都在 .work/；provenance/ 记上游来源与校验值；开发 APK 签名密钥是唯一同步的密钥。
 
-- **E1** 提交前的候选检查用 Git 实际的忽略规则，在临时 Git 目录里列出候选文件，标出敏感文件名、令牌格式、大文件和指向仓库外的链接，只放行指定的开发签名密钥；不改工作区索引。（人工）
-- **E2** 下载、构建产物、日志、截图、实机媒体和其他密钥都在 .work/，被忽略的文件不出现在 .work/ 之外。（**未检查**）
-- **E3** APK 默认用仓库里的开发签名身份签名，换一台机器构建签名不变。（人工）
-- **E4** 上游来源、版本、校验值和许可证有记录；审计只按精确哈希豁免已核对的上游公开文件。（**未检查**）
+- **E1** 提交前的候选检查用 Git 实际的忽略规则，在临时 Git 目录里列出候选文件，标出敏感文件名、令牌格式、大文件和指向仓库外的链接，只放行指定的开发签名密钥；不改工作区索引。（单元测试、人工）
+- **E2** 下载、构建产物、日志、截图、实机媒体和其他密钥都在 .work/，被忽略的文件不出现在 .work/ 之外。（单元测试）
+- **E3** APK 默认用仓库里的开发签名身份签名，换一台机器构建签名不变。（单元测试、人工）
+- **E4** 上游来源、版本、校验值和许可证有记录；审计只按精确哈希豁免已核对的上游公开文件。（单元测试）
 
 注意：
 - 2026-09-30 的历史改写改变了所有提交号；发布记录和文档里的旧提交号按 provenance/history-rewrite-20260930/commit-map.txt 查找，不要再推送基于旧历史的分支。 [docs/52-git-repository-scope.md](../docs/52-git-repository-scope.md)
@@ -1472,7 +1472,7 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 `delivery.benchmark-evidence` · 依赖安卓 — benchmarks/ 保存挑选过的性能测试原始数据和结果，带校验值，用仓库里的分析工具可以复算出文档里的结论。
 
-- **E1** 每组基准数据都有来源说明和 SHA256SUMS（大的 trace 留在 .work，按 TRACES-SHA256SUMS 识别），原始数据未被改写。（**未检查**）
+- **E1** 每组基准数据都有来源说明和 SHA256SUMS（大的 trace 留在 .work，按 TRACES-SHA256SUMS 识别），原始数据未被改写。（单元测试）
 - **E2** 用仓库里的分析工具重新分析得到与原结论相同的结果。（人工）
 
 注意：
@@ -1482,9 +1482,9 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 `delivery.dev-guide` · Linux 系统功能 — README（产品主页）、docs/README.md（开发者指南和文档索引）、AGENTS.md（用户要求与工程约定）和 .agents/skills 下的项目技能。
 
-- **E1** 开发 Agent 一进仓库就能读到按日期记录的用户要求与工程约定（AGENTS.md），并能按任务调用项目技能（$rungic-three-stage-image、$rungic-dev-release；Claude Code 经 .claude/skills 链接）。（**未检查**）
-- **E2** docs/README.md 的文档索引列出每一篇现有文档。（**未检查**）
-- **E3** README 的产品展示图只用挑选过、缩小、确认不含隐私的成品，原始录像和截图留在 .work/readme/。（**未检查**）
+- **E1** 开发 Agent 一进仓库就能读到按日期记录的用户要求与工程约定（AGENTS.md），并能按任务调用项目技能（$rungic-three-stage-image、$rungic-dev-release；Claude Code 经 .claude/skills 链接）。（单元测试）
+- **E2** docs/README.md 的文档索引列出每一篇现有文档。（单元测试）
+- **E3** README 的产品展示图只用挑选过、缩小、确认不含隐私的成品，原始录像和截图留在 .work/readme/。（单元测试）
 
 注意：
 - docs/README.md 的索引落后：91–104 篇及 research/ 下多篇新文档（共 24 篇）没有列入。 [docs/README.md](../docs/README.md)
@@ -1496,9 +1496,9 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 `delivery.feature-inventory` · Linux 系统功能 — quality/ 记下每个功能必须做到的体验和背后的代码、文档、测试；tools/feature_inventory.py 检查引用、认领和覆盖，并生成 docs/feature-inventory.md。
 
-- **E1** check 把断裂的引用（不存在的文件、未知的功能或体验、未知的接口）报为错误，把无人认领的文件、没有检查的体验、已退役功能的残留和被取代的文档报为警告；--strict 下警告也算失败。（**未检查**）
-- **E2** owner PATH 说出一个文件归哪些功能，feature ID 列出它的体验、检查、代码和文档。（**未检查**）
-- **E3** 生成的 docs/feature-inventory.md 与数据不一致时 check 失败，提示 render --write。（**未检查**）
+- **E1** check 把断裂的引用（不存在的文件、未知的功能或体验、未知的接口）报为错误，把无人认领的文件、没有检查的体验、已退役功能的残留和被取代的文档报为警告；--strict 下警告也算失败。（单元测试）
+- **E2** owner PATH 说出一个文件归哪些功能，feature ID 列出它的体验、检查、代码和文档。（单元测试）
+- **E3** 生成的 docs/feature-inventory.md 与数据不一致时 check 失败，提示 render --write。（单元测试）
 
 注意：
 - 测试要在被检查的地方声明 covers，只在真的检查了那条体验时才写；没有测试的体验如实留作未检查或写明 gap。 [quality/README.md](../quality/README.md)
@@ -2540,12 +2540,12 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 - **E1** 安装前核验精确的手机：序列号/端口、完整 fingerprint、机型、运行内核、SELinux Enforcing、槽位、电量和 boot 回读摘要；任何一项不符都在读 boot 或写入手机之前停止。（单元测试、人工）
 - **E2** 只信调用者给的可信 manifest 摘要；组件损坏或截断、被换成符号链接、清单里有越界路径、release 名带 shell 字符时拒绝安装。（单元测试）
 - **E3** 一次安装自动完成：两个普通 APK、Termux 前缀、LXC 宿主、rootfs（解压后核对整镜像 SHA）、SSH 主机密钥和共享挂载准备，最后发布 ready / complete / error=none。（人工）
-- **E4** 手机上已有 Rungic runtime 时拒绝首装；只允许重试同一 release、同一 manifest 的未完成安装，新 release 不覆盖已有安装。（**未检查**）
+- **E4** 手机上已有 Rungic runtime 时拒绝首装；只允许重试同一 release、同一 manifest 的未完成安装，新 release 不覆盖已有安装。（单元测试）
 - **E5** 重启后已选中的独立安装不会被旧 product 种子重新接管；选中的载荷缺失时失败关闭，不回落到旧入口。（单元测试、人工）
 - **E6** Rungic 应用的 root 授权在发布安装状态之前设好，首次打开没有 Magisk 授权弹窗。（人工）
 - **E7** 投屏组件是可选部分：缺失或安装失败只记日志，不阻止桌面安装；完好的已装组件不动，损坏的会被修复，记住的电视保留。（单元测试）
 - **E8** 组包时拒绝与当前源码不符的旧投屏组件（旧 JAR 曾让电视列表为空）。（单元测试）
-- **E9** 手机空间不足时在写镜像之前停止（保守预留整镜像加 512 MiB），不会写满 /data。（**未检查**）
+- **E9** 手机空间不足时在写镜像之前停止（保守预留整镜像加 512 MiB），不会写满 /data。（单元测试）
 
 注意：
 - `install` 返回 installing 只表示后台任务已启动；必须继续核对 ready、账户和真实桌面。 [docs/91-x70-independent-install.md](../docs/91-x70-independent-install.md)
@@ -2567,7 +2567,7 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 - **E2** 安装状态缺失、版本与本次 release 不符、内容截断或损坏、或是未知的未来 schema 时继续等待并在详情里说明原因，不打开账户表单。（单元测试）
 - **E3** 失败按原因给出不同的说明：安装文件校验失败（重新获取安装包，重启不会修复）、空间不足、共享存储不可用、其他；不一律让用户重启。（单元测试、人工）
 - **E4** 等待解锁时提示先解锁手机、解锁后自动继续；三分钟没有新阶段时只提示“较长时间未收到新的阶段状态”，不判为失败。（单元测试）
-- **E5** 准备期间可以返回 Android，再打开时接着显示当前阶段。（**未检查**）
+- **E5** 准备期间可以返回 Android，再打开时接着显示当前阶段。（缺口：返回 Android 再打开时的阶段显示由 MainActivity/StartupScreen 的生命周期决定，离线 Java 测试只覆盖状态文件的读取（FirstBootStateTest）；82 篇把“安装中进入/退出 Rungic”列为待做的首启场景，尚无实机记录）
 - **E6** 清除 Rungic 应用数据后再打开，不用重启手机：已完成的安装重新发布状态并直接放行，进行中的安装交给首启脚本，复用底座上的旧 product 种子不会让它一直等待。（单元测试、人工）
 
 注意：
@@ -2607,10 +2607,10 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 经由接口：`kwin-android-host`
 
 - **E1** 启动时显示“正在启动桌面”，直到当前会话的手机帧真正显示后才移除 loading；旧帧、投屏输出或屏障之前的提交都不算。（单元测试、人工）
-- **E2** 显示确认 60 秒没有到达时显示可恢复的“显示未确认”，可以重新检查，不强行放行。（**未检查**）
+- **E2** 显示确认 60 秒没有到达时显示可恢复的“显示未确认”，可以重新检查，不强行放行。（缺口：显示确认超时的处理在 MainActivity（framePoll）里，依赖 Android 的 Activity、Surface 和 NativeBridge，离线 Java 测试只编译 FirstBootState；需要 Android 仪器测试，或实机首装时让显示反馈不到达（82 篇“后续整包必须覆盖的场景”第 4 条））
 - **E3** 首次进入直接到 Plasma 桌面，不出现 Plasma Mobile 欢迎向导；需要时仍可手动打开向导。（人工）
 - **E4** 通知随实际状态变化（正在准备 Rungic、等待设置账户、正在运行、需要处理），点通知回到 Rungic；新装时不声称桌面已在运行。（人工）
-- **E5** 关闭会话前确认并说明会结束 Linux 应用；切到 Android 时会话继续运行。（**未检查**）
+- **E5** 关闭会话前确认并说明会结束 Linux 应用；切到 Android 时会话继续运行。（缺口：关闭会话的确认对话框在 MainActivity 的宿主菜单里（AlertDialog），离线无法运行；82 篇只记录了切到 Android 后返回（2026-09-28），没有关闭会话确认的实机记录）
 
 注意：
 - 显示确认只证明手机图形输出链路，画面可能还是启动画面，不代表桌面服务和应用都已可交互。不支持帧时间反馈的设备会显示确认超时，不能假定与 G100 等价。 [docs/82-first-run-ux-refactor.md](../docs/82-first-run-ux-refactor.md)
@@ -2628,8 +2628,8 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 `install.ssh-access` · Linux 系统功能 — 装好后容器的 SSH 自动可用（用户 2026-09-29 要求），每台手机有自己的主机密钥，账户密码和密钥都能登录。
 
 - **E1** 新装的系统 ssh.socket 已启用并在 22 端口（IPv4 与 IPv6）监听，开机后自动可连；有连接时才启动 sshd。（系统测试、人工）
-- **E2** 账户密码和 ~/.ssh/authorized_keys 里的密钥都能登录；root 只能用密钥。（人工）
-- **E3** 镜像里不带主机密钥；每台手机在安装时生成自己的三组主机密钥，之后缺失时自动补上。（人工）
+- **E2** 账户密码和 ~/.ssh/authorized_keys 里的密钥都能登录；root 只能用密钥。（系统测试、人工）
+- **E3** 镜像里不带主机密钥；每台手机在安装时生成自己的三组主机密钥，之后缺失时自动补上。（系统测试、人工）
 
 注意：
 - 用户明确要求 SSH 自动开启；升级和排障时不得按旧文档“默认关闭”停用 SSH 或加关闭策略。2026-10-03 前 desktop/services/policy.json 的 SSH 默认值仍是 disabled，新装设备首装会停用 ssh.socket；现为 enabled（tools/system/tests/ssh_on_first_install.py）。deb-systemd-helper 的 enable 不会撤销它自己先前的 disable。 [docs/research/g100-system-update-20260929.md](../docs/research/g100-system-update-20260929.md) [docs/83-service-policy.md](../docs/83-service-policy.md)
@@ -2667,7 +2667,7 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 - **E2** 只有两边都读得到且确实不一致时才重启容器；目录没变或任一侧读取失败时不重启。（单元测试）
 - **E3** 应用被强制停止后再打开，plasmashell 不会停在 failed；点“重新检查”改为重启会话，5 秒内 plasmashell 和 KWin 恢复。（单元测试、人工）
 - **E4** 重启会话时先等上一个会话的停止作业结束（最多 20 秒）再启动，plasmashell 不会被 systemd 丢掉。（单元测试、人工）
-- **E5** Android 重新挂载共享存储后，下次打开会重启容器重新绑定，共享文件夹恢复可用。（**未检查**）
+- **E5** Android 重新挂载共享存储后，下次打开会重启容器重新绑定，共享文件夹恢复可用。（单元测试）
 
 注意：
 - APK 重新建出 files/tmp 之前，所有经过 rungic-plasma-enter 的控制命令都会报 bind Android Wayland socket directory。 [docs/96-desktop-recovery-after-apk-restart.md](../docs/96-desktop-recovery-after-apk-restart.md)
@@ -2719,9 +2719,9 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 `install.container-base` · 依赖安卓 — Android 侧控制器（rungic-plasma）、LXC 配置、容器 init 和随系统安装的配置文件（system/、两个系统包）： Ubuntu 容器以受限权限跑在 Android 上，其余领域的系统集成文件也从这里装进去。
 
-- **E1** 容器在 SELinux Enforcing 下运行，与 Android 共用网络但去掉 net_admin、net_raw、sys_module 等能力，只开放明确列出的设备（GPU、DMA heap、fuse、tun）；Android 重启后设备号变了也按当前设备号授权。（**未检查**）
+- **E1** 容器在 SELinux Enforcing 下运行，与 Android 共用网络但去掉 net_admin、net_raw、sys_module 等能力，只开放明确列出的设备（GPU、DMA heap、fuse、tun）；Android 重启后设备号变了也按当前设备号授权。（单元测试）
 - **E2** 容器里 Flatpak 应用的沙箱能启动（/proc/sys/user 可写、有完整可见的 proc），其余 /proc/sys 仍只读。（人工）
-- **E3** 控制命令串行执行：Surface 重建和显式重启同时发生时，不会并行启动两次容器或会话。（**未检查**）
+- **E3** 控制命令串行执行：Surface 重建和显式重启同时发生时，不会并行启动两次容器或会话。（单元测试）
 
 注意：
 - home、崩溃记录、本机发布仓库和 Android 侧写给容器的文件放在 rootfs 镜像之外的 state/，以 bind 挂入；改名 D 阶段之前同时挂在旧名 /var/lib/moto-* 下。 [docs/61-delivery-diagnostics-plan.md](../docs/61-delivery-diagnostics-plan.md) [docs/70-rungic-rebrand.md](../docs/70-rungic-rebrand.md)
@@ -2773,7 +2773,7 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 - **E1** 改名后账户、家目录（随登录名到 /home/<登录名>）、用户设置保留；已完成的 KDE 配置迁移不会重复执行（用户移除的快捷设置不会被加回）；只运行一次。（单元测试、人工）
 - **E2** 回到改名前的发布时把名称和改名后变化的设置交回旧目录。（单元测试、人工）
 - **E3** 首次账户设置已经移动过家目录、或已在新名称下重新运行过时，迁移仍然正确。（单元测试）
-- **E4** 已安装的包、单元和包名里不再有 moto 名称（硬件名称和 C 阶段兼容名除外）。（实机验收、人工）
+- **E4** 已安装的包、单元和包名里不再有 moto 名称（硬件名称和 C 阶段兼容名除外）。（单元测试、实机验收、人工）
 
 注意：
 - D 阶段还没做：兼容挂载 /var/lib/moto-*、moto-gpu-alloc 链接、投屏厂商“Moto”、/home/linux 链接、旧 APK、moto-* 的 rc 残留和 Docker 旧卷都还在。 [docs/70-rungic-rebrand.md](../docs/70-rungic-rebrand.md)
@@ -2790,7 +2790,7 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 `install.device-spec` · 依赖安卓 — 每个机型/固件一份不可变 spec（身份、原厂摘要、内核配方、分区与刷写策略），原厂包按它核验后才使用。用户是开发者和 Agent。
 
 - **E1** 原厂包按精确 identity 核验后才解包（默认 G100，X70 用显式 identity）；错机型、多出的 super 分片、XML 摘要不符时在解包前拒绝，结果不发布。（单元测试）
-- **E2** 实机预检按 spec 核对身份、固件、槽位、电量和空间，不符时停止，不写设备。（**未检查**）
+- **E2** 实机预检按 spec 核对身份、固件、槽位、电量和空间，不符时停止，不写设备。（单元测试）
 
 注意：
 - G100 S（mumba_cn）的镜像、哈希和刷机命令不能用于 G100（portov_cn）；同销售名、同 GPU、同 Android 版本都不能合并 spec。 [docs/78-g100-firmware-inventory.md](../docs/78-g100-firmware-inventory.md) [docs/75-image-build-separation.md](../docs/75-image-build-separation.md)
@@ -2823,7 +2823,7 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 - **E1** 镜像不带个人账户、密码、凭据或构建机痕迹：只有一个口令锁定的 UID 1000 模板账户，没有账户完成标记，home 里没有别的条目；违反时拒绝出镜像，报错里不出现口令哈希。（单元测试、人工）
 - **E2** 预装集合按清单：被排除的独立应用（Angelfish、Haruna、Journald Browser、KleverNotes、Marknote）不在镜像里，Emoji Selector 入口被 dpkg 排除，桌面与 Emoji 字体保留；旧树有残留时拒绝。（单元测试、人工）
-- **E3** 镜像里的包安装干净：dpkg --audit、apt-get check、ext4 检查通过；APT pin 按本次 manifest 重新生成，不留旧 release 的 pin。（人工）
+- **E3** 镜像里的包安装干净：dpkg --audit、apt-get check、ext4 检查通过；APT pin 按本次 manifest 重新生成，不留旧 release 的 pin。（系统测试、人工）
 - **E4** 按输入指纹复用产物：安装包里组件被替换、缺少构建绑定、输入被改或依赖未解析时 verify 拒绝。（单元测试、人工）
 - **E5** 在 x86 主机上构建 ARM64 root 树时，chroot 不继承宿主的 Python 设置和 HOME，但保留代理。（单元测试）
 
