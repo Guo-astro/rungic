@@ -11,6 +11,8 @@ for dir in agent/screen agent/workspace; do
         && cmake --install /build/$dir >>/build.log 2>&1 \
         || { echo "{\"test\": \"build $dir\", \"passed\": false, \"log\": \"$(tail -5 /build.log | tr '\"\n' "' ")\"}"; exit 1; }
 done
+sh /src/tools/system/build-media.sh >/build.log 2>&1 \
+    || { echo "{\"test\": \"build media\", \"passed\": false, \"log\": \"$(tail -5 /build.log | tr '\"\n' "' ")\"}"; exit 1; }
 failed=0
 for test in "$@"; do
     path=/src/tools/system:/src/tools:/src/agent/computer-use

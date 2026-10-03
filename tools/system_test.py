@@ -85,7 +85,6 @@ def run(names):
         print(f'system tests {" ".join(names)} on {tag} (working tree {digest})', flush=True)
         result = host.ssh(f'{host.DOCKER} run --rm --cap-add SYS_NICE -v {src}:/src:ro {tag} '
                           f'sh /src/tools/system/run-in-container.sh {" ".join(names)}', 1800, check=False)
-        host.ssh(f'ls -dt {REMOTE}/src-* 2>/dev/null | tail -n +4 | xargs rm -rf', 120, check=False)  # keep the last three trees
     finally:
         host.ssh(f'rmdir {lock}', 60, check=False)
     lines = [json.loads(l) for l in result.stdout.decode(errors='replace').splitlines() if l.startswith('{')]
@@ -95,6 +94,9 @@ def run(names):
         mark = 'PASS' if line.get('passed') else 'FAIL'
         print(f'{mark} {line["test"]} ({line.get("seconds", "-")} s)' + (f': {line["error"]}' if line.get('error') else '')
               + (f': {line["log"]}' if line.get('log') else ''))
+    # Trees older than two hours go. Not "all but the last three": with runs from several working trees
+    # at once, that removed a tree another run's container was still building from.
+    host.ssh(f'find {REMOTE} -maxdepth 1 -name "src-*" -mmin +120 -exec rm -rf {{}} +', 120, check=False)
     passed = lines and all(l.get('passed') for l in lines) and len([l for l in lines if 'build' not in l['test']]) == len(names)
     print(f'{"passed" if passed else "FAILED"}; record {record.relative_to(ROOT)}')
     return 0 if passed else 1

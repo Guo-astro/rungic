@@ -13,7 +13,7 @@ the field saves as the button does.
 Forwarded: no
 Last-Update: 2026-10-01
 X-Rungic-Status: Pending [a plain bug; check upstream master first]
-X-Rungic-Tests: none (gap: checked by hand on the phone, docs/103)
+X-Rungic-Tests: tools/tests/test_mobile_file_dialog.py (the save row from this hunk, offscreen Qt Quick); the whole dialog by hand on the phone, docs/103
 X-Rungic-Docs: docs/103
 ---
  src/kirigami-filepicker/declarative/FilePicker.qml | 13 ++++++++++++-

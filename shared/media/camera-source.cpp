@@ -19,6 +19,7 @@
 #include <vector>
 #include <string>
 #include <stdexcept>
+#include <cstdlib>
 #include <cstring>
 #include <clocale>
 #include <libintl.h>
@@ -86,7 +87,11 @@ static void capture(Source *s) {
             if(fd<0)throw std::runtime_error("Cannot create camera socket");
             s->fd=fd;
             sockaddr_un address{};address.sun_family=AF_UNIX;
-            strcpy(address.sun_path,"/mnt/android-wayland/capture.sock");
+            // The app's capture socket; another one only for a stand-in (tools/system/tests).
+            const char *path=getenv("RUNGIC_CAPTURE_SOCKET");
+            if(!path || !*path)path="/mnt/android-wayland/capture.sock";
+            if(strlen(path)>=sizeof(address.sun_path))throw std::runtime_error("Camera socket path too long");
+            strcpy(address.sun_path,path);
             timeval timeout{50,0};setsockopt(fd,SOL_SOCKET,SO_RCVTIMEO,&timeout,sizeof(timeout));
             if(connect(fd,reinterpret_cast<sockaddr*>(&address),sizeof(address)))throw std::runtime_error("Android camera backend unavailable");
             JsonBuilder *builder=json_builder_new();json_builder_begin_object(builder);

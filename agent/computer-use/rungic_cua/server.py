@@ -635,8 +635,12 @@ class Cua:
                 'soon as the recording has started, stop and reply DONE.',
                 max_steps=6, timeout_s=60, stop=routed.is_set)
             if not routed.wait(3):
+                # The app may be recording the real microphone: never leave that to be sent (docs/62).
+                computer.run('A voice message recording may still be open. Cancel it without sending, then reply DONE.',
+                             max_steps=4, timeout_s=60)
                 return {'sent': False, 'app': binary, 'start': start,
-                        'note': f'{binary} did not start recording through the Linux microphone; nothing was spoken'}
+                        'note': f'{binary} did not start recording through the Linux microphone; nothing was spoken, '
+                                'the recording was cancelled'}
             # Finding the send control takes the model a few seconds: it looks while the speech plays,
             # and presses only after it ended (else the message ends in seconds of silence).
             spoken = threading.Event()
@@ -789,7 +793,7 @@ class Cua:
         start_at = control(snapshot, start)
         router = subprocess.Popen(['rungic-audio-route', '--binary', binary, '--microphone'], stdin=subprocess.PIPE,
                                   stdout=subprocess.PIPE, text=True)
-        routed = False
+        routed = started = False
         try:
             if router.stdout.readline().strip() != 'ready':
                 raise RuntimeError('audio routing did not start')
@@ -797,6 +801,7 @@ class Cua:
                 backend.input.press(*start_at)
             else:
                 backend.input.click(*start_at)
+            started = True
             # The recording stream appears when recording starts; speak only once it
             # records from the Linux microphone.
             deadline = time.monotonic() + 4
@@ -819,8 +824,10 @@ class Cua:
                 backend._root = None
                 backend.input.click(*control(backend.observe(), str(finish)))
         except Exception:
-            if routed and not hold:
-                try:   # never leave a recording that could be sent later
+            # Never leave a recording that could be sent later: not routed in time, it may be
+            # recording the real microphone (docs/62).
+            if started and not hold:
+                try:
                     backend._root = None
                     backend.input.click(*control(backend.observe(), cancel))
                 except Exception:  # noqa: BLE001
