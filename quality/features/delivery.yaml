@@ -729,9 +729,7 @@ features:
     pitfalls:
       - text: 2026-09-30 的历史改写把 vendor/ 从全部提交中删除，计划里引用的提交（如 dffc717e）已不存在，这个工具无法再运行。
         docs: [docs/52-git-repository-scope.md]
-    code:
-      - tools/pq_import_history.py
-      - tools/pq-history/
+    code: []
     docs: []
 
   # ---------------------------------------------------------------- repository

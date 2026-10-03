@@ -132,7 +132,7 @@ packages/<源码包名>/
 
 ## 第二批：改名涉及的6个组件（2026-09-26）
 
-用户决定只先迁移Rungic改名会改到的组件：plasma-mobile、plasma-settings、kscreen、FFmpeg、Snapshot、typesafe-computer-use（提交`baef71f4`）。每个组件都由`tools/pq_import_history.py`从vendor历史生成补丁队列，并与`c36596035f9e:vendor/<名称>`逐字节核对一致（空目录、`debian/`、`.pc`除外）；随后删除这6个vendor目录，以及已被`packages/kwin`取代的`vendor/kwin`。
+用户决定只先迁移Rungic改名会改到的组件：plasma-mobile、plasma-settings、kscreen、FFmpeg、Snapshot、typesafe-computer-use（提交`baef71f4`）。每个组件都由`tools/pq_import_history.py`从vendor历史生成补丁队列，并与`c36596035f9e:vendor/<名称>`逐字节核对一致（空目录、`debian/`、`.pc`除外）；随后删除这6个vendor目录，以及已被`packages/kwin`取代的`vendor/kwin`。（2026-10-03：2026-09-30 的历史改写后，任何提交里都已没有 `vendor/`，这两个导入工具连同 `tools/pq-history/` 的计划和 `desktop/patches/` 中只供它们导入的旧补丁副本一并删除，需要时见 git 历史。）
 
 | 组件 | 上游来源 | 补丁 | 说明 |
 |---|---|---|---|

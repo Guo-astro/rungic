@@ -148,7 +148,6 @@ features:
       - desktop/bench/
       - desktop/build-shims/
       - tools/build_mesa.py
-      - tools/pq-history/mesa.json
       - tools/analyze_plasma_gpu.py
       - tools/benchmark_plasma_compositor.py
       - tools/compare_plasma_gpu.py
@@ -481,8 +480,6 @@ features:
     code:
       - packages/snapshot/
       - packaging/rungic-snapshot/
-      - tools/pq-history/snapshot.json
-      - shared/media/snapshot-moto-codec.patch
       - system/diagnostics/media-probes/camerabin-record.py
     docs: [docs/research/35-hardware-codec-integration.md]
 
@@ -521,9 +518,6 @@ features:
       - packages/libcamera/
       - packages/plasma-camera/
       - desktop/libcamera/
-      - tools/pq-history/libcamera.json
-      - tools/pq-history/plasma-camera.json
-      - desktop/patches/camera-frame-timestamps.patch
       - desktop/patches/qt-video-duration.patch
     docs: [docs/48-plasma-media-pipelines.md]
 
@@ -573,8 +567,6 @@ features:
       - android/app/src/com/rungic/plasma/CaptureService.java
       - packages/qt6-multimedia/
       - packages/gst-plugins-base1.0/
-      - tools/pq-history/qt6-multimedia.json
-      - desktop/patches/qt-pulse-buffer.patch
       - system/diagnostics/media-probes/pa-gap.py
     docs: [docs/48-plasma-media-pipelines.md, docs/research/33-capture-integration.md]
 
@@ -660,7 +652,6 @@ features:
       - android/app/src/com/rungic/plasma/CodecBridge.java
       - packages/ffmpeg/
       - packaging/rungic-codec/
-      - tools/pq-history/ffmpeg.json
     docs:
       - docs/research/34-hardware-codec-audit.md
       - docs/research/35-hardware-codec-integration.md
@@ -693,8 +684,6 @@ features:
         docs: [docs/40-plasma-mobile-integration.md]
     code:
       - packages/xdg-desktop-portal-kde/
-      - tools/pq-history/xdg-desktop-portal-kde.json
-      - desktop/patches/portal-mobile-width.patch
     docs: [docs/42-plasma-runtime-acceptance.md]
 
   # ---- Firefox ------------------------------------------------------------------------------------

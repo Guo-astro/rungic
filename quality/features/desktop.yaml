@@ -1115,8 +1115,4 @@ features:
         docs: [docs/48-plasma-media-pipelines.md]
     code:
       - desktop/patches/
-      - desktop/kwin-wayland.postinst
-      - desktop/package-display.py
-      - desktop/android-display-client.h
-      - desktop/libcamera/pipewire-pipeline.patch
     docs: []
