@@ -48,6 +48,7 @@ class WorkspaceEnv(unittest.TestCase):
                                 text=True, check=True)
         return parse(result.stdout)
 
+    # covers: agent.workspaces/E5
     def test_a_desktop_session(self):
         env = self.run_env()
         self.assertNotIn('QT_QPA_PLATFORMTHEME', env)
@@ -56,12 +57,14 @@ class WorkspaceEnv(unittest.TestCase):
         self.assertEqual(env['WAYLAND_DISPLAY'], 'wayland-ws-1')
         self.assertEqual(env['DBUS_SESSION_BUS_ADDRESS'], 'unix:path=/run/user/1000/rungic-workspace-1.bus')
 
+    # covers: agent.workspaces/E5
     def test_the_users_values_go_along(self):
         env = self.run_env()
         self.assertEqual(env['RUNGIC_USER_QT_QPA_PLATFORMTHEME'], 'KDE')
         self.assertEqual(env['RUNGIC_USER_PLASMA_INTEGRATION_USE_PORTAL'], '1')
         self.assertEqual(env['RUNGIC_USER_WAYLAND_DISPLAY'], 'wayland-0')
 
+    # covers: agent.workspaces/E5
     def test_from_inside_a_workspace_they_stay(self):
         inside = {'RUNGIC_WORKSPACE': '1', 'QT_QPA_PLATFORMTHEME': '', 'PLASMA_INTEGRATION_USE_PORTAL': '0',
                   'RUNGIC_USER_QT_QPA_PLATFORMTHEME': 'KDE', 'RUNGIC_USER_PLASMA_INTEGRATION_USE_PORTAL': '1'}
@@ -69,6 +72,7 @@ class WorkspaceEnv(unittest.TestCase):
         self.assertEqual(env['RUNGIC_USER_QT_QPA_PLATFORMTHEME'], 'KDE')
         self.assertEqual(env['RUNGIC_USER_PLASMA_INTEGRATION_USE_PORTAL'], '1')
 
+    # covers: agent.workspaces/E5
     def test_back_in_the_users_session(self):
         env = self.run_env(None, 'sh', str(USER), 'env')
         self.assertEqual((env.get('QT_QPA_PLATFORMTHEME'), env.get('PLASMA_INTEGRATION_USE_PORTAL')), ('KDE', '1'))
@@ -111,6 +115,7 @@ class AgentWorkspaceEnv(unittest.TestCase):
             os.environ.clear()
             os.environ.update(saved)
 
+    # covers: agent.workspaces/E5
     def test_same_desktop_as_the_script(self):
         with tempfile.TemporaryDirectory() as temp:
             env = self.workspace_env(temp)

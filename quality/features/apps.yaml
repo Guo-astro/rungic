@@ -1,0 +1,977 @@
+area: apps
+title: 应用、图形与媒体
+summary: 在手机上安装、运行 Linux 应用，并让它们用上手机的 GPU、相机、麦克风、扬声器、硬件编解码和安卓共享存储。
+scenarios:
+  - id: apps.install
+    title: 安装和打开 Linux 应用
+    summary: 用 Discover、pkgcli 或 Flatpak 装应用，输入一次系统密码，装好的应用能打开、能用。
+  - id: apps.graphics
+    title: 用 GPU 画画面的应用
+    summary: 浏览器、绘图、3D、聊天和 X11 老程序都在 Adreno GPU 上绘制，不退回 CPU 软件渲染。
+  - id: apps.media
+    title: 拍照、录像、听和说
+    summary: Linux 应用用手机的相机拍照录像，用手机的扬声器和麦克风，视频用硬件编解码，屏幕可以分享给网页或会议。
+  - id: apps.web
+    title: 上网
+    summary: 用 Firefox 浏览网页、看视频、开视频会议，手机上是移动版，桌面里是桌面版。
+  - id: apps.files
+    title: 文件与安卓互通
+    summary: 下载、图片、视频、音乐放在安卓共享存储里，两边都能看到；应用的保存对话框在手机上好用。
+  - id: apps.tools
+    title: 开发与系统工具
+    summary: 在容器里跑 Docker、写代码、看系统监视器里的 CPU、GPU 和磁盘。
+features:
+  # ---- 安装应用 -----------------------------------------------------------------------------------
+  - id: apps.store
+    title: 应用商店与 pkgcli 安装应用
+    scenario: apps.install
+    status: live
+    platform: linux
+    interfaces: []
+    summary: Discover（PackageKit APT 后端）和 pkgcli 能搜到、装上、卸掉 Ubuntu 的 ARM64 应用，授权用系统的密码框。
+    experience:
+      - id: E1
+        text: Discover 能显示应用的介绍、版本和安装按钮（AppStream/DEP11 元数据与图标已下载）。
+        evidence:
+          - {doc: docs/45-plasma-app-store.md, date: 2026-09-23, note: "Plasma Mobile 推荐的 12 个应用都有包并已经同一 PackageKit 后端装上"}
+      - id: E2
+        text: 从 Discover 用 APT 装应用，同一进程约 5 分钟内只问一次密码（auth_admin_keep），不会每一步都要密码。
+        evidence:
+          - {doc: docs/45-plasma-app-store.md, date: 2026-09-24, note: "会话挂到 seat0 后 pkcheck 结果"}
+      - id: E3
+        text: 管理员账户在本地会话里装、卸 Flatpak 应用不用密码，一个应用拆成多个 ref 也不会连问多次。
+        evidence:
+          - {doc: docs/45-plasma-app-store.md, date: 2026-09-24}
+      - id: E4
+        text: 卸载 APT 软件包每次都要求密码（上游默认 auth_admin），不会被无密码规则放行。
+        evidence:
+          - {doc: docs/45-plasma-app-store.md, date: 2026-09-24}
+      - id: E5
+        text: 系统的定制 Mesa、KWin 等包不会被一次普通的 PackageKit 更新换回发行版版本。
+        gap: 只核对过当时的更新清单，没有覆盖第三方源的依赖求解
+    pitfalls:
+      - text: 会话由服务经 PAM 创建时没有 seat，logind 当它是非本地会话，polkit 对 Discover、Flatpak 一律 auth_admin，每步都要密码；服务里必须有 XDG_SEAT=seat0。
+        docs: [docs/45-plasma-app-store.md]
+      - text: 带 http_proxy 的 pkgcli 在 LXC attach 上下文会报 “failed to get the session”；批量 CLI 去掉代理环境，下载交给 APT 已配置的代理。
+        docs: [docs/45-plasma-app-store.md]
+      - text: 用户明确要求真实用户名密码，不要加免密码的 polkit 规则。
+        docs: [docs/45-plasma-app-store.md]
+      - text: Kalk 的 AppStream 地址是 appstream://org.kde.kalk，带 .desktop 会匹配失败。
+        docs: [docs/45-plasma-app-store.md]
+      - text: 安装成功不等于功能可用：Angelfish、KClock 定时唤醒、Marble 自动定位等仍各有缺口，要单独验收。
+        docs: [docs/45-plasma-app-store.md]
+    code: []
+    docs: [docs/45-plasma-app-store.md]
+
+  - id: apps.flatpak
+    title: Flatpak 应用能装、能在沙箱里运行
+    scenario: apps.install
+    status: live
+    platform: linux
+    interfaces: []
+    summary: 在 LXC 容器里，Flatpak 的 bubblewrap 沙箱能建起来，Flathub 应用装得上、跑得起。
+    experience:
+      - id: E1
+        text: 从 Discover 装 extra-data 类型的 Flatpak 应用（VS Code）能完整装完，不会在部署应用本体时失败并回滚运行时。
+        evidence:
+          - {doc: docs/45-plasma-app-store.md, date: 2026-09-24, note: "容器重启后 VS Code 完整安装，flatpak run 出窗口"}
+      - id: E2
+        text: 沙箱的防逃逸限制仍然有效：沙箱里写全局 sysctl 被拒，嵌套的 unshare -U 被禁止。
+        evidence:
+          - {doc: docs/45-plasma-app-store.md, date: 2026-09-24}
+      - id: E3
+        text: 容器 init 准备沙箱条件失败时只记日志，容器和桌面照常启动。
+    pitfalls:
+      - text: LXC 的 proc:mixed 把 /proc/sys 挂为只读，bwrap 写 user.max_user_namespaces 失败；只把 /proc/sys/user 重挂可写，其余保持只读。
+        docs: [docs/45-plasma-app-store.md]
+      - text: 新 PID 命名空间挂 proc 要求有一个完全可见的 proc；LXC 的遮盖挂载让 /proc 不完全可见，要在仅 root 可进的 /run/rungic-proc 另挂一个。
+        docs: [docs/45-plasma-app-store.md]
+      - text: flatpak 以 root 跑的安装后触发器用 --unshare-net，容器没有 net_admin，会报 loopback RTM_NEWADDR 错误；应用本身不受影响。
+        docs: [docs/45-plasma-app-store.md]
+      - text: Qt 的 Flatpak 应用看到 AT_SPI_BUS_ADDRESS 就无条件开无障碍桥，Telegram 因此一直提示读屏模式；共享层不接无障碍总线会让 rungic-cua 无法自动化它们，尚未决定。
+        docs: [docs/49-plasma-performance.md]
+    code:
+      - packages/flatpak/
+    docs: [docs/45-plasma-app-store.md]
+
+  # ---- GPU ----------------------------------------------------------------------------------------
+  - id: apps.gpu
+    title: 应用在手机 GPU 上绘制（OpenGL / GLES）
+    scenario: apps.graphics
+    status: live
+    platform: linux
+    interfaces: [kwin-android-host]
+    summary: 桌面和原生 Wayland 应用经本项目的 Mesa（KGSL 上的 freedreno）用 Adreno 710 画画面，Qt Quick 和 GTK 默认 GL。
+    experience:
+      - id: E1
+        text: 普通用户的应用拿到的是硬件 GL（渲染器 FD710，GLES 3.2 / GL 4.6），不是 llvmpipe 或 softpipe。
+        evidence:
+          - {doc: docs/40-plasma-mobile-integration.md, date: 2026-09-23, note: "UID1000 实载 FD710 / GLES3.2"}
+          - {doc: docs/research/93-xwayland-kgsl-gpu.md, date: 2026-09-30, note: "Krita 6 原生 Wayland 下渲染器 FD710"}
+      - id: E2
+        text: Qt Quick 应用和 plasmashell 滚动、切换时没有整屏灰色闪帧（会话默认 QSG_RHI_BACKEND=opengl）。
+        evidence:
+          - {doc: docs/56-kwin-vulkan-quantification.md, date: 2026-09-26, note: "撤回 Vulkan 后 414 帧逐帧检测无闪屏"}
+      - id: E3
+        text: 应用抽屉滑动时 Surface 呈现间隔超过 12.6 ms 的比例低于 1%（GLES 合成）。
+        evidence:
+          - {doc: docs/51-plasma-vulkan-benchmark.md, date: 2026-09-23, note: "GLES 0.57%，Zink 5.06%"}
+      - id: E4
+        text: 系统 Mesa 的包不会被发行版更新覆盖，升级 Mesa 后 KWin 不会因图形复位而中止。
+        gap: 只能在手机上换包重启工作区验证；没有自动检查
+    pitfalls:
+      - text: KGSL 不是 DRM 设备，没有 /dev/dri；所有依赖 drmGetDevice2、DRM 渲染节点或 PCI 信息的路径（Firefox VA-API、wlroots、ksystemstats、Xwayland glamor）都要单独处理，不能伪造 DRM 节点。
+        docs: [docs/research/74-vaapi-feasibility.md, docs/research/93-xwayland-kgsl-gpu.md]
+      - text: 会话环境 gpu-env 必须带 MESA_LOADER_DRIVER_OVERRIDE=kgsl、FD_KGSL_ENABLE_DMABUF=1，并清掉 LIBGL_ALWAYS_SOFTWARE 和遗留的 QT_QUICK_BACKEND=software。
+        docs: [docs/40-plasma-mobile-integration.md]
+      - text: 2026-09-26 全局把 Qt Quick 改成 Vulkan 后语音助手整屏灰色闪帧，当天撤回；评估渲染后端必须做逐帧画面检测，不能只看帧间隔和 CPU。
+        docs: [docs/56-kwin-vulkan-quantification.md]
+      - text: KWin 经 Zink 合成更慢（慢帧 5.06% 对 0.57%），KWin 原生 Vulkan 只省约 0.7–1.5 ms/帧 CPU，不值得维护分支；桌面合成保持 GLES。
+        docs: [docs/51-plasma-vulkan-benchmark.md, docs/56-kwin-vulkan-quantification.md]
+      - text: Mesa 换到上游 main 的尝试失败：freedreno 一渲染就 GPU hang，工作区 KWin abort；已退回 lfdevs 分支 98f3d622 加 4 个补丁。再试前要先二分定位上游回归。
+        docs: [docs/research/94-mesa-base.md]
+      - text: lfdevs 分支的 Termux 专用改动（1274 修饰符、dri3_x11_connect 失败也返回成功）是 Flatpak 崩溃和 Xwayland 黑窗的来源，换底座或升级时要逐条核对。
+        docs: [docs/research/94-mesa-base.md, docs/49-plasma-performance.md]
+      - text: freedreno 的 OpenGL 在 Blender 按物体取数据的路径上出错（物体位置、大小、颜色串位），同一 GPU 的 Turnip 正确；具体出错位置未查明。
+        docs: [docs/90-blender-vulkan-incident.md]
+      - text: GPU 与 CPU 共用 7.3 GB 内存，EEVEE 一类 GPU 负载要多占约 1 GB，内存吃紧时安卓会按 LOW_MEMORY 结束进程。
+        docs: [docs/90-blender-vulkan-incident.md]
+      - text: 性能对照要交错执行、每轮重启并确认热状态为 0，不锁频不改温控；Surface 呈现间隔、Qt frameSwapped 与 GPU 执行时间是不同的量，不能混用。
+        docs: [docs/51-plasma-vulkan-benchmark.md, desktop/bench/README.md]
+    code:
+      - packages/mesa/
+      - desktop/mesa-meson-options
+      - desktop/package-mesa.py
+      - desktop/gpu-env
+      - desktop/gpu-ahb-probe.c
+      - shared/graphics/
+      - desktop/bench/
+      - desktop/build-shims/
+      - tools/build_mesa.py
+      - tools/pq-history/mesa.json
+      - tools/analyze_plasma_gpu.py
+      - tools/benchmark_plasma_compositor.py
+      - tools/compare_plasma_gpu.py
+      - tools/profile_plasma_frames.py
+      - tools/kwin_pipeline_run.py
+      - tools/compbench_run.py
+      - benchmarks/
+    docs:
+      - docs/51-plasma-vulkan-benchmark.md
+      - docs/56-kwin-vulkan-quantification.md
+      - docs/research/94-mesa-base.md
+      - desktop/bench/README.md
+      - benchmarks/README.md
+
+  - id: apps.vulkan
+    title: Vulkan 应用（Turnip）
+    scenario: apps.graphics
+    status: live
+    platform: linux
+    interfaces: [kwin-android-host]
+    summary: 需要 Vulkan 的应用（vkcube、Blender 的 Vulkan 视口、选用 Vulkan 的 Qt 程序）拿到 Adreno 710 上的 Turnip Vulkan 1.4。
+    experience:
+      - id: E1
+        text: 普通用户的 Vulkan 程序识别到 Turnip Adreno 710（API 1.4，不是 lavapipe），vkcube 经 Wayland WSI 正常显示。
+        evidence:
+          - {doc: docs/51-plasma-vulkan-benchmark.md, date: 2026-09-23}
+      - id: E2
+        text: 单个 Qt 程序设 QSG_RHI_BACKEND=vulkan 能用原生 Vulkan 显示，不影响其他应用。
+        evidence:
+          - {doc: docs/51-plasma-vulkan-benchmark.md, date: 2026-09-23, note: "Kalk"}
+      - id: E3
+        text: Vulkan 窗口在 KGSL 上呈现时没有整屏灰色闪帧。
+        gap: 已知 Turnip WSI 在 KGSL 上会闪屏，原因未查（docs/56）；没有修复
+    pitfalls:
+      - text: Turnip 的 Wayland 呈现在 KGSL 上会闪出整屏灰色帧，可能与 WSI 同步有关，所以桌面和 Qt Quick 默认不用 Vulkan。
+        docs: [docs/56-kwin-vulkan-quantification.md]
+      - text: zink on Turnip 轻场景有约 10 ms 固定帧开销，超过 120 Hz 帧预算，不作为 GL 的替代。
+        docs: [docs/research/94-mesa-base.md]
+      - text: 只看 CPU 下降就切 Vulkan 会误判：plasmashell 切 Vulkan 后 GPU 提交合并成大块，曾让 SurfaceFlinger p95 从 16.7 ms 变到 33.4 ms。
+        docs: [docs/56-kwin-vulkan-quantification.md]
+    code:
+      - desktop/gpu-env
+    docs: [docs/51-plasma-vulkan-benchmark.md, docs/56-kwin-vulkan-quantification.md]
+
+  - id: apps.xwayland-gpu
+    title: X11 应用用 GPU（Xwayland glamor / DRI3）
+    scenario: apps.graphics
+    status: live
+    platform: linux
+    interfaces: [kwin-android-host]
+    summary: 只能走 X11 的程序（Qt5、微信、Wine、老游戏）经 Xwayland 的 glamor 和 DRI3 在 FD710 上绘制，不再用 softpipe。
+    experience:
+      - id: E1
+        text: Xwayland 提供 DRI3 和 Present，X11 GL 程序 direct rendering 为 Yes、Accelerated yes、渲染器 FD710。
+        evidence:
+          - {doc: docs/research/93-xwayland-kgsl-gpu.md, date: 2026-09-30, note: "xdpyinfo、glxinfo -B、eglinfo -p x11"}
+      - id: E2
+        text: X11 GL 窗口画出内容（不是黑窗），两个 GL 程序同时运行时各自内容正确、画面在动。
+        evidence:
+          - {doc: docs/research/93-xwayland-kgsl-gpu.md, date: 2026-09-30, note: "glxgears 与 glmark2 terrain 同时运行"}
+      - id: E3
+        text: 纯 2D 的 X11 程序（以 xcb 运行的 Dolphin）由 glamor 绘制，显示正确。
+        evidence:
+          - {doc: docs/research/93-xwayland-kgsl-gpu.md, date: 2026-09-30}
+      - id: E4
+        text: X11 下的 GL 性能与原生 Wayland 相当（glmark2 全套分数不低于原生 Wayland）。
+        evidence:
+          - {doc: docs/research/93-xwayland-kgsl-gpu.md, date: 2026-09-30, note: "X11 GL 218 / GLES 224，原生 193 / 185"}
+      - id: E5
+        text: 改变窗口大小、连续运行 30 分钟不卡死、画面不采样到旧内容。
+        gap: research/93 列为未做，需实机长时间运行
+    pitfalls:
+      - text: KWin 的安卓宿主后端只提供 linux-dmabuf v3、没有 wl_drm，上游 Xwayland 因此直接放弃 glamor；补丁在 dmabuf v3 且有 /dev/kgsl-3d0 时用这个节点，跳过 drmGetDevice2 和认证。
+        docs: [docs/research/93-xwayland-kgsl-gpu.md]
+      - text: Mesa 分支把 LINEAR 写成 1274，gbm_bo_import 不认，DRI3 返回 BadAlloc；Xwayland 补丁里改回 LINEAR。
+        docs: [docs/research/93-xwayland-kgsl-gpu.md]
+      - text: 分支在 KGSL 上把未标共享的导入缓冲导出时影子复制成新缓冲，Present 翻页交出空缓冲，GL 窗口全黑；Mesa 补丁把导入标为共享。
+        docs: [docs/research/93-xwayland-kgsl-gpu.md]
+      - text: KGSL 不在 dma-buf reservation 上挂隐式 fence，Xwayland 拿不到有效等待；目前没发现问题，也没专门测过。
+        docs: [docs/research/93-xwayland-kgsl-gpu.md]
+    code:
+      - packages/xwayland/
+    docs: [docs/research/93-xwayland-kgsl-gpu.md]
+
+  - id: apps.flatpak-gpu
+    title: Flatpak 应用用 GPU
+    scenario: apps.graphics
+    status: live
+    platform: linux
+    interfaces: []
+    summary: Flatpak 应用经 GL 扩展 org.freedesktop.Platform.GL.rungic 用本项目的 Mesa 在 KGSL 上绘制；拿不到 GPU 时退到软件渲染而不崩溃。
+    experience:
+      - id: E1
+        text: Freedesktop 25.08 运行时的应用（Telegram、VS Code）用 FD710 绘制，不再是 llvmpipe。
+        evidence:
+          - {doc: docs/49-plasma-performance.md, date: 2026-09-28, note: "Telegram RHI 探测 FD710；VS Code GPU 进程持有 /dev/kgsl-3d0"}
+      - id: E2
+        text: 只声明 --device=dri 的应用在沙箱里也能看到 /dev/kgsl-3d0 和 /dev/dma_heap/system，安卓的其他 DMA 堆仍在沙箱外。
+        evidence:
+          - {doc: docs/49-plasma-performance.md, date: 2026-09-30, note: "Flathub Krita 5.3.3"}
+      - id: E3
+        text: 拿不到 KGSL、或 X 服务器没有 DRI3 时，GL 程序退到扩展里的 softpipe 正常启动，不段错误、不卡住。
+        evidence:
+          - {doc: docs/49-plasma-performance.md, date: 2026-09-30, note: "krita --version 在 --device=dri 与 --nodevice=dri 下都 exit 0"}
+      - id: E4
+        text: 扩展只在存在时才启用（FLATPAK_GL_DRIVERS=rungic），从 Plasma 启动的 Flatpak 应用都继承它。
+        gap: 只有会话环境的实机检查，没有离线测试
+    pitfalls:
+      - text: 系统 Mesa 链接 Ubuntu 的 glibc 2.43，运行时只有 2.42，不能把系统 Mesa 直接挂进沙箱；扩展要在 freedesktopsdk/sdk:25.08-aarch64 里用同一份补丁源码另行构建。
+        docs: [docs/49-plasma-performance.md]
+      - text: 扩展只为 25.08 分支构建；系统 Mesa 补丁更新后扩展要跟着重建，否则 X11 Flatpak 应用仍走旧路径（+rungic3 时尚未重建）。
+        docs: [docs/49-plasma-performance.md, docs/research/93-xwayland-kgsl-gpu.md]
+      - text: 只走 X11 的 Flatpak 应用要真正用上 GPU，还要 Xwayland 有 DRI3。
+        docs: [docs/49-plasma-performance.md]
+      - text: 不要逐个给应用加 LIBGL_ALWAYS_SOFTWARE 或放宽权限；缺设备就在 flatpak 的设备列表里补。
+        docs: [docs/49-plasma-performance.md]
+    code:
+      - packaging/rungic-flatpak-gl/
+      - packages/flatpak/
+      - desktop/mesa-meson-options
+      - desktop/gpu-env
+    docs: [docs/49-plasma-performance.md]
+
+  # ---- 具体应用 -----------------------------------------------------------------------------------
+  - id: apps.blender
+    title: Blender 渲染与视口
+    scenario: apps.graphics
+    status: live
+    platform: linux
+    interfaces: []
+    summary: Blender 默认用 CPU 的 Cycles、一半核心渲染，编辑视口用 Vulkan 正确显示，渲染过程中画面逐步变清晰。
+    experience:
+      - id: E1
+        text: 新场景默认 Cycles CPU，渲染时最多用一半 CPU 线程，脚本设成自动或 8 线程也被限制为 4。
+        evidence:
+          - {doc: docs/90-blender-vulkan-incident.md, date: 2026-09-29, note: "-b 与 --factory-startup 下 CYCLES CPU FIXED 4，实际占用 4.0 核"}
+      - id: E2
+        text: 编辑视口（实体、材质预览）里的物体位置、大小、颜色正确：每次以图形界面启动都把 GPU 后端偏好保持为 Vulkan，退出时自动保存的也是 Vulkan。
+        evidence:
+          - {doc: docs/90-blender-vulkan-incident.md, date: 2026-09-29, note: "关闭旧实例后重开小火箭，加载 libvulkan_freedreno，显示正确"}
+      - id: E3
+        text: 在 Blender 的 config/rungic-gpu-backend 写 OPENGL 就保留 OpenGL，不被启动模块改掉。
+      - id: E4
+        text: 在界面里渲染时窗口保持响应，渲染窗口按批次（4、12、28、60 采样）换上预览，最终图与一次渲染无差别。
+        evidence:
+          - {doc: docs/90-blender-vulkan-incident.md, date: 2026-09-29, note: "第 6、8、13、22 秒出现预览，第 23 秒完成"}
+    pitfalls:
+      - text: 渲染在 Blender 主线程上时界面必然 Not Responding，这时关窗 KWin 会强制结束 Blender；渲染中不要关闭或结束它。
+        docs: [docs/90-blender-vulkan-incident.md]
+      - text: 只设一次 Vulkan 偏好会失效：还在用 OpenGL 的旧实例退出时会把 OpenGL 写回偏好。
+        docs: [docs/90-blender-vulkan-incident.md]
+      - text: “Vulkan 出故障、OpenGL 正常”曾是误判，真正的共同条件是内存吃紧；EEVEE 无论哪个后端都多占约 1 GB 共享内存。
+        docs: [docs/90-blender-vulkan-incident.md]
+      - text: Blender 5.0 后台合成器的 Denoise 实测不执行，渐进渲染第一版不降噪；Blender 不对外开放渲染中的像素，只能分批渲染。
+        docs: [docs/90-blender-vulkan-incident.md]
+      - text: Turnip 在 KGSL 上的闪屏可能也影响 Blender 窗口，尚未逐帧检测。
+        docs: [docs/90-blender-vulkan-incident.md, docs/56-kwin-vulkan-quantification.md]
+    code:
+      - system/config/usr/lib/blender/
+      - compatibility/entries/blender-cpu-policy.json
+    docs: [docs/90-blender-vulkan-incident.md]
+
+  - id: apps.krita
+    title: Krita 绘画
+    scenario: apps.graphics
+    status: live
+    platform: linux
+    interfaces: []
+    summary: Ubuntu 的 Krita 6 原生 Wayland 在 GPU 上绘制，“另存为”能正常保存；Flathub 的 Krita 5 不再崩溃或卡住。
+    experience:
+      - id: E1
+        text: Krita 6 原生 Wayland 下画布的渲染器是 FD710。
+        evidence:
+          - {doc: docs/research/93-xwayland-kgsl-gpu.md, date: 2026-09-30}
+      - id: E2
+        text: 经门户“另存为”保存后文件写出，菜单和工具栏照常可点，不会被看不见的空壳对话框挡住。
+        evidence:
+          - {doc: docs/103-krita-save-dialog-hang.md, date: 2026-10-01, note: "工作区 1 端到端：门户与进程内对话框两条路径"}
+      - id: E3
+        text: Flathub Krita 5.3.3（只有 --device=dri）去掉 LIBGL_ALWAYS_SOFTWARE 也能启动，不段错误、不卡住。
+        evidence:
+          - {doc: docs/49-plasma-performance.md, date: 2026-09-30}
+      - id: E4
+        text: Flathub Krita 5（X11）画布用 GPU 绘制，不卡顿。
+        gap: Flatpak GL 扩展还没用 +rungic3 重建，X11 Flatpak 应用 GPU 未验收（research/93）
+    pitfalls:
+      - text: Krita 在建 KisApplication 前用临时 QGuiApplication 探测 OpenGL；startplasmamobile 写死的 QT_QPA_PLATFORMTHEME=KDE 让 KDE 主题在临时应用里连上会话总线，恢复派发随临时应用一起被删，会话总线永久暂停，门户的 Response 信号收不到。
+        docs: [docs/103-krita-save-dialog-hang.md]
+      - text: 缺陷本身在 Qt（恢复派发挂在连接时的 qApp 上），上游未改；本项目改环境不改应用，Qt 补丁暂不做。
+        docs: [docs/103-krita-save-dialog-hang.md]
+    code: []
+    docs: [docs/103-krita-save-dialog-hang.md]
+
+  - id: apps.telegram
+    title: Telegram（Flatpak）
+    scenario: apps.graphics
+    status: live
+    platform: linux
+    interfaces: []
+    summary: Flathub 的 Telegram 用 GPU 绘制，聊天列表滑动比 CPU 渲染时流畅得多。
+    experience:
+      - id: E1
+        text: 聊天列表滑动时 Telegram CPU 低于 60%（llvmpipe 时约 196%），超过 12 ms 的帧间隔低于 40%。
+        evidence:
+          - {doc: docs/49-plasma-performance.md, date: 2026-09-28, note: "34–59% CPU，26–39% 慢帧"}
+      - id: E2
+        text: 无障碍关闭时 Telegram 不显示 “working in Screen Reader”。
+        gap: 尚未决定是否在共享层不接无障碍总线（docs/49）；可在 Telegram 设置里单独关闭
+    pitfalls:
+      - text: 剩余开销在 Telegram 主线程：界面用 Qt Widgets 在 CPU 上光栅化，动画节拍 8 ms；属应用自身，没有再改。
+        docs: [docs/49-plasma-performance.md]
+    code: []
+    docs: [docs/49-plasma-performance.md]
+
+  - id: apps.vscode
+    title: VS Code（Flatpak）
+    scenario: apps.tools
+    status: live
+    platform: linux
+    interfaces: []
+    summary: Flathub 的 VS Code 能装上、打开，Electron 的 GPU 进程用 KGSL 绘制。
+    experience:
+      - id: E1
+        text: 从 Discover 装 VS Code 一次完成，flatpak run 打开图形窗口。
+        evidence:
+          - {doc: docs/45-plasma-app-store.md, date: 2026-09-24}
+      - id: E2
+        text: VS Code 的 GPU 进程映射扩展里的 libEGL_mesa、libgallium，持有 /dev/kgsl-3d0，窗口正常绘制。
+        evidence:
+          - {doc: docs/49-plasma-performance.md, date: 2026-09-28}
+    pitfalls:
+      - text: Electron/Chromium 的 SingletonLock 和单实例套接字要符号链接和 Unix 套接字，放在 ~/Shared 上会失败；工程和数据放本地目录。
+        docs: [docs/69-filesystem-capabilities.md]
+      - text: nofile 硬上限 32768、inotify 128 个实例，监视大目录的大型 IDE 可能不够；这些是安卓内核全局设置。
+        docs: [docs/69-filesystem-capabilities.md]
+    code: []
+    docs: [docs/45-plasma-app-store.md]
+
+  - id: apps.wechat
+    title: 微信
+    scenario: apps.media
+    status: live
+    platform: linux
+    interfaces: []
+    summary: arm64 的 Linux 微信能登录、保留聊天数据，通话声音可以交给程序接管。
+    experience:
+      - id: E1
+        text: 打开微信直接进入主界面，不会反复提示“数据库损坏”并修复。
+        evidence:
+          - {doc: docs/69-filesystem-capabilities.md, date: 2026-09-25, note: "Documents 改为本地目录后重新打开"}
+      - id: E2
+        text: 微信通话的录音流和播放流可以临时切到 Linux 麦克风和 Linux 扬声器，挂断后回到原设备，不影响其他 Chromium/Electron 应用。
+        evidence:
+          - {doc: docs/62-linux-virtual-audio.md, date: 2026-09-25, note: "语音电话双向都通"}
+      - id: E3
+        text: 微信经 Xwayland 用 GPU 绘制。
+        gap: research/93 未验收微信
+    pitfalls:
+      - text: 微信把账号数据库放在 $XDG_DOCUMENTS_DIR/xwechat_files，全部 SQLite WAL；放在 FUSE direct-io 挂载上会 disk I/O error。
+        docs: [docs/69-filesystem-capabilities.md]
+      - text: 微信 4.1 的通话音频在 PulseAudio 里叫通用的 “Chromium”；用 pactl move 会被 stream-restore 按名字记住、波及其他应用，要按 application.process.binary 匹配并用不保存的移动。
+        docs: [docs/62-linux-virtual-audio.md]
+      - text: 微信包是 arm64 的 .deb，不要按安卓理解成“手机装不了”。
+        docs: [docs/59-voice-agent.md]
+    code: []
+    docs: [docs/69-filesystem-capabilities.md, docs/62-linux-virtual-audio.md]
+
+  # ---- 相机与声音 ---------------------------------------------------------------------------------
+  - id: apps.camera
+    title: Linux 应用使用手机相机
+    scenario: apps.media
+    status: live
+    platform: linux
+    interfaces: [camera]
+    summary: 手机的前后摄像头是 PipeWire 的 Video/Source 节点（rungic.camera.0/1），任何 PipeWire 应用按需使用。
+    experience:
+      - id: E1
+        text: 前后两个摄像头节点都能送出画面：有变化的帧、时间戳递增，约 30 fps、720×1280。
+        evidence:
+          - {doc: docs/48-plasma-media-pipelines.md, date: 2026-09-23, note: "经 PipeWire 后摄节点的 libcamera cam 连续 30 帧，约 30fps"}
+      - id: E2
+        text: 只在有应用使用时才打开安卓相机，应用停止后节点回到 idle/suspended，相机被释放。
+      - id: E3
+        text: 离开 Linux 桌面（APK 到后台）时释放相机，安卓 CameraService 里没有活动客户端；回到前台后节点重新出现。
+      - id: E4
+        text: 节点只暴露已实现的能力（尺寸、自动拍摄）；画面方向随 Android 旋转元数据转正。
+    pitfalls:
+      - text: 没有 RTKit 的容器里 Realtime portal 返回 RTTimeUSecMax=0，视频客户端的 module-rt 把 RLIMIT_RTTIME 设为 0 后被内核 SIGKILL；视频客户端要 module.rt=false。
+        docs: [docs/research/33-capture-integration.md]
+      - text: 帧时间戳不能是 -1，否则预览正常但 MP4 没有有效时间戳；源写入收到帧时的 CLOCK_MONOTONIC，不等于传感器曝光时间。
+        docs: [docs/research/33-capture-integration.md]
+      - text: 一次只占一个物理摄像头；背面贴桌时后摄黑画面是真实输入，不是故障。
+        docs: [docs/research/33-capture-integration.md]
+      - text: 照片也取自 720p 这一路，不是原厂全分辨率；没有 HDR、多镜头和横屏方向协商。
+        docs: [docs/research/33-capture-integration.md, docs/48-plasma-media-pipelines.md]
+      - text: WirePlumber 的 libcamera 硬件发现保持禁用，避免与 libcamera virtual 管线反向重复发现。
+        docs: [docs/48-plasma-media-pipelines.md]
+      - text: 只认 V4L2 的程序不在支持范围内；没有新增 v4l2loopback 或 /dev/video 节点。
+        docs: [docs/48-plasma-media-pipelines.md, docs/research/33-capture-integration.md]
+    code:
+      - shared/media/camera-source.cpp
+      - shared/media/media-bridge.py
+      - android/app/src/com/rungic/plasma/CaptureBridge.java
+      - android/app/src/com/rungic/plasma/CaptureService.java
+    docs: [docs/research/33-capture-integration.md, docs/48-plasma-media-pipelines.md]
+
+  - id: apps.snapshot
+    title: 相机应用 Snapshot 拍照录像
+    scenario: apps.media
+    status: live
+    platform: linux
+    interfaces: [camera, codec]
+    summary: GNOME Snapshot 51 切前后摄、拍照、录带声音的视频，开着“硬件编码”时用安卓的 H.264 硬件编码器，文件存到图片、视频目录。
+    experience:
+      - id: E1
+        text: 前后摄可切换，JPEG 照片和带声音的 H.264 录像保存到共享的图片、视频目录。
+        evidence:
+          - {doc: docs/40-plasma-mobile-integration.md, date: 2026-09-23}
+      - id: E2
+        text: 开着硬件编码开关时录像实际用 rungich264enc（高通 c2.qti.avc.encoder），关掉时不用它。
+      - id: E3
+        text: 正常停止的录像能完整解码，音视频时长接近，没有零字节文件。
+    pitfalls:
+      - text: 录像要先点停止、等保存完，再切回安卓：离开桌面会释放相机，Snapshot 取消录像，中断的文件缺 moov 不能播放；没有后台录像。
+        docs: [docs/research/33-capture-integration.md, docs/research/35-hardware-codec-integration.md]
+      - text: 安卓相机源不提供自己的管线时钟（provide-clock=false、do-timestamp=true），否则增减音频源时出现 EOS 等待和零字节文件。
+        docs: [docs/research/35-hardware-codec-integration.md]
+      - text: 第一次前摄拍照曾等待约 14 秒；录像音频编码是软件。
+        docs: [docs/40-plasma-mobile-integration.md]
+    code:
+      - packages/snapshot/
+      - packaging/rungic-snapshot/
+      - tools/pq-history/snapshot.json
+      - shared/media/snapshot-moto-codec.patch
+      - system/diagnostics/media-probes/camerabin-record.py
+    docs: [docs/research/35-hardware-codec-integration.md]
+
+  - id: apps.plasma-camera
+    title: Plasma Camera 与 libcamera 应用
+    scenario: apps.media
+    status: experimental
+    platform: linux
+    interfaces: [camera]
+    summary: libcamera 的 virtual 管线从已有的 PipeWire 相机取帧，Plasma Camera、cam 等 libcamera 客户端看到前后两个相机。
+    experience:
+      - id: E1
+        text: libcamera 列出“Android 后置相机”“Android 前置相机”两个设备，cam 能连续取 30 帧。
+        evidence:
+          - {doc: docs/48-plasma-media-pipelines.md, date: 2026-09-23}
+      - id: E2
+        text: Plasma Camera 前摄预览显示实际场景，能保存照片。
+        evidence:
+          - {doc: docs/48-plasma-media-pipelines.md, date: 2026-09-23, note: "image_0001.jpg"}
+      - id: E3
+        text: Plasma Camera 录像的时间戳单调，生成的 H.264 文件完整、没有负 duration 警告。
+        gap: 帧时间戳已修，仍有 Qt FFmpeg 按相邻 PTS 估 B 帧 duration 的负值警告；私有插件候选未通过，未进 Qt 补丁队列
+      - id: E4
+        text: 第一次切换相机没有绿色帧，启动没有明显延迟。
+        gap: docs/48 记为待核验
+    pitfalls:
+      - text: Plasma Camera 2.1.1 直接调用 libcamera，只改 QT_MEDIA_BACKEND 解决不了设备枚举；适配放在 libcamera Pipeline Handler，不把安卓相机代码写进应用。
+        docs: [docs/48-plasma-media-pipelines.md]
+      - text: Plasma Camera 重复提交共享的 QVideoFrame 并改写时间戳是应用自身缺陷，补丁为每次提交建独立帧元数据（有源码证据的应用补丁例外）。
+        docs: [docs/48-plasma-media-pipelines.md]
+      - text: 容器只读授予 DMA system heap，libcamera 以读写打开失败时要退为只读打开。
+        docs: [docs/48-plasma-media-pipelines.md]
+      - text: desktop/patches/qt-video-duration.patch 是未验收实验，未进入 Qt 补丁队列，不要当作已修复。
+        docs: [docs/48-plasma-media-pipelines.md]
+    code:
+      - packages/libcamera/
+      - packages/plasma-camera/
+      - desktop/libcamera/
+      - tools/pq-history/libcamera.json
+      - tools/pq-history/plasma-camera.json
+      - desktop/patches/camera-frame-timestamps.patch
+      - desktop/patches/qt-video-duration.patch
+    docs: [docs/48-plasma-media-pipelines.md]
+
+  - id: apps.phone-audio
+    title: 应用用手机的扬声器和麦克风
+    scenario: apps.media
+    status: live
+    platform: linux
+    interfaces: [audio]
+    summary: PulseAudio 的默认输出是安卓（android），默认输入是手机麦克风（android_microphone），所有 Linux 应用共用。
+    experience:
+      - id: E1
+        text: 默认输出是 android、默认输入是 android_microphone；android.monitor 不会被当作麦克风。
+        evidence:
+          - {doc: docs/62-linux-virtual-audio.md, date: 2026-09-25, note: "创建虚拟设备后默认设备不变"}
+      - id: E2
+        text: 播放流进入默认输出，播完后输出重新挂起；播放—空闲—恢复反复多次都能出声。
+        evidence:
+          - {doc: docs/40-plasma-mobile-integration.md, date: 2026-09-23, note: "10 轮播放—空闲 5 秒—恢复"}
+      - id: E3
+        text: 只在有应用录音时才打开安卓 AudioRecord，录到非零电平，录音结束后麦克风停止、源挂起。
+      - id: E4
+        text: Qt Multimedia 应用（KRecorder 等）播放的声音没有周期性插零，与参考 PCM 相关性约 1.0。
+        evidence:
+          - {doc: docs/48-plasma-media-pipelines.md, date: 2026-09-23, note: "Qt 公共库实际构建样本相关性 0.99999953"}
+      - id: E5
+        text: 安卓一侧的专用 PulseAudio 卡住后能自动恢复（约 30 秒），持久化的旧 PID 被别的进程复用时不会误杀它。
+        gap: 由 system/android-audio 的测试（tools/ci/test_android_audio.py）和 X70 冷启动记录（docs/93）覆盖，归属另一领域
+      - id: E6
+        text: 录屏、录像的音频支路不会因负的段偏移跳过环形缓冲而丢声。
+        gap: 只有录屏验收场景间接覆盖（patch 声明 L3:recording.quicksetting）
+    pitfalls:
+      - text: Qt 6.10 的 PulseAudio sink 以 1024 帧设 maxlength，转发链路的请求块超过它时每 1024 个样本插入 62 个零；修复在 Qt 公共库，不改录音机。Qt 6.11.2 仍是同样写法。
+        docs: [docs/48-plasma-media-pipelines.md]
+      - text: PulseAudio 17 的 module-tunnel-sink-new 没有 latency_msec 参数，不能套用旧 tunnel 文档。
+        docs: [docs/48-plasma-media-pipelines.md]
+      - text: 中文应用名会触发 PA17 JSON exporter 错误；消费者检测用 LC_ALL=C 的 pactl 文本输出。
+        docs: [docs/research/33-capture-integration.md]
+      - text: 用默认缓冲录音时结束录音进程会丢尾部数据；测量要用 --latency-msec=20。
+        docs: [docs/62-linux-virtual-audio.md]
+      - text: 物理麦克风是单声道，应用录成双声道不等于立体声采集；没有回声消除、耳机/蓝牙路由与长会议验收。
+        docs: [docs/research/33-capture-integration.md]
+    code:
+      - shared/media/media-bridge.py
+      - shared/media/audio-follow.py
+      - android/app/src/com/rungic/plasma/CaptureBridge.java
+      - android/app/src/com/rungic/plasma/CaptureService.java
+      - packages/qt6-multimedia/
+      - packages/gst-plugins-base1.0/
+      - tools/pq-history/qt6-multimedia.json
+      - desktop/patches/qt-pulse-buffer.patch
+      - system/diagnostics/media-probes/pa-gap.py
+    docs: [docs/48-plasma-media-pipelines.md, docs/research/33-capture-integration.md]
+
+  - id: apps.virtual-audio
+    title: Linux 扬声器与 Linux 麦克风（虚拟音频设备）
+    scenario: apps.media
+    status: live
+    platform: linux
+    interfaces: [audio]
+    summary: 系统级、名称中性的虚拟输出和虚拟麦克风，让程序代替人听和说，例如助理代接通话、代发语音消息。
+    experience:
+      - id: E1
+        text: 安卓输出出现后才创建 Linux 扬声器、Linux 麦克风；它们不会成为默认设备，落到它们上时立即交还 android / android_microphone。
+        evidence:
+          - {doc: docs/62-linux-virtual-audio.md, date: 2026-09-25}
+      - id: E2
+        text: 往“Linux 麦克风输入”播放的声音从 Linux 麦克风无损录回（增益 1）；播到 Linux 扬声器的声音能从其 monitor 录到。
+        evidence:
+          - {doc: docs/62-linux-virtual-audio.md, date: 2026-09-25, note: "1 kHz 正弦有效值 7069/7071"}
+      - id: E3
+        text: 虚拟设备创建失败只记警告，安卓麦克风和“手机本机”输出照常工作。
+      - id: E4
+        text: rungic-audio-route 运行期间把指定程序的流（含之后新建的流）移到虚拟设备，收到 SIGTERM/SIGINT 或标准输入关闭时把每条流移回原设备；第一行输出总是 ready。
+        evidence:
+          - {doc: docs/62-linux-virtual-audio.md, date: 2026-09-25, note: "代发语音后微信没有残留录音流，默认输入仍为 android_microphone"}
+      - id: E5
+        text: 代发语音时，应用的录音流没有在 4 秒内移到 Linux 麦克风就不播放、点取消并报错，真麦克风录到的内容不会被发出。
+    pitfalls:
+      - text: 描述里有空格时整个属性列表要加引号，否则 Module initialization failed。
+        docs: [docs/62-linux-virtual-audio.md]
+      - text: 首版把虚拟设备创建失败当成音频服务不可用，连带停掉了手机输出；虚拟设备必须与原有设备隔离。
+        docs: [docs/62-linux-virtual-audio.md]
+      - text: stream-restore 要设 restore_device=false，否则 pactl move 会按应用名记住设备、波及同名的其他应用。
+        docs: [docs/62-linux-virtual-audio.md]
+    code:
+      - shared/media/media-bridge.py
+      - shared/media/audio-route.py
+    docs: [docs/62-linux-virtual-audio.md]
+
+  # ---- 硬件编解码 ---------------------------------------------------------------------------------
+  - id: apps.hw-codec
+    title: 视频硬件编解码（GStreamer 与 FFmpeg）
+    scenario: apps.media
+    status: live
+    platform: linux
+    interfaces: [codec]
+    summary: Linux 的 GStreamer 播放器、相机、录屏和私有 FFmpeg 经 APK 用安卓 MediaCodec（高通 c2.qti）做 H.264/HEVC 编解码和 VP9 解码。
+    experience:
+      - id: E1
+        text: playbin3 播放 H.264/HEVC/VP9 时自动选中硬件解码元素（rungich264dec 等，rank PRIMARY+32），seek、暂停/恢复、EOS 正常。
+        evidence:
+          - {doc: docs/40-plasma-mobile-integration.md, date: 2026-09-23, note: "Showtime 实际播放有画面"}
+      - id: E2
+        text: 硬件 H.264 编码 90 帧测试图样后，经私有 FFmpeg 的 h264_rungic 解码，帧数、时长、分辨率都对。
+      - id: E3
+        text: 要求硬件的编码器（rungich264enc、h264_rungic）在拿不到硬件组件时报错，不悄悄换成软件编码；混合编码器 h264_rungic_auto 打开失败时回退软件。
+      - id: E4
+        text: 带 B 帧的 H.264 解码时间戳正确；seek 后 FLUSH 不会让后续响应错位。
+      - id: E5
+        text: 编码跟不上设定帧率时丢掉编码前的帧而不是积压，停止后收尾在 1 秒内完成。
+        evidence:
+          - {doc: docs/48-plasma-media-pipelines.md, date: 2026-09-27, note: "录屏收尾 0.29 秒，连续 3 次快捷设置验收通过"}
+    pitfalls:
+      - text: 解码输出按 stride 和 crop 在 CPU 上复制成 I420，不是零复制；1080p NV12 约 3.1 MB/帧。
+        docs: [docs/research/35-hardware-codec-integration.md, docs/research/34-hardware-codec-audit.md]
+      - text: 硬件编码经宿主桥接的吞吐约 50 fps：1080×2400@60 单路被拒，两路大分辨率同时编码第二路 CodecException；多屏或 60 fps 时把每路缩到长边 ≤1920。
+        docs: [docs/48-plasma-media-pipelines.md]
+      - text: Android SharedMemory 可能是 st_size=0 的 ashmem 字符设备，不能只接受普通 memfd。
+        docs: [docs/research/35-hardware-codec-integration.md]
+      - text: 做成 VA-API 驱动换不掉 FFmpeg 补丁、Snapshot 补丁和 Firefox 预加载（Firefox 的 glxtest 在 KGSL 软件 EGL 设备处就关掉 VA-API），维持现状；VA-API 只能作为另一项新能力单独立项。
+        docs: [docs/research/74-vaapi-feasibility.md]
+      - text: 原厂 V4L2 节点 video32/33 只验证到能力枚举，MMAP/USERPTR 返回 EINVAL；不为未验证接口扩大 LXC 权限。
+        docs: [docs/research/34-hardware-codec-audit.md, docs/research/35-hardware-codec-integration.md]
+      - text: VP8、AV1 在本机只有软件组件，不能宣称硬件编解码；没有 4K、HDR、10-bit 和 DRM 视频。
+        docs: [docs/research/34-hardware-codec-audit.md]
+      - text: broker 只允许 UID 0/1000，最多 64 条连接、6 个活动 codec，只接受编解码固定命令。
+        docs: [docs/research/35-hardware-codec-integration.md]
+    code:
+      - shared/media/codec-client.c
+      - shared/media/codec-client.h
+      - shared/media/gst-rungic-codec.c
+      - shared/media/ffmpeg-rungic-codec.c
+      - android/app/src/com/rungic/plasma/CodecBridge.java
+      - packages/ffmpeg/
+      - packaging/rungic-codec/
+      - tools/pq-history/ffmpeg.json
+    docs:
+      - docs/research/34-hardware-codec-audit.md
+      - docs/research/35-hardware-codec-integration.md
+      - docs/research/74-vaapi-feasibility.md
+
+  - id: apps.screen-sharing
+    title: 屏幕共享门户
+    scenario: apps.media
+    status: live
+    platform: linux
+    interfaces: []
+    summary: 网页和会议应用经 xdg-desktop-portal 的 ScreenCast 请求屏幕，用户在权限框里选屏，画面以 PipeWire 流送出。
+    experience:
+      - id: E1
+        text: ScreenCast 弹出权限框，用户选屏后三个阶段都返回 Response=0，PipeWire 收到画面帧。
+        evidence:
+          - {doc: docs/42-plasma-runtime-acceptance.md, date: 2026-09-23, note: "选 WL-0，收到 20 帧"}
+      - id: E2
+        text: 门户的权限框在手机上不超出屏幕宽度。
+        evidence:
+          - {doc: docs/42-plasma-runtime-acceptance.md, date: 2026-09-23}
+    pitfalls:
+      - text: 测试管线必须约束 video/x-raw，不约束时 WirePlumber 判断不了 media.type，造成假失败。
+        docs: [docs/42-plasma-runtime-acceptance.md]
+      - text: 门户的 desktop 元数据要保留 X-KDE-Wayland-Interfaces，否则 KWin 的受限接口允许列表拒绝它，CreateSession 失败。
+        docs: [docs/42-plasma-runtime-acceptance.md]
+      - text: 门户后端自己要设 QT_NO_XDG_DESKTOP_PORTAL=1，避免注册时再次激活等待中的门户。
+        docs: [docs/42-plasma-runtime-acceptance.md]
+      - text: 只验证了标准门户，不代表所有网站各自兼容。
+        docs: [docs/40-plasma-mobile-integration.md]
+    code:
+      - packages/xdg-desktop-portal-kde/
+      - tools/pq-history/xdg-desktop-portal-kde.json
+      - desktop/patches/portal-mobile-width.patch
+    docs: [docs/42-plasma-runtime-acceptance.md]
+
+  # ---- Firefox ------------------------------------------------------------------------------------
+  - id: apps.firefox
+    title: Firefox 浏览器
+    scenario: apps.web
+    status: live
+    platform: linux
+    interfaces: [camera, audio]
+    summary: Mozilla 官方 APT 的 Firefox 156，手机上用 mobile-config-firefox 的移动版界面和安卓 UA，独立桌面和工作区里是桌面版，WebRender 用 GPU。
+    experience:
+      - id: E1
+        text: 手机上 Firefox 是移动版：UA 为 Android 16; Mobile，maxTouchPoints 为 1，网站会跳到移动版（m.bilibili.com）。
+        evidence:
+          - {doc: docs/research/97-headless-agent-work.md, date: 2026-10-03, note: "§19.8 不设 RUNGIC_WORKSPACE 时"}
+      - id: E2
+        text: 独立桌面和 Agent 工作区里（RUNGIC_WORKSPACE 非空）不加载移动配置：Linux 桌面 UA、maxTouchPoints 为 0、没有 about:mobile。
+        evidence:
+          - {doc: docs/research/97-headless-agent-work.md, date: 2026-10-03, note: "§19.8 后台无头实测；界面待用户实测"}
+      - id: E3
+        text: 屏幕键盘在地址栏输入英文和中文候选都能提交，不崩溃。
+        evidence:
+          - {doc: docs/40-plasma-mobile-integration.md, date: 2026-09-23}
+      - id: E4
+        text: WebRender 和 WebGL 1/2 在 FD710 上运行，浏览器内容沙箱保持开启。
+      - id: E5
+        text: 网站经正常授权使用 PipeWire 摄像头和麦克风，同步录制。
+      - id: E6
+        text: 浏览器按系统代理联网，界面是中文。
+    pitfalls:
+      - text: 自动化把 focusmanager.testmode=true 留在日常 profile，会让 Firefox 在输入法提交时空指针崩溃；自动化只用独立测试 profile，验收后要核对日常 profile 里没有测试偏好。
+        docs: [docs/36-firefox-input-fix.md]
+      - text: KGSL 没有 DRM 节点，Firefox 会误判软件显卡；策略里把 gfx.webrender.all 设为可更改的默认 true。
+        docs: [docs/research/74-vaapi-feasibility.md]
+      - text: 用 RUNGIC_WORKSPACE 判断桌面，不能用 PLASMA_PLATFORM（它会由 startplasma 串进工作区的 systemd 环境）；Firefox 不能在两边同时运行。
+        docs: [docs/research/97-headless-agent-work.md]
+      - text: 用户在 about:mobile 或 about:config 里改的设置两边都生效；网站记在 cookie 里的移动版可能还会跳。
+        docs: [docs/research/97-headless-agent-work.md]
+      - text: Firefox 156 的 WebRender 在 Linux 上只有 OpenGL 和软件路径，没有 Vulkan 合成选项。
+        docs: [docs/56-kwin-vulkan-quantification.md]
+    code:
+      - packaging/rungic-firefox/
+      - packages/mobile-config-firefox/
+      - desktop/firefox-policies.json
+      - desktop/mozilla.pref
+      - desktop/mozilla.sources
+    docs: [docs/36-firefox-input-fix.md]
+
+  - id: apps.firefox-hw-video
+    title: Firefox 硬件视频与 WebRTC
+    scenario: apps.web
+    status: live
+    platform: linux
+    interfaces: [codec]
+    summary: 网页视频、WebCodecs 和 WebRTC 的 H.264 经私有 FFmpeg 用安卓硬件编解码，浏览器沙箱不放宽。
+    experience:
+      - id: E1
+        text: 网页 H.264 / VP9 视频由高通硬件解码播放，seek、暂停正常，内容和 RDD 沙箱保持开启。
+        evidence:
+          - {doc: docs/40-plasma-mobile-integration.md, date: 2026-09-23}
+      - id: E2
+        text: WebCodecs（no-preference）H.264 编码再解码，帧数和时间戳完整。
+        evidence:
+          - {doc: docs/40-plasma-mobile-integration.md, date: 2026-09-23}
+      - id: E3
+        text: WebRTC 协商 H.264 并使用硬件编码，结束后高通组件释放。
+        evidence:
+          - {doc: docs/40-plasma-mobile-integration.md, date: 2026-09-23}
+      - id: E4
+        text: 硬件打开失败时编解码回退软件，播放和 WebCodecs 仍可用。
+      - id: E5
+        text: MediaRecorder 录 WebM（VP8/Opus）可用；MP4 AVC 如实报告不支持。
+    pitfalls:
+      - text: 只设 LD_LIBRARY_PATH/LD_PRELOAD 不够：部分内容进程从应用目录另行加载发行版 FFmpeg，私有 FFmpeg 的运行库要放进 /usr/lib/firefox；/usr/bin/firefox 被转移为包装入口。
+        docs: [docs/research/35-hardware-codec-integration.md]
+      - text: 内容/RDD 沙箱禁止新建 codec.sock 连接；包装预加载传输库，在沙箱建立前预连 broker，fork 出的子进程各建一条，不关闭沙箱。
+        docs: [docs/research/35-hardware-codec-integration.md, docs/research/74-vaapi-feasibility.md]
+      - text: 私有库里把 x264 改名为 libx264_sw，否则 Firefox 按名字直接选 x264、绕过混合编码器。
+        docs: [docs/research/35-hardware-codec-integration.md]
+      - text: Firefox 日志可能把混合编码器归为 software，判断是否硬件要看 MotoCodec/RungicCodec OPEN c2.qti.* 和实际帧数。
+        docs: [docs/research/35-hardware-codec-integration.md]
+      - text: WebRTC 短测约 20 fps 发送、13 fps 接收，有丢帧，不能宣称满 30 fps 或长会议已验收；prefer-hardware 分类不支持。
+        docs: [docs/research/35-hardware-codec-integration.md]
+      - text: 升级 Firefox 或 FFmpeg 后要重新核验包装、私有库 ABI 和偏好；不要沿用早期针对 Firefox main 的远程编码 pref。
+        docs: [docs/research/35-hardware-codec-integration.md]
+    code:
+      - desktop/firefox
+      - desktop/firefox-codec-prefs.js
+      - packaging/rungic-firefox/
+      - shared/media/ffmpeg-rungic-codec.c
+    docs: [docs/research/35-hardware-codec-integration.md]
+
+  # ---- 文件 ---------------------------------------------------------------------------------------
+  - id: apps.shared-storage
+    title: 与安卓共享的文件目录（~/Shared）
+    scenario: apps.files
+    status: live
+    platform: android
+    interfaces: []
+    summary: 安卓内部存储的 Plasma 目录经 bindfs 挂成 ~/Shared，下载、图片、视频、音乐、模板、公共目录链接到这里，文档和桌面是本地目录。
+    experience:
+      - id: E1
+        text: 新账户第一次登录就有 8 个标准目录：下载、音乐、图片、视频、模板、公共链接到 Shared，文档和桌面是本地目录；重复运行结果不变。
+        evidence:
+          - {doc: docs/69-filesystem-capabilities.md, date: 2026-09-28, note: "X70 实机 XDG、qtpaths6、GLib 都返回 Pictures"}
+      - id: E2
+        text: 已有的目录内容、自定义链接和同名文件不会被覆盖或删除。
+      - id: E3
+        text: 共享存储没挂上时明确失败，不在主目录里造出假目录。
+      - id: E4
+        text: ~/Shared 上可写共享映射和 SQLite WAL 正常，rungic-fs-audit 的必需项全部通过。
+        evidence:
+          - {doc: docs/69-filesystem-capabilities.md, date: 2026-09-25}
+      - id: E5
+        text: 会话启动后标准目录不会被 xdg-user-dirs-update 改回主目录，录屏、截图、下载存到对应目录。
+        evidence:
+          - {doc: docs/48-plasma-media-pipelines.md, date: 2026-09-24, note: "容器重启后 xdg-user-dir VIDEOS 为 ~/Videos"}
+      - id: E6
+        text: 安卓一侧改过的文件，Linux 下次打开时就能看到；bindfs 意外退出留下的断开挂载在服务重启时被清掉，不会无限重启。
+    pitfalls:
+      - text: bindfs 不能带 --direct-io：FUSE 对 direct-io 拒绝可写共享映射，SQLite WAL、LMDB、MMKV 都会 I/O error。
+        docs: [docs/69-filesystem-capabilities.md]
+      - text: 共享存储不支持符号链接、硬链接、区分大小写、执行、chmod、xattr、Unix 套接字和 FIFO；应用私有数据、数据库、源码仓库和可执行程序放本地目录。
+        docs: [docs/69-filesystem-capabilities.md]
+      - text: 下载到共享存储的 AppImage 不能直接运行（两层 noexec，安卓 FUSE 存不下执行位），尚未决定。
+        docs: [docs/69-filesystem-capabilities.md]
+      - text: bindfs 在前台运行时 systemd 会在挂载完成前就判定服务已启动，会话抢先启动导致目录被重置；服务要等挂载点就绪。
+        docs: [docs/48-plasma-media-pipelines.md]
+      - text: 新增挂载或某个应用只在某目录出问题时，先跑 rungic-fs-audit，结果记入 69 篇。
+        docs: [docs/69-filesystem-capabilities.md]
+      - text: Documents、Desktop 已改为本地目录，在安卓上不再可见。
+        docs: [docs/69-filesystem-capabilities.md]
+    code:
+      - system/shared-storage
+      - system/user-dirs
+      - system/diagnostics/rungic-fs-audit
+    docs: [docs/69-filesystem-capabilities.md]
+
+  - id: apps.file-dialog
+    title: 手机上的文件保存对话框
+    scenario: apps.files
+    status: live
+    platform: linux
+    interfaces: []
+    summary: 应用经门户打开的手机版文件选择器预填建议的文件名，输入完整路径也能存到那里。
+    experience:
+      - id: E1
+        text: 应用给了建议名（current_name）时，文件名框里预填它，直接确认就存到建议的目录。
+        evidence:
+          - {doc: docs/103-krita-save-dialog-hang.md, date: 2026-10-01, note: "工作区总线直接调用 SaveFile"}
+      - id: E2
+        text: 输入以 / 开头的完整路径或 file:// 地址时原样使用；只输入名字时放进当前目录；名字里的空格、井号、问号不截断文件名。
+        evidence:
+          - {doc: docs/103-krita-save-dialog-hang.md, date: 2026-10-01}
+      - id: E3
+        text: 文件名为空时不能保存；在文件名框里按回车也能保存。
+        evidence:
+          - {doc: docs/103-krita-save-dialog-hang.md, date: 2026-10-01}
+      - id: E4
+        text: 打开文件时选择共享下载目录里的文件，门户返回它的 file URI。
+        evidence:
+          - {doc: docs/42-plasma-runtime-acceptance.md, date: 2026-09-23}
+    pitfalls:
+      - text: 原手机版选择器把输入直接拼在当前目录后，输完整路径会得到不存在的目录；门户丢弃路径时 Qt 的 QFileDialog::accept() 不关闭也不报错，留下挡住输入的空壳。
+        docs: [docs/103-krita-save-dialog-hang.md]
+      - text: 用户屏幕上由 Qt 应用发起的完整“另存为”没有实测（会弹到用户屏幕上），只在工作区里端到端测过。
+        docs: [docs/103-krita-save-dialog-hang.md]
+    code:
+      - packages/xdg-desktop-portal-kde/
+    docs: [docs/103-krita-save-dialog-hang.md]
+
+  # ---- 开发与系统工具 -----------------------------------------------------------------------------
+  - id: apps.docker
+    title: 容器里的 rootless Docker
+    scenario: apps.tools
+    status: live
+    platform: linux
+    interfaces: []
+    summary: 每个用户在容器里跑 rootless Docker 和 Compose，在设置→服务里开关，不需要把 net_admin 还给容器，也不碰安卓网络。
+    experience:
+      - id: E1
+        text: hello-world、镜像已有目录写入、bridge 网络出网、Compose 按服务名互访都能用。
+        evidence:
+          - {doc: docs/85-lxc-rootless-docker.md, date: 2026-09-28}
+      - id: E2
+        text: -p 发布的端口在容器内和安卓的 127.0.0.1 都能访问。
+        evidence:
+          - {doc: docs/85-lxc-rootless-docker.md, date: 2026-09-28}
+      - id: E3
+        text: 桌面的 /proc/sys 仍只读；rootless 一侧的进程写安卓的网络参数被拒，安卓的转发设置不变。
+        evidence:
+          - {doc: docs/85-lxc-rootless-docker.md, date: 2026-09-28}
+      - id: E4
+        text: 在设置→服务里开启时先确认再弹密码框，密码晚于 25 秒输入也能当场启动；关闭时当场停止，页面状态与实际一致。
+        evidence:
+          - {doc: docs/85-lxc-rootless-docker.md, date: 2026-09-28, note: "KAuth 超时改为 10 分钟后，37 秒后输入"}
+      - id: E5
+        text: 开机自动准备 /dev/net/tun、从属 UID/GID 段和按 UID 的数据目录；账户改名后数据不丢、从属 ID 段随之迁移。
+        evidence:
+          - {doc: docs/85-lxc-rootless-docker.md, date: 2026-09-28}
+      - id: E6
+        text: rootful 的 docker.service、containerd.service 被屏蔽，不会开机失败。
+        evidence:
+          - {doc: docs/85-lxc-rootless-docker.md, date: 2026-09-28}
+    pitfalls:
+      - text: 容器与安卓共用网络命名空间且没有 net_admin/net_raw，rootful Docker 不可用；不要为它把 net_admin 还给整个容器。
+        docs: [docs/85-lxc-rootless-docker.md]
+      - text: 曾把可写的 /proc/sys/net 绑到整个容器，容器 root 实际能写安卓的网络 sysctl；只能在 rootless Docker 自己的 mount namespace 里绑定。
+        docs: [docs/85-lxc-rootless-docker.md]
+      - text: 安卓把 memory/cpu 等控制器放在 cgroup v1，Docker 的 --memory 等单容器资源限制不生效。
+        docs: [docs/85-lxc-rootless-docker.md]
+      - text: 内核没有 nftables 和 xt_addrtype：要 iptables-legacy、--iptables=false 并自己加 MASQUERADE；pasta 端口不可达，用 slirp4netns 加 builtin 端口驱动；不加 --pidns。
+        docs: [docs/85-lxc-rootless-docker.md]
+      - text: /home 是安卓的 f2fs，overlayfs 不接受，数据目录放在 /var/lib/rungic-docker/<UID>。
+        docs: [docs/85-lxc-rootless-docker.md]
+      - text: usermod --login 不迁移 /etc/subuid、/etc/subgid 里按登录名记的段，账户改名要另外迁移。
+        docs: [docs/85-lxc-rootless-docker.md]
+    code:
+      - system/docker/
+      - packaging/rungic-docker/
+    docs: [docs/85-lxc-rootless-docker.md]
+
+  - id: apps.android-docker
+    title: 安卓侧的独立 Docker（已取代）
+    scenario: apps.tools
+    status: retired
+    platform: android
+    interfaces: []
+    summary: 早期在安卓一侧运行的独立 Alpine Docker（/data/adb/rungic-docker），2026-09-29 已从手机清除，由容器里的 rootless Docker 取代。
+    experience:
+      - id: E1
+        text: 手机的内部存储目录能 bind mount 进 Docker 容器，和命名卷同时使用。
+    pitfalls:
+      - text: 代码已删除（最后一版见提交 86f56970）；文档只作历史证据。
+        docs: [docs/20-docker-storage.md]
+    code: []
+    docs: [docs/19-docker-installation.md, docs/20-docker-storage.md]
+
+  - id: apps.system-monitor
+    title: 系统监视器里的 GPU 与磁盘
+    scenario: apps.tools
+    status: live
+    platform: linux
+    interfaces: []
+    summary: 系统监视器和小组件的 GPU 饼图、曲线和磁盘条有数据，ksystemstats 从 KGSL sysfs 和 mountinfo 取值。
+    experience:
+      - id: E1
+        text: 概览和历史页不再提示 “This page is missing some sensors”。
+        evidence:
+          - {doc: docs/104-system-monitor-gpu-disks.md, date: 2026-10-03, note: "用户打开系统监视器确认"}
+      - id: E2
+        text: GPU 名称显示 Adreno 710；使用率与 KGSL 的 gpu_clock_stats 增量一致（满载 85–89%，空闲约 0），还有频率和温度；不编造显存和功耗。
+        evidence:
+          - {doc: docs/104-system-monitor-gpu-disks.md, date: 2026-10-03}
+      - id: E3
+        text: 磁盘显示“系统”和“主目录”两个卷，容量与 df 一致，读写速率随实际读写变化；同一设备挂多处只算一次。
+        evidence:
+          - {doc: docs/104-system-monitor-gpu-disks.md, date: 2026-10-03}
+      - id: E4
+        text: 手机会话和独立桌面（工作区 0）的 ksystemstats 给出相同的传感器和数值。
+        evidence:
+          - {doc: docs/104-system-monitor-gpu-disks.md, date: 2026-10-03}
+      - id: E5
+        text: 只在传感器被订阅时才读 sysfs 和 diskstats，打开概览页时 ksystemstats 的 CPU 不超过单核 1%。
+        evidence:
+          - {doc: docs/104-system-monitor-gpu-disks.md, date: 2026-10-03, note: "0.85%、0.88%"}
+    pitfalls:
+      - text: 上游 GPU 插件只认 DRM 设备，KGSL 没有 DRM 节点，sysfs 的 card0 是显示控制器；上游 MR !149 的 msm DRM 方案不能直接用。
+        docs: [docs/104-system-monitor-gpu-disks.md]
+      - text: 不要读 devfreq/gpu_load：读取会重置调频器的统计；gpubusy 按上电时间计，会放大短暂负载，只作后备。
+        docs: [docs/104-system-monitor-gpu-disks.md]
+      - text: 容器里没有 udev 和 UDisks2，Solid 列不出卷；不要为监视器补整套设备管理，mountinfo 只在 Solid 没有卷时作后备。
+        docs: [docs/104-system-monitor-gpu-disks.md]
+      - text: 根文件系统镜像本身是 userdata 上的文件，disk/all/total 的物理空间有重叠；没有按进程的 GPU 使用；挂载只在 ksystemstats 启动时读一次。
+        docs: [docs/104-system-monitor-gpu-disks.md]
+      - text: 补丁里的单元测试（kgsltest、mountinfotest）只在单独的测试构建里跑，Ubuntu 打包关闭了测试。
+        docs: [docs/104-system-monitor-gpu-disks.md]
+    code:
+      - packages/ksystemstats/
+    docs: [docs/104-system-monitor-gpu-disks.md]

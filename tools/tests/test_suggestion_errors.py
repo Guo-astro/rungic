@@ -24,12 +24,14 @@ class SuggestionErrorTests(unittest.TestCase):
         a.background = {}    # no background turns (docs/research/97): the agent is idle after this one
         return a
 
+    # covers: agent.suggestion-tasks/E4
     def test_failed_completion_reports_reason(self):
         a = self.agent()
         a.on_notification('turn/completed', {'threadId': 'thread', 'turn': {'status': 'failed', 'error': {'message': '401 authentication missing'}}})
         self.assertEqual(a.emit.call_args_list[0].args[0], {'type': 'error', 'text': '401 authentication missing'})
         self.assertFalse(a.agent_busy)
 
+    # covers: agent.suggestion-tasks/E4
     def test_retry_does_not_prematurely_fail_task(self):
         a = self.agent()
         a.on_notification('error', {'threadId': 'thread', 'willRetry': True, 'error': {'message': 'temporary'}})

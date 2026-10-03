@@ -22,6 +22,7 @@ def load(tmp_path, monkeypatch):
     return module
 
 
+# covers: desktop-mode.remote-viewing/E3
 def test_the_config_is_private_points_at_the_registry_and_keeps_its_password(tmp_path, monkeypatch):
     r = load(tmp_path, monkeypatch)
     with mock.patch.object(r.subprocess, 'run', side_effect=lambda argv, **k: [Path(a).write_text('x') for a in argv if a.endswith('.pem')]):
@@ -34,6 +35,7 @@ def test_the_config_is_private_points_at_the_registry_and_keeps_its_password(tmp
     assert stat.S_IMODE(os.stat(config).st_mode) == 0o600
 
 
+# covers: desktop-mode.remote-viewing/E2
 def test_the_phone_desktop_is_listed_unavailable_while_the_phone_sleeps(tmp_path, monkeypatch):
     r = load(tmp_path, monkeypatch)
     with mock.patch.object(r, 'phone_answers', return_value=(True, '')):
@@ -47,6 +49,7 @@ def test_the_phone_desktop_is_listed_unavailable_while_the_phone_sleeps(tmp_path
     assert not entry['available'] and entry['reason'] == 'The phone is asleep'
 
 
+# covers: desktop-mode.remote-viewing/E2
 def test_a_recent_unreachable_mark_means_asleep_without_asking(tmp_path, monkeypatch):
     r = load(tmp_path, monkeypatch)
     (tmp_path / 'run/rungic-host-unreachable').touch()

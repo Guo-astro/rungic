@@ -11,6 +11,7 @@ from call_backends import capabilities, resolve
 
 
 class CallBackendsTest(unittest.TestCase):
+    # covers: agent.call-card/E1
     def test_explicit_and_existing_clients(self):
         for params, expected in [
             ({'backend':'cellular','number':'10000'}, ('cellular','cellular')),
@@ -23,6 +24,7 @@ class CallBackendsTest(unittest.TestCase):
             with self.subTest(params=params):
                 self.assertEqual(resolve(params), expected)
 
+    # covers: agent.call-card/E1
     def test_missing_or_conflicting_intent_never_defaults_to_wechat(self):
         for params in ({}, {'contact':'某人'}, {'backend':'app'},
                        {'backend':'cellular','app':'wechat','number':'10000'},
@@ -32,6 +34,7 @@ class CallBackendsTest(unittest.TestCase):
             with self.subTest(params=params), self.assertRaises(ValueError):
                 resolve(params)
 
+    # covers: agent.call-card/E1 agent.call-card/E2
     def test_capability_failure_does_not_select_another_backend(self):
         def unavailable():
             raise OSError('unreachable')
@@ -43,6 +46,7 @@ class CallBackendsTest(unittest.TestCase):
         self.assertFalse(phone['endToEndVerified'])
         self.assertEqual(resolve({'backend':'cellular','number':'10000'}), ('cellular','cellular'))
 
+    # covers: agent.call-card/E2
     def test_interface_is_not_end_to_end_verification(self):
         accounts = [{'id':'first'}, {'id':'second'}]
         result = capabilities(key_configured=True, router_available=False,
@@ -57,6 +61,7 @@ class CallBackendsTest(unittest.TestCase):
         self.assertFalse(phone['privateVoiceInstructions'])
         self.assertFalse(phone['independentMonitor'])
 
+    # covers: agent.call-card/E2
     def test_protocol_mismatch_is_not_usable(self):
         result = capabilities(probe=lambda: {'protocol':2,'audioCapable':True}, router_available=False)
         self.assertFalse(result['backends']['cellular']['reachable'])

@@ -52,6 +52,7 @@ class PackageTree(unittest.TestCase):
 
 
 class HeaderTests(unittest.TestCase):
+    # covers: delivery.patch-queue/E2
     def test_fields_and_continuation_lines(self):
         fields = pq.header(GOOD)
         self.assertEqual(fields['Subject'], 'A minimum size above the maximum no longer disconnects the client')
@@ -59,6 +60,7 @@ class HeaderTests(unittest.TestCase):
         self.assertEqual(fields['Last-Update'], '2026-09-26')
         self.assertNotIn('diff', ''.join(fields))
 
+    # covers: delivery.patch-queue/E2
     def test_plain_dep3(self):
         fields = pq.header('Description: fix it\nAuthor: A <a@b>\nForwarded: not-needed\n\n--- a/x\n+++ b/x\n')
         self.assertEqual(fields['Description'], 'fix it')
@@ -66,10 +68,12 @@ class HeaderTests(unittest.TestCase):
 
 
 class LintTests(PackageTree):
+    # covers: delivery.patch-queue/E2
     def test_good_package(self):
         self.package({'ubuntu.patch': 'Description: theirs\n---\n', 'rungic/a.patch': GOOD})
         self.assertEqual(pq.lint_package('demo'), [])
 
+    # covers: delivery.patch-queue/E2
     def test_missing_fields_series_and_bad_values(self):
         bad = GOOD.replace('Forwarded: no\n', '').replace('2026-09-26', '26.9.2026').replace(
             'X-Rungic-Status: Pending', 'X-Rungic-Status: Maybe')
@@ -84,6 +88,7 @@ class LintTests(PackageTree):
 
 
 class MatrixTests(PackageTree):
+    # covers: delivery.patch-queue/E6
     def test_planned_tests_do_not_count(self):
         gap = GOOD.replace('X-Rungic-Tests: L3:session.ready; L1:xdgshellwindow_test (to write)',
                            'X-Rungic-Tests: none (gap: needs a TV)')
@@ -95,6 +100,7 @@ class MatrixTests(PackageTree):
 
 
 class FetchTests(PackageTree):
+    # covers: delivery.patch-queue/E1
     def test_checks_sha256_and_keeps_nothing_on_mismatch(self):
         data = b'upstream source'
         self.package({}, recipe={'fetch': 'https://example.org/{file}',
@@ -125,29 +131,35 @@ class OverlayTests(PackageTree):
         self.package({}, recipe={'files': {}, 'overlay': entries})
         pq.add_overlay('demo', self.tree)
 
+    # covers: delivery.patch-queue/E3
     def test_new_file(self):
         self.overlay({'src/new.cpp': 'shared/ours.cpp'})
         self.assertEqual((self.tree / 'src/new.cpp').read_text(), 'ours\n')
 
+    # covers: delivery.patch-queue/E3
     def test_upstream_file_needs_its_hash(self):
         with self.assertRaisesRegex(SystemExit, 'exists in the upstream tree'):
             self.overlay({'src/theirs.cpp': 'shared/ours.cpp'})
 
+    # covers: delivery.patch-queue/E3
     def test_replaces_upstream_file_with_the_recorded_hash(self):
         digest = hashlib.sha256(b'theirs\n').hexdigest()
         self.overlay({'src/theirs.cpp': {'from': 'shared/ours.cpp', 'replaces': digest}})
         self.assertEqual((self.tree / 'src/theirs.cpp').read_text(), 'ours\n')
 
+    # covers: delivery.patch-queue/E3
     def test_refuses_once_upstream_changed(self):
         with self.assertRaisesRegex(SystemExit, 'upstream src/theirs.cpp changed'):
             self.overlay({'src/theirs.cpp': {'from': 'shared/ours.cpp', 'replaces': '0' * 64}})
 
+    # covers: delivery.patch-queue/E3
     def test_refuses_when_the_replaced_file_is_gone(self):
         with self.assertRaisesRegex(SystemExit, 'which is gone'):
             self.overlay({'src/gone.cpp': {'from': 'shared/ours.cpp', 'replaces': '0' * 64}})
 
 
 class VerifyTests(PackageTree):
+    # covers: delivery.patch-queue/E5
     def test_unresolvable_symlink_is_a_difference(self):
         mine, ref = self.root / 'mine', self.root / 'ref'
         mine.mkdir()
@@ -190,6 +202,7 @@ class GitSubtreeTests(PackageTree):
         else:
             self.package({}, recipe=self.info)
 
+    # covers: delivery.patch-queue/E4
     def test_subtree_is_selected_and_exclusions_are_applied(self):
         self.info['exclude'] = ['logs']
         self.write_recipe()
@@ -200,6 +213,7 @@ class GitSubtreeTests(PackageTree):
         with tarfile.open(pq.orig_tarball('demo')) as archive:
             self.assertEqual({m.mtime for m in archive.getmembers()}, {978307200})
 
+    # covers: delivery.patch-queue/E4
     def test_whole_commit_archive_keeps_existing_layout_and_timestamp(self):
         self.info.pop('subdir')
         self.info['tree'] = self.git('rev-parse', 'HEAD^{tree}')
@@ -210,6 +224,7 @@ class GitSubtreeTests(PackageTree):
             self.assertEqual(archive.pax_headers['comment'], self.info['commit'])
             self.assertEqual({m.mtime for m in archive.getmembers()}, {978307200})
 
+    # covers: delivery.patch-queue/E4
     def test_changed_subtree_does_not_reuse_previous_archive(self):
         self.write_recipe()
         pq.source('demo', self.output)
@@ -219,6 +234,7 @@ class GitSubtreeTests(PackageTree):
         self.assertEqual((self.output / 'main.rs').read_text(), 'other')
         self.assertFalse((self.output / 'src').exists())
 
+    # covers: delivery.patch-queue/E4
     def test_wrong_tree_hash_rejects_source_even_after_previous_fetch(self):
         self.write_recipe()
         pq.fetch('demo')
@@ -227,12 +243,14 @@ class GitSubtreeTests(PackageTree):
         with self.assertRaisesRegex(SystemExit, 'recipe says'):
             pq.fetch('demo')
 
+    # covers: delivery.patch-queue/E4
     def test_missing_exclusion_requires_review(self):
         self.info['exclude'] = ['removed-in-new-version']
         self.write_recipe()
         with self.assertRaisesRegex(SystemExit, 'no longer exists'):
             pq.source('demo', self.output)
 
+    # covers: delivery.patch-queue/E4
     def test_paths_cannot_escape_selected_tree(self):
         for value in ('../outside', '/outside', '.'):
             with self.subTest(value=value), self.assertRaisesRegex(SystemExit, 'invalid source path'):

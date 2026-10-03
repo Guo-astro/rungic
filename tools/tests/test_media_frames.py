@@ -36,12 +36,14 @@ class FramesTest(unittest.TestCase):
         self.addCleanup(home.stop)
         self.addCleanup(self.temp.cleanup)
 
+    # covers: agent.attachments/E4
     def test_count(self):
         self.assertEqual(media_frames.frame_count(0.5), 2)
         self.assertEqual(media_frames.frame_count(7), 4)
         self.assertEqual(media_frames.frame_count(600), media_frames.MAX_FRAMES)
         self.assertEqual(media_frames.frame_count(10, available=3), 3)
 
+    # covers: agent.attachments/E4
     def test_gif_frames(self):
         path = self.dir / 'wave.gif'
         animation(path, (1600, 900), 30, duration=100)       # 3 s
@@ -55,6 +57,7 @@ class FramesTest(unittest.TestCase):
                          f'{path} (animated image, 3 s, 1600x900): 2 frames from it are attached as images, '
                          'at 0.7 s, 2.2 s')
 
+    # covers: agent.attachments/E4
     def test_animated_webp_and_apng(self):
         for name in ('wave.webp', 'wave.png'):
             with self.subTest(name=name):
@@ -64,6 +67,7 @@ class FramesTest(unittest.TestCase):
                 self.assertEqual(info['kind'], 'animation')
                 self.assertEqual(len(info['frames']), 2)
 
+    # covers: agent.attachments/E4
     def test_still_pictures_have_no_frames(self):
         for name in ('still.gif', 'still.webp', 'still.png'):
             with self.subTest(name=name):
@@ -74,6 +78,7 @@ class FramesTest(unittest.TestCase):
         self.assertFalse(media_frames.may_move(self.dir / 'photo.jpg'))
         self.assertIsNone(media_frames.prepare(self.dir / 'missing.gif', quiet))
 
+    # covers: agent.attachments/E4
     def test_cache_reused_and_renewed(self):
         path = self.dir / 'wave.gif'
         animation(path, (64, 48), 10)
@@ -84,6 +89,7 @@ class FramesTest(unittest.TestCase):
         os.utime(path, ns=(1, 1))
         self.assertNotEqual(media_frames.prepare(path, quiet)['duration'], first['duration'])
 
+    # covers: agent.attachments/E4
     def test_old_frames_forgotten(self):
         old = media_frames.cache_root() / 'old'
         old.mkdir(parents=True)
@@ -93,6 +99,7 @@ class FramesTest(unittest.TestCase):
         media_frames.prepare(path, quiet)
         self.assertFalse(old.exists())
 
+    # covers: agent.attachments/E4
     @unittest.skipUnless(shutil.which('ffmpeg') and shutil.which('ffprobe'), 'needs ffmpeg')
     def test_video_frames(self):
         path = self.dir / 'clip.mp4'
@@ -111,6 +118,7 @@ class FramesTest(unittest.TestCase):
         manifest = json.loads((Path(info['frames'][0]['path']).parent / 'frames.json').read_text())
         self.assertEqual(manifest, info)
 
+    # covers: agent.attachments/E4
     @unittest.skipUnless(shutil.which('ffmpeg'), 'needs ffmpeg')
     def test_rotated_video_reports_upright_size(self):
         # A phone video held upright: 640x360 pixels stored, shown turned a quarter.
@@ -126,12 +134,14 @@ class FramesTest(unittest.TestCase):
         with Image.open(info['frames'][0]['path']) as frame:
             self.assertEqual(frame.size, (360, 640))
 
+    # covers: agent.attachments/E4
     def test_video_without_ffmpeg_is_sent_by_path(self):
         path = self.dir / 'clip.mp4'
         path.write_bytes(b'not really')
         with patch.object(media_frames.shutil, 'which', return_value=None):
             self.assertIsNone(media_frames.prepare(path, quiet))
 
+    # covers: agent.attachments/E4
     def test_unreadable_video(self):
         path = self.dir / 'broken.mp4'
         path.write_bytes(b'not a video')

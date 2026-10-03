@@ -17,6 +17,7 @@ def load(runtime):
     return module
 
 
+# covers: agent.keep-awake/E1
 def test_only_live_holders_keep_it_awake(tmp_path):
     user = tmp_path / '1000'
     user.mkdir()

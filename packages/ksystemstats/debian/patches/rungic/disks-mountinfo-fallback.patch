@@ -30,11 +30,11 @@ X-Rungic-Docs: docs/104
  .../fixtures/mountinfo-btrfs.txt.license}          |   0
  .../autotests/fixtures/mountinfo-container.txt     |  36 +++++
  .../fixtures/mountinfo-container.txt.license}      |   0
- plugins/disks/autotests/mountinfo.cpp              |  98 +++++++++++++
+ plugins/disks/autotests/mountinfo.cpp              |  99 +++++++++++++
  plugins/disks/disks.cpp                            | 128 +++++++++++++++--
  plugins/disks/disks.h                              |   1 +
  po/zh_CN/ksystemstats_plugins.po                   |  12 ++
- 12 files changed, 495 insertions(+), 10 deletions(-)
+ 12 files changed, 496 insertions(+), 10 deletions(-)
  create mode 100644 plugins/disks/MountInfo.cpp
  create mode 100644 plugins/disks/MountInfo.h
  create mode 100644 plugins/disks/autotests/CMakeLists.txt
@@ -365,10 +365,10 @@ copy from plugins/cpu/autotests/fixtures/linux_amd64_cpuinfo.txt.license
 copy to plugins/disks/autotests/fixtures/mountinfo-container.txt.license
 diff --git a/plugins/disks/autotests/mountinfo.cpp b/plugins/disks/autotests/mountinfo.cpp
 new file mode 100644
-index 0000000..ece7644
+index 0000000..7528031
 --- /dev/null
 +++ b/plugins/disks/autotests/mountinfo.cpp
-@@ -0,0 +1,98 @@
+@@ -0,0 +1,99 @@
 +/*
 +    SPDX-FileCopyrightText: 2026 Rungic
 +
@@ -380,6 +380,7 @@ index 0000000..ece7644
 +
 +#include "../MountInfo.h"
 +
++// covers: apps.system-monitor/E3
 +class MountInfoTest : public QObject
 +{
 +    Q_OBJECT

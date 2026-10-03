@@ -9,6 +9,7 @@ from standalone import FILES, digest, preflight, verify, validate_cast_host, cas
 
 
 class PayloadTests(unittest.TestCase):
+    # covers: install.standalone-install/E8
     def test_cached_host_requires_matching_cast_sources_and_jar(self):
         for old in ({}, {'cast_build': {}}, {'cast_build': {'schema': 1, 'inputs': {}}}):
             with self.subTest(old=old), self.assertRaisesRegex(ValueError, 'stale'):
@@ -33,37 +34,44 @@ class PayloadTests(unittest.TestCase):
     def save(self):
         (self.root / 'manifest.json').write_text(json.dumps(self.manifest))
 
+    # covers: install.standalone-install/E2
     def test_valid_payload(self):
         self.assertEqual(verify(self.root, digest(self.root / 'manifest.json'))['release'], 'test.1')
 
+    # covers: install.standalone-install/E2
     def test_wrong_trusted_manifest_rejected(self):
         with self.assertRaisesRegex(ValueError, 'trusted'):
             verify(self.root, '0' * 64)
 
+    # covers: install.standalone-install/E2
     def test_corrupt_or_truncated_component_rejected(self):
         for contents in ('fixturE', ''):
             (self.root / 'host-seed.tar.gz').write_text(contents)
             with self.assertRaisesRegex(ValueError, 'host-seed'):
                 verify(self.root)
 
+    # covers: install.standalone-install/E2
     def test_file_symlink_rejected(self):
         p = self.root / 'rungic.apk'
         p.unlink(); p.symlink_to(self.root / 'termux.apk')
         with self.assertRaisesRegex(ValueError, 'rungic.apk'):
             verify(self.root)
 
+    # covers: install.standalone-install/E2
     def test_traversal_inventory_rejected(self):
         self.manifest['files']['../outside'] = self.manifest['files'].pop('rungic.apk')
         self.save()
         with self.assertRaisesRegex(ValueError, 'inventory'):
             verify(self.root)
 
+    # covers: install.standalone-install/E2
     def test_shell_release_rejected(self):
         self.manifest['release'] = 'a;touch /tmp/bad'
         self.save()
         with self.assertRaisesRegex(ValueError, 'release'):
             verify(self.root)
 
+    # covers: install.standalone-install/E1
     def test_wrong_device_and_kernel_rejected_before_boot_read(self):
         manifest = dict(fingerprint='expected', product='vantage', kernel_release='6.12',
                         minimum_battery_percent=30, boot_bytes=4096, boot_sha256='good')
@@ -85,6 +93,7 @@ class PayloadTests(unittest.TestCase):
 
 
 class BootCompatibilityTests(unittest.TestCase):
+    # covers: install.standalone-install/E5
     def test_old_product_caller_selects_managed_release_and_fails_closed(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

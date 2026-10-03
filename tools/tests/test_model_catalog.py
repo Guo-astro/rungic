@@ -26,6 +26,7 @@ MODELS = [model_catalog.normalize_codex(m) for m in (ASTRA, LUNA, OLD)]
 
 
 class NormalizeTests(unittest.TestCase):
+    # covers: agent.model-choice/E1
     def test_common_shape(self):
         astra = MODELS[0]
         self.assertEqual(astra['id'], 'gpt-6-astra')
@@ -38,41 +39,50 @@ class NormalizeTests(unittest.TestCase):
 
 
 class ResolveTests(unittest.TestCase):
+    # covers: agent.model-choice/E1
     def test_default_follows_the_account(self):
         r = model_catalog.resolve(MODELS, {'model': '', 'effort': ''})
         self.assertEqual((r['model'], r['effort'], r['following'], r['fallback']), ('gpt-6-astra', 'low', True, False))
 
+    # covers: agent.model-choice/E1
     def test_chosen_model_and_effort(self):
         r = model_catalog.resolve(MODELS, {'model': 'gpt-6-luna', 'effort': 'high'})
         self.assertEqual((r['model'], r['effort'], r['name']), ('gpt-6-luna', 'high', 'GPT-6-Luna'))
 
+    # covers: agent.model-choice/E2
     def test_effort_default_is_the_models(self):
         self.assertEqual(model_catalog.resolve(MODELS, {'model': 'gpt-6-luna', 'effort': ''})['effort'], 'medium')
 
+    # covers: agent.model-choice/E2
     def test_gone_model_falls_back_to_the_default(self):
         r = model_catalog.resolve(MODELS, {'model': 'gpt-4', 'effort': 'ultra'})
         self.assertEqual((r['model'], r['effort'], r['fallback'], r['effortFallback']), ('gpt-6-astra', 'ultra', True, False))
 
+    # covers: agent.model-choice/E2
     def test_unsupported_effort_falls_back(self):
         r = model_catalog.resolve(MODELS, {'model': 'gpt-6-luna', 'effort': 'ultra'})
         self.assertEqual((r['effort'], r['effortFallback']), ('medium', True))
 
+    # covers: agent.model-choice/E1
     def test_unknown_catalog_leaves_it_to_the_provider(self):
         r = model_catalog.resolve(None, {'model': '', 'effort': ''})
         self.assertEqual((r['model'], r['effort']), (None, None))
         self.assertEqual(model_catalog.resolve(None, {'model': 'gpt-6-luna', 'effort': 'low'})['model'], 'gpt-6-luna')
 
+    # covers: agent.model-choice/E1
     def test_choice_values_are_strings(self):
         self.assertEqual(model_catalog.normalize_choice({'model': 3, 'effort': None, 'x': 'y'}), {'model': '', 'effort': ''})
         self.assertEqual(model_catalog.normalize_choice('nonsense'), {'model': '', 'effort': ''})
 
 
 class ValidTests(unittest.TestCase):
+    # covers: agent.model-choice/E1
     def test_valid(self):
         self.assertEqual(model_catalog.valid_choice(MODELS, {'model': 'gpt-6-luna', 'effort': 'max'}), '')
         self.assertEqual(model_catalog.valid_choice(MODELS, {'model': '', 'effort': 'ultra'}), '')   # Astra has it
         self.assertEqual(model_catalog.valid_choice(None, {'model': 'anything'}), '')
 
+    # covers: agent.model-choice/E1
     def test_invalid(self):
         self.assertIn('unknown model', model_catalog.valid_choice(MODELS, {'model': 'gpt-4'}))
         self.assertIn('no reasoning effort', model_catalog.valid_choice(MODELS, {'model': 'gpt-6-luna', 'effort': 'ultra'}))
@@ -88,6 +98,7 @@ class FakeServer:
 
 
 class CodexCatalogTests(unittest.TestCase):
+    # covers: agent.model-choice/E1
     def test_pages_and_hidden(self):
         server = FakeServer([{'data': [ASTRA, HIDDEN], 'nextCursor': 'c1'}, {'data': [LUNA], 'nextCursor': None}])
         catalog = model_catalog.CodexCatalog(lambda: server)
@@ -95,6 +106,7 @@ class CodexCatalogTests(unittest.TestCase):
         self.assertEqual(server.calls[1][1]['cursor'], 'c1')
         self.assertFalse(server.calls[0][1]['includeHidden'])
 
+    # covers: agent.model-choice/E4
     def test_cached_until_forgotten(self):
         server = FakeServer([{'data': [ASTRA]}, {'data': [LUNA]}])
         catalog = model_catalog.CodexCatalog(lambda: server)
@@ -104,6 +116,7 @@ class CodexCatalogTests(unittest.TestCase):
         catalog.forget()
         self.assertEqual([m['id'] for m in catalog.read()], ['gpt-6-luna'])
 
+    # covers: agent.model-choice/E4
     def test_failure_keeps_the_last_catalog(self):
         server = FakeServer([{'data': [ASTRA]}])
         catalog = model_catalog.CodexCatalog(lambda: server)
@@ -112,6 +125,7 @@ class CodexCatalogTests(unittest.TestCase):
         self.assertEqual([m['id'] for m in catalog.read(refresh=True)], ['gpt-6-astra'])
         self.assertEqual(catalog.error, 'Codex is not running')
 
+    # covers: agent.model-choice/E1
     def test_describe(self):
         server = FakeServer([{'data': [ASTRA, LUNA]}])
         catalog = model_catalog.CodexCatalog(lambda: server)

@@ -1,3 +1,4 @@
+# covers: install.rungicos-image/E4
 import copy
 from pathlib import Path
 import sys

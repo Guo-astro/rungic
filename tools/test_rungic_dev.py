@@ -20,6 +20,7 @@ def newer(a, b):
 
 
 class VersionTests(unittest.TestCase):
+    # covers: delivery.dev-overlay/E1
     def test_between_release_builds(self):
         dev = rungic_dev.dev_version('0.510', '20260930t221500', '32b158c', True)
         self.assertEqual(dev, '0.510+dev20260930t221500.32b158c.dirty')
@@ -27,6 +28,7 @@ class VersionTests(unittest.TestCase):
         self.assertTrue(newer('0.511', dev))
         self.assertTrue(newer(dev, '0.510+dev20260930t221459.32b158c'))   # a later build wins
 
+    # covers: delivery.dev-overlay/E1
     def test_release_metapackage_between(self):
         self.assertTrue(newer('20260930.9+dev20260930t221500', '20260930.9'))
         self.assertTrue(newer('20260930.10', '20260930.9+dev20260930t221500'))
@@ -36,6 +38,7 @@ class OverlayTests(unittest.TestCase):
     def override(self, version):
         return {'version': version, 'commit': 'x', 'dirty': True, 'built': 'now', 'file': f'rungic-design_{version}_arm64.deb'}
 
+    # covers: delivery.dev-overlay/E2
     def test_overlay_on_release(self):
         info = rungic_dev.overlay_info(RELEASE, {'rungic-design': self.override('0.510+dev1.a')}, '20260930t221500')
         self.assertEqual(info['version'], '20260930.9+dev20260930t221500')
@@ -44,6 +47,7 @@ class OverlayTests(unittest.TestCase):
         self.assertEqual(info['dev']['base_packages'], RELEASE['packages'])
         self.assertEqual(info['user_restart'], RELEASE['user_restart'])
 
+    # covers: delivery.dev-overlay/E3
     def test_overlay_on_overlay_keeps_the_base(self):
         first = rungic_dev.overlay_info(RELEASE, {'rungic-design': self.override('0.510+dev1.a')}, '1')
         second = rungic_dev.overlay_info(first, {'rungic-design': self.override('0.510+dev2.a')}, '2')
@@ -51,6 +55,7 @@ class OverlayTests(unittest.TestCase):
         self.assertEqual(second['dev']['base_packages'], RELEASE['packages'])
         self.assertEqual(rungic_dev.base_of(second), ('20260930.9', RELEASE['packages']))
 
+    # covers: delivery.dev-overlay/E1
     def test_pins_above_the_release(self):
         info = rungic_dev.overlay_info(RELEASE, {'rungic-design': self.override('0.510+dev1.a')}, '1')
         script = rungic_dev.config_script(info)
@@ -59,6 +64,7 @@ class OverlayTests(unittest.TestCase):
         self.assertIn(f'URIs: file:{rungic_dev.DEVICE_REPO}', script)
         self.assertNotIn('kwin-wayland', script)          # the release's own pins stay in charge
 
+    # covers: delivery.dev-overlay/E2
     def test_metapackage(self):
         info = rungic_dev.overlay_info(RELEASE, {'rungic-design': self.override('0.510+dev1.a')}, '1')
         with tempfile.TemporaryDirectory(dir=rungic_release.WORKSPACE / '.work/cache') as temp:
@@ -80,17 +86,20 @@ class UpstreamTests(unittest.TestCase):
     COMPONENTS = {'plasma-mobile': {'source': 'packages/plasma-mobile', 'version': '6.6.5-0ubuntu1+rungic3',
                                     'packages': ['plasma-mobile', 'plasma-mobile-tweaks', 'plasma-mobile-dev']}}
 
+    # covers: delivery.dev-overlay/E5
     def test_names_split_and_unknown_stop(self):
         own, upstream = rungic_dev.resolve(['rungic-design', 'plasma-mobile'], {'rungic-design': {}}, self.COMPONENTS)
         self.assertEqual((own, upstream), (['rungic-design'], ['plasma-mobile']))
         with self.assertRaises(SystemExit):
             rungic_dev.resolve(['plasma-mobil'], {'rungic-design': {}}, self.COMPONENTS)
 
+    # covers: delivery.dev-overlay/E5
     def test_only_the_release_packages(self):
         base = {'plasma-mobile': '6.6.5-0ubuntu1+rungic3', 'plasma-mobile-tweaks': '6.6.5-0ubuntu1+rungic3'}
         self.assertEqual(rungic_dev.release_binaries(self.COMPONENTS['plasma-mobile'], base),
                          ['plasma-mobile', 'plasma-mobile-tweaks'])
 
+    # covers: delivery.dev-overlay/E5
     def test_component_new_to_the_release(self):
         # ksystemstats joined "rebuilt" after the installed release: its distribution build is the base
         component = {'packages': ['ksystemstats']}
@@ -103,6 +112,7 @@ class UpstreamTests(unittest.TestCase):
         self.assertEqual(rungic_dev.distribution_bases(component, installed, earlier), {'ksystemstats': '6.6.6-0ubuntu0.1'})
         self.assertEqual(rungic_dev.distribution_bases(component, {}, {}), {})
 
+    # covers: delivery.dev-overlay/E4
     def test_reset_restores_the_distribution_build(self):
         before = {'ksystemstats': {'version': '6.6.6-0ubuntu0.1+rungic1+dev1', 'base': '6.6.6-0ubuntu0.1'},
                   'rungic-design': {'version': '0.510+dev1'}}
@@ -111,11 +121,13 @@ class UpstreamTests(unittest.TestCase):
         self.assertEqual(rungic_dev.restored(before, {}), {'ksystemstats': '6.6.6-0ubuntu0.1'})
         self.assertEqual(rungic_dev.restored(before, before), {})
 
+    # covers: delivery.dev-overlay/E1 delivery.dev-overlay/E5
     def test_versions_with_an_epoch(self):
         dev = rungic_dev.dev_version('4:6.6.6-0ubuntu0.1+rungic9', '20261001t040000', 'abc1234', False)
         self.assertTrue(newer(dev, '4:6.6.6-0ubuntu0.1+rungic9'))
         self.assertTrue(newer('4:6.6.6-0ubuntu0.1+rungic10', dev))
 
+    # covers: delivery.dev-overlay/E5
     def test_changelog_entry_parses(self):
         version = rungic_dev.dev_version('6.6.5-0ubuntu1+rungic3', '20261001t040000', 'abc1234', True)
         entry = rungic_dev.changelog_entry('plasma-mobile', version, 'resolute', 'Wed, 01 Oct 2026 04:00:00 +0000',
@@ -128,6 +140,7 @@ class UpstreamTests(unittest.TestCase):
                                     capture_output=True, text=True, check=True).stdout.strip()
         self.assertEqual(parsed, version)
 
+    # covers: delivery.dev-overlay/E4
     def test_reset_by_component(self):
         overrides = {'plasma-mobile': {'component': 'plasma-mobile'}, 'plasma-mobile-tweaks': {'component': 'plasma-mobile'},
                      'rungic-design': {}}
@@ -135,6 +148,7 @@ class UpstreamTests(unittest.TestCase):
         self.assertEqual(rungic_dev.reset_names(['plasma-mobile-tweaks'], overrides), {'plasma-mobile-tweaks'})
         self.assertEqual(rungic_dev.reset_names(['rungic-design'], overrides), {'rungic-design'})
 
+    # covers: delivery.dev-overlay/E5
     def test_components_of_the_release(self):
         components = rungic_dev.upstream_components()
         self.assertIn('plasma-mobile', components)
@@ -149,6 +163,7 @@ class KeptOnBuildHostTests(unittest.TestCase):
         self.pool = Path(self.temp.name)
         self.addCleanup(self.temp.cleanup)
 
+    # covers: delivery.dev-overlay/E6
     def test_taker_leaves_a_record_not_the_deb(self):
         class Host:
             def keep_for_phone(self, path, name):
@@ -159,6 +174,7 @@ class KeptOnBuildHostTests(unittest.TestCase):
         self.assertEqual(json.loads((self.pool / 'x_1_arm64.deb.remote').read_text())['path'], 'dev-pool/x_1_arm64.deb')
         self.assertIsNone(rungic_dev.taker(object()))       # a build on the phone: fetched here as before
 
+    # covers: delivery.dev-overlay/E6
     def test_sync_sends_what_is_here_and_the_phone_takes_the_rest(self):
         for name in ('meta_1_all.deb', 'Packages', 'Packages.gz', 'Packages.xz', 'Release'):
             (self.pool / name).write_text(name)
@@ -188,6 +204,7 @@ class KeptOnBuildHostTests(unittest.TestCase):
         self.assertEqual(result, {'sent': 5, 'fetched': 1, 'removed': 1})
         self.assertIn('old_1_arm64.deb', scripts[-1])          # the phone's stale file goes
 
+    # covers: delivery.dev-overlay/E6 delivery.build-hosts/E3
     def test_fetch_checks_size_and_hash_over_either_way(self):
         scripts = []
         saved = rungic_release.run
@@ -201,12 +218,14 @@ class KeptOnBuildHostTests(unittest.TestCase):
         self.assertIn('10.77.0.20 192.168.5.45', scripts[0])
         self.assertIn('sha256sum', scripts[0])
 
+    # covers: delivery.dev-overlay/E6
     def test_index_has_the_kept_entries(self):
         (self.pool / 'big_1_arm64.deb.remote').write_text(json.dumps(
             {'stanza': 'Package: big\nVersion: 1\nArchitecture: arm64\nFilename: ./big_1_arm64.deb\nSize: 9\n\n'}))
         rungic_release.index(self.pool, 'rungic-dev')
         self.assertIn('Filename: ./big_1_arm64.deb', (self.pool / 'Packages').read_text())
 
+    # covers: delivery.dev-overlay/E6
     def test_prune_drops_old_records(self):
         info = rungic_dev.overlay_info(RELEASE, {'rungic-design': {'version': '0.510+dev1', 'file': 'rungic-design_0.510+dev1_arm64.deb'}}, '1')
         for name in ('rungic-design_0.510+dev1_arm64.deb', 'rungic-design_0.510+dev0_arm64.deb'):

@@ -28,6 +28,7 @@ def upstream(tmp_path):
     return source
 
 
+# covers: desktop.rime/E3
 def test_both_chinese_pages_create_rime(tmp_path):
     dest = tmp_path / 'dest'
     layouts.build(upstream(tmp_path), dest)
@@ -39,6 +40,7 @@ def test_both_chinese_pages_create_rime(tmp_path):
     assert (dest / 'en_US').readlink() == Path('/usr/share/plasma/keyboard/layouts/en_US')
 
 
+# covers: desktop.rime/E3
 @pytest.mark.parametrize('change', ['main.qml', 'symbols.qml'])
 def test_a_changed_upstream_page_stops_the_build(tmp_path, change):
     source = upstream(tmp_path)
@@ -48,6 +50,7 @@ def test_a_changed_upstream_page_stops_the_build(tmp_path, change):
         layouts.build(source, tmp_path / 'dest')
 
 
+# covers: desktop.rime/E3
 def test_another_page_creating_pinyin_stops_the_build(tmp_path):
     source = upstream(tmp_path)
     (source / 'zh_CN/extra.qml').write_text(layouts.PINYIN + '\n')
@@ -58,6 +61,7 @@ def test_another_page_creating_pinyin_stops_the_build(tmp_path):
 PLASMA_KEYBOARD = ROOT / '.work/pq/plasma-keyboard/src/layouts'
 
 
+# covers: desktop.rime/E3
 @pytest.mark.skipif(not PLASMA_KEYBOARD.is_dir(), reason='no plasma-keyboard source in .work/pq (tools/pq.py prepare)')
 def test_plasma_keyboard_layouts(tmp_path):
     layouts.build(PLASMA_KEYBOARD, tmp_path / 'dest')
@@ -77,6 +81,7 @@ def engine_missing():
     return None
 
 
+# covers: desktop.rime/E1 desktop.rime/E3 desktop.rime/E4
 @pytest.mark.skipif(engine_missing() is not None, reason=f'engine check needs the build dependencies: {engine_missing()}')
 def test_engine_and_session_lifecycle(tmp_path):
     """Builds the plugin; rungic-rime-check and the Qt Virtual Keyboard session test (run.sh)."""

@@ -96,6 +96,7 @@ pub extern "system" fn Java_com_winland_server_NativeBridge_idleInhibitFd(_env: 
 mod tests {
     use super::Inhibitors;
 
+    // covers[provider]: iface:kwin-android-host
     #[test]
     fn inhibition_follows_surfaces_not_inhibitor_count() {
         let mut state = Inhibitors::default();
@@ -109,6 +110,7 @@ mod tests {
         assert!(!state.inhibited());
     }
 
+    // covers[provider]: iface:kwin-android-host
     #[test]
     fn removing_unknown_inhibitors_is_harmless() {
         let mut state = Inhibitors::default();

@@ -31,6 +31,7 @@ class LoginEnvironmentTests(unittest.TestCase):
     def run_it(self, shell='/bin/sh'):
         return login_environment.login_environment(self.env, shell)
 
+    # covers: install.login-environment/E1
     def test_user_bins_before_they_exist(self):
         path = self.run_it()['PATH'].split(':')
         self.assertFalse((self.home / '.local/bin').exists())
@@ -38,6 +39,7 @@ class LoginEnvironmentTests(unittest.TestCase):
         self.assertEqual(path[1], str(self.home / 'bin'))
         self.assertIn('/usr/bin', path)
 
+    # covers: install.login-environment/E2
     def test_profile_path_and_exports(self):
         self.profile('export PATH="$HOME/tools:$PATH"\nexport EDITOR=vim\nexport QT_QPA_PLATFORM=xcb\n')
         values = self.run_it()
@@ -46,18 +48,21 @@ class LoginEnvironmentTests(unittest.TestCase):
         self.assertNotIn('QT_QPA_PLATFORM', values)          # the session's own
         self.assertEqual(values['PATH'].split(':').count(str(self.home / '.local/bin')), 1)
 
+    # covers: install.login-environment/E1
     def test_bash_login_shell_reads_profile(self):
         if not os.access('/bin/bash', os.X_OK):
             self.skipTest('no bash')
         self.profile('export FROM_PROFILE=1\n')
         self.assertEqual(self.run_it('/bin/bash').get('FROM_PROFILE'), '1')
 
+    # covers: install.login-environment/E3
     def test_broken_profile_keeps_the_session(self):
         self.profile('exit 3\n')
         values = self.run_it()
         self.assertTrue(values['PATH'].startswith(str(self.home / '.local/bin')))
         self.assertEqual(set(values), {'PATH'})
 
+    # covers: install.login-environment/E3
     def test_hanging_profile_is_cut_short(self):
         self.profile('sleep 30\n')
         with patch.object(login_environment, 'TIMEOUT_S', 1):
@@ -65,6 +70,7 @@ class LoginEnvironmentTests(unittest.TestCase):
         self.assertIn('/usr/bin', values['PATH'].split(':'))
         self.assertEqual(set(values), {'PATH'})
 
+    # covers: install.login-environment/E1 install.login-environment/E2
     def test_output_evaluates_in_the_session_shell(self):
         self.profile("export GREETING='hello world'\n")
         env = {**self.env, 'SHELL': '/bin/sh'}
@@ -75,6 +81,7 @@ class LoginEnvironmentTests(unittest.TestCase):
         self.assertEqual(greeting, 'hello world')
         self.assertIn('PATH', names.split())
 
+    # covers: install.login-environment/E1
     def test_session_uses_it(self):
         session = (ROOT / 'desktop/session').read_text()
         self.assertIn('/usr/libexec/rungic-login-environment', session)

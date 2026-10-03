@@ -25,19 +25,23 @@ class RootfsIsolationTests(unittest.TestCase):
         source = Path(__file__).resolve().parents[2] / 'system/config' / config
         path.write_text(source.read_text())
 
+    # covers: install.rungicos-image/E2
     def test_preinstalled_apps_keeps_desktop_and_emoji_fonts(self):
         self.seed_app_policy()
         check_preinstalled_apps(self.root, {'plasma-desktop': (), 'fonts-noto-color-emoji': ()})
 
+    # covers: install.rungicos-image/E2
     def test_reused_root_with_removed_apps_rejected(self):
         for name in ('angelfish', 'haruna', 'kjournaldbrowser', 'klevernotes', 'marknote'):
             with self.subTest(package=name), self.assertRaisesRegex(ValueError, name):
                 check_preinstalled_apps(self.root, {name + ':arm64': ()})
 
+    # covers: install.rungicos-image/E2
     def test_old_config_without_app_policy_rejected(self):
         with self.assertRaisesRegex(ValueError, 'exclusion rules missing'):
             check_preinstalled_apps(self.root, {})
 
+    # covers: install.rungicos-image/E2
     def test_leftover_emoji_shortcut_rejected_even_if_broken(self):
         self.seed_app_policy()
         shortcut = self.root / 'usr/share/kglobalaccel/org.kde.plasma.emojier.desktop'
@@ -46,10 +50,12 @@ class RootfsIsolationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'excluded app files remain'):
             check_preinstalled_apps(self.root, {})
 
+    # covers: install.rungicos-image/E1
     def test_clean_identity(self):
         self.seed_accounts()
         check_fresh_account(self.root)
 
+    # covers: install.rungicos-image/E1
     def test_unlocked_account_rejected_without_hash_in_error(self):
         self.seed_accounts()
         (self.root / 'etc/shadow').write_text('root:*:0::::::\nrungic:secret-hash:0::::::\n')
@@ -57,6 +63,7 @@ class RootfsIsolationTests(unittest.TestCase):
             check_fresh_account(self.root)
         self.assertNotIn('secret-hash', str(error.exception))
 
+    # covers: install.rungicos-image/E1
     def test_old_account_marker_rejected(self):
         self.seed_accounts()
         marker = self.root / 'var/lib/rungic-host/account.json'
@@ -65,6 +72,7 @@ class RootfsIsolationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'completion marker'):
             check_fresh_account(self.root)
 
+    # covers: install.rungicos-image/E1
     def test_auth_credentials_rejected(self):
         self.seed_accounts()
         token = self.root / 'home/rungic/.codex/auth.json'
@@ -73,6 +81,7 @@ class RootfsIsolationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'credentials'):
             check_fresh_account(self.root)
 
+    # covers: install.rungicos-image/E1
     def test_extra_personal_account_rejected(self):
         self.seed_accounts()
         with (self.root / 'etc/passwd').open('a') as f:
@@ -80,9 +89,11 @@ class RootfsIsolationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'exactly one'):
             check_fresh_account(self.root)
 
+    # covers: install.rungicos-image/E1
     def test_clean_template(self):
         check_home_layout(self.root, '/home/rungic')
 
+    # covers: install.rungicos-image/E1
     def test_host_cache_home_rejected(self):
         cache = self.root / 'home/builder/project/.work/cache/python'
         cache.mkdir(parents=True)
@@ -90,6 +101,7 @@ class RootfsIsolationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'builder'):
             check_home_layout(self.root, '/home/rungic')
 
+    # covers: install.rungicos-image/E1
     def test_legacy_alias(self):
         alias = self.root / 'home/linux'
         for target in ('rungic', '/home/rungic'):
@@ -97,11 +109,13 @@ class RootfsIsolationTests(unittest.TestCase):
             check_home_layout(self.root, '/home/rungic')
             alias.unlink()
 
+    # covers: install.rungicos-image/E1
     def test_unrelated_alias_rejected(self):
         (self.root / 'home/linux').symlink_to('/outside')
         with self.assertRaisesRegex(ValueError, 'linux'):
             check_home_layout(self.root, '/home/rungic')
 
+    # covers: install.rungicos-image/E1
     def test_template_cannot_escape_tree(self):
         home = self.root / 'home/rungic'
         home.rmdir()
@@ -109,6 +123,7 @@ class RootfsIsolationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'real directory'):
             check_home_layout(self.root, '/home/rungic')
 
+    # covers: install.rungicos-image/E5
     def test_host_python_settings_removed_without_losing_proxy(self):
         host = {'PYTHONPYCACHEPREFIX': '/home/builder/.cache',
                 'PYTHONPATH': '/host/modules', 'PYTHONHOME': '/host/python',

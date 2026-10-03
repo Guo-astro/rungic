@@ -13,6 +13,7 @@ import build_host_seed
 
 
 class SourceLayoutTests(unittest.TestCase):
+    # covers: delivery.packaging/E2
     def test_declared_package_inputs_and_overlays_exist(self):
         for pkg in rungic_package.definitions().values():
             for name in rungic_package.identity_paths(pkg):
@@ -24,6 +25,7 @@ class SourceLayoutTests(unittest.TestCase):
                 with self.subTest(recipe=recipe.name, source=source):
                     self.assertTrue((ROOT / source).is_file(), source)
 
+    # covers: delivery.packaging/E2
     def test_build_script_literal_inputs_are_declared(self):
         for pkg in rungic_package.definitions().values():
             script = (pkg['dir'] / 'build.sh').read_text()
@@ -39,6 +41,7 @@ class SourceLayoutTests(unittest.TestCase):
                                             or (ROOT / entry).is_relative_to(path)
                                             for entry in pkg['paths']), f'undeclared input: {path}')
 
+    # covers: delivery.release-deploy/E7
     def test_incremental_release_and_host_seed_agree(self):
         destinations = {source: (dest, mode) for source, dest, mode in build_host_seed.ANDROID_FILES}
         release = json.loads((ROOT / 'release/packages.json').read_text())

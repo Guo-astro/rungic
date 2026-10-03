@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
+# covers[consumer]: iface:telephony
 """Socket-pair tests; never touch a modem or a real phone number."""
 import json
 from pathlib import Path
@@ -16,6 +17,7 @@ from cellular_audio import PCMPlayer, exchange, FRAME_BYTES
 
 
 class CellularPCMTest(unittest.TestCase):
+    # covers: agent.cellular-call/E5
     def test_handshake_preserves_first_pcm_bytes(self):
         client, server = socket.socketpair()
         with client, server:
@@ -23,6 +25,7 @@ class CellularPCMTest(unittest.TestCase):
             self.assertEqual(exchange(client, {'op': 'audio'}), {'ok': True})
             self.assertEqual(client.recv(4), b'\x00\xff\x10\x00')
 
+    # covers: agent.cellular-call/E5
     def test_error_never_becomes_audio(self):
         client, server = socket.socketpair()
         with client, server:
@@ -30,6 +33,7 @@ class CellularPCMTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'stale-call'):
                 exchange(client, {'op': 'audio'})
 
+    # covers: agent.cellular-call/E5
     def test_clocked_silence_audio_and_disconnect(self):
         client, server = socket.socketpair()
         client.settimeout(1)
@@ -63,6 +67,7 @@ class CellularPCMTest(unittest.TestCase):
         self.assertTrue(player.closed)
         self.assertFalse(player.close())
 
+    # covers: agent.cellular-call/E5
     def test_cancel_during_audio_handshake(self):
         client, server = socket.socketpair()
         with server:
@@ -74,6 +79,7 @@ class CellularPCMTest(unittest.TestCase):
                     player.open('call-a', lambda _: None, lambda: None)
             self.assertEqual(client.fileno(), -1)
 
+    # covers: agent.cellular-call/E5
     def test_flush_discards_unspoken_held_audio(self):
         player = PCMPlayer()
         player.hold(); player.push(b'\x23\x01'*480)

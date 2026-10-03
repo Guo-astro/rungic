@@ -21,14 +21,14 @@ X-Rungic-Tests: L1:kgsltest
 X-Rungic-Docs: docs/104
 ---
  plugins/gpu/CMakeLists.txt           |   2 +-
- plugins/gpu/KgslStats.cpp            | 114 +++++++++++++++++++++
+ plugins/gpu/KgslStats.cpp            | 114 ++++++++++++++++++++
  plugins/gpu/KgslStats.h              |  52 ++++++++++
  plugins/gpu/LinuxBackend.cpp         |  19 ++++
  plugins/gpu/LinuxKgslGpu.cpp         | 123 ++++++++++++++++++++++
  plugins/gpu/LinuxKgslGpu.h           |  40 ++++++++
  plugins/gpu/autotests/CMakeLists.txt |   5 +
- plugins/gpu/autotests/kgsl.cpp       | 193 +++++++++++++++++++++++++++++++++++
- 8 files changed, 547 insertions(+), 1 deletion(-)
+ plugins/gpu/autotests/kgsl.cpp       | 194 +++++++++++++++++++++++++++++++++++
+ 8 files changed, 548 insertions(+), 1 deletion(-)
  create mode 100644 plugins/gpu/KgslStats.cpp
  create mode 100644 plugins/gpu/KgslStats.h
  create mode 100644 plugins/gpu/LinuxKgslGpu.cpp
@@ -455,10 +455,10 @@ index f256852..6795643 100644
 +)
 diff --git a/plugins/gpu/autotests/kgsl.cpp b/plugins/gpu/autotests/kgsl.cpp
 new file mode 100644
-index 0000000..bb20038
+index 0000000..7cf4240
 --- /dev/null
 +++ b/plugins/gpu/autotests/kgsl.cpp
-@@ -0,0 +1,193 @@
+@@ -0,0 +1,194 @@
 +/*
 +    SPDX-FileCopyrightText: 2026 Rungic
 +
@@ -480,6 +480,7 @@ index 0000000..bb20038
 +static const QByteArray adreno710ClockStats = "7603584471 3417620194 884482783 2648244955 11343366934 3267221696 21997648518 \n";
 +static const QByteArray adreno710Frequencies = "816000000 734000000 650000000 600000000 500000000 345000000 295000000\n";
 +
++// covers: apps.system-monitor/E2
 +class KgslTest : public QObject
 +{
 +    Q_OBJECT

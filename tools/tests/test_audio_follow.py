@@ -32,17 +32,21 @@ class TargetTest(unittest.TestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
 
+    # covers: desktop-mode.audio-follow/E1
     def test_an_app_on_the_phone_plays_on_the_phone(self):
         self.assertEqual(self.f.target(stream(1, pid=100), {}), 'android_phone')
 
+    # covers: desktop-mode.audio-follow/E1
     def test_an_app_on_the_tv_stays_on_the_tv(self):
         self.assertEqual(self.f.target(stream(1, pid=200), {}), 'android')
 
+    # covers: desktop-mode.audio-follow/E2
     def test_a_workspace_on_the_tv_or_the_phone(self):
         loops = {'40': 2, '41': 3}
         self.assertEqual(self.f.target(stream(1, module='40'), loops), 'android')
         self.assertEqual(self.f.target(stream(2, module='41'), loops), 'android_phone')
 
+    # covers: desktop-mode.audio-follow/E2
     def test_the_independent_desktop_on_the_tv_in_computer_mode_else_on_the_phone(self):
         # Workspace 0, desktop mode (docs/research/97 §19.6): its loopback, module 9.
         self.assertEqual(self.f.target(stream(3, module='9'), {'9': 0}), 'android_phone')
@@ -51,15 +55,18 @@ class TargetTest(unittest.TestCase):
         self.f.tv = {}
         self.assertEqual(self.f.target(stream(3, module='9'), {'9': 0}), 'android')
 
+    # covers: desktop-mode.audio-follow/E1
     def test_no_window_follows_the_users_desktop(self):
         self.assertEqual(self.f.target(stream(1, pid=999), {}), 'android_phone')
         self.f.tv['content'] = 'desktop'
         self.assertEqual(self.f.target(stream(1, pid=999), {}), 'android')
 
+    # covers: desktop-mode.audio-follow/E3
     def test_an_apps_own_choice_is_left(self):
         self.assertIsNone(self.f.target(stream(1, sink='linux_speaker', pid=100), {}))
         self.assertIsNone(self.f.target(stream(2, sink='android_phone', pid=200), {}))   # the voice assistant's
 
+    # covers: desktop-mode.audio-follow/E4
     def test_without_a_tv_the_moved_go_back(self):
         self.f.moved = {'1'}
         self.f.tv = {'connected': False}

@@ -33,16 +33,19 @@ class AppServerExitTests(unittest.TestCase):
     def setUp(self):
         exits.clear()
 
+    # covers: agent.sign-in/E4
     def test_replaced_on_purpose_keeps_the_service(self):
         s = server(retired=True)
         s.read()
         s.on_notification.assert_called_once()
         self.assertEqual(exits, [])
 
+    # covers: agent.sign-in/E4
     def test_died_on_its_own_takes_the_service_down(self):
         server(retired=False).read()
         self.assertEqual(exits, [1])
 
+    # covers: agent.sign-in/E4
     def test_restart_server_retires_the_old_one_first(self):
         text = source.read_text()
         body = text[text.index('    def restart_server(self):'):text.index('    def needs_setup(self')]

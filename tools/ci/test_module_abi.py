@@ -1,3 +1,4 @@
+# covers: install.gki-kernel/E1
 """Version-format regressions for Android 15/16 OEM module auditing."""
 
 from pathlib import Path

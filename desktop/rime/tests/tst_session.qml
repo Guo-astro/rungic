@@ -49,6 +49,7 @@ Item {
             number.text = ""
         }
 
+        // covers: desktop.rime/E3
         // Runs first: the symbols page is the first page, and it must create Rime (layouts.py).
         function test_1_symbols_page_first() {
             show(number)
@@ -60,6 +61,7 @@ Item {
             Qt.inputMethod.hide()
             tryVerify(closed, 2000, "hiding the keyboard closes the session")
         }
+        // covers: desktop.rime/E4
         function test_2_typing_then_hide() {
             show(field)
             compare(im().sessionOpen, false, "showing the keyboard opens no session")
@@ -76,6 +78,7 @@ Item {
             commitFirst()
             tryCompare(field, "text", "你好中国")
         }
+        // covers: desktop.rime/E4
         function test_3_composition_survives_hide() {
             show(field)
             type("zhong")
@@ -88,6 +91,7 @@ Item {
             compare(field.text, "")
             im().idleInterval = 5000
         }
+        // covers: desktop.rime/E4
         function test_4_idle_closes_while_visible() {
             show(field)
             im().idleInterval = 200
@@ -104,6 +108,7 @@ Item {
             tryCompare(field, "text", "好好")
             im().idleInterval = 5000
         }
+        // covers: desktop.rime/E4
         function test_5_focus_loss() {
             show(field)
             type("ni")

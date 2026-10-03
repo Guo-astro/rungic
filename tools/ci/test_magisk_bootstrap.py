@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# covers: install.legacy-full-bundle/E4
 """Exercise first-boot write/reboot boundaries in a temporary path sandbox.
 
 Android labels and the init service still require the full-wipe device test.

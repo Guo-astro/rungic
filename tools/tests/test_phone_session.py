@@ -20,6 +20,7 @@ def bridge(settings=None):
     return obj
 
 
+# covers: agent.phone-mode/E2
 def test_read_tasks_disable_all_configured_mcp(tmp_path, monkeypatch):
     (tmp_path / '.codex').mkdir()
     (tmp_path / '.codex/config.toml').write_text('[mcp_servers.writes]\ncommand="unsafe"\n')
@@ -30,6 +31,7 @@ def test_read_tasks_disable_all_configured_mcp(tmp_path, monkeypatch):
     assert settings['config']['mcp_servers.rungic-desktop.enabled'] is False
 
 
+# covers: agent.phone-mode/E2
 def test_exclusive_tools_are_task_owned(tmp_path, monkeypatch):
     monkeypatch.setattr(module.Path, 'home', lambda: tmp_path)
     obj = bridge()
@@ -60,6 +62,7 @@ def test_rpc_strips_private_fields_and_registers_thread_before_reply(tmp_path, m
     assert replies[0]['result']['thread']['id'] == 'codex-thread'
 
 
+# covers: agent.phone-mode/E7
 def test_notifications_stay_scoped():
     obj = bridge()
     obj.threads['native-thread'] = {'conversation': 'origin'}
@@ -70,6 +73,7 @@ def test_notifications_stay_scoped():
     assert len(messages) == 1
 
 
+# covers: agent.phone-mode/E11
 def test_desktop_language_does_not_force_spoken_language():
     obj = bridge()
     obj.foreground = lambda: True
@@ -102,6 +106,7 @@ def reader(lines):
     return obj
 
 
+# covers: agent.phone-mode/E1
 def test_a_reply_without_an_id_is_dropped_not_the_end():
     # ExternalBusy was written without an id; its reply had none and the reader's KeyError took
     # the coordinator down with it (2026-10-03).
@@ -119,6 +124,7 @@ def test_a_reply_without_an_id_is_dropped_not_the_end():
     assert {'type': 'phone-notice', 'text': 'still here'} in obj.events
 
 
+# covers: agent.phone-mode/E1
 def test_post_gives_every_command_an_id():
     obj = bridge()
     obj.serial = 0
@@ -130,6 +136,7 @@ def test_post_gives_every_command_an_id():
     assert all(m['type'] == 'command' and m['method'] == 'ExternalBusy' for m in written)
 
 
+# covers: agent.phone-mode/E1
 def test_post_to_a_stopped_coordinator_is_dropped():
     obj = bridge()
     obj.serial = 0
@@ -139,6 +146,7 @@ def test_post_to_a_stopped_coordinator_is_dropped():
     obj.post('ExternalBusy', {'busy': True})   # a hint: no exception into the agent's turn handling
 
 
+# covers: agent.phone-mode/E1
 def test_the_agent_writes_no_command_without_an_id():
     # Every command to the coordinator goes through command() or post(), which number it.
     source = (MODULE.parent / 'rungic_voice_agent.py').read_text()

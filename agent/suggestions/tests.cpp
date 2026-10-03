@@ -41,6 +41,7 @@ class CareTests : public QObject {
         QFile f(path); QVERIFY(f.open(QIODevice::WriteOnly)); f.write(bytes);
     }
 private Q_SLOTS:
+    // covers: agent.care-ledger/E1
     void groupedCrashesKeepIndependentRecordsAndReceipts() {
         Care::Model m(""); auto a = item("a"), b = item("b"), c = item("other");
         const auto first = a["id"].toString(), second = b["id"].toString();
@@ -58,6 +59,7 @@ private Q_SLOTS:
         QCOMPARE(m.groups(true).size(), 1); QCOMPARE(m.groups().size(), 2);
         QCOMPARE(m.list().size(), 3);
     }
+    // covers: agent.suggestion-tasks/E2
     void structuredSummaryDoesNotMakeAPlanExecutable() {
         Care::Model m(""); const auto o = item(); const auto id = o["id"].toString(); m.observe(o, 100);
         auto r = m.updatePlan(id, {{"conclusion", "Possibly a known bug, not confirmed"}, {"confidence", "suspected"}, {"nextStep", "Observe"}});
@@ -67,6 +69,7 @@ private Q_SLOTS:
     }
     // ---- Agent usage (docs/research/95) ----
     void initTestCase() { qputenv("TZ", "UTC"); tzset(); }
+    // covers: agent.usage-widget/E2
     void usageDeduplicatesRequestsRestartsAndAccounts() {
         QTemporaryDir d; const auto path = d.path() + "/usage.json";
         Care::Usage u(path); u.setProviders({provider("codex")});
@@ -90,6 +93,7 @@ private Q_SLOTS:
         restarted.snapshot("codex", snapshot, 109); QCOMPARE(device(restarted.view(109)).toInteger(), 700);
         QCOMPARE(Care::readObject(path)["schema"].toInt(), 2);
     }
+    // covers: agent.usage-widget/E2
     void usageLedgerMigratesSchemaOneAndLegacyEvents() {
         QTemporaryDir d; const auto path = d.path() + "/usage.json";
         const QJsonObject account{{"turns", QJsonObject{{Care::fingerprint("thread"), QJsonObject{{"tokens", 1000}}}}}, {"total", 400}, {"days", QJsonObject{}}};
@@ -103,6 +107,7 @@ private Q_SLOTS:
         QVERIFY(!u.record("codex", Care::codexTokenEvent(legacy), 102));
         QVERIFY(!u.record("undeclared", token("a", "s", 10, 0), 103)); // no descriptor, no record
     }
+    // covers: agent.usage-widget/E1 agent.usage-widget/E6
     void usageQuotaIsNullableAndResetDoesNotInventFreshData() {
         Care::Usage u(""); u.setProviders({provider("codex")});
         const QJsonArray limits{QJsonObject{{"id", "codex.primary"}, {"label", "codex"}, {"usedPercent", 75}, {"windowMinutes", 300}, {"resetsAt", 200}}};
@@ -123,6 +128,7 @@ private Q_SLOTS:
         QVERIFY(p["tokens"].toObject()["device"].isNull()); QCOMPARE(p["status"].toString(), "signed-out");
         QCOMPARE(p["account"].toObject()["kind"].toString(), "none");
     }
+    // covers: agent.usage-widget/E3
     void usageDescriptorsLoadFromSystemAndUserDirectories() {
         QTemporaryDir d; const auto system = d.path() + "/system", user = d.path() + "/user";
         write(system + "/codex.json", R"({"schema":1,"id":"codex","name":"Codex","vendor":"OpenAI","order":10,
@@ -152,6 +158,7 @@ private Q_SLOTS:
             QCOMPARE(Care::validateUsageProvider(Care::readObject(path), QFileInfo(path).fileName()), QString());
         }
     }
+    // covers: agent.usage-widget/E3
     void usageViewOrdersProvidersAndChoosesPrimary() {
         Care::Usage u(""); u.setProviders({provider("a", 10), provider("b", 20), provider("c", 30, true)});
         auto v = u.view(100);
@@ -175,6 +182,7 @@ private Q_SLOTS:
         QCOMPARE(u.view(110)["providers"].toArray().size(), 2); // its agent isn't used here
         Care::Usage none(""); QCOMPARE(none.view(1)["primary"].toString(), QString());
     }
+    // covers: agent.usage-widget/E2
     void usageAccountsAreIsolatedPerProvider() {
         Care::Usage u(""); u.setProviders({provider("a"), provider("b")});
         u.snapshot("a", {{"accountKey", "same"}}, 100); u.snapshot("b", {{"accountKey", "same"}}, 100);
@@ -186,6 +194,7 @@ private Q_SLOTS:
         QCOMPARE(shown(u.view(104), "b")["tokens"].toObject()["device"].toInteger(), 300);
         QCOMPARE(shown(u.view(104), "a")["tokens"].toObject()["device"].toInteger(), 300);
     }
+    // covers: agent.usage-widget/E5
     void usageStaleAndErrorArePerProvider() {
         Care::Usage u(""); u.setProviders({provider("a"), provider("b")});
         u.snapshot("a", {{"accountKey", "k"}}, 100); u.snapshot("b", {{"accountKey", "k"}}, 100);
@@ -199,6 +208,7 @@ private Q_SLOTS:
         u.snapshot("b", {{"accountKey", "k"}}, 103);
         QVERIFY(!shown(u.view(104), "b")["stale"].toBool()); QCOMPARE(shown(u.view(104), "b")["status"].toString(), "ready");
     }
+    // covers: agent.usage-widget/E3
     void usageDropsUnknownFields() {
         Care::Usage u(""); u.setProviders({provider("a")});
         u.snapshot("a", {{"accountKey", "secret-key"}, {"email", "someone@example.com"}, {"name", "Spoofed"}, {"id", "other"},
@@ -217,6 +227,7 @@ private Q_SLOTS:
         QCOMPARE(p["limits"].toArray().size(), 1);
         QCOMPARE(p["limits"].toArray()[0].toObject().keys(), (QStringList{"expired", "id", "label", "resetsAt", "usedPercent", "windowMinutes"}));
     }
+    // covers: agent.usage-widget/E3
     void usageIconsArePathsThatExist() {
         QTemporaryDir d;
         write(d.path() + "/mark.svg", "<svg xmlns=\"http://www.w3.org/2000/svg\"/>");
@@ -239,12 +250,14 @@ private Q_SLOTS:
             u.setProviders({p}); QVERIFY(shown(u.view(1), "a")["icon"].isNull());
         }
     }
+    // covers: agent.usage-widget/E2
     void usageAdapterLedgerTokensPassThrough() {
         Care::Usage u(""); u.setProviders({provider("reader")});
         u.snapshot("reader", {{"tokens", QJsonObject{{"device", 1375}, {"today", 1322}}}}, 100);
         const auto t = shown(u.view(101), "reader")["tokens"].toObject();
         QCOMPARE(t["device"].toInteger(), 1375); QCOMPARE(t["today"].toInteger(), 1322); QVERIFY(t["account"].isNull());
     }
+    // covers: agent.usage-widget/E4
     void claudeCodeTranscriptsCountEachMessageOnce() {
         QTemporaryDir d; const auto root = d.path() + "/claude";
         const QString fixture = QStringLiteral(CARE_TESTDATA) + "/claude-code/projects/-home-u-proj";
@@ -284,6 +297,7 @@ private Q_SLOTS:
         const Care::ClaudeCode::Paths nothing{{d.path() + "/none"}, d.path() + "/n.json", d.path() + "/ns.json"};
         QCOMPARE(Care::ClaudeCode::read(nothing, now), (QJsonObject{{"available", false}}));
     }
+    // covers: agent.usage-widget/E4
     void claudeCodeLimitsOnlyFromTheDocumentedStatusline() {
         QTemporaryDir d;
         const Care::ClaudeCode::Paths paths{{d.path() + "/none"}, d.path() + "/ledger.json", d.path() + "/statusline.json"};
@@ -310,6 +324,7 @@ private Q_SLOTS:
         QVERIFY(Care::ClaudeCode::read(paths, now + 4001)["limits"].toArray().isEmpty());
         QCOMPARE(Care::ClaudeCode::statusline("not json", paths, now), QString());
     }
+    // covers: agent.care-ledger/E6
     void staleReferencesNeverCreateRecords() {
         QTemporaryDir d; const auto path = d.path() + "/state.json";
         QVERIFY(Care::writeObject(path, {{"schema", 2}, {"items", QJsonObject{{"stale", QJsonValue::Null}}}}));
@@ -323,6 +338,7 @@ private Q_SLOTS:
         QVERIFY(m.list().isEmpty()); QVERIFY(m.save());
         Care::Model restarted(path); QVERIFY(restarted.load()); QVERIFY(restarted.list().isEmpty());
     }
+    // covers: agent.briefing/E7
     void widgetLayoutPreservesUserChoicesAndRemoval() {
         QTemporaryDir d; const auto path = d.path() + "/layout";
         {
@@ -355,6 +371,7 @@ private Q_SLOTS:
         KConfig c(path, KConfig::SimpleConfig);
         QVERIFY(!c.group("Containments").group("1").group("Applets").hasGroup("100"));
     }
+    // covers: agent.briefing/E7
     void widgetLayoutNeverOverwritesOccupiedPage() {
         QTemporaryDir d; const auto path = d.path() + "/layout";
         {
@@ -369,6 +386,7 @@ private Q_SLOTS:
         QCOMPARE(pages.size(), 2); QCOMPARE(pages[0].toArray()[0].toObject()["id"].toInt(), 12);
         QVERIFY(folio.readEntry("favorites", QString()).contains("known.desktop"));
     }
+    // covers: agent.care-ledger/E1 agent.care-ledger/E2
     void persistentSnoozeAndDeduplication() {
         QTemporaryDir d; const auto path = d.path() + "/state.json";
         Care::Model m(path); auto o = item(); const auto id = o["id"].toString();
@@ -381,6 +399,7 @@ private Q_SLOTS:
         QVERIFY(restarted.due(301).isEmpty()); QVERIFY(!restarted.notification(301, false, false).isEmpty());
         restarted.notified({id}, 301); QVERIFY(restarted.notification(302, true, false).isEmpty());
     }
+    // covers: agent.care-ledger/E2 agent.care-ledger/E5
     void resolvedBeforeReminder() {
         Care::Model m(""); const auto o = item(); const auto id = o["id"].toString();
         m.observe(o, 100); m.act(id, "snooze", {{"at", 300}}, 110);
@@ -388,6 +407,7 @@ private Q_SLOTS:
         QVERIFY(m.due(301).isEmpty()); QCOMPARE(m.get(id)["state"].toString(), "resolved");
         m.observe(o, 400); QCOMPARE(m.get(id)["state"].toString(), "new");
     }
+    // covers: agent.care-ledger/E3
     void dismissPersistsThroughRepeatedObservations() {
         Care::Model m(""); auto o = item(); const auto id = o["id"].toString();
         m.observe(o, 100); m.act(id, "dismiss", {}, 101); o["body"] = "次数增加";
@@ -395,6 +415,7 @@ private Q_SLOTS:
         QVERIFY(m.notification(100000, true, false).isEmpty());
         m.act(id, "restore", {}, 300); QCOMPARE(m.get(id)["state"].toString(), "new");
     }
+    // covers: agent.care-ledger/E7
     void closedConditionAndNoImplicitExecution() {
         Care::Model m(""); auto o = item(); const auto id = o["id"].toString();
         m.observe(o, 100); QVERIFY(m.act(id, "closed", {}, 101).contains("error"));
@@ -403,6 +424,7 @@ private Q_SLOTS:
         QVERIFY(m.due(105, {}).isEmpty()); // A process name is not an application instance.
         QCOMPARE(m.get(id)["state"].toString(), "new");
     }
+    // covers: agent.care-ledger/E4
     void ordinaryHintsQuietOutsideFeedAndRespectInhibition() {
         Care::Model m(""); auto o = item(); m.observe(o, 100000);
         QVERIFY(m.notification(100001, false, false).isEmpty());
@@ -415,6 +437,7 @@ private Q_SLOTS:
         m.observe(item("crash:2"), 200002);
         QVERIFY(!m.notification(200002, true, false).isEmpty());
     }
+    // covers: agent.care-ledger/E5
     void upstreamAndTaskCompletionDoNotResolveFaults() {
         Care::Model m(""); auto o = item(); const auto id = o["id"].toString();
         m.observe(o, 100); m.update(id, {{"upstream", QJsonObject{{"state", "merged"}}}});
@@ -422,6 +445,7 @@ private Q_SLOTS:
         m.recoverTasks(); QCOMPARE(m.get(id)["state"].toString(), "working");
         QCOMPARE(m.get(id)["upstream"].toObject()["state"].toString(), "merged");
     }
+    // covers: agent.suggestion-tasks/E6
     void absenceDoesNotLoseTaskOrLateResult() {
         Care::Model m(""); const auto o = item(); const auto id = o["id"].toString();
         m.observe(o, 100);
@@ -440,6 +464,7 @@ private Q_SLOTS:
         m.act(id, "reviewed", {}, 106);
         QCOMPARE(m.get(id)["state"].toString(), "resolved");
     }
+    // covers: agent.suggestion-tasks/E2
     void confirmationBindsExactPlanAndEvidence() {
         Care::Model m(""); auto o = item(); const auto id = o["id"].toString(); m.observe(o, 100);
         m.updatePlan(id, {{"plan", "证据不足，暂不修改"}, {"verification", "未知"}, {"rollback", "无变更"}});
@@ -459,6 +484,7 @@ private Q_SLOTS:
         QVERIFY(!m.get(id)["canApply"].toBool());
         QVERIFY(m.beginTask(id, "apply", m.get(id)["planRevision"].toString(), 106).contains("error"));
     }
+    // covers: agent.care-ledger/E4
     void presentationAndNotificationsArePerRevision() {
         Care::Model m(""); const auto a = item("a"), b = item("b");
         m.observe(a, 100000); m.observe(b, 100000);
@@ -474,6 +500,7 @@ private Q_SLOTS:
         QVERIFY(m.present(b["id"].toString(), 2, true, 100007));
         QVERIFY(m.notification(100008, false, false).isEmpty());
     }
+    // covers: agent.suggestion-tasks/E3
     void restartAndReplacedTasksPreserveCorrelation() {
         QTemporaryDir d; const auto path = d.path() + "/state.json";
         Care::Model m(path); const auto o = item(); const auto id = o["id"].toString(); m.observe(o, 100);
@@ -486,6 +513,7 @@ private Q_SLOTS:
         QVERIFY(!restarted.taskEvent(id, first, {{"type", "failed"}, {"text", "late old error"}}, 104));
         QCOMPARE(restarted.get(id)["state"].toString(), "working");
     }
+    // covers: agent.care-ledger/E6
     void oldLedgerMigrationKeepsChoicesAndInvalidatesLegacyPlan() {
         QTemporaryDir d; const auto path = d.path() + "/state.json"; auto o = item(); const auto id = o["id"].toString();
         o["state"] = "snoozed"; o["condition"] = "old-process"; o["plan"] = "旧文字";
@@ -497,6 +525,7 @@ private Q_SLOTS:
         QCOMPARE(m.get(id)["upstream"].toObject()["state"].toString(), "prepared"); QVERIFY(m.save());
         QCOMPARE(Care::readObject(path)["schema"].toInt(), 2);
     }
+    // covers: agent.care-ledger/E4
     void sourceFailureCannotTriggerScheduledReminder() {
         Care::Model m(""); const auto o = item(); const auto id = o["id"].toString(); m.observe(o, 100);
         m.act(id, "snooze", {{"at", 500}}, 101);
@@ -505,6 +534,7 @@ private Q_SLOTS:
         m.act(id, "dismiss", {}, 504); m.reconcile("crashes", {}, 505); m.observe(o, 506);
         QCOMPARE(m.get(id)["state"].toString(), "dismissed");
     }
+    // covers: agent.suggestion-tasks/E6
     void completedResultReminderSurvivesIssueAbsence() {
         Care::Model m(""); const auto o = item(); const auto id = o["id"].toString(); m.observe(o, 100);
         const auto task = m.beginTask(id, "investigate", {}, 101)["task"].toObject()["id"].toString();
@@ -514,6 +544,7 @@ private Q_SLOTS:
         QCOMPARE(m.due(1000).size(), 1);
         QVERIFY(!m.notification(1001, false, false).isEmpty());
     }
+    // covers: agent.care-ledger/E6
     void corruptedStateIsNotOverwritten() {
         QTemporaryDir d; QFile f(d.path() + "/state.json"); QVERIFY(f.open(QIODevice::WriteOnly)); f.write("broken"); f.close();
         Care::Model m(f.fileName()); QString error; QVERIFY(!m.load(&error)); QVERIFY(!error.isEmpty());
@@ -524,6 +555,7 @@ private Q_SLOTS:
         return {{"title", title}, {"body", "Several apps quit unexpectedly this week."}, {"kind", kind}, {"priority", 50},
                 {"refs", QJsonArray{ref}}, {"action", QJsonObject{{"label", "Go through them"}, {"prompt", "List them"}}}, {"notify", false}};
     }
+    // covers: agent.briefing/E4
     void curatedOutputIsValidatedStrictly() {
         Care::Model m(""); const auto a = item("a"), b = item("b");
         m.observe(a, 100); m.observe(b, 100);
@@ -558,6 +590,7 @@ private Q_SLOTS:
         QVERIFY(br.applyAgent(QJsonObject{{"cards", QJsonArray{}}}, m.list(), 200)); // nothing needs the user: allowed
         QCOMPARE(br.source(), "agent");
     }
+    // covers: agent.briefing/E3
     void curationTriggersOnlyOnMaterialChanges() {
         using namespace Care::BriefingLimits;
         Care::Model m(""); Care::Briefing br(""); auto a = item("a");
@@ -590,6 +623,7 @@ private Q_SLOTS:
         QCOMPARE(capped.nextRun(t), 10000 + 86400);
         QVERIFY(!capped.capped(10000 + 86400));
     }
+    // covers: agent.briefing/E4
     void fallbackSummarisesFindingsAndResults() {
         Care::Model m(""); QStringList ids;
         for (const auto key : {"a", "b", "c", "d"}) { const auto o = item(key); m.observe(o, 100); ids.append(o["id"].toString()); }
@@ -609,6 +643,7 @@ private Q_SLOTS:
         QCOMPARE(view["source"].toString(), "fallback"); QCOMPARE(view["error"].toString(), "unavailable");
         QVERIFY(!view["cards"].toArray()[0].toObject()["action"].toObject().contains("prompt"));
     }
+    // covers: agent.briefing/E4
     void agentCardsStayAndUnseenFindingsGetServiceCards() {
         Care::Model m(""); const auto a = item("a"), b = item("b"), c = item("c");
         m.observe(a, 100); m.observe(b, 100);
@@ -622,6 +657,7 @@ private Q_SLOTS:
         for (const auto &v : cards) if (v.toObject()["origin"] == "service") service = v.toObject();
         QCOMPARE(service["refs"].toArray(), QJsonArray{c["id"]});
     }
+    // covers: agent.briefing/E6
     void dismissedCardStaysHiddenUntilMaterialChange() {
         Care::Model m(""); auto a = item("a"); m.observe(a, 100);
         Care::Briefing br(""); br.observe(m.list(), 100);
@@ -635,6 +671,7 @@ private Q_SLOTS:
         QCOMPARE(br.cards(m.list()).size(), 1);
         QVERIFY(!br.dismiss("fallback:none", m.list(), 410));
     }
+    // covers: agent.briefing/E6
     void feedbackReachesTheNextCurationInput() {
         Care::Model m(""); const auto a = item("a"), b = item("b"); m.observe(a, 100); m.observe(b, 100);
         Care::Briefing br(""); br.begin(m.list(), 100);
@@ -653,6 +690,7 @@ private Q_SLOTS:
         QVERIFY(flagged);
         QVERIFY(br.input(m.list(), 140 + 15 * 86400)["feedback"].toArray().isEmpty()); // bounded in time
     }
+    // covers: agent.briefing/E5
     void curationInputIsRedacted() {
         Care::Model m(""); const auto home = QDir::homePath();
         auto o = Care::observation("svc", "Failed: " + home + "/Documents/tax-2026.pdf", "raw body with details", "fault", 1,
@@ -667,6 +705,7 @@ private Q_SLOTS:
         QVERIFY(!text.contains("/var/lib/crash")); QVERIFY(!text.contains("raw body"));
         QVERIFY(text.contains("\"evidence_reports\": 4")); QVERIFY(text.contains("<private path>"));
     }
+    // covers: agent.compat-knowledge/E1
     void knowledgeRequiresEvidenceAndCannotExecute() {
         QJsonObject e{{"schema", 1}, {"id", "test"}, {"title", "test"}, {"kind", "policy"}, {"status", "verified"},
             {"explanation", "intentional"}, {"reviewed", "2026-09-29"}, {"match", QJsonObject{{"package", "app"}, {"versions", QJsonArray{"1"}}}},

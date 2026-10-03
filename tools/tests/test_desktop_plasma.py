@@ -25,11 +25,13 @@ plugin=org.kde.plasma.volume
 """
 
 
+# covers: desktop-mode.independent-desktop/E5
 def test_the_trays_and_the_panels_volume_applets_lack_it():
     assert plasma.lacking(LAYOUT) == [['Containments', '2', 'Applets', '7', 'Applets', '12', 'Configuration', 'General'],
                                       ['Containments', '2', 'Applets', '20', 'Configuration', 'General']]
 
 
+# covers: desktop-mode.independent-desktop/E5
 def test_once_set_nothing_lacks():
     done = LAYOUT.replace('migrated=true\n', 'migrated=true\nshowVirtualDevices=true\n') + \
         '\n[Containments][2][Applets][20][Configuration][General]\nshowVirtualDevices=true\n'

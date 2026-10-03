@@ -9,6 +9,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
 class DisplayPolicy(unittest.TestCase):
+    # covers: desktop.display-size/E1 desktop.display-size/E4 desktop.display-size/E6
     def test_shared_policy(self):
         source = r'''
 #include "shared/display-policy/handset-scale.h"

@@ -15,6 +15,7 @@ import codex_install  # noqa: E402
 
 
 class VersionTests(unittest.TestCase):
+    # covers: agent.codex-install/E2
     def test_parse(self):
         self.assertEqual(codex_install.parse_version('codex-cli 0.159.2\n'), (0, 159, 2))
         self.assertEqual(codex_install.parse_version('rust-v0.160.0'), (0, 160, 0))
@@ -22,6 +23,7 @@ class VersionTests(unittest.TestCase):
         self.assertIsNone(codex_install.parse_version(''))
         self.assertEqual(codex_install.version_text((0, 159, 2)), '0.159.2')
 
+    # covers: agent.codex-install/E2
     def test_numeric_order(self):
         self.assertGreater(codex_install.parse_version('0.160.0'), codex_install.parse_version('0.159.12'))
 
@@ -37,9 +39,11 @@ def reply(data):
 
 
 class LatestTests(unittest.TestCase):
+    # covers: agent.codex-install/E2
     def test_stable_tag(self):
         self.assertEqual(codex_install.latest_release(reply({'tag_name': 'rust-v0.159.2'})), (0, 159, 2))
 
+    # covers: agent.codex-install/E2
     def test_prerelease_refused(self):
         with self.assertRaises(ValueError):
             codex_install.latest_release(reply({'tag_name': 'rust-v0.160.0', 'prerelease': True}))
@@ -62,14 +66,17 @@ class UpdateCheckTests(unittest.TestCase):
     def check(self, installed=(0, 159, 2)):
         return codex_install.UpdateCheck(lambda: installed, self.fetch, lambda: self.now)
 
+    # covers: agent.codex-install/E2
     def test_available(self):
         r = self.check().check()
         self.assertEqual((r['installed'], r['latest'], r['available']), ('0.159.2', '0.160.0', True))
 
+    # covers: agent.codex-install/E2
     def test_up_to_date(self):
         self.latest = (0, 159, 2)
         self.assertFalse(self.check().check()['available'])
 
+    # covers: agent.codex-install/E2
     def test_cached_until_forced_or_stale(self):
         c = self.check()
         c.check(); c.check()
@@ -80,6 +87,7 @@ class UpdateCheckTests(unittest.TestCase):
         c.check()
         self.assertEqual(self.asked, 3)
 
+    # covers: agent.codex-install/E2
     def test_offline_keeps_the_last_answer(self):
         c = self.check()
         c.check()
@@ -87,12 +95,14 @@ class UpdateCheckTests(unittest.TestCase):
         r = c.check(force=True)
         self.assertEqual((r['latest'], r['available'], r['error']), ('0.160.0', True, 'network is unreachable'))
 
+    # covers: agent.codex-install/E2
     def test_not_installed_has_nothing_to_update(self):
         r = self.check(installed=None).check()
         self.assertEqual((r['installed'], r['available']), ('', False))
 
 
 class InstallationTests(unittest.TestCase):
+    # covers: agent.codex-install/E4
     def test_standalone_and_command(self):
         with tempfile.TemporaryDirectory() as home:
             with patch.dict(os.environ, {'CODEX_HOME': home}):
@@ -106,11 +116,13 @@ class InstallationTests(unittest.TestCase):
                 with patch.object(codex_install, 'LAUNCHER', str(Path(home) / 'no-launcher')):
                     self.assertEqual(codex_install.command(), str(binary))
 
+    # covers: agent.codex-install/E1
     def test_install_command_is_codex_updates_own(self):
         script = codex_install.install_command()[-1]
         self.assertIn('curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh', script)
         self.assertIn('/etc/profile.d/proxy.sh', script)
 
+    # covers: agent.codex-install/E4
     def test_launcher_runs_the_standalone(self):
         wrapper = (Path(__file__).resolve().parents[2] / 'agent/codex/codex-wrapper').read_text()
         self.assertIn('packages/standalone/current/bin/codex', wrapper)

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+// covers: agent.phone-mode/E2 agent.phone-mode/E3 agent.phone-mode/E5 agent.phone-mode/E7 agent.phone-mode/E12
 #include "core.h"
 #include <QCoreApplication>
 #include <cstdio>

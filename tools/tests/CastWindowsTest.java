@@ -28,6 +28,7 @@ public final class CastWindowsTest {
         if (conflict(dump, display) != expected) throw new AssertionError(dump);
     }
 
+    // covers: desktop-mode.tv-shows-linux/E1
     public static void main(String[] args) {
         String desktop = window("PlasmaCastDesktop", "com.rungic.plasma", 10220, 7, "APPLICATION_OVERLAY", 111000);
         String splash = window("MotoDesktopSplash: 7", "com.motorola.mobiledesktop", 10352, 7, "2938", 161000);

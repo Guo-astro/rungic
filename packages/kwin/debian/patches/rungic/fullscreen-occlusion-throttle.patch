@@ -34,15 +34,15 @@ X-Rungic-Docs: docs/research/97
 Origin: vendor
 ---
  autotests/integration/CMakeLists.txt               |   1 +
- .../integration/fullscreen_occlusion_test.cpp      | 215 +++++++++++++++++++++
+ .../integration/fullscreen_occlusion_test.cpp      | 216 +++++++++++++++++++++
  src/scene/item.cpp                                 |  30 ++-
  src/scene/item.h                                   |  15 +-
  src/scene/scene.cpp                                |   5 +
  src/scene/windowitem.cpp                           |   7 +
- src/scene/workspacescene.cpp                       | 129 +++++++++++++
+ src/scene/workspacescene.cpp                       | 129 ++++++++++++
  src/scene/workspacescene.h                         |  17 ++
  src/xdgshellwindow.cpp                             |   8 +
- 9 files changed, 423 insertions(+), 4 deletions(-)
+ 9 files changed, 424 insertions(+), 4 deletions(-)
  create mode 100644 autotests/integration/fullscreen_occlusion_test.cpp
 
 diff --git a/autotests/integration/CMakeLists.txt b/autotests/integration/CMakeLists.txt
@@ -59,10 +59,10 @@ index 7f3e594..0282e93 100644
  integrationTest(NAME testPlacement SRCS placement_test.cpp)
 diff --git a/autotests/integration/fullscreen_occlusion_test.cpp b/autotests/integration/fullscreen_occlusion_test.cpp
 new file mode 100644
-index 0000000..1a380de
+index 0000000..a0c602a
 --- /dev/null
 +++ b/autotests/integration/fullscreen_occlusion_test.cpp
-@@ -0,0 +1,215 @@
+@@ -0,0 +1,216 @@
 +/*
 +    KWin - the KDE window manager
 +    This file is part of the KDE project.
@@ -95,6 +95,7 @@ index 0000000..1a380de
 +// A window below one whose opaque content covers the whole output gets frame callbacks only once
 +// a second and its commits make the output composite nothing; partly covered windows and windows
 +// below a translucent one are not affected.
++// covers[system]: desktop-mode.fullscreen/E6
 +class TestFullscreenOcclusion : public QObject
 +{
 +    Q_OBJECT

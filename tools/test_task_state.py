@@ -13,6 +13,7 @@ sys.path.insert(0, str(VOICE_AGENT))
 import task_state as ts  # noqa: E402
 
 
+# covers: agent.progress/E2
 def test_commands_read_as_what_they_do():
     assert ts.describe_command("/bin/bash -lc 'blender -b -t 6 --python /home/u/make_donut.py'") == 'Run Blender in the background (make_donut.py)'
     assert ts.describe_command("/bin/bash -lc 'cd /tmp && python3 render.py --fast'") == 'Run the Python script render.py'
@@ -23,6 +24,7 @@ def test_commands_read_as_what_they_do():
     assert ts.describe_command('whatever-tool --x') == 'Run whatever-tool'
 
 
+# covers: agent.progress/E2
 def test_output_gives_the_last_line_and_progress():
     assert ts.last_line('a\nFra:1 Mem:12M | Sample 12/64\r\x1b[2K') == 'Fra:1 Mem:12M | Sample 12/64'
     assert ts.progress_of('Fra:1 Mem:12M | Sample 16/64') == 0.25
@@ -30,6 +32,7 @@ def test_output_gives_the_last_line_and_progress():
     assert ts.progress_of('2026-09-29 12/10 notes') is None
 
 
+# covers: agent.progress/E1 agent.progress/E2 agent.progress/E4
 def test_a_turn_with_a_plan():
     state = ts.TurnState(now=100)
     assert state.on_plan([{'step': '写建模脚本', 'status': 'inProgress'}, {'step': '渲染', 'status': 'pending'}])
@@ -53,6 +56,7 @@ def test_a_turn_with_a_plan():
     assert state.snapshot(now=141)['recent'][-1] == {'kind': 'command', 'text': 'Run Blender', 'ok': False, 'seconds': 36}
 
 
+# covers: agent.progress/E4
 def test_commentary_is_an_intention():
     state = ts.TurnState(now=0)
     state.on_commentary('我会做一个甜甜圈，完成后附在回复里。', now=5)
@@ -60,6 +64,7 @@ def test_commentary_is_an_intention():
     assert 'intention' not in state.facts(now=100)
 
 
+# covers: agent.progress/E5
 def test_screen_captions_follow_the_desktop_tool():
     state = ts.TurnState(now=0)
     assert not state.on_screen('打开“渲染”菜单')          # no desktop tool running
@@ -68,6 +73,7 @@ def test_screen_captions_follow_the_desktop_tool():
     assert '打开“渲染”菜单' in state.facts(now=3)
 
 
+# covers: agent.progress/E6
 def test_a_live_picture_is_taken_from_this_turn_only():
     state = ts.TurnState(now=100)
     assert not state.on_live({'image': '/run/x-0.jpg', 'text': 'Blender 渲染 · 4/64 采样', 'progress': 0.06, 'time': 99})
@@ -107,6 +113,7 @@ class PoCatalog(gettext.NullTranslations):
         return forms[0] if forms else (singular if n == 1 else plural)   # zh_CN: nplurals=1
 
 
+# covers: agent.progress/E7
 def test_a_chinese_desktop_reads_as_before(monkeypatch):
     zh = PoCatalog(VOICE_AGENT / 'po/zh_CN/rungic-voice-agent.po')
     monkeypatch.setattr(ts, '_', zh.gettext)

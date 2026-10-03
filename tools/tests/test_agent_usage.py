@@ -35,6 +35,7 @@ class UsageBridgeTests(unittest.TestCase):
     def pushed(self, method):
         return [c.args[1:] for c in self.agent.usage_push.call_args_list if c.args[0] == method]
 
+    # covers: agent.usage-widget/E1
     def test_api_key_never_requests_subscription_quota(self):
         self.agent.server.call.return_value = {'account': {'type': 'apiKey'}}
         data = self.agent.usage()
@@ -44,6 +45,7 @@ class UsageBridgeTests(unittest.TestCase):
         self.assertEqual(data['status'], 'ready')
         self.assertLessEqual(set(data), PROVIDER_KEYS)
 
+    # covers: agent.usage-widget/E1
     def test_subscription_returns_real_nullable_fields(self):
         self.agent.server.call.side_effect = [
             {'account': {'type': 'chatgpt', 'planType': 'plus', 'email': 'do-not-publish'}},
@@ -57,6 +59,7 @@ class UsageBridgeTests(unittest.TestCase):
         self.assertNotIn('do-not-publish', json.dumps(data))
         self.assertLessEqual(set(data), PROVIDER_KEYS)
 
+    # covers: agent.usage-widget/E1
     def test_limit_buckets_become_named_limits(self):
         read = {'rateLimitsByLimitId': {'codex': {'limitName': 'Codex', 'primary': {'usedPercent': 3.0, 'windowDurationMins': 300, 'resetsAt': 200},
                                                   'secondary': {'usedPercent': 40, 'windowDurationMins': 10080, 'resetsAt': 900}},
@@ -66,12 +69,14 @@ class UsageBridgeTests(unittest.TestCase):
         self.assertEqual(limits[1]['label'], 'Codex')
         self.assertEqual(limits[1]['windowMinutes'], 10080)
 
+    # covers: agent.usage-widget/E5
     def test_failed_quota_read_is_an_error_without_invented_limits(self):
         self.agent.server.call.side_effect = [{'account': {'type': 'chatgpt'}}, RuntimeError('timeout')]
         data = self.agent.usage()
         self.assertNotIn('limits', data)
         self.assertEqual(data['error'], 'Account usage has not updated yet')
 
+    # covers: agent.usage-widget/E5
     def test_signed_out_and_offline_states(self):
         self.agent.server.call.return_value = {'account': None}
         self.assertEqual(self.agent.usage()['status'], 'signed-out')
@@ -82,11 +87,13 @@ class UsageBridgeTests(unittest.TestCase):
         self.agent.server.call.return_value = {'account': {'type': 'apiKey'}}
         self.assertEqual(self.agent.usage()['status'], 'working')
 
+    # covers: agent.usage-widget/E5
     def test_account_change_during_read_discards_response(self):
         self.agent.server.call.return_value = {'account': {'type': 'apiKey'}}
         self.agent.usage_identity.side_effect = ['opaque-a', 'opaque-b']
         with self.assertRaises(RuntimeError): self.agent.usage()
 
+    # covers: agent.usage-widget/E2
     def test_background_thread_token_is_recorded(self):
         self.agent.on_notification('thread/tokenUsage/updated', {'threadId': 'other', 'turnId': 't',
                                     'tokenUsage': {'total': {'totalTokens': 300}, 'last': {'totalTokens': 100}}})
@@ -101,11 +108,13 @@ class UsageBridgeTests(unittest.TestCase):
         self.agent.on_notification('turn/started', {'threadId': 'other', 'turn': {'id': 't'}})
         self.assertEqual(self.pushed('ProviderChanged'), [('codex',), ('codex',)])
 
+    # covers: agent.usage-widget/E5
     def test_tokens_from_another_account_never_return(self):
         self.agent.server.call.return_value = {'account': {'type': 'apiKey'}}
         self.agent.usage_tokens = {'x': {'accountKey': 'opaque-b'}}
         self.assertEqual(self.agent.usage()['tokenEvents'], [])
 
+    # covers: agent.usage-widget/E2
     def test_late_usage_keeps_account_from_turn_start(self):
         self.agent.usage_accounts[('other', 'old-turn')] = 'opaque-old'
         self.agent.on_notification('thread/tokenUsage/updated', {'threadId': 'other', 'turnId': 'old-turn',
@@ -116,6 +125,7 @@ class UsageBridgeTests(unittest.TestCase):
 
 
 class DescriptorTests(unittest.TestCase):
+    # covers: agent.usage-widget/E3
     def test_codex_descriptor_names_the_agents_usage_method(self):
         d = json.loads((root / 'agent/assistant/agent-usage/codex.json').read_text())
         self.assertEqual((d['schema'], d['id']), (1, 'codex'))
@@ -131,6 +141,7 @@ class DescriptorTests(unittest.TestCase):
         self.assertIn('/usr/share/rungic/agent-usage/providers/codex.json', build)
         self.assertIn('"$V"/agent-usage/icons/*.svg', build)
 
+    # covers: agent.usage-widget/E3
     def test_shipped_icons_are_the_files_their_packages_install(self):
         # Each descriptor's icon must be a file its package installs to /usr/share/rungic/agent-usage/icons.
         for descriptor, icons in (('agent/assistant/agent-usage/codex.json', 'agent/assistant/agent-usage/icons'),
