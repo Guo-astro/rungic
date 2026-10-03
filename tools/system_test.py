@@ -69,13 +69,25 @@ def run(names):
     tag = image(host)
     archive, digest = working_tree()
     src = f'{REMOTE}/src-{digest}'
-    host.ssh(f'test -d {src} || {{ mkdir -p {src}.part && tar -xzf - -C {src}.part && mv {src}.part {src}; }}', 600,
-             data=archive)
-    record = RESULTS / datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
-    record.mkdir(parents=True)
-    print(f'system tests {" ".join(names)} on {tag} (working tree {digest})', flush=True)
-    result = host.ssh(f'{host.DOCKER} run --rm --cap-add SYS_NICE -v {src}:/src:ro {tag} '
-                      f'sh /src/tools/system/run-in-container.sh {" ".join(names)}', 1800, check=False)
+    # One run at a time on the Mac mini: parallel runs built at once and the compiler was killed for
+    # memory, and a run's cleanup removed another's tree. A lock directory (macOS has no flock); one
+    # older than 40 minutes is a run that died.
+    lock = f'{REMOTE}/run.lock'
+    host.ssh(f'mkdir -p {REMOTE}; until mkdir {lock} 2>/dev/null; do '
+             f'[ $(( $(date +%s) - $(stat -f %m {lock} 2>/dev/null || date +%s) )) -gt 2400 ] && rmdir {lock}; sleep 5; done',
+             3600)
+    try:
+        # A temporary directory of its own: two runs of the same tree no longer extract into one.
+        host.ssh(f'test -d {src} || {{ part=$(mktemp -d {src}.XXXXXX) && tar -xzf - -C "$part" '
+                 f'&& {{ mv "$part" {src} 2>/dev/null || rm -rf "$part"; }}; }}', 600, data=archive)
+        record = RESULTS / datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+        record.mkdir(parents=True)
+        print(f'system tests {" ".join(names)} on {tag} (working tree {digest})', flush=True)
+        result = host.ssh(f'{host.DOCKER} run --rm --cap-add SYS_NICE -v {src}:/src:ro {tag} '
+                          f'sh /src/tools/system/run-in-container.sh {" ".join(names)}', 1800, check=False)
+        host.ssh(f'ls -dt {REMOTE}/src-* 2>/dev/null | tail -n +4 | xargs rm -rf', 120, check=False)  # keep the last three trees
+    finally:
+        host.ssh(f'rmdir {lock}', 60, check=False)
     lines = [json.loads(l) for l in result.stdout.decode(errors='replace').splitlines() if l.startswith('{')]
     (record / 'results.json').write_text(json.dumps(lines, indent=1, ensure_ascii=False) + '\n')
     (record / 'stderr.txt').write_text(result.stderr.decode(errors='replace'))
@@ -83,7 +95,6 @@ def run(names):
         mark = 'PASS' if line.get('passed') else 'FAIL'
         print(f'{mark} {line["test"]} ({line.get("seconds", "-")} s)' + (f': {line["error"]}' if line.get('error') else '')
               + (f': {line["log"]}' if line.get('log') else ''))
-    host.ssh(f'ls -dt {REMOTE}/src-* 2>/dev/null | tail -n +4 | xargs rm -rf', 120, check=False)  # keep the last three trees
     passed = lines and all(l.get('passed') for l in lines) and len([l for l in lines if 'build' not in l['test']]) == len(names)
     print(f'{"passed" if passed else "FAILED"}; record {record.relative_to(ROOT)}')
     return 0 if passed else 1
