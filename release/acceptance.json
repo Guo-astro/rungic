@@ -52,6 +52,150 @@
       ]
     },
     {
+      "id": "contract.communication-audio",
+      "level": "smoke",
+      "check": "interface_contract",
+      "params": {
+        "interface": "communication-audio"
+      },
+      "title": "The shared communication audio service listens for the desktop user and refuses a request without a session (or while another session holds it), as the phone mode's client expects; nothing is opened (quality/contracts/communication-audio.json)",
+      "covers": [
+        "iface:communication-audio"
+      ]
+    },
+    {
+      "id": "contract.clipboard",
+      "level": "smoke",
+      "check": "interface_contract",
+      "params": {
+        "interface": "clipboard"
+      },
+      "title": "Android's clipboard daemon answers the clipboard's read-only queries (get, watch) as Shell (uid 2000) with every field rungic-plasma-clipboard relies on; the text is blanked on the phone (quality/contracts/clipboard.json)",
+      "covers": [
+        "iface:clipboard"
+      ]
+    },
+    {
+      "id": "contract.network",
+      "level": "smoke",
+      "check": "interface_contract",
+      "params": {
+        "interface": "network"
+      },
+      "title": "The Rungic app answers the network service's read-only queries (network-get, the saved networks and scan results) with every field it relies on; names, addresses and lists are blanked on the phone (quality/contracts/network.json)",
+      "covers": [
+        "iface:network"
+      ]
+    },
+    {
+      "id": "contract.bluetooth",
+      "level": "smoke",
+      "check": "interface_contract",
+      "params": {
+        "interface": "bluetooth"
+      },
+      "title": "The Rungic app answers the BlueZ service's state query (the adapter, bonded and found devices) with every field it relies on; names and addresses are blanked on the phone (quality/contracts/bluetooth.json)",
+      "covers": [
+        "iface:bluetooth"
+      ]
+    },
+    {
+      "id": "contract.telephony",
+      "level": "smoke",
+      "check": "interface_contract",
+      "params": {
+        "interface": "telephony"
+      },
+      "title": "The Rungic app answers the telephony state, and the call daemon (served as root) the call status, with every field the Linux side relies on; call numbers are blanked on the phone (quality/contracts/telephony.json)",
+      "covers": [
+        "iface:telephony"
+      ]
+    },
+    {
+      "id": "contract.camera",
+      "level": "smoke",
+      "check": "interface_contract",
+      "params": {
+        "interface": "camera"
+      },
+      "title": "The Rungic app's capture-info lists the cameras with what the media bridge needs to start their PipeWire nodes (quality/contracts/camera.json); opening a camera is camera.frames",
+      "covers": [
+        "iface:camera"
+      ]
+    },
+    {
+      "id": "contract.audio",
+      "level": "smoke",
+      "check": "interface_contract",
+      "params": {
+        "interface": "audio"
+      },
+      "title": "The Rungic app's capture-info has what the media bridge needs to decide on the Android microphone (quality/contracts/audio.json); playing and recording are audio.playback and audio.record",
+      "covers": [
+        "iface:audio"
+      ]
+    },
+    {
+      "id": "contract.host-controller",
+      "level": "smoke",
+      "check": "interface_contract",
+      "params": {
+        "interface": "host-controller"
+      },
+      "title": "The root controller's read-only actions (account-status, memory-status) and the published install state are what the Rungic app reads (quality/contracts/host-controller.json)",
+      "covers": [
+        "iface:host-controller"
+      ]
+    },
+    {
+      "id": "contract.shared-storage",
+      "level": "smoke",
+      "check": "interface_contract",
+      "params": {
+        "interface": "shared-storage"
+      },
+      "title": "Android's shared storage is mounted in the container (FUSE) and as the account's writable ~/Shared, and the standard directories lead into it (quality/contracts/shared-storage.json); nothing is written",
+      "covers": [
+        "iface:shared-storage"
+      ]
+    },
+    {
+      "id": "contract.gpu-device",
+      "level": "full",
+      "check": "interface_contract",
+      "params": {
+        "interface": "gpu-device"
+      },
+      "title": "The KGSL and DMA heap device nodes are there for the desktop user (read-write, read-only) and render Adreno pixels offscreen through Mesa (quality/contracts/gpu-device.json)",
+      "covers": [
+        "iface:gpu-device"
+      ]
+    },
+    {
+      "id": "contract.ocr",
+      "level": "full",
+      "check": "interface_contract",
+      "params": {
+        "interface": "ocr"
+      },
+      "title": "The Rungic app recognizes a blank 64x32 image on the GPU and answers with lines and timings as linux_ocr.py expects (quality/contracts/ocr.json); an app without models starts their download, as a first use would",
+      "covers": [
+        "iface:ocr"
+      ]
+    },
+    {
+      "id": "contract.wifi-display",
+      "level": "full",
+      "check": "interface_contract",
+      "params": {
+        "interface": "wifi-display"
+      },
+      "title": "The casting tool answers status and capabilities through the Rungic app with protocol 1 and everything rungic-cast and the cast quick setting read; TV names are blanked on the phone (quality/contracts/wifi-display.json)",
+      "covers": [
+        "iface:wifi-display"
+      ]
+    },
+    {
       "id": "display.geometry",
       "level": "smoke",
       "check": "display_geometry",

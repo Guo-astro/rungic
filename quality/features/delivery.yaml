@@ -868,6 +868,8 @@ features:
       - tools/system/
       - tools/contracts.py
       - quality/contracts/
+      - tools/tests/test_contract_*.py   # interface contracts: consumers against stand-ins, the provider check
+      - tools/tests/contract_*
     docs: [quality/README.md]
 
   - id: delivery.rebrand

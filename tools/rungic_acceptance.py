@@ -101,41 +101,117 @@ def new_crashes(ctx):
 
 # ---------------------------------------------------------------- interface contracts
 
+# Sends the read-only socket queries of a contract from the container, as the desktop user (as the
+# Linux consumers do), and prints one JSON line per query. Private reply fields are blanked there, on
+# the phone, keeping their types: the clipboard's text or a caller's number never reaches this computer.
+CONTRACT_ASK = r"""python3 - <<'ASK'
+import json, os, socket, struct
+def blank(value):
+    if isinstance(value, str):
+        return ''
+    if isinstance(value, list):
+        return [blank(v) for v in value]
+    if isinstance(value, dict):
+        return {k: blank(v) for k, v in value.items()}
+    return value
+for ask in json.loads(%s):
+    out = {'name': ask['name']}
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as c:
+            c.settimeout(ask['timeout'])
+            c.connect(os.environ.get(ask['env'], ask['address']) if ask['env'] else ask['address'])
+            if ask['peer_uid'] is not None:
+                out['peer_uid'] = struct.unpack('3i', c.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))[1]
+            c.sendall(json.dumps(ask['request']).encode() + b'\n' + bytes(ask['payload']))
+            reply = json.loads(c.makefile('rb').readline() or b'null')
+            for key in ask['private'] if isinstance(reply, dict) else ():
+                if key in reply:
+                    reply[key] = blank(reply[key])
+            out['reply'] = reply
+    except (OSError, ValueError) as error:
+        out['error'] = repr(error)
+    print(json.dumps(out))
+ASK"""
+
+
+def _parse_command(q, text):
+    """A command query's reply: its last JSON line, or its key=value lines (format properties)."""
+    if q.get('format', 'json') == 'properties':
+        reply = dict(line.split('=', 1) for line in text.splitlines() if '=' in line and not line.startswith('#'))
+    else:
+        lines = [line for line in text.splitlines() if line.startswith('{')]
+        reply = json.loads(lines[-1]) if lines else None
+    for key in q.get('private', []) if isinstance(reply, dict) else ():
+        if isinstance(reply.get(key), str):
+            reply[key] = ''        # not kept in the report (a command's output does reach this computer)
+    return reply
+
+
+def _command_problems(q):
+    done = run(q['command'], q.get('as', 'root'), q.get('timeout', 30), check=False)
+    fmt = q.get('format', 'json')
+    if fmt == 'exit':
+        if done.returncode != q.get('exit', 0):
+            return [f'exit {done.returncode}, not {q.get("exit", 0)}: {(done.stdout + done.stderr)[-300:]}']
+        return []
+    if fmt == 'text':
+        return [] if re.search(q['expect'], done.stdout) else [f'output does not match {q["expect"]!r}: {done.stdout[-300:]!r}']
+    if done.returncode != 0:
+        return [f'exit {done.returncode}: {(done.stdout + done.stderr)[-300:]}']
+    import contracts
+    try:
+        return contracts.check_reply(q, _parse_command(q, done.stdout))
+    except ValueError as error:
+        return [f'unreadable output: {error}']
+
+
 @check
 def interface_contract(ctx, interface='platform-bridge'):
     """The Android provider of an interface keeps its contract (quality/contracts/, tools/contracts.py):
-    each read-only query of the contract, sent from the container as the Linux consumers send it, gets
-    a reply with every field they rely on, of the right type. The consumers' side is tested offline
-    against a stand-in of the same contract."""
+    each read-only query of the contract, sent from the container as the Linux consumers send it (or
+    its read-only command, run where the contract says), gets a reply with every field they rely on, of
+    the right type, from the server they trust (peer_uid). Queries not marked read_only are never sent:
+    nothing changes on the phone. The consumers' side is tested offline against a stand-in of the same
+    contract."""
     import contracts
     contract = contracts.load(interface)
-    requests = [q['request'] for q in contract['queries']]
-    script = ('''python3 - <<'ASK'
-import json, os, socket
-for request in %s:
-    try:
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as c:
-            c.settimeout(5)
-            c.connect(os.environ.get('RUNGIC_PLATFORM_SOCKET', '/mnt/android-wayland/platform.sock'))
-            c.sendall(json.dumps(request).encode() + b'\\n')
-            print(json.dumps({'request': request, 'reply': json.loads(c.makefile('rb').readline() or b'null')}))
-    except (OSError, ValueError) as error:
-        print(json.dumps({'request': request, 'error': repr(error)}))
-ASK''' % json.dumps(requests))
-    lines = [json.loads(line) for line in user(script).stdout.splitlines() if line.startswith('{')]
+    read = [q for q in contract['queries'] if q.get('read_only') is True]
+    asks = []
+    for q in read:
+        if 'command' not in q:
+            spec = contracts.socket_of(contract, q)[1]
+            asks.append({'name': q['name'], 'request': q['request'], 'address': contracts.address(spec),
+                         'env': spec.get('env'), 'peer_uid': spec.get('peer_uid'), 'timeout': q.get('timeout', 5),
+                         'payload': int(q['request'].get(q['payload'], 0)) if q.get('payload') else 0,
+                         'private': q.get('private', [])})
+    answers = {}
+    if asks:
+        wait = sum(a['timeout'] for a in asks) + 30
+        for line in user(CONTRACT_ASK % repr(json.dumps(asks)), timeout=wait).stdout.splitlines():
+            if line.startswith('{'):
+                answer = json.loads(line)
+                answers[answer['name']] = answer
     problems = {}
-    for q in contract['queries']:
-        answer = next((a for a in lines if a['request'] == q['request']), None)
-        if answer is None or 'error' in answer:
-            problems[q['name']] = [answer.get('error') if answer else 'no answer']
-        elif isinstance(answer['reply'], dict) and 'error' in answer['reply']:
-            problems[q['name']] = [f"error reply: {answer['reply']['error']}"]
+    for q in read:
+        name = q['name']
+        if 'command' in q:
+            found = _command_problems(q)
         else:
-            found = contracts.validate(q['reply'], answer['reply'])
-            if found:
-                problems[q['name']] = found
-    return result(not problems, {'queries': len(contract['queries']), 'broken': len(problems)},
-                  interface=interface, problems=problems)
+            answer, spec = answers.get(name), contracts.socket_of(contract, q)[1]
+            if answer is None or 'error' in answer:
+                found = [answer.get('error') if answer else 'no answer']
+            elif spec.get('peer_uid') is not None and answer.get('peer_uid') != spec['peer_uid']:
+                found = [f"served by uid {answer.get('peer_uid')}, not {spec['peer_uid']}"]
+            elif isinstance(answer['reply'], dict) and 'error' in answer['reply'] \
+                    and not any('error' in r for r in contracts.replies(q)):
+                found = [f"error reply: {answer['reply']['error']}"]
+            else:
+                found = contracts.check_reply(q, answer['reply'])
+        if found:
+            problems[name] = found
+    details = {} if read else {'error': 'the contract has no read-only query'}
+    return result(read and not problems, {'queries': len(read), 'broken': len(problems)},
+                  interface=interface, problems=problems, **details)
 
 
 # ---------------------------------------------------------------- display and input
