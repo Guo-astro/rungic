@@ -1,0 +1,738 @@
+From: clawd20130 <clawd20130@gmail.com>
+Date: Sat, 3 Oct 2026 07:41:29 +0900
+Subject: A prompt in the session bus of its requester: a delegate shows it
+ there
+MIME-Version: 1.0
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+polkit picks one agent per login session, but a session can have more than one desktop: a nested
+or headless compositor with a session bus of its own. Rungic's independent desktop (workspace 0,
+docs/research/97 §19) is a KWin and a bus of its own inside the phone's session; polkit sends its
+apps' requests to the phone session's agent, which drew the dialog on the phone, portrait and in
+the phone's look, while the desktop is landscape (on the phone's fullscreen, a TV or a remote
+viewer).
+
+The agent polkit knows (the router) now reads the requesting process's DBUS_SESSION_BUS_ADDRESS
+(polkit.subject-pid, /proc/<pid>/environ). When it is another socket of this user in its
+XDG_RUNTIME_DIR, the request goes to org.kde.Polkit1AuthAgent.Delegate on that bus (Begin, then
+Finished; Cancel when polkit cancels; the delegate gone ends the request with an error). The
+delegate is this program with --delegate, D-Bus activatable on that bus, not registered with
+polkit: PolicyKitListener shows the dialog as before, with an async result of its own, and
+polkit-agent-helper-1 checks the password with the request's cookie (polkit only checks that the
+helper's caller is the agent's user). Its Prompting property says a request waits there. Requests
+whose bus is the router's own, unreadable or not acceptable, or whose delegate cannot be reached,
+get the router's dialog as before.
+
+Forwarded: no
+Last-Update: 2026-10-03
+X-Rungic-Status: Inappropriate [one login session with several compositors and session buses]
+X-Rungic-Tests: L1:routetest; L3:docs/research/97 §21.7
+X-Rungic-Docs: docs/research/97 §21
+---
+ CMakeLists.txt           |  11 +++
+ autotests/CMakeLists.txt |   4 +
+ autotests/routetest.cpp  |  60 +++++++++++++
+ delegate.cpp             | 225 +++++++++++++++++++++++++++++++++++++++++++++++
+ delegate.h               | 106 ++++++++++++++++++++++
+ main.cpp                 |  10 +++
+ policykitlistener.cpp    |  45 ++++++++++
+ policykitlistener.h      |   8 ++
+ promptroute.cpp          |  54 ++++++++++++
+ promptroute.h            |  27 ++++++
+ 10 files changed, 550 insertions(+)
+ create mode 100644 autotests/CMakeLists.txt
+ create mode 100644 autotests/routetest.cpp
+ create mode 100644 delegate.cpp
+ create mode 100644 delegate.h
+ create mode 100644 promptroute.cpp
+ create mode 100644 promptroute.h
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index a9c78d7..0d2698e 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -53,6 +53,9 @@ add_feature_info("prctl/procctl tracing control"
+ configure_file (config.h.cmake ${CMAKE_CURRENT_BINARY_DIR}/config.h)
+ 
+ find_package(PolkitQt6-1 REQUIRED 0.103.0)
++# delegate.cpp completes a request with an async result of its own (GSimpleAsyncResult).
++find_package(PkgConfig REQUIRED)
++pkg_check_modules(GIO REQUIRED IMPORTED_TARGET gio-2.0 polkit-agent-1)
+ ecm_set_disabled_deprecation_versions(QT 6.8.1
+     KF 6.12.0
+ )
+@@ -64,6 +67,8 @@ qt_add_dbus_adaptor(policykit_SRCS org.kde.Polkit1AuthAgent.xml policykitlistene
+ set(policykit_SRCS
+     ${policykit_SRCS}
+     policykitlistener.cpp
++    delegate.cpp
++    promptroute.cpp
+     main.cpp
+     QuickAuthDialog.cpp
+     QuickAuthDialog.qrc
+@@ -84,8 +89,14 @@ target_link_libraries(polkit-kde-authentication-agent-1
+     Qt::Quick
+     Qt::Widgets
+     PolkitQt6-1::Agent
++    PkgConfig::GIO
+ )
+ 
++if(BUILD_TESTING)
++    find_package(Qt6 ${QT_MIN_VERSION} CONFIG REQUIRED Test)
++    add_subdirectory(autotests)
++endif()
++
+ configure_file(polkit-kde-authentication-agent-1.desktop.cmake ${CMAKE_BINARY_DIR}/polkit-kde-authentication-agent-1.desktop)
+ 
+ install(TARGETS polkit-kde-authentication-agent-1 DESTINATION ${KDE_INSTALL_LIBEXECDIR})
+diff --git a/autotests/CMakeLists.txt b/autotests/CMakeLists.txt
+new file mode 100644
+index 0000000..e8ebd90
+--- /dev/null
++++ b/autotests/CMakeLists.txt
+@@ -0,0 +1,4 @@
++include(ECMAddTests)
++
++# The routing rules of delegate.cpp: which session bus may get a prompt.
++ecm_add_test(routetest.cpp ../promptroute.cpp TEST_NAME routetest LINK_LIBRARIES Qt::Core Qt::Test)
+diff --git a/autotests/routetest.cpp b/autotests/routetest.cpp
+new file mode 100644
+index 0000000..4d364a6
+--- /dev/null
++++ b/autotests/routetest.cpp
+@@ -0,0 +1,60 @@
++/*  This file is part of the KDE project
++    SPDX-FileCopyrightText: 2026 Rungic
++
++    SPDX-License-Identifier: GPL-2.0-or-later
++*/
++
++#include <QTest>
++
++#include "../promptroute.h"
++
++using namespace Qt::StringLiterals;
++
++class RouteTest : public QObject
++{
++    Q_OBJECT
++private Q_SLOTS:
++    void environ()
++    {
++        const QByteArray environ = QByteArrayLiteral("HOME=/home/u\0WAYLAND_DISPLAY=wayland-ws-0\0DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/rungic-workspace-0.bus\0LANG=C\0");
++        QCOMPARE(PromptRoute::sessionBusFromEnviron(environ), u"unix:path=/run/user/1000/rungic-workspace-0.bus"_s);
++        QCOMPARE(PromptRoute::sessionBusFromEnviron(QByteArrayLiteral("HOME=/home/u\0")), QString());
++        // Not a prefix of another name.
++        QCOMPARE(PromptRoute::sessionBusFromEnviron(QByteArrayLiteral("XDBUS_SESSION_BUS_ADDRESS=unix:path=/x\0")), QString());
++    }
++
++    void accepted_data()
++    {
++        QTest::addColumn<QString>("address");
++        QTest::addColumn<QString>("socket");
++        QTest::newRow("another bus of the user") << u"unix:path=/run/user/1000/rungic-workspace-0.bus"_s << u"/run/user/1000/rungic-workspace-0.bus"_s;
++        QTest::newRow("with a guid") << u"unix:path=/run/user/1000/rungic-workspace-0.bus,guid=389de51d8d3731889b5edb296ac01e86"_s
++                                     << u"/run/user/1000/rungic-workspace-0.bus"_s;
++        QTest::newRow("the agent's own bus") << u"unix:path=/run/user/1000/bus"_s << QString();
++        QTest::newRow("its own, another spelling") << u"unix:path=/run/user/1000//bus,guid=1"_s << QString();
++        QTest::newRow("outside the runtime dir") << u"unix:path=/tmp/evil.bus"_s << QString();
++        QTest::newRow("out of it by ..") << u"unix:path=/run/user/1000/../1001/bus"_s << QString();
++        QTest::newRow("another user's runtime dir") << u"unix:path=/run/user/10000/bus"_s << QString();
++        QTest::newRow("abstract socket") << u"unix:abstract=/tmp/dbus-x"_s << QString();
++        QTest::newRow("tcp") << u"tcp:host=localhost,port=1234"_s << QString();
++        QTest::newRow("relative path") << u"unix:path=run/user/1000/x.bus"_s << QString();
++        QTest::newRow("unknown key") << u"unix:path=/run/user/1000/x.bus,foo=bar"_s << QString();
++        QTest::newRow("empty") << QString() << QString();
++        QTest::newRow("the first of two") << u"unix:path=/run/user/1000/x.bus;unix:path=/tmp/y"_s << u"/run/user/1000/x.bus"_s;
++    }
++    void accepted()
++    {
++        QFETCH(QString, address);
++        QFETCH(QString, socket);
++        QCOMPARE(PromptRoute::acceptedSocket(address, u"unix:path=/run/user/1000/bus,guid=3a7b"_s, u"/run/user/1000"_s), socket);
++    }
++
++    void noRuntimeDir()
++    {
++        QCOMPARE(PromptRoute::acceptedSocket(u"unix:path=/run/user/1000/x.bus"_s, u"unix:path=/run/user/1000/bus"_s, QString()), QString());
++    }
++};
++
++QTEST_GUILESS_MAIN(RouteTest)
++
++#include "routetest.moc"
+diff --git a/delegate.cpp b/delegate.cpp
+new file mode 100644
+index 0000000..8f116f2
+--- /dev/null
++++ b/delegate.cpp
+@@ -0,0 +1,225 @@
++/*  This file is part of the KDE project
++    SPDX-FileCopyrightText: 2026 Rungic
++
++    SPDX-License-Identifier: GPL-2.0-or-later
++*/
++
++#include "delegate.h"
++#include "policykitlistener.h"
++
++#include <QDBusMessage>
++#include <QDBusPendingCallWatcher>
++#include <QDBusServiceWatcher>
++#include <QDebug>
++#include <QDir>
++#include <QFile>
++#include <QFileInfo>
++
++#include <gio/gio.h>
++#include <polkit/polkit.h>
++#include <unistd.h>
++
++using namespace Qt::StringLiterals;
++
++PromptRouter::PromptRouter(QObject *parent)
++    : QObject(parent)
++{
++}
++
++bool PromptRouter::active() const
++{
++    return !m_cookie.isEmpty();
++}
++
++bool PromptRouter::forward(const QString &actionId,
++                           const QString &message,
++                           const QString &iconName,
++                           const PolkitQt1::Details &details,
++                           const QString &cookie,
++                           const PolkitQt1::Identity::List &identities,
++                           std::function<void()> fallback,
++                           std::function<void(const QString &)> finished)
++{
++    if (active())
++        return false;
++    const QString pid = details.lookup(u"polkit.subject-pid"_s);
++    if (pid.isEmpty())
++        return false;
++    // Unreadable (another user's process, or one that is not dumpable): the request stays here.
++    QFile environ(u"/proc/%1/environ"_s.arg(pid));
++    if (!environ.open(QIODevice::ReadOnly))
++        return false;
++    const QString socket = PromptRoute::acceptedSocket(PromptRoute::sessionBusFromEnviron(environ.readAll()),
++                                                       qEnvironmentVariable("DBUS_SESSION_BUS_ADDRESS"),
++                                                       qEnvironmentVariable("XDG_RUNTIME_DIR"));
++    if (socket.isEmpty())
++        return false;
++    const QFileInfo info(socket);
++    if (!info.exists() || info.ownerId() != getuid())
++        return false;
++
++    m_connectionName = u"polkit-delegate "_s + socket;
++    QDBusConnection bus = QDBusConnection::connectToBus(u"unix:path="_s + socket, m_connectionName);
++    if (!bus.isConnected()) {
++        QDBusConnection::disconnectFromBus(m_connectionName);
++        m_connectionName.clear();
++        return false;
++    }
++    m_cookie = cookie;
++    m_finished = std::move(finished);
++    bus.connect(QString::fromLatin1(PromptRoute::Service), QString::fromLatin1(PromptRoute::Path), QString::fromLatin1(PromptRoute::Interface),
++                u"Finished"_s, this, SLOT(delegateFinished(QString,QString)));
++
++    QVariantMap detailMap;
++    for (const QString &key : details.keys())
++        detailMap.insert(key, details.lookup(key));
++    QStringList identityNames;
++    for (const PolkitQt1::Identity &identity : identities)
++        identityNames << identity.toString();
++    QDBusMessage call = QDBusMessage::createMethodCall(QString::fromLatin1(PromptRoute::Service), QString::fromLatin1(PromptRoute::Path),
++                                                       QString::fromLatin1(PromptRoute::Interface), u"Begin"_s);
++    call << actionId << message << iconName << detailMap << cookie << identityNames;
++    qDebug() << "Prompt for" << actionId << "goes to the delegate on" << socket;
++    // Long enough for the bus to start the delegate.
++    auto *pending = new QDBusPendingCallWatcher(bus.asyncCall(call, 30000), this);
++    connect(pending, &QDBusPendingCallWatcher::finished, this, [this, cookie, fallback, bus](QDBusPendingCallWatcher *watcher) {
++        watcher->deleteLater();
++        if (m_cookie != cookie)
++            return;  // finished meanwhile
++        if (watcher->isError()) {
++            qWarning() << "The delegate did not take the prompt, showing it here:" << watcher->error().message();
++            reset();
++            fallback();
++            return;
++        }
++        // Shown there: gone before it finished, the request ends.
++        m_watcher = new QDBusServiceWatcher(QString::fromLatin1(PromptRoute::Service), bus, QDBusServiceWatcher::WatchForUnregistration, this);
++        connect(m_watcher, &QDBusServiceWatcher::serviceUnregistered, this, [this] {
++            finish(u"The authentication dialog went away"_s);
++        });
++    });
++    return true;
++}
++
++bool PromptRouter::cancel()
++{
++    if (!active())
++        return false;
++    QDBusMessage call = QDBusMessage::createMethodCall(QString::fromLatin1(PromptRoute::Service), QString::fromLatin1(PromptRoute::Path),
++                                                       QString::fromLatin1(PromptRoute::Interface), u"Cancel"_s);
++    call << m_cookie;
++    QDBusConnection(m_connectionName).asyncCall(call);
++    return true;
++}
++
++void PromptRouter::delegateFinished(const QString &cookie, const QString &error)
++{
++    if (active() && cookie == m_cookie)
++        finish(error);
++}
++
++void PromptRouter::finish(const QString &error)
++{
++    auto finished = std::move(m_finished);
++    reset();
++    if (finished)
++        finished(error);
++}
++
++void PromptRouter::reset()
++{
++    delete m_watcher;
++    m_watcher = nullptr;
++    if (!m_connectionName.isEmpty()) {
++        QDBusConnection(m_connectionName)
++            .disconnect(QString::fromLatin1(PromptRoute::Service), QString::fromLatin1(PromptRoute::Path), QString::fromLatin1(PromptRoute::Interface),
++                        u"Finished"_s, this, SLOT(delegateFinished(QString,QString)));
++        QDBusConnection::disconnectFromBus(m_connectionName);
++    }
++    m_connectionName.clear();
++    m_cookie.clear();
++    m_finished = nullptr;
++}
++
++PromptDelegate::PromptDelegate(PolicyKitListener *listener, QObject *parent)
++    : QObject(parent)
++    , m_listener(listener)
++{
++    if (!QDBusConnection::sessionBus().registerObject(QString::fromLatin1(PromptRoute::Path), this, QDBusConnection::ExportScriptableContents)) {
++        qWarning() << "Could not register the delegate on the session bus";
++    }
++}
++
++PromptDelegate::~PromptDelegate()
++{
++    delete m_finished;
++}
++
++bool PromptDelegate::prompting() const
++{
++    return m_prompting;
++}
++
++void PromptDelegate::setPrompting(bool prompting)
++{
++    if (m_prompting == prompting)
++        return;
++    m_prompting = prompting;
++    Q_EMIT PromptingChanged(prompting);
++}
++
++void PromptDelegate::Begin(const QString &actionId,
++                           const QString &message,
++                           const QString &iconName,
++                           const QVariantMap &details,
++                           const QString &cookie,
++                           const QStringList &identities)
++{
++    if (m_result) {
++        Q_EMIT Finished(cookie, u"Another client is already authenticating, please try again later."_s);
++        return;
++    }
++    PolkitQt1::Details polkitDetails;
++    for (auto it = details.cbegin(); it != details.cend(); ++it)
++        polkitDetails.insert(it.key(), it.value().toString());
++    PolkitQt1::Identity::List polkitIdentities;
++    for (const QString &name : identities) {
++        const PolkitQt1::Identity identity = PolkitQt1::Identity::fromString(name);
++        if (identity.isValid())
++            polkitIdentities << identity;
++    }
++    qDebug() << "Prompt for" << actionId << "from the router";
++    m_cookie = cookie;
++    // The listener completes it as it does polkit's: completed() reports to the router.
++    GSimpleAsyncResult *simple = g_simple_async_result_new(nullptr, &PromptDelegate::completed, this, nullptr);
++    m_result = new PolkitQt1::Agent::AsyncResult(simple);
++    setPrompting(true);
++    m_listener->initiateAuthentication(actionId, message, iconName, polkitDetails, cookie, polkitIdentities, m_result);
++}
++
++void PromptDelegate::Cancel(const QString &cookie)
++{
++    if (m_result && cookie == m_cookie)
++        m_listener->cancelAuthentication();
++}
++
++void PromptDelegate::completed(GObject *, GAsyncResult *result, void *self)
++{
++    auto *delegate = static_cast<PromptDelegate *>(self);
++    QString text;
++    GError *error = nullptr;
++    if (g_simple_async_result_propagate_error(G_SIMPLE_ASYNC_RESULT(result), &error)) {
++        text = QString::fromUtf8(error->message);
++        g_error_free(error);
++    }
++    // Kept until the next request: the listener finishes a cancelled dialog more than once (the
++    // button, the session, the window closing) and completes its result each time; a completed
++    // AsyncResult ignores that, a deleted one crashed the delegate (2026-10-03).
++    delete delegate->m_finished;
++    delegate->m_finished = delegate->m_result;
++    const QString cookie = delegate->m_cookie;
++    delegate->m_result = nullptr;
++    delegate->m_cookie.clear();
++    delegate->setPrompting(false);
++    Q_EMIT delegate->Finished(cookie, text);
++}
+diff --git a/delegate.h b/delegate.h
+new file mode 100644
+index 0000000..91822cb
+--- /dev/null
++++ b/delegate.h
+@@ -0,0 +1,106 @@
++/*  This file is part of the KDE project
++    SPDX-FileCopyrightText: 2026 Rungic
++
++    SPDX-License-Identifier: GPL-2.0-or-later
++*/
++
++// A prompt in the session its requester is in.
++//
++// polkit picks one agent per session, but a session can have more than one desktop: a nested or
++// headless compositor with a session bus of its own (Rungic's independent desktop is one, its own
++// KWin and its own bus inside the phone's session). The agent registered with polkit (the router)
++// looks at the requesting process's session bus. When that is another bus of this user, and a
++// delegate runs there (this program with --delegate, D-Bus activatable on that bus), the prompt is
++// shown by the delegate, on the requester's display, in its look; polkit-agent-helper-1 checks the
++// password with the request's cookie whichever process of the user runs it. Anything else, or a
++// delegate that cannot be reached, gets the router's own dialog as before.
++
++#pragma once
++
++#include <QDBusConnection>
++#include <QObject>
++#include <QStringList>
++#include <QVariantMap>
++#include <functional>
++
++#include <PolkitQt1/Agent/Session>
++#include <PolkitQt1/Details>
++#include <PolkitQt1/Identity>
++
++#include "promptroute.h"
++
++class PolicyKitListener;
++class QDBusServiceWatcher;
++
++
++// In the agent polkit knows: hands a request to the delegate on its requester's bus.
++class PromptRouter : public QObject
++{
++    Q_OBJECT
++public:
++    explicit PromptRouter(QObject *parent = nullptr);
++
++    // Starts the request on the delegate of the requester's bus and returns true, or returns false
++    // when the request stays here. When the delegate cannot take it after all, `fallback` runs (show
++    // the dialog here); otherwise `finished` with polkit's error text (empty when completed).
++    bool forward(const QString &actionId,
++                 const QString &message,
++                 const QString &iconName,
++                 const PolkitQt1::Details &details,
++                 const QString &cookie,
++                 const PolkitQt1::Identity::List &identities,
++                 std::function<void()> fallback,
++                 std::function<void(const QString &)> finished);
++    // The forwarded request is cancelled (polkit asked): the delegate closes its dialog and finishes.
++    bool cancel();
++    bool active() const;
++
++private Q_SLOTS:
++    void delegateFinished(const QString &cookie, const QString &error);
++
++private:
++    void finish(const QString &error);
++    void reset();
++
++    QString m_connectionName;
++    QString m_cookie;
++    std::function<void(const QString &)> m_finished;
++    QDBusServiceWatcher *m_watcher = nullptr;
++};
++
++// --delegate: shows the router's requests on this display (PolicyKitListener's dialog), not
++// registered with polkit itself.
++class PromptDelegate : public QObject
++{
++    Q_OBJECT
++    Q_CLASSINFO("D-Bus Interface", "org.kde.Polkit1AuthAgent.Delegate")
++    // A request is waiting for its user here (a shell can point at it).
++    Q_PROPERTY(bool Prompting READ prompting NOTIFY PromptingChanged SCRIPTABLE true)
++public:
++    explicit PromptDelegate(PolicyKitListener *listener, QObject *parent = nullptr);
++    ~PromptDelegate() override;
++    bool prompting() const;
++
++public Q_SLOTS:
++    Q_SCRIPTABLE void Begin(const QString &actionId,
++                            const QString &message,
++                            const QString &iconName,
++                            const QVariantMap &details,
++                            const QString &cookie,
++                            const QStringList &identities);
++    Q_SCRIPTABLE void Cancel(const QString &cookie);
++
++Q_SIGNALS:
++    Q_SCRIPTABLE void Finished(const QString &cookie, const QString &error);
++    Q_SCRIPTABLE void PromptingChanged(bool prompting);
++
++private:
++    static void completed(struct _GObject *source, struct _GAsyncResult *result, void *self);
++    void setPrompting(bool prompting);
++
++    PolicyKitListener *m_listener;
++    QString m_cookie;
++    PolkitQt1::Agent::AsyncResult *m_result = nullptr;     // the request shown now
++    PolkitQt1::Agent::AsyncResult *m_finished = nullptr;   // the last one, completed
++    bool m_prompting = false;
++};
+diff --git a/main.cpp b/main.cpp
+index 86dc56f..a3a4b6e 100644
+--- a/main.cpp
++++ b/main.cpp
+@@ -5,6 +5,7 @@
+ */
+ 
+ #include "config.h"
++#include "delegate.h"
+ #include "policykitlistener.h"
+ // KF
+ #include <KAboutData>
+@@ -66,6 +67,15 @@ int main(int argc, char *argv[])
+     // register agent
+     PolicyKitListener *listener = new PolicyKitListener(&app);
+ 
++    // --delegate (delegate.h): the prompts of requesters on this session bus, handed over by the
++    // agent polkit knows, which runs on another bus of the same login session.
++    if (app.arguments().contains(QStringLiteral("--delegate"))) {
++        new PromptDelegate(listener, &app);
++        qDebug() << "Delegate online";
++        return app.exec();
++    }
++    listener->setRouter(new PromptRouter(listener));
++
+     PolkitQt1::UnixSessionSubject session(getpid());
+ 
+     const bool result = listener->registerListener(session, "/org/kde/PolicyKit1/AuthenticationAgent");
+diff --git a/policykitlistener.cpp b/policykitlistener.cpp
+index b56a4b2..51f9e6a 100644
+--- a/policykitlistener.cpp
++++ b/policykitlistener.cpp
+@@ -23,6 +23,7 @@
+ 
+ #include "IdentitiesModel.h"
+ #include "QuickAuthDialog.h"
++#include "delegate.h"
+ #include "policykitlistener.h"
+ #include "polkit1authagentadaptor.h"
+ 
+@@ -107,6 +108,45 @@ void PolicyKitListener::initiateAuthentication(const QString &actionId,
+ 
+     m_inProgress = true;
+ 
++    if (m_router
++        && m_router->forward(
++            actionId,
++            message,
++            iconName,
++            details,
++            cookie,
++            identities,
++            [this, actionId, message, details, identities] {
++                showDialog(actionId, message, details, identities);
++            },
++            [this](const QString &error) {
++                delegateFinished(error);
++            })) {
++        return;
++    }
++    showDialog(actionId, message, details, identities);
++}
++
++void PolicyKitListener::setRouter(PromptRouter *router)
++{
++    m_router = router;
++}
++
++void PolicyKitListener::delegateFinished(const QString &error)
++{
++    qDebug() << "The delegate finished" << error;
++    if (!error.isEmpty()) {
++        m_result->setError(error);
++    }
++    m_result->setCompleted();
++    m_inProgress = false;
++}
++
++void PolicyKitListener::showDialog(const QString &actionId,
++                                   const QString &message,
++                                   const PolkitQt1::Details &details,
++                                   const PolkitQt1::Identity::List &identities)
++{
+     const QString parentHandle = m_windowHandles.value(actionId);
+     const QString activationToken = m_activationTokens.value(actionId);
+ 
+@@ -225,6 +265,11 @@ void PolicyKitListener::cancelAuthentication()
+ {
+     qDebug() << "Cancelling authentication";
+ 
++    // Shown by a delegate: it closes its dialog, and the request finishes when it says so.
++    if (m_router && m_router->cancel()) {
++        return;
++    }
++
+     m_wasCancelled = true;
+     finishObtainPrivilege();
+ }
+diff --git a/policykitlistener.h b/policykitlistener.h
+index 339cf52..6485830 100644
+--- a/policykitlistener.h
++++ b/policykitlistener.h
+@@ -13,6 +13,7 @@
+ 
+ #include <PolkitQt1/Agent/Listener>
+ 
++class PromptRouter;
+ class QuickAuthDialog;
+ 
+ using namespace PolkitQt1::Agent;
+@@ -48,6 +49,10 @@ public Q_SLOTS:
+     void setWindowHandleForAction(const QString &action, const QString &handle);
+     void setActivationTokenForAction(const QString &action, const QString &token);
+ 
++public:
++    // Requests whose requester is on another session bus with a delegate are shown there (delegate.h).
++    void setRouter(PromptRouter *router);
++
+ private:
+     QPointer<QuickAuthDialog> m_dialog;
+     QPointer<Session> m_session = nullptr;
+@@ -62,6 +67,7 @@ private:
+ 
+     QHash<QString /*action*/, QString /*window handle*/> m_windowHandles;
+     QHash<QString /*action*/, QString /*activation token*/> m_activationTokens;
++    PromptRouter *m_router = nullptr;
+ 
+ private Q_SLOTS:
+     void dialogAccepted();
+@@ -69,6 +75,8 @@ private Q_SLOTS:
+     void userSelected();
+ 
+ private:
++    void showDialog(const QString &actionId, const QString &message, const PolkitQt1::Details &details, const PolkitQt1::Identity::List &identities);
++    void delegateFinished(const QString &error);
+     void handleParentWindow(const QString &action, const QString &handle);
+     void handleWaylandActivation(const QString &action, const QString &token);
+ };
+diff --git a/promptroute.cpp b/promptroute.cpp
+new file mode 100644
+index 0000000..cd53c3d
+--- /dev/null
++++ b/promptroute.cpp
+@@ -0,0 +1,54 @@
++/*  This file is part of the KDE project
++    SPDX-FileCopyrightText: 2026 Rungic
++
++    SPDX-License-Identifier: GPL-2.0-or-later
++*/
++
++#include "promptroute.h"
++
++#include <QDir>
++#include <QStringList>
++
++using namespace Qt::StringLiterals;
++
++QString PromptRoute::sessionBusFromEnviron(const QByteArray &environ)
++{
++    const QByteArray key = "DBUS_SESSION_BUS_ADDRESS=";
++    for (const QByteArray &entry : environ.split('\0')) {
++        if (entry.startsWith(key))
++            return QString::fromUtf8(entry.mid(key.size()));
++    }
++    return {};
++}
++
++namespace
++{
++// The socket path of a unix:path= address (its first, a guid allowed), or an empty string.
++QString socketOf(const QString &address)
++{
++    const QString first = address.section(u';', 0, 0);
++    if (!first.startsWith("unix:"_L1))
++        return {};
++    QString path;
++    for (const QString &part : first.mid(5).split(u',')) {
++        if (part.startsWith("path="_L1))
++            path = part.mid(5);
++        else if (!part.startsWith("guid="_L1))
++            return {};  // abstract sockets, directories, other keys: not ours to follow
++    }
++    return path;
++}
++}
++
++QString PromptRoute::acceptedSocket(const QString &address, const QString &ownAddress, const QString &runtimeDir)
++{
++    const QString socket = QDir::cleanPath(socketOf(address));
++    if (socket.isEmpty() || runtimeDir.isEmpty() || !QDir::isAbsolutePath(socket))
++        return {};
++    if (!socket.startsWith(QDir::cleanPath(runtimeDir) + u'/'))
++        return {};
++    if (socket == QDir::cleanPath(socketOf(ownAddress)))
++        return {};
++    return socket;
++}
++
+diff --git a/promptroute.h b/promptroute.h
+new file mode 100644
+index 0000000..beb7838
+--- /dev/null
++++ b/promptroute.h
+@@ -0,0 +1,27 @@
++/*  This file is part of the KDE project
++    SPDX-FileCopyrightText: 2026 Rungic
++
++    SPDX-License-Identifier: GPL-2.0-or-later
++*/
++
++// Which session bus a prompt goes to (delegate.h): the rules alone, Qt Core only.
++
++#pragma once
++
++#include <QByteArray>
++#include <QString>
++
++namespace PromptRoute
++{
++// The well-known name, object and interface of a delegate on its session bus.
++inline constexpr char Service[] = "org.kde.polkit-kde-authentication-agent-1";
++inline constexpr char Path[] = "/org/kde/Polkit1AuthAgent/Delegate";
++inline constexpr char Interface[] = "org.kde.Polkit1AuthAgent.Delegate";
++
++// DBUS_SESSION_BUS_ADDRESS from the contents of /proc/<pid>/environ; empty without one.
++QString sessionBusFromEnviron(const QByteArray &environ);
++// The bus at `address` may get a prompt: one Unix socket path (a guid allowed, no other transport) in
++// `runtimeDir` (this user's XDG_RUNTIME_DIR), not `ownAddress`'s socket. Returns that socket's path,
++// or an empty string.
++QString acceptedSocket(const QString &address, const QString &ownAddress, const QString &runtimeDir);
++}

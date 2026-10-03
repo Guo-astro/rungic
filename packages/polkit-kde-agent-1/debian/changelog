@@ -1,0 +1,961 @@
+polkit-kde-agent-1 (4:6.6.4-0ubuntu1+rungic1) resolute; urgency=medium
+
+  * Patch queue (docs/71, docs/research/97 §21): a request whose requester is
+    on another session bus of the user, with a delegate there (this program
+    with --delegate), is shown by that delegate, on the requester's display;
+    Rungic's independent desktop gets its own, landscape, prompts.
+
+ -- range-dev <noreply@localhost>  Sat, 03 Oct 2026 08:00:00 +0000
+
+polkit-kde-agent-1 (4:6.6.4-0ubuntu1) resolute; urgency=medium
+
+  * New upstream bugfix release (6.6.4)
+
+ -- Rik Mills <rikmills@kde.org>  Tue, 07 Apr 2026 13:12:28 +0100
+
+polkit-kde-agent-1 (4:6.6.3-0ubuntu1) resolute; urgency=medium
+
+  * New upstream release (6.6.3)
+
+ -- Rik Mills <rikmills@kde.org>  Wed, 18 Mar 2026 14:46:17 +0000
+
+polkit-kde-agent-1 (4:6.6.2-0ubuntu1) resolute; urgency=medium
+
+  * New upstream release (6.6.2)
+
+ -- Rik Mills <rikmills@kde.org>  Tue, 03 Mar 2026 12:25:28 +0000
+
+polkit-kde-agent-1 (4:6.6.1-0ubuntu1) resolute; urgency=medium
+
+  * New upstream release (6.6.0)
+  * New upstream release (6.6.1)
+
+ -- Rik Mills <rikmills@kde.org>  Sat, 28 Feb 2026 22:17:37 +0000
+
+polkit-kde-agent-1 (4:6.5.5-0ubuntu1) resolute; urgency=medium
+
+  * New upstream release (6.5.5)
+
+ -- Rik Mills <rikmills@kde.org>  Tue, 13 Jan 2026 15:09:18 +0000
+
+polkit-kde-agent-1 (4:6.5.4-0ubuntu1) resolute; urgency=medium
+
+  * New upstream release (6.5.4)
+
+ -- Rik Mills <rikmills@kde.org>  Tue, 09 Dec 2025 11:24:12 +0000
+
+polkit-kde-agent-1 (4:6.5.3-0ubuntu1) resolute; urgency=medium
+
+  * New upstream release (6.5.3)
+
+ -- Rik Mills <rikmills@kde.org>  Tue, 18 Nov 2025 12:10:24 +0000
+
+polkit-kde-agent-1 (4:6.5.2-0ubuntu1) resolute; urgency=medium
+
+  * New upstream release (6.5.2)
+
+ -- Rik Mills <rikmills@kde.org>  Tue, 04 Nov 2025 17:14:53 +0000
+
+polkit-kde-agent-1 (4:6.5.1-0ubuntu1) resolute; urgency=medium
+
+  * New upstream release (6.5.1)
+
+ -- Rik Mills <rikmills@kde.org>  Wed, 29 Oct 2025 05:49:18 +0000
+
+polkit-kde-agent-1 (4:6.5.0-0ubuntu1) resolute; urgency=medium
+
+  * New upstream release (6.5.0)
+
+ -- Rik Mills <rikmills@kde.org>  Mon, 20 Oct 2025 18:40:06 +0100
+
+polkit-kde-agent-1 (4:6.4.5-0ubuntu1) questing; urgency=medium
+
+  * New upstream release (6.4.5)
+
+ -- Rik Mills <rikmills@kde.org>  Tue, 09 Sep 2025 17:04:35 +0100
+
+polkit-kde-agent-1 (4:6.4.4-0ubuntu1) questing; urgency=medium
+
+  * New upstream release (6.4.4)
+  * Build depend on libkf6notifications-dev
+
+ -- Rik Mills <rikmills@kde.org>  Tue, 12 Aug 2025 17:31:57 +0100
+
+polkit-kde-agent-1 (4:6.3.5-0ubuntu1) questing; urgency=medium
+
+  * New upstream release (6.3.5)
+
+ -- Rik Mills <rikmills@kde.org>  Tue, 06 May 2025 21:36:56 +0100
+
+polkit-kde-agent-1 (4:6.3.4-0ubuntu1) plucky; urgency=medium
+
+  * New upstream release (6.3.4)
+
+ -- Rik Mills <rikmills@kde.org>  Wed, 02 Apr 2025 08:59:21 +0100
+
+polkit-kde-agent-1 (4:6.3.3-0ubuntu1) plucky; urgency=medium
+
+  * New upstream release (6.3.3)
+
+ -- Rik Mills <rikmills@kde.org>  Tue, 11 Mar 2025 15:25:54 +0000
+
+polkit-kde-agent-1 (4:6.3.2-1ubuntu1) plucky; urgency=medium
+
+  * Merge from Debian unstable. Remaining changes:
+    - Kubuntu Vcs and maintainer fields.
+
+ -- Rik Mills <rikmills@kde.org>  Mon, 10 Mar 2025 13:07:16 +0000
+
+polkit-kde-agent-1 (4:6.3.2-1) unstable; urgency=medium
+
+  [ Aurélien COUDERC ]
+  * New upstream release (6.3.1).
+  * New upstream release (6.3.2).
+
+ -- Aurélien COUDERC <coucouf@debian.org>  Fri, 28 Feb 2025 00:52:37 +0100
+
+polkit-kde-agent-1 (4:6.3.0-1) unstable; urgency=medium
+
+  [ Aurélien COUDERC ]
+  * New upstream release (6.3.0).
+  * Release to unstable.
+
+ -- Aurélien COUDERC <coucouf@debian.org>  Mon, 10 Feb 2025 14:59:24 +0100
+
+polkit-kde-agent-1 (4:6.2.91-1) experimental; urgency=medium
+
+  [ Aurélien COUDERC ]
+  * New upstream release (6.2.91).
+
+ -- Aurélien COUDERC <coucouf@debian.org>  Thu, 23 Jan 2025 23:52:23 +0100
+
+polkit-kde-agent-1 (4:6.2.90-1) experimental; urgency=medium
+
+  [ Aurélien COUDERC ]
+  * New upstream release (6.2.90).
+  * Update build-deps and deps with the info from cmake.
+
+ -- Aurélien COUDERC <coucouf@debian.org>  Sat, 11 Jan 2025 23:38:28 +0100
+
+polkit-kde-agent-1 (4:6.2.5-1) unstable; urgency=medium
+
+  [ Aurélien COUDERC ]
+  * New upstream release (6.2.5).
+  * Update build-deps and deps with the info from cmake.
+
+ -- Aurélien COUDERC <coucouf@debian.org>  Sun, 05 Jan 2025 10:58:49 +0100
+
+polkit-kde-agent-1 (4:6.2.4-1) unstable; urgency=medium
+
+  [ Aurélien COUDERC ]
+  * New upstream release (6.2.4).
+
+ -- Aurélien COUDERC <coucouf@debian.org>  Tue, 03 Dec 2024 16:33:44 +0100
+
+polkit-kde-agent-1 (4:6.2.3-1) unstable; urgency=medium
+
+  [ Aurélien COUDERC ]
+  * New upstream release (6.2.3).
+  * Release to unstable.
+
+ -- Aurélien COUDERC <coucouf@debian.org>  Sat, 23 Nov 2024 21:57:29 +0100
+
+polkit-kde-agent-1 (4:6.2.1-1) experimental; urgency=medium
+
+  [ Aurélien COUDERC ]
+  * New upstream release (6.2.1).
+
+ -- Aurélien COUDERC <coucouf@debian.org>  Tue, 15 Oct 2024 18:01:49 +0200
+
+polkit-kde-agent-1 (4:6.2.0-1) experimental; urgency=medium
+
+  [ Aurélien COUDERC ]
+  * New upstream release (6.1.90).
+  * Update build-deps and deps with the info from cmake.
+  * New upstream release (6.2.0).
+
+ -- Aurélien COUDERC <coucouf@debian.org>  Sat, 05 Oct 2024 23:17:45 +0200
+
+polkit-kde-agent-1 (4:6.1.5-1) experimental; urgency=medium
+
+  [ Aurélien COUDERC ]
+  * New upstream release (6.1.5).
+
+ -- Aurélien COUDERC <coucouf@debian.org>  Wed, 11 Sep 2024 23:27:54 +0200
+
+polkit-kde-agent-1 (4:6.1.4-1) experimental; urgency=medium
+
+  [ Aurélien COUDERC ]
+  * New upstream release (6.1.4).
+
+ -- Aurélien COUDERC <coucouf@debian.org>  Sun, 11 Aug 2024 23:58:21 +0200
+
+polkit-kde-agent-1 (4:6.1.3-1) experimental; urgency=medium
+
+  [ Aurélien COUDERC ]
+  * New upstream release (6.1.3).
+  * Update build-deps and deps with the info from cmake.
+
+ -- Aurélien COUDERC <coucouf@debian.org>  Sun, 21 Jul 2024 23:46:17 +0200
+
+polkit-kde-agent-1 (4:6.1.0-1) experimental; urgency=medium
+
+  [ Patrick Franz ]
+  * New upstream release (6.1.0).
+  * Update build-deps and deps with the info from cmake.
+
+ -- Patrick Franz <deltaone@debian.org>  Fri, 21 Jun 2024 00:22:32 +0200
+
+polkit-kde-agent-1 (4:5.27.11-1) unstable; urgency=medium
+
+  [ Patrick Franz ]
+  * Bump Standards-Version to 4.7.0 (No changes needed).
+  * New upstream release (5.27.11).
+  * Remove inactive uploaders, thanks for your work.
+
+ -- Patrick Franz <deltaone@debian.org>  Sun, 19 May 2024 12:20:30 +0200
+
+polkit-kde-agent-1 (4:5.27.10-1) unstable; urgency=medium
+
+  [ Patrick Franz ]
+  * New upstream release (5.27.10).
+
+ -- Patrick Franz <deltaone@debian.org>  Thu, 11 Jan 2024 23:20:02 +0100
+
+polkit-kde-agent-1 (4:5.27.9-1) unstable; urgency=medium
+
+  [ Patrick Franz ]
+  * New upstream release (5.27.9).
+
+ -- Patrick Franz <deltaone@debian.org>  Fri, 27 Oct 2023 21:53:29 +0200
+
+polkit-kde-agent-1 (4:5.27.8-1) unstable; urgency=medium
+
+  [ Patrick Franz ]
+  * New upstream release (5.27.8).
+
+ -- Patrick Franz <deltaone@debian.org>  Wed, 13 Sep 2023 20:47:15 +0200
+
+polkit-kde-agent-1 (4:5.27.7-1) unstable; urgency=medium
+
+  [ Patrick Franz ]
+  * New upstream release (5.27.7).
+
+ -- Patrick Franz <deltaone@debian.org>  Thu, 03 Aug 2023 18:54:04 +0200
+
+polkit-kde-agent-1 (4:5.27.5-2) unstable; urgency=medium
+
+  * Release to unstable.
+
+ -- Aurélien COUDERC <coucouf@debian.org>  Sat, 27 May 2023 18:23:44 +0200
+
+polkit-kde-agent-1 (4:5.27.5-1) experimental; urgency=medium
+
+  [ Patrick Franz ]
+  * New upstream release (5.27.5).
+
+ -- Patrick Franz <deltaone@debian.org>  Tue, 09 May 2023 23:25:15 +0200
+
+polkit-kde-agent-1 (4:5.27.3-1) experimental; urgency=medium
+
+  [ Patrick Franz ]
+  * New upstream release (5.27.3).
+
+ -- Patrick Franz <deltaone@debian.org>  Wed, 22 Mar 2023 23:12:01 +0100
+
+polkit-kde-agent-1 (4:5.27.2-1) unstable; urgency=medium
+
+  [ Aurélien COUDERC ]
+  * New upstream release (5.27.1).
+  * New upstream release (5.27.2).
+
+ -- Aurélien COUDERC <coucouf@debian.org>  Tue, 28 Feb 2023 15:00:23 +0100
+
+polkit-kde-agent-1 (4:5.27.0-1) unstable; urgency=medium
+
+  [ Aurélien COUDERC ]
+  * New upstream release (5.27.0).
+  * Update build-deps and deps with the info from cmake.
+
+ -- Aurélien COUDERC <coucouf@debian.org>  Sat, 18 Feb 2023 17:08:42 +0100
+
+polkit-kde-agent-1 (4:5.26.90-1) unstable; urgency=medium
+
+  [ Aurélien COUDERC ]
+  * New upstream release (5.26.90).
+  * Bump Standards-Version to 4.6.2, no change required.
+
+ -- Aurélien COUDERC <coucouf@debian.org>  Mon, 23 Jan 2023 21:50:56 +0100
+
+polkit-kde-agent-1 (4:5.26.5-1) unstable; urgency=medium
+
+  [ Aurélien COUDERC ]
+  * New upstream release (5.26.5).
+
+ -- Aurélien COUDERC <coucouf@debian.org>  Sat, 07 Jan 2023 00:21:33 +0100
+
+polkit-kde-agent-1 (4:5.26.4-1) unstable; urgency=medium
+
+  [ Aurélien COUDERC ]
+  * New upstream release (5.26.4).
+
+ -- Aurélien COUDERC <coucouf@debian.org>  Tue, 29 Nov 2022 16:04:25 +0100
+
+polkit-kde-agent-1 (4:5.26.3-1) unstable; urgency=medium
+
+  [ Aurélien COUDERC ]
+  * New upstream release (5.26.3).
+
+ -- Aurélien COUDERC <coucouf@debian.org>  Tue, 08 Nov 2022 15:45:00 +0100
+
+polkit-kde-agent-1 (4:5.26.2-1) unstable; urgency=medium
+
+  [ Aurélien COUDERC ]
+  * New upstream release (5.26.1).
+  * New upstream release (5.26.2).
+
+ -- Aurélien COUDERC <coucouf@debian.org>  Thu, 27 Oct 2022 23:33:24 +0200
+
+polkit-kde-agent-1 (4:5.26.0-1) unstable; urgency=medium
+
+  [ Aurélien COUDERC ]
+  * New upstream release (5.26.0).
+  * Release to unstable.
+
+ -- Aurélien COUDERC <coucouf@debian.org>  Tue, 11 Oct 2022 15:44:19 +0200
+
+polkit-kde-agent-1 (4:5.25.90-1) experimental; urgency=medium
+
+  [ Aurélien COUDERC ]
+  * New upstream release (5.25.90).
+  * Update build-deps and deps with the info from cmake.
+
+ -- Aurélien COUDERC <coucouf@debian.org>  Sun, 25 Sep 2022 00:14:23 +0200
+
+polkit-kde-agent-1 (4:5.25.5-1) unstable; urgency=medium
+
+  [ Aurélien COUDERC ]
+  * New upstream release (5.25.5).
+
+ -- Aurélien COUDERC <coucouf@debian.org>  Fri, 09 Sep 2022 23:21:35 +0200
+
+polkit-kde-agent-1 (4:5.25.4-1) unstable; urgency=medium
+
+  [ Aurélien COUDERC ]
+  * New upstream release (5.25.4).
+
+ -- Aurélien COUDERC <coucouf@debian.org>  Tue, 02 Aug 2022 17:33:02 +0200
+
+polkit-kde-agent-1 (4:5.25.3-1) unstable; urgency=medium
+
+  [ Aurélien COUDERC ]
+  * New upstream release (5.25.2).
+  * New upstream release (5.25.3).
+  * Release to unstable
+
+ -- Aurélien COUDERC <coucouf@debian.org>  Sun, 17 Jul 2022 15:28:22 +0200
+
+polkit-kde-agent-1 (4:5.25.1-1) experimental; urgency=medium
+
+  [ Patrick Franz ]
+  * New upstream release (5.25.1).
+
+ -- Patrick Franz <deltaone@debian.org>  Tue, 21 Jun 2022 21:45:06 +0200
+
+polkit-kde-agent-1 (4:5.25.0-1) experimental; urgency=medium
+
+  * New upstream release (5.25.0).
+  * Bump Standards-Version to 4.6.1, no change required.
+
+ -- Aurélien COUDERC <coucouf@debian.org>  Tue, 14 Jun 2022 21:26:37 +0200
+
+polkit-kde-agent-1 (4:5.24.90-1) experimental; urgency=medium
+
+  [ Aurélien COUDERC ]
+  * New upstream release (5.24.90).
+
+ -- Aurélien COUDERC <coucouf@debian.org>  Fri, 20 May 2022 11:45:16 +0200
+
+polkit-kde-agent-1 (4:5.24.5-1) unstable; urgency=medium
+
+  [ Aurélien COUDERC ]
+  * New upstream release (5.24.5).
+
+ -- Aurélien COUDERC <coucouf@debian.org>  Thu, 12 May 2022 21:39:56 +0200
+
+polkit-kde-agent-1 (4:5.24.4-2) unstable; urgency=medium
+
+  * Team upload.
+  * Switch from the transitional policykit-1 to only polkitd, as pkexec is not
+    needed.
+  * Modernize building:
+    - add the dh-sequence-kf5 build dependency to use the kf5 addon
+      automatically, removing pkg-kde-tools
+    - drop all the manually specified addons and buildsystem for dh
+
+ -- Pino Toscano <pino@debian.org>  Sun, 24 Apr 2022 09:38:50 +0200
+
+polkit-kde-agent-1 (4:5.24.4-1) unstable; urgency=medium
+
+  [ Aurélien COUDERC ]
+  * New upstream release (5.24.4).
+
+ -- Aurélien COUDERC <coucouf@debian.org>  Wed, 30 Mar 2022 13:47:43 +0200
+
+polkit-kde-agent-1 (4:5.24.3-1) unstable; urgency=medium
+
+  [ Aurélien COUDERC ]
+  * New upstream release (5.24.3).
+  * Added myself to the uploaders.
+
+ -- Aurélien COUDERC <coucouf@debian.org>  Thu, 10 Mar 2022 07:49:10 +0100
+
+polkit-kde-agent-1 (4:5.24.2-1) unstable; urgency=medium
+
+  [ Patrick Franz ]
+  * New upstream release (5.24.2).
+  * Bump Standards-Version to 4.6.0 (no changes needed).
+  * Re-export signing key without extra signatures.
+
+ -- Patrick Franz <deltaone@debian.org>  Sat, 26 Feb 2022 21:59:58 +0100
+
+polkit-kde-agent-1 (4:5.23.5-1) unstable; urgency=medium
+
+  [ Patrick Franz ]
+  * New upstream release (5.23.5).
+
+ -- Patrick Franz <deltaone@debian.org>  Fri, 07 Jan 2022 15:45:09 +0100
+
+polkit-kde-agent-1 (4:5.23.4-1) unstable; urgency=medium
+
+  [ Norbert Preining ]
+  * New upstream release (5.23.4).
+
+ -- Patrick Franz <deltaone@debian.org>  Thu, 02 Dec 2021 20:25:58 +0100
+
+polkit-kde-agent-1 (4:5.23.3-1) unstable; urgency=medium
+
+  [ Norbert Preining ]
+  * New upstream release (5.23.3).
+
+ -- Norbert Preining <norbert@preining.info>  Wed, 10 Nov 2021 08:43:16 +0900
+
+polkit-kde-agent-1 (4:5.23.2-1) unstable; urgency=medium
+
+  [ Patrick Franz ]
+  * Update upstream signing-key.
+
+  [ Norbert Preining ]
+  * New upstream release (5.23.1).
+  * New upstream release (5.23.2).
+
+ -- Norbert Preining <norbert@preining.info>  Wed, 03 Nov 2021 22:21:04 +0900
+
+polkit-kde-agent-1 (4:5.23.0-1) unstable; urgency=medium
+
+  [ Norbert Preining ]
+  * New upstream release (5.23.0).
+
+ -- Norbert Preining <norbert@preining.info>  Thu, 14 Oct 2021 20:13:16 +0900
+
+polkit-kde-agent-1 (4:5.21.5-2) unstable; urgency=medium
+
+  [ Patrick Franz ]
+  * Release to unstable.
+
+ -- Patrick Franz <deltaone@debian.org>  Tue, 17 Aug 2021 03:25:22 +0200
+
+polkit-kde-agent-1 (4:5.21.5-1) experimental; urgency=medium
+
+  [ Patrick Franz ]
+  * New upstream release (5.21.5).
+
+ -- Patrick Franz <patfra71@gmail.com>  Fri, 07 May 2021 13:55:50 +0200
+
+polkit-kde-agent-1 (4:5.21.4-1) experimental; urgency=medium
+
+  [ Patrick Franz ]
+  * New upstream release (5.21.4).
+
+ -- Patrick Franz <patfra71@gmail.com>  Tue, 06 Apr 2021 17:48:21 +0200
+
+polkit-kde-agent-1 (4:5.21.3-1) experimental; urgency=medium
+
+  [ Norbert Preining ]
+  * New upstream release (5.21.3).
+
+ -- Norbert Preining <norbert@preining.info>  Wed, 17 Mar 2021 05:49:43 +0900
+
+polkit-kde-agent-1 (4:5.21.2-1) experimental; urgency=medium
+
+  [ Patrick Franz ]
+  * New upstream release (5.21.2).
+
+ -- Norbert Preining <norbert@preining.info>  Wed, 03 Mar 2021 05:33:51 +0900
+
+polkit-kde-agent-1 (4:5.21.1-1) experimental; urgency=medium
+
+  [ Norbert Preining ]
+  * New upstream release (5.21.1).
+
+ -- Norbert Preining <norbert@preining.info>  Wed, 24 Feb 2021 14:36:41 +0900
+
+polkit-kde-agent-1 (4:5.21.0-1) experimental; urgency=medium
+
+  [ Norbert Preining ]
+  * New upstream release (5.21.0).
+  * Update build-deps and deps with the info from cmake.
+
+ -- Norbert Preining <norbert@preining.info>  Wed, 17 Feb 2021 05:42:28 +0900
+
+polkit-kde-agent-1 (4:5.20.5-1) unstable; urgency=medium
+
+  * New upstream release (5.20.5).
+
+ -- Norbert Preining <norbert@preining.info>  Wed, 06 Jan 2021 23:50:54 +0900
+
+polkit-kde-agent-1 (4:5.20.4-2) unstable; urgency=medium
+
+  * Release to unstable.
+
+ -- Norbert Preining <norbert@preining.info>  Tue, 22 Dec 2020 11:04:38 +0900
+
+polkit-kde-agent-1 (4:5.20.4-1) experimental; urgency=medium
+
+  [ Patrick Franz ]
+  * New upstream release (5.20.4).
+  * Update build-deps with the info from cmake.
+
+ -- Norbert Preining <norbert@preining.info>  Wed, 09 Dec 2020 14:17:34 +0900
+
+polkit-kde-agent-1 (4:5.19.5-3) unstable; urgency=medium
+
+  [ Scarlett Moore ]
+  * Remove obsolete fields in d/upstream/metadata already defined
+    d/copyright.
+
+ -- Norbert Preining <norbert@preining.info>  Fri, 06 Nov 2020 08:37:24 +0900
+
+polkit-kde-agent-1 (4:5.19.5-2) experimental; urgency=medium
+
+  * Rebuild for Qt 5.15
+
+ -- Norbert Preining <norbert@preining.info>  Mon, 02 Nov 2020 09:27:43 +0900
+
+polkit-kde-agent-1 (4:5.19.5-1) experimental; urgency=medium
+
+  * New upstream release (5.19.5).
+  * Add Patrick and myself to uploaders.
+
+ -- Norbert Preining <norbert@preining.info>  Mon, 19 Oct 2020 18:54:07 +0900
+
+polkit-kde-agent-1 (4:5.19.4-1) experimental; urgency=medium
+
+  * Team upload.
+
+  [ Scarlett Moore ]
+  * Bump compat level to 13.
+  * Add Rules-Requires-Root field to control.
+  * New upstream release (5.18.5).
+  * Update build-deps and deps with the info from cmake.
+    - Bump dev build deps versions.
+    - wrap-and-sort.
+  * Delete not needed Breaks/Confilcts.
+  * Add myself to Uploaders.
+  * Remove not needed injection of linker flags.
+  * Update Homepage link to point to new invent.kde.org
+  * Update field Source in debian/copyright to invent.kde.org move.
+  * Set/Update field Upstream-Contact in debian/copyright.
+
+  [ Patrick Franz ]
+  * Add hardening=+all build flag.
+  * Update data in /debian/upstream/metadata.
+  * New upstream release (5.19.4).
+  * Update build-deps and deps with the info from cmake.
+  * Change Maintainer in debian/control to Debian Qt/KDE Maintainers.
+  * Remove Maxy from Uploaders as requested.
+
+  [ Pino Toscano ]
+  * Update the build dependencies according to the upstream build system:
+    - set the KF packages to 5.66.0
+
+ -- Pino Toscano <pino@debian.org>  Sun, 30 Aug 2020 07:57:55 +0200
+
+polkit-kde-agent-1 (4:5.17.5-2) unstable; urgency=medium
+
+  * Team upload.
+  * Upload to unstable.
+  * Bump Standards-Version to 4.5.0, no changes required.
+
+ -- Pino Toscano <pino@debian.org>  Fri, 14 Feb 2020 21:14:35 +0100
+
+polkit-kde-agent-1 (4:5.17.5-1) experimental; urgency=medium
+
+  * Team upload.
+
+  [ Maximiliano Curia ]
+  * New upstream release (5.16.5).
+  * Update build-deps and deps with the info from cmake
+  * Salsa CI automatic initialization by Tuco
+  * Drop the transitional package polkit-kde-1 (Closes: 940757)
+
+  [ Pino Toscano ]
+  * New upstream release.
+  * Bump the debhelper compatibility to 12:
+    - switch the debhelper build dependency to debhelper-compat 12
+    - remove debian/compat
+  * Update the build dependencies according to the upstream build system:
+    - bump KF packages to 5.62.0
+    - remove unused libkf5config-dev, and libkf5notifications-dev
+    - explicitly add gettext
+  * Bump Standards-Version to 4.4.1, no changes required.
+
+ -- Pino Toscano <pino@debian.org>  Sat, 18 Jan 2020 10:18:42 +0100
+
+polkit-kde-agent-1 (4:5.14.5-1) unstable; urgency=medium
+
+  * New upstream release (5.14.5).
+  * Release to unstable
+
+ -- Maximiliano Curia <maxy@debian.org>  Thu, 24 Jan 2019 09:26:14 -0300
+
+polkit-kde-agent-1 (4:5.14.3-1) unstable; urgency=medium
+
+  * Update upsteam signing-key
+  * New upstream release (5.14.3).
+  * Update build-deps and deps with the info from cmake
+  * Bump group breaks (4:5.14)
+  * Release to unstable
+
+ -- Maximiliano Curia <maxy@debian.org>  Fri, 23 Nov 2018 08:51:11 -0300
+
+polkit-kde-agent-1 (4:5.13.4-1) unstable; urgency=medium
+
+  * New upstream release (5.13.4).
+  * Release to unstable
+
+ -- Maximiliano Curia <maxy@debian.org>  Sun, 19 Aug 2018 23:18:24 +0200
+
+polkit-kde-agent-1 (4:5.13.1-1) unstable; urgency=medium
+
+  * New upstream release (5.13.1).
+  * Update build-deps and deps with the info from cmake
+  * Bump group breaks (4:5.13)
+  * Release to unstable
+
+ -- Maximiliano Curia <maxy@debian.org>  Tue, 26 Jun 2018 13:43:27 +0200
+
+polkit-kde-agent-1 (4:5.12.5-1) unstable; urgency=medium
+
+  * New upstream release (5.12.2).
+  * New upstream release (5.12.5).
+  * Bump Standards-Version to 4.1.4.
+  * Use https for the debian/copyright
+  * Release to unstable
+
+ -- Maximiliano Curia <maxy@debian.org>  Wed, 09 May 2018 13:24:13 +0200
+
+polkit-kde-agent-1 (4:5.12.1-1) sid; urgency=medium
+
+  * Use the salsa canonical urls
+  * New upstream release (5.12.1).
+  * Release to sid
+
+ -- Maximiliano Curia <maxy@debian.org>  Tue, 20 Feb 2018 22:09:09 +0100
+
+polkit-kde-agent-1 (4:5.12.0-2) sid; urgency=medium
+
+  * New revision
+  * Release to sid
+
+ -- Maximiliano Curia <maxy@debian.org>  Mon, 12 Feb 2018 16:03:57 +0100
+
+polkit-kde-agent-1 (4:5.12.0-1) experimental; urgency=medium
+
+  * Bump debhelper build-dep and compat to 11.
+  * Build without build_stamp
+  * Add link options as-needed
+  * Add Bhushan Shah upstream signing key
+  * New upstream release (5.12.0).
+  * Bump Standards-Version to 4.1.3.
+  * Bump group breaks (5.12)
+  * Use https uri for uscan
+  * Release to experimental
+
+ -- Maximiliano Curia <maxy@debian.org>  Thu, 08 Feb 2018 15:21:13 +0100
+
+polkit-kde-agent-1 (4:5.11.4-1) experimental; urgency=medium
+
+  * New revision
+  * Update uploaders list as requested by MIA team (Closes: #879421)
+  * New upstream release (5.11.4).
+  * Bump Standards-Version to 4.1.2.
+  * Update build-deps and deps with the info from cmake
+  * Release to experimental
+
+ -- Maximiliano Curia <maxy@debian.org>  Wed, 03 Jan 2018 16:49:23 -0300
+
+polkit-kde-agent-1 (4:5.10.5-2) sid; urgency=medium
+
+  * New revision
+  * Bump Standards-Version to 4.1.0.
+  * Release to sid
+
+ -- Maximiliano Curia <maxy@debian.org>  Sun, 03 Sep 2017 09:55:47 +0200
+
+polkit-kde-agent-1 (4:5.10.5-1) experimental; urgency=medium
+
+  * New upstream release (5.10.3).
+  * Bump Standards-Version to 4.0.0.
+  * Update upstream metadata
+  * Bump group breaks (5.10)
+  * Sync debian/watch with neon
+  * New upstream release (5.10.4).
+  * Update build-deps and deps with the info from cmake
+  * Set Priority to optional
+  * New upstream release (5.10.5).
+  * Release to experimental
+
+ -- Maximiliano Curia <maxy@debian.org>  Mon, 28 Aug 2017 15:28:56 +0200
+
+polkit-kde-agent-1 (4:5.8.5-1) experimental; urgency=medium
+
+  * New upstream release (5.8.5).
+
+ -- Maximiliano Curia <maxy@debian.org>  Fri, 30 Dec 2016 18:46:23 +0100
+
+polkit-kde-agent-1 (4:5.8.4-1) unstable; urgency=medium
+
+  * Add provides polkit-1-auth-agent.
+    Thanks to Jeremy Bicha for reporting (Closes: 842266)
+  * New upstream release (5.8.4)
+
+ -- Maximiliano Curia <maxy@debian.org>  Wed, 23 Nov 2016 18:38:53 +0100
+
+polkit-kde-agent-1 (4:5.8.2-1) unstable; urgency=medium
+
+  * New upstream release (5.8.2)
+
+ -- Maximiliano Curia <maxy@debian.org>  Wed, 19 Oct 2016 15:24:44 +0200
+
+polkit-kde-agent-1 (4:5.8.1-1) unstable; urgency=medium
+
+  * New upstream release (5.8.1)
+
+ -- Maximiliano Curia <maxy@debian.org>  Sun, 16 Oct 2016 22:59:54 +0200
+
+polkit-kde-agent-1 (4:5.8.0-1) unstable; urgency=medium
+
+  * New upstream release (5.8.0)
+  * Bump group breaks (5.8)
+
+ -- Maximiliano Curia <maxy@debian.org>  Fri, 07 Oct 2016 14:07:13 +0200
+
+polkit-kde-agent-1 (4:5.7.4-1) unstable; urgency=medium
+
+  * New upstream release (5.7.4)
+  * Bump group breaks (5.7)
+
+ -- Maximiliano Curia <maxy@debian.org>  Fri, 26 Aug 2016 15:06:09 +0200
+
+polkit-kde-agent-1 (4:5.7.0-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Maximiliano Curia <maxy@debian.org>  Fri, 08 Jul 2016 13:26:25 +0200
+
+polkit-kde-agent-1 (4:5.6.5-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Maximiliano Curia <maxy@debian.org>  Sun, 19 Jun 2016 20:11:47 +0200
+
+polkit-kde-agent-1 (4:5.6.4-1) unstable; urgency=medium
+
+  * Release to unstable.
+
+ -- Maximiliano Curia <maxy@debian.org>  Sun, 22 May 2016 08:59:05 +0200
+
+polkit-kde-agent-1 (4:5.6.3-1) experimental; urgency=medium
+
+  [ Maximiliano Curia ]
+  * New upstream release (5.5.5).
+  * debian/control: Update Vcs-Browser and Vcs-Git fields
+
+  [ Automatic packaging ]
+  * Bump Standards-Version to 3.9.8
+
+ -- Maximiliano Curia <maxy@debian.org>  Tue, 10 May 2016 16:16:53 +0200
+
+polkit-kde-agent-1 (4:5.5.4-1) experimental; urgency=medium
+
+  * New upstream release (5.5.0).
+  * New upstream release (5.5.1).
+  * New upstream release (5.5.2).
+  * New upstream release (5.5.3).
+  * New upstream release (5.5.4).
+
+ -- Maximiliano Curia <maxy@debian.org>  Wed, 27 Jan 2016 16:49:02 +0100
+
+polkit-kde-agent-1 (4:5.4.3-1) unstable; urgency=medium
+
+  * New upstream release (5.4.3).
+
+ -- Maximiliano Curia <maxy@debian.org>  Tue, 01 Dec 2015 11:45:53 +0100
+
+polkit-kde-agent-1 (4:5.4.2-1) unstable; urgency=medium
+
+  * New upstream release (5.4.2).
+
+ -- Maximiliano Curia <maxy@debian.org>  Tue, 06 Oct 2015 07:52:11 +0200
+
+polkit-kde-agent-1 (4:5.4.1-1) unstable; urgency=medium
+
+  * New upstream release (5.4.1).
+
+ -- Maximiliano Curia <maxy@debian.org>  Fri, 11 Sep 2015 18:45:19 +0200
+
+polkit-kde-agent-1 (4:5.4.0-1) unstable; urgency=medium
+
+  * New upstream release (5.4.0).
+
+ -- Maximiliano Curia <maxy@debian.org>  Thu, 03 Sep 2015 18:53:35 +0200
+
+polkit-kde-agent-1 (4:5.3.2-1) unstable; urgency=medium
+
+  * New upstream release (5.3.2).
+
+ -- Maximiliano Curia <maxy@debian.org>  Tue, 30 Jun 2015 23:34:21 +0200
+
+polkit-kde-agent-1 (4:5.3.1-0ubuntu1) wily; urgency=medium
+
+  [ Jonathan Riddell ]
+  * Plasma 5.3 beta
+  * new upstream release
+
+  [ Scarlett Clark ]
+  * Vivid backport
+
+  [ Jonathan Riddell ]
+  * New upstream release
+
+ -- Jonathan Riddell <jriddell@ubuntu.com>  Fri, 05 Jun 2015 02:53:13 +0200
+
+polkit-kde-agent-1 (4:5.3.1-1) unstable; urgency=medium
+
+  * New upstream release (5.3.0).
+  * New upstream release (5.3.1).
+
+ -- Maximiliano Curia <maxy@debian.org>  Tue, 30 Jun 2015 11:25:45 +0200
+
+polkit-kde-agent-1 (4:5.2.2-1) experimental; urgency=medium
+
+  * New upstream release (5.2.1).
+  * New upstream release (5.2.2).
+
+ -- Maximiliano Curia <maxy@debian.org>  Wed, 25 Mar 2015 23:17:42 +0100
+
+polkit-kde-agent-1 (4:5.2.2-0ubuntu1) vivid; urgency=medium
+
+  * New upstream release
+
+ -- Scarlett Clark <sgclark@kubuntu.org>  Tue, 24 Mar 2015 07:44:58 -0700
+
+polkit-kde-agent-1 (4:5.2.1-0ubuntu1) vivid; urgency=medium
+
+  * New upstream release
+
+ -- Scarlett Clark <sgclark@kubuntu.org>  Mon, 23 Feb 2015 09:49:49 -0800
+
+polkit-kde-agent-1 (4:5.2.0-1) experimental; urgency=medium
+
+  * Prepare initial Debian release.
+  * Add myself as Uploader.
+  * Update build dependencies to build against experimental and to
+    follow cmake.
+  * Update copyright information.
+  * Update install files.
+
+ -- Maximiliano Curia <maxy@debian.org>  Thu, 12 Feb 2015 23:54:37 +0100
+
+polkit-kde-agent-1 (4:5.2.0-0ubuntu1) vivid; urgency=medium
+
+  * New upstream release
+
+ -- Harald Sitter <sitter@kde.org>  Tue, 27 Jan 2015 15:01:19 +0100
+
+polkit-kde-agent-1 (4:5.1.95-0ubuntu1) vivid; urgency=medium
+
+  [ Sergey Popov ]
+  * New upstream release.
+
+  [ Harald Sitter ]
+  * Rename source to polkit-kde-agent-1 to align with upstream
+  * Rename binary to align with source/upstream
+    + Add transitional package.
+  * Update maintainer to include Kubuntu
+  * Change section to kde as this is a kde helper, not technically a lib
+  * Bump dh compat to 9
+
+ -- Jonathan Riddell <jriddell@ubuntu.com>  Wed, 14 Jan 2015 13:25:50 +0100
+
+polkit-kde-1 (0.99.1-1) unstable; urgency=low
+
+  * Team upload.
+
+  [ Felix Geyer ]
+  * New upstream release.
+    - Drop fix_dialog_focus.diff, applied upstream.
+    - Remove non-functional checkbox "Remember password". (Closes: #691104)
+  * Remove obsolete /etc/xdg/autostart/polkit-kde-authentication-agent-1.desktop
+    on upgrade. (Closes: #645440)
+  * Bump Standards-Version to 3.9.4, no changes needed.
+
+  [ Pino Toscano ]
+  * The rebuild changes the kdebase-runtime dependency to kde-runtime.
+    (Closes: #716849)
+  * Update Vcs-* headers
+
+ -- Felix Geyer <fgeyer@debian.org>  Mon, 12 Aug 2013 11:58:57 +0200
+
+polkit-kde-1 (0.99.0-3) unstable; urgency=low
+
+  [ Scott Kitterman ]
+  * Add debian/patches/fix_dialog_focus.diff from Kubuntu
+    - Prevents the auth dialog from popping up in the background where it can't
+      be seen
+
+ -- Debian Qt/KDE Maintainers <debian-qt-kde@lists.debian.org>  Thu, 23 Jun 2011 11:38:30 +0300
+
+polkit-kde-1 (0.99.0-2) unstable; urgency=low
+
+  [ Modestas Vainius ]
+  * Bump Standards-Version to 3.9.2: no changes needed.
+
+ -- Debian Qt/KDE Maintainers <debian-qt-kde@lists.debian.org>  Thu, 26 May 2011 00:28:45 +0300
+
+polkit-kde-1 (0.99.0-1) experimental; urgency=low
+
+  * New upstream release.
+
+  [ Modestas Vainius ]
+  * Add Vcs fields to debian/control.
+  * Switch to dhmk based debian-qt-kde.mk.
+
+  [ José Manuel Santamaría Lema ]
+  * Bump Standards-Version to 3.9.1, no changes needed.
+  * Bump libpolkit-qt-1-dev build depend to 0.99.0.
+
+ -- Debian Qt/KDE Maintainers <debian-qt-kde@lists.debian.org>  Wed, 23 Mar 2011 01:30:52 +0200
+
+polkit-kde-1 (0.95.1-2) unstable; urgency=low
+
+  * Update debian/control: add policykit-1 dependency.
+
+ -- Fathi Boudra <fabo@debian.org>  Mon, 22 Mar 2010 09:08:17 +0100
+
+polkit-kde-1 (0.95.1-1) unstable; urgency=low
+
+  * Initial release. (Closes: #571531)
+
+ -- Fathi Boudra <fabo@debian.org>  Thu, 25 Feb 2010 20:43:18 +0100

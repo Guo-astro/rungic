@@ -1,0 +1,16 @@
+{
+ "comment": "Pinned upstream of the polkit-kde-agent-1 source package (docs/71, docs/research/97 §21): Ubuntu's 4:6.6.4-0ubuntu1; packages/polkit-kde-agent-1/debian replaces its debian/ (Ubuntu's packaging plus our patches under debian/patches/rungic).",
+ "kind": "ubuntu",
+ "source": "polkit-kde-agent-1",
+ "version": "4:6.6.4-0ubuntu1",
+ "series": "resolute",
+ "git_ubuntu_tag": "import/4%6.6.4-0ubuntu1",
+ "upstream": "https://invent.kde.org/plasma/polkit-kde-agent-1",
+ "licenses": "GPL-2.0-or-later (see LICENSES)",
+ "files": {
+  "polkit-kde-agent-1_6.6.4-0ubuntu1.dsc": "0839c6e573e989a73747f393aaca46e6e8e6bc1f5126d26ee2baa4af9c362ccd",
+  "polkit-kde-agent-1_6.6.4.orig.tar.xz": "5a3944e19658cbff9d8fc4b15252ca1947c6acad9c41722d4bc05f9ce8d6f226",
+  "polkit-kde-agent-1_6.6.4-0ubuntu1.debian.tar.xz": "a9345f175556a81e899ff27ad20d54539112c8f6e93cd4b169775f81a0edd2d7"
+ },
+ "fetch": "https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/polkit-kde-agent-1/4:6.6.4-0ubuntu1/{file}"
+}
