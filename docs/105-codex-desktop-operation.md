@@ -6,13 +6,13 @@
 
 | 功能 | 当前行为 | 本轮验收 |
 |---|---|---|
-| 默认桌面操作 | 当前 Codex 登录与所选模型逐步看图和执行动作，计划、进展和结果在来源对话显示 | 开发 G100 常驻 Agent 启动 Kalk、点击 137 × 29、再次截图确认 3,973 通过 |
+| 默认桌面操作 | 当前 Codex 登录与所选模型逐步看图和执行动作，计划、进展和结果在来源对话显示 | 最新 G100 覆盖由常驻 Agent 点击 147 × 31、再次截图确认 4,557；无头 KWin 的 MCP 点击链路通过 |
 | API 备选 | 显式 Luna API 执行器，保留旧 API 及 AT-SPI/OCR 选择 | Luna 只读识别同一计算器结果、恢复 Codex 通过；未验证 API 模式的完整多步任务 |
-| Agent App 设置 | 桌面操作方式、Codex 登录、OpenAI API key 分开；任务或通话进行中拒绝切换 | 新页面四状态离线渲染、服务接口切换和忙时拒绝通过；未验完整页面触控流程 |
-| 语音消息 | Codex 决定录音和发送动作，本地辅助程序管理路由和一次播放，TTS 使用 API key | ARM64 假音频进程的生命周期测试通过；未向真实联系人发语音 |
-| 电话界面 | 默认 Codex 执行拨号/挂断和画面判断，通话音频与调度保留 API | 实现已部署，辅助线程模型/租约离线测试通过；未拨真实电话 |
+| Agent App 设置 | 桌面操作方式、Codex 登录、OpenAI API key 分开；任务或通话进行中拒绝切换 | QML 点击和错误保留通过；G100 任务、SIM 通话、空闲电话模式均拒绝切换；未验完整页面触控流程 |
+| 语音消息 | Codex 决定录音和发送动作，本地辅助程序管理路由和一次播放，TTS 使用 API key | ARM64 三项原生生命周期及真实 PulseAudio 录音、路由恢复通过；G100 无已登录微信，实际发送待验 |
+| 电话界面 | 默认 Codex 执行应用内拨号/挂断和画面判断；SIM 由 Android Telecom 处理，通话音频与调度保留 API | 10000 实际接通、挂断与模式保护通过；不代表微信界面的 Codex 拨号/挂断或双向音质验收 |
 
-本轮为开发覆盖 `20260930.19+dev20261003t061714`，不是正式发布或所有机型的验收。G100 S 日常机未更新。下文保存实现、部署和逐次失败/修正证据。
+最新开发覆盖为 `20260930.19+dev20261003t085900`，不是正式发布或所有机型的验收。G100 S 日常机未更新。下文保存实现、部署和逐次失败/修正证据。
 
 ## 执行与认证是两个选择
 
@@ -88,3 +88,40 @@ API 备选的首次实机只读验收发现本轮重构遗漏：模型工具常�
 - `baseline.log`、`baseline-import-order.log`：在干净 `331bbdea` 工作树逐项对照，全部 15 个失败复现。其中缺少 dpkg-parsechangelog / apt-get、Debian 依赖检查、libx264；另有 director 替身请求、linux-vdso 符号化、输入探针，以及完整模块导入顺序下 ThreadPoolExecutor 为 lazy_import 的六个失败。本轮未扩大范围修复这些上游或宿主环境问题。
 
 本轮只同步、整合和离线检查。没有重新部署手机、拨打电话或发送语音，没有更换账户和 API key。新的电话模式切换保护仍需后续开发部署验收；此前 G100 的计算器和 API 只读验收仍为上一节记录的版本。
+
+## PR 前补充验证（2026-10-03）
+
+用户要求补齐上一节明确未完成的验证并提交 PR。生产代码基于 `333b931e` / main `331bbdea`；本次新增测试归属与 `covers` 仍按 quality 清单维护。证据目录 `.work/verify/20261003-codex-desktop-pr/`。
+
+### 无头 Linux 与原生音频
+
+Mac mini 现场为 Darwin ARM64，Surge HTTP/HTTPS 6152、SOCKS 6153；运行中的构建容器为 `rungic-arm64-host:5dce1a9f1dbc`。系统测试在独立 Ubuntu ARM64 容器 `rungic-system:e14d334e6523` 运行，不使用手机。
+
+- `cua_desktop`：默认 Codex 的 `desktop_screenshot` → `desktop_act` 实际经 KWin 向 GTK 应用点击，使用窗口图片坐标，返回下一张图片；未截图时拒绝动作，Codex 模式拒绝独立 API goal。既有启动、不重复实例、双击、拖动、滚动、键盘、弹出菜单、窗口管理回归通过。GPU-less KWin 的截图像素使用明确的替身，输入和窗口没有替换；真实截图仍由下述 G100 验证。
+- `voice_recording`：现场构建真实 Qt C++ helper，三项原生生命周期检查全部运行、零跳过。另运行真实 PulseAudio、生产 `rungic-audio-route`、pacat 及录音进程，录到完整一秒正弦音（非硬件麦克风），关闭 helper stdin 后实际录音流回到原 source。三项负面/一次播放测试使用假音频进程；这项集成使用私有 PulseAudio 的 null sink，不是微信或人工听感验收。
+- `assistant_app`：当前树的 Qt 应用在双输出 KWin 与 D-Bus 接口替身中构建通过，Home 浮层和单实例回归通过；其旧系统用例不检查新设置页，新设置页的真实点击另由 QML 单元检查覆盖。
+- `phone_session_units`：电话会话的 C++ 核心及状态测试现场构建、执行通过。
+
+四项系统测试原始 JSON：`.work/system-tests/20261003-165741/results.json`。补充真实 PulseAudio 后的最终录音记录：`.work/system-tests/20261003-170837/results.json`，3.7 秒通过；强化 Codex 点击误差约一像素的断言后，桌面测试最终记录 `.work/system-tests/20261003-171323/results.json`，7.9 秒通过。单元回归 `test_desktop_mode`、`test_cua_tools`、`test_voice_message`、`test_assistant_app` 为 **47 passed、5 subtests passed**（`unit.log`）。上一节完整 runner 的 15 个已复现 main 失败和退出崩溃仍保留，没有用这轮局部通过覆盖它们。
+
+### G100 开发覆盖与实际桌面
+
+目标明确固定为 G100 `ZY32M9MRVP`（portov_cn）；G100 S 日常机未操作。现场核对其容器 ARM64、192.168.5.69、手机代理 `192.168.5.45:6152`，SSH socket 仍 enabled。仅以 `rungic_dev.py deploy rungic-voice-agent rungic-cua --host macmini` 更新两个相关包；构建产物从 Mac mini 直传手机。未做正式发布、APK 更新或 rootfs 快照提交。
+
+覆盖版本 `20260930.19+dev20261003t085900`：voice-agent `0.510+dev20261003t085900.333b931`，cua `0.358+dev20261003t085900.333b931`。重启 voice-agent、voice-overlay 和助理应用，保留主桌面与独立工作区。部署记录 `.work/dev-deploy/20261003-165900-deploy/`：result=ok，apt Installed=Candidate，changed_files=0、release_mismatch=0；已有 missing_files=308、unowned_usr=5、unowned_etc=11，与部署前一致，完整性摘要仍是 drift，不称整机无漂移。已安装服务脚本与 MCP server SHA-256 和当前源码一致。
+
+常驻 Codex 使用 gpt-6-luna，在专用验收对话中实际启动 Kalk、看截图、点按 **147 × 31**，独立截图显示 **4,557**，计划/进展/结果回到来源对话。`resident-codex.log` 与人工核对的 `kalk-workspace.png` 保存证据。验收时拒绝 SetDesktopMode(luna)，没有改写 Codex 模式。
+
+### 10000 通话及空闲电话模式保护
+
+用户明确指定 **10000**（DM `47652ce7`）。只使用 SIM 通道做短暂通话，不按业务菜单、不转人工、不查询或办理业务。Android Telecom 接受请求后，实际 call state 依次为 dialing → ringing → connected；接通约 2.6 秒后发送 hang-up，随后收到 call-ended（hung up），额外核对 phoneState=0、calls=[]。接受拨号请求本身没有被计为接通。
+
+通话中 SetDesktopMode(luna) 返回拒绝错误，结束后 mode 仍 codex、callPhase 为空。日志 `call-test.log`。这是 SIM 控制和恢复验收，**不是应用内 Codex 拨号界面或双向音频/音质验收**。系统此前记录的“保持安静仍可能自动开场”限制仍可观察到：本次有自动开场转写，不能宣称全程静默；没有操作任何业务菜单。
+
+另外实际启动一个临时电话模式会话后设为静音，等待 connected；在没有运行任务的状态调用 SetDesktopMode(luna) 被拒绝。一秒后原 sessionId、connected 和 muted=true 都保持，最后停止该测试会话。`idle-phone.log`；它验证了本次修复的空闲电话模式不会因修改执行方式被 BackendReset 打断，不代表人工对话验收。
+
+### 尚未完成与恢复
+
+G100 当前 `/opt`、应用包与 Flatpak 中没有微信，也没有已登录微信窗口。**真实微信文件传输助手的录音按钮选择、播放后发送、消息时长/音质，以及应用内电话的 Codex 拨号/挂断未验**；没有给真实联系人发送消息，没有将原生假进程或 PulseAudio 正弦音测试算作发消息成功。用户随后明确“微信就暂时不验收了”（DM `bfe17756`），本轮将这些实机项暂缓，并在待审 PR 保留该边界。
+
+开发覆盖可经 `rungic_dev.py reset rungic-voice-agent rungic-cua` 回到基线发布对应包；这会重启相关服务，本次未执行。其他既有覆盖、SSH 和 rootfs 快照未动。测试结束无运行任务或通话，桌面方式保持 Codex。验收对话已按接口尝试回到先前助理对话；Kalk 保留在 Agent 工作区，未操作用户主桌面窗口。
