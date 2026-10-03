@@ -173,3 +173,86 @@ class DeviceBuildTests(PackageRepo):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class IncrementalBuildTree(unittest.TestCase):
+    """A package's tree is kept between builds on the build host (rungic_package.sync_script): only
+    what changed rebuilds; trees not built for 30 days go (build_on_device.expire_script)."""
+
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.base = Path(temp.name)
+
+    def unpack(self, files):
+        incoming = self.base / 'incoming'
+        shutil.rmtree(incoming, ignore_errors=True)
+        for name, text in files.items():
+            (incoming / name).parent.mkdir(parents=True, exist_ok=True)
+            (incoming / name).write_text(text)
+
+    def sync(self, files, clean=False):
+        self.unpack(files)
+        subprocess.run(['sh', '-c', rungic_package.sync_script(str(self.base), clean)], check=True)
+
+    # covers: delivery.packaging
+    def test_unchanged_sources_keep_their_time_and_the_build_tree_stays(self):
+        src = self.base / 'src'
+        self.sync({'app/main.cpp': 'one', 'app/util.cpp': 'two', 'app/old.qml': 'gone soon'})
+        (src / 'app/build').mkdir()
+        (src / 'app/build/main.o').write_text('object')              # what build.sh made
+        old = 1_000_000_000
+        for name in ('app/main.cpp', 'app/util.cpp'):
+            os.utime(src / name, (old, old))
+        self.sync({'app/main.cpp': 'one', 'app/util.cpp': 'two, changed', 'app/new.qml': 'new'})
+        self.assertEqual((src / 'app/main.cpp').stat().st_mtime, old, 'same content: its time stays, no rebuild')
+        self.assertEqual((src / 'app/util.cpp').read_text(), 'two, changed')
+        self.assertGreater((src / 'app/util.cpp').stat().st_mtime, old, 'changed: newer than its objects')
+        self.assertFalse((src / 'app/old.qml').exists(), 'a source no longer in the tree goes')
+        self.assertTrue((src / 'app/new.qml').exists())
+        self.assertEqual((src / 'app/build/main.o').read_text(), 'object', 'the build tree stays')
+        self.assertFalse((self.base / 'incoming').exists())
+        self.assertTrue((self.base / '.rungic-last-build').exists(), 'marked as built now')
+
+    # covers: delivery.packaging
+    def test_clean_starts_from_the_new_tree_alone(self):
+        self.sync({'a.c': 'x'})
+        (self.base / 'src/build').mkdir()
+        self.sync({'a.c': 'x'}, clean=True)
+        self.assertEqual(sorted(p.name for p in (self.base / 'src').iterdir()), ['a.c'])
+
+    # covers: delivery.packaging
+    def test_a_tree_from_before_the_manifest_is_replaced(self):
+        (self.base / 'src').mkdir()
+        (self.base / 'src/stale.c').write_text('from an older tool')
+        self.sync({'a.c': 'x'})
+        self.assertEqual(sorted(p.name for p in (self.base / 'src').iterdir()), ['a.c'])
+
+    # covers: delivery.packaging
+    def test_trees_not_built_for_thirty_days_expire(self):
+        import build_on_device
+        old, recent, unmarked, absent = (self.base / n for n in ('old', 'recent', 'unmarked', 'absent'))
+        for d in (old, recent, unmarked):
+            d.mkdir()
+        (old / build_on_device.MARKER).touch()
+        (recent / build_on_device.MARKER).touch()
+        long_ago = 1_000_000_000
+        os.utime(old / build_on_device.MARKER, (long_ago, long_ago))
+        os.utime(unmarked, (long_ago, long_ago))           # from before the markers: its own time
+        (recent / 'big.o').write_text('x')
+        out = subprocess.run(['sh', '-c', build_on_device.expire_script([str(old), str(recent), str(unmarked), str(absent)])],
+                             capture_output=True, text=True, check=True).stdout
+        self.assertFalse(old.exists())
+        self.assertFalse(unmarked.exists())
+        self.assertTrue((recent / 'big.o').exists(), 'built within 30 days: kept')
+        self.assertIn(f'build cache expired: {old}', out)
+
+    # covers: delivery.packaging
+    def test_only_build_trees_may_expire(self):
+        import build_on_device
+        dirs = build_on_device.cache_dirs()
+        self.assertIn(f'{build_on_device.BASE}/kwin', dirs)
+        self.assertIn(f'{build_on_device.PACKAGE_BASE}/rungic-agent-screen', dirs)
+        self.assertNotIn(f'{build_on_device.BASE}/cmake-shims', dirs)
+        self.assertNotIn(f'{build_on_device.BASE}/dev-pool', dirs)
+        self.assertEqual(build_on_device.CACHE_DAYS, 30)

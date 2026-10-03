@@ -52,7 +52,7 @@ import rungic_release
 
 PACKAGING = WORKSPACE / 'packaging'
 BUILDS = rungic_release.APT / 'project-builds.json'
-DEVICE_BASE = '/root/rungic-packages'
+DEVICE_BASE = build_on_device.PACKAGE_BASE
 MAINTAINER = 'range-dev <noreply@localhost>'
 
 
@@ -351,8 +351,30 @@ def stage_sources(pkg, worktree=False):
     return archive
 
 
-def build_device(pkg, tree, jobs=4, dev=None):
-    """dev: as for build_host."""
+def sync_script(base, clean=False):
+    """Shell that puts the tree unpacked in {base}/incoming into {base}/src for an incremental build.
+    The build trees build.sh makes inside src (cmake's build/, FFmpeg's objects next to its sources)
+    stay: a file whose content is the same keeps its time, so make and ninja rebuild only what
+    changed; a changed file gets the time of now. A source file no longer in the tree goes (the last
+    tree's list is src.manifest); what the build made is never in that list. A first build, a tree
+    from before this (no manifest) or clean: src is the new tree as it is."""
+    return f'''set -e
+cd {base}
+(cd incoming && find . ! -type d | LC_ALL=C sort) > incoming.manifest
+if {'true' if clean else 'false'} || [ ! -d src ] || [ ! -f src.manifest ]; then
+  rm -rf src && mv incoming src
+else
+  LC_ALL=C comm -23 src.manifest incoming.manifest | (cd src && tr '\\n' '\\0' | xargs -0 -r rm -f --)
+  rsync -rlpD --checksum incoming/ src/
+  rm -rf incoming
+fi
+mv incoming.manifest src.manifest
+touch {build_on_device.MARKER}
+'''
+
+
+def build_device(pkg, tree, jobs=4, dev=None, clean=False):
+    """dev: as for build_host. clean: build from nothing, not on the kept tree (sync_script)."""
     host = build_on_device.host
     run = lambda script, level='container', timeout=120, check=True: host.run(script, timeout, check)
     name = pkg['name']
@@ -371,8 +393,10 @@ def build_device(pkg, tree, jobs=4, dev=None):
             run(('apt-get update -qq; ' if host.name != 'phone' else '') +
                 'DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends '
                 + ' '.join(pkg['build_depends']), 'container', timeout=3600)
-    run(f'rm -rf {base}/src {base}/root', 'container', timeout=600)
-    host.put_tar(stage_sources(pkg, worktree=bool(dev)), f'{base}/src')
+    build_on_device.expire()
+    run(f'rm -rf {base}/incoming {base}/root', 'container', timeout=600)
+    host.put_tar(stage_sources(pkg, worktree=bool(dev)), f'{base}/incoming')
+    run(sync_script(base, clean), 'container', timeout=600)
     work = WORKSPACE / f'.work/cache/{name}-device'
     shutil.rmtree(work, ignore_errors=True)
     (work / 'DEBIAN').mkdir(parents=True)
@@ -498,7 +522,7 @@ dpkg-deb --root-owner-group -Zxz --build dbgsym {dbg_name} >/dev/null''', 'conta
     return target
 
 
-def build(names, force=False, jobs=4):
+def build(names, force=False, jobs=4, clean=False):
     defs = definitions()
     rungic_release.POOL.mkdir(parents=True, exist_ok=True)
     done = []
@@ -509,7 +533,7 @@ def build(names, force=False, jobs=4):
             done.append({'package': name, 'version': builds()[name]['version'], 'built': False})
             continue
         print(f'building {name} ({pkg["build"]})', flush=True)
-        deb = build_host(pkg, tree) if pkg['build'] == 'host' else build_device(pkg, tree, jobs)
+        deb = build_host(pkg, tree) if pkg['build'] == 'host' else build_device(pkg, tree, jobs, clean=clean)
         done.append({'package': name, 'version': builds()[name]['version'], 'built': True, 'file': deb.name})
     rungic_release.index()
     return done
@@ -534,6 +558,7 @@ def main():
     sub.add_parser('list')
     p = sub.add_parser('build'); p.add_argument('names', nargs='*'); p.add_argument('--all', action='store_true')
     p.add_argument('--force', action='store_true'); p.add_argument('--jobs', type=int)
+    p.add_argument('--clean', action='store_true', help='build from nothing, not incrementally on the kept tree')
     p.add_argument('--host', choices=sorted(build_on_device.HOSTS), default=os.environ.get('RUNGIC_BUILD_HOST', 'macmini'),
                    help='where device packages build (default $RUNGIC_BUILD_HOST, else macmini)')
     a = parser.parse_args()
@@ -544,7 +569,7 @@ def main():
         if not names:
             parser.error('name packages or pass --all')
         build_on_device.use(a.host)
-        result = build(names, a.force, a.jobs or build_on_device.host.jobs)
+        result = build(names, a.force, a.jobs or build_on_device.host.jobs, a.clean)
     print(json.dumps(result, indent=1, ensure_ascii=False))
 
 
