@@ -40,7 +40,7 @@ class Bridge(contracts.StandIn):
 
     def answer(self, request):
         if request.get('op') == 'tv' and request.get('button'):
-            return self.contract_reply('tv')
+            return contracts.query(self.contract, request), self.contract_reply('tv')
         return super().answer(request)
 
     def contract_reply(self, name):

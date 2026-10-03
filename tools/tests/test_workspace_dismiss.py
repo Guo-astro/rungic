@@ -89,7 +89,7 @@ class Screen(contracts.StandIn):
                 self.state['enabled'] = bool(request['enabled'])
             if 'workspace' in request:
                 self.state['workspace'] = int(request['workspace'])
-            return dict(self.state)
+            return contracts.query(self.contract, request), dict(self.state)
         return super().answer(request)
 
 

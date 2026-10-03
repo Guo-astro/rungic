@@ -251,7 +251,7 @@ class Frozen:
             with conn:
                 request = json.loads(conn.makefile('rb').readline())
                 self.standin.requests.append(request)
-                conn.sendall((json.dumps(self.standin.answer(request)) + '\n').encode())
+                conn.sendall((json.dumps(self.standin.answer(request)[1]) + '\n').encode())
 
     def answer(self):
         self.standin = contracts.StandIn('platform-bridge')
