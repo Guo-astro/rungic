@@ -840,6 +840,7 @@ features:
       - android/app/src/com/rungic/plasma/HostEvents.java
       - android/app/src/com/rungic/plasma/PlatformBridge.java
       - packaging/rungic-plasma-bridges/
+      - tools/tests/test_platform_bridges.py
     docs:
       - docs/49-plasma-performance.md
       - docs/research/30-feature-adaptation.md
