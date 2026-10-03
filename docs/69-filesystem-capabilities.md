@@ -9,7 +9,7 @@
 - **现象**：微信4.1登录后提示数据库损坏并自动修复；清空数据重新登录后依旧，每次启动都卡很久，然后再修复一次，无限循环。微信的提示建议检查目录权限。
 - **原因**：
   - 微信把账号数据库放在`$XDG_DOCUMENTS_DIR/xwechat_files`。`~/Documents`是指向`~/Shared/Documents`的链接，也就是Android共享存储。
-  - `~/Shared`是bindfs挂载（`plasma/shared-storage`），原先带`--direct-io`。FUSE对direct-io打开的文件拒绝可写的共享内存映射（`mmap MAP_SHARED`返回`ENODEV`）。
+  - `~/Shared`是bindfs挂载（`system/shared-storage`），原先带`--direct-io`。FUSE对direct-io打开的文件拒绝可写的共享内存映射（`mmap MAP_SHARED`返回`ENODEV`）。
   - SQLite的WAL模式需要这样映射`-shm`文件，于是每次访问数据库都返回`disk I/O error`。微信的数据库全部是WAL模式（`*.db-wal`、`*.db-shm`）。
   - 权限不是原因：这个挂载确实改不了权限位（一律0666），但不影响SQLite。
 - **修复**：去掉`--direct-io`。
@@ -35,7 +35,7 @@
 
 ## 检查工具：`moto-fs-audit`
 
-`plasma/diagnostics/moto-fs-audit`由`plasma/diagnostics/install.sh`安装到`/usr/local/bin`，以桌面用户身份运行。
+`system/diagnostics/rungic-fs-audit`由`rungic-plasma-diagnostics`包安装到`/usr/bin`，以桌面用户身份运行（改名前为`/usr/local/bin/moto-fs-audit`）。
 
 > 2026-09-26起由`moto-plasma-diagnostics`包安装到`/usr/bin/moto-fs-audit`（61篇）。
 

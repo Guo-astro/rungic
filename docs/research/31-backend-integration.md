@@ -14,7 +14,7 @@
 
 > 改名说明（2026-09-26）：Rungic改名B阶段之后，容器内的`moto-*`包、程序、单元、路径，`MOTO_*`变量和`dev.moto.*`名称改为`rungic-*`、`RUNGIC_*`、`com.rungic.*`；Android侧的名称在C阶段（2026-09-27）改为APK `com.rungic.plasma`、`/data/adb/rungic-*`（镜像在`/data/adb/rungic-lxc/images/`）、容器中的`/var/lib/rungic-{host,cores,apt}`、`rungic-gpu-alloc`、`rungic-cast`、`debug.rungic.*`、dm `rungic-root`与SELinux `rungic_image`。对照与边界见[70篇](../70-rungic-rebrand.md)。下文按时间记录的内容保留当时的名称。
 
-> 历史研究记录：Phosh 专属实现已于2026-09-23移除。本篇保留共享硬件接口与研究结论；当前代码见 `shared/`、`native/plasma/`、`plasma/`，现行集成见 [40篇](../40-plasma-mobile-integration.md)。旧Phosh路径和已删除的原始日志不再作为可执行入口。
+> 历史研究记录：Phosh 专属实现已于2026-09-23移除。本篇保留共享硬件接口与研究结论；当前代码见 `shared/`、`android/host/` 与 `packages/android-host/`、`desktop/`、`system/`，现行集成见 [40篇](../40-plasma-mobile-integration.md)。旧Phosh路径和已删除的原始日志不再作为可执行入口。
 
 记录日期：2026-09-23。对应 moto g100s / XT2537-4，Android 16，Phosh/Phoc/Stevia 0.57.0，Linux 桌面 APK 2.3，Alpine edge 与统一 Mesa/KGSL 基线。本文依据本地实际源码、配置与上一轮实机证据整理；本次编写文档没有新增硬件验收。
 
@@ -467,29 +467,17 @@ python3 tools/moto_phosh.py user-exec gdbus call --session \
 
 ## 12. 维护与复现时以哪些文件为准
 
-| 修改类型 | 需要更新的材料与产物 |
-|---|---|
-| Android界面、权限、平台op、旋转/Insets | `phosh/native-apk/`，运行 build-native-apk.sh（历史材料已移除） 重建并沿用原签名；必要时同时更新Linux客户端 |
-| 外层Wayland、GPU allocator、frame clock | `native/phosh/` 内实际编译源码，更新 `phosh/` 中对应镜像/补丁；先 build-native-core.sh（历史材料已移除），再打APK |
-| 内层Phoc/wlroots | 在0.57/wlroots0.20.2基线上更新补丁并重编静态嵌入库；部署 `/opt/moto-phoc/bin/phoc`，随后验收实际渲染 |
-| Phosh原生后端/顶栏/手势 | 更新0.57源码与补丁，重建 `/usr/local/lib/moto-phosh/phosh`；当前亮度、旋转补丁叠加在27篇基线上 |
-| Stevia/portal补丁 | 分别重编独立的Stevia和portal-wlr二进制；确认启动脚本或D-Bus service选中自定义路径 |
-| 会话/设备页/剪贴板/选择器 | 修改 `phosh/` 脚本并同步到部署路径；根据进程是否常驻决定重新启动组件或会话 |
-| 挂载与容器初始化 | 更新config/init；enter源码变化用 build-launcher.sh（历史材料已移除） 重编；新的挂载配置需完整容器重启验证 |
+2026-10-03 按当前目录重写；Phosh 时期的对照表（`phosh/`、`native/phosh/`、refs 中的源码镜像）见 git 历史。每个文件归哪个功能，用 `python3 tools/feature_inventory.py owner 路径` 查（quality/README.md）。
 
-`phosh/native-frame-clock.rs`、`phosh/native-gpu-allocator.rs`等是保存的源码镜像；`build-native-core.sh`实际编译refs里的native工程。只修改镜像而不同步实际源树，构建结果不会包含变化。`phosh/native-vsync.patch`以已做过触摸/GPU适配的Winland源码为前提，不能单独覆盖到任意上游版本。
-
-APK、定制Linux二进制、源码、包清单、宿主manager/enter/config分别保存在 本轮材料目录（历史材料已移除）。`feature-binaries.tar.gz`是明确列出文件的功能层快照，不含整个Linux rootfs、用户home、cookie或签名私钥；只装APK不能重建当前桌面。源码归档已包含修改的文件时，不再重复应用同一补丁。
-
-在项目目录可核对上一轮保存的产物：
-
-```bash
-sha256sum -c .work/refs/phosh-features-20260923/SHA256SUMS
-```
-
-构建工具脚本仍包含本机路径，Alpine edge会变化，当前未提供全新电脑/空设备的一键复现流程。原有Fastboot包未合入这些功能；第26篇旧GPU安装器冻结于旧Alpine基线，不能用于覆盖当前edge环境。
-
-来源与许可证随各组件保留：Phosh/Stevia修改遵循其GPL-3.0-or-later，portal-wlr补丁遵循MIT；其他依赖以各自源码许可为准。Winland固定提交的项目级授权未明确，29篇已记录；公开仓库不自动等于可任意重新授权分发。当前材料用于本地开发和回溯。
+| 修改类型 | 改哪里 | 构建与验证 |
+|---|---|---|
+| Android 界面、权限、平台 op、旋转/Insets | `android/app/` | `android/build-apk.sh`，沿用开发签名；平台 op 的回复格式见 `quality/contracts/platform-bridge.json`，Linux 一侧同时更新 |
+| 外层 Wayland、GPU allocator、frame clock | 上游部分在 `packages/android-host/`（补丁队列），自有模块在 `android/host/` | `tools/prepare_android_host.py` 组装源码，`android/build-native-core.sh` 交叉编译，再打 APK |
+| 内层 KWin（Android 后端、全屏、录屏） | `packages/kwin/`（补丁队列，`tools/pq.py`） | `tools/build_on_device.py` 或 `rungic_dev.py deploy kwin`；系统层面可先用 `tools/system_test.py` 在无头 KWin 上测 |
+| Plasma Mobile 外壳、设置、键盘、Portal 等上游组件 | `packages/<组件>/` | 同上，按组件部署 |
+| 共享硬件桥（音频、摄像头、编解码、剪贴板、网络、蓝牙、电话） | `shared/`、`system/` | 所属软件包（`packaging/*/package.json` 的 `paths`）经开发覆盖或发布部署；接口见 `quality/interfaces.yaml` |
+| 会话、设备面板、桌面工具 | `desktop/` | 同上 |
+| 挂载与容器初始化 | `system/plasma.config`、`system/init`、`system/rungic-plasma`；enter 程序 `tools/rungic_*_enter.c` | Android 侧文件随发布部署；挂载配置变化需完整容器重启验证 |
 
 功能状态与未完成事项统一维护在[30篇](30-feature-adaptation.md)，接口和连接方式维护在本文，原始来源与实测证据保存在refs。这样版本升级时可以分别判断：需要重新研究的接口、需要迁移的补丁，以及需要重新运行的验收。
 
@@ -526,7 +514,7 @@ Agent可直接调用的设备诊断、崩溃现场、统一追踪（perfetto + K
 
 2026-09-28 UX 第一批重构（[82 篇](../82-first-run-ux-refactor.md)）：安装原子状态升级 schema 2（兼容 1）；账户助手持有事务锁并提供 `--status`/`pending`，rootfs 标记 `account-protocol=2`，组包与安装验收检查该契约。APK 2.8 与 native JNI 一起更新，通过渲染线程请求屏障和当前手机输出的真实完成反馈撤除 loading；旧帧、投屏帧、合成超时反馈不能满足门槛。显示确认不等于桌面全部服务就绪。现阶段实机证据是已有账户启动进入 Plasma 欢迎页，新组件完整清数据首启另验。
 
-2026-09-28 X70 全新账户目录链补齐：Koko/Qt 与 GLib 应用 → XDG user-dirs → `plasma/user-dirs` → `~/Pictures` 等到 `~/Shared` 的链接 → bindfs → Android `Plasma/` 共享目录。会话在共享挂载真实就绪后幂等创建标准目录并调用 xdg-user-dirs-update，不依赖历史用户目录；Documents/Desktop 继续本地化。实现、上游 0.19 核验与测试见 docs/69，X70 实机证据见 docs/83。
+2026-09-28 X70 全新账户目录链补齐：Koko/Qt 与 GLib 应用 → XDG user-dirs → `system/user-dirs` → `~/Pictures` 等到 `~/Shared` 的链接 → bindfs → Android `Plasma/` 共享目录。会话在共享挂载真实就绪后幂等创建标准目录并调用 xdg-user-dirs-update，不依赖历史用户目录；Documents/Desktop 继续本地化。实现、上游 0.19 核验与测试见 docs/69，X70 实机证据见 docs/83。
 
 
 2026-09-28 显示大小公共接口：`KScreen → libkscreen → Wayland 输出管理 → KWin AndroidOutput → Android 宿主`。共享策略在 `shared/display-policy/`，Android 内屏以标准 manufacturer/model=Rungic/Handset 识别，KWin 保存可选 logicalDpi 并补偿 mode/scale；外屏独立。状态栏也以 Qt 同一身份匹配内屏，不使用输出顺序。默认/用户配置/宿主实际模式与刷新策略的职责、失败补偿及验收边界见 [85 篇](../85-phone-display-size-policy.md)。
@@ -542,7 +530,7 @@ Agent可直接调用的设备诊断、崩溃现场、统一追踪（perfetto + K
 
 2026-09-29 历史层补齐：Android ClipboardManager ↔ PlatformBridge ↔ rungic-clipboard/wl-clipboard ↔ KWin 标准剪贴板 → Klipper 历史。Mobile taskpanel 与桌面 clipboard 托盘通过 KlipperInterface 持有同一 plasmashell 进程内单例；桥保持只同步当前文本、不过滤规则外扩、不单独存历史的职责。G100 rungic6 已部署，首装/多输出、焦点及手机弹窗的验收边界见 [剪贴板历史记录](clipboard-history.md)。
 
-2026-09-29 后台剪贴板：`ClipboardDaemon`（APK 内代码，由 `plasma/android-clipboard` 经 Magisk 以 Shell UID 2000 启动）持有 Android framework ClipboardManager 与变化监听；生命周期由 Android 宿主 `rungic-plasma start/stop` 管理，独立于 Activity。Linux `rungic-clipboard` 直连抽象 Unix socket `com.rungic.clipboard.v1`，使用 `clipboard-get` / `clipboard-set` / `watch`，后者返回 epoch 与 versions.clipboard。服务只接受 UID 0、1000 和当前 Rungic APK UID；客户端核验服务 UID 2000。当前 LXC 共享 Android 网络命名空间，未使用网络端口。`platform.sock` 的旧剪贴板操作继续转发，旧 HostEvents 的单/多主题 watch 由独立后端事件驱动。历史仍只在 Klipper，桥不存正文日志/历史。来源、升级配套与边界见 [后台剪贴板](clipboard-background.md)。
+2026-09-29 后台剪贴板：`ClipboardDaemon`（APK 内代码，由 `system/android-clipboard` 经 Magisk 以 Shell UID 2000 启动）持有 Android framework ClipboardManager 与变化监听；生命周期由 Android 宿主 `rungic-plasma start/stop` 管理，独立于 Activity。Linux `rungic-clipboard` 直连抽象 Unix socket `com.rungic.clipboard.v1`，使用 `clipboard-get` / `clipboard-set` / `watch`，后者返回 epoch 与 versions.clipboard。服务只接受 UID 0、1000 和当前 Rungic APK UID；客户端核验服务 UID 2000。当前 LXC 共享 Android 网络命名空间，未使用网络端口。`platform.sock` 的旧剪贴板操作继续转发，旧 HostEvents 的单/多主题 watch 由独立后端事件驱动。历史仍只在 Klipper，桥不存正文日志/历史。来源、升级配套与边界见 [后台剪贴板](clipboard-background.md)。
 
 ## 2026-09-29：SIM 电话 Agent 候选（双向验收未完成）
 

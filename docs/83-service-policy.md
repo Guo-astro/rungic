@@ -2,6 +2,8 @@
 
 **2026-09-29 用户要求更新：SSH 要自动开启，不能依据下文历史默认值擅自关闭。G100 已恢复 ssh.socket 开机启用和监听；本轮部署及纠正见 [G100 更新记录](research/g100-system-update-20260929.md)，局域网连通性见 [SSH 网络记录](research/g100-ssh-connectivity-20260929.md)。下文保留原设计与验收历史。**
 
+**2026-10-03 默认值修正（离线核对，未在新装设备上实测）：** 功能清单核对时发现 `desktop/services/policy.json` 仍把 SSH 组的默认值写成 `disabled`，`rungic-plasma-config` 的 postinst 第一次见到该组时会停用它，新装设备上 `ssh.socket` 因此会被关掉。现增加默认值 `enabled`（与 `disabled` 一样用 enable/disable 切换，不 mask，只在第一次落地时启用），SSH 组改用它；已记录旧默认值的设备保持现状。下文“默认停用”是 2026-09-28 的历史。
+
 2026-09-28。用户要求：列出容器里被屏蔽（mask）的服务，提供图形界面浏览和重新打开；SSH 做成可以开启的服务，密码和密钥都能登录。
 
 ## 出发点（已在 ZY32MVJS25 上核对）
@@ -14,7 +16,7 @@
 
 ## 设计
 
-**一份清单，默认值只落地一次。** `plasma/services/policy.json` 安装为 `/usr/share/rungic/service-policy.json`。它把单元按功能分组，每组记录默认状态（`masked`/`disabled`）、原因、依据（recorded 表示有文档记录，inferred 表示推测、未实测，unknown 表示原因未记录）和风险（remote、android、unknown、none）。`rungic-plasma-config` 的 postinst 对每个单元只应用一次默认值，并记到 `/var/lib/rungic/service-defaults`。已经记录过的单元不再处理，所以用户在设置里的改动能在升级后保留。原先包自带的 mask 会在升级时被 dpkg 删除，随后由 postinst 重新创建为本地状态（第一次运行即完成迁移）。`deb-systemd-helper disable ssh.socket` 会记下停用状态，所以 openssh-server 自己升级时也不会重新启用它。
+**一份清单，默认值只落地一次。** `desktop/services/policy.json`（原 `plasma/services/`）安装为 `/usr/share/rungic/service-policy.json`。它把单元按功能分组，每组记录默认状态（`masked`/`disabled`）、原因、依据（recorded 表示有文档记录，inferred 表示推测、未实测，unknown 表示原因未记录）和风险（remote、android、unknown、none）。`rungic-plasma-config` 的 postinst 对每个单元只应用一次默认值，并记到 `/var/lib/rungic/service-defaults`。已经记录过的单元不再处理，所以用户在设置里的改动能在升级后保留。原先包自带的 mask 会在升级时被 dpkg 删除，随后由 postinst 重新创建为本地状态（第一次运行即完成迁移）。`deb-systemd-helper disable ssh.socket` 会记下停用状态，所以 openssh-server 自己升级时也不会重新启用它。
 
 **权限走 KAuth。** 设置页（KCM `kcm_rungic_services`，位于“系统管理”分类）用 C++ 和 QML 编写。改动通过 KAuth 辅助程序 `rungic-services-helper` 完成，polkit 动作是 `com.rungic.services.set` 和 `com.rungic.services.unmask`（`auth_admin`，会话内保持授权）。每次改动只弹一次密码框。直接调用 systemd 的 D-Bus 接口则要分别授权 manage-unit-files、reload 和 manage-units，而且没有接口能改全局用户单元（`/etc/systemd/user`）。辅助程序只处理清单中的单元名，或 `/etc/systemd` 里实际存在的 mask，不执行调用方传来的其他单元名。
 
