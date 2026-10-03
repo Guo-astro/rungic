@@ -202,9 +202,38 @@ class IncrementalSyncTests(unittest.TestCase):
 
         build_on_device.start('demo', 'incremental', 2)
         steps = build_on_device.host.steps
-        self.assertIn(f'test -d {src}/obj-aarch64-linux-gnu && make -C {src}/obj-aarch64-linux-gnu -j2', steps)
+        self.assertIn(f'test -d {src}/obj-aarch64-linux-gnu', steps)
         self.assertIn('debian/rules binary', steps)
         self.assertNotIn('dpkg-buildpackage', steps)
+
+    # covers: delivery.build-hosts/E2
+    def test_incremental_build_compiles_make_and_ninja_trees_before_packaging(self):
+        for generator in ('make', 'ninja'):
+            with self.subTest(generator=generator):
+                src = self.base / generator / 'src'
+                obj = src / 'obj-aarch64-linux-gnu'
+                obj.mkdir(parents=True)
+                (src / 'input').write_text('updated source\n')
+                (src / 'debian').mkdir()
+                rules = src / 'debian/rules'
+                rules.write_text('#!/bin/sh\nset -eu\n'
+                                 'test "$1" = binary\n'
+                                 'cmp input obj-aarch64-linux-gnu/output\n'
+                                 'cp obj-aarch64-linux-gnu/output packaged\n')
+                rules.chmod(0o755)
+                if generator == 'make':
+                    (obj / 'Makefile').write_text('output: ../input\n\tcp ../input output\n')
+                else:
+                    (obj / 'build.ninja').write_text('rule copy\n  command = cp $in $out\n'
+                                                   'build output: copy ../input\n')
+                build_on_device.start(generator, 'incremental', 2)
+                build_on_device.host.run(build_on_device.host.steps)
+                self.assertEqual((src / 'packaged').read_text(), 'updated source\n')
+                # Reusing the same tree must compile a subsequent source change too.
+                time.sleep(0.01)
+                (src / 'input').write_text('second revision\n')
+                build_on_device.host.run(build_on_device.host.steps)
+                self.assertEqual((src / 'packaged').read_text(), 'second revision\n')
 
 
 class TransferTests(unittest.TestCase):
@@ -222,6 +251,23 @@ class TransferTests(unittest.TestCase):
         self.assertIn('\nBASE=/root/rungic-build\n', text)
         self.script = self.root / 'rungic-transfer'
         self.script.write_text(text.replace('\nBASE=/root/rungic-build\n', f'\nBASE={self.base}\n'))
+
+    # covers: delivery.build-hosts/E4
+    def test_pruning_preserves_exact_kept_names_with_shell_metacharacters(self):
+        pool = self.base / build_on_device.MacMini.DEV_POOL
+        pool.mkdir()
+        keep = {'libegl-mesa0_26.3~devel_arm64.deb', 'with space.deb', 'literal$(touch CANARY).deb'}
+        for name in {*keep, 'obsolete.deb', 'libegl-mesa0_26.2~devel_arm64.deb'}:
+            (pool / name).write_text('package')
+        mac = FakeMac()
+        def run(script, timeout):
+            return subprocess.run(['sh', '-eu', '-c', script], check=True,
+                                  capture_output=True, text=True, cwd=pool)
+        with patch.object(build_on_device, 'BASE', str(self.base)), patch.object(mac, 'run', run):
+            mac.prune_kept(keep)
+            self.assertEqual({p.name for p in pool.iterdir()}, keep)
+            mac.prune_kept(set())
+            self.assertEqual(list(pool.iterdir()), [])
 
     def transfer(self, command, data=b''):
         env = {'PATH': os.environ['PATH'], 'SSH_ORIGINAL_COMMAND': command}

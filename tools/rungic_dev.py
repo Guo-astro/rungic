@@ -268,7 +268,9 @@ def build_upstream(name, component, base_packages, stamp, commit, record, earlie
              f"&& mv debian/changelog.dev debian/changelog")
     # An earlier successful build keeps its obj tree: build only what changed. Otherwise configure afresh.
     previous = host.out(f'test -d {work}/src/obj-aarch64-linux-gnu && cat {work}/build.rc 2>/dev/null || true').strip()
-    mode = 'incremental' if previous == '0' else 'full'
+    # Mesa's recipe has patches and a changelog, but no Debian build rules. Use its
+    # existing Meson build and runtime packager rather than apt build-dep/dpkg-buildpackage.
+    mode = 'targets' if name == 'mesa' else 'incremental' if previous == '0' else 'full'
     if mode == 'full':
         print(build_on_device.build_deps(name), flush=True)
     build_on_device.start(name, mode, host.jobs)
@@ -277,6 +279,9 @@ def build_upstream(name, component, base_packages, stamp, commit, record, earlie
     if 'Result=success' not in state:
         raise SystemExit(f'{name}: {mode} build failed on {host.name}\n{state}\n'
                          + host.out(f'tail -40 {work}/build.log', timeout=60))
+    if name == 'mesa':
+        import build_mesa
+        build_mesa.package(host, version, commit)
     file_version = version.split(':', 1)[-1]
     listing = host.out(f'cd {work} && ls *_{file_version}_*.deb *_{file_version}_*.ddeb 2>/dev/null || true').split()
     POOL.mkdir(parents=True, exist_ok=True)
@@ -342,7 +347,9 @@ def restarts(info, before, after, restart, record):
     packages, and the session when a package that needs it changed."""
     if restart == 'never':
         return
-    units = [u for pkg, names in info.get('service_restart', {}).items() if before.get(pkg) != after.get(pkg)
+    current = json.loads(rungic_release.SPEC.read_text())
+    services = {**info.get('service_restart', {}), **current.get('service_restart', {})}
+    units = [u for pkg, names in services.items() if before.get(pkg) != after.get(pkg)
              for u in names]
     if units:
         result = run('for u in ' + ' '.join(units) + '; do systemctl is-enabled -q "$u" && '
@@ -357,7 +364,7 @@ def restarts(info, before, after, restart, record):
     else:
         # The release's list, and the working tree's over it: an overlay is built from the working
         # tree, whose packages may have restarts the release does not know yet (polkit-kde-agent-1).
-        spec = {**info.get('user_restart', {}), **json.loads(rungic_release.SPEC.read_text()).get('user_restart', {})}
+        spec = {**info.get('user_restart', {}), **current.get('user_restart', {})}
         output = rungic_release.restart_user_services(spec, before, after)
         if output is not None:
             record.step('user-services', output=output)

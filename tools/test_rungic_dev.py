@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 import rungic_dev
 import rungic_release
@@ -35,6 +36,34 @@ class VersionTests(unittest.TestCase):
 
 
 class OverlayTests(unittest.TestCase):
+
+    # covers: delivery.dev-overlay/E8
+    def test_restarts_use_current_bridge_units_when_the_base_release_has_old_names(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            spec = root / 'spec.json'
+            spec.write_text(json.dumps({'service_restart': {'bridge': ['new-network.service', 'new-modem.service'],
+                                                            'unchanged': ['unchanged.service']}}))
+            systemctl = root / 'systemctl'
+            log = root / 'restarted'
+            systemctl.write_text(f'#!/bin/sh\nset -eu\n'
+                                 'case "$1" in\n'
+                                 'is-enabled) exit 0;;\n'
+                                 f'restart) printf "%s\\n" "$2" >> {log};;\n'
+                                 '*) exit 1;;\nesac\n')
+            systemctl.chmod(0o755)
+            def run(script, level, **kwargs):
+                import os
+                self.assertEqual(level, 'container')
+                return subprocess.run(['sh', '-eu', '-c', script], capture_output=True, text=True,
+                                      env={**os.environ, 'PATH': f'{root}:{os.environ["PATH"]}'}, check=True)
+            with patch.object(rungic_release, 'SPEC', spec), patch.object(rungic_dev, 'run', run), \
+                    patch.object(rungic_release, 'needs_restart', return_value=([], [])), \
+                    patch.object(rungic_release, 'restart_user_services', return_value=None):
+                rungic_dev.restarts({'service_restart': {'bridge': ['old-network.service']}},
+                                    {'bridge': '1', 'unchanged': '1'}, {'bridge': '2', 'unchanged': '1'},
+                                    'auto', Mock())
+            self.assertEqual(log.read_text().splitlines(), ['new-network.service', 'new-modem.service'])
     def override(self, version):
         return {'version': version, 'commit': 'x', 'dirty': True, 'built': 'now', 'file': f'rungic-design_{version}_arm64.deb'}
 
@@ -85,6 +114,36 @@ class UpstreamTests(unittest.TestCase):
     the development version, and resets by component."""
     COMPONENTS = {'plasma-mobile': {'source': 'packages/plasma-mobile', 'version': '6.6.5-0ubuntu1+rungic3',
                                     'packages': ['plasma-mobile', 'plasma-mobile-tweaks', 'plasma-mobile-dev']}}
+
+    # covers: delivery.dev-overlay/E5
+    def test_mesa_uses_its_meson_packager_and_records_the_development_version(self):
+        import build_on_device
+        import build_mesa
+        component = {'version': '26.3.0+rungic1', 'packages': ['libgbm1']}
+        version = rungic_dev.dev_version(component['version'], '20261003t120000', 'abc1234', False)
+        host = Mock(name='build-host', jobs=4)
+        host.name = 'macmini'
+        host.out.side_effect = ['mesa', 'resolute', '', f'libgbm1_{version}_arm64.deb']
+        take = Mock()
+        with tempfile.TemporaryDirectory() as temp, \
+                patch.object(rungic_dev, 'POOL', Path(temp)), \
+                patch.object(rungic_dev, 'upstream_dirty', return_value=False), \
+                patch.object(rungic_dev, 'git', return_value='abc1234'), \
+                patch.object(rungic_dev, 'taker', return_value=take), \
+                patch.object(build_on_device, 'host', host), \
+                patch.object(build_on_device, 'sync'), \
+                patch.object(build_on_device, 'build_deps') as deps, \
+                patch.object(build_on_device, 'start') as start, \
+                patch.object(build_on_device, 'status', return_value='Result=success'), \
+                patch.object(build_mesa, 'package') as package:
+            result = rungic_dev.build_upstream('mesa', component, {'libgbm1': component['version']},
+                                               '20261003t120000', 'abc1234', Mock())
+            deps.assert_not_called()
+            start.assert_called_once_with('mesa', 'targets', 4)
+            package.assert_called_once_with(host, version, 'abc1234')
+            self.assertEqual(result['libgbm1']['version'], version)
+            self.assertEqual(result['libgbm1']['component'], 'mesa')
+            take.assert_called_once()
 
     # covers: delivery.dev-overlay/E5
     def test_names_split_and_unknown_stop(self):
@@ -217,6 +276,30 @@ class KeptOnBuildHostTests(unittest.TestCase):
         self.assertIn('take big_1_arm64.deb dev-pool/big_1_arm64.deb 9 cd', scripts[0])
         self.assertIn('10.77.0.20 192.168.5.45', scripts[0])
         self.assertIn('sha256sum', scripts[0])
+
+    # covers: delivery.dev-overlay/E6 delivery.build-hosts/E3
+    def test_fetch_does_not_let_ssh_consume_the_remaining_script(self):
+        import hashlib
+        import build_on_device
+        remote = self.pool / 'remote.deb'
+        payload = b'checked package contents\n'
+        remote.write_bytes(payload)
+        ssh = self.pool / 'fake-ssh'
+        # SSH normally reads its stdin. The phone executes the transfer script from
+        # stdin too: enough commands to exceed the shell's read-ahead expose the bug.
+        ssh.write_text('#!/bin/sh\ncat >/dev/null\ncat "$2"\n')
+        ssh.chmod(0o755)
+        destination = self.pool / 'device'
+        destination.mkdir()
+        kept = {f'package-{i:04}_1_arm64.deb': {'path': str(remote), 'size': len(payload),
+                  'sha256': hashlib.sha256(payload).hexdigest()} for i in range(180)}
+        def run(script, level, **kwargs):
+            return subprocess.run(['sh'], input=script, capture_output=True, text=True, check=True)
+        with patch.object(rungic_release, 'run', run), \
+                patch.object(build_on_device.MacMini, 'PHONE_SSH', str(ssh)):
+            rungic_release.fetch_kept(kept, str(destination))
+        self.assertEqual({p.name for p in destination.iterdir()}, set(kept))
+        self.assertTrue(all(p.read_bytes() == payload for p in destination.iterdir()))
 
     # covers: delivery.dev-overlay/E6
     def test_index_has_the_kept_entries(self):

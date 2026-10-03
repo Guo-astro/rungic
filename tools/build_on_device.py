@@ -277,7 +277,13 @@ rm -f {name}''', 600)
         """Remove the files kept for the phone but those named."""
         names = ' '.join(shlex.quote(n) for n in sorted(keep))
         self.run(f'''cd {BASE}/{self.DEV_POOL} 2>/dev/null || exit 0
-for f in *.deb; do [ -e "$f" ] || continue; case " {names} " in *" $f "*) ;; *) rm -f "$f";; esac; done''', 120)
+set -- {names}
+for f in *.deb; do
+  [ -e "$f" ] || continue
+  kept=false
+  for wanted do [ "$f" != "$wanted" ] || {{ kept=true; break; }}; done
+  "$kept" || rm -f -- "$f"
+done''', 120)
 
     def background(self, component, steps):
         work = f'{BASE}/{component}'
@@ -376,7 +382,9 @@ def start(component, mode, jobs, targets=(), lto=True, cmake_args=()):
                  f"cd {work}/src && dpkg-buildpackage {'-B' if arch_only(component) else '-b'} -uc -us")
     else:
         steps = (f"export DEB_BUILD_OPTIONS='nocheck parallel={jobs}' {DEBUG_FLAGS}{maint}; "
-                 f"cd {work}/src && test -d {obj} && make -C {obj} -j{jobs} && debian/rules binary")
+                 f"cd {work}/src && test -d {obj} && "
+                 f"(if test -f {obj}/build.ninja; then ninja -C {obj} -j{jobs}; "
+                 f"else make -C {obj} -j{jobs}; fi) && debian/rules binary")
     host.background(component, steps)
     print(f'started rungic-build-{component} on {host.name} ({mode}, {jobs} jobs); '
           f'follow with: build_on_device.py --host {host.name} {component} status')
