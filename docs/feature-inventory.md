@@ -4,7 +4,7 @@
 
 以产品功能和用户场景为骨架：每条功能是用户能感知的一件事；“体验”是它必须做到的，每条都标明由什么检查（自动测试、实机验收、人工验证或已登记的缺口）。数据在 `quality/`，规则见 [quality/README.md](../quality/README.md)。
 
-共 160 条功能、663 条体验，其中 527 条有检查。
+共 160 条功能、663 条体验，其中 528 条有检查。
 
 ## Agent 能力
 
@@ -633,7 +633,7 @@ Agent 在自己的工作区（或用户指定的桌面）上打开应用、看�
 
 - **E1** 从 Discover 装 extra-data 类型的 Flatpak 应用（VS Code）能完整装完，不会在部署应用本体时失败并回滚运行时。（人工）
 - **E2** 沙箱的防逃逸限制仍然有效：沙箱里写全局 sysctl 被拒，嵌套的 unshare -U 被禁止。（人工）
-- **E3** 容器 init 准备沙箱条件失败时只记日志，容器和桌面照常启动。（**未检查**）
+- **E3** 容器 init 准备沙箱条件失败时只记日志，容器和桌面照常启动。（系统测试）
 
 注意：
 - LXC 的 proc:mixed 把 /proc/sys 挂为只读，bwrap 写 user.max_user_namespaces 失败；只把 /proc/sys/user 重挂可写，其余保持只读。 [docs/45-plasma-app-store.md](../docs/45-plasma-app-store.md)
@@ -1038,8 +1038,8 @@ Linux 应用用手机的相机拍照录像，用手机的扬声器和麦克风�
 - **E2** -p 发布的端口在容器内和安卓的 127.0.0.1 都能访问。（人工）
 - **E3** 桌面的 /proc/sys 仍只读；rootless 一侧的进程写安卓的网络参数被拒，安卓的转发设置不变。（人工）
 - **E4** 在设置→服务里开启时先确认再弹密码框，密码晚于 25 秒输入也能当场启动；关闭时当场停止，页面状态与实际一致。（人工）
-- **E5** 开机自动准备 /dev/net/tun、从属 UID/GID 段和按 UID 的数据目录；账户改名后数据不丢、从属 ID 段随之迁移。（人工）
-- **E6** rootful 的 docker.service、containerd.service 被屏蔽，不会开机失败。（人工）
+- **E5** 开机自动准备 /dev/net/tun、从属 UID/GID 段和按 UID 的数据目录；账户改名后数据不丢、从属 ID 段随之迁移。（系统测试、人工）
+- **E6** rootful 的 docker.service、containerd.service 被屏蔽，不会开机失败。（系统测试、人工）
 
 注意：
 - 容器与安卓共用网络命名空间且没有 net_admin/net_raw，rootful Docker 不可用；不要为它把 net_admin 还给整个容器。 [docs/85-lxc-rootless-docker.md](../docs/85-lxc-rootless-docker.md)

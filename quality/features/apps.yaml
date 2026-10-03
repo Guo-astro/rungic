@@ -92,6 +92,7 @@ features:
         docs: [docs/49-plasma-performance.md]
     code:
       - packages/flatpak/
+      - tools/system/tests/flatpak_init.py
     docs: [docs/45-plasma-app-store.md]
 
   # ---- GPU ----------------------------------------------------------------------------------------
@@ -924,6 +925,7 @@ features:
     code:
       - system/docker/
       - packaging/rungic-docker/
+      - tools/system/tests/docker_prepare.py
     docs: [docs/85-lxc-rootless-docker.md]
 
   - id: apps.android-docker
