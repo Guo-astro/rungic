@@ -68,9 +68,13 @@ def run(names):
     host = build_on_device.MacMini()
     tag = image(host)
     archive, digest = working_tree()
-    src = f'{REMOTE}/src-{digest}'
-    host.ssh(f'test -d {src} || {{ mkdir -p {src}.part && tar -xzf - -C {src}.part && mv {src}.part {src}; }}', 600,
-             data=archive)
+    src = f'{REMOTE}/tree-{digest}'      # not src-*: older copies of this tool remove those under running tests
+    # Each run unpacks into a directory of its own: two runs of the same tree at once (agents working
+    # in one worktree) once shared {src}.part, and the second's unpacking replaced files under the first's
+    # running tests (files missing in /src). The first complete tree wins; a later one is dropped.
+    # A tree used again is touched: the cleanup below goes by age.
+    host.ssh(f'if test -d {src}; then touch {src}; else part=$(mktemp -d {src}.part.XXXXXX) && tar -xzf - -C "$part" && '
+             f'{{ test -d {src} && rm -rf "$part" || mv "$part" {src}; }}; fi', 600, data=archive)
     record = RESULTS / datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
     record.mkdir(parents=True)
     print(f'system tests {" ".join(names)} on {tag} (working tree {digest})', flush=True)
@@ -83,7 +87,10 @@ def run(names):
         mark = 'PASS' if line.get('passed') else 'FAIL'
         print(f'{mark} {line["test"]} ({line.get("seconds", "-")} s)' + (f': {line["error"]}' if line.get('error') else '')
               + (f': {line["log"]}' if line.get('log') else ''))
-    host.ssh(f'ls -dt {REMOTE}/src-* 2>/dev/null | tail -n +4 | xargs rm -rf', 120, check=False)  # keep the last three trees
+    # Trees of runs that may still be going stay: keeping only the last three removed /src under
+    # other agents' running tests (files missing in /src). Older than two hours, a tree is done.
+    host.ssh(f'find {REMOTE} -maxdepth 1 \\( -name "tree-*" -o -name "src-*" \\) -mmin +120 -exec rm -rf {{}} +', 120,
+             check=False)
     passed = lines and all(l.get('passed') for l in lines) and len([l for l in lines if 'build' not in l['test']]) == len(names)
     print(f'{"passed" if passed else "FAILED"}; record {record.relative_to(ROOT)}')
     return 0 if passed else 1
