@@ -137,9 +137,6 @@ void AgentScreen::poll()
     m_onTv = state.contains(QStringLiteral("tvShown"))
         ? state.value(QStringLiteral("tvShown")).toArray().contains(m_workspace)
         : state.value(QStringLiteral("tv")).toBool();
-    m_fullscreen = state.value(QStringLiteral("fullscreen")).toBool()
-        // The director fullscreen shows every workspace: none records its own picture meanwhile.
-        || state.value(QStringLiteral("directorFullscreen")).toBool();
     if (!m_enabled) {  // turned off elsewhere (quick setting, rungic-agent-screen off)
         QCoreApplication::quit();
         return;
@@ -149,13 +146,13 @@ void AgentScreen::poll()
 
 void AgentScreen::update()
 {
-    // Its own KWin, recorded by a helper connected to it; nothing while a TV or the APK's
-    // fullscreen presents an assistant's screen. Desktop mode on a TV is this window's own view on
-    // the TV's output (docs/research/97 §19.5): the picture goes on.
+    // Its own KWin, recorded by a helper connected to it; nothing while a TV presents an
+    // assistant's screen. Desktop mode on a TV is this window's own view on the TV's output
+    // (docs/research/97 §19.5): the picture goes on.
     const bool shownHere = m_workspace == 0 && m_onTv;
-    if ((m_onTv || m_fullscreen) && !shownHere) {
+    if (m_onTv && !shownHere) {
         stopWorkspaceStream();
-        setStatus(m_onTv ? QStringLiteral("tv") : QStringLiteral("fullscreen"));
+        setStatus(QStringLiteral("tv"));
         return;
     }
     if (!m_workspaceStream || m_streamedWorkspace != m_workspace)
@@ -332,17 +329,6 @@ void AgentScreen::castToTv()
         setStatus(state.value(QStringLiteral("error")).toString());
 }
 
-void AgentScreen::fullscreen()
-{
-    const QJsonObject state = bridge({{QStringLiteral("op"), op()}, {QStringLiteral("fullscreen"), true}});
-    if (state.contains(QStringLiteral("error"))) {
-        qWarning() << "agent screen: fullscreen:" << state.value(QStringLiteral("error")).toString();
-        return;
-    }
-    m_fullscreen = state.value(QStringLiteral("fullscreen")).toBool();
-    update();
-}
-
 void AgentScreen::close()
 {
     if (op() == QStringLiteral("agent-screen")) {
@@ -421,7 +407,6 @@ void Director::apply(const QJsonObject &state)
     if (!m_screens.contains(m_focus) && !(m_focus == BoardTile::kSlot && m_boardShown))
         m_focus = m_screens.isEmpty() ? 0 : m_screens.firstKey();
     m_level = state.value(QStringLiteral("level")).toInt();
-    m_fullscreen = state.value(QStringLiteral("fullscreen")).toBool();
     Q_EMIT changed();
     // No assistant's screen left: nothing to show.
     if (m_screens.isEmpty())
@@ -438,9 +423,3 @@ void Director::nextLevel()
     apply(bridge({{QStringLiteral("op"), QStringLiteral("director")}, {QStringLiteral("level"), (m_level + 1) % 3}}));
 }
 
-void Director::fullscreen()
-{
-    const QJsonObject state = bridge({{QStringLiteral("op"), QStringLiteral("director")}, {QStringLiteral("fullscreen"), true}});
-    if (!state.contains(QStringLiteral("error")))
-        apply(state);
-}

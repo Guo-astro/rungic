@@ -12,8 +12,8 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 /**
- * How the director's tiles are labelled (docs/58, the design "导播台设计"), on the TV (Director's
- * label window) and fullscreen on the phone (AgentFullscreen), the same there and there. Over each
+ * How the director's tiles are labelled on the TV (docs/58, the design "导播台设计"; Director's
+ * label window; on the phone the Linux floating window labels its own tiles). Over each
  * tile: a status capsule at its top left (a dot: green at work, grey waiting, amber needs an
  * answer; the role or screen name; the state), and a dark band at its bottom with what its agent
  * is doing: one line on a small tile; on the focus, a ticker of the last three lines, older ones

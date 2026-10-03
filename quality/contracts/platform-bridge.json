@@ -56,7 +56,6 @@
         "width": 1920,
         "height": 1080,
         "tv": false,
-        "fullscreen": false,
         "watched": false
       }
     },
@@ -71,11 +70,9 @@
         "width": 1920,
         "height": 1080,
         "tv": false,
-        "fullscreen": false,
         "tvShown": [],
         "tvHeard": -1,
-        "directorFocus": 1,
-        "directorFullscreen": false
+        "directorFocus": 1
       }
     },
     {
@@ -112,8 +109,7 @@
           "content": null,
           "shown": [],
           "heard": -1
-        },
-        "fullscreen": false
+        }
       }
     }
   ]

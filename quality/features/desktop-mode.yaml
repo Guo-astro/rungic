@@ -921,24 +921,22 @@ features:
     title: Rungic 应用里的全屏（旧）
     scenario: desktop-mode.use
     status: retired
-    keep: 暂留：删除要随下一次 APK 发布并在手机上验证；列为待清理。
     platform: android
     interfaces: [kwin-android-host, host-input]
     summary: 旧做法：浮窗的全屏（含导播台全屏）由 Rungic 应用的 AgentFullscreen 把宿主输出直接呈现在手机上，手势在安卓里识别（DirectGestures）。2026-10-02 起被 Linux 的全屏窗口取代（docs/research/97 §17），Linux 一侧已不再请求它。
     pitfalls:
-      - text: 还连着它的地方：MainActivity 的 agent-screen、desktop-mode、director 请求里的 fullscreen 字段，AgentScreen::fullscreen()、Director::fullscreen()（QML 已不调用），keeper 按“单屏全屏/导播台全屏”启动呈现器，以及 quality/interfaces.yaml 的 host-input 提供方 DirectGestures.java。
+      - text: 2026-10-03 随 APK 2.30 删除（AgentFullscreen、DirectGestures，平台桥 agent-screen、desktop-mode、director 的 fullscreen 字段，Linux 一侧的 AgentScreen::fullscreen()、Director::fullscreen() 和 keeper 的全屏判断）；电视的导播台与触控板（TouchpadGestures）保留。
         docs: [docs/research/97-headless-agent-work.md]
-    code:
-      - android/app/src/com/rungic/plasma/AgentFullscreen.java
-      - android/app/src/com/rungic/plasma/DirectGestures.java
+    code: []
 
   - id: desktop-mode.cast-test-pattern
     title: 电视测试图（原型）
     scenario: desktop-mode.tv
     status: retired
-    keep: 暂留：删除要随下一次 APK 发布并在手机上验证（含 cast-test 操作）；列为待清理。
     platform: android
     interfaces: [platform-bridge]
     summary: 投屏第 1 步的原型：平台桥 cast-test 在电视上放彩条、毫秒时钟和帧计数，用来验证能否接管电视画面（docs/58）。已被 CastDesktop 的真实桌面取代，没有调用方。
-    code:
-      - android/app/src/com/rungic/plasma/CastTest.java
+    pitfalls:
+      - text: 2026-10-03 随 APK 2.30 删除（CastTest.java 与平台桥 cast-test 操作）。
+        docs: [docs/research/97-headless-agent-work.md]
+    code: []

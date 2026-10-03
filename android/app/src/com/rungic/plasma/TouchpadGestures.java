@@ -14,8 +14,8 @@ import android.view.MotionEvent;
  *    timeout)
  *   two fingers move        scroll, content following the fingers; kinetic after the lift
  *
- * Shared by the phone as the TV's touchpad (CastControls) and the touchpad mode of the assistant's
- * screen fullscreen (AgentFullscreen).
+ * Used by the phone as the TV's touchpad (CastControls). The Linux fullscreen's touchpad mode
+ * (agent/screen/qml/FullTouch.qml) is a port of it, with the same states and timings.
  */
 final class TouchpadGestures {
     private enum State { IDLE, TOUCH, TAPPED, DRAG_OR_DOUBLETAP, DRAGGING }

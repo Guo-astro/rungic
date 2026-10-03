@@ -52,12 +52,12 @@ def test_a_stand_in_reply_must_keep_the_contract():
 # covers: delivery.system-tests/E3
 def test_the_assistant_screen_status_reads_where_it_is_shown(monkeypatch, tmp_path):
     reply = {**contracts.query(contracts.load('platform-bridge'), {'op': 'agent-screen'})['reply'],
-             'enabled': True, 'workspace': 2, 'fullscreen': True}
+             'enabled': True, 'workspace': 2, 'tv': True}
     with contracts.StandIn('platform-bridge', {'agent-screen': reply}) as bridge:
         module = agent_screen(bridge.path, monkeypatch, tmp_path)
         (tmp_path / 'wayland-ws-2').touch()
         state = module.status()
-    assert state['enabled'] and state['shown_on'] == 'phone fullscreen'
+    assert state['enabled'] and state['shown_on'] == 'tv'
     assert state['size'] == '1920x1080' and state['workspace'] == 2 and state['output'] == 'workspace 2'
     assert bridge.requests == [{'op': 'agent-screen'}]
 

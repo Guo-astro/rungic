@@ -1710,7 +1710,7 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 
 注意：
-- 还连着它的地方：MainActivity 的 agent-screen、desktop-mode、director 请求里的 fullscreen 字段，AgentScreen::fullscreen()、Director::fullscreen()（QML 已不调用），keeper 按“单屏全屏/导播台全屏”启动呈现器，以及 quality/interfaces.yaml 的 host-input 提供方 DirectGestures.java。 [docs/research/97-headless-agent-work.md](../docs/research/97-headless-agent-work.md)
+- 2026-10-03 随 APK 2.30 删除（AgentFullscreen、DirectGestures，平台桥 agent-screen、desktop-mode、director 的 fullscreen 字段，Linux 一侧的 AgentScreen::fullscreen()、Director::fullscreen() 和 keeper 的全屏判断）；电视的导播台与触控板（TouchpadGestures）保留。 [docs/research/97-headless-agent-work.md](../docs/research/97-headless-agent-work.md)
 
 ### 在电视上用
 
@@ -1905,6 +1905,9 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 经由接口：`platform-bridge`
 
+
+注意：
+- 2026-10-03 随 APK 2.30 删除（CastTest.java 与平台桥 cast-test 操作）。 [docs/research/97-headless-agent-work.md](../docs/research/97-headless-agent-work.md)
 
 ### 看助理们工作
 

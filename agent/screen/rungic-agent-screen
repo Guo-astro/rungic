@@ -199,7 +199,7 @@ def status():
         return {'enabled': on, 'shown_on': 'tv' if on and desktop_tv() else 'floating window', 'size': '1920x1080',
                 'window_running': window_running(), 'workspace': 0, 'output': 'workspace 0' if on else None}
     state = bridge({'op': OP})
-    shown_on = 'tv' if state.get('tv') else 'phone fullscreen' if state.get('fullscreen') else 'floating window'
+    shown_on = 'tv' if state.get('tv') else 'floating window'
     result = {'enabled': state['enabled'], 'shown_on': shown_on, 'size': f"{state['width']}x{state['height']}",
               'window_running': window_running()}
     slot = state.get('workspace', 1)
@@ -422,7 +422,7 @@ def workspace_stopped():
     if not state.get('enabled') or int(state.get('workspace') or 1) != slot:
         return status()
     others = [n for n in windows_shown() if n != slot]
-    if others and not (state.get('tv') or state.get('fullscreen')):
+    if others and not state.get('tv'):
         bridge({'op': OP, 'workspace': others[0]})
         return status()
     return off()
