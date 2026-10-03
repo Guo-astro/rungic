@@ -179,6 +179,7 @@ features:
       - desktop/rungic-plasma-display.service
       - packages/plasma-mobile/debian/patches/rungic/panel-exclusive-zone.patch
       - packages/plasma-mobile/debian/patches/rungic/panels-app-colours.patch
+      - tools/tests/test_display_panel.py
     docs:
       - docs/43-plasma-panel-workarea.md
       - docs/59-voice-agent.md
