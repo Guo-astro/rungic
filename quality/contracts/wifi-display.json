@@ -1,0 +1,76 @@
+{
+  "interface": "wifi-display",
+  "comment": "Casting to a TV through Android's (Qualcomm) Wi-Fi Display stack: the root tool rungic-cast (shared/android/rungic-cast, /data/adb/rungic-wfd), run by the Rungic app for op cast on the platform bridge's socket ($RUNGIC_PLATFORM_SOCKET, one JSON object per line each way, one request per connection; a cast request may take a minute, connect three, resolution five and a half). The Linux consumer is desktop/cast/rungic-cast (used by the cast quick setting and rungic-cast-watch): it first asks the platform bridge's status (an app that does not answer is asleep: host-unreachable), then {op: cast, args: [command, argument]}. status and capabilities answer the same object: protocol_version 1 (the consumer refuses any other, or receivers that are not a list, as backend-incompatible), active_state (2: connected), active (the connected TV or null), reconnecting, receivers (one per TV) and displays; the quick setting reads active_state, active.name and reconnecting. Errors are {\"error\": string, \"code\": string}, code component-missing when the tool is not installed. scan, connect, disconnect, resolution and settings change what Android's Wi-Fi Display does or shows and are never sent by the provider check. Tested from both ends: tools/tests/test_contract_wifi_display.py (the real rungic-cast against tools/contracts.py's stand-in) and acceptance scenario contract.wifi-display (the app and the tool on the phone; TV names and addresses are blanked there).",
+  "queries": [
+    {
+      "name": "status",
+      "request": {"op": "cast", "args": ["status"]},
+      "reply": {
+        "protocol_version": 1,
+        "backend": "android-wfd",
+        "supported": true,
+        "feature_state": 3,
+        "scan_state": 0,
+        "active_state": 0,
+        "active": null,
+        "reconnecting": false,
+        "receivers": [
+          {"name": "Living Room TV", "address": "aa:bb:cc:dd:ee:ff", "active": false, "available": true, "can_connect": true, "remembered": true, "last": true}
+        ],
+        "displays": []
+      },
+      "private": ["receivers", "active", "displays"],
+      "timeout": 70,
+      "read_only": true
+    },
+    {
+      "name": "capabilities",
+      "request": {"op": "cast", "args": ["capabilities"]},
+      "reply": {
+        "protocol_version": 1,
+        "backend": "android-wfd",
+        "supported": true,
+        "adapter": "qualcomm",
+        "receivers": []
+      },
+      "private": ["receivers", "active", "displays"],
+      "timeout": 70,
+      "read_only": true
+    },
+    {
+      "name": "scan",
+      "request": {"op": "cast", "args": ["scan", "8"]},
+      "match": ["op", "args.0"],
+      "reply": {"protocol_version": 1, "receivers": []},
+      "read_only": false
+    },
+    {
+      "name": "connect",
+      "request": {"op": "cast", "args": ["connect", "Living Room TV"]},
+      "match": ["op", "args.0"],
+      "reply": {"protocol_version": 1, "active_state": 2, "active": null},
+      "read_only": false
+    },
+    {
+      "name": "disconnect",
+      "request": {"op": "cast", "args": ["disconnect"]},
+      "match": ["op", "args.0"],
+      "reply": {"protocol_version": 1, "active_state": 0},
+      "read_only": false
+    },
+    {
+      "name": "resolution",
+      "request": {"op": "cast", "args": ["resolution", "aa:bb:cc:dd:ee:ff/1920x1080@30"]},
+      "match": ["op", "args.0"],
+      "reply": {"protocol_version": 1, "active_state": 2},
+      "read_only": false
+    },
+    {
+      "name": "settings",
+      "request": {"op": "cast", "args": ["settings"]},
+      "match": ["op", "args.0"],
+      "reply": {},
+      "read_only": false
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 {
   "interface": "platform-bridge",
-  "comment": "The read-only queries of the platform bridge (quality/interfaces.yaml) and what Linux consumers rely on in their replies: a key in an example reply is required, with that value's type (null: any value or null; display-get refreshPolicy: 0 automatic, else a fixed rate in Hz). Framing: a Unix stream socket, one JSON object per line each way, one request per connection. Errors are {\"error\": string}. The socket is $RUNGIC_PLATFORM_SOCKET, by default /mnt/android-wayland/platform.sock in the container. Tested from both ends: tools/tests/test_platform_bridge_contract.py (consumers against tools/contracts.py's stand-in) and acceptance scenario contract.platform-bridge (the Rungic app on the phone).",
+  "comment": "The read-only queries of the platform bridge (quality/interfaces.yaml) and what Linux consumers rely on in their replies: a key in an example reply is required, with that value's type (null: any value or null; display-get refreshPolicy: 0 automatic, else a fixed rate in Hz). Framing: a Unix stream socket, one JSON object per line each way, one request per connection. Errors are {\"error\": string}. The socket is $RUNGIC_PLATFORM_SOCKET, by default /mnt/android-wayland/platform.sock in the container. All of them are read-only (read_only: the provider check on the phone sends them). Tested from both ends: tools/tests/test_platform_bridge_contract.py (consumers against tools/contracts.py's stand-in) and acceptance scenario contract.platform-bridge (the Rungic app on the phone).",
   "queries": [
     {
       "name": "status",
@@ -14,7 +14,8 @@
         "orientation": "portrait",
         "foreground": true,
         "keepAwake": false
-      }
+      },
+      "read_only": true
     },
     {
       "name": "display-get",
@@ -34,7 +35,8 @@
         ],
         "refreshPolicy": 0,
         "currentRefresh": 120.0
-      }
+      },
+      "read_only": true
     },
     {
       "name": "brightness-get",
@@ -44,7 +46,8 @@
       "reply": {
         "level": 40,
         "followAndroid": true
-      }
+      },
+      "read_only": true
     },
     {
       "name": "desktop-mode",
@@ -57,7 +60,8 @@
         "height": 1080,
         "tv": false,
         "watched": false
-      }
+      },
+      "read_only": true
     },
     {
       "name": "agent-screen",
@@ -73,7 +77,8 @@
         "tvShown": [],
         "tvHeard": -1,
         "directorFocus": 1
-      }
+      },
+      "read_only": true
     },
     {
       "name": "tv",
@@ -92,7 +97,8 @@
           "heard": -1
         },
         "picking": false
-      }
+      },
+      "read_only": true
     },
     {
       "name": "director",
@@ -110,7 +116,8 @@
           "shown": [],
           "heard": -1
         }
-      }
+      },
+      "read_only": true
     }
   ]
 }

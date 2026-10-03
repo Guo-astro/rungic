@@ -14,6 +14,8 @@
   provider:
     - android/host/
     - packages/android-host/
+  gaps:
+    consumer: 使用方是 KWin 的 android 后端（packages/kwin 的 android-backend.patch）：它在 KGSL 设备上渲染，输出缓冲向宿主的 rungic-gpu-alloc 租用 AHardwareBuffer。替身得是会分配 AHardwareBuffer 的 Wayland 宿主，而宿主（android/host，APK 里的 Smithay）只为 Android 构建；系统测试容器也没有 KGSL 或任何 GPU 设备节点，无头测试用的 KWin --virtual 不经过这个后端。
 - id: host-input
   title: 宿主输入
   summary: 安卓的触摸、按键、指针、手势与输入法文字送进 KWin（直接触摸、触控板、电视遥控与键盘）。
@@ -22,6 +24,8 @@
     - android/app/src/com/rungic/plasma/TouchpadGestures.java
     - android/app/src/com/rungic/plasma/PointerTransfer.java
     - android/app/src/com/rungic/plasma/GestureRules.java
+  gaps:
+    consumer: 触摸、按键、指针和输入法文字经 APK 的宿主合成器（android/host，只为 Android 构建）以 Wayland 输入事件和 text-input-v3 送进 KWin 的 android 后端；这个后端离开 KGSL 起不来（见 kwin-android-host）。把 KWin 嵌在别的 Wayland 宿主里测到的是 KWin 通用的 Wayland 后端，不是这条路径。
 - id: camera
   title: 相机
   summary: 安卓 Camera2 的画面作为 PipeWire 相机节点（rungic.camera.N），按需开关；有哪些相机由平台桥的 capture-info 回答。
@@ -93,6 +97,8 @@
   summary: 内核的 KGSL（/dev/kgsl-3d0）与 dma-heap（/dev/dma_heap/system）设备节点，Mesa、Xwayland、Flatpak 和系统监视器经它们用 Adreno；PC 上换成 DRM。
   provider:
     - system/plasma.config
+  gaps:
+    consumer: 使用方是 Mesa 的 freedreno KGSL 驱动（以及在它上面的 KWin、Xwayland、Flatpak GL、libcamera 的 dma-heap 分配）：它们直接对高通内核驱动发 KGSL ioctl。手机之外没有 KGSL 的替身或模拟器，系统测试容器也没有 GPU；只有手机能说明它们可用（contract.gpu-device 的离屏渲染、perf.compositor）。
 - id: host-controller
   title: 宿主控制器
   summary: Rungic 应用经 Magisk su 调用的 rungic-plasma 动作及其输出：账户状态与设置、安装发布、启停会话、内存上限；安装状态写在应用私有的 rungic-install.properties。
