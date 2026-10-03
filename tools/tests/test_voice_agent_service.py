@@ -460,6 +460,18 @@ def test_read_aloud_only_sounds_and_speak_off_is_silent(service):
     s.reply_audio(600)
     assert len(s.pushed()) == heard
     assert json.loads((v.CONFIG / 'preferences.json').read_text())['speak'] is False, 'kept across restarts'
+    # "朗读" on one answer still sounds with speak off: the user asked for that one.
+    s.dbus('ReadAloud', 'Another answer.')
+    agent.on_notification('thread/realtime/item/started',
+                          {'threadId': 'A', 'item': {'type': 'transcriptSegment', 'role': 'assistant', 'id': 'R2'}})
+    s.reply_audio(600)
+    pump()
+    assert len(s.pushed()) > heard, 'a reading asked for is heard with speak off'
+    agent.on_notification('thread/realtime/item/completed', {'threadId': 'A', 'item': {
+        'type': 'transcriptSegment', 'role': 'assistant', 'id': 'R2', 'text': 'Another answer.'}})
+    heard = len(s.pushed())
+    s.reply_audio(600)
+    assert len(s.pushed()) == heard, 'after the reading, replies are silent again'
 
 
 # ---- the conversation the user looks at (agent.voice/E7) -----------------------------------------
