@@ -42,6 +42,8 @@ features:
           - {doc: docs/73-reduce-upstream-changes.md, date: 2026-09-27, note: "发布20260927.9的部署验收：应用抽屉空白"}
       - id: E3
         text: 新会话等上一个会话的 startplasma-wayland 真正退出后才设置环境，plasmashell 总以手机 shell 启动，不会变成桌面版 shell。
+        evidence:
+          - {doc: docs/65-agent-screen.md, date: 2026-09-28, note: "会话修复（rungic-plasma-session 0.283）：连续两次重装 APK，plasmashell 都是移动版"}
       - id: E4
         text: GPU 设置、登录 PATH 在任何会话单元启动前导入用户管理器；Qt 按 XDG_CURRENT_DESKTOP 选平台主题，旧会话强加的主题不残留到新会话。
       - id: E5
@@ -69,6 +71,7 @@ features:
       - android/host/src/android/presentation_gate.rs
       - system/config/etc/xdg/kscreenlockerrc
       - system/config/usr/lib/systemd/user/plasma-kaccess.service.d/rungic.conf
+      - tools/system/tests/session_restart.py
     docs:
       - docs/40-plasma-mobile-integration.md
       - docs/42-plasma-runtime-acceptance.md
@@ -96,6 +99,8 @@ features:
         docs: [docs/61-delivery-diagnostics-plan.md]
     code:
       - system/config/usr/share/kconf_update/
+      - tools/tests/test_settings_migration.py
+      - tools/system/tests/settings_migration.py
     docs: [docs/61-delivery-diagnostics-plan.md]
 
   # ---------------------------------------------------------------- desktop.operate
@@ -1018,6 +1023,7 @@ features:
         evidence:
           - {doc: docs/46-plasma-recording-and-edge-back.md, date: 2026-09-23, note: "moto3-frame.png"}
           - {doc: docs/48-plasma-media-pipelines.md, date: 2026-09-23, note: "moto4 方向正常"}
+        device: 画面是手机上 KWin 的录屏流在 Adreno GPU 上回读的像素（screencast-gles-readback），方向随安卓；像素对不对只有手机的 GPU 和驱动能说明。不黑屏的另一半（录屏不排除 plasmashell，screencast-mobile-shell）是 KWin 补丁的逻辑，系统测试镜像里是 Ubuntu 原版 KWin，这一半还没有自动检查。
       - id: E4
         text: 接着电视时手机和电视同时录、各存一个文件（电视上带光标），录制中断开电视两个文件都保存。
         evidence:
@@ -1045,6 +1051,8 @@ features:
       - packages/kwin/debian/patches/rungic/screencast-mobile-shell.patch
       - packages/kwin/debian/patches/rungic/screencast-gles-readback.patch
       - packages/kwin/debian/patches/rungic/screencast-finish-without-implicit-sync.patch
+      - tools/tests/test_screen_recorder.py
+      - tools/system/tests/recording_notification.py
     docs:
       - docs/46-plasma-recording-and-edge-back.md
       - docs/48-plasma-media-pipelines.md
@@ -1062,6 +1070,7 @@ features:
         gap: kcm_users 改密码与 Discover 内的密码认证都还没有实机验证（docs/44）
       - id: E2
         text: 改 Linux 密码不会重新启用 Linux 锁屏，手机锁定仍由安卓管理。
+        gap: 要在无头会话里经 kcm_users 与 AccountsService 真的改一次密码，再核对 Linux 锁屏仍关着；系统测试镜像没有 accountsservice，也没有可用的系统总线。锁屏设置以 [$i] 固定、用户配置改不动，由系统测试 session_restart 检查。
     pitfalls:
       - text: 设置 Linux 管理密码不重新启用第二层 Linux 锁屏；试验中的 PackageKit 免密码授权规则已移除，不设固定默认密码。
         docs: [docs/44-plasma-user-account.md]

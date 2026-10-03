@@ -50,7 +50,7 @@ def masked(unit):
     return path.is_symlink() and str(path.readlink()) == '/dev/null'
 
 
-# covers[system]: install.ssh-access/E1
+# covers[system]: install.ssh-access/E1 desktop.services-ssh/E4
 def test():
     steps = []
 

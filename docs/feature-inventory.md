@@ -1994,7 +1994,7 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 - **E1** 应用更新或宿主进程重启时，KWin 记录“Host connection lost”、等宿主 socket 可连接后以 133 退出并被重启，不留核心转储；Qt 客户端不在重连空窗里段错误，桌面恢复。（人工）
 - **E2** 一次 GPU 启动失败（宿主重启时 EGL 暂不可用）不会让 plasmashell 永久改用软件渲染；有 GPU 时每次会话都清掉 SceneGraphBackend=software，应用抽屉不会空白。（人工）
-- **E3** 新会话等上一个会话的 startplasma-wayland 真正退出后才设置环境，plasmashell 总以手机 shell 启动，不会变成桌面版 shell。（系统测试）
+- **E3** 新会话等上一个会话的 startplasma-wayland 真正退出后才设置环境，plasmashell 总以手机 shell 启动，不会变成桌面版 shell。（系统测试、人工）
 - **E4** GPU 设置、登录 PATH 在任何会话单元启动前导入用户管理器；Qt 按 XDG_CURRENT_DESKTOP 选平台主题，旧会话强加的主题不残留到新会话。（实机验收）
 - **E5** 桌面上没有 Linux 锁屏挡住（锁定交给安卓），kaccess 不在没有 X 显示的会话里反复崩溃。（系统测试）
 
@@ -2472,7 +2472,7 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 - **E1** 录屏快捷设置写出可播放的 MP4，含 H.264 视频和 AAC 音频两轨，保存在 ~/Videos。（单元测试、系统测试、实机验收、人工）
 - **E2** 停止录屏后很快收尾（约 0.3 秒），不会超时只留下 .partial.mp4；编码跟不上时丢帧而不积压。（单元测试、人工）
-- **E3** 录到的是完整桌面和应用画面，方向正确，不是黑屏。（人工）
+- **E3** 录到的是完整桌面和应用画面，方向正确，不是黑屏。（人工；只能在手机上看：画面是手机上 KWin 的录屏流在 Adreno GPU 上回读的像素（screencast-gles-readback），方向随安卓；像素对不对只有手机的 GPU 和驱动能说明。不黑屏的另一半（录屏不排除 plasmashell，screencast-mobile-shell）是 KWin 补丁的逻辑，系统测试镜像里是 Ubuntu 原版 KWin，这一半还没有自动检查。）
 - **E4** 接着电视时手机和电视同时录、各存一个文件（电视上带光标），录制中断开电视两个文件都保存。（单元测试、系统测试、人工）
 - **E5** 设置里可选声音来源（无、系统声音、麦克风、两者）和画质档位；只用硬件编码器，拿不到时报错而不改用软件编码。（单元测试）
 - **E6** 录屏结束时弹出“录屏已保存或失败”的通知。（系统测试）
@@ -2492,7 +2492,7 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 `desktop.account-password` · Linux 系统功能 — 首次设置之后（见 install.account-setup），在“用户与密码”（kcm_users 与 AccountsService）里改 Linux 账户的密码；软件管理和系统设置的授权随之使用新密码。
 
 - **E1** 在“用户与密码”里输入旧密码和新密码后修改成功，之后 polkit 授权（软件管理、系统服务页）要的是新密码。（缺口：kcm_users 改密码与 Discover 内的密码认证都还没有实机验证（docs/44））
-- **E2** 改 Linux 密码不会重新启用 Linux 锁屏，手机锁定仍由安卓管理。（**未检查**）
+- **E2** 改 Linux 密码不会重新启用 Linux 锁屏，手机锁定仍由安卓管理。（缺口：要在无头会话里经 kcm_users 与 AccountsService 真的改一次密码，再核对 Linux 锁屏仍关着；系统测试镜像没有 accountsservice，也没有可用的系统总线。锁屏设置以 [$i] 固定、用户配置改不动，由系统测试 session_restart 检查。）
 
 注意：
 - 设置 Linux 管理密码不重新启用第二层 Linux 锁屏；试验中的 PackageKit 免密码授权规则已移除，不设固定默认密码。 [docs/44-plasma-user-account.md](../docs/44-plasma-user-account.md)
