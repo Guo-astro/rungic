@@ -15,7 +15,7 @@ import unittest
 sys.dont_write_bytecode = True
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 os.environ.setdefault('QT_QUICK_BACKEND', 'software')
-from PySide6.QtCore import QObject, QUrl, Slot
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, QUrl, Slot
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlComponent, QQmlEngine, QQmlExpression
 from PySide6.QtQuick import QQuickItem
@@ -86,6 +86,10 @@ class CallCardsTest(unittest.TestCase):
     def tearDown(self):
         self.model.deleteLater()
         self.engine.deleteLater()
+        # processEvents() leaves deferred deletes alone outside an event loop: the engine lived on,
+        # its context object (self.i18n) was freed with the test, and a later test module's
+        # event processing ran the model's bindings into it (a segfault in test_design_picture).
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
         APP.processEvents()
 
     def js(self, code):
@@ -233,6 +237,7 @@ class CallCardsTest(unittest.TestCase):
             self.assertTrue(any(isinstance(text, str) and 'Them:' in text and '你好 &lt;测试>' in text
                                 for text in texts), texts)
             card.deleteLater()
+            QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
             APP.processEvents()
 
 
