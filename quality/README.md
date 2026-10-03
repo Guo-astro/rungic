@@ -97,4 +97,14 @@ python3 tools/feature_inventory.py report         # 警告全文：要补的测�
 - `--strict`（`tools/test_feature_inventory.py`、`tools/run-tests.sh`）对两类警告的处理不同：
   - **结构性问题必须清零**：无主文件、未分类或无人引用的文档、已被取代还没删的文档、留着代码的退役功能（没有 `keep`）、没有功能用的接口。新增文件就要有功能认领，新功能就要写体验。
   - **测试欠账只许减少**：没有检查的体验（`untested`）、只在手机上检查的 Linux 功能（`device-only`）、只测了一头的接口（`one-sided-contract`）、过期的人工验证（`stale-evidence`）。现有的记在 `quality/baseline.json`，出现新的就失败。补上测试后运行 `check --update-baseline` 收紧基线；基线变大会出现在 diff 里，需要说明理由。
+- 人工验证超过 90 天（`stale-evidence`）只在 `report` 里提示，测试不因日历而失败；重新验证后更新 `evidence` 的日期。
+- `tools/run-tests.sh` 跑上述检查，另外核对 `release/acceptance.json` 的每个场景都有对应的检查函数（`tools/tests/test_acceptance_scenarios.py`），以及补丁头 `X-Rungic-Tests` 里写的 L3 场景存在（`tools/pq.py lint`；还没写的标 `(to write)`）。
 - 删除代码或文档前，先用 `owner` 确认归属，用 `git grep` 确认没有引用，再看构建（`packaging/*/package.json` 的 `paths`、配方的 `overlay`）。一项清理一个提交，写明依据。
+
+## 在手机上验证提供方：只读
+
+契约的提供方检查和其他实机检查都在用户的日常机上跑。2026-10-03 `desktop-mode.workspace` 的第一版检查为验证开关而先关后开桌面模式，又把状态读成了空（输出格式与预期不同），于是关掉了用户正在用的桌面（工作区 0 被关、应用被要求退出）；当即用 `rungic-desktop-mode on` 恢复，浮窗进程没有受影响。现在的规则：
+
+- 检查以实际运行的部件判断状态，读不懂状态就报失败，不做任何切换。
+- 桌面模式正在使用时只做只读核对；开关的往返只在它本来就关着时做，结束时恢复原状。往返会在手机上短暂打开桌面模式的浮窗，所以它属于 `full` 级验收，不在部署后的冒烟验收里。
+- 新的实机检查先在只读模式下跑一遍，看清它读到的是什么，再加会改变状态的步骤。

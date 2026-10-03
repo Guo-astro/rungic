@@ -25,7 +25,7 @@ Read [Agent OS: Working together](docs/philosophy.md). Agents are lasting partic
 - 一次初步检索不代表该项已经完成选型；在实际适配前继续完成对应源码和接口核验。没有搜到适配方案，只能记为本轮未找到，不能宣称不存在。
 - 这项要求是工作顺序与质量要求，不增加逐项请求用户确认的流程。
 
-当前设备能力审计见 `docs/research/28-capability-audit.md`；首轮复用研究见 `docs/research/29-reuse-research.md`。
+Phosh 时期的首轮设备能力审计和复用研究见 `docs/research/28-capability-audit.md`、`docs/research/29-reuse-research.md`（方法仍可参考，结论以功能清单和 30/31 篇为准）。
 
 已部署能力与验收范围见 `docs/research/30-feature-adaptation.md`；桌面与 Android 后端的实际连接、启动/挂载、接口契约、研究方法及扩展入口见 `docs/research/31-backend-integration.md`。后续适配先对照当前架构，保留源码/补丁与实机证据，并同步更新这两篇的相应内容。
 
@@ -47,6 +47,15 @@ Read [Agent OS: Working together](docs/philosophy.md). Agents are lasting partic
 - 新遇到的失败、修复和实机证据及时写入对应 `docs/`，并在下一次相关操作前重新查阅；研究结论、离线校验和实机验收必须分别标注。
 - 本轮 G100 完整镜像的经验汇总见 `docs/80-g100-image-installation-retrospective.md`，逐次证据见 79 篇。`.5` 清数据刷入后用户已确认正常进入 Plasma；后续先复用安全阶段初始化、真实 loading 和账户准备门槛，不能将旧候选的失败或待验收状态当作最终状态，也不能把本机结果推广到其他机型。
 - 将普通 APK 改为 product/app 预装时，须同时核验其原生库安装方式：ZIP 中压缩的 ARM64 JNI 库要放入对应应用的 `lib/arm64`，不能仅复制 APK。12 篇已有相关经验；79 篇的 G100 Rungic 因遗漏 `libc++_shared.so` 在启动时崩溃。`pm path` 和默认权限通过不足以验收应用，必须实际启动；用 `pm install -r` 临时修好也不能代替只读镜像预装验收。
+
+## 功能清单与质量治理（用户于 2026-10-03 要求）
+
+所有功能按产品领域和用户场景记在 `quality/`（规则见 `quality/README.md`，生成的总览 `docs/feature-inventory.md`）：一条功能是用户能感知的一件事，写明必须做到的体验、要注意的问题，以及认领的代码、文档和检查。
+
+- 改一个功能前先 `python3 tools/feature_inventory.py feature ID` 看它的体验、已知问题和检查；删除或重构文件前用 `owner PATH` 查归属，再 `git grep` 和看构建。一项清理一个提交，写明依据。
+- 新文件要有功能认领，新文档要在 `quality/docs.yaml` 分类，新功能要写体验；测试在被检查的地方写 `covers: 功能/E编号`，实机验收在场景里写 `covers`。结构性警告必须清零，测试欠账只许减少（`quality/baseline.json`），`tools/run-tests.sh` 会检查。
+- 与安卓无关的 Linux 系统功能优先用无头系统测试（`tools/system_test.py`，Mac mini 上的 `kwin_wayland --virtual`）；它和安卓之间的接口按 `quality/contracts/` 的契约两头分别测，Linux 一侧对着替身离线测，安卓一侧在手机上只读核对。
+- 实机检查不得改变用户正在用的状态：读不懂状态就报失败，不做切换（2026-10-03 一次检查误关了用户的桌面模式，见 `quality/README.md`）。
 
 ## 优先修复共享系统能力，避免逐个应用重复适配
 

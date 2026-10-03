@@ -365,6 +365,7 @@ features:
     code:
       - tools/rungic_acceptance.py
       - release/acceptance.json
+      - tools/tests/test_acceptance_scenarios.py
     docs: [docs/61-delivery-diagnostics-plan.md]
 
   - id: delivery.build-fingerprint

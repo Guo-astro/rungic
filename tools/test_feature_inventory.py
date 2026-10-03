@@ -144,3 +144,12 @@ def test_the_generated_overview_must_be_current(tmp_path):
 def test_the_real_inventory_has_no_broken_reference():
     inventory = fi.Inventory(ROOT).check()
     assert not inventory.errors, '\n'.join(inventory.errors)
+
+
+# covers: delivery.feature-inventory/E1
+def test_the_real_inventory_keeps_within_its_baseline():
+    """quality/README.md: structural warnings are fixed at once; the test backlog may only shrink.
+    Evidence by hand going stale is the calendar, not a change: report shows it, this does not fail on it."""
+    over = [w for w in fi.Inventory(ROOT).check().over_baseline() if w[0] != 'stale-evidence']
+    assert not over, '\n'.join(f'{k}: {w}: {n}' for k, w, n in over) + \
+        '\n(fix these; for test backlog that is meant to grow, run check --update-baseline and say why)'
