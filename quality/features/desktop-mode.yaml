@@ -200,6 +200,8 @@ features:
       - agent/workspace/stream.cpp
       - agent/workspace/com.rungic.WorkspaceStream.desktop
       - tools/tests/test_agent_screen_gestures.py
+      - tools/tests/test_agent_screen_window.py
+      - tools/system/tests/desktop_mode_window.py
     docs: [docs/65-agent-screen.md, docs/research/97-headless-agent-work.md, docs/research/91-agent-workspaces.md]
 
   - id: desktop-mode.fullscreen
@@ -214,6 +216,7 @@ features:
         text: 进出全屏是连续的变形动画，中间没有空白帧，退出后浮窗回到原来的位置和大小。
         evidence:
           - {doc: docs/research/97-headless-agent-work.md, date: 2026-10-03, note: "§21.6 手机录屏逐帧检查"}
+        device: 空白帧出不出现取决于手机上新窗口第一帧上屏的时机（手机 KWin 约晚 0.6 秒，离线渲染几毫秒就画出），离线测试只能检查变形连续、交接静帧的先后和回到原位，进入时的那一帧要看手机录屏。
       - id: E2
         text: 全屏是一个普通的全屏窗口：会被激活的对话框（授权框）、屏幕键盘、通知和 OSD 都显示在它上面，关闭后它回到最上面。
         evidence:
@@ -227,6 +230,7 @@ features:
         evidence:
           - {doc: docs/research/97-headless-agent-work.md, date: 2026-10-02, note: "§17.1 进入全屏后 mCurrentRotation=ROTATION_0"}
           - {doc: docs/research/97-headless-agent-work.md, date: 2026-10-03, note: "§21.6 画面转成横屏、铺满屏幕"}
+        device: 手机整机转不转屏由安卓的旋转（mCurrentRotation）决定，Linux 一侧测不到；画面在窗口里转、横屏显示器上不转由单元测试检查。
       - id: E5
         text: 离开全屏：工具栏的退出，或电脑上的 Esc；从任务切换器关闭它只回到浮窗，桌面照开；桌面被投到电视时全屏直接撤掉、不播动画。
         evidence:
@@ -305,6 +309,7 @@ features:
         docs: [docs/65-agent-screen.md, docs/research/97-headless-agent-work.md]
     code:
       - agent/screen/qml/FullTouch.qml
+      - tools/tests/test_full_touch.py
     docs: [docs/research/97-headless-agent-work.md, docs/66-pointer-gestures.md]
 
   - id: desktop-mode.floating-keyboard
