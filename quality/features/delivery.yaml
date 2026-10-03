@@ -879,8 +879,5 @@ features:
     pitfalls:
       - text: tools/device.py 与 tools/prefetch_apt_uris.py 没有任何导入或文档引用；prefetch_apt_uris.py 还写死了代理 192.168.5.45:6152。lxc_kernel_probe.c 只被 docs/16 作为当时的证据引用，新机型接入走三段式 skill 的内核兼容参考。
         docs: [docs/16-lxc-prerequisites.md]
-    code:
-      - tools/device.py
-      - tools/prefetch_apt_uris.py
-      - tools/lxc_kernel_probe.c
+    code: []
     docs: []

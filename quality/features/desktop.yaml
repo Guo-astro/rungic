@@ -139,7 +139,6 @@ features:
         docs: [docs/73-reduce-upstream-changes.md]
     code:
       - packages/plasma-mobile/
-      - desktop/target.json
     docs:
       - docs/38-plasma-mobile.md
       - docs/40-plasma-mobile-integration.md

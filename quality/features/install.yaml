@@ -740,7 +740,6 @@ features:
       - android/build-apk.sh
       - android/build-native-core.sh
       - android/test-native-core.sh
-      - android/adapt-native-presentation.py
       - tools/pull_installed_native_libs.py
       - tools/ci/apk-builder.Dockerfile
     docs:
@@ -933,8 +932,6 @@ features:
     pitfalls:
       - text: 旧 boot-gki-userns.img 直接用于原厂系统会缺 97 个模块、阻碍开机；恢复原厂 GKI 信任证书后 441 个模块完整加载。证书恢复脚本只适用于两个哈希固定的镜像。
         docs: [docs/17-lxc-installation.md, docs/75-image-build-separation.md]
-    code:
-      - kernel/patches/
-      - tools/restore_gki_module_certificate.py
+    code: []
     docs:
       - docs/16-lxc-prerequisites.md
