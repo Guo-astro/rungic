@@ -155,6 +155,7 @@ features:
       - tools/kwin_pipeline_run.py
       - tools/compbench_run.py
       - benchmarks/
+      - tools/tests/test_gpu_env.py
     docs:
       - docs/51-plasma-vulkan-benchmark.md
       - docs/56-kwin-vulkan-quantification.md
@@ -308,6 +309,7 @@ features:
     code:
       - system/config/usr/lib/blender/
       - compatibility/entries/blender-cpu-policy.json
+      - tools/tests/test_blender_render.py
     docs: [docs/90-blender-vulkan-incident.md]
 
   - id: apps.krita
@@ -821,6 +823,7 @@ features:
       - system/shared-storage
       - system/user-dirs
       - system/diagnostics/rungic-fs-audit
+      - tools/tests/test_shared_storage_mount.py
     docs: [docs/69-filesystem-capabilities.md]
 
   - id: apps.file-dialog
@@ -854,6 +857,7 @@ features:
         docs: [docs/103-krita-save-dialog-hang.md]
     code:
       - packages/xdg-desktop-portal-kde/
+      - tools/tests/test_mobile_file_dialog.py
     docs: [docs/103-krita-save-dialog-hang.md]
 
   # ---- 开发与系统工具 -----------------------------------------------------------------------------
