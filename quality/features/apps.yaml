@@ -454,6 +454,9 @@ features:
       - shared/media/media-bridge.py
       - android/app/src/com/rungic/plasma/CaptureBridge.java
       - android/app/src/com/rungic/plasma/CaptureService.java
+      - tools/system/tests/media_camera.py
+      - tools/system/android_media.py
+      - tools/system/build-media.sh
     docs: [docs/research/33-capture-integration.md, docs/48-plasma-media-pipelines.md]
 
   - id: apps.snapshot
@@ -570,6 +573,9 @@ features:
       - packages/qt6-multimedia/
       - packages/gst-plugins-base1.0/
       - system/diagnostics/media-probes/pa-gap.py
+      - tools/system/tests/media_audio.py
+      - tools/system/android_media.py
+      - tools/system/build-media.sh
     docs: [docs/48-plasma-media-pipelines.md, docs/research/33-capture-integration.md]
 
   - id: apps.virtual-audio
@@ -607,6 +613,7 @@ features:
       - shared/media/media-bridge.py
       - shared/media/audio-route.py
       - tools/tests/test_voice_message_routing.py
+      - tools/system/tests/media_audio.py
     docs: [docs/62-linux-virtual-audio.md]
 
   # ---- 硬件编解码 ---------------------------------------------------------------------------------
@@ -626,8 +633,12 @@ features:
         text: 硬件 H.264 编码 90 帧测试图样后，经私有 FFmpeg 的 h264_rungic 解码，帧数、时长、分辨率都对。
       - id: E3
         text: 要求硬件的编码器（rungich264enc、h264_rungic）在拿不到硬件组件时报错，不悄悄换成软件编码；混合编码器 h264_rungic_auto 打开失败时回退软件。
+        evidence:
+          - {doc: docs/research/35-hardware-codec-integration.md, date: 2026-09-23, note: "私有 FFmpeg 故障注入：混合编码器打开失败回退软件，CLI 软件编解码 30 帧"}
       - id: E4
         text: 带 B 帧的 H.264 解码时间戳正确；seek 后 FLUSH 不会让后续响应错位。
+        evidence:
+          - {doc: docs/research/35-hardware-codec-integration.md, date: 2026-09-23, note: "带 B 帧 H.264 720p 300 帧；seek 时 FLUSHING 的协议错位已修复，playbin3 seek/暂停通过"}
       - id: E5
         text: 编码跟不上设定帧率时丢掉编码前的帧而不是积压，停止后收尾在 1 秒内完成。
         evidence:
@@ -655,6 +666,10 @@ features:
       - android/app/src/com/rungic/plasma/CodecBridge.java
       - packages/ffmpeg/
       - packaging/rungic-codec/
+      - tools/system/tests/media_codec.py
+      - tools/tests/test_codec_client.py
+      - tools/system/android_media.py
+      - tools/system/build-media.sh
     docs:
       - docs/research/34-hardware-codec-audit.md
       - docs/research/35-hardware-codec-integration.md

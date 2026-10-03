@@ -16,3 +16,12 @@ RUN apt-get update -q && DEBIAN_FRONTEND=noninteractive apt-get install -y -q --
         fonts-noto-core openssh-server \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m tester
+# The media of the apps area (tools/system/build-media.sh): PulseAudio as the container's sound
+# server, PipeWire and WirePlumber for the cameras, GStreamer for the codec elements, and what they
+# build with.
+RUN apt-get update -q && DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends \
+        pulseaudio pulseaudio-utils pipewire pipewire-bin wireplumber libpipewire-0.3-dev libjson-glib-dev libyuv-dev \
+        libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-tools gstreamer1.0-plugins-base \
+        gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-pipewire \
+        python3-gst-1.0 gir1.2-gst-plugins-base-1.0 \
+    && rm -rf /var/lib/apt/lists/*

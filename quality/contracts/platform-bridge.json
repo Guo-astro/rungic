@@ -111,6 +111,46 @@
           "heard": -1
         }
       }
+    },
+    {
+      "name": "capture-info",
+      "request": {
+        "op": "capture-info"
+      },
+      "reply": {
+        "version": 1,
+        "visible": true,
+        "microphonePermission": true,
+        "microphoneActive": false,
+        "cameraActive": false,
+        "cameraPermission": true,
+        "cameraDenied": false,
+        "microphoneDenied": false,
+        "communication": {
+          "version": 1,
+          "active": false,
+          "aecAvailable": true,
+          "playbackCursor": true
+        },
+        "cameras": [
+          {
+            "id": "0",
+            "facing": "back",
+            "width": 1280,
+            "height": 720,
+            "rotation": 90,
+            "fps": 30
+          },
+          {
+            "id": "1",
+            "facing": "front",
+            "width": 1280,
+            "height": 720,
+            "rotation": 270,
+            "fps": 30
+          }
+        ]
+      }
     }
   ]
 }

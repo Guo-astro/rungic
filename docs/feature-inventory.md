@@ -4,7 +4,7 @@
 
 以产品功能和用户场景为骨架：每条功能是用户能感知的一件事；“体验”是它必须做到的，每条都标明由什么检查（自动测试、实机验收、人工验证或已登记的缺口）。数据在 `quality/`，规则见 [quality/README.md](../quality/README.md)。
 
-共 160 条功能、663 条体验，其中 522 条有检查。
+共 160 条功能、663 条体验，其中 527 条有检查。
 
 ## Agent 能力
 
@@ -779,7 +779,7 @@ Linux 应用用手机的相机拍照录像，用手机的扬声器和麦克风�
 `apps.wechat` · Linux 系统功能 — arm64 的 Linux 微信能登录、保留聊天数据，通话声音可以交给程序接管。
 
 - **E1** 打开微信直接进入主界面，不会反复提示“数据库损坏”并修复。（人工）
-- **E2** 微信通话的录音流和播放流可以临时切到 Linux 麦克风和 Linux 扬声器，挂断后回到原设备，不影响其他 Chromium/Electron 应用。（人工）
+- **E2** 微信通话的录音流和播放流可以临时切到 Linux 麦克风和 Linux 扬声器，挂断后回到原设备，不影响其他 Chromium/Electron 应用。（系统测试、人工）
 - **E3** 微信经 Xwayland 用 GPU 绘制。（缺口：research/93 未验收微信）
 
 注意：
@@ -795,10 +795,10 @@ Linux 应用用手机的相机拍照录像，用手机的扬声器和麦克风�
 
 经由接口：`camera`
 
-- **E1** 前后两个摄像头节点都能送出画面：有变化的帧、时间戳递增，约 30 fps、720×1280。（实机验收、人工）
-- **E2** 只在有应用使用时才打开安卓相机，应用停止后节点回到 idle/suspended，相机被释放。（实机验收）
-- **E3** 离开 Linux 桌面（APK 到后台）时释放相机，安卓 CameraService 里没有活动客户端；回到前台后节点重新出现。（**未检查**）
-- **E4** 节点只暴露已实现的能力（尺寸、自动拍摄）；画面方向随 Android 旋转元数据转正。（**未检查**）
+- **E1** 前后两个摄像头节点都能送出画面：有变化的帧、时间戳递增，约 30 fps、720×1280。（系统测试、实机验收、人工）
+- **E2** 只在有应用使用时才打开安卓相机，应用停止后节点回到 idle/suspended，相机被释放。（系统测试、实机验收）
+- **E3** 离开 Linux 桌面（APK 到后台）时释放相机，安卓 CameraService 里没有活动客户端；回到前台后节点重新出现。（系统测试）
+- **E4** 节点只暴露已实现的能力（尺寸、自动拍摄）；画面方向随 Android 旋转元数据转正。（系统测试）
 
 注意：
 - 没有 RTKit 的容器里 Realtime portal 返回 RTTimeUSecMax=0，视频客户端的 module-rt 把 RLIMIT_RTTIME 设为 0 后被内核 SIGKILL；视频客户端要 module.rt=false。 [docs/research/33-capture-integration.md](../docs/research/33-capture-integration.md)
@@ -852,9 +852,9 @@ Linux 应用用手机的相机拍照录像，用手机的扬声器和麦克风�
 
 经由接口：`audio`
 
-- **E1** 默认输出是 android、默认输入是 android_microphone；android.monitor 不会被当作麦克风。（人工）
-- **E2** 播放流进入默认输出，播完后输出重新挂起；播放—空闲—恢复反复多次都能出声。（实机验收、人工）
-- **E3** 只在有应用录音时才打开安卓 AudioRecord，录到非零电平，录音结束后麦克风停止、源挂起。（实机验收）
+- **E1** 默认输出是 android、默认输入是 android_microphone；android.monitor 不会被当作麦克风。（系统测试、人工）
+- **E2** 播放流进入默认输出，播完后输出重新挂起；播放—空闲—恢复反复多次都能出声。（系统测试、实机验收、人工）
+- **E3** 只在有应用录音时才打开安卓 AudioRecord，录到非零电平，录音结束后麦克风停止、源挂起。（系统测试、实机验收）
 - **E4** Qt Multimedia 应用（KRecorder 等）播放的声音没有周期性插零，与参考 PCM 相关性约 1.0。（人工）
 - **E5** 安卓一侧的专用 PulseAudio 卡住后能自动恢复（约 30 秒），持久化的旧 PID 被别的进程复用时不会误杀它。（缺口：由 system/android-audio 的测试（tools/ci/test_android_audio.py）和 X70 冷启动记录（docs/93）覆盖，归属另一领域）
 - **E6** 录屏、录像的音频支路不会因负的段偏移跳过环形缓冲而丢声。（实机验收）
@@ -874,10 +874,10 @@ Linux 应用用手机的相机拍照录像，用手机的扬声器和麦克风�
 
 经由接口：`audio`
 
-- **E1** 安卓输出出现后才创建 Linux 扬声器、Linux 麦克风；它们不会成为默认设备，落到它们上时立即交还 android / android_microphone。（人工）
-- **E2** 往“Linux 麦克风输入”播放的声音从 Linux 麦克风无损录回（增益 1）；播到 Linux 扬声器的声音能从其 monitor 录到。（人工）
-- **E3** 虚拟设备创建失败只记警告，安卓麦克风和“手机本机”输出照常工作。（**未检查**）
-- **E4** rungic-audio-route 运行期间把指定程序的流（含之后新建的流）移到虚拟设备，收到 SIGTERM/SIGINT 或标准输入关闭时把每条流移回原设备；第一行输出总是 ready。（人工）
+- **E1** 安卓输出出现后才创建 Linux 扬声器、Linux 麦克风；它们不会成为默认设备，落到它们上时立即交还 android / android_microphone。（系统测试、人工）
+- **E2** 往“Linux 麦克风输入”播放的声音从 Linux 麦克风无损录回（增益 1）；播到 Linux 扬声器的声音能从其 monitor 录到。（系统测试、人工）
+- **E3** 虚拟设备创建失败只记警告，安卓麦克风和“手机本机”输出照常工作。（系统测试）
+- **E4** rungic-audio-route 运行期间把指定程序的流（含之后新建的流）移到虚拟设备，收到 SIGTERM/SIGINT 或标准输入关闭时把每条流移回原设备；第一行输出总是 ready。（系统测试、人工）
 - **E5** 代发语音时，应用的录音流没有在 4 秒内移到 Linux 麦克风就不播放、点取消并报错，真麦克风录到的内容不会被发出。（单元测试）
 
 注意：
@@ -893,10 +893,10 @@ Linux 应用用手机的相机拍照录像，用手机的扬声器和麦克风�
 
 经由接口：`codec`
 
-- **E1** playbin3 播放 H.264/HEVC/VP9 时自动选中硬件解码元素（rungich264dec 等，rank PRIMARY+32），seek、暂停/恢复、EOS 正常。（人工）
+- **E1** playbin3 播放 H.264/HEVC/VP9 时自动选中硬件解码元素（rungich264dec 等，rank PRIMARY+32），seek、暂停/恢复、EOS 正常。（系统测试、人工）
 - **E2** 硬件 H.264 编码 90 帧测试图样后，经私有 FFmpeg 的 h264_rungic 解码，帧数、时长、分辨率都对。（实机验收）
-- **E3** 要求硬件的编码器（rungich264enc、h264_rungic）在拿不到硬件组件时报错，不悄悄换成软件编码；混合编码器 h264_rungic_auto 打开失败时回退软件。（**未检查**）
-- **E4** 带 B 帧的 H.264 解码时间戳正确；seek 后 FLUSH 不会让后续响应错位。（**未检查**）
+- **E3** 要求硬件的编码器（rungich264enc、h264_rungic）在拿不到硬件组件时报错，不悄悄换成软件编码；混合编码器 h264_rungic_auto 打开失败时回退软件。（单元测试、系统测试、人工）
+- **E4** 带 B 帧的 H.264 解码时间戳正确；seek 后 FLUSH 不会让后续响应错位。（单元测试、系统测试、人工）
 - **E5** 编码跟不上设定帧率时丢掉编码前的帧而不是积压，停止后收尾在 1 秒内完成。（实机验收、人工）
 
 注意：
@@ -2950,13 +2950,13 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 | 接口 | 说明 | 使用它的功能 | 使用方测试 | 提供方测试 |
 |---|---|---|---|---|
-| `platform-bridge` 平台桥 | 逐行 JSON 的 Unix socket（Rungic 应用 files/tmp/platform.sock）：状态、显示、亮度、方向、振动、设置面板、桌面模式、助理屏、电视与导播台、文字提交。 | `agent.voice`、`agent.progress`、`agent.phone-mode`、`agent.workspaces`、`agent.where`、`delivery.acceptance`、`delivery.agent-diagnostics`、`delivery.system-tests`、`desktop-mode.on-off`、`desktop-mode.floating-window`、`desktop-mode.fullscreen`、`desktop-mode.cast-connect`、`desktop-mode.tv-computer-mode`、`desktop-mode.tv-touchpad`、`desktop-mode.audio-follow`、`desktop-mode.director`、`desktop-mode.tv-director`、`desktop-mode.remote-viewing`、`desktop-mode.cast-test-pattern`、`desktop.orientation`、`desktop.resolution-refresh`、`desktop.brightness`、`desktop.host-bridges`、`desktop.power`、`desktop.device-panel` | 4 | 1 |
+| `platform-bridge` 平台桥 | 逐行 JSON 的 Unix socket（Rungic 应用 files/tmp/platform.sock）：状态、显示、亮度、方向、振动、设置面板、桌面模式、助理屏、电视与导播台、文字提交。 | `agent.voice`、`agent.progress`、`agent.phone-mode`、`agent.workspaces`、`agent.where`、`delivery.acceptance`、`delivery.agent-diagnostics`、`delivery.system-tests`、`desktop-mode.on-off`、`desktop-mode.floating-window`、`desktop-mode.fullscreen`、`desktop-mode.cast-connect`、`desktop-mode.tv-computer-mode`、`desktop-mode.tv-touchpad`、`desktop-mode.audio-follow`、`desktop-mode.director`、`desktop-mode.tv-director`、`desktop-mode.remote-viewing`、`desktop-mode.cast-test-pattern`、`desktop.orientation`、`desktop.resolution-refresh`、`desktop.brightness`、`desktop.host-bridges`、`desktop.power`、`desktop.device-panel` | 6 | 1 |
 | `kwin-android-host` KWin 安卓宿主 | KWin 的 android-host 后端与 Rungic 应用里的宿主：输出、帧时钟、零拷贝呈现、显式同步、空闲抑制、投屏输出。 | `agent.workspaces`、`apps.gpu`、`apps.vulkan`、`apps.xwayland-gpu`、`delivery.acceptance`、`delivery.trace`、`delivery.probes`、`desktop-mode.tv-computer-mode`、`desktop-mode.external-screen`、`desktop-mode.tv-director`、`desktop-mode.apk-fullscreen`、`desktop.session`、`desktop.panels`、`desktop.orientation`、`desktop.host-display`、`desktop.resolution-refresh`、`desktop.display-size`、`desktop.power`、`install.desktop-entry`、`install.app-restart-recovery`、`install.apk-build` | — | 5 |
 | `host-input` 宿主输入 | 安卓的触摸、按键、指针、手势与输入法文字送进 KWin（直接触摸、触控板、电视遥控与键盘）。 | `delivery.acceptance`、`delivery.ui-automation`、`desktop-mode.fullscreen`、`desktop-mode.fullscreen-touch`、`desktop-mode.tv-computer-mode`、`desktop-mode.tv-touchpad`、`desktop-mode.apk-fullscreen`、`desktop.touch`、`desktop.edge-back`、`desktop.android-text` | — | 1 |
-| `camera` 相机 | 安卓 Camera2 的画面作为 PipeWire 相机节点（rungic.camera.N），按需开关；有哪些相机由平台桥的 capture-info 回答。 | `apps.camera`、`apps.snapshot`、`apps.plasma-camera`、`apps.firefox`、`delivery.acceptance`、`delivery.probes` | — | 2 |
-| `audio` 扬声器与麦克风 | 安卓的扬声器和麦克风作为 PulseAudio 设备（android、android_phone 输出与麦克风源），按需挂起；输出经安卓侧的 PulseAudio（system/android-audio）。 | `agent.voice`、`agent.call-proxy`、`apps.phone-audio`、`apps.virtual-audio`、`apps.firefox`、`delivery.acceptance`、`delivery.probes`、`desktop-mode.audio-follow`、`desktop.screen-recording`、`install.cold-start` | — | 2 |
+| `camera` 相机 | 安卓 Camera2 的画面作为 PipeWire 相机节点（rungic.camera.N），按需开关；有哪些相机由平台桥的 capture-info 回答。 | `apps.camera`、`apps.snapshot`、`apps.plasma-camera`、`apps.firefox`、`delivery.acceptance`、`delivery.probes` | 1 | 2 |
+| `audio` 扬声器与麦克风 | 安卓的扬声器和麦克风作为 PulseAudio 设备（android、android_phone 输出与麦克风源），按需挂起；输出经安卓侧的 PulseAudio（system/android-audio）。 | `agent.voice`、`agent.call-proxy`、`apps.phone-audio`、`apps.virtual-audio`、`apps.firefox`、`delivery.acceptance`、`delivery.probes`、`desktop-mode.audio-follow`、`desktop.screen-recording`、`install.cold-start` | 1 | 2 |
 | `communication-audio` 通话音频 | $XDG_RUNTIME_DIR/rungic-communication.sock：电话模式与通话用的双向通信音频（android_communication 设备）。 | `agent.phone-mode` | — | — |
-| `codec` 硬件编解码 | 安卓 MediaCodec 经 IPC 给 GStreamer、FFmpeg 和 Firefox 用（H.264/HEVC/VP9 解码、H.264 编码）。 | `apps.snapshot`、`apps.hw-codec`、`apps.firefox-hw-video`、`delivery.acceptance`、`desktop.screen-recording` | — | 1 |
+| `codec` 硬件编解码 | 安卓 MediaCodec 经 IPC 给 GStreamer、FFmpeg 和 Firefox 用（H.264/HEVC/VP9 解码、H.264 编码）。 | `apps.snapshot`、`apps.hw-codec`、`apps.firefox-hw-video`、`delivery.acceptance`、`desktop.screen-recording` | 2 | 1 |
 | `clipboard` 剪贴板 | 安卓 ClipboardDaemon 与 Wayland 剪贴板双向同步。 | `desktop-mode.clipboard`、`desktop.clipboard`、`desktop.clipboard-history` | — | — |
 | `network` 网络 | 安卓的 Wi-Fi 与网络状态，经 Linux 一侧的 NetworkManager D-Bus 接口给桌面用。 | `desktop.network` | — | — |
 | `bluetooth` 蓝牙 | 安卓蓝牙经 Linux 一侧的 BlueZ D-Bus 接口给桌面用。 | `desktop.bluetooth` | — | — |
