@@ -133,5 +133,34 @@ Item {
             compare(InputContext.inputEngine.wordCandidateListModel.count, 0, "no candidates")
             Qt.inputMethod.hide()
         }
+        // covers: desktop.rime/E6
+        // A word picked in a sensitive field is not learned; the same pick in an ordinary field is.
+        function test_7_sensitive_field_does_not_learn() {
+            const model = InputContext.inputEngine.wordCandidateListModel
+            function candidates(item) {
+                show(item)
+                type("shi")
+                tryVerify(() => model.count > 6, 2000, "candidates for shi")
+                const list = []
+                for (let i = 0; i < 6; ++i) list.push(model.dataAt(i))
+                return list
+            }
+            const before = candidates(sensitive)
+            verify(im().sessionOpen && !im().sessionShared, "a sensitive field types in a session without the user dictionary")
+            model.selectItem(5)
+            tryCompare(sensitive, "text", before[5])
+            Qt.inputMethod.hide()
+            tryVerify(closed, 2000, "hiding the keyboard closes the session")
+            const after = candidates(field)
+            compare(after[0], before[0], "the sensitive field's pick is not first now")
+            model.selectItem(after.indexOf(before[5]))
+            Qt.inputMethod.hide()
+            tryVerify(closed, 2000, "hiding the keyboard closes the session")
+            const learned = candidates(field)
+            compare(learned[0], before[5], "the ordinary field's pick is first from then on")
+            model.selectItem(0)
+            Qt.inputMethod.hide()
+            tryVerify(closed, 2000, "hiding the keyboard closes the session")
+        }
     }
 }

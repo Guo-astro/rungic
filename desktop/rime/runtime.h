@@ -43,7 +43,12 @@ public:
             close(s);
             return false;
         }
-        if (sharedOnly || !guests) return false;
+        return !sharedOnly && openGuest(s);
+    }
+    // A session that neither reads nor learns into the user dictionary: for a field whose text
+    // must not be remembered (Qt::ImhSensitiveData), or while another process holds it.
+    bool openGuest(Session &s) {
+        if (!ready || !guests) return false;
         const auto saved = disableUserDict();
         s = {api->create_session(), false};
         const bool ok = s.id && prepare(s.id);
