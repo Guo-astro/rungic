@@ -37,15 +37,17 @@ class AgentGuideTests(unittest.TestCase):
                 self.assertIn(f'name: {skill}\n', front[1] + '\n')
                 self.assertRegex(front[1], r'(?m)^description: \S')
                 self.assertIn(f'.agents/skills/{skill}/SKILL.md', text, 'AGENTS.md says where the skill is')
-        # Claude Code finds a skill through its link in .claude/skills; AGENTS.md says which are linked.
+        # Claude Code finds a skill through its link in .claude/skills: each is a project skill of the
+        # same name (one AGENTS.md names, or another project-local one, such as asd-ste100).
         links = sorted((ROOT / '.claude/skills').iterdir())
         self.assertTrue(links)
         for link in links:
             with self.subTest(link.name):
                 self.assertTrue(link.is_symlink())
                 self.assertEqual(link.resolve(), (ROOT / '.agents/skills' / link.name).resolve())
-                self.assertTrue((link / 'SKILL.md').is_file())
-                self.assertIn(link.name, named)
+                front = re.match(r'---\n(.*?)\n---\n', (link / 'SKILL.md').read_text(), re.S)
+                self.assertTrue(front, 'SKILL.md starts with its front matter')
+                self.assertRegex(front[1], rf'(?m)^name: {re.escape(link.name)}$')
         self.assertIn('Claude Code 经 `.claude/skills/` 链接调用', text)
 
 
