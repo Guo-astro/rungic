@@ -54,7 +54,7 @@ Window {
             callContact = e.contact || i18nc("@info a call without a contact name", "Call"); callStarted = 0; callNote = ""
             callCanMonitor = e.independentMonitor !== false
             callDetails = false; shown = false; hideTimer.stop()
-            Overlay.present(screenName)
+            win.present(screenName)
         } else if (e.type === "call-state") {
             callStatus = e.state
             if (e.state === "connected" && !callStarted) callStarted = e.connectedAt || e.time || Date.now() / 1000
@@ -70,7 +70,7 @@ Window {
             callLive = true; callContact = e.callInfo.contact; callPhase = e.callPhase
             callCanMonitor = e.callInfo.independentMonitor !== false
             callStatus = e.callInfo.state || (e.callInfo.connectedAt ? "connected" : "ongoing"); callStarted = e.callInfo.connectedAt || 0
-            if (!shown) { hideTimer.stop(); Overlay.present(screenName) }
+            if (!shown) { hideTimer.stop(); win.present(screenName) }
         } else if (e.type === "agent-restarted") {
             callLive = false
             if (!shown) Overlay.conceal()
@@ -81,13 +81,25 @@ Window {
         AgentClient.callCommand(JSON.stringify(Object.assign({op: op, callId: callId}, fields || {})))
     }
 
-    // The app's look, also here.
+    // The app's look, also here. The app is another process writing the same settings file, and
+    // the overlay stays running: what it read at start went stale when the app's theme changed.
+    // Read again each time the overlay comes up.
     Settings {
         id: appSettings
         category: "App"
         property string theme: "system"
     }
-    Binding { target: Theme; property: "mode"; value: appSettings.theme }
+    property string themeMode: appSettings.theme
+    function followTheme() {
+        appSettings.sync()
+        themeMode = appSettings.value("theme", "system")
+    }
+    Binding { target: Theme; property: "mode"; value: win.themeMode }
+    // Mapped on a screen: in the app's look of now.
+    function present(screen) {
+        followTheme()
+        Overlay.present(screen)
+    }
 
     property string screenName: ""
     property bool shown: false
@@ -147,7 +159,7 @@ Window {
         hideTimer.stop()
         if (reopen) { reopen = false; AgentClient.openAssistant() }
         if (screen) win.screenName = screen
-        Overlay.present(win.screenName)
+        win.present(win.screenName)
         updateMaterial()
         win.shown = true
         idleTimer.restart()

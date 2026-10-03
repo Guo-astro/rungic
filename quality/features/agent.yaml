@@ -42,10 +42,12 @@ features:
         text: 从哪块屏发起，回复就从哪里播放：手机上发起在手机本机（耳机优先，否则扬声器），电视上发起在电视。
         evidence:
           - {doc: docs/59-voice-agent.md, date: 2026-09-24, note: "按 Android 路由核对，尚待人耳确认"}
+        device: 手机本机里耳机优先还是扬声器、电视那一路由 Android 的音频路由决定，系统测试只能核对 Linux 选了哪个 sink，声音实际从哪里出来要在手机上听
       - id: E4
         text: 回复连续播放，不快进、不卡顿、不丢句。
         evidence:
           - {doc: docs/59-voice-agent.md, date: 2026-09-24, note: "复测无不连续或重新同步记录"}
+        device: 回复是否连续、不快进、不卡顿取决于 PulseAudio 到 Android 音频桥的缓冲与时序，只有手机上实际播出的声音能判断
       - id: E5
         text: 点“停止”立即停播并中止当前任务，任务显示“已停止”，之后不再播出残句。
         evidence:
@@ -82,6 +84,7 @@ features:
       - agent/assistant/prompts/realtime.md
       - agent/assistant/app/qml/Composer.qml
       - packaging/rungic-voice-agent/
+      - tools/tests/test_voice_agent_service.py
     docs: [docs/59-voice-agent.md, docs/87-agent-app-redesign.md, docs/89-agent-progress.md, docs/agent-ready-interfaces.md]
 
   - id: agent.home-hold
@@ -108,6 +111,7 @@ features:
         text: 按下后不必等连接：服务和浮层常驻预热，按下约 0.1 s 内开始录音，实时连接在后台建立，期间的录音按顺序补发。
         evidence:
           - {doc: docs/67-home-assistant.md, date: 2026-09-25, note: "Hold 后 89 ms 开始录音"}
+        device: 按下到开始录音的时延取决于手机上 Android 麦克风经 PulseAudio 的采集链路和 CPU 调度，无头系统里没有这条采集链路，测不出 0.1 s；浮层常驻不显示由 tools/system/tests/assistant_app.py 检查
       - id: E5
         text: 一次按住超过 60 秒视为松开事件丢失：关闭浮层、取消录音，已说的内容不发送，麦克风不会一直开着。
       - id: E6
@@ -135,6 +139,8 @@ features:
       - agent/assistant/app/qml/AssistantOverlay.qml
       - agent/assistant/rungic-voice-overlay.service
       - agent/assistant/com.rungic.VoiceAssistant.service
+      - tools/tests/test_assistant_overlay.py
+      - tools/system/tests/assistant_app.py
     docs: [docs/67-home-assistant.md, docs/87-agent-app-redesign.md]
 
   - id: agent.chat-app
@@ -206,6 +212,9 @@ features:
       - agent/assistant/app/qml/SettingsPage.qml
       - agent/assistant/app/qml/SettingsFrame.qml
       - agent/assistant/com.rungic.VoiceAssistant.desktop
+      - tools/tests/assistant_qml.py
+      - tools/tests/test_assistant_app.py
+      - tools/tests/test_assistant_service_side.py
     docs: [docs/59-voice-agent.md, docs/87-agent-app-redesign.md, docs/67-home-assistant.md]
 
   - id: agent.attachments
@@ -353,6 +362,7 @@ features:
       - agent/assistant/prompts/phone.md
       - tools/tests/test_phone_session.py
       - tools/tests/native_task_tools_probe.py
+      - tools/system/tests/phone_session_units.py
     docs: [docs/101-full-duplex-phone-mode.md]
 
   # ---- 安装、设置和接入 ---------------------------------------------------------------------------
@@ -429,6 +439,8 @@ features:
       - agent/assistant/app/qml/KeyPage.qml
       - agent/assistant/app/qml/account.js
       - agent/computer-use/rungic_cua/keys.py
+      - tools/tests/test_api_key_file.py
+      - tools/tests/test_voice_agent_key_page.py
       - tools/tests/test_codex_login.py
       - tools/tests/test_app_server.py
     docs: [docs/101-codex-sign-in-and-api-key.md, docs/87-agent-app-redesign.md]
@@ -501,6 +513,7 @@ features:
       - agent/assistant/skills/rungic-phone-desktop/SKILL.md
       - agent/assistant/kconf_update/
       - tools/tests/test_instructions_sync.py
+      - tools/tests/test_codex_setup_update.py
     docs: [docs/59-voice-agent.md, docs/88-agent-visible-work.md]
 
   - id: agent.dev-diagnostics
@@ -530,6 +543,7 @@ features:
       - tools/rungic_agent_mcp.py
       - tools/ui_launch_check.py
       - .mcp.json
+      - tools/tests/test_rungic_agent_mcp.py
     docs: [docs/55-agent-native-debugging.md, docs/agent-ready-interfaces.md]
 
   # ---- 让 Agent 操作桌面 --------------------------------------------------------------------------
@@ -544,10 +558,12 @@ features:
         text: Agent 能点击、双击、拖动、滚动、按键和输入任何语言的文字来操作图形应用；应用收到的是普通的键盘鼠标事件，Plasma 在后台时也能输入。
         evidence:
           - {doc: docs/68-luna-computer-use.md, date: 2026-09-25, note: "微信 3 步打开聊天"}
+        device: 任何语言的文字靠 KWin 的 commitText 提交，这是 Rungic 的 KWin 补丁（virtualkeyboard-commit-text），系统测试容器里是 Ubuntu 原版 KWin，只测了按键和指针；“Plasma 在后台”指 Android 前台是别的应用，只有手机能造出
       - id: E2
         text: 截图只截任务所在的窗口（连同它的弹出菜单和对话框），范围变化时用一句话告诉模型；点击坐标误差约 1 像素。
         evidence:
           - {doc: docs/68-luna-computer-use.md, date: 2026-09-25, note: "输入 token 减少 67%，坐标误差 1 px"}
+        device: 截图的像素由 KWin 的 ScreenShot2 渲染，需要 OpenGL 合成；系统测试容器没有 GPU 渲染节点，KWin 退回 QPainter，截图被取消，真实画面和点击误差只能在手机上看
       - id: E3
         text: 多步任务交给 desktop_goal，结束时报告完成、需要提问或失败；需要用户信息时以提问结束，由助手问用户后带着答复继续；用户说停时中止。
         evidence:
@@ -598,6 +614,8 @@ features:
       - agent/assistant/kconf_update/
       - packaging/rungic-cua/
       - tools/test_blocked.py
+      - tools/tests/test_cua_tools.py
+      - tools/system/tests/cua_desktop.py
     docs: [docs/68-luna-computer-use.md, docs/60-computer-use.md, docs/103-krita-save-dialog-hang.md, docs/agent-ready-interfaces.md]
 
   - id: agent.plan-two
@@ -614,8 +632,10 @@ features:
         text: OCR 在手机 GPU 上识别整屏约 0.5 s（PP-OCRv6 Small，fp16）；模型还没下载好或 GPU 不可用时立即改用容器 CPU 上的 RapidOCR（约 2 s），不卡住。
         evidence:
           - {doc: docs/64-goal-computer-use.md, date: 2026-09-25, note: "det 640² 57 ms，整屏约 0.5 s"}
+        device: 整屏约 0.5 s 是手机 Adreno GPU 上 LiteRT 的速度，OCR 在安卓应用里运行，系统测试里没有这块 GPU；CPU 约 2 s 也取决于手机 CPU
       - id: E3
         text: OCR 模型在第一次请求时由 Rungic 应用后台下载，按固定的地址和 SHA-256 校验；下载完成前请求立即返回错误。
+        gap: 模型下载和 SHA-256 校验在 Rungic 应用的 OcrBridge.java 里，没有 Android 侧的离线测试，也没有实机记录；Linux 一侧收到“下载中”后立即改用 CPU 已由 tools/tests/test_cua_tools.py 检查（E2）
       - id: E4
         text: 语音识别写错的人名按读音找：同音得 1.0、近音 0.9，按分区标题区分联系人和搜索建议；两个不同的人都达到 0.9 时先问用户。
         evidence:
@@ -624,6 +644,7 @@ features:
         text: 一次观察约 0.5–1 s；控件坐标按窗口根节点换算，应用的错误窗口坐标（微信内置 Qt）和阴影边距不影响点击。
         evidence:
           - {doc: docs/60-computer-use.md, date: 2026-09-25, note: "微信子任务 2 步 7.2 s"}
+        device: 一次观察 0.5–1 s 是手机上 AT-SPI 往返的耗时（每个属性约 50 ms，取决于手机和应用）；微信内置 Qt 的错误窗口坐标只有真实微信能复现，测试里是按其症状做的替身
     pitfalls:
       - text: Qt 没有实现 AT-SPI 缓存和 GetAll，逐个属性查询每个节点约 50 ms；改为同一层的请求一次发出。
         docs: [docs/60-computer-use.md]
@@ -649,6 +670,7 @@ features:
       - tools/fetch_ocr_assets.py
       - android/app/src/com/rungic/plasma/OcrBridge.java
       - android/app/jni/ocr/
+      - tools/system/tests/cua_find_name.py
     docs: [docs/64-goal-computer-use.md, docs/60-computer-use.md]
 
   - id: agent.workspaces
@@ -667,6 +689,7 @@ features:
         text: 工作区默认无头：手机锁屏、息屏、Rungic 应用被冻结时，工作区照常启动、运行应用、截图和操作。
         evidence:
           - {doc: docs/research/97-headless-agent-work.md, date: 2026-10-02, note: "§10、§14：APK 冻结时启动、截图、录屏"}
+        device: 截图要经 KWin 在手机 GPU 上渲染，容器里的 KWin 没有 GPU，ScreenShot2 一律取消；Android 锁屏、息屏和冻结 Rungic 应用也只在手机上发生
       - id: E3
         text: 宿主不响应时，需要宿主的工作区约 3 秒内明确失败并说明原因，Agent 能如实转告；冻结期间桌面工具每次约 1 秒，不每次等满超时。
         evidence:
@@ -720,6 +743,8 @@ features:
       - agent/computer-use/rungic_cua/router.py
       - agent/computer-use/rungic_cua/fakeinput.py
       - tools/tests/test_workspace_env.py
+      - tools/system/tests/workspace_headless.py
+      - tools/tests/test_workspace_unit.py
     docs: [docs/research/91-agent-workspaces.md, docs/research/97-headless-agent-work.md, docs/agent-ready-interfaces.md]
 
   - id: agent.workspace-lifecycle
@@ -758,6 +783,7 @@ features:
       - agent/workspace/keeper.cpp
       - agent/computer-use/rungic_cua/workspace.py
       - tools/test_workspace_lifecycle.py
+      - tools/tests/test_workspace_dismiss.py
     docs: [docs/research/91-agent-workspaces.md]
 
   - id: agent.where
@@ -833,6 +859,8 @@ features:
           - {doc: docs/88-agent-visible-work.md, date: 2026-09-29, note: "前两条之后都是 Luna 自己写的中文说明"}
     code:
       - agent/computer-use/rungic_cua/activity.py
+      - tools/tests/test_cua_caption_qml.py
+      - tools/system/tests/cua_captions.py
     docs: [docs/88-agent-visible-work.md, docs/research/91-agent-workspaces.md]
 
   - id: agent.keep-awake
@@ -859,6 +887,7 @@ features:
       - agent/workspace/rungic-agent-wakelock
       - agent/workspace/rungic-agent-wakelock.service
       - tools/tests/test_agent_wakelock.py
+      - tools/tests/test_agent_wakelock_expiry.py
     docs: [docs/research/97-headless-agent-work.md]
 
   # ---- 组队 ---------------------------------------------------------------------------------------
@@ -881,6 +910,7 @@ features:
         text: 组长按简报 → 一轮评审（每人一条、最多 8 点）→ 组长定稿 → 并行制作 → 汇总审查 → 交给用户的流程推进，成员之间不直接讨论。
         evidence:
           - {doc: docs/research/91-agent-workspaces.md, date: 2026-10-02, note: "野餐邀请卡约 15 分钟完成，没有受阻"}
+        device: 流程由真实模型按 rungic-agent-team 技能推进，替身模型只会重放脚本；是否按简报、评审、定稿、制作、汇总的顺序走、成员是否不直接讨论，只有用真实 Codex 在手机上跑一轮团队才看得出（看板阶段的代码由 team-board/E1 的测试检查）
       - id: E4
         text: 成员的每次工具调用翻成一句短话（“写 BRIEF.md”“运行 check.py”）显示在它的格子上，命令链按实际做的那一步描述，最多每 1.5 秒一句。
       - id: E5
@@ -903,6 +933,7 @@ features:
       - agent/assistant/skills/rungic-agent-team/SKILL.md
       - tools/team/run-lead.sh
       - tools/team/request.txt
+      - tools/tests/test_team_frozen_host.py
       - tools/test_router.py
       - docs/images/readme/team*
     docs: [docs/research/91-agent-workspaces.md]
@@ -1030,6 +1061,7 @@ features:
         docs: [docs/research/91-agent-workspaces.md]
     code:
       - agent/assistant/call_proxy.py
+      - tools/tests/test_call_proxy.py
     docs: [docs/63-call-proxy.md]
 
   - id: agent.cellular-call
@@ -1091,8 +1123,10 @@ features:
           - {doc: docs/68-luna-computer-use.md, date: 2026-09-25, note: "文件传输助手：6.7 s 语音成为 8 秒消息，留白约 1.3 s"}
       - id: E2
         text: 只点真正的录音按钮，不点“语音输入/听写”（它会把语音转成文字发出去）。
+        gap: 录音按钮与“语音输入/听写”都会让应用经 Linux 麦克风录音，程序侧分不出；只靠 Luna 看屏幕选对控件，需要真实模型在微信文件传输助手里验证，尚无记录
       - id: E3
         text: 发送前先经用户确认。
+        gap: 发送前确认由 Agent 按 prompts/agent.md 执行，工具本身不拦截；离线没有真实模型无法检查，也还没有实机记录
     pitfalls:
       - text: 找发送按钮的模型调用曾排在语音播完之后，结尾多出约 9 秒静音；改为录音一开始就并行去找。
         docs: [docs/68-luna-computer-use.md]
@@ -1101,6 +1135,7 @@ features:
     code:
       - agent/computer-use/rungic_cua/speech.py
       - agent/computer-use/rungic_cua/server.py
+      - tools/tests/test_voice_message.py
     docs: [docs/68-luna-computer-use.md]
 
   # ---- 主动照看 -----------------------------------------------------------------------------------
@@ -1137,6 +1172,7 @@ features:
         text: 后台采集占用很小（服务约 13 MiB，单次采集 CPU 约 0.2 s），不在手机上自动编译、符号化或跑重负载探针。
         evidence:
           - {doc: docs/research/proactive-system-care.md, date: 2026-09-30, note: "RSS 约 12.6 MiB，单次 root 采集约 172 ms"}
+        device: 常驻内存和单次采集的 CPU 时间取决于手机上真实的崩溃记录、软件包数量和 CPU，容器里量出的数不代表手机；采集器只调用 dpkg-query、dpkg --audit 和 systemctl --failed（collector.cpp）
     pitfalls:
       - text: 日志里的 error 只是线索；SIGKILL、无响应和没有 core 都不能单独推出崩溃原因。Blender 的 CPU 渲染是用户选的策略，不能提示“修复为 GPU”。
         docs: [docs/research/proactive-system-care.md]
@@ -1224,6 +1260,7 @@ features:
       - agent/suggestions/qml/WidgetGallery.qml
       - agent/assistant/app/qml/SuggestionsPage.qml
       - tools/tests/test_briefing_curation.py
+      - tools/tests/test_suggestions_widgets.py
     docs: [docs/research/96-agent-curated-briefing.md, docs/research/proactive-system-care.md]
 
   - id: agent.suggestion-tasks
@@ -1286,6 +1323,7 @@ features:
         docs: [docs/research/proactive-system-care.md]
     code:
       - compatibility/
+      - tools/system/tests/suggestions_collect.py
     docs: [docs/research/proactive-system-care.md]
 
   - id: agent.usage-widget

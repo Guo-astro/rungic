@@ -62,7 +62,10 @@ if [ "$slot" = 0 ]; then
     # and Qt Quick's mobile controls (Kirigami's isMobile layouts).
     unset PLASMA_DEFAULT_SHELL PLASMA_PLATFORM QT_QUICK_CONTROLS_MOBILE
 else
-    [ -e "$state/config/kdeglobals" ] || ln -s "$RUNGIC_USER_CONFIG_HOME/kdeglobals" "$state/config/kdeglobals"
+    # The link stays from the last start; while the user has no kdeglobals yet it dangles (-e is false
+    # for it), and a second ln failed the start under set -e.
+    [ -e "$state/config/kdeglobals" ] || [ -L "$state/config/kdeglobals" ] \
+        || ln -s "$RUNGIC_USER_CONFIG_HOME/kdeglobals" "$state/config/kdeglobals"
 fi
 export XDG_CONFIG_HOME="$state/config"
 # A desktop's window behaviour, not the phone's: Plasma Mobile's configuration leaves the search

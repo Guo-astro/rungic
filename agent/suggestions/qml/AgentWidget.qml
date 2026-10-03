@@ -98,6 +98,15 @@ Item {
                     name: widget.provider.name || "Agent"
                     icon: widget.provider.icon || ({})
                     muted: !widget.provider.id || widget.provider.status === "signed-out" || widget.provider.status === "offline"
+                    // The agent's own mark goes back to its conversation; the rest of the card to its usage.
+                    MouseArea {
+                        anchors.fill: parent; anchors.margins: -10
+                        enabled: widget.live
+                        onClicked: navigation.openAgent()
+                        Accessible.role: Accessible.Button
+                        Accessible.name: widget.provider.name || "Agent"
+                        Accessible.onPressAction: navigation.openAgent()
+                    }
                 }
                 Text {
                     text: widget.compact && widget.provider.name === "Claude Code" ? "Claude" : (widget.provider.name || "Agent")

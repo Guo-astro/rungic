@@ -156,7 +156,8 @@ def snapshot(label: str = 'manual', since_seconds: float = 300) -> str:
     return text
 
 
-@server.tool(annotations=READ)
+# Not read-only: both turn accessibility on when it is off (the apps then register; it costs CPU).
+@server.tool(annotations=ACT)
 def ui_apps() -> str:
     """Applications registered on the AT-SPI bus, and KWin's windows with global logical geometry.
     Enables accessibility if it is off (Qt apps then register within ~2 s; it costs some CPU)."""
@@ -167,12 +168,13 @@ def ui_apps() -> str:
     return dump({'apps': rungic_agent.a11y('apps'), 'windows': rungic_agent.ui_windows()})
 
 
-@server.tool(annotations=READ)
+@server.tool(annotations=ACT)
 def ui_find(app: str, role: str | None = None, name: str | None = None, include_hidden: bool = False) -> str:
     """Find UI elements of an application (name from ui_apps, e.g. "plasmashell", "kalk") by AT-SPI role
     ("button", "label", "text", "filler", ...) and/or case-insensitive name regex. Returns path, role, name,
     states, window-relative extents, actions. Paths change when the UI changes: find again after acting.
-    Plasma launcher icons are "filler" elements whose child "label" holds the app name."""
+    Plasma launcher icons are "filler" elements whose child "label" holds the app name. Enables
+    accessibility if it is off."""
     return dump(rungic_agent.ui_find(app, role, name, include_hidden))
 
 
