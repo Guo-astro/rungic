@@ -195,6 +195,8 @@ void AgentScreen::startWorkspaceStream()
             } else if (line.startsWith("tv-node ")) {
                 m_tvNodeId = line.mid(8).toUInt();
                 Q_EMIT tvNodeIdChanged();
+            } else if (line.startsWith("prompting ")) {
+                setPrompting(line.mid(10) == "1");
             } else if (line.startsWith("error ")) {
                 setStatus(QStringLiteral("error: ") + QString::fromUtf8(line.mid(6)));
             }
@@ -218,11 +220,20 @@ void AgentScreen::startWorkspaceStream()
             m_tvNodeId = 0;
             Q_EMIT tvNodeIdChanged();
         }
+        setPrompting(false);
         // The workspace went or restarted: try again at the next poll.
         m_streamedWorkspace = 0;
         setStatus(QStringLiteral("waiting for the workspace"));
     });
     process->start();
+}
+
+void AgentScreen::setPrompting(bool prompting)
+{
+    if (prompting == m_prompting)
+        return;
+    m_prompting = prompting;
+    Q_EMIT promptingChanged();
 }
 
 void AgentScreen::stopWorkspaceStream()
@@ -236,6 +247,7 @@ void AgentScreen::stopWorkspaceStream()
     process->closeWriteChannel();
     process->terminate();
     connect(process, &QProcess::finished, process, &QObject::deleteLater);
+    setPrompting(false);
     if (m_nodeId) {
         m_nodeId = 0;
         Q_EMIT nodeIdChanged();

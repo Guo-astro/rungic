@@ -32,6 +32,9 @@ class AgentScreen : public QObject
     // Desktop mode on a TV: a picture of its own for the TV's view (setTvShown), 0 until it starts.
     Q_PROPERTY(uint tvNodeId READ tvNodeId NOTIFY tvNodeIdChanged)
     Q_PROPERTY(bool onTv READ onTv NOTIFY statusChanged)
+    // polkit's prompt waits in this screen's workspace for its user (docs/research/97 §21): it is
+    // answered there, so the floating window says to open fullscreen.
+    Q_PROPERTY(bool prompting READ prompting NOTIFY promptingChanged)
     // 0: desktop mode's window; n: the assistant's screen of workspace n.
     Q_PROPERTY(int workspace READ workspace CONSTANT)
     // What the assistant is doing on this screen (rungic_cua.activity, docs/88): "" when nothing,
@@ -53,6 +56,7 @@ public:
     uint pointerNodeId() const { return m_pointerNodeId; }
     uint tvNodeId() const { return m_tvNodeId; }
     bool onTv() const { return m_onTv; }
+    bool prompting() const { return m_prompting; }
     int workspace() const { return m_workspace; }
     QString activityState() const { return m_activityState; }
     QString activityText() const { return m_activityText; }
@@ -92,6 +96,7 @@ Q_SIGNALS:
     void nodeIdChanged();
     void pointerNodeIdChanged();
     void tvNodeIdChanged();
+    void promptingChanged();
     void activityChanged();
 
 private:
@@ -102,6 +107,7 @@ private:
     void readActivity();
     void startWorkspaceStream();
     void stopWorkspaceStream();
+    void setPrompting(bool prompting);
     void send(const QString &line);   // a command to rungic-workspace-stream
 
     uint m_pointerNodeId = 0;
@@ -113,6 +119,7 @@ private:
     uint m_nodeId = 0;
     bool m_enabled = true;
     bool m_onTv = false;
+    bool m_prompting = false;
     bool m_fullscreen = false;
     QFileSystemWatcher m_activityWatcher;
     QString m_activityPath;

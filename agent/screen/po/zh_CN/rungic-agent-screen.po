@@ -205,3 +205,8 @@ msgstr "{apps} 没有关闭，可能有未保存的内容，所以桌面还开�
 msgctxt "@title:window desktop mode on the TV"
 msgid "Desktop on the TV"
 msgstr "电视上的桌面"
+
+#: qml/Main.qml
+msgctxt "@info:status an app of the desktop asks for the password; tap to answer it in fullscreen"
+msgid "Authentication needed · tap to answer in fullscreen"
+msgstr "需要授权 · 点此全屏后输入"

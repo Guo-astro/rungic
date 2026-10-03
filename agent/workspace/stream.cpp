@@ -20,8 +20,16 @@
 // second picture with the pointer drawn in (fullscreen's touchpad mode), printed as
 // "pointer-node <id>", and `pointer-stream off` ends it ("pointer-node 0"). `tv-stream on|off`
 // likewise a picture of its own for the TV ("tv-node <id>").
-#include <QDBusMessage>
+//
+// "prompting 1" while polkit's prompt waits in the workspace for its user (polkit-kde-agent's
+// delegate on the workspace's bus shows the prompts of its apps there, docs/research/97 §21), and
+// "prompting 0" once it is answered: the floating window says so.
 #include <QDBusConnection>
+#include <QDBusConnectionInterface>
+#include <QDBusMessage>
+#include <QDBusPendingCallWatcher>
+#include <QDBusServiceWatcher>
+#include <QDBusVariant>
 #include <QGuiApplication>
 #include <QScreen>
 #include <QSocketNotifier>
@@ -60,6 +68,49 @@ protected:
     void zkde_screencast_stream_unstable_v1_closed() override { Q_EMIT closedByCompositor(); }
 };
 
+// The delegate's Prompting on this workspace's bus, printed when it changes.
+class PromptWatch : public QObject
+{
+    Q_OBJECT
+public:
+    PromptWatch()
+    {
+        const QString service = QStringLiteral("org.kde.polkit-kde-authentication-agent-1");
+        const QString path = QStringLiteral("/org/kde/Polkit1AuthAgent/Delegate");
+        QDBusConnection bus = QDBusConnection::sessionBus();
+        bus.connect(service, path, QStringLiteral("org.kde.Polkit1AuthAgent.Delegate"), QStringLiteral("PromptingChanged"), this,
+                    SLOT(changed(bool)));
+        auto *watcher = new QDBusServiceWatcher(service, bus, QDBusServiceWatcher::WatchForUnregistration, this);
+        connect(watcher, &QDBusServiceWatcher::serviceUnregistered, this, [this] {
+            changed(false);
+        });
+        // Already waiting when this started (the window opened after the prompt); never starts it.
+        if (bus.interface() && bus.interface()->isServiceRegistered(service)) {
+            QDBusMessage get = QDBusMessage::createMethodCall(service, path, QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
+            get << QStringLiteral("org.kde.Polkit1AuthAgent.Delegate") << QStringLiteral("Prompting");
+            auto *pending = new QDBusPendingCallWatcher(bus.asyncCall(get), this);
+            connect(pending, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher *call) {
+                call->deleteLater();
+                const QDBusMessage reply = call->reply();
+                if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
+                    changed(qvariant_cast<QDBusVariant>(reply.arguments().first()).variant().toBool());
+            });
+        }
+    }
+
+public Q_SLOTS:
+    void changed(bool prompting)
+    {
+        if (prompting == m_prompting)
+            return;
+        m_prompting = prompting;
+        std::cout << "prompting " << (prompting ? 1 : 0) << std::endl;
+    }
+
+private:
+    bool m_prompting = false;
+};
+
 class Screencasting : public QWaylandClientExtensionTemplate<Screencasting>, public QtWayland::zkde_screencast_unstable_v1
 {
 public:
@@ -87,6 +138,7 @@ int main(int argc, char *argv[])
     QGuiApplication::setDesktopFileName(QStringLiteral("com.rungic.WorkspaceStream"));
     Screencasting screencasting;
     FakeInput input;
+    PromptWatch prompts;
     bool authenticated = false;
     std::unique_ptr<Stream> stream;
     constexpr uint hidden = 1, embedded = 2;    // the pointer left out of the picture, or drawn in

@@ -557,6 +557,8 @@ Window {
     // ---- caption: what the assistant is doing (docs/88) ---------------------------------------------
     // hidden, working, done, question, failed, stopped. An ending shows a few seconds, then hides.
     property string captionState: ""
+    // A prompt waits in the screen while it is not fullscreen (rungic-workspace-stream's "prompting").
+    readonly property bool prompting: !!root.screen && !!root.screen.prompting && !full
     function followActivity() {
         const state = root.screen.activityState
         captionState = ["working", "done", "question", "failed", "stopped"].indexOf(state) >= 0 ? state : ""
@@ -572,7 +574,7 @@ Window {
     Timer {
         interval: 100
         repeat: true
-        running: root.captionState === "working" && (caption.visible || tab.visible)
+        running: (root.captionState === "working" || root.prompting) && (caption.visible || tab.visible)
         onTriggered: root.breath = 0.5 + 0.5 * Math.cos(Date.now() / 1400 * 2 * Math.PI)
         onRunningChanged: if (!running) root.breath = 1
     }
@@ -867,10 +869,19 @@ Window {
             opacity: shown ? 1 : 0
             visible: opacity > 0.01
             Behavior on opacity { NumberAnimation { duration: 180 } }
-            // The board in focus says it all itself: no screen's caption over it.
-            state: root.captionState === "" || (root.directing && director.focus === 100) ? "hidden" : root.captionState
+            // The prompt's caption opens fullscreen (the touch is the caption's alone: no toolbar).
+            TapHandler {
+                enabled: caption.state === "prompt"
+                gesturePolicy: TapHandler.ReleaseWithinBounds
+                onTapped: root.setFullscreen()
+            }
+            // polkit's prompt waits in the screen (desktop mode's apps, docs/research/97 §21): answered
+            // there, in fullscreen. The board in focus says it all itself: no screen's caption over it.
+            state: root.prompting ? "prompt"
+                 : root.captionState === "" || (root.directing && director.focus === 100) ? "hidden" : root.captionState
             states: [
                 State { name: "hidden"; PropertyChanges { caption.shown: false } },
+                State { name: "prompt"; PropertyChanges { caption.shown: true; caption.dot: "#e0a83c"; caption.label: i18nc("@info:status an app of the desktop asks for the password; tap to answer it in fullscreen", "Authentication needed · tap to answer in fullscreen") } },
                 State { name: "working"; PropertyChanges { caption.shown: true; caption.dot: "#63d471"; caption.label: root.screen.activityText || i18nc("@info:status the agent is at work on this screen", "Working") } },
                 State { name: "done"; PropertyChanges { caption.shown: true; caption.dot: "#8ab4f8"; caption.label: root.screen.activityText ? i18nc("@info:status %1 is what the agent did", "Done · %1", root.screen.activityText) : i18nc("@info:status", "Done") } },
                 State { name: "question"; PropertyChanges { caption.shown: true; caption.dot: "#e0a83c"; caption.label: root.screen.activityText ? i18nc("@info:status %1 is the agent's question", "Needs your answer · %1", root.screen.activityText) : i18nc("@info:status", "Needs your answer") } },
@@ -1114,8 +1125,8 @@ Window {
             id: tabDot
             anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 8 }
             width: 6; height: 6; radius: 3
-            color: root.screen.status === "running" ? "#63d471" : "#e0a83c"
-            opacity: root.captionState === "working" ? 0.25 + 0.75 * root.breath : 1
+            color: root.screen.status === "running" && !root.prompting ? "#63d471" : "#e0a83c"
+            opacity: root.captionState === "working" || root.prompting ? 0.25 + 0.75 * root.breath : 1
         }
         TapHandler { onTapped: root.expand() }
         DragHandler {
