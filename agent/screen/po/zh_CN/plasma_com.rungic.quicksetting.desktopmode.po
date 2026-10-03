@@ -48,6 +48,6 @@ msgid "Floating window"
 msgstr "浮窗"
 
 #: quicksetting/contents/ui/main.qml
-msgctxt "@info:status"
-msgid "Something went wrong"
-msgstr "操作失败"
+msgctxt "@info:status %1 is why desktop mode could not be turned on or off"
+msgid "Failed: %1"
+msgstr "失败：%1"

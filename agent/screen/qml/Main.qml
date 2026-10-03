@@ -536,7 +536,12 @@ Window {
         }
     }
     property bool typing: false
-    onFullChanged: if (!full) typing = false
+    onFullChanged: {
+        if (!full)
+            typing = false
+        if (root.screen)
+            root.screen.setFullscreen(full)   // desktop mode's: what its quick setting shows
+    }
     onTypingChanged: {
         if (typing) {
             keyboardField.forceActiveFocus()

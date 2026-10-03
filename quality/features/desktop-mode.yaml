@@ -53,6 +53,8 @@ features:
       - agent/screen/com.rungic.DesktopMode.desktop
       - packaging/rungic-agent-screen/
       - tools/tests/test_platform_bridge_contract.py
+      - tools/tests/test_desktop_mode_switch.py
+      - tools/tests/test_desktop_mode_tile.py
     docs: [docs/research/97-headless-agent-work.md, docs/65-agent-screen.md, docs/research/91-agent-workspaces.md]
 
   - id: desktop-mode.independent-desktop
@@ -114,6 +116,7 @@ features:
       - tools/tests/test_desktop_plasma.py
       - tools/tests/test_bus_forward.py
       - tools/tests/test_workspace_env.py
+      - tools/system/tests/independent_desktop_session.py
     docs: [docs/research/97-headless-agent-work.md, docs/research/91-agent-workspaces.md]
 
   - id: desktop-mode.clipboard
@@ -142,6 +145,7 @@ features:
     code:
       - agent/workspace/rungic-workspace
       - shared/platform/clipboard.py
+      - tools/system/tests/desktop_clipboard.py
     docs: [docs/research/97-headless-agent-work.md, docs/research/clipboard-background.md, docs/research/clipboard-history.md]
 
   - id: desktop-mode.floating-window
@@ -196,6 +200,8 @@ features:
       - agent/workspace/stream.cpp
       - agent/workspace/com.rungic.WorkspaceStream.desktop
       - tools/tests/test_agent_screen_gestures.py
+      - tools/tests/test_agent_screen_window.py
+      - tools/system/tests/desktop_mode_window.py
     docs: [docs/65-agent-screen.md, docs/research/97-headless-agent-work.md, docs/research/91-agent-workspaces.md]
 
   - id: desktop-mode.fullscreen
@@ -210,6 +216,7 @@ features:
         text: 进出全屏是连续的变形动画，中间没有空白帧，退出后浮窗回到原来的位置和大小。
         evidence:
           - {doc: docs/research/97-headless-agent-work.md, date: 2026-10-03, note: "§21.6 手机录屏逐帧检查"}
+        device: 空白帧出不出现取决于手机上新窗口第一帧上屏的时机（手机 KWin 约晚 0.6 秒，离线渲染几毫秒就画出），离线测试只能检查变形连续、交接静帧的先后和回到原位，进入时的那一帧要看手机录屏。
       - id: E2
         text: 全屏是一个普通的全屏窗口：会被激活的对话框（授权框）、屏幕键盘、通知和 OSD 都显示在它上面，关闭后它回到最上面。
         evidence:
@@ -223,6 +230,7 @@ features:
         evidence:
           - {doc: docs/research/97-headless-agent-work.md, date: 2026-10-02, note: "§17.1 进入全屏后 mCurrentRotation=ROTATION_0"}
           - {doc: docs/research/97-headless-agent-work.md, date: 2026-10-03, note: "§21.6 画面转成横屏、铺满屏幕"}
+        device: 手机整机转不转屏由安卓的旋转（mCurrentRotation）决定，Linux 一侧测不到；画面在窗口里转、横屏显示器上不转由单元测试检查。
       - id: E5
         text: 离开全屏：工具栏的退出，或电脑上的 Esc；从任务切换器关闭它只回到浮窗，桌面照开；桌面被投到电视时全屏直接撤掉、不播动画。
         evidence:
@@ -301,6 +309,7 @@ features:
         docs: [docs/65-agent-screen.md, docs/research/97-headless-agent-work.md]
     code:
       - agent/screen/qml/FullTouch.qml
+      - tools/tests/test_full_touch.py
     docs: [docs/research/97-headless-agent-work.md, docs/66-pointer-gestures.md]
 
   - id: desktop-mode.floating-keyboard
@@ -378,6 +387,7 @@ features:
           - {doc: docs/research/97-headless-agent-work.md, date: 2026-10-03, note: "§21.7 修复后复测"}
       - id: E5
         text: 电视的电脑模式或远程观看 ws-0 时，授权框同样出现在 0 号桌面里，在哪看就在哪输入。
+        gap: 还没有实测（docs/97 §21.7“未测和遗留”第一项）；系统测试要先在容器里运行由补丁队列构建的 polkit-kde-agent-1，再有一个 RDP 观看端或电视。
     pitfalls:
       - text: 原版 PolicyKitListener 取消一次会多次完成结果对象，结果对象不能在第一次完成时释放。
         docs: [docs/research/97-headless-agent-work.md]
@@ -420,6 +430,7 @@ features:
           - {doc: docs/58-miracast-desktop-feasibility.md, date: 2026-09-24, note: "第 5 步实测表：模拟电视端断开 11 秒后重连"}
       - id: E4
         text: 投屏中可以换另一台电视：列表里有当前的、上次使用的、最近发现的和安卓已保存的电视，点一台即切换，失败时有提示。
+        gap: 投屏中实际换到第二台电视、换台失败的提示、“已保存”的电视出现在列表里都还没有实机验收（docs/58：2026-09-29 列为未验证，2026-10-01 修复后待验收）；APK 的换设备面板没有离线测试。
       - id: E5
         text: 后端出错时说清原因（组件版本不兼容、无线显示关闭、Wi-Fi 不可用、超时等），不显示成“没有电视”的空列表。
         evidence:
@@ -663,6 +674,7 @@ features:
         text: 留在手机本机的声音不卡顿，延迟有上限（约 185 ms）。
         evidence:
           - {doc: docs/58-miracast-desktop-feasibility.md, date: 2026-10-02, note: "用户确认声音从手机出来、不卡"}
+        device: 手机本机的声音卡不卡、延迟多少取决于安卓 AudioTrack 的输出线程和扬声器路径，只能在手机上听和测；Linux 一侧按画面分配去处由 E1–E4 的单元测试检查。
     pitfalls:
       - text: 安卓会把所有普通媒体声音都送到无线显示，所以要在 Linux 一侧按画面所在分配，否则手机上玩的游戏声音从电视出来。
         docs: [docs/58-miracast-desktop-feasibility.md]
@@ -817,6 +829,7 @@ features:
         text: 三块助理屏的导播台约占 290 MB（每块屏各开一个窗口时约 516 MB）。
         evidence:
           - {doc: docs/58-miracast-desktop-feasibility.md, date: 2026-10-01}
+        device: 内存是手机上 Qt 在 Mesa/KGSL 上渲染、PipeWire 缓冲几路画面的实际占用，取决于手机的 GPU 驱动；系统测试容器用 llvmpipe，量出的数不代表手机。
     pitfalls:
       - text: 浮窗里不能用一个视频项换 nodeId 切换焦点：接通另一路 PipeWire 流前那几帧是黑底；每块屏固定一个一直连着的视频项，切焦点只改位置和大小。
         docs: [docs/58-miracast-desktop-feasibility.md]
@@ -832,6 +845,7 @@ features:
       - agent/screen/agentscreen.cpp
       - agent/screen/agentscreen.h
       - docs/images/readme/team-director.jpg
+      - tools/tests/test_agent_screen_switch.py
     docs: [docs/58-miracast-desktop-feasibility.md, docs/research/91-agent-workspaces.md]
 
   - id: desktop-mode.tv-director
@@ -899,6 +913,7 @@ features:
         text: 看一块无头工作区时 1920×1080 约 27 fps（软件 H.264）。
         evidence:
           - {doc: docs/research/97-headless-agent-work.md, date: 2026-10-02, note: "§15 单工作区冒烟测试，测试用 Host，非 rungic-remote.service"}
+        device: 约 27 fps 是手机 CPU 上软件 H.264 编码的实测速度（KGSL 不是 DRM 渲染节点，画面要读回再编码）；Mac mini 容器的 CPU、渲染和读回路径都不同，量出的帧率不代表手机。
       - id: E5
         text: 手机界面重启不会断开正在看工作区的观看端。
     pitfalls:

@@ -94,7 +94,29 @@ void AgentScreen::readActivity()
     Q_EMIT activityChanged();
 }
 
-AgentScreen::~AgentScreen() = default;
+AgentScreen::~AgentScreen()
+{
+    setFullscreen(false);
+}
+
+QString AgentScreen::fullscreenMark() const
+{
+    const QString runtime = qEnvironmentVariable("XDG_RUNTIME_DIR", QStringLiteral("/run/user/%1").arg(getuid()));
+    return runtime + QStringLiteral("/rungic-agent-screen/desktop-fullscreen");
+}
+
+void AgentScreen::setFullscreen(bool fullscreen)
+{
+    if (m_workspace > 0)
+        return;
+    if (fullscreen) {
+        QFile mark(fullscreenMark());
+        if (mark.open(QIODevice::WriteOnly))
+            mark.close();
+    } else {
+        QFile::remove(fullscreenMark());
+    }
+}
 
 QString AgentScreen::op() const
 {
