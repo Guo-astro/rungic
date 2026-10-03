@@ -1105,6 +1105,8 @@ features:
     code:
       - desktop/design/
       - packaging/rungic-design/
+      - tools/tests/test_design_system.py
+      - tools/system/tests/design_system.py
     docs:
       - docs/87-agent-app-redesign.md
       - docs/102-design-system-choices-and-swipe-back.md
