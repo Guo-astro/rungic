@@ -17,12 +17,12 @@ X-Rungic-Tests: L1:testXdgShellWindow::testMinimumAboveMaximum; probe:plasma/dia
 X-Rungic-Docs: docs/42
 Origin: vendor, commit:f47ee505
 ---
- autotests/integration/xdgshellwindow_test.cpp | 27 +++++++++++++++++++++++++++
+ autotests/integration/xdgshellwindow_test.cpp | 28 ++++++++++++++++++++++++++++
  src/wayland/xdgshell.cpp                      | 22 +++++++++++++++-------
- 2 files changed, 42 insertions(+), 7 deletions(-)
+ 2 files changed, 43 insertions(+), 7 deletions(-)
 
 diff --git a/autotests/integration/xdgshellwindow_test.cpp b/autotests/integration/xdgshellwindow_test.cpp
-index 6011bde..2aa5329 100644
+index 6011bde..8449018 100644
 --- a/autotests/integration/xdgshellwindow_test.cpp
 +++ b/autotests/integration/xdgshellwindow_test.cpp
 @@ -120,6 +120,7 @@ private Q_SLOTS:
@@ -33,10 +33,11 @@ index 6011bde..2aa5329 100644
      void testUnconfiguredBufferToplevel();
      void testUnconfiguredBufferPopup();
      void testRemoveActiveDesktopBeforeInitialCommit();
-@@ -2602,6 +2603,32 @@ void TestXdgShellWindow::testNoMaximumSize()
+@@ -2602,6 +2603,33 @@ void TestXdgShellWindow::testNoMaximumSize()
      QCOMPARE(window->maxSize(), QSizeF(INT_MAX, INT_MAX));
  }
  
++// covers: desktop.app-windows/E1
 +void TestXdgShellWindow::testMinimumAboveMaximum()
 +{
 +    // xdg-shell makes a maximum below the minimum an invalid_size error. KWin keeps such a client

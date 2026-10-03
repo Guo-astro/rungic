@@ -123,6 +123,7 @@ features:
         text: 主屏静止时 plasmashell 几乎不占 CPU（约 0.6% 单核、每秒十几次唤醒）；关着的快捷设置面板里溢出的文字不再滚动。
         evidence:
           - {doc: docs/57-zero-copy-explicit-sync.md, date: 2026-09-24, note: "第6项：0.57–0.61% 单核"}
+        device: 静止时 plasmashell 的单核占用和每秒唤醒次数取决于手机的 CPU 和宿主的帧节拍，只能在手机上量。关着的快捷设置不再滚动文字是 plasma-mobile 补丁（marquee-stop-when-hidden）的逻辑，系统测试镜像里只有 Ubuntu 原版 plasma-mobile，这一半还没有自动检查。
       - id: E4
         text: 横屏时主屏边距按当前可用区域计算，小组件和收藏栏都在屏幕内；默认不再行列互换，小组件保持形状，图标隐藏名称。
         evidence:
@@ -201,18 +202,22 @@ features:
         text: 横屏、竖屏和缩放下点哪里就点中哪里，多指触点各自保留 ID 和按下/移动/抬起。
         evidence:
           - {doc: docs/42-plasma-runtime-acceptance.md, date: 2026-09-23, note: "横屏→竖屏、键盘菜单与触摸通过"}
+        device: 触点是安卓的 MotionEvent，横竖屏与缩放下的坐标换算在 Rungic 应用的原生宿主（packages/android-host）里做，再经 KWin 的 Android 后端（android-backend.patch）进入 KWin；宿主只能在安卓上运行（它的单元测试也在手机上跑，android/test-native-core.sh），无头 KWin（--virtual）没有 Android 后端，系统测试走不到这条输入通路。
       - id: E2
         text: 宿主暂停渲染时，还没抬起的触点先收到取消，KWin 里不会留下一直按着的手指。
         evidence:
           - {doc: docs/49-plasma-performance.md, date: 2026-09-28, note: "同时修复：宿主暂停渲染时的触摸取消"}
+        device: 取消由安卓宿主在暂停渲染（Activity 进入后台、熄屏）时发出（packages/android-host 的 smithay 补丁），要安卓的生命周期才会发生；宿主只能在安卓上运行（它的单元测试也在手机上跑，android/test-native-core.sh），无头 KWin（--virtual）没有 Android 后端，系统测试走不到这条输入通路。
       - id: E3
         text: 触屏模式下屏幕上没有鼠标指针（开机左上角不再有黑框光标），切到鼠标或触控板模式才出现指针。
         evidence:
           - {doc: docs/57-zero-copy-explicit-sync.md, date: 2026-09-24, note: "其他修复：开机左上角黑框光标"}
+        device: 有没有指针取决于宿主报告的输入设备（触摸屏，或安卓连着的鼠标、触控板），由 KWin 的 Android 后端（android-backend.patch，只在 --android-host 下工作）处理；宿主只能在安卓上运行（它的单元测试也在手机上跑，android/test-native-core.sh），无头 KWin（--virtual）没有 Android 后端，系统测试走不到这条输入通路。
       - id: E4
         text: 每次按下不会让 KWin 重新应用输出配置（宿主只在状态变化时发 configure），点按不引起卡顿。
         evidence:
           - {doc: docs/57-zero-copy-explicit-sync.md, date: 2026-09-24, note: "第7项：applyConfigure 不再出现"}
+        device: configure 由安卓宿主发出（它只在尺寸、方向等状态变化时发），点按会不会让 KWin 重新应用输出配置要在宿主与 KWin 的 Android 后端之间看；宿主只能在安卓上运行（它的单元测试也在手机上跑，android/test-native-core.sh），无头 KWin（--virtual）没有 Android 后端，系统测试走不到这条输入通路。
     pitfalls:
       - text: 蓝牙鼠标模式的指针能力增删尚未实机验证。
         docs: [docs/57-zero-copy-explicit-sync.md]
@@ -305,6 +310,7 @@ features:
           - {doc: docs/42-plasma-runtime-acceptance.md, date: 2026-09-25, note: "minmax-probe 在 moto16 下保持连接"}
       - id: E2
         text: 缩放与缓冲不一致时为采样加宽的损伤区不超出窗口自身，不会把邻近内容重画坏。
+        gap: 要带本项目 KWin 补丁（clip-scaled-damage-to-surface）的测试：两块缩放不同、边挨边的输出，一侧窗口出帧时另一侧不重画；系统测试镜像里只有 Ubuntu 原版 kwin-wayland，KWin 的 L1 测试构建（docs/71）也还没有这一项。2026-09-28 在手机上量过（docs/65：助理屏上 60 fps 动画时手机每秒重画 0 次）。
     pitfalls:
       - text: 放宽“最小大于最大必须报错”不符合 xdg-shell 协议，是本机为兼容这类客户端做的；微信登录后主窗口的真实尺寸还待抓取。
         docs: [docs/42-plasma-runtime-acceptance.md]
@@ -383,6 +389,7 @@ features:
           - {doc: docs/41-plasma-rime-input.md, date: 2026-09-23, note: "键盘前端的语言菜单与旋转修复"}
       - id: E3
         text: 屏幕键盘只出现在手机内屏，不出现在电视等外屏。
+        gap: 要一个带本项目 KWin 补丁（inputmethod-host-text 的内屏规则）和 plasma-keyboard 的无头系统测试：一块内屏、一块外屏，聚焦外屏上的文本框；系统测试镜像里只有 Ubuntu 原版 kwin-wayland。2026-09-24 在电视上实机看过（docs/58 第3步），但那时还没有实机场景记录它。
       - id: E4
         text: 聚焦一个 Qt 文本框时键盘弹出。
     pitfalls:
@@ -407,6 +414,7 @@ features:
         text: 用安卓输入法打的文字到达 Linux 里获得焦点的输入框（例如应用抽屉的搜索框，结果按输入过滤）。
       - id: E2
         text: 安卓输入法提交的中文经宿主 text-input 交给 KWin，直接进入焦点应用；键盘布局数据由 APK 安装，缺失时明确报错。
+        gap: 中文经安卓输入法提交只在 2026-09-24 投屏时实机试过（docs/58 第3步，进入电视上的 KRunner）；手机屏上的提交和布局数据缺失时的报错（KeyboardAssets.java）还没有检查。要一个实机场景：input.text 用 adb input text 直接发 ASCII 按键，不经输入法的提交通路。
     pitfalls:
       - text: 容器刚启动后的第一次安卓文字输入偶尔大小写错乱（Calcul 到达为 CaICUL），原因未确认；验收的读回不区分大小写并重试一次。
         docs: [docs/61-delivery-diagnostics-plan.md]
