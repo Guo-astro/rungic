@@ -689,6 +689,7 @@ features:
         text: 工作区默认无头：手机锁屏、息屏、Rungic 应用被冻结时，工作区照常启动、运行应用、截图和操作。
         evidence:
           - {doc: docs/research/97-headless-agent-work.md, date: 2026-10-02, note: "§10、§14：APK 冻结时启动、截图、录屏"}
+        device: 截图要经 KWin 在手机 GPU 上渲染，容器里的 KWin 没有 GPU，ScreenShot2 一律取消；Android 锁屏、息屏和冻结 Rungic 应用也只在手机上发生
       - id: E3
         text: 宿主不响应时，需要宿主的工作区约 3 秒内明确失败并说明原因，Agent 能如实转告；冻结期间桌面工具每次约 1 秒，不每次等满超时。
         evidence:
@@ -743,6 +744,7 @@ features:
       - agent/computer-use/rungic_cua/fakeinput.py
       - tools/tests/test_workspace_env.py
       - tools/system/tests/workspace_headless.py
+      - tools/tests/test_workspace_unit.py
     docs: [docs/research/91-agent-workspaces.md, docs/research/97-headless-agent-work.md, docs/agent-ready-interfaces.md]
 
   - id: agent.workspace-lifecycle
@@ -781,6 +783,7 @@ features:
       - agent/workspace/keeper.cpp
       - agent/computer-use/rungic_cua/workspace.py
       - tools/test_workspace_lifecycle.py
+      - tools/tests/test_workspace_dismiss.py
     docs: [docs/research/91-agent-workspaces.md]
 
   - id: agent.where
@@ -907,6 +910,7 @@ features:
         text: 组长按简报 → 一轮评审（每人一条、最多 8 点）→ 组长定稿 → 并行制作 → 汇总审查 → 交给用户的流程推进，成员之间不直接讨论。
         evidence:
           - {doc: docs/research/91-agent-workspaces.md, date: 2026-10-02, note: "野餐邀请卡约 15 分钟完成，没有受阻"}
+        device: 流程由真实模型按 rungic-agent-team 技能推进，替身模型只会重放脚本；是否按简报、评审、定稿、制作、汇总的顺序走、成员是否不直接讨论，只有用真实 Codex 在手机上跑一轮团队才看得出（看板阶段的代码由 team-board/E1 的测试检查）
       - id: E4
         text: 成员的每次工具调用翻成一句短话（“写 BRIEF.md”“运行 check.py”）显示在它的格子上，命令链按实际做的那一步描述，最多每 1.5 秒一句。
       - id: E5
@@ -929,6 +933,7 @@ features:
       - agent/assistant/skills/rungic-agent-team/SKILL.md
       - tools/team/run-lead.sh
       - tools/team/request.txt
+      - tools/tests/test_team_frozen_host.py
       - tools/test_router.py
       - docs/images/readme/team*
     docs: [docs/research/91-agent-workspaces.md]
