@@ -1,0 +1,10 @@
+# The test driver of Settings -> Services (show_page.cpp, tools/system/tests/services_page.py).
+cmake_minimum_required(VERSION 3.22)
+project(rungic-services-tests LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_AUTOMOC ON)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Gui Quick Qml)
+find_package(KF6KCMUtils 6.0 REQUIRED)
+find_package(KF6CoreAddons 6.0 REQUIRED)
+add_executable(show-page show_page.cpp)
+target_link_libraries(show-page PRIVATE Qt::Gui Qt::Quick Qt::Qml KF6::KCMUtilsQuick KF6::CoreAddons)

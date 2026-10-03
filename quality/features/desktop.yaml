@@ -997,6 +997,7 @@ features:
     code:
       - desktop/services/
       - packaging/rungic-plasma-services/
+      - tools/system/tests/services_page.py
     docs:
       - docs/83-service-policy.md
       - docs/research/g100-system-update-20260929.md
