@@ -14,7 +14,7 @@ return upstream's failure otherwise: eglInitialize then retries with Zink and wi
 Forwarded: no
 Last-Update: 2026-09-30
 X-Rungic-Status: Pending [a fix of the branch's own change, b355d4d41a86 from termux-packages 411745ec]
-X-Rungic-Tests: L3:flatpak.gl-fallback (a Flatpak X11 GL app without /dev/kgsl-3d0 starts on softpipe)
+X-Rungic-Tests: L3:flatpak.gl-fallback (to write) (a Flatpak X11 GL app without /dev/kgsl-3d0 starts on softpipe)
 X-Rungic-Docs: docs/49
 ---
  src/egl/drivers/dri2/platform_x11_dri3.c | 5 ++++-

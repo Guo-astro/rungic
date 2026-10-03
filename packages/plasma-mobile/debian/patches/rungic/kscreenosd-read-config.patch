@@ -8,7 +8,7 @@ never switched to convergence (docked) mode.
 Forwarded: not-needed
 Last-Update: 2026-09-26
 X-Rungic-Status: Pending [a plain bug; check upstream master first]
-X-Rungic-Tests: L3:cast.agent_screen
+X-Rungic-Tests: L3:desktop-mode.workspace
 X-Rungic-Docs: docs/58
 ---
  quicksettings/kscreenosd/kscreenosdutil.cpp | 3 +++

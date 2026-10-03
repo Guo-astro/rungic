@@ -32,7 +32,7 @@ No environment variable is read; the session passes --android-host (plasma/kwin)
 Forwarded: not-needed
 Last-Update: 2026-09-26
 X-Rungic-Status: Inappropriate [Android host specific: KWin nested in the Android APK compositor]
-X-Rungic-Tests: L3:session.ready L3:display.geometry L3:display.mode L3:input.text L3:idle.inhibit L3:cast.agent_screen L3:perf.compositor; L1:full suite equals baseline
+X-Rungic-Tests: L3:session.ready L3:display.geometry L3:display.mode L3:input.text L3:idle.inhibit L3:desktop-mode.workspace L3:perf.compositor; L1:full suite equals baseline
 X-Rungic-Docs: docs/40 docs/57 docs/58 docs/65 docs/72
 Origin: vendor
 ---

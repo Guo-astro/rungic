@@ -16,7 +16,7 @@ once loaded, landed on the phone as duplicates after the TV disconnected (from t
 Forwarded: not-needed
 Last-Update: 2026-09-29
 X-Rungic-Status: Inappropriate [interim until upstream desktop panels on external screens (!548)]
-X-Rungic-Tests: L3:cast.agent_screen (output appears); desktop shell on the TV: manual
+X-Rungic-Tests: L3:desktop-mode.workspace (output appears); desktop shell on the TV: manual
 X-Rungic-Docs: docs/58
 ---
  quicksettings/kscreenosd/kscreenosdutil.cpp        |  31 ++

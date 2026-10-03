@@ -23,6 +23,7 @@ are cached in .work/sources/<name>/; packaging tools run from the pinned toolcha
                               which tests cover which patch; --gaps: patches without any
 """
 import argparse
+import functools
 import hashlib
 import json
 import os
@@ -329,7 +330,19 @@ def lint_package(name):
             problems.append(f'{entry}: X-Rungic-Status {status!r} is not one of {", ".join(STATUSES)}')
         if status.startswith('Submitted') and not fields.get('Forwarded', '').startswith('http'):
             problems.append(f'{entry}: Submitted but Forwarded has no URL')
+        # An acceptance scenario named as a test must exist, unless it is marked as still to write.
+        for segment in fields.get('X-Rungic-Tests', '').split(';'):
+            if re.search(r'\(to (?:write|extend)\)', segment):
+                continue
+            for scenario in re.findall(r'\bL3:([a-z][a-z0-9_-]*\.[a-z0-9_.-]*[a-z0-9_])(?![/\w])', segment):
+                if scenario not in scenarios():
+                    problems.append(f'{entry}: X-Rungic-Tests names L3:{scenario}, not a scenario of release/acceptance.json')
     return problems
+
+
+@functools.cache
+def scenarios():
+    return {s['id'] for s in json.loads((WORKSPACE / 'release/acceptance.json').read_text())['scenarios']}
 
 
 def tree_diff(mine, theirs, exclude=()):

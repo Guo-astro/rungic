@@ -86,6 +86,14 @@ class LintTests(PackageTree):
                          'rungic/b.patch: Submitted but Forwarded has no URL'):
             self.assertIn(expected, problems)
 
+    # covers: delivery.patch-queue/E2
+    def test_named_acceptance_scenarios_exist_unless_still_to_write(self):
+        gone = GOOD.replace('L3:session.ready;', 'L3:cast.agent_screen;')
+        planned = GOOD.replace('L3:session.ready;', 'L3:flatpak.dri-kgsl (to write);')
+        self.package({'rungic/a.patch': gone, 'rungic/b.patch': planned})
+        self.assertEqual(pq.lint_package('demo'), [
+            'rungic/a.patch: X-Rungic-Tests names L3:cast.agent_screen, not a scenario of release/acceptance.json'])
+
 
 class MatrixTests(PackageTree):
     # covers: delivery.patch-queue/E6

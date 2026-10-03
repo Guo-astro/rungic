@@ -15,7 +15,7 @@ asleep and the Rungic app frozen (docs/research/97, approach C).
 Forwarded: no
 Last-Update: 2026-10-02
 X-Rungic-Status: Pending [generic: virtual backend on non-DRM GPU nodes]
-X-Rungic-Tests: L3:workspace.headless
+X-Rungic-Tests: L3:workspace.headless (to write)
 X-Rungic-Docs: docs/research/97
 Origin: vendor
 ---

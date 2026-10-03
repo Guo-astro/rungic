@@ -12,7 +12,7 @@ software (EGL: egl-x11-dri3-fallback-software.patch; GLX: drisw).
 Forwarded: no
 Last-Update: 2026-09-30
 X-Rungic-Status: Pending [a fix of the branch's own KGSL shortcut]
-X-Rungic-Tests: L3:flatpak.gl-fallback (an X11 GL client with /dev/kgsl-3d0 on an Xwayland without DRI3 starts on softpipe)
+X-Rungic-Tests: L3:flatpak.gl-fallback (to write) (an X11 GL client with /dev/kgsl-3d0 on an Xwayland without DRI3 starts on softpipe)
 X-Rungic-Docs: docs/49
 ---
  src/x11/x11_dri3.c | 10 ++++++----
