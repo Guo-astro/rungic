@@ -429,6 +429,7 @@ features:
       - agent/assistant/app/qml/KeyPage.qml
       - agent/assistant/app/qml/account.js
       - agent/computer-use/rungic_cua/keys.py
+      - tools/tests/test_api_key_file.py
       - tools/tests/test_codex_login.py
       - tools/tests/test_app_server.py
     docs: [docs/101-codex-sign-in-and-api-key.md, docs/87-agent-app-redesign.md]

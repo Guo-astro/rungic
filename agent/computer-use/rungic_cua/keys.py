@@ -33,6 +33,7 @@ def where(name: str) -> str:
 
 def store(name: str, value: str) -> str:
     FILES.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(FILES, 0o700)      # made earlier with the umask's mode (the service's prompts live there too)
     path = _file(name)
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, 'w') as f:
