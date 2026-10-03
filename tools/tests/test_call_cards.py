@@ -15,7 +15,7 @@ import unittest
 sys.dont_write_bytecode = True
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 os.environ.setdefault('QT_QUICK_BACKEND', 'software')
-from PySide6.QtCore import QObject, QUrl, Slot
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, QUrl, Slot
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlComponent, QQmlEngine, QQmlExpression
 from PySide6.QtQuick import QQuickItem
@@ -84,8 +84,11 @@ class CallCardsTest(unittest.TestCase):
         self.load([])
 
     def tearDown(self):
+        # Really delete them: processEvents() leaves deleteLater() pending, and the model's 15 s sweep
+        # Timer then fired in a later test's event loop against this engine's freed context (a crash).
         self.model.deleteLater()
         self.engine.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
         APP.processEvents()
 
     def js(self, code):
