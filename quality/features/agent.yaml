@@ -1229,6 +1229,7 @@ features:
       - agent/suggestions/qml/WidgetGallery.qml
       - agent/assistant/app/qml/SuggestionsPage.qml
       - tools/tests/test_briefing_curation.py
+      - tools/tests/test_suggestions_widgets.py
     docs: [docs/research/96-agent-curated-briefing.md, docs/research/proactive-system-care.md]
 
   - id: agent.suggestion-tasks
