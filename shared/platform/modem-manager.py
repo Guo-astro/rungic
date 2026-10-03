@@ -15,6 +15,7 @@ calls fail with org.freedesktop.ModemManager1.Error.Core.Unsupported. The proper
 ModemManager 1.24 and Droidian's ofono2mm (BSD-3-Clause), which bridges oFono the same way.
 Requests go to the APK's platform socket ("telephony"). Requires PyGObject.
 """
+import os
 import concurrent.futures
 import json
 import logging
@@ -32,7 +33,7 @@ MODEM = BASE + '/Modem/0'
 SIM = BASE + '/SIM/0'
 OM = 'org.freedesktop.DBus.ObjectManager'
 PROPS = 'org.freedesktop.DBus.Properties'
-SOCKET = '/mnt/android-wayland/platform.sock'
+SOCKET = os.environ.get('RUNGIC_PLATFORM_SOCKET', '/mnt/android-wayland/platform.sock')
 LOG = logging.getLogger('android-modem')
 V = GLib.Variant
 POLL = 5

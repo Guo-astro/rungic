@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 """Android-owned device capabilities for the Plasma session (private Unix IPC)."""
+import os
 import configparser
 import gettext
 import json
@@ -8,7 +9,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-SOCKET = '/mnt/android-wayland/platform.sock'
+SOCKET = os.environ.get('RUNGIC_PLATFORM_SOCKET', '/mnt/android-wayland/platform.sock')
 # Follows the Plasma desktop language (LANGUAGE/LANG of the session).
 _translation = gettext.translation('rungic-platform', localedir='/usr/share/locale', fallback=True)
 _, pgettext = _translation.gettext, _translation.pgettext

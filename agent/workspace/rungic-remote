@@ -120,7 +120,7 @@ def phone_answers() -> tuple[bool, str]:
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
             conn.settimeout(2)
-            conn.connect('/mnt/android-wayland/platform.sock')
+            conn.connect(os.environ.get('RUNGIC_PLATFORM_SOCKET', '/mnt/android-wayland/platform.sock'))
             conn.sendall(b'{"op": "status"}\n')
             if json.loads(conn.makefile('rb').readline() or b'null'):
                 return True, ''

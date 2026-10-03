@@ -136,7 +136,7 @@ public:
         if (qEnvironmentVariable("RUNGIC_WORKSPACE_BACKEND") != QLatin1String("virtual"))
             return;
         QLocalSocket socket;
-        socket.connectToServer(QStringLiteral("/mnt/android-wayland/platform.sock"));
+        socket.connectToServer(qEnvironmentVariable("RUNGIC_PLATFORM_SOCKET", QStringLiteral("/mnt/android-wayland/platform.sock")));
         if (!socket.waitForConnected(500))
             return;
         socket.write(QJsonDocument(QJsonObject{{QStringLiteral("op"), QStringLiteral("director")},
@@ -274,7 +274,7 @@ private:
     bool shown()
     {
         QLocalSocket socket;
-        socket.connectToServer(QStringLiteral("/mnt/android-wayland/platform.sock"));
+        socket.connectToServer(qEnvironmentVariable("RUNGIC_PLATFORM_SOCKET", QStringLiteral("/mnt/android-wayland/platform.sock")));
         if (!socket.waitForConnected(2000)) {
             return true; // unknown: as if shown, nothing is frozen on a guess
         }
@@ -467,7 +467,7 @@ int main(int argc, char *argv[])
             retry(0);
         });
         QObject::connect(socket, &QLocalSocket::errorOccurred, socket, [retry](QLocalSocket::LocalSocketError) { retry(5000); });
-        socket->connectToServer(QStringLiteral("/mnt/android-wayland/platform.sock"));
+        socket->connectToServer(qEnvironmentVariable("RUNGIC_PLATFORM_SOCKET", QStringLiteral("/mnt/android-wayland/platform.sock")));
     };
     watchScreens();
 

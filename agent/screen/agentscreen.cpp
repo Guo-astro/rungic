@@ -16,7 +16,7 @@
 
 namespace
 {
-const QString kSocket = QStringLiteral("/mnt/android-wayland/platform.sock");
+const QString kSocket = qEnvironmentVariable("RUNGIC_PLATFORM_SOCKET", QStringLiteral("/mnt/android-wayland/platform.sock"));
 // rungic_cua.activity (docs/88): a "working" report older than this was left by a writer that went away;
 // an ending is news only for a moment (the window shows it a few seconds).
 constexpr double kActivityStaleS = 120;

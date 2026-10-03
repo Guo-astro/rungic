@@ -36,7 +36,7 @@ from pathlib import Path
 # The floating window's catalog (po/<language>/rungic-agent-screen.po), for the notification.
 _ = gettext.translation('rungic-agent-screen', fallback=True).pgettext
 
-SOCKET = '/mnt/android-wayland/platform.sock'
+SOCKET = os.environ.get('RUNGIC_PLATFORM_SOCKET', '/mnt/android-wayland/platform.sock')
 WINDOW = '/usr/libexec/rungic-agent-screen-window'
 DESKTOP = os.path.basename(sys.argv[0]) == 'rungic-desktop-mode'
 OP = 'desktop-mode' if DESKTOP else 'agent-screen'

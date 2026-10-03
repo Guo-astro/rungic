@@ -80,7 +80,7 @@ def read_header(client):
 def host_info():
     with socket.socket(socket.AF_UNIX) as client:
         client.settimeout(2)
-        client.connect('/mnt/android-wayland/platform.sock')
+        client.connect(os.environ.get('RUNGIC_PLATFORM_SOCKET', '/mnt/android-wayland/platform.sock'))
         client.sendall(b'{"op":"capture-info"}\n')
         return read_header(client)
 

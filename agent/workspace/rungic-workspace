@@ -28,11 +28,11 @@ if [ "$backend" = virtual ]; then :; else
 # freezer, docs/research/97) takes the connection but never the first roundtrip, and KWin and every
 # app started in it would hang there with no end.
 python3 - <<'PROBE' || fail "the Android host is not responding (the phone is asleep or Rungic is frozen, docs/research/97)"
-import json, socket, sys
+import json, os, socket, sys
 try:
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as c:
         c.settimeout(3)
-        c.connect('/mnt/android-wayland/platform.sock')
+        c.connect(os.environ.get('RUNGIC_PLATFORM_SOCKET', '/mnt/android-wayland/platform.sock'))
         c.sendall(b'{"op": "status"}\n')
         sys.exit(0 if json.loads(c.makefile('rb').readline() or b'null') else 1)
 except (OSError, ValueError):

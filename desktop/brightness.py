@@ -4,6 +4,7 @@
 This implements BrightnessControl and loads the foreground inhibition subset.
 Android retains automatic panel brightness, system suspend and physical locking.
 """
+import os
 import concurrent.futures
 import json
 import logging
@@ -22,7 +23,7 @@ PATH = '/org/kde/Solid/PowerManagement/Actions/BrightnessControl'
 def host(**value):
     with socket.socket(socket.AF_UNIX) as connection:
         connection.settimeout(3)
-        connection.connect('/mnt/android-wayland/platform.sock')
+        connection.connect(os.environ.get('RUNGIC_PLATFORM_SOCKET', '/mnt/android-wayland/platform.sock'))
         connection.sendall(json.dumps(value).encode() + b'\n')
         with connection.makefile('rb') as stream:
             response = stream.readline(65537)

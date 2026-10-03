@@ -64,7 +64,7 @@ def tell_app(slot: int, state: str, text: str) -> None:
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
             conn.settimeout(0.5)
-            conn.connect('/mnt/android-wayland/platform.sock')
+            conn.connect(os.environ.get('RUNGIC_PLATFORM_SOCKET', '/mnt/android-wayland/platform.sock'))
             conn.sendall(json.dumps({'op': 'director', 'caption': {'slot': slot, 'state': state, 'text': text}},
                                     ensure_ascii=False).encode() + b'\n')
             conn.recv(4096)

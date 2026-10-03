@@ -20,11 +20,12 @@ host app's root tool rungic-cast through the platform bridge.
 
 Prints the tool's JSON; exits 1 with {"error": ...} on failure.
 """
+import os
 import json
 import socket
 import sys
 
-SOCKET = '/mnt/android-wayland/platform.sock'
+SOCKET = os.environ.get('RUNGIC_PLATFORM_SOCKET', '/mnt/android-wayland/platform.sock')
 COMMANDS = ('status', 'capabilities', 'settings', 'scan', 'connect', 'disconnect', 'modes', 'resolution')
 
 

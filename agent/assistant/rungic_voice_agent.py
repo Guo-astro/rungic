@@ -3170,7 +3170,7 @@ def platform_request(request, timeout=1.0):
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as bridge:
             bridge.settimeout(timeout)
-            bridge.connect('/mnt/android-wayland/platform.sock')
+            bridge.connect(os.environ.get('RUNGIC_PLATFORM_SOCKET', '/mnt/android-wayland/platform.sock'))
             bridge.sendall(json.dumps(request).encode() + b'\n')
             reply = b''
             while not reply.endswith(b'\n'):

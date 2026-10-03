@@ -42,7 +42,7 @@ USER_VALUES = ('PLASMA_INTEGRATION_USE_PORTAL', 'QT_QPA_PLATFORMTHEME')
 
 logger = logging.getLogger('rungic-cua.router')
 
-PLATFORM = '/mnt/android-wayland/platform.sock'
+PLATFORM = os.environ.get('RUNGIC_PLATFORM_SOCKET', '/mnt/android-wayland/platform.sock')
 WHERE_TOOL = {
     'name': 'desktop_where',
     'description': ("Where your desktop tools work. 'desktop': the user's desktop (desktop mode: workspace 0, "
