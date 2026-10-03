@@ -631,8 +631,8 @@ Agent 在自己的工作区（或用户指定的桌面）上打开应用、看�
 
 `apps.flatpak` · Linux 系统功能 — 在 LXC 容器里，Flatpak 的 bubblewrap 沙箱能建起来，Flathub 应用装得上、跑得起。
 
-- **E1** 从 Discover 装 extra-data 类型的 Flatpak 应用（VS Code）能完整装完，不会在部署应用本体时失败并回滚运行时。（人工）
-- **E2** 沙箱的防逃逸限制仍然有效：沙箱里写全局 sysctl 被拒，嵌套的 unshare -U 被禁止。（人工）
+- **E1** 从 Discover 装 extra-data 类型的 Flatpak 应用（VS Code）能完整装完，不会在部署应用本体时失败并回滚运行时。（人工；只能在手机上看：装应用时 bubblewrap 要在手机的 LXC 容器里建沙箱，成败取决于容器的 proc:mixed 挂载、/proc/sys/user 与安卓内核的用户命名空间；系统测试的 Docker 容器没有这些限制，测不出它们）
+- **E2** 沙箱的防逃逸限制仍然有效：沙箱里写全局 sysctl 被拒，嵌套的 unshare -U 被禁止。（人工；只能在手机上看：防逃逸限制靠手机 LXC 容器只读的 /proc/sys 与安卓内核的命名空间设置；Docker 测试容器的 /proc 与权限不同，结果不代表手机）
 - **E3** 容器 init 准备沙箱条件失败时只记日志，容器和桌面照常启动。（系统测试）
 
 注意：
@@ -653,9 +653,9 @@ Agent 在自己的工作区（或用户指定的桌面）上打开应用、看�
 
 经由接口：`kwin-android-host`
 
-- **E1** 普通用户的应用拿到的是硬件 GL（渲染器 FD710，GLES 3.2 / GL 4.6），不是 llvmpipe 或 softpipe。（人工）
-- **E2** Qt Quick 应用和 plasmashell 滚动、切换时没有整屏灰色闪帧（会话默认 QSG_RHI_BACKEND=opengl）。（单元测试、人工）
-- **E3** 应用抽屉滑动时 Surface 呈现间隔超过 12.6 ms 的比例低于 1%（GLES 合成）。（实机验收、人工）
+- **E1** 普通用户的应用拿到的是硬件 GL（渲染器 FD710，GLES 3.2 / GL 4.6），不是 llvmpipe 或 softpipe。（人工；只能在手机上看：渲染器是不是 FD710 取决于手机的 Adreno 710 与 /dev/kgsl-3d0；系统测试容器没有 GPU，只有软件渲染）
+- **E2** Qt Quick 应用和 plasmashell 滚动、切换时没有整屏灰色闪帧（会话默认 QSG_RHI_BACKEND=opengl）。（单元测试、人工；只能在手机上看：整屏灰色闪帧要在手机 GPU 上逐帧检测（docs/56）；会话默认的 GL 设置由 tools/tests/test_gpu_env.py 检查）
+- **E3** 应用抽屉滑动时 Surface 呈现间隔超过 12.6 ms 的比例低于 1%（GLES 合成）。（实机验收、人工；只能在手机上看：呈现间隔是手机 GPU 与安卓刷新下的性能，只能在手机上量）
 - **E4** 系统 Mesa 的包不会被发行版更新覆盖，升级 Mesa 后 KWin 不会因图形复位而中止。（缺口：只能在手机上换包重启工作区验证；没有自动检查）
 
 注意：
@@ -677,8 +677,8 @@ Agent 在自己的工作区（或用户指定的桌面）上打开应用、看�
 
 经由接口：`kwin-android-host`
 
-- **E1** 普通用户的 Vulkan 程序识别到 Turnip Adreno 710（API 1.4，不是 lavapipe），vkcube 经 Wayland WSI 正常显示。（人工）
-- **E2** 单个 Qt 程序设 QSG_RHI_BACKEND=vulkan 能用原生 Vulkan 显示，不影响其他应用。（人工）
+- **E1** 普通用户的 Vulkan 程序识别到 Turnip Adreno 710（API 1.4，不是 lavapipe），vkcube 经 Wayland WSI 正常显示。（人工；只能在手机上看：Turnip 驱动 Adreno 710 只在手机上有；系统测试容器里只有 lavapipe）
+- **E2** 单个 Qt 程序设 QSG_RHI_BACKEND=vulkan 能用原生 Vulkan 显示，不影响其他应用。（人工；只能在手机上看：原生 Vulkan 显示要手机的 Turnip 与 KGSL）
 - **E3** Vulkan 窗口在 KGSL 上呈现时没有整屏灰色闪帧。（缺口：已知 Turnip WSI 在 KGSL 上会闪屏，原因未查（docs/56）；没有修复）
 
 注意：
@@ -694,10 +694,10 @@ Agent 在自己的工作区（或用户指定的桌面）上打开应用、看�
 
 经由接口：`kwin-android-host`
 
-- **E1** Xwayland 提供 DRI3 和 Present，X11 GL 程序 direct rendering 为 Yes、Accelerated yes、渲染器 FD710。（人工）
-- **E2** X11 GL 窗口画出内容（不是黑窗），两个 GL 程序同时运行时各自内容正确、画面在动。（人工）
-- **E3** 纯 2D 的 X11 程序（以 xcb 运行的 Dolphin）由 glamor 绘制，显示正确。（人工）
-- **E4** X11 下的 GL 性能与原生 Wayland 相当（glmark2 全套分数不低于原生 Wayland）。（人工）
+- **E1** Xwayland 提供 DRI3 和 Present，X11 GL 程序 direct rendering 为 Yes、Accelerated yes、渲染器 FD710。（人工；只能在手机上看：Xwayland 的补丁只在有 /dev/kgsl-3d0 时走 glamor/DRI3（KGSL 不是 DRM 设备）；系统测试容器没有 KGSL）
+- **E2** X11 GL 窗口画出内容（不是黑窗），两个 GL 程序同时运行时各自内容正确、画面在动。（人工；只能在手机上看：X11 GL 窗口在 KGSL 上导入、呈现缓冲，系统测试容器没有 KGSL）
+- **E3** 纯 2D 的 X11 程序（以 xcb 运行的 Dolphin）由 glamor 绘制，显示正确。（人工；只能在手机上看：glamor 在 KGSL 上绘制，系统测试容器没有 KGSL）
+- **E4** X11 下的 GL 性能与原生 Wayland 相当（glmark2 全套分数不低于原生 Wayland）。（人工；只能在手机上看：glmark2 分数是手机 GPU 的性能）
 - **E5** 改变窗口大小、连续运行 30 分钟不卡死、画面不采样到旧内容。（缺口：research/93 列为未做，需实机长时间运行）
 
 注意：
@@ -712,8 +712,8 @@ Agent 在自己的工作区（或用户指定的桌面）上打开应用、看�
 
 `apps.flatpak-gpu` · Linux 系统功能 — Flatpak 应用经 GL 扩展 org.freedesktop.Platform.GL.rungic 用本项目的 Mesa 在 KGSL 上绘制；拿不到 GPU 时退到软件渲染而不崩溃。
 
-- **E1** Freedesktop 25.08 运行时的应用（Telegram、VS Code）用 FD710 绘制，不再是 llvmpipe。（人工）
-- **E2** 只声明 --device=dri 的应用在沙箱里也能看到 /dev/kgsl-3d0 和 /dev/dma_heap/system，安卓的其他 DMA 堆仍在沙箱外。（人工）
+- **E1** Freedesktop 25.08 运行时的应用（Telegram、VS Code）用 FD710 绘制，不再是 llvmpipe。（人工；只能在手机上看：Flatpak 应用经 GL 扩展用 FD710，要手机的 Adreno 与 KGSL）
+- **E2** 只声明 --device=dri 的应用在沙箱里也能看到 /dev/kgsl-3d0 和 /dev/dma_heap/system，安卓的其他 DMA 堆仍在沙箱外。（人工；只能在手机上看：/dev/kgsl-3d0 与安卓的 DMA 堆是手机内核的设备节点，系统测试容器里没有）
 - **E3** 拿不到 KGSL、或 X 服务器没有 DRI3 时，GL 程序退到扩展里的 softpipe 正常启动，不段错误、不卡住。（人工）
 - **E4** 扩展只在存在时才启用（FLATPAK_GL_DRIVERS=rungic），从 Plasma 启动的 Flatpak 应用都继承它。（缺口：只有会话环境的实机检查，没有离线测试）
 
@@ -730,7 +730,7 @@ Agent 在自己的工作区（或用户指定的桌面）上打开应用、看�
 `apps.blender` · Linux 系统功能 — Blender 默认用 CPU 的 Cycles、一半核心渲染，编辑视口用 Vulkan 正确显示，渲染过程中画面逐步变清晰。
 
 - **E1** 新场景默认 Cycles CPU，渲染时最多用一半 CPU 线程，脚本设成自动或 8 线程也被限制为 4。（单元测试、人工）
-- **E2** 编辑视口（实体、材质预览）里的物体位置、大小、颜色正确：每次以图形界面启动都把 GPU 后端偏好保持为 Vulkan，退出时自动保存的也是 Vulkan。（单元测试、人工）
+- **E2** 编辑视口（实体、材质预览）里的物体位置、大小、颜色正确：每次以图形界面启动都把 GPU 后端偏好保持为 Vulkan，退出时自动保存的也是 Vulkan。（单元测试、人工；只能在手机上看：视口画得对不对取决于 Adreno 上 freedreno/Turnip 的绘制，只有手机能看；保持 Vulkan 偏好的逻辑由 tools/tests/test_blender_render.py 检查）
 - **E3** 在 Blender 的 config/rungic-gpu-backend 写 OPENGL 就保留 OpenGL，不被启动模块改掉。（单元测试）
 - **E4** 在界面里渲染时窗口保持响应，渲染窗口按批次（4、12、28、60 采样）换上预览，最终图与一次渲染无差别。（单元测试、人工）
 
@@ -747,9 +747,9 @@ Agent 在自己的工作区（或用户指定的桌面）上打开应用、看�
 
 `apps.krita` · Linux 系统功能 — Ubuntu 的 Krita 6 原生 Wayland 在 GPU 上绘制，“另存为”能正常保存；Flathub 的 Krita 5 不再崩溃或卡住。
 
-- **E1** Krita 6 原生 Wayland 下画布的渲染器是 FD710。（人工）
+- **E1** Krita 6 原生 Wayland 下画布的渲染器是 FD710。（人工；只能在手机上看：画布的渲染器 FD710 是手机的 GPU）
 - **E2** 经门户“另存为”保存后文件写出，菜单和工具栏照常可点，不会被看不见的空壳对话框挡住。（人工）
-- **E3** Flathub Krita 5.3.3（只有 --device=dri）去掉 LIBGL_ALWAYS_SOFTWARE 也能启动，不段错误、不卡住。（人工）
+- **E3** Flathub Krita 5.3.3（只有 --device=dri）去掉 LIBGL_ALWAYS_SOFTWARE 也能启动，不段错误、不卡住。（人工；只能在手机上看：只声明 --device=dri 的 Krita 能否用上 KGSL、不段错误，取决于手机的 /dev/kgsl-3d0 与 GL 扩展）
 - **E4** Flathub Krita 5（X11）画布用 GPU 绘制，不卡顿。（缺口：Flatpak GL 扩展还没用 +rungic3 重建，X11 Flatpak 应用 GPU 未验收（research/93））
 
 注意：
@@ -762,7 +762,7 @@ Agent 在自己的工作区（或用户指定的桌面）上打开应用、看�
 
 `apps.telegram` · Linux 系统功能 — Flathub 的 Telegram 用 GPU 绘制，聊天列表滑动比 CPU 渲染时流畅得多。
 
-- **E1** 聊天列表滑动时 Telegram CPU 低于 60%（llvmpipe 时约 196%），超过 12 ms 的帧间隔低于 40%。（人工）
+- **E1** 聊天列表滑动时 Telegram CPU 低于 60%（llvmpipe 时约 196%），超过 12 ms 的帧间隔低于 40%。（人工；只能在手机上看：CPU 占用与帧间隔是手机上的性能）
 - **E2** 无障碍关闭时 Telegram 不显示 “working in Screen Reader”。（缺口：尚未决定是否在共享层不接无障碍总线（docs/49）；可在 Telegram 设置里单独关闭）
 
 注意：
@@ -778,7 +778,7 @@ Linux 应用用手机的相机拍照录像，用手机的扬声器和麦克风�
 
 `apps.wechat` · Linux 系统功能 — arm64 的 Linux 微信能登录、保留聊天数据，通话声音可以交给程序接管。
 
-- **E1** 打开微信直接进入主界面，不会反复提示“数据库损坏”并修复。（人工）
+- **E1** 打开微信直接进入主界面，不会反复提示“数据库损坏”并修复。（人工；只能在手机上看：数据库损坏出在安卓共享存储（MediaProvider 的 FUSE，经 bindfs）上的 SQLite WAL，系统测试没有安卓的 FUSE；Linux 一侧（文档目录在本地、bindfs 不带 direct-io）由 test_user_dirs 与 test_shared_storage_mount 检查）
 - **E2** 微信通话的录音流和播放流可以临时切到 Linux 麦克风和 Linux 扬声器，挂断后回到原设备，不影响其他 Chromium/Electron 应用。（系统测试、人工）
 - **E3** 微信经 Xwayland 用 GPU 绘制。（缺口：research/93 未验收微信）
 
@@ -816,9 +816,9 @@ Linux 应用用手机的相机拍照录像，用手机的扬声器和麦克风�
 
 经由接口：`camera`、`codec`
 
-- **E1** 前后摄可切换，JPEG 照片和带声音的 H.264 录像保存到共享的图片、视频目录。（人工）
-- **E2** 开着硬件编码开关时录像实际用 rungich264enc（高通 c2.qti.avc.encoder），关掉时不用它。（**未检查**）
-- **E3** 正常停止的录像能完整解码，音视频时长接近，没有零字节文件。（**未检查**）
+- **E1** 前后摄可切换，JPEG 照片和带声音的 H.264 录像保存到共享的图片、视频目录。（人工；只能在手机上看：前后摄、照片和有声录像来自安卓的相机、麦克风与高通编码器）
+- **E2** 开着硬件编码开关时录像实际用 rungich264enc（高通 c2.qti.avc.encoder），关掉时不用它。（缺口：要构建 Snapshot（Rust，捆绑 Cargo 依赖）并有相机输入，系统测试镜像都没有；开关打开时用高通编码器只有 Phosh 时期的实机记录（research/35，2026-09-23，帧数吻合），关掉时不用它没有记录）
+- **E3** 正常停止的录像能完整解码，音视频时长接近，没有零字节文件。（缺口：要 Snapshot 与相机、麦克风录一段再解码核对时长，系统测试镜像没有 Snapshot；research/35 只记了两次有声 MP4 的帧数（Phosh 时期））
 
 注意：
 - 录像要先点停止、等保存完，再切回安卓：离开桌面会释放相机，Snapshot 取消录像，中断的文件缺 moov 不能播放；没有后台录像。 [docs/research/33-capture-integration.md](../docs/research/33-capture-integration.md) [docs/research/35-hardware-codec-integration.md](../docs/research/35-hardware-codec-integration.md)
@@ -834,7 +834,7 @@ Linux 应用用手机的相机拍照录像，用手机的扬声器和麦克风�
 经由接口：`camera`
 
 - **E1** libcamera 列出“Android 后置相机”“Android 前置相机”两个设备，cam 能连续取 30 帧。（人工）
-- **E2** Plasma Camera 前摄预览显示实际场景，能保存照片。（人工）
+- **E2** Plasma Camera 前摄预览显示实际场景，能保存照片。（人工；只能在手机上看：预览里的是安卓相机拍到的实际场景）
 - **E3** Plasma Camera 录像的时间戳单调，生成的 H.264 文件完整、没有负 duration 警告。（缺口：帧时间戳已修，仍有 Qt FFmpeg 按相邻 PTS 估 B 帧 duration 的负值警告；私有插件候选未通过，未进 Qt 补丁队列）
 - **E4** 第一次切换相机没有绿色帧，启动没有明显延迟。（缺口：docs/48 记为待核验）
 
@@ -894,10 +894,10 @@ Linux 应用用手机的相机拍照录像，用手机的扬声器和麦克风�
 经由接口：`codec`
 
 - **E1** playbin3 播放 H.264/HEVC/VP9 时自动选中硬件解码元素（rungich264dec 等，rank PRIMARY+32），seek、暂停/恢复、EOS 正常。（系统测试、人工）
-- **E2** 硬件 H.264 编码 90 帧测试图样后，经私有 FFmpeg 的 h264_rungic 解码，帧数、时长、分辨率都对。（实机验收）
+- **E2** 硬件 H.264 编码 90 帧测试图样后，经私有 FFmpeg 的 h264_rungic 解码，帧数、时长、分辨率都对。（实机验收；只能在手机上看：编码由安卓的 c2.qti.avc.encoder 完成（替身不编码），解码用的私有 FFmpeg 只在手机上构建（rungic-codec 的 build 为 device））
 - **E3** 要求硬件的编码器（rungich264enc、h264_rungic）在拿不到硬件组件时报错，不悄悄换成软件编码；混合编码器 h264_rungic_auto 打开失败时回退软件。（单元测试、系统测试、人工）
 - **E4** 带 B 帧的 H.264 解码时间戳正确；seek 后 FLUSH 不会让后续响应错位。（单元测试、系统测试、人工）
-- **E5** 编码跟不上设定帧率时丢掉编码前的帧而不是积压，停止后收尾在 1 秒内完成。（实机验收、人工）
+- **E5** 编码跟不上设定帧率时丢掉编码前的帧而不是积压，停止后收尾在 1 秒内完成。（实机验收、人工；只能在手机上看：编码跟不上取决于手机硬件编码器经宿主桥接的吞吐（约 50 fps），收尾时间也是手机上的时序）
 
 注意：
 - 解码输出按 stride 和 crop 在 CPU 上复制成 I420，不是零复制；1080p NV12 约 3.1 MB/帧。 [docs/research/35-hardware-codec-integration.md](../docs/research/35-hardware-codec-integration.md) [docs/research/34-hardware-codec-audit.md](../docs/research/34-hardware-codec-audit.md)
@@ -938,9 +938,9 @@ Linux 应用用手机的相机拍照录像，用手机的扬声器和麦克风�
 - **E1** 手机上 Firefox 是移动版：UA 为 Android 16; Mobile，maxTouchPoints 为 1，网站会跳到移动版（m.bilibili.com）。（人工）
 - **E2** 独立桌面和 Agent 工作区里（RUNGIC_WORKSPACE 非空）不加载移动配置：Linux 桌面 UA、maxTouchPoints 为 0、没有 about:mobile。（人工）
 - **E3** 屏幕键盘在地址栏输入英文和中文候选都能提交，不崩溃。（人工）
-- **E4** WebRender 和 WebGL 1/2 在 FD710 上运行，浏览器内容沙箱保持开启。（**未检查**）
-- **E5** 网站经正常授权使用 PipeWire 摄像头和麦克风，同步录制。（**未检查**）
-- **E6** 浏览器按系统代理联网，界面是中文。（**未检查**）
+- **E4** WebRender 和 WebGL 1/2 在 FD710 上运行，浏览器内容沙箱保持开启。（缺口：Firefox 156 上 WebRender、WebGL 1/2 与内容沙箱没有当前版本的检查记录（research/30 的结果是 Phosh 时期的 Firefox 154）；要在手机的 FD710 上看，系统测试镜像也没有 Firefox）
+- **E5** 网站经正常授权使用 PipeWire 摄像头和麦克风，同步录制。（缺口：40 篇（2026-09-23）记有浏览器前后摄、麦克风采集通过，没有记音画同步的录制；要手机的真实摄像头和麦克风，本轮不碰手机）
+- **E6** 浏览器按系统代理联网，界面是中文。（缺口：40 篇记有 Firefox 156 的中文界面，按系统代理联网只有 Phosh 时期的记录（research/30）；系统测试镜像没有 Firefox，要在手机上核对）
 
 注意：
 - 自动化把 focusmanager.testmode=true 留在日常 profile，会让 Firefox 在输入法提交时空指针崩溃；自动化只用独立测试 profile，验收后要核对日常 profile 里没有测试偏好。 [docs/36-firefox-input-fix.md](../docs/36-firefox-input-fix.md)
@@ -957,11 +957,11 @@ Linux 应用用手机的相机拍照录像，用手机的扬声器和麦克风�
 
 经由接口：`codec`
 
-- **E1** 网页 H.264 / VP9 视频由高通硬件解码播放，seek、暂停正常，内容和 RDD 沙箱保持开启。（人工）
-- **E2** WebCodecs（no-preference）H.264 编码再解码，帧数和时间戳完整。（人工）
-- **E3** WebRTC 协商 H.264 并使用硬件编码，结束后高通组件释放。（人工）
-- **E4** 硬件打开失败时编解码回退软件，播放和 WebCodecs 仍可用。（**未检查**）
-- **E5** MediaRecorder 录 WebM（VP8/Opus）可用；MP4 AVC 如实报告不支持。（**未检查**）
+- **E1** 网页 H.264 / VP9 视频由高通硬件解码播放，seek、暂停正常，内容和 RDD 沙箱保持开启。（人工；只能在手机上看：网页视频由高通硬件解码，要手机的 MediaCodec；Firefox 156 与私有 FFmpeg 只装在手机上）
+- **E2** WebCodecs（no-preference）H.264 编码再解码，帧数和时间戳完整。（人工；只能在手机上看：WebCodecs 的 H.264 编码用安卓的硬件编码器，要手机的 MediaCodec）
+- **E3** WebRTC 协商 H.264 并使用硬件编码，结束后高通组件释放。（人工；只能在手机上看：WebRTC 的硬件编码与高通组件的释放都在手机的 MediaCodec 上）
+- **E4** 硬件打开失败时编解码回退软件，播放和 WebCodecs 仍可用。（缺口：回退软件只在 Phosh 时期（Firefox 154、Alpine）做过故障注入（research/35，2026-09-23）；当前的 Firefox 156 与私有 FFmpeg 只装在手机上，系统测试镜像里没有）
+- **E5** MediaRecorder 录 WebM（VP8/Opus）可用；MP4 AVC 如实报告不支持。（缺口：40 篇（2026-09-23）记有 MediaRecorder WebM 可用、MP4 返回不支持；系统测试镜像没有 Firefox 156，暂无可重复的检查）
 
 注意：
 - 只设 LD_LIBRARY_PATH/LD_PRELOAD 不够：部分内容进程从应用目录另行加载发行版 FFmpeg，私有 FFmpeg 的运行库要放进 /usr/lib/firefox；/usr/bin/firefox 被转移为包装入口。 [docs/research/35-hardware-codec-integration.md](../docs/research/35-hardware-codec-integration.md)
@@ -1021,8 +1021,8 @@ Linux 应用用手机的相机拍照录像，用手机的扬声器和麦克风�
 
 `apps.vscode` · Linux 系统功能 — Flathub 的 VS Code 能装上、打开，Electron 的 GPU 进程用 KGSL 绘制。
 
-- **E1** 从 Discover 装 VS Code 一次完成，flatpak run 打开图形窗口。（人工）
-- **E2** VS Code 的 GPU 进程映射扩展里的 libEGL_mesa、libgallium，持有 /dev/kgsl-3d0，窗口正常绘制。（人工）
+- **E1** 从 Discover 装 VS Code 一次完成，flatpak run 打开图形窗口。（人工；只能在手机上看：从 Flathub 下载 extra-data 并在手机 LXC 容器的 bubblewrap 沙箱里部署，成败取决于容器的 proc 挂载与网络（同 apps.flatpak/E1））
+- **E2** VS Code 的 GPU 进程映射扩展里的 libEGL_mesa、libgallium，持有 /dev/kgsl-3d0，窗口正常绘制。（人工；只能在手机上看：GPU 进程持有 /dev/kgsl-3d0、映射扩展里的 Mesa，要手机的 KGSL）
 
 注意：
 - Electron/Chromium 的 SingletonLock 和单实例套接字要符号链接和 Unix 套接字，放在 ~/Shared 上会失败；工程和数据放本地目录。 [docs/69-filesystem-capabilities.md](../docs/69-filesystem-capabilities.md)
@@ -1034,9 +1034,9 @@ Linux 应用用手机的相机拍照录像，用手机的扬声器和麦克风�
 
 `apps.docker` · Linux 系统功能 — 每个用户在容器里跑 rootless Docker 和 Compose，在设置→服务里开关，不需要把 net_admin 还给容器，也不碰安卓网络。
 
-- **E1** hello-world、镜像已有目录写入、bridge 网络出网、Compose 按服务名互访都能用。（人工）
-- **E2** -p 发布的端口在容器内和安卓的 127.0.0.1 都能访问。（人工）
-- **E3** 桌面的 /proc/sys 仍只读；rootless 一侧的进程写安卓的网络参数被拒，安卓的转发设置不变。（人工）
+- **E1** hello-world、镜像已有目录写入、bridge 网络出网、Compose 按服务名互访都能用。（人工；只能在手机上看：rootless Docker 的网络（iptables-legacy、自加 MASQUERADE、slirp4netns 与 TUN）是按手机内核（没有 nftables、xt_addrtype）和 LXC 的设备许可做的；无特权的系统测试容器里 rootlesskit/dockerd 跑不起来，也不代表手机）
+- **E2** -p 发布的端口在容器内和安卓的 127.0.0.1 都能访问。（人工；只能在手机上看：端口要在安卓的 127.0.0.1 上访问，只有手机有安卓的网络）
+- **E3** 桌面的 /proc/sys 仍只读；rootless 一侧的进程写安卓的网络参数被拒，安卓的转发设置不变。（人工；只能在手机上看：/proc/sys 只读、写安卓网络参数被拒，取决于手机 LXC 的 proc 挂载和与安卓共用的网络命名空间）
 - **E4** 在设置→服务里开启时先确认再弹密码框，密码晚于 25 秒输入也能当场启动；关闭时当场停止，页面状态与实际一致。（人工）
 - **E5** 开机自动准备 /dev/net/tun、从属 UID/GID 段和按 UID 的数据目录；账户改名后数据不丢、从属 ID 段随之迁移。（系统测试、人工）
 - **E6** rootful 的 docker.service、containerd.service 被屏蔽，不会开机失败。（系统测试、人工）
@@ -1064,11 +1064,11 @@ Linux 应用用手机的相机拍照录像，用手机的扬声器和麦克风�
 
 `apps.system-monitor` · Linux 系统功能 — 系统监视器和小组件的 GPU 饼图、曲线和磁盘条有数据，ksystemstats 从 KGSL sysfs 和 mountinfo 取值。
 
-- **E1** 概览和历史页不再提示 “This page is missing some sensors”。（人工）
+- **E1** 概览和历史页不再提示 “This page is missing some sensors”。（人工；只能在手机上看：传感器齐不齐取决于手机 KGSL 的 sysfs（gpu_clock_stats、频率、温度）与容器的 mountinfo；补丁里的 kgsltest、mountinfotest 用的是固定样本）
 - **E2** GPU 名称显示 Adreno 710；使用率与 KGSL 的 gpu_clock_stats 增量一致（满载 85–89%，空闲约 0），还有频率和温度；不编造显存和功耗。（单元测试、人工）
 - **E3** 磁盘显示“系统”和“主目录”两个卷，容量与 df 一致，读写速率随实际读写变化；同一设备挂多处只算一次。（单元测试、人工）
-- **E4** 手机会话和独立桌面（工作区 0）的 ksystemstats 给出相同的传感器和数值。（人工）
-- **E5** 只在传感器被订阅时才读 sysfs 和 diskstats，打开概览页时 ksystemstats 的 CPU 不超过单核 1%。（人工）
+- **E4** 手机会话和独立桌面（工作区 0）的 ksystemstats 给出相同的传感器和数值。（人工；只能在手机上看：两个会话在手机上读同一块 KGSL 的 sysfs，要在手机上同时看两边）
+- **E5** 只在传感器被订阅时才读 sysfs 和 diskstats，打开概览页时 ksystemstats 的 CPU 不超过单核 1%。（人工；只能在手机上看：CPU 占用是手机上的性能）
 
 注意：
 - 上游 GPU 插件只认 DRM 设备，KGSL 没有 DRM 节点，sysfs 的 card0 是显示控制器；上游 MR !149 的 msm DRM 方案不能直接用。 [docs/104-system-monitor-gpu-disks.md](../docs/104-system-monitor-gpu-disks.md)
