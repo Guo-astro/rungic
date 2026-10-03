@@ -286,11 +286,20 @@ case "$action" in
       echo 'plasmashell had failed; restarting the desktop session' >&2
       action=restart-session
     fi
+    # The session's own compositor and shell: the main processes of its two user units. Not pidof:
+    # the workspaces (desktop mode's 0 among them) run a kwin_wayland and a plasmashell of their own
+    # that a session restart leaves running, so "every pid is new" never held (docs/research/97 §19.4).
+    session_pids() {
+      attach /usr/bin/rungic-plasma-user-exec sh -c 'test -f /run/user/1000/rungic-session.env &&
+        k=$(systemctl --user show -P MainPID plasma-kwin_wayland.service) &&
+        p=$(systemctl --user show -P MainPID plasma-plasmashell.service) &&
+        [ "${k:-0}" != 0 ] && [ "${p:-0}" != 0 ] && echo "$k $p"' 9>&-
+    }
     old_pids=
     if [ "$action" = restart-session ] && running; then
       startup_phase=session-restart
       # The old compositor and shell take a moment to exit: readiness must see new ones.
-      old_pids=$(attach /bin/sh -c 'echo $(pidof kwin_wayland) $(pidof plasmashell)' 9>&-) || old_pids=
+      old_pids=$(session_pids) || old_pids=
       attach /bin/sh -c 'systemctl restart rungic-plasma-session.service' 9>&-
     fi
     if ! running; then
@@ -300,7 +309,7 @@ case "$action" in
     startup_phase=desktop-ready
     ready=0
     for i in $(seq 1 60); do
-      pids=$(attach /bin/sh -c 'test -f /run/user/1000/rungic-session.env && k=$(pidof kwin_wayland) && p=$(pidof plasmashell) && echo $k $p' 9>&-) || pids=
+      pids=$(session_pids) || pids=
       if [ -n "$pids" ]; then
         new=1
         for pid in $pids; do case " $old_pids " in *" $pid "*) new=0 ;; esac; done

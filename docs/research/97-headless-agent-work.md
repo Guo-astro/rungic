@@ -1289,3 +1289,20 @@ KWin 的层从低到高（`effect/globals.h`）：Desktop、Below、Normal、Abo
 - 手机端浮窗显示英文提示：浮窗进程的语言本来就是英文（标签 “Desktop” 也是），和这次改动无关；
 - 0 号的密码库解锁提示（经 `rungic-bus-forward` 转到手机）仍在手机上，属于同一类问题，尚未处理。
 
+
+## 22. 退役 APK 全屏与投屏测试图；会话就绪误报的修复（2026-10-03，G100 S 实机）
+
+**APK 2.30**（提交 `168aa02`）：§17 顺序第 4 步的一部分。
+- 删除 `AgentFullscreen`、`DirectGestures`、`CastTest` 和平台桥 `cast-test` 操作；`desktop-mode`、`agent-screen`、`director` 不再接受 `fullscreen` 请求，回复里也没有 `fullscreen`、`directorFullscreen`；呈现器只剩电视一个归属，导播台不再有手机布局。
+- 保留：电视的导播台与呈现器、`TouchpadGestures` 与 `PointerTransfer`（投屏控件的电视触控板；`FullTouch.qml` 是它们的移植）。
+- Linux 一侧删除 `AgentScreen::fullscreen()`、`Director::fullscreen()`、`fullscreenShown`（QML 早已不调用），以及 keeper、`rungic-agent-screen` 对这两个字段的读取；平台桥契约同步。新旧版本混用时，缺少的字段读作 false。
+
+**部署**（开发覆盖，基线 20260930.10）：8 个包（`rungic-agent-screen`、`rungic-cast`、`rungic-cua`、`rungic-plasma-bridges`、`rungic-plasma-config`、`rungic-plasma-services`、`rungic-plasma-session`、`rungic-voice-agent`）版本 `+dev20261003t045430.168aa02`，`[verify] apt=ok`，完整性 `drift`（开发覆盖本身）。APK 2.30 用 `adb install -r` 安装。
+
+**实机结果**：
+- 桌面、dock 与部署前一致；部署和两次会话重启期间没有新的崩溃，没有失败的单元。
+- 验收：`session.ready`、`session.units`、`contract.platform-bridge`（7/7，2.30 的回复）、`desktop-mode.workspace`（桌面模式开着，只读核对）通过。
+- 直接查询：`cast-test` 回复 `Unsupported operation`；`desktop-mode`、`agent-screen` 的回复不再含 `fullscreen`。
+- 未测：手机上的触控全屏操作（会打断用户正在用的桌面模式；无头系统测试 `desktop_mode_fullscreen` 覆盖窗口层级）；电视投屏（需要电视）。
+
+**会话就绪误报**（§19.4 记过两次）：部署的重启步骤又报 “Desktop did not become ready”，桌面其实已在 6 秒内就绪。原因：`system/rungic-plasma` 用 `pidof kwin_wayland`/`pidof plasmashell` 记下重启前的进程，要求就绪时“全是新进程”；而 0 号（桌面模式）和其他工作区各有一个 KWin 和 plasmashell，会话重启时它们照常运行，条件永远不成立。改为只看会话自己的两个用户单元 `plasma-kwin_wayland.service`、`plasma-plasmashell.service` 的主进程。手机上的控制器换成新版（旧版存为 `/data/adb/rungic-plasma/rungic-plasma.before-20261003`，与仓库 HEAD 的旧版哈希相同），`rungic_plasma.py restart-session` 在工作区 0、1 都在运行时 6.7 秒报告就绪。控制器属于发布清单的 Android 侧文件，没有开发覆盖机制，下一次正式发布会按清单部署同一文件。
