@@ -99,6 +99,10 @@ def test_a_retired_feature_with_code_left_is_a_cleanup(tmp_path):
     inventory = repo(tmp_path, {'src/thing.py': '', 'docs/a.md': ''}, area, DOCS)
     assert 'retired' in kinds(inventory)
     assert 'untested' not in kinds(inventory)
+    # Nor is a retired feature's check by hand test debt: there is nothing left to test.
+    inventory = repo(tmp_path, {'src/thing.py': '', 'docs/a.md': ''}, area, DOCS,
+                     acceptance='{"scenarios": [{"id": "s", "level": "smoke", "covers": ["a.thing/E1"]}]}')
+    assert 'device-only' not in kinds(inventory)
 
 
 def test_old_evidence_by_hand_is_stale(tmp_path):
@@ -130,6 +134,28 @@ def test_an_interface_wants_both_ends_of_its_contract(tmp_path):
     assert ('unowned', 'android/Bridge.java', 'no feature owns it') not in inventory.warnings, 'a provider is owned by its interface'
     inventory = repo(tmp_path, {**files, 'src/test_bridge.py': '# covers[system]: iface:bridge\n'}, area, DOCS, interfaces)
     assert any('an interface is covered as consumer or provider' in e for e in inventory.errors)
+
+
+# covers: delivery.feature-inventory/E2
+def test_owner_and_feature_answer_from_the_inventory(tmp_path, capsys):
+    inventory = repo(tmp_path, {'src/thing.py': '', 'docs/a.md': '', 'tests/test_thing.py': '# covers: a.thing/E1\n'},
+                     AREA.replace('code: [src/]', 'code: [src/, tests/]'), DOCS)
+    assert inventory.owners('src/thing.py') == ['a.thing']
+    assert inventory.owners('elsewhere.py') == []
+    text = inventory.describe('a.thing')
+    for line in ('a.thing: The thing (live, quality/features/area.yaml)', '  E1 It works.',
+                 '      unit: tests/test_thing.py:1', '  E2 It recovers.', '      manual: docs/a.md (2026-09-01)',
+                 '  code: src/ (1 files)', '  doc: docs/a.md'):
+        assert line in text.splitlines(), text
+    # The commands, on this repository's own inventory.
+    assert fi.main(['owner', 'tools/feature_inventory.py', 'no/such/file']) == 0
+    out = capsys.readouterr().out.splitlines()
+    assert out == ['tools/feature_inventory.py: delivery.feature-inventory', 'no/such/file: (nobody)']
+    assert fi.main(['feature', 'delivery.feature-inventory']) == 0
+    out = capsys.readouterr().out
+    assert out.startswith('delivery.feature-inventory: ') and '  E2 owner PATH' in out
+    assert 'tools/test_feature_inventory.py:' in out
+    assert fi.main(['feature', 'no.such']) == 1
 
 
 # covers: delivery.feature-inventory/E3
