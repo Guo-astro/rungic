@@ -165,3 +165,14 @@ def test_an_experience_only_the_phone_can_show_says_why(tmp_path):
     inventory = repo(tmp_path, files, AREA.replace('{id: E1, text: It works.}', "{id: E1, text: It works., device: ''}"), DOCS,
                      acceptance=acceptance)
     assert any('device needs the reason' in e for e in inventory.errors)
+
+
+# covers: delivery.feature-inventory/E1
+def test_a_side_of_a_contract_that_cannot_be_tested_says_why(tmp_path):
+    area = AREA.replace('    platform: linux\n', '    platform: linux\n    interfaces: [bridge]\n')
+    files = {'src/thing.py': '', 'docs/a.md': '', 'android/Bridge.java': '', 'src/test_bridge.py': '# covers[consumer]: iface:bridge\n'}
+    interfaces = '- {id: bridge, title: A bridge, summary: Android answers., provider: [android/], gaps: {provider: needs a TV}}\n'
+    inventory = repo(tmp_path, files, area, DOCS, interfaces)
+    assert not [w for w in inventory.warnings if w[0] == 'one-sided-contract'], inventory.warnings
+    inventory = repo(tmp_path, files, area, DOCS, interfaces.replace('provider: needs a TV', 'sideways: x'))
+    assert any('gaps.sideways must be consumer or provider' in e for e in inventory.errors)

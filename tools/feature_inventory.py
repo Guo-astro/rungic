@@ -251,8 +251,13 @@ class Inventory:
             layers = {k for k, _ in self.covers.get(f'iface:{iid}', [])}
             for found in self.matches_all(entry['provider']):
                 owned.add(found)
+            gaps = entry.get('gaps') or {}
+            for side in gaps:
+                if side not in INTERFACE_LAYERS or not str(gaps[side] or '').strip():
+                    self.errors.append(f'{where}: gaps.{side} must be consumer or provider, with the reason')
             for side in INTERFACE_LAYERS:
-                if side not in layers:
+                # A side that cannot be tested yet says why (gaps: {provider: why}), as an experience's gap.
+                if side not in layers and not gaps.get(side):
                     self.warnings.append(('one-sided-contract', iid, f'no {side} test of its contract'))
         for ref, places in self.covers.items():
             if ref.startswith('iface:'):
