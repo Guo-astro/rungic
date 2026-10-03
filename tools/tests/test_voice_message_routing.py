@@ -16,11 +16,16 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'agent/computer-use'))
-# Libraries of the computer-use stack that this does not reach (the JEV executor, pinyin names).
-with mock.patch.dict(sys.modules, {name: mock.MagicMock() for name in
-                                   ('arc_cua', 'arc_cua.policies', 'arc_cua.errors', 'arc_cua.keyboard',
-                                    'arc_cua.models', 'pypinyin')}):
+# Libraries of the computer-use stack that this does not reach (the JEV executor, pinyin names), as
+# stand-ins only while the server loads. The rungic_cua modules it loads stay: other tests use them.
+STUBS = {name: mock.MagicMock() for name in ('arc_cua', 'arc_cua.policies', 'arc_cua.errors', 'arc_cua.keyboard',
+                                             'arc_cua.models', 'pypinyin') if name not in sys.modules}
+sys.modules.update(STUBS)
+try:
     from rungic_cua import server
+finally:
+    for name in STUBS:
+        sys.modules.pop(name, None)
 
 
 ROUTER = '''#!{python}

@@ -38,11 +38,17 @@ class _Server:
         self.closed = False
 
     def __enter__(self):
-        threading.Thread(target=self._accept, daemon=True).start()
+        self.accepting = threading.Thread(target=self._accept, daemon=True)
+        self.accepting.start()
         return self
 
     def __exit__(self, *exc):
         self.closed = True
+        try:
+            self.server.shutdown(socket.SHUT_RDWR)     # wakes the accepting thread, which then ends
+        except OSError:
+            pass
+        self.accepting.join(2)
         self.server.close()
         self.dir.cleanup()
 
