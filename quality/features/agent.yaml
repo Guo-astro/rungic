@@ -111,6 +111,7 @@ features:
         text: 按下后不必等连接：服务和浮层常驻预热，按下约 0.1 s 内开始录音，实时连接在后台建立，期间的录音按顺序补发。
         evidence:
           - {doc: docs/67-home-assistant.md, date: 2026-09-25, note: "Hold 后 89 ms 开始录音"}
+        device: 按下到开始录音的时延取决于手机上 Android 麦克风经 PulseAudio 的采集链路和 CPU 调度，无头系统里没有这条采集链路，测不出 0.1 s；浮层常驻不显示由 tools/system/tests/assistant_app.py 检查
       - id: E5
         text: 一次按住超过 60 秒视为松开事件丢失：关闭浮层、取消录音，已说的内容不发送，麦克风不会一直开着。
       - id: E6
@@ -139,6 +140,7 @@ features:
       - agent/assistant/rungic-voice-overlay.service
       - agent/assistant/com.rungic.VoiceAssistant.service
       - tools/tests/test_assistant_overlay.py
+      - tools/system/tests/assistant_app.py
     docs: [docs/67-home-assistant.md, docs/87-agent-app-redesign.md]
 
   - id: agent.chat-app
@@ -211,6 +213,8 @@ features:
       - agent/assistant/app/qml/SettingsFrame.qml
       - agent/assistant/com.rungic.VoiceAssistant.desktop
       - tools/tests/assistant_qml.py
+      - tools/tests/test_assistant_app.py
+      - tools/tests/test_assistant_service_side.py
     docs: [docs/59-voice-agent.md, docs/87-agent-app-redesign.md, docs/67-home-assistant.md]
 
   - id: agent.attachments

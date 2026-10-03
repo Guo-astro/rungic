@@ -14,5 +14,7 @@ RUN apt-get update -q && DEBIAN_FRONTEND=noninteractive apt-get install -y -q --
         qml6-module-qtquick-virtualkeyboard qt6-virtualkeyboard-plugin qml6-module-qtcore qml6-module-qtquick-window \
         qml6-module-qtquick-effects qml6-module-org-kde-kirigami qml6-module-org-kde-pipewire qml6-module-org-kde-layershell \
         fonts-noto-core openssh-server \
+        libkf6windowsystem-dev libkf6colorscheme-dev libkf6config-dev qml6-module-org-kde-ki18n \
+        qml6-module-qtquick-dialogs qml6-module-qt-labs-folderlistmodel qml6-module-qtquick-shapes \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m tester

@@ -31,7 +31,7 @@ class Failed(AssertionError):
 
 
 class Session:
-    def __init__(self, width, height, name='system'):
+    def __init__(self, width, height, name='system', outputs=1):
         self.runtime = Path(f'/tmp/rt-{os.getuid()}')
         self.runtime.mkdir(mode=0o700, exist_ok=True)
         os.environ.update(XDG_RUNTIME_DIR=str(self.runtime), WAYLAND_DISPLAY=f'wayland-{name}', QT_QPA_PLATFORM='wayland',
@@ -42,7 +42,8 @@ class Session:
         kwin_env = {**os.environ, 'KWIN_WAYLAND_NO_PERMISSION_CHECKS': '1'}
         self.kwin = subprocess.Popen(['kwin_wayland', '--virtual', '--width', str(width), '--height', str(height),
                                       '--socket', f'wayland-{name}', '--no-lockscreen', '--no-global-shortcuts',
-                                      '--no-kactivities'], stdout=self.log, stderr=subprocess.STDOUT, env=kwin_env)
+                                      '--no-kactivities', *(['--output-count', str(outputs)] if outputs > 1 else [])],
+                                     stdout=self.log, stderr=subprocess.STDOUT, env=kwin_env)
         self.children = []
         self.steps = []
         self.wait_for(lambda: (self.runtime / f'wayland-{name}').exists(), 20, 'KWin listening')
