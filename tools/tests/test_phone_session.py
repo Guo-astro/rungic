@@ -77,3 +77,69 @@ def test_desktop_language_does_not_force_spoken_language():
     obj.language = lambda: 'en'
     obj.command = lambda method, args: args
     assert obj.start('origin')['language'] == ''
+
+
+class Process:
+    """The coordinator's side of the pipe: the lines it printed, then gone."""
+    def __init__(self, lines):
+        self.stdout = iter(lines)
+        self.terminated = False
+    def poll(self):
+        return 0 if self.terminated else None
+    def terminate(self):
+        self.terminated = True
+    def wait(self, timeout=None):
+        return 0
+
+
+def reader(lines):
+    obj = bridge()
+    obj.process = Process(lines)
+    obj.pending = {}
+    obj.snapshot = {'sessionId': 's', 'phase': 'live', 'conversation': 'c'}
+    obj.events = []
+    obj.emit = lambda event, keep=True: obj.events.append(event)
+    return obj
+
+
+def test_a_reply_without_an_id_is_dropped_not_the_end():
+    # ExternalBusy was written without an id; its reply had none and the reader's KeyError took
+    # the coordinator down with it (2026-10-03).
+    import json
+    event, result = threading.Event(), {}
+    obj = reader([json.dumps({'type': 'reply', 'result': {'ok': True}}) + '\n',
+                  'not json\n',
+                  json.dumps({'type': 'reply', 'id': 7, 'result': {'sessionId': 'x'}}) + '\n',
+                  json.dumps({'type': 'event', 'event': {'type': 'phone-notice', 'text': 'still here'}}) + '\n'])
+    obj.pending[7] = event, result
+    obj._read()
+    # Answered by the reply after the bad lines (the coordinator stopping at the end marks what is
+    # left pending, which command() would have taken already).
+    assert event.is_set() and result['sessionId'] == 'x'
+    assert {'type': 'phone-notice', 'text': 'still here'} in obj.events
+
+
+def test_post_gives_every_command_an_id():
+    obj = bridge()
+    obj.serial = 0
+    written = []
+    obj._write = written.append
+    obj.post('ExternalBusy', {'busy': True})
+    obj.post('ExternalBusy', {'busy': False})
+    assert [m['id'] for m in written] == [1, 2]
+    assert all(m['type'] == 'command' and m['method'] == 'ExternalBusy' for m in written)
+
+
+def test_post_to_a_stopped_coordinator_is_dropped():
+    obj = bridge()
+    obj.serial = 0
+    def stopped(message):
+        raise RuntimeError('Phone session service stopped; try again')
+    obj._write = stopped
+    obj.post('ExternalBusy', {'busy': True})   # a hint: no exception into the agent's turn handling
+
+
+def test_the_agent_writes_no_command_without_an_id():
+    # Every command to the coordinator goes through command() or post(), which number it.
+    source = (MODULE.parent / 'rungic_voice_agent.py').read_text()
+    assert 'phone._write(' not in source

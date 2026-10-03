@@ -986,12 +986,20 @@ class VoiceAgent:
     def phone_session(self):
         from phone_session import PhoneSession
         with self.lock:
-            if self.phone is None:
+            # Its coordinator gone (it should not), a new one: no "reopen the app" that changes nothing.
+            stopped = self.phone is not None and not self.phone.alive()
+            if stopped:
+                log('phone session: the coordinator stopped, starting it again')
+            if self.phone is None or stopped:
+                old = self.phone
                 self.phone = PhoneSession(lambda: self.server, self.thread_settings, self.emit,
                     lambda: platform_request({'op': 'status'}).get('foreground', False),
                     lambda: prompt('phone.md') + language_note(),
                     lambda: desktop_language().split('_')[0].split('-')[0], history=self.store.history)
-                threading.Thread(target=lambda: self.phone.command('Reconcile'), daemon=True).start()
+                if old is not None:
+                    self.phone.threads.update(old.threads)   # its tasks' Codex threads still report to it
+                phone = self.phone
+                threading.Thread(target=lambda: phone.command('Reconcile'), daemon=True).start()
             return self.phone
 
     def phone_command(self, method, args):
@@ -1986,7 +1994,7 @@ class VoiceAgent:
             self.agent_busy = True
             mark_agent_busy(True)
             if self.phone:
-                self.phone._write({"type": "command", "method": "ExternalBusy", "args": {"busy": True}})
+                self.phone.post("ExternalBusy", {"busy": True})
             self.turn_started = self.last_voice = time.monotonic()
             with self.turn_lock:
                 self.turn = task_state.TurnState()
@@ -2007,7 +2015,7 @@ class VoiceAgent:
             self.agent_busy = False
             mark_agent_busy(bool(self.background))
             if self.phone:
-                self.phone._write({"type": "command", "method": "ExternalBusy", "args": {"busy": bool(self.background)}})
+                self.phone.post("ExternalBusy", {"busy": bool(self.background)})
             self.agent_idle_since = time.monotonic()
             forget_screen_dismissal()
             if getattr(self, 'model_pending', False):

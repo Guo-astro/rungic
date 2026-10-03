@@ -31,9 +31,24 @@ class PhoneSession:
     def _write(self, message):
         with self.write_lock:
             if self.process.poll() is not None:
-                raise RuntimeError('Phone session service stopped; reopen the app')
+                raise RuntimeError('Phone session service stopped; try again')
             self.process.stdin.write(json.dumps(message, ensure_ascii=False) + '\n')
             self.process.stdin.flush()
+
+    def alive(self):
+        return self.process.poll() is None
+
+    def post(self, method, args=None):
+        """A command nobody waits for (ExternalBusy, a hint). It has an id all the same: the
+        coordinator answers every command with its id, and a reply without one ended the reader and
+        the coordinator with it (2026-10-03). A stopped coordinator drops the hint."""
+        with self.lock:
+            self.serial += 1
+            rid = self.serial
+        try:
+            self._write({'type': 'command', 'id': rid, 'method': method, 'args': args or {}})
+        except (RuntimeError, OSError):
+            pass
 
     def command(self, method, args=None, timeout=30):
         with self.lock:
@@ -145,22 +160,11 @@ class PhoneSession:
     def _read(self):
         try:
             for line in self.process.stdout:
-                message = json.loads(line)
-                kind = message.get('type')
-                if kind == 'reply':
-                    with self.lock:
-                        pair = self.pending.get(message['id'])
-                        if pair:
-                            pair[1].update(message.get('result') or {})
-                            pair[0].set()
-                elif kind == 'rpc':
-                    threading.Thread(target=self._rpc, args=(message,), daemon=True).start()
-                elif kind == 'event':
-                    event = message['event']
-                    if event.get('type') == 'phone-state':
-                        with self.lock:
-                            self.snapshot.update(event)
-                    self.emit(event, message.get('keep', True))
+                try:
+                    self._handle(json.loads(line))
+                except Exception as error:
+                    # One bad line is dropped and said, never the end of the session.
+                    print(f'phone session: dropped a message ({error!r}): {line[:300]!r}', flush=True)
         finally:
             if self.process.poll() is None:
                 self.process.terminate()
@@ -175,6 +179,23 @@ class PhoneSession:
                     event.set()
             self.emit({'type': 'phone-state', 'conversation': self.snapshot.get('conversation', ''),
                        'sessionId': '', 'phase': 'closed', 'microphone': False}, False)
+
+    def _handle(self, message):
+        kind = message.get('type')
+        if kind == 'reply':
+            with self.lock:
+                pair = self.pending.get(message.get('id'))
+                if pair:
+                    pair[1].update(message.get('result') or {})
+                    pair[0].set()
+        elif kind == 'rpc':
+            threading.Thread(target=self._rpc, args=(message,), daemon=True).start()
+        elif kind == 'event':
+            event = message['event']
+            if event.get('type') == 'phone-state':
+                with self.lock:
+                    self.snapshot.update(event)
+            self.emit(event, message.get('keep', True))
 
     def _watch_foreground(self):
         while self.process.poll() is None:

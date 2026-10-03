@@ -72,3 +72,22 @@ APK 2.29/77 单独构建安装。Java-only 构建复用 G100 已安装 APK 的�
 用户随后要求低音量：G100 的 `android` 和 `android_phone` sink 为 10%。新 communication sink 在创建时继承 android_phone 音量，不因开始通话恢复为 100%；Android 系统音量命令未观察到实际改变，因此这里记录的是已核验的 Rungic/PulseAudio 输出设置。
 
 证据目录中的 final-dev.json 核对最终 Installed/Candidate；native-audio-final.log、integration-final.log、foreground3.log、task-tools-verified.log、cloud-capacity.log 和 cloud.log 分别对应原生音频、真实执行、前后台、工具清理、小样本云端路由与长连接。仍须验收真人双工音质/回声、声学打断和首音、真实跨对话使用与长期交互稳定性。目标仍为：有效语音到实际静音 P95≤200 ms、完整话语到首音正常 P95≤2.5 s/兜底≤4 s；意图大样本≥95%，关键错误开始/取消为零，以及连续 30 分钟会话。这些指标不能用当前少量云端或离线样本代替。
+
+## 故障：打开 App 提示 “Phone session service stopped; reopen the app”（2026-10-03）
+
+**现象（用户报告）**：一打开 Agent App 就提示这句话。服务日志从 11:09 起，每次打开对话时调用 `PhoneSnapshot` 都失败；手机上 `rungic-voice-agent.service` 一直在运行（从 03:30 起），但它的子进程 `rungic-agent-session` 已经不在了。
+
+**原因（日志、源码，并用协调器实测确认）**：
+- 03:34:47 打开新对话，服务创建了 `PhoneSession`。03:35:04 Agent 回合开始（`turn/started`），`rungic_voice_agent.py` 直接调用 `self.phone._write({"type": "command", "method": "ExternalBusy", ...})`，没有带 `id`。回合结束时（`turn/completed`）也有同样的一处。这两处是 `c40326e`（2026-10-02，Agent 忙时保持唤醒）加的。
+- 协调器对每条指令都回复 `{"type": "reply", "id": o["id"], ...}`。请求里没有 `id` 时，Qt 会把值为 undefined 的键省掉，回复就成了 `{"result":{"ok":true},"type":"reply"}`。在手机上用临时 `HOME` 单独运行 `rungic-agent-session` 已复现：不带 `id` 的 `ExternalBusy` 得到不带 `id` 的回复，带 `id` 的原样带回。
+- `phone_session.py` 的读取线程执行 `self.pending.get(message['id'])`，抛出 `KeyError: 'id'` 后退出；退出时的 `finally` 主动 `terminate()` 了协调器。
+- `PhoneSession` 在服务里只创建一次，没有重建。从那以后每条指令都报 “stopped; reopen the app”，而重开 App 并不能恢复，因为会话属于常驻服务。
+- 所以只要 `PhoneSession` 已经存在，Agent 的下一个回合就会把它弄坏，每次都能复现。
+
+**修法**：
+- `PhoneSession.post()`：只发送、不等回复，但同样分配 `id`。`ExternalBusy` 改用它；协调器已停止时，这个提示直接丢弃，不把异常抛进 Agent 的回合处理。
+- 读取线程逐行处理：解析不了或处理出错的一行记进日志（`phone session: dropped a message …`，带这一行的开头）后跳过，不再结束会话、不再杀协调器。
+- `phone_session()` 发现协调器已退出时，记日志后重建，并带上原来任务的 Codex 线程对应关系；提示文字改为 “try again”。
+- 测试：`tools/tests/test_phone_session.py` 新增 4 项（无 `id` 的回复和非 JSON 行被跳过，之后的回复和事件照常处理；`post()` 编号；协调器停止时 `post()` 不抛异常；Agent 代码里不再直接调用 `phone._write(`），共 9 项通过。
+
+**部署**：待用户同意。部署 `rungic-voice-agent` 会重启 `rungic-voice-agent.service`、`rungic-voice-overlay.service`，并关闭正在运行的 Agent App。
