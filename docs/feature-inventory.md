@@ -2955,7 +2955,7 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 | `host-input` 宿主输入 | 安卓的触摸、按键、指针、手势与输入法文字送进 KWin（直接触摸、触控板、电视遥控与键盘）。 | `delivery.acceptance`、`delivery.ui-automation`、`desktop-mode.fullscreen`、`desktop-mode.fullscreen-touch`、`desktop-mode.tv-computer-mode`、`desktop-mode.tv-touchpad`、`desktop-mode.apk-fullscreen`、`desktop.touch`、`desktop.edge-back`、`desktop.android-text` | — | 1 |
 | `camera` 相机 | 安卓 Camera2 的画面作为 PipeWire 相机节点（rungic.camera.N），按需开关；有哪些相机由平台桥的 capture-info 回答。 | `apps.camera`、`apps.snapshot`、`apps.plasma-camera`、`apps.firefox`、`delivery.acceptance`、`delivery.probes` | 1 | 3 |
 | `audio` 扬声器与麦克风 | 安卓的扬声器和麦克风作为 PulseAudio 设备（android、android_phone 输出与麦克风源），按需挂起；输出经安卓侧的 PulseAudio（system/android-audio）。 | `agent.voice`、`agent.call-proxy`、`apps.phone-audio`、`apps.virtual-audio`、`apps.firefox`、`delivery.acceptance`、`delivery.probes`、`desktop-mode.audio-follow`、`desktop.screen-recording`、`install.cold-start` | 4 | 3 |
-| `communication-audio` 通话音频 | $XDG_RUNTIME_DIR/rungic-communication.sock：电话模式与通话用的双向通信音频（android_communication 设备）。 | `agent.phone-mode` | — | — |
+| `communication-audio` 通话音频 | $XDG_RUNTIME_DIR/rungic-communication.sock：电话模式与通话用的双向通信音频（android_communication 设备）。 | `agent.phone-mode` | 1 | 2 |
 | `codec` 硬件编解码 | 安卓 MediaCodec 经 IPC 给 GStreamer、FFmpeg 和 Firefox 用（H.264/HEVC/VP9 解码、H.264 编码）。 | `apps.snapshot`、`apps.hw-codec`、`apps.firefox-hw-video`、`delivery.acceptance`、`desktop.screen-recording` | 4 | 1 |
 | `clipboard` 剪贴板 | 安卓 ClipboardDaemon 与 Wayland 剪贴板双向同步。 | `desktop-mode.clipboard`、`desktop.clipboard`、`desktop.clipboard-history` | 3 | 1 |
 | `network` 网络 | 安卓的 Wi-Fi 与网络状态，经 Linux 一侧的 NetworkManager D-Bus 接口给桌面用。 | `desktop.network` | 3 | 1 |

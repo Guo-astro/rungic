@@ -52,6 +52,18 @@
       ]
     },
     {
+      "id": "contract.communication-audio",
+      "level": "smoke",
+      "check": "interface_contract",
+      "params": {
+        "interface": "communication-audio"
+      },
+      "title": "The shared communication audio service listens for the desktop user and refuses a request without a session (or while another session holds it), as the phone mode's client expects; nothing is opened (quality/contracts/communication-audio.json)",
+      "covers": [
+        "iface:communication-audio"
+      ]
+    },
+    {
       "id": "contract.clipboard",
       "level": "smoke",
       "check": "interface_contract",

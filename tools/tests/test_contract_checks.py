@@ -98,7 +98,7 @@ def check(monkeypatch, name, phone):
 
 # covers: delivery.system-tests/E2
 @pytest.mark.parametrize('names', [['platform-bridge'], ['network', 'telephony'], ['bluetooth'], ['camera'],
-                                   ['audio'], ['ocr'], ['wifi-display', 'platform-bridge']])
+                                   ['audio'], ['ocr'], ['wifi-display', 'platform-bridge'], ['communication-audio']])
 def test_the_provider_check_passes_a_provider_that_keeps_the_contract(monkeypatch, names):
     with contracts.StandIn(names) as android:
         result = check(monkeypatch, names[0], Phone([android]))
