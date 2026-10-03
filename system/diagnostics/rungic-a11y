@@ -103,7 +103,9 @@ def node(acc, path):
     try:
         text = acc.get_text_iface()
         if text:
-            info['text'] = text.get_text(0, min(text.get_character_count(), 200))
+            # Atspi.Text's own methods: on the object, get_text() is the deprecated Accessible.get_text()
+            # (no arguments), which failed here so that no element ever showed its text.
+            info['text'] = Atspi.Text.get_text(text, 0, min(Atspi.Text.get_character_count(text), 200))
     except Exception:
         pass
     return info

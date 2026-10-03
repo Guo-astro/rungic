@@ -118,6 +118,24 @@ def maintainer_scripts(pkg, root):
     units = pkg.get('units', {})
     obsolete = pkg.get('obsolete', [])
     post = ['#!/bin/sh', 'set -e', '']
+    renamed = [(scope, flag, unit, former_unit(pkg, unit)) for scope, flag in (('system', ''), ('user', ' --user'))
+               for unit in units.get(scope, []) if former_unit(pkg, unit)]
+    if renamed:
+        # Renamed units (docs/70): whether the old unit was enabled, read before the obsolete links
+        # below go. Its enable links, as deb-systemd-helper recorded them (.dsh-also), are dangling
+        # once apt removed the old package, and still there unless the administrator disabled it;
+        # deb-systemd-helper's own mirror of them does not see an administrator's systemctl disable.
+        post += ['rungic_was_enabled() {   # unit state-directory',
+                 '  [ -f "$2/$1.dsh-also" ] || return 0',
+                 '  while read -r link; do',
+                 '    [ -L "$link" ] || return 1',
+                 '  done < "$2/$1.dsh-also"',
+                 '  return 0',
+                 '}']
+        for index, (scope, flag, unit, former) in enumerate(renamed):
+            post += [f"rungic_former_{index}=disabled",
+                     f"if rungic_was_enabled '{former}' {MIRROR[scope]}; then rungic_former_{index}=enabled; fi"]
+        post += ['']
     if obsolete:
         items = ' '.join(p if '*' in p else shlex.quote(p) for p in obsolete)   # patterns with * expand
         post += ['# Files of the manual installation this package replaces (docs/61). Symlinks go only when',
@@ -132,16 +150,6 @@ def maintainer_scripts(pkg, root):
                  'fi', '']
     if units.get('system') or units.get('user') or pkg.get('user_systemd'):
         post += ['if [ -d /run/systemd/system ]; then systemctl daemon-reload || true; fi']
-    if pkg.get('formerly') and (units.get('system') or units.get('user')):
-        # Enabled while any link deb-systemd-helper recorded for the unit is in its mirror directory.
-        post += ['rungic_was_enabled() {   # unit mirror-directory',
-                 '  [ -f "$2/$1.dsh-also" ] || return 0',
-                 '  while read -r link; do',
-                 '    rel=${link#/etc/systemd/system/}; rel=${rel#/etc/systemd/user/}',
-                 '    if [ -e "$2/$rel" ] || [ -L "$2/$rel" ]; then return 0; fi',
-                 '  done < "$2/$1.dsh-also"',
-                 '  return 1',
-                 '}']
     for scope, flag in (('system', ''), ('user', ' --user')):
         for unit in units.get(scope, []):
             # debhelper 14's postinst-systemd{,-user}-enable: was-enabled is true without a record, so
@@ -151,13 +159,13 @@ def maintainer_scripts(pkg, root):
                      '[ "$1" = abort-remove ]; then']
             former = former_unit(pkg, unit)
             if former:
-                # Renamed (docs/70): the old unit's state, as deb-systemd-helper recorded it, carries
-                # over, then its record goes (a rollback to the old package enables it again, as
-                # debhelper does without a record). was-enabled cannot tell: the old unit file is
-                # gone once apt removed the package this one replaces.
-                mirror = MIRROR[scope]
+                # Renamed (docs/70): the old unit's state (read above) carries over, then its record
+                # goes (a rollback to the old package enables it again, as debhelper does without a
+                # record). was-enabled cannot tell: the old unit file is gone once apt removed the
+                # package this one replaces.
+                index = [u for _, _, u, _ in renamed].index(unit)
                 post += [f"  if deb-systemd-helper{flag} debian-installed '{former}'; then",
-                         f"    if rungic_was_enabled '{former}' {mirror}; then deb-systemd-helper{flag} enable '{unit}' >/dev/null || true",
+                         f"    if [ \"$rungic_former_{index}\" = enabled ]; then deb-systemd-helper{flag} enable '{unit}' >/dev/null || true",
                          f"    else deb-systemd-helper{flag} disable '{unit}' >/dev/null || true; fi",
                          f"    deb-systemd-helper{flag} purge '{former}' >/dev/null || true",
                          f"  elif deb-systemd-helper --quiet{flag} was-enabled '{unit}'; then"]

@@ -78,8 +78,8 @@ def run(names):
              3600)
     try:
         # A temporary directory of its own: two runs of the same tree no longer extract into one.
-        host.ssh(f'test -d {src} || {{ part=$(mktemp -d {src}.XXXXXX) && tar -xzf - -C "$part" '
-                 f'&& {{ mv "$part" {src} 2>/dev/null || rm -rf "$part"; }}; }}', 600, data=archive)
+        host.ssh(f'if test -d {src}; then touch {src}; else part=$(mktemp -d {src}.XXXXXX) && tar -xzf - -C "$part" '
+                 f'&& {{ mv "$part" {src} 2>/dev/null || rm -rf "$part"; }}; fi', 600, data=archive)
         record = RESULTS / datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
         record.mkdir(parents=True)
         print(f'system tests {" ".join(names)} on {tag} (working tree {digest})', flush=True)
@@ -94,9 +94,9 @@ def run(names):
         mark = 'PASS' if line.get('passed') else 'FAIL'
         print(f'{mark} {line["test"]} ({line.get("seconds", "-")} s)' + (f': {line["error"]}' if line.get('error') else '')
               + (f': {line["log"]}' if line.get('log') else ''))
-    # Trees older than two hours go. Not "all but the last three": with runs from several working trees
-    # at once, that removed a tree another run's container was still building from.
-    host.ssh(f'find {REMOTE} -maxdepth 1 -name "src-*" -mmin +120 -exec rm -rf {{}} +', 120, check=False)
+    # Trees unused for three hours (longer than a run): other runs, of other working trees, may be using
+    # newer ones (keeping only the newest three removed a running test's tree under it).
+    host.ssh(f"find {REMOTE} -maxdepth 1 -name 'src-*' -mmin +180 -exec rm -rf {{}} +", 120, check=False)
     passed = lines and all(l.get('passed') for l in lines) and len([l for l in lines if 'build' not in l['test']]) == len(names)
     print(f'{"passed" if passed else "FAILED"}; record {record.relative_to(ROOT)}')
     return 0 if passed else 1

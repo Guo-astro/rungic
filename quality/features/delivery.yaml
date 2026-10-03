@@ -83,6 +83,7 @@ features:
     experience:
       - id: E1
         text: 默认构建机是 Mac mini，速度远快于手机：KWin 含 LTO 的完整构建约 6 分钟，手机上一小时以上；构建期间手机不受影响。
+        device: 构建耗时取决于 Mac mini 与手机的硬件，只能在两台机器上实测；默认构建机和不碰手机由单元测试检查
         evidence:
           - {doc: docs/71-upstream-patch-queue.md, date: 2026-09-27, note: "§构建机：Mac mini"}
       - id: E2
@@ -99,6 +100,7 @@ features:
           - {doc: docs/71-upstream-patch-queue.md, date: 2026-09-27, note: "实测 6.8 MB/s，其他命令与路径被拒绝"}
       - id: E5
         text: Mac mini 上的构建结果与手机上的完整构建逐文件一致（ELF 去掉 build-id 与 debuglink 后比较），差异只来自可解释的原因。
+        device: 要在手机容器里做一次完整构建（一小时以上）再与 Mac mini 的产物逐文件比较；系统测试只有 Mac mini 一台构建环境，替代不了手机上的那一份
         evidence:
           - {doc: docs/71-upstream-patch-queue.md, date: 2026-09-27, note: "plasma-settings、libcamera 一致；qmlcachegen AOT 与 IPA 签名差异已解释"}
       - id: E6
@@ -118,6 +120,7 @@ features:
       - tools/pq/arm64-host.Dockerfile
       - tools/pq/arm64-host-packages.txt
       - tools/pq/rungic-transfer
+      - tools/test_build_on_device.py
     docs: [docs/71-upstream-patch-queue.md, docs/53-remote-system-development.md]
 
   - id: delivery.dev-env
@@ -145,6 +148,7 @@ features:
       - tools/dev-requirements.txt
       - tools/toolchains/
       - .cargo/config.toml
+      - tools/test_dev_env.py
     docs: [docs/52-git-repository-scope.md]
 
   - id: delivery.design-gallery
@@ -170,6 +174,7 @@ features:
     code:
       - tools/design_gallery.py
       - tools/tests/test_design_picture.py
+      - tools/tests/test_design_gallery.py
     docs: [docs/87-agent-app-redesign.md]
 
   - id: delivery.offline-tests
@@ -194,6 +199,7 @@ features:
     code:
       - tools/run-tests.sh
       - tools/conftest.py
+      - tools/test_run_tests.py
     docs: [docs/95-install-use-case-tests.md]
 
   # ---------------------------------------------------------------- release
@@ -232,6 +238,8 @@ features:
       - tools/rungic_package.py
       - packaging/
       - tools/test_source_layout.py
+      - tools/test_rungic_package.py
+      - tools/system/tests/package_unit_state.py
     docs: [docs/61-delivery-diagnostics-plan.md]
 
   - id: delivery.release-deploy
@@ -284,6 +292,7 @@ features:
       - tools/rungic_release.py
       - tools/test_rungic_release.py
       - release/packages.json
+      - tools/test_rungic_release_deploy.py
     docs: [docs/61-delivery-diagnostics-plan.md, docs/96-desktop-recovery-after-apk-restart.md]
 
   - id: delivery.rootfs-snapshot
@@ -324,6 +333,7 @@ features:
     code:
       - system/rootfs-image
       - tools/rootfs_rollback_test.sh
+      - tools/test_rootfs_image_state.py
     docs: [docs/61-delivery-diagnostics-plan.md]
 
   - id: delivery.acceptance
@@ -366,6 +376,7 @@ features:
       - tools/rungic_acceptance.py
       - release/acceptance.json
       - tools/tests/test_acceptance_scenarios.py
+      - tools/tests/test_acceptance_restore.py
     docs: [docs/61-delivery-diagnostics-plan.md]
 
   - id: delivery.build-fingerprint
@@ -444,6 +455,7 @@ features:
       - tools/rungic_agent.py
       - tools/rungic_agent_mcp.py
       - .mcp.json
+      - tools/tests/test_agent_tools.py
     docs: [docs/55-agent-native-debugging.md]
 
   - id: delivery.crash-reports
@@ -494,6 +506,7 @@ features:
       - system/diagnostics/rungic-coredump.tmpfiles
       - system/diagnostics/rungic-crash-symbols
       - system/diagnostics/60-rungic-core.conf
+      - tools/tests/test_crash_reports.py
     docs: [docs/61-delivery-diagnostics-plan.md, docs/55-agent-native-debugging.md]
 
   - id: delivery.trace
@@ -527,6 +540,7 @@ features:
       - tools/rungic_trace.py
       - tools/rungic_trace_report.py
       - system/diagnostics/sys-kernel-tracing.conf
+      - tools/tests/test_trace_markers.py
     docs: [docs/55-agent-native-debugging.md, docs/56-kwin-vulkan-quantification.md]
 
   - id: delivery.integrity
@@ -559,6 +573,7 @@ features:
     code:
       - system/diagnostics/rungic-integrity
       - system/diagnostics/rungic-local-config.json
+      - tools/system/tests/integrity_drift.py
     docs: [docs/61-delivery-diagnostics-plan.md]
 
   - id: delivery.ui-automation
@@ -589,6 +604,7 @@ features:
     code:
       - system/diagnostics/rungic-a11y
       - tools/rungic_agent.py
+      - tools/system/tests/ui_automation_atspi.py
     docs: [docs/55-agent-native-debugging.md]
 
   - id: delivery.probes
@@ -601,6 +617,7 @@ features:
     experience:
       - id: E1
         text: idle-probe 持有空闲抑制期间手机屏幕保持常亮（冒烟验收 idle.inhibit 用它）。
+        device: 屏幕常亮是宿主 APK 把 KWin 经 zwp_idle_inhibitor_v1 转来的空闲抑制变成窗口 FLAG_KEEP_SCREEN_ON 的结果；无头 KWin 没有 Android 后端和屏幕，熄不熄屏只有手机能看出（验收 idle.inhibit）
         evidence:
           - {doc: docs/94-build-fingerprints.md, date: 2026-09-30, note: "9 项 smoke 含空闲抑制"}
       - id: E2
@@ -611,6 +628,7 @@ features:
           - {doc: docs/69-filesystem-capabilities.md, date: 2026-09-25, note: "~/Documents、~/Desktop 两处 24/24"}
       - id: E4
         text: 媒体复现脚本能稳定复现并对照问题：pa-gap 测出 Qt 原版缓冲参数下的播放断点，camerabin-record 测出相机录像被截短。
+        device: 复现的是手机上的媒体问题：pa-gap 录 Android 音频桥的 android.monitor，camerabin-record 用 Android 摄像头 rungic.camera.0；断点和截短来自 Android 音频与相机的时序，系统测试容器里没有这些后端
         evidence:
           - {doc: docs/73-reduce-upstream-changes.md, date: 2026-09-27, note: "第一阶段 1.2、1.3"}
     pitfalls:
@@ -623,6 +641,7 @@ features:
       - system/diagnostics/wayland-probes/
       - system/diagnostics/media-probes/
       - system/diagnostics/rungic-fs-audit
+      - tools/tests/test_probes.py
     docs: [docs/69-filesystem-capabilities.md]
 
   - id: delivery.phone-access
@@ -645,6 +664,7 @@ features:
           - {doc: docs/70-rungic-rebrand.md, date: 2026-09-27, note: "按包回滚到 20260926.20 后冒烟验收通过"}
       - id: E4
         text: enter 程序在私有挂载命名空间里进入 LXC 运行环境，不在 Android 原来的挂载命名空间挂载任何东西；build_enter.sh 用 NDK 静态编译。
+        gap: enter 程序只能以 Android root 运行：路径写死为 /data/adb/rungic-lxc/runtime、/storage 与 /data/user，unshare/pivot_root 需要 CAP_SYS_ADMIN；开发机禁止非特权 user namespace（apparmor_restrict_unprivileged_userns=1），系统测试容器没有 SYS_ADMIN，也没有 NDK；还没有按日期记录的实机核对
     pitfalls:
       - text: 多个 adb server 或多台手机同时在线时，先 adb devices -l 核对端口和序列号，之后每条命令都带精确序列号；adb server 是共用的，不能 kill-server。
         docs: [AGENTS.md]
@@ -660,6 +680,7 @@ features:
       - tools/build_enter.sh
       - tools/rungic_plasma_enter.c
       - tools/rungic_lxc_enter.c
+      - tools/tests/test_phone_levels.py
     docs: [docs/55-agent-native-debugging.md, docs/39-magisk-daemon-crash.md]
 
   # ---------------------------------------------------------------- upstream
@@ -768,6 +789,7 @@ features:
       - signing/
       - .gitignore
       - .gitattributes
+      - tools/test_repo_scope.py
     docs: [docs/52-git-repository-scope.md, docs/53-remote-system-development.md]
 
   - id: delivery.benchmark-evidence
@@ -789,6 +811,7 @@ features:
         docs: [docs/94-build-fingerprints.md]
     code:
       - benchmarks/
+      - tools/tests/test_benchmark_evidence.py
     docs: []
 
   - id: delivery.dev-guide
@@ -816,6 +839,7 @@ features:
       - .agents/
       - .claude/
       - docs/images/
+      - tools/tests/test_dev_guide.py
     docs: [docs/README.md]
 
   - id: delivery.feature-inventory
@@ -870,6 +894,7 @@ features:
       - quality/contracts/
       - tools/tests/test_contract_*.py   # interface contracts: consumers against stand-ins, the provider check
       - tools/tests/contract_*
+      - tools/test_system_test.py
     docs: [quality/README.md]
 
   - id: delivery.rebrand

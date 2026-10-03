@@ -176,6 +176,7 @@ cd {work}/debs
 for deb in *.deb; do [ -e "$deb" ] && dpkg-deb -x "$deb" {work}/sysroot; done; true''', timeout=3 * 3600)
     host.put(WORKSPACE / 'system/diagnostics/rungic-coredump-collect', f'{WORK}/rungic-coredump-collect', '644')
     script = WORKSPACE / f'.work/crash/analyse.py'
+    script.parent.mkdir(parents=True, exist_ok=True)
     script.write_text(ANALYSE)
     host.put(script, f'{WORK}/analyse.py', '644')
     result = json.loads(host.out(f'python3 {WORK}/analyse.py {work} {shlex.quote(report)}', timeout=1800).splitlines()[-1])

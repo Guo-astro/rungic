@@ -59,7 +59,9 @@ BASELINE = 'quality/baseline.json'
 TAG = re.compile(r'^[+\s]*(?:#|//|\*|--|<!--)\s*covers(?:\[([a-z]+)\])?:\s*(.+?)\s*(?:-->)?$')
 EXPERIENCE_ID = re.compile(r'^E\d+$')
 # Files whose `covers:` lines are not tests (the inventory and its documentation describe them).
-TAGLESS = ('quality/', 'docs/', 'tools/feature_inventory.py', 'tools/test_feature_inventory.py')
+# tools/test_feature_inventory.py is a test like any other: its made-up repositories' tags sit inside
+# strings, never at the start of a line, so only its own comments count.
+TAGLESS = ('quality/', 'docs/', 'tools/feature_inventory.py')
 
 
 class Inventory:
@@ -222,8 +224,8 @@ class Inventory:
                 # unless what the experience is about is the phone itself (`device: why`, quality/README.md).
                 if 'device' in item and not str(item['device'] or '').strip():
                     self.errors.append(f'{where}/{eid}: device needs the reason only the phone can show it')
-                if f.get('platform') == 'linux' and checks and not {k for k, _ in checks} & {'unit', 'system'} \
-                        and not item.get('device'):
+                if f.get('platform') == 'linux' and f.get('status') != 'retired' and checks \
+                        and not {k for k, _ in checks} & {'unit', 'system'} and not item.get('device'):
                     self.warnings.append(('device-only', f'{fid}/{eid}', 'a Linux feature checked only on the phone or by hand'))
             if f.get('status') == 'live' and not f['experience']:
                 self.warnings.append(('no-experience', fid, 'a live feature with no experience to check'))

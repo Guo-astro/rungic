@@ -2,6 +2,8 @@
 import copy
 import json
 import os
+import shutil
+import subprocess
 from pathlib import Path
 import sys
 import tempfile
@@ -122,6 +124,39 @@ class BuildCacheTests(unittest.TestCase):
         self.recipe['outputs'] = ['../outside']
         with self.assertRaisesRegex(ValueError, 'relative path'):
             self.build()
+
+
+@unittest.skipUnless(shutil.which('cc'), 'needs a C compiler')
+class RealComponentTests(unittest.TestCase):
+    """A real component of the install payload, the sparse image writer (tools/ci/sparse_write.c,
+    docs/94's "静态入口/稀疏写入工具" stage), compiled from the repository by this machine's compiler."""
+
+    # covers: delivery.build-fingerprint/E4
+    def test_second_call_of_the_same_executor_hits(self):
+        root = Path(__file__).resolve().parents[2]
+        cc = Path(shutil.which('cc')).resolve()
+        recipe = dict(schema=1, component='sparse-write', target=f'{os.uname().machine}-linux',
+                      sources=['tools/ci/sparse_write.c'], tools={'cc': {'path': str(cc)}},
+                      parameters={'cflags': ['-O2', '-Wall']},
+                      command=[str(cc), '-O2', '-Wall', '-o', '{output}/rungic-sparse-write', '{repo}/tools/ci/sparse_write.c'],
+                      outputs=['rungic-sparse-write'])
+        with tempfile.TemporaryDirectory() as temp:
+            cache = Path(temp) / 'cache'
+            first = b.execute(recipe, cache, root)
+            second = b.execute(copy.deepcopy(recipe), cache, root)
+            self.assertFalse(first['reused'])
+            self.assertTrue(second['reused'])
+            self.assertEqual(second['directory'], first['directory'])
+            self.assertEqual(second['report']['input_sha256'], first['report']['input_sha256'])
+            self.assertEqual(second['report']['outputs'], first['report']['outputs'])
+            self.assertEqual(len(list((cache / 'sparse-write').iterdir())), 2)    # the entry and its lock, no rebuild
+            # What the cache holds is the working tool: a sparse image of the expected length.
+            tool = Path(second['directory']) / 'rungic-sparse-write'
+            image = Path(temp) / 'image'
+            data = b'\0' * (2 << 20) + b'header' + b'\0' * 10
+            run = subprocess.run([str(tool), str(image), str(len(data))], input=data, capture_output=True)
+            self.assertEqual(run.returncode, 0, run.stderr)
+            self.assertEqual(image.read_bytes(), data)
 
 
 if __name__ == '__main__':

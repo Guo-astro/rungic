@@ -4,6 +4,7 @@
 # Ubuntu rootfs too: tests marked "system-test: as root" install into it (openssh-server: SSH on first install).
 # GStreamer's headers build the communication audio service and its client; /mnt/android-wayland, as in
 # the phone's container, holds stand-ins of the app's sockets where programs have their paths fixed.
+# The AT-SPI bus and its GObject binding: rungic-a11y drives applications by their controls' names.
 ARG BASE
 FROM ${BASE}
 ARG http_proxy
@@ -19,6 +20,7 @@ RUN apt-get update -q && DEBIAN_FRONTEND=noninteractive apt-get install -y -q --
         libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
         libkf6windowsystem-dev libkf6colorscheme-dev libkf6config-dev qml6-module-org-kde-ki18n \
         qml6-module-qtquick-dialogs qml6-module-qt-labs-folderlistmodel qml6-module-qtquick-shapes \
+        at-spi2-core gir1.2-atspi-2.0 qml6-module-qtquick-controls qml6-module-qtquick-layouts \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m tester \
     && install -d -o tester /mnt/android-wayland
