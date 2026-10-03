@@ -950,6 +950,7 @@ features:
     code:
       - desktop/device-panel.py
       - desktop/com.rungic.Platform.desktop
+      - tools/tests/test_device_panel.py
     docs: [docs/61-delivery-diagnostics-plan.md]
 
   - id: desktop.services-ssh
