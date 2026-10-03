@@ -535,6 +535,7 @@ features:
       - tools/rungic_agent_mcp.py
       - tools/ui_launch_check.py
       - .mcp.json
+      - tools/tests/test_rungic_agent_mcp.py
     docs: [docs/55-agent-native-debugging.md, docs/agent-ready-interfaces.md]
 
   # ---- 让 Agent 操作桌面 --------------------------------------------------------------------------
