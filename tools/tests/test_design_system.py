@@ -340,6 +340,17 @@ class ChoiceSheetTest(Scene):
         self.assertEqual(w.pickedList(), '')
         self.assertEqual(self.marked(), [])
 
+    # The phone's back is Android's right-edge gesture, which reaches the window as Alt+Left
+    # (StandardKey.Back, docs/46). The Drawer closes on Escape only (Qt takes the Back key there on
+    # Android builds alone), and the modal sheet keeps PageStack's Back shortcut from firing; until
+    # 2026-10-03 the gesture did nothing with the sheet open (ChoiceSheet's own Back shortcut now).
+    # covers: desktop.design-system/E3
+    def test_the_phones_back_closes_without_a_choice(self):
+        w = self.open_sheet()
+        QTest.keyClick(self.window, Qt.Key_Left, Qt.AltModifier)
+        self.assertTrue(self.closed(w))
+        self.assertEqual(w.pickedList(), '')
+
     # covers: desktop.design-system/E3
     def test_dragging_it_down_closes_without_a_choice(self):
         w = self.open_sheet()

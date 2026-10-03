@@ -77,3 +77,10 @@
   - 新增「页面与面板」一节：PageStack 横滑返回（停在第二页、滑到 40%、滑到 80%）和 ChoiceSheet（刚打开、刚选中）；
   - ListRow 和 NavItem 的说明写上了 `tapShown`；「尺寸与动效」画板的动效一栏加了 `tapShown` 150 ms。
 - 数值和文案取自 `desktop/design/qml` 和 zh_CN 翻译；本机渲染截图核对过（离线）。横滑示意中的手指圆点和箭头只是标注。
+
+## 2026-10-03：底部选择面板打开时，手机的返回手势不起作用（已修，离线验证）
+
+- **发现**：离线测试 `tools/tests/test_design_system.py`（PySide6，非实机）对打开的 ChoiceSheet 发 Alt+Left（安卓右边缘返回手势在 Linux 里就是它，docs/46），面板不关。
+- **原因**：QQC2 Drawer 只在 Escape 时关闭（Back 键只在 Android 构建的 Qt 里处理）；面板是模态的，页面 PageStack 的 Back 快捷键在它打开时也不触发。上文“按返回键关闭”实际上只对 Escape 成立。
+- **修复**：ChoiceSheet 自带一个 `StandardKey.Back` 的 Shortcut，只在打开时启用，触发时关闭面板且不做选择。修复前该测试失败，修复后通过；实机尚未复核。
+- **另记**：这一版 Qt 的 `StandardKey.Back` 已包含 Back 键（还有 Alt+Left、Backspace），PageStack 的 `sequences: [StandardKey.Back, "Back"]` 把 Back 注册了两次，Back 键因歧义不起作用；手机不会发 Back 键，暂未改。页面外的 Backspace 也会返回上一页。
