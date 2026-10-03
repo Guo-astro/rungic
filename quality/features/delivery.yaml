@@ -864,7 +864,7 @@ features:
       - tools/feature_inventory.py
       - tools/test_feature_inventory.py
       - docs/feature-inventory.md
-    docs: [quality/README.md]
+    docs: [quality/README.md, docs/105-test-debt-2026-10-03.md]
 
   - id: delivery.system-tests
     title: 不接手机测试系统功能

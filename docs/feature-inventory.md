@@ -1505,7 +1505,7 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 注意：
 - 测试要在被检查的地方声明 covers，只在真的检查了那条体验时才写；没有测试的体验如实留作未检查或写明 gap。 [quality/README.md](../quality/README.md)
 
-文档：[quality/README.md](../quality/README.md)
+文档：[quality/README.md](../quality/README.md)、[docs/105-test-debt-2026-10-03.md](../docs/105-test-debt-2026-10-03.md)
 
 #### Rungic 改名迁移
 

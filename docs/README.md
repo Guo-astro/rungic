@@ -226,6 +226,7 @@ Every feature, the experience it must give and the code, tests and documents beh
 | [102-design-system-choices-and-swipe-back.md](102-design-system-choices-and-swipe-back.md) | Design system gaps: choice feedback, bottom sheets, swipe back (2026-10-01) |
 | [103-krita-save-dialog-hang.md](103-krita-save-dialog-hang.md) | Krita stops responding: the portal's Save As result never arrived (2026-10-01) |
 | [104-system-monitor-gpu-disks.md](104-system-monitor-gpu-disks.md) | GPU and disks in the system monitor: ksystemstats with KGSL and mountinfo (2026-10-03) |
+| [105-test-debt-2026-10-03.md](105-test-debt-2026-10-03.md) | Paying down the feature inventory's test debt: results, defects found and fixed, what is left (2026-10-03) |
 | [95-agent-usage-providers.md](research/95-agent-usage-providers.md) | A common interface for agent usage, and where Claude Code's data comes from (2026-09-30) |
 | [96-agent-curated-briefing.md](research/96-agent-curated-briefing.md) | Suggestion cards the agent curates (the briefing layer) |
 | [97-headless-agent-work.md](research/97-headless-agent-work.md) | The agent working with the phone locked and the screen off; desktop-mode fullscreen and auth prompts (§21) |

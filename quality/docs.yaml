@@ -128,3 +128,4 @@
 - {path: docs/research/mac-offline-desktop-link.md, kind: research, note: MacBook 无网络直连手机桌面（opendrop/AWDL）评估，未实施}
 - {path: docs/research/miracast-video-modes.md, kind: journal, note: Miracast 视频模式选择与验收}
 - {path: docs/research/proactive-system-care.md, kind: journal, note: 主动式系统关怀：设计依据与验收}
+- {path: docs/105-test-debt-2026-10-03.md, kind: journal, note: 测试欠账清理：结果、修复的缺陷、未修的问题与剩下的 device-only}
