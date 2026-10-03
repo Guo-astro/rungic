@@ -178,6 +178,7 @@ class DeviceApp(Adw.Application):
         future=self.pool.submit(read)
         def done(f):
             try:data,error=f.result(),None
+            except OSError:data,error=None,_('Cannot reach the Android side. Open Rungic on the phone.')
             except Exception as e:data,error=None,str(e)
             GLib.idle_add(self.update, data, error)
         future.add_done_callback(done)
@@ -186,7 +187,11 @@ class DeviceApp(Adw.Application):
     def update(self, data, error):
         self.busy=False
         if not self.window:return False
-        if error:self.message.set_description(error);return False
+        if error:
+            # What was read before may no longer be true: show nothing rather than old values.
+            self.message.set_description(error)
+            for row in self.rows.values():row.set_subtitle(_('Not available'))
+            return False
         self.message.set_description('')
         self.changing=True
         self.orientation.set_selected(['system','portrait','landscape'].index(data.get('orientation','portrait')))

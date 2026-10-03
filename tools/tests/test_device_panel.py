@@ -236,3 +236,27 @@ def test_brightness_follows_android_or_the_slider(panel):
         p.wait(lambda s: {'op': 'brightness', 'value': 0.3} in platform.requests, 'the new level sent', 5)
         p.do(do='follow', value=True)
         p.wait(lambda s: {'op': 'brightness', 'value': -1} in platform.requests, 'follow Android sent', 5)
+
+
+# covers: desktop.device-panel/E4
+def test_an_old_or_unreachable_android_side_is_said_and_old_data_is_not_shown(panel):
+    with Platform() as platform:
+        platform.memory = None                                    # an app from before container-memory
+        p = panel(platform)
+        state = p.wait(loaded, 'the page loaded')
+        assert 'Rungic APK 2.5' in state['rows']['memory']
+        platform.__exit__(None, None, None)                       # the app goes away
+        state = p.wait(lambda s: s['message'] != '', 'a message', 8)
+        assert state['message'] == 'Cannot reach the Android side. Open Rungic on the phone.'
+        assert not any('Home Wi-Fi' in v or 'XT2537' in v or '81%' in v for v in state['rows'].values()), \
+            f'data from before is still shown: {state["rows"]}'
+
+
+# covers: desktop.device-panel/E4
+def test_a_response_too_large_is_an_error(panel):
+    with Platform() as platform:
+        platform.network = {'networks': [{'interface': 'wlan%d' % i, 'ssid': 'x' * 200} for i in range(400)]}
+        p = panel(platform)
+        state = p.wait(lambda s: s['message'] != '' and 'Connecting' not in s['message'], 'the error', 8)
+        assert state['message'] == 'The Android host sent a response that is too large'
+        assert set(state['rows'].values()) == {'Not available'}
