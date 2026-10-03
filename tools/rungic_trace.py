@@ -111,8 +111,7 @@ def capture(duration_s=10, label='trace', preset='frame', during=None):
     # Enable KWin's markers only once perfetto is recording: with tracing off the
     # kernel rejects trace_marker writes (EBADF) and KWin's QFile then stops
     # writing until it is reopened. Disable/enable reopens it.
-    kwin_ftrace(False)
-    previous = None
+    original = kwin_ftrace(False)     # the state to restore afterwards (None: markers unavailable)
     gpu_instance_start()
     box = {}
 
@@ -124,15 +123,15 @@ def capture(duration_s=10, label='trace', preset='frame', during=None):
     thread.start()
     try:
         time.sleep(1.5)            # perfetto startup; ftrace begins shortly after launch
-        previous = kwin_ftrace(True)
+        kwin_ftrace(True)
         if during:
             during()
         thread.join()
     finally:
         gpu_remote = f'/data/local/tmp/{name}.kgsl.txt'
         gpu_instance_stop(gpu_remote)
-        if previous is not None:
-            kwin_ftrace(False)
+        if original is not None:
+            kwin_ftrace(original)
     result = box.get('result')
     if result is None or result.returncode:
         raise rungic_device.DeviceError(f'perfetto failed: {result.stderr if result else "no result"}')
