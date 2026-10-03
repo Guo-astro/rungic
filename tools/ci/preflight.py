@@ -82,6 +82,9 @@ def main():
     }
     for name, wanted in expected.items():
         require(props[name] == wanted, f"{name}: got {props[name]!r}; expected {wanted!r}")
+    # The spec's partitions are A/B: a phone that reports no active slot is not the one it describes.
+    require(props["ro.boot.slot_suffix"] in ("_a", "_b"),
+            f"ro.boot.slot_suffix: got {props['ro.boot.slot_suffix']!r}; expected _a or _b")
     release = adb(args.adb_port, args.serial, "shell", "uname", "-r")
     require(release == spec["kernel"]["stock_release"], "running kernel differs from OEM baseline")
     selinux = adb(args.adb_port, args.serial, "shell", "getenforce")
