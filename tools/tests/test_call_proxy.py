@@ -308,6 +308,7 @@ class QuietDuringCallTest(unittest.TestCase):
         a = self.agent
         a.talking = a.muted = False
         a.prefs = {'speak': True}
+        a.aloud_pending, a.aloud_items = False, set()     # no reading asked for (朗读)
         a.playing_until = 0.0
         a.reply_audio_ms = 0
         a.player_src = Mock()

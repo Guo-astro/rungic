@@ -12,6 +12,7 @@ migrated input method at once.
 Root installs what the phone's packages and the Android host would provide: the Android display's
 socket, rungic.upd, and stand-ins for programs the session calls (startplasmamobile records when it
 started and what KWin would read; systemctl records calls and reports the previous session's stop jobs)."""
+import atexit
 import os
 import pwd
 import shutil
@@ -68,6 +69,9 @@ def prepare(user):
     android.mkdir(parents=True, exist_ok=True)
     if not (android / 'wayland-0').exists():
         socket.socket(socket.AF_UNIX).bind(str(android / 'wayland-0'))
+        # A stand-in of the host's socket, for this test only: the tests after it in the same
+        # container are headless (workspace_headless took it for an Android host).
+        atexit.register((android / 'wayland-0').unlink, missing_ok=True)
     # rungic-plasma-config's migrations, where the package puts them.
     # rungic-plasma-config's fixed screen locker settings.
     shutil.copy(SRC / 'system/config/etc/xdg/kscreenlockerrc', '/etc/xdg/kscreenlockerrc')

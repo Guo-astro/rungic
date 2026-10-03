@@ -178,8 +178,10 @@ def test():
 
         workspace = start_workspace()
         # No Android host compositor (its wayland-0); the directory itself is in the image, for stand-ins.
-        s.check(not list(Path('/mnt/android-wayland').glob('wayland-*')) and not (runtime / f'rungic-workspace-{SLOT}.failed').exists(),
-                'the workspace is up with no Android host at all (headless)')
+        host = [str(p) for p in Path('/mnt/android-wayland').glob('wayland-*')]
+        failed_mark = (runtime / f'rungic-workspace-{SLOT}.failed').exists()
+        s.check(not host and not failed_mark,
+                f'the workspace is up with no Android host at all (headless) [host sockets {host}, failed mark {failed_mark}]')
 
         # ---- an app of the agent's, its input (E1, E2) ----------------------------------------
         s.start(['rungic-workspace-env', SLOT, 'python3', str(tmp / 'app.py'), 'rungic-ws-app', 'agent app',
