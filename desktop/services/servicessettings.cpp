@@ -150,7 +150,9 @@ public:
         m_groups.clear();
         for (const auto &value : policy) {
             const auto group = value.toObject();
-            const bool disabledKind = group.value(u"default"_s).toString() == u"disabled";
+            // Optional (off or on by default: enabled and disabled), or masked (masked and unmasked).
+            const auto defaultState = group.value(u"default"_s).toString();
+            const bool disabledKind = defaultState == u"disabled" || defaultState == u"enabled";
             const auto start = strings(group.value(u"start"_s));
             int masked = 0, total = 0, active = 0, enabled = 0, missing = 0;
             QStringList units, userRun;
