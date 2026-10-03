@@ -20,4 +20,7 @@ def no_device(monkeypatch):
     def refuse(*args, **kwargs):
         raise AssertionError(f'an offline test reached the device: {list(args[:1])[:3]}')
     monkeypatch.setattr(rungic_device, '_run', refuse)
+    # Kept for tests that put a fake adb in RUNGIC_ADB and test how the phone is found
+    # (tools/tests/test_rungic_agent_mcp.py); they restore it themselves.
+    rungic_device.__dict__.setdefault('_unguarded_adb_path', rungic_device.adb_path)
     monkeypatch.setattr(rungic_device, 'adb_path', refuse)

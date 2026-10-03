@@ -77,6 +77,12 @@ def test():
           'a local dpkg diversion: development')
     check(first['crash'] == ["/etc/sysctl.d/50-coredump.conf is not masked: systemd-sysctl could redirect Android's core_pattern"],
           "the crash chain's precondition")
+    # A fourth: the image's own wl-clipboard 2.3.0 in /usr/local (for the clipboard tests) shadows the
+    # Ubuntu package's wl-copy and wl-paste, as a hand-installed program on the phone would.
+    check({'/usr/local/bin/wl-copy', '/usr/local/bin/wl-paste'} <= set(first['unowned'].get('usr_local_shadowing', [])),
+          'a program in /usr/local that shadows a packaged one')
+    for name in ('wl-copy', 'wl-paste'):
+        os.unlink(f'/usr/local/bin/{name}')
     os.makedirs('/var/lib/apt/lists/partial', mode=0o700, exist_ok=True)
     subprocess.run(['dpkg-divert', '--local', '--rename', '--remove', '/sbin/initctl'], check=True, capture_output=True)
     deb('rungic-test-config', '1', 'systemd-coredump', {}, links={'/etc/sysctl.d/50-coredump.conf': '/dev/null'})

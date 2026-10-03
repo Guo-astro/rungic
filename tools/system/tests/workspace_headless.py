@@ -177,7 +177,8 @@ def test():
             return proc
 
         workspace = start_workspace()
-        s.check(not Path('/mnt/android-wayland').exists() and not (runtime / f'rungic-workspace-{SLOT}.failed').exists(),
+        # No Android host compositor (its wayland-0); the directory itself is in the image, for stand-ins.
+        s.check(not list(Path('/mnt/android-wayland').glob('wayland-*')) and not (runtime / f'rungic-workspace-{SLOT}.failed').exists(),
                 'the workspace is up with no Android host at all (headless)')
 
         # ---- an app of the agent's, its input (E1, E2) ----------------------------------------

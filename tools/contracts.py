@@ -239,6 +239,7 @@ class StandIn:
         self.dir.cleanup()
 
     def answer(self, request):
+        """(the contract's query, the reply). A subclass may return the reply alone."""
         q = query(self.contract, request)
         if not q:
             return None, {'error': f'unknown request {request.get("op")!r}'}
@@ -275,7 +276,10 @@ class StandIn:
                 data = stream.read(int(request.get(q['payload']) or 0))
                 with self.lock:
                     self.payloads.append(data)
-            q, reply = self.answer(request) if isinstance(request, dict) else (None, {'error': 'not an object'})
+            answered = self.answer(request) if isinstance(request, dict) else (None, {'error': 'not an object'})
+            # A subclass may answer some requests itself with the reply alone (the platform bridge's
+            # writing ops in the desktop's tests); the query is then the contract's, if it has one.
+            q, reply = answered if isinstance(answered, tuple) else (query(self.contract, request), answered)
             try:
                 conn.sendall((json.dumps(reply) + '\n').encode())
                 if q and q['name'] in self.streams:

@@ -138,6 +138,8 @@ esac
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr(rungic_device, 'WORKSPACE', tmp_path)       # no .work/device.env of this computer
     monkeypatch.setenv('RUNGIC_ADB', str(fake))
+    # The guard (tools/conftest.py) refuses adb_path; here adb is the fake above, in RUNGIC_ADB.
+    monkeypatch.setattr(rungic_device, 'adb_path', rungic_device._unguarded_adb_path)
     monkeypatch.setenv('ANDROID_ADB_SERVER_PORT', '5038')
 
     def fresh():

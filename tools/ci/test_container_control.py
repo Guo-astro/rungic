@@ -48,7 +48,9 @@ case "$tool" in
       *'systemctl restart rungic-plasma-session.service'*)
         echo session-restart >> $T/log
         echo $(( $(cat $T/generation) + 1 )) > $T/generation ;;
-      *pidof*) g=$(cat $T/generation); echo "${g}1 ${g}2" ;;
+      # The session's compositor and shell: the main pids of its two user units, new with every
+      # start or session restart (a workspace's KWin and plasmashell are not among them).
+      *'MainPID plasma-kwin_wayland.service'*) g=$(cat $T/generation); echo "${g}1 ${g}2" ;;
       *) echo "attach $*" >> $T/log ;;
     esac ;;
   *) echo "enter $*" >> $T/log ;;

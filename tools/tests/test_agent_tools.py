@@ -13,7 +13,8 @@ import rungic_agent  # noqa: E402
 ROOT = Path(__file__).resolve().parents[2]
 # Tools that change something: operate controls, switch accessibility, record a trace (it toggles
 # KWin's markers and tracefs), install symbols, write an evidence bundle.
-CHANGING = {'ui_press', 'ui_tap', 'ui_set_text', 'ui_accessibility', 'trace', 'crash_symbolize', 'snapshot'}
+# ui_apps and ui_find turn accessibility on when it is off: a change of the device's state (E5).
+CHANGING = {'ui_press', 'ui_tap', 'ui_set_text', 'ui_accessibility', 'ui_apps', 'ui_find', 'trace', 'crash_symbolize', 'snapshot'}
 
 
 def mcp_tools(monkeypatch):
