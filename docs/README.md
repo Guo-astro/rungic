@@ -1,5 +1,7 @@
 # Rungic developer guide and documentation index
 
+Start with the [project philosophy: working together](philosophy.md).
+
 For developers: where the project came from, which document covers each capability, the repository layout, how to get started, and the index of all documents. For the product itself see the [project home](../README.md); engineering conventions are in [AGENTS.md](../AGENTS.md). The documents themselves are written in Chinese; their titles are translated below.
 
 ## Project history
