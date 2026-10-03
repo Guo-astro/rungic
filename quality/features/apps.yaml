@@ -604,6 +604,7 @@ features:
     code:
       - shared/media/media-bridge.py
       - shared/media/audio-route.py
+      - tools/tests/test_voice_message_routing.py
     docs: [docs/62-linux-virtual-audio.md]
 
   # ---- 硬件编解码 ---------------------------------------------------------------------------------
