@@ -31,6 +31,7 @@ def agent_screen(socket_path, monkeypatch, tmp_path, name='rungic-agent-screen')
     return module
 
 
+# covers: delivery.system-tests/E2
 def test_the_contract_is_its_own_example():
     contract = contracts.load('platform-bridge')
     names = [q['name'] for q in contract['queries']]
@@ -40,6 +41,7 @@ def test_the_contract_is_its_own_example():
         assert q['request'] == {'op': q['name']}, 'read-only queries carry no other fields'
 
 
+# covers: delivery.system-tests/E2
 def test_a_stand_in_reply_must_keep_the_contract():
     with pytest.raises(ValueError):
         contracts.StandIn('platform-bridge', {'desktop-mode': {'enabled': 'yes'}})
@@ -47,6 +49,7 @@ def test_a_stand_in_reply_must_keep_the_contract():
 
 
 # covers[consumer]: iface:platform-bridge
+# covers: delivery.system-tests/E3
 def test_the_assistant_screen_status_reads_where_it_is_shown(monkeypatch, tmp_path):
     reply = {**contracts.query(contracts.load('platform-bridge'), {'op': 'agent-screen'})['reply'],
              'enabled': True, 'workspace': 2, 'fullscreen': True}

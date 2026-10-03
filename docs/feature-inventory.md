@@ -4,7 +4,7 @@
 
 以产品功能和用户场景为骨架：每条功能是用户能感知的一件事；“体验”是它必须做到的，每条都标明由什么检查（自动测试、实机验收、人工验证或已登记的缺口）。数据在 `quality/`，规则见 [quality/README.md](../quality/README.md)。
 
-共 159 条功能、658 条体验，其中 514 条有检查。
+共 160 条功能、663 条体验，其中 519 条有检查。
 
 ## Agent 能力
 
@@ -1168,6 +1168,22 @@ Linux 应用用手机的相机拍照录像，用手机的扬声器和麦克风�
 
 文档：[docs/95-install-use-case-tests.md](../docs/95-install-use-case-tests.md)
 
+#### 不接手机测试系统功能（实验）
+
+`delivery.system-tests` · Linux 系统功能 — 与安卓无关的 Linux 系统功能在 Mac mini 的无头 KWin 里测试；它和安卓之间的接口按契约两头分别测，Linux 一侧对着替身，安卓一侧在手机上。
+
+经由接口：`platform-bridge`
+
+- **E1** tools/system_test.py 在 Mac mini 的一次性 arm64 容器里用工作区的代码构建并运行系统测试，不碰手机；结果逐条写进 .work/system-tests/。（人工）
+- **E2** 接口契约（quality/contracts/）给出每个查询和使用方依赖的回复字段；替身按契约回答并记下请求，同一份契约在手机上核对提供方。（单元测试）
+- **E3** Linux 程序都经 RUNGIC_PLATFORM_SOCKET 找平台桥，测试可以换成替身；不设时仍是手机上的路径。（单元测试）
+
+注意：
+- 测试 KWin 要 KWIN_WAYLAND_NO_PERMISSION_CHECKS=1 才接受模拟输入，容器要 --cap-add SYS_NICE（kwin_wayland 带文件能力）；Docker 构建上下文要 USTAR 格式的 tar。 [quality/README.md](../quality/README.md)
+- 在手机上核对提供方的检查只能读不能切换：桌面模式的第一版检查把状态读成空，关掉了用户正在用的桌面。 [quality/README.md](../quality/README.md)
+
+文档：[quality/README.md](../quality/README.md)
+
 ### 出一个正式发布并能回退
 
 从干净的提交构建全部包，生成发布元包，部署到手机，自动验收；失败时自动回到部署前，之后也能回到上一个发布。
@@ -1391,8 +1407,9 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 - 多个 adb server 或多台手机同时在线时，先 adb devices -l 核对端口和序列号，之后每条命令都带精确序列号；adb server 是共用的，不能 kill-server。 [AGENTS.md](../AGENTS.md)
 - adb shell su -c '命令一; 命令二' 可能只有第一条以 root 运行，改为把脚本经 stdin 送给 su -c sh。 [AGENTS.md](../AGENTS.md)
 - adb 走 Wi-Fi，离开当前 Wi-Fi 会断开 adb，失去对手机的全部访问；不要做会断网的操作。 [docs/73-reduce-upstream-changes.md](../docs/73-reduce-upstream-changes.md)
+- Magisk 31.0 的 magiskd 遇到返回 SQL NULL 的查询会退出（直接 PRAGMA table_info、未检查的 SELECT *）；只查明确非空的列或逐列 COALESCE，先在内存数据库核对，不在实机复现。 [docs/39-magisk-daemon-crash.md](../docs/39-magisk-daemon-crash.md) [AGENTS.md](../AGENTS.md)
 
-文档：[docs/55-agent-native-debugging.md](../docs/55-agent-native-debugging.md)
+文档：[docs/55-agent-native-debugging.md](../docs/55-agent-native-debugging.md)、[docs/39-magisk-daemon-crash.md](../docs/39-magisk-daemon-crash.md)
 
 ### 维护对上游组件的修改
 
@@ -1488,9 +1505,9 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 文档：[quality/README.md](../quality/README.md)
 
-#### Rungic 改名迁移（已退役）
+#### Rungic 改名迁移
 
-`delivery.rebrand` · 依赖安卓 — 2026-09-26/27 从 moto 改名为 Rungic 的工具：规则替换（rebrand.py）、用户与系统状态的双向迁移、Android 侧切换（rungic_cutover.py）。B、C 阶段已完成；清理残留的 D 阶段还没做。
+`delivery.rebrand` · 依赖安卓 — 2026-09-26/27 从 moto 改名为 Rungic 的工具（迁移仍随会话包发布，回滚到改名前的发布也靠它们）：规则替换（rebrand.py）、用户与系统状态的双向迁移、Android 侧切换（rungic_cutover.py）。B、C 阶段已完成；清理残留的 D 阶段还没做。
 
 - **E1** 跨越改名的升级和回滚两个方向都可用：用户设置、目录和单元启用状态迁到新名称，回滚到改名前的发布时迁回，往返后配置逐字节相同。（单元测试、人工）
 - **E2** 已安装的包、单元和包名中不再出现 moto 名称（硬件名称和 D 阶段的残留除外）。（实机验收、人工）
@@ -2693,7 +2710,7 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 注意：
 - Android 的 sh 只有 32 位整数，上限用 M 后缀写给内核；遍历进程只用 shell 内建命令（每个进程一次 grep 要一分钟）。 [docs/61-delivery-diagnostics-plan.md](../docs/61-delivery-diagnostics-plan.md)
 
-文档：[docs/61-delivery-diagnostics-plan.md](../docs/61-delivery-diagnostics-plan.md)
+文档：[docs/61-delivery-diagnostics-plan.md](../docs/61-delivery-diagnostics-plan.md)、[docs/21-memory-audit.md](../docs/21-memory-audit.md)、[docs/76-g100-memory-audit.md](../docs/76-g100-memory-audit.md)
 
 #### Rungic 容器底座
 
@@ -2779,7 +2796,7 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 - Android/fastbootd 回 bootloader 常只断开 USB、需要重插；bootloader 直接刷第二个 super 分片曾卡住并报 error -71。不要循环重刷，超级分区走 fastbootd，进入前清 fb_mode。 [docs/79-g100-ci-execution.md](../docs/79-g100-ci-execution.md) [profiles/devices/motorola/vantage_cn/W2WV36.55-75-15-knowledge.md](../profiles/devices/motorola/vantage_cn/W2WV36.55-75-15-knowledge.md)
 - 改执行参数要发新的 adapter 和包，不能改已绑定哈希的旧 spec 后继续用。 [profiles/devices/motorola/vantage_cn/W2WV36.55-75-15-knowledge.md](../profiles/devices/motorola/vantage_cn/W2WV36.55-75-15-knowledge.md)
 
-文档：[docs/77-g100-three-ci-assessment.md](../docs/77-g100-three-ci-assessment.md)、[docs/78-g100-firmware-inventory.md](../docs/78-g100-firmware-inventory.md)、[docs/83-x70-air-pro-onboarding.md](../docs/83-x70-air-pro-onboarding.md)
+文档：[docs/01-device.md](../docs/01-device.md)、[docs/77-g100-three-ci-assessment.md](../docs/77-g100-three-ci-assessment.md)、[docs/78-g100-firmware-inventory.md](../docs/78-g100-firmware-inventory.md)、[docs/83-x70-air-pro-onboarding.md](../docs/83-x70-air-pro-onboarding.md)
 
 #### 自编 GKI 设备底座
 
@@ -2930,7 +2947,7 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 | 接口 | 说明 | 使用它的功能 | 使用方测试 | 提供方测试 |
 |---|---|---|---|---|
-| `platform-bridge` 平台桥 | 逐行 JSON 的 Unix socket（Rungic 应用 files/tmp/platform.sock）：状态、显示、亮度、方向、振动、设置面板、桌面模式、助理屏、电视与导播台、文字提交。 | `agent.voice`、`agent.progress`、`agent.phone-mode`、`agent.workspaces`、`agent.where`、`delivery.acceptance`、`delivery.agent-diagnostics`、`desktop-mode.on-off`、`desktop-mode.floating-window`、`desktop-mode.fullscreen`、`desktop-mode.cast-connect`、`desktop-mode.tv-computer-mode`、`desktop-mode.tv-touchpad`、`desktop-mode.audio-follow`、`desktop-mode.director`、`desktop-mode.tv-director`、`desktop-mode.remote-viewing`、`desktop-mode.cast-test-pattern`、`desktop.orientation`、`desktop.resolution-refresh`、`desktop.brightness`、`desktop.host-bridges`、`desktop.power`、`desktop.device-panel` | 4 | 1 |
+| `platform-bridge` 平台桥 | 逐行 JSON 的 Unix socket（Rungic 应用 files/tmp/platform.sock）：状态、显示、亮度、方向、振动、设置面板、桌面模式、助理屏、电视与导播台、文字提交。 | `agent.voice`、`agent.progress`、`agent.phone-mode`、`agent.workspaces`、`agent.where`、`delivery.acceptance`、`delivery.agent-diagnostics`、`delivery.system-tests`、`desktop-mode.on-off`、`desktop-mode.floating-window`、`desktop-mode.fullscreen`、`desktop-mode.cast-connect`、`desktop-mode.tv-computer-mode`、`desktop-mode.tv-touchpad`、`desktop-mode.audio-follow`、`desktop-mode.director`、`desktop-mode.tv-director`、`desktop-mode.remote-viewing`、`desktop-mode.cast-test-pattern`、`desktop.orientation`、`desktop.resolution-refresh`、`desktop.brightness`、`desktop.host-bridges`、`desktop.power`、`desktop.device-panel` | 4 | 1 |
 | `kwin-android-host` KWin 安卓宿主 | KWin 的 android-host 后端与 Rungic 应用里的宿主：输出、帧时钟、零拷贝呈现、显式同步、空闲抑制、投屏输出。 | `agent.workspaces`、`apps.gpu`、`apps.vulkan`、`apps.xwayland-gpu`、`delivery.acceptance`、`delivery.trace`、`delivery.probes`、`desktop-mode.tv-computer-mode`、`desktop-mode.external-screen`、`desktop-mode.tv-director`、`desktop-mode.apk-fullscreen`、`desktop.session`、`desktop.panels`、`desktop.orientation`、`desktop.host-display`、`desktop.resolution-refresh`、`desktop.display-size`、`desktop.power`、`install.desktop-entry`、`install.app-restart-recovery`、`install.apk-build` | — | 5 |
 | `host-input` 宿主输入 | 安卓的触摸、按键、指针、手势与输入法文字送进 KWin（直接触摸、触控板、电视遥控与键盘）。 | `delivery.acceptance`、`delivery.ui-automation`、`desktop-mode.fullscreen`、`desktop-mode.fullscreen-touch`、`desktop-mode.tv-computer-mode`、`desktop-mode.tv-touchpad`、`desktop-mode.apk-fullscreen`、`desktop.touch`、`desktop.edge-back`、`desktop.android-text` | — | 1 |
 | `camera` 相机 | 安卓 Camera2 的画面作为 PipeWire 相机节点（rungic.camera.N），按需开关；有哪些相机由平台桥的 capture-info 回答。 | `apps.camera`、`apps.snapshot`、`apps.plasma-camera`、`apps.firefox`、`delivery.acceptance`、`delivery.probes` | — | 2 |

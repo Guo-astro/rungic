@@ -940,6 +940,7 @@ features:
     title: 开发端脚本当组长的团队运行
     scenario: agent.team
     status: retired
+    keep: README 的团队演示和 research/91 的端到端记录引用这些脚本与请求原文，作为那次演示的可复现记录保留；不再作为启动团队的入口。
     platform: linux
     summary: 2026-10-01 的第一次团队验收：开发机上的 Agent 当组长，用脚本在手机上起三个 codex exec 成员；以及子 Agent 工具进程的探针实验。已由助理会话按 rungic-agent-team 技能当组长取代。
     pitfalls:

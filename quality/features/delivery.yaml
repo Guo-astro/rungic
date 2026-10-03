@@ -651,14 +651,15 @@ features:
         docs: [AGENTS.md]
       - text: adb 走 Wi-Fi，离开当前 Wi-Fi 会断开 adb，失去对手机的全部访问；不要做会断网的操作。
         docs: [docs/73-reduce-upstream-changes.md]
+      - text: Magisk 31.0 的 magiskd 遇到返回 SQL NULL 的查询会退出（直接 PRAGMA table_info、未检查的 SELECT *）；只查明确非空的列或逐列 COALESCE，先在内存数据库核对，不在实机复现。
+        docs: [docs/39-magisk-daemon-crash.md, AGENTS.md]
     code:
       - tools/rungic_device.py
       - tools/rungic_plasma.py
-      - tools/rungic_lxc.py
       - tools/build_enter.sh
       - tools/rungic_plasma_enter.c
       - tools/rungic_lxc_enter.c
-    docs: [docs/55-agent-native-debugging.md]
+    docs: [docs/55-agent-native-debugging.md, docs/39-magisk-daemon-crash.md]
 
   # ---------------------------------------------------------------- upstream
   - id: delivery.patch-queue
@@ -836,16 +837,45 @@ features:
     code:
       - quality/
       - tools/feature_inventory.py
+      - tools/test_feature_inventory.py
       - docs/feature-inventory.md
+    docs: [quality/README.md]
+
+  - id: delivery.system-tests
+    title: 不接手机测试系统功能
+    scenario: delivery.try-on-phone
+    status: experimental
+    platform: linux
+    interfaces: [platform-bridge]
+    summary: 与安卓无关的 Linux 系统功能在 Mac mini 的无头 KWin 里测试；它和安卓之间的接口按契约两头分别测，Linux 一侧对着替身，安卓一侧在手机上。
+    experience:
+      - id: E1
+        text: tools/system_test.py 在 Mac mini 的一次性 arm64 容器里用工作区的代码构建并运行系统测试，不碰手机；结果逐条写进 .work/system-tests/。
+        evidence:
+          - {doc: quality/README.md, date: 2026-10-03, note: "desktop_mode_fullscreen 4 秒通过；在修复前的 e6693dd 上失败"}
+      - id: E2
+        text: 接口契约（quality/contracts/）给出每个查询和使用方依赖的回复字段；替身按契约回答并记下请求，同一份契约在手机上核对提供方。
+      - id: E3
+        text: Linux 程序都经 RUNGIC_PLATFORM_SOCKET 找平台桥，测试可以换成替身；不设时仍是手机上的路径。
+    pitfalls:
+      - text: 测试 KWin 要 KWIN_WAYLAND_NO_PERMISSION_CHECKS=1 才接受模拟输入，容器要 --cap-add SYS_NICE（kwin_wayland 带文件能力）；Docker 构建上下文要 USTAR 格式的 tar。
+        docs: [quality/README.md]
+      - text: 在手机上核对提供方的检查只能读不能切换：桌面模式的第一版检查把状态读成空，关掉了用户正在用的桌面。
+        docs: [quality/README.md]
+    code:
+      - tools/system_test.py
+      - tools/system/
+      - tools/contracts.py
+      - quality/contracts/
     docs: [quality/README.md]
 
   - id: delivery.rebrand
     title: Rungic 改名迁移
     scenario: delivery.repository
-    status: retired
+    status: live
     platform: android
     interfaces: []
-    summary: 2026-09-26/27 从 moto 改名为 Rungic 的工具：规则替换（rebrand.py）、用户与系统状态的双向迁移、Android 侧切换（rungic_cutover.py）。B、C 阶段已完成；清理残留的 D 阶段还没做。
+    summary: 2026-09-26/27 从 moto 改名为 Rungic 的工具（迁移仍随会话包发布，回滚到改名前的发布也靠它们）：规则替换（rebrand.py）、用户与系统状态的双向迁移、Android 侧切换（rungic_cutover.py）。B、C 阶段已完成；清理残留的 D 阶段还没做。
     experience:
       - id: E1
         text: 跨越改名的升级和回滚两个方向都可用：用户设置、目录和单元启用状态迁到新名称，回滚到改名前的发布时迁回，往返后配置逐字节相同。
@@ -866,6 +896,8 @@ features:
       - tools/test_rebrand_user.py
       - desktop/rebrand-user.py
       - system/rebrand-system.sh
+      - lxc/termux-lxc          # rungic_cutover 回滚时装回的旧 Android 侧文件
+      - lxc/alpine.config
     docs: [docs/70-rungic-rebrand.md]
 
   - id: delivery.legacy-helpers

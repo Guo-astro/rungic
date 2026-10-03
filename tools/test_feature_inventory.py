@@ -60,6 +60,7 @@ def kinds(inventory):
     return {k for k, _, _ in inventory.warnings}
 
 
+# covers: delivery.feature-inventory/E1
 def test_a_test_saying_what_it_covers_checks_that_experience(tmp_path):
     inventory = repo(tmp_path, {'src/thing.py': 'x = 1\n', 'tests/test_thing.py': '# covers: a.thing/E1\ndef test(): pass\n',
                                 'docs/a.md': '# A\n'}, AREA + "    code: [src/, tests/]\n".replace('    code: [src/, tests/]\n', ''), DOCS)
@@ -69,17 +70,20 @@ def test_a_test_saying_what_it_covers_checks_that_experience(tmp_path):
     assert ('unowned', 'tests/test_thing.py', 'no feature owns it') in inventory.warnings
 
 
+# covers: delivery.feature-inventory/E1
 def test_a_test_covering_what_does_not_exist_is_an_error(tmp_path):
     inventory = repo(tmp_path, {'src/thing.py': '', 'docs/a.md': '', 'src/test_x.py': '// covers: a.thing/E9 a.gone\n'}, AREA, DOCS)
     assert any("covers unknown 'a.thing/E9'" in e for e in inventory.errors)
     assert any("covers unknown 'a.gone'" in e for e in inventory.errors)
 
 
+# covers: delivery.feature-inventory/E1
 def test_paths_that_match_nothing_are_errors(tmp_path):
     inventory = repo(tmp_path, {'docs/a.md': ''}, AREA, DOCS)
     assert any("code 'src/' matches no tracked file" in e for e in inventory.errors)
 
 
+# covers: delivery.feature-inventory/E1
 def test_unowned_files_unclassified_and_superseded_documents_are_reported(tmp_path):
     inventory = repo(tmp_path, {'src/thing.py': '', 'docs/a.md': '', 'docs/old.md': '', 'docs/loose.md': '', 'stray.sh': ''},
                      AREA, DOCS + '- {path: docs/old.md, kind: superseded, superseded_by: docs/a.md}\n')
@@ -89,6 +93,7 @@ def test_unowned_files_unclassified_and_superseded_documents_are_reported(tmp_pa
     assert ('superseded-doc', 'docs/old.md', 'superseded by docs/a.md') in inventory.warnings
 
 
+# covers: delivery.feature-inventory/E1
 def test_a_retired_feature_with_code_left_is_a_cleanup(tmp_path):
     area = AREA.replace('status: live', 'status: retired')
     inventory = repo(tmp_path, {'src/thing.py': '', 'docs/a.md': ''}, area, DOCS)
@@ -127,6 +132,7 @@ def test_an_interface_wants_both_ends_of_its_contract(tmp_path):
     assert any('an interface is covered as consumer or provider' in e for e in inventory.errors)
 
 
+# covers: delivery.feature-inventory/E3
 def test_the_generated_overview_must_be_current(tmp_path):
     inventory = repo(tmp_path, {'src/thing.py': '', 'docs/a.md': ''}, AREA, DOCS)
     assert not [e for e in inventory.errors if 'out of date' in e]

@@ -224,7 +224,9 @@ class Inventory:
             if f.get('status') == 'live' and not f['experience']:
                 self.warnings.append(('no-experience', fid, 'a live feature with no experience to check'))
             if f.get('status') == 'retired' and not f.get('keep'):
-                left = sorted({x for p in f['code'] for x in self.matches(p)} | {d.split('#')[0] for d in f['docs']})
+                # Its history documents stay as evidence (quality/docs.yaml kind history); the rest goes.
+                docs = {d.split('#')[0] for d in f['docs']} - {d for d, e in self.docs.items() if e.get('kind') == 'history'}
+                left = sorted({x for p in f['code'] for x in self.matches(p)} | docs)
                 if left:
                     self.warnings.append(('retired', fid, ', '.join(left[:6]) + (' ...' if len(left) > 6 else '')))
         for iid, entry in self.interfaces.items():

@@ -1104,6 +1104,7 @@ features:
     title: 桌面目录里的旧补丁与旧打包脚本
     scenario: desktop.manage
     status: retired
+    keep: qt-video-duration.patch 是 AGENTS.md 点名的未验收实验，未进入 Qt 补丁队列。
     platform: linux
     interfaces: []
     summary: 迁入 packages/<组件>/debian/patches/rungic 补丁队列之前直接维护的补丁，以及已被 KWin Android 后端和 kscreen 补丁队列取代的旧显示设置通路；构建不再使用。

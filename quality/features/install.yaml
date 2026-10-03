@@ -441,6 +441,8 @@ features:
       - system/rungic-plasma
     docs:
       - docs/61-delivery-diagnostics-plan.md
+      - docs/21-memory-audit.md       # G100 S 的 RAM 实测与工作区的内存需求
+      - docs/76-g100-memory-audit.md  # G100 的 Android 内存占用
 
   - id: install.container-base
     title: Rungic 容器底座
@@ -615,6 +617,7 @@ features:
       - tools/ci/preflight.py
       - .agents/skills/rungic-three-stage-image/
     docs:
+      - docs/01-device.md             # G100 S 的硬件与分区身份
       - docs/77-g100-three-ci-assessment.md
       - docs/78-g100-firmware-inventory.md
       - docs/83-x70-air-pro-onboarding.md
@@ -750,6 +753,7 @@ features:
     title: Android 与 Rungic 整包清数据刷入
     scenario: install.legacy-rom
     status: retired
+    keep: AGENTS.md：完整 Android 整包工具保留给明确指定的历史/恢复工作。
     platform: android
     interfaces: []
     summary: >-
@@ -797,6 +801,7 @@ features:
     title: G100 S v3 一键完整重装包
     scenario: install.legacy-rom
     status: retired
+    keep: G100 S 是用户的日常机，v3 整包是它清数据重装的恢复手段；按 AGENTS.md 保留给恢复工作。
     platform: android
     interfaces: []
     summary: XT2537-4 / mumba_cn 原厂 Android 16 加精简 product 与离线 Magisk 的一键清数据重装包（差分封装，约 9.78 GB），不含 RungicOS。
@@ -823,6 +828,7 @@ features:
     title: 原厂精简 product（G100 S W1WAA36）
     scenario: install.legacy-rom
     status: retired
+    keep: v3 整包与 tools/ci 的 product 组装仍用到这些工具（erofs_inventory 等）；按 AGENTS.md 保留给恢复工作。
     platform: android
     interfaces: []
     summary: 从原厂 product 删除 15 个第三方预装、保留其余文件元数据，重建 product 镜像与纯净 ROM 目录。
@@ -847,6 +853,7 @@ features:
     title: 离线 Magisk 首启（G100 S product 种子）
     scenario: install.legacy-rom
     status: retired
+    keep: v3 整包的离线 Magisk 种子由它们生成和核验；按 AGENTS.md 保留给恢复工作。
     platform: android
     interfaces: []
     summary: 精简 product 携带官方完整 Magisk APK 和运行文件种子，断网首启时 Magisk 自己把完整管理器装成普通应用。
@@ -872,6 +879,7 @@ features:
     title: 原厂手工 root 与恢复原厂（G100 S）
     scenario: install.legacy-rom
     status: retired
+    keep: 从远端原厂包取单个镜像是恢复原厂时的手段；按 AGENTS.md 保留给恢复工作。
     platform: android
     interfaces: []
     summary: 早期在 G100 S 上手工修补 init_boot 取得 Magisk root、从远端原厂包取单个镜像、回到官方系统的流程与命令。
@@ -908,6 +916,7 @@ features:
     title: 最小 Alpine 测试容器
     scenario: install.legacy-rom
     status: retired
+    keep: lxc/rungic-lxc 仍被 tools/ci/build_host_seed.py 打进宿主种子；从种子里去掉要随下一次独立首装验证。
     platform: android
     interfaces: []
     summary: 第一个在原厂 Android 16 上跑通的 LXC 容器（Alpine 3.22.6、BusyBox init、只有 loopback），以及 Termux 里的 lxc 快捷命令。Plasma 容器取代了它。
@@ -916,8 +925,7 @@ features:
       - text: lxc/rungic-lxc 仍被 tools/ci/build_host_seed.py 打进宿主种子（/data/adb/rungic-lxc/rungic-lxc），删除时要一并改掉；LXC 6.0.4 的 Alpine 宿主 runtime 本身仍在用，不能一起删。
         docs: [docs/17-lxc-installation.md]
     code:
-      - lxc/
-      - tools/rungic_lxc.py
+      - lxc/rungic-lxc
     docs:
       - docs/18-termux-lxc.md
 

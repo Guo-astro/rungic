@@ -1,4 +1,0 @@
-# Minimal BusyBox init; no OpenRC/systemd required for the first container.
-::sysinit:/sbin/ip link set lo up
-::respawn:/bin/sleep 86400
-::shutdown:/bin/sync

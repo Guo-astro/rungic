@@ -921,6 +921,7 @@ features:
     title: Rungic 应用里的全屏（旧）
     scenario: desktop-mode.use
     status: retired
+    keep: 暂留：删除要随下一次 APK 发布并在手机上验证；列为待清理。
     platform: android
     interfaces: [kwin-android-host, host-input]
     summary: 旧做法：浮窗的全屏（含导播台全屏）由 Rungic 应用的 AgentFullscreen 把宿主输出直接呈现在手机上，手势在安卓里识别（DirectGestures）。2026-10-02 起被 Linux 的全屏窗口取代（docs/research/97 §17），Linux 一侧已不再请求它。
@@ -935,6 +936,7 @@ features:
     title: 电视测试图（原型）
     scenario: desktop-mode.tv
     status: retired
+    keep: 暂留：删除要随下一次 APK 发布并在手机上验证（含 cast-test 操作）；列为待清理。
     platform: android
     interfaces: [platform-bridge]
     summary: 投屏第 1 步的原型：平台桥 cast-test 在电视上放彩条、毫秒时钟和帧计数，用来验证能否接管电视画面（docs/58）。已被 CastDesktop 的真实桌面取代，没有调用方。
