@@ -1,0 +1,18 @@
+{
+  "source": "https://github.com/danyuchn/asd-ste100-skill",
+  "ref": "master",
+  "commit": "7d4a135a199a5d7447c4886bcd7ffe742a627bc9",
+  "version": "0.4.0",
+  "license": "MIT",
+  "installed_at": "2026-10-03",
+  "destination": ".agents/skills/asd-ste100",
+  "files_sha256": {
+    "LICENSE": "d3c674e8592076c9021a59b55177adbcba6fd7e1710082becb922522b22ec672",
+    "README.md": "614609cde7a885904cf5611cf93c693e3a981eae5cf686e0fbe0755943aad534",
+    "SKILL.md": "406626aa8b9a534d15b59eb8c8f4d151a7e339984b604c1df697f3a310fa3ddd",
+    "examples/before-after.md": "d7bf2b4a390f1997a18790b243dd4c0670018d0d4d5183ec8ed44cbbf282bc52",
+    "examples/linter-edge-cases.md": "b6cc08af876014453b0c72d26ee4bfaeed1e9a154b5046947392752911ce1774",
+    "references/writing-rules.md": "4b92c86bf803f9f54e069767d34dc7356fbb95fb52a3f28476093917c608c102",
+    "scripts/ste-lint.py": "73bbd3de05b6517428ff6df73b789248a2d11f9eaf8d413fee56bbe71b5f863b"
+  }
+}
