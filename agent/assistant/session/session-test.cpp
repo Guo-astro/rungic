@@ -2,6 +2,10 @@
 // covers: agent.phone-mode/E3 agent.phone-mode/E4 agent.phone-mode/E5 agent.phone-mode/E6 agent.phone-mode/E7
 #include "session.h"
 #include <QCoreApplication>
+#include <QElapsedTimer>
+#include <QJsonDocument>
+#include <QLocalServer>
+#include <QLocalSocket>
 #include <QTemporaryDir>
 #include <cstdio>
 #include <cstdlib>
@@ -66,5 +70,45 @@ int main(int argc,char **argv){
     check(!s.inputBlocked&&s.phase=="connected","quiet interval restores listening explicitly");
     s.incoming({{"type","error"},{"error",QJsonObject{{"code","invalid_response"},{"message","test protocol failure"}}}});
     check(s.id.isEmpty()&&s.phase=="closed","unknown protocol failure releases voice resources");
+    {
+        // covers: agent.phone-mode/E8
+        // Mute and hang-up against a stand-in of the Android communication audio backend (its socket,
+        // $XDG_RUNTIME_DIR/rungic-communication.sock): muting stops the microphone capture and tells
+        // Android to close the physical microphone, while the reply keeps playing; hanging up releases
+        // the capture, the playback and the backend's call audio. No sound server here: a capture that
+        // cannot start stays as it is (its failure is recorded, not acted on).
+        qputenv("PULSE_SERVER","unix:/nonexistent");
+        QLocalServer backend;check(backend.listen(dir.path()+"/rungic-communication.sock"),"stand-in backend listens");
+        QLocalSocket *peer=nullptr;QList<QJsonObject> requests;bool released=false;
+        QObject::connect(&backend,&QLocalServer::newConnection,[&]{peer=backend.nextPendingConnection();
+            QObject::connect(peer,&QLocalSocket::readyRead,[&]{while(peer->canReadLine())requests.append(QJsonDocument::fromJson(peer->readLine()).object());});
+            QObject::connect(peer,&QLocalSocket::disconnected,[&]{released=true;});});
+        auto until=[&](std::function<bool()> done){QElapsedTimer t;t.start();while(!done()&&t.elapsed()<5000)QCoreApplication::processEvents(QEventLoop::AllEvents,20);return done();};
+        auto last=[&](QString op){for(int i=requests.size()-1;i>=0;--i)if(requests[i]["op"]==op)return requests[i];return QJsonObject{};};
+        Session m;QList<QJsonObject> states;QStringList failures;
+        m.output=[&](QJsonObject o){auto e=o["event"].toObject();if(e["type"]=="phone-state")states.append(e);};
+        m.audio.failed=[&](QString reason){failures.append(reason);};
+        m.id="mute-test";m.conversation="origin";m.configured=true;m.phase="connected";
+        m.audio.start(m.id);
+        check(until([&]{return !last("open").isEmpty();}),"the call audio is opened with the backend");
+        peer->write(QJsonDocument(QJsonObject{{"type","ready"},{"microphone",true}}).toJson(QJsonDocument::Compact)+'\n');
+        check(until([&]{return m.audio.opened;}),"backend ready");
+        if(!m.audio.recorder)m.audio.recorder=gst_parse_launch("fakesrc ! fakesink",nullptr);   // without webrtcdsp
+        m.audio.player=gst_parse_launch("appsrc name=audio ! fakesink",nullptr);m.audio.src=gst_bin_get_by_name(GST_BIN(m.audio.player),"audio");
+        check(m.audio.recorder&&m.audio.player,"capturing and playing");
+        QJsonObject reply;m.command("SetPhoneMuted",{{"sessionId","mute-test"},{"muted",true}},[&](QJsonObject r){reply=r;});
+        check(reply["ok"].toBool(),"mute accepted");
+        check(!m.audio.recorder&&m.audio.captureToken.isEmpty(),"muted: the microphone capture is stopped");
+        check(until([&]{return last("mute")["muted"].toBool();}),"muted: Android is told to close the physical microphone");
+        check(m.audio.player!=nullptr&&m.audio.opened,"muted: the reply keeps playing");
+        check(!states.last()["microphone"].toBool()&&states.last()["muted"].toBool(),"muted: the card shows the microphone off");
+        m.command("SetPhoneMuted",{{"sessionId","mute-test"},{"muted",false}},[&](QJsonObject r){reply=r;});
+        check(until([&]{auto o=last("mute");return o.contains("muted")&&!o["muted"].toBool();}),"unmuted: Android opens the microphone again");
+        check(m.audio.recorder!=nullptr||!failures.isEmpty(),"unmuted: capture starts again");
+        m.stop();
+        check(!m.audio.recorder&&!m.audio.player&&!m.audio.opened,"hung up: capture and playback released");
+        check(until([&]{return released;}),"hung up: the backend's call audio is released");
+        check(m.phase=="closed"&&m.id.isEmpty(),"hung up: the session is closed");
+    }
     std::puts("session state, transcript fidelity, late events, cancellation and hangup checks passed");
 }

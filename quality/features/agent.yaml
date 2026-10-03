@@ -356,6 +356,7 @@ features:
       - agent/assistant/prompts/phone.md
       - tools/tests/test_phone_session.py
       - tools/tests/native_task_tools_probe.py
+      - tools/system/tests/phone_session_units.py
     docs: [docs/101-full-duplex-phone-mode.md]
 
   # ---- 安装、设置和接入 ---------------------------------------------------------------------------
@@ -506,6 +507,7 @@ features:
       - agent/assistant/skills/rungic-phone-desktop/SKILL.md
       - agent/assistant/kconf_update/
       - tools/tests/test_instructions_sync.py
+      - tools/tests/test_codex_setup_update.py
     docs: [docs/59-voice-agent.md, docs/88-agent-visible-work.md]
 
   - id: agent.dev-diagnostics
@@ -865,6 +867,7 @@ features:
       - agent/workspace/rungic-agent-wakelock
       - agent/workspace/rungic-agent-wakelock.service
       - tools/tests/test_agent_wakelock.py
+      - tools/tests/test_agent_wakelock_expiry.py
     docs: [docs/research/97-headless-agent-work.md]
 
   # ---- 组队 ---------------------------------------------------------------------------------------
@@ -1036,6 +1039,7 @@ features:
         docs: [docs/research/91-agent-workspaces.md]
     code:
       - agent/assistant/call_proxy.py
+      - tools/tests/test_call_proxy.py
     docs: [docs/63-call-proxy.md]
 
   - id: agent.cellular-call
@@ -1097,8 +1101,10 @@ features:
           - {doc: docs/68-luna-computer-use.md, date: 2026-09-25, note: "文件传输助手：6.7 s 语音成为 8 秒消息，留白约 1.3 s"}
       - id: E2
         text: 只点真正的录音按钮，不点“语音输入/听写”（它会把语音转成文字发出去）。
+        gap: 录音按钮与“语音输入/听写”都会让应用经 Linux 麦克风录音，程序侧分不出；只靠 Luna 看屏幕选对控件，需要真实模型在微信文件传输助手里验证，尚无记录
       - id: E3
         text: 发送前先经用户确认。
+        gap: 发送前确认由 Agent 按 prompts/agent.md 执行，工具本身不拦截；离线没有真实模型无法检查，也还没有实机记录
     pitfalls:
       - text: 找发送按钮的模型调用曾排在语音播完之后，结尾多出约 9 秒静音；改为录音一开始就并行去找。
         docs: [docs/68-luna-computer-use.md]
@@ -1107,6 +1113,7 @@ features:
     code:
       - agent/computer-use/rungic_cua/speech.py
       - agent/computer-use/rungic_cua/server.py
+      - tools/tests/test_voice_message.py
     docs: [docs/68-luna-computer-use.md]
 
   # ---- 主动照看 -----------------------------------------------------------------------------------
@@ -1143,6 +1150,7 @@ features:
         text: 后台采集占用很小（服务约 13 MiB，单次采集 CPU 约 0.2 s），不在手机上自动编译、符号化或跑重负载探针。
         evidence:
           - {doc: docs/research/proactive-system-care.md, date: 2026-09-30, note: "RSS 约 12.6 MiB，单次 root 采集约 172 ms"}
+        device: 常驻内存和单次采集的 CPU 时间取决于手机上真实的崩溃记录、软件包数量和 CPU，容器里量出的数不代表手机；采集器只调用 dpkg-query、dpkg --audit 和 systemctl --failed（collector.cpp）
     pitfalls:
       - text: 日志里的 error 只是线索；SIGKILL、无响应和没有 core 都不能单独推出崩溃原因。Blender 的 CPU 渲染是用户选的策略，不能提示“修复为 GPU”。
         docs: [docs/research/proactive-system-care.md]
@@ -1293,6 +1301,7 @@ features:
         docs: [docs/research/proactive-system-care.md]
     code:
       - compatibility/
+      - tools/system/tests/suggestions_collect.py
     docs: [docs/research/proactive-system-care.md]
 
   - id: agent.usage-widget
