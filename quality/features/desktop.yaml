@@ -431,6 +431,7 @@ features:
         text: Rungic 不在前台、处于自己的全屏或 APK 重建时同步照常进行。
         evidence:
           - {doc: docs/research/clipboard-background.md, date: 2026-09-29, note: "fullscreen-final.json、compat-watch.json"}
+        device: 不在前台、全屏或 APK 重建时照常同步，靠的是安卓侧以 Shell 身份（UID 2000）独立于 APK 窗口运行的剪贴板后端（ClipboardDaemon、system/android-clipboard）；后台读剪贴板的权限和 APK 的重建只有手机上才有。Linux 一侧的同步与重连由离线测试检查。
       - id: E3
         text: 安卓标记为敏感的内容、非文本内容不同步，Linux 原内容保留；超长或格式错误的请求被拒绝；重启 Linux 桥时不把旧 Linux 文本写回安卓。
         evidence:
@@ -462,6 +463,7 @@ features:
       - packages/wl-clipboard/
       - tools/deploy_clipboard.py
       - tools/tests/android_clipboard/
+      - tools/tests/test_clipboard_bridge.py
     docs: [docs/research/clipboard-background.md]
 
   - id: desktop.clipboard-history
@@ -700,6 +702,7 @@ features:
       - desktop/po/
       - shared/po/
       - system/config/usr/share/locale/zh_CN/LC_MESSAGES/xdg-desktop-portal.mo
+      - tools/tests/test_chinese.py
     docs: [docs/55-agent-native-debugging.md]
 
   # ---------------------------------------------------------------- desktop.connect
@@ -862,6 +865,7 @@ features:
         text: 显示出来的 Wayland 窗口请求空闲抑制时，经 KWin 到宿主保持亮屏，释放后恢复正常息屏。
         evidence:
           - {doc: docs/72-kwin-android-host-isolation.md, date: 2026-09-26, note: "idle.inhibit 通过"}
+        device: Wayland 窗口的空闲抑制由 KWin 的 Android 后端在宿主的输出面上建抑制器，经 Rungic 应用的原生宿主（idle_inhibit.rs，单元测试只能在手机上跑：android/test-native-core.sh）设置 FLAG_KEEP_SCREEN_ON；无头 KWin 没有 Android 后端，系统测试走不到这条路。
       - id: E3
         text: Plasma 移动电源页的“关闭屏幕”时间与安卓 screen_off_timeout 双向同步；页面只显示真能发生的动作（不显示调暗和挂起）。
         evidence:
@@ -890,6 +894,7 @@ features:
       - packages/powerdevil/
       - system/config/etc/UPower/UPower.conf.d/60-rungic-android.conf
       - android/host/src/android/idle_inhibit.rs
+      - tools/tests/test_power_policy.py
     docs:
       - docs/42-plasma-runtime-acceptance.md
       - docs/72-kwin-android-host-isolation.md
