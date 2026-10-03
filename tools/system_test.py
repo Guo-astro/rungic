@@ -69,8 +69,9 @@ def run(names):
     tag = image(host)
     archive, digest = working_tree()
     src = f'{REMOTE}/src-{digest}'
-    host.ssh(f'test -d {src} || {{ mkdir -p {src}.part && tar -xzf - -C {src}.part && mv {src}.part {src}; }}', 600,
-             data=archive)
+    # touch: a tree in use is recent, so a concurrent run's cleanup (below) leaves it alone.
+    host.ssh(f'if test -d {src}; then touch {src}; else mkdir -p {src}.part && tar -xzf - -C {src}.part && '
+             f'mv {src}.part {src}; fi', 600, data=archive)
     record = RESULTS / datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
     record.mkdir(parents=True)
     print(f'system tests {" ".join(names)} on {tag} (working tree {digest})', flush=True)
@@ -83,7 +84,9 @@ def run(names):
         mark = 'PASS' if line.get('passed') else 'FAIL'
         print(f'{mark} {line["test"]} ({line.get("seconds", "-")} s)' + (f': {line["error"]}' if line.get('error') else '')
               + (f': {line["log"]}' if line.get('log') else ''))
-    host.ssh(f'ls -dt {REMOTE}/src-* 2>/dev/null | tail -n +4 | xargs rm -rf', 120, check=False)  # keep the last three trees
+    # Trees unused for three hours (longer than a run): other runs, of other working trees, may be using
+    # newer ones (keeping only the newest three removed a running test's tree under it).
+    host.ssh(f"find {REMOTE} -maxdepth 1 -name 'src-*' -mmin +180 -exec rm -rf {{}} +", 120, check=False)
     passed = lines and all(l.get('passed') for l in lines) and len([l for l in lines if 'build' not in l['test']]) == len(names)
     print(f'{"passed" if passed else "FAILED"}; record {record.relative_to(ROOT)}')
     return 0 if passed else 1
