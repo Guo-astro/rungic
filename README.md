@@ -275,7 +275,7 @@ For each device, we pin kernel sources and a build configuration that match its 
 
 Full flash packages also include root, the Rungic app and first-boot installation. The device's release manifest records their partition changes.
 
-The current adaptation path requires:
+The current official adaptation path requires:
 
 - **An unlockable bootloader and a supported root setup.** Current device integrations use Magisk. Eligibility and consequences depend on the manufacturer and device variant.
 - **A GKI kernel with matching sources and compatible vendor modules.** Builds so far use android15-6.6 and android16-6.12. Other branches require adaptation and checks. The Android version alone does not establish compatibility.
@@ -291,6 +291,9 @@ Tested so far:
 | moto g100s (XT2537-4) | android15-6.6 | Main development device, most complete |
 | moto g100 (XT2533-4) | android15-6.6 | One-step flash package verified on a wiped phone |
 | moto X70 Air Pro | android16-6.12 | Standalone installation verified after reflashing and wiping stock Android. Rungic installed from scratch. Three cold reboots and nine device checks passed. |
+| Redmi K40S (munch, Snapdragon 870) | Custom LineageOS 4.19.325 (non-GKI) | Unofficial, community-verified on LineageOS 23.2 (Android 16): Ubuntu 26.04, GPU-accelerated Plasma Desktop 6.6.5 and physical touch input. [Report](https://blog.yayoi.love/post/rungic-k40s) · [Community build kit](https://github.com/yayoinoyume/Rungic/tree/dev/munch-cgroup-fix/munch-build-kit) |
+
+The Redmi K40S community port uses device-specific kernel and compatibility changes for Linux 4.19. Its complete Rungic release package and full feature set remain unverified; the report records the working desktop and remaining issues.
 
 ### Before you install
 
