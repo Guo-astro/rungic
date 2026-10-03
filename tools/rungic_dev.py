@@ -355,7 +355,9 @@ def restarts(info, before, after, restart, record):
         ok, text = rungic_release.restart_session()
         record.step('restart', ok=ok, output=text[-500:])
     else:
-        spec = info.get('user_restart') or json.loads(rungic_release.SPEC.read_text()).get('user_restart', {})
+        # The release's list, and the working tree's over it: an overlay is built from the working
+        # tree, whose packages may have restarts the release does not know yet (polkit-kde-agent-1).
+        spec = {**info.get('user_restart', {}), **json.loads(rungic_release.SPEC.read_text()).get('user_restart', {})}
         output = rungic_release.restart_user_services(spec, before, after)
         if output is not None:
             record.step('user-services', output=output)
