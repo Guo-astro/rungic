@@ -742,6 +742,7 @@ features:
       - agent/computer-use/rungic_cua/router.py
       - agent/computer-use/rungic_cua/fakeinput.py
       - tools/tests/test_workspace_env.py
+      - tools/system/tests/workspace_headless.py
     docs: [docs/research/91-agent-workspaces.md, docs/research/97-headless-agent-work.md, docs/agent-ready-interfaces.md]
 
   - id: agent.workspace-lifecycle
