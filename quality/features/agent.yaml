@@ -552,10 +552,12 @@ features:
         text: Agent 能点击、双击、拖动、滚动、按键和输入任何语言的文字来操作图形应用；应用收到的是普通的键盘鼠标事件，Plasma 在后台时也能输入。
         evidence:
           - {doc: docs/68-luna-computer-use.md, date: 2026-09-25, note: "微信 3 步打开聊天"}
+        device: 任何语言的文字靠 KWin 的 commitText 提交，这是 Rungic 的 KWin 补丁（virtualkeyboard-commit-text），系统测试容器里是 Ubuntu 原版 KWin，只测了按键和指针；“Plasma 在后台”指 Android 前台是别的应用，只有手机能造出
       - id: E2
         text: 截图只截任务所在的窗口（连同它的弹出菜单和对话框），范围变化时用一句话告诉模型；点击坐标误差约 1 像素。
         evidence:
           - {doc: docs/68-luna-computer-use.md, date: 2026-09-25, note: "输入 token 减少 67%，坐标误差 1 px"}
+        device: 截图的像素由 KWin 的 ScreenShot2 渲染，需要 OpenGL 合成；系统测试容器没有 GPU 渲染节点，KWin 退回 QPainter，截图被取消，真实画面和点击误差只能在手机上看
       - id: E3
         text: 多步任务交给 desktop_goal，结束时报告完成、需要提问或失败；需要用户信息时以提问结束，由助手问用户后带着答复继续；用户说停时中止。
         evidence:
@@ -606,6 +608,8 @@ features:
       - agent/assistant/kconf_update/
       - packaging/rungic-cua/
       - tools/test_blocked.py
+      - tools/tests/test_cua_tools.py
+      - tools/system/tests/cua_desktop.py
     docs: [docs/68-luna-computer-use.md, docs/60-computer-use.md, docs/103-krita-save-dialog-hang.md, docs/agent-ready-interfaces.md]
 
   - id: agent.plan-two
@@ -622,8 +626,10 @@ features:
         text: OCR 在手机 GPU 上识别整屏约 0.5 s（PP-OCRv6 Small，fp16）；模型还没下载好或 GPU 不可用时立即改用容器 CPU 上的 RapidOCR（约 2 s），不卡住。
         evidence:
           - {doc: docs/64-goal-computer-use.md, date: 2026-09-25, note: "det 640² 57 ms，整屏约 0.5 s"}
+        device: 整屏约 0.5 s 是手机 Adreno GPU 上 LiteRT 的速度，OCR 在安卓应用里运行，系统测试里没有这块 GPU；CPU 约 2 s 也取决于手机 CPU
       - id: E3
         text: OCR 模型在第一次请求时由 Rungic 应用后台下载，按固定的地址和 SHA-256 校验；下载完成前请求立即返回错误。
+        gap: 模型下载和 SHA-256 校验在 Rungic 应用的 OcrBridge.java 里，没有 Android 侧的离线测试，也没有实机记录；Linux 一侧收到“下载中”后立即改用 CPU 已由 tools/tests/test_cua_tools.py 检查（E2）
       - id: E4
         text: 语音识别写错的人名按读音找：同音得 1.0、近音 0.9，按分区标题区分联系人和搜索建议；两个不同的人都达到 0.9 时先问用户。
         evidence:
@@ -632,6 +638,7 @@ features:
         text: 一次观察约 0.5–1 s；控件坐标按窗口根节点换算，应用的错误窗口坐标（微信内置 Qt）和阴影边距不影响点击。
         evidence:
           - {doc: docs/60-computer-use.md, date: 2026-09-25, note: "微信子任务 2 步 7.2 s"}
+        device: 一次观察 0.5–1 s 是手机上 AT-SPI 往返的耗时（每个属性约 50 ms，取决于手机和应用）；微信内置 Qt 的错误窗口坐标只有真实微信能复现，测试里是按其症状做的替身
     pitfalls:
       - text: Qt 没有实现 AT-SPI 缓存和 GetAll，逐个属性查询每个节点约 50 ms；改为同一层的请求一次发出。
         docs: [docs/60-computer-use.md]
@@ -657,6 +664,7 @@ features:
       - tools/fetch_ocr_assets.py
       - android/app/src/com/rungic/plasma/OcrBridge.java
       - android/app/jni/ocr/
+      - tools/system/tests/cua_find_name.py
     docs: [docs/64-goal-computer-use.md, docs/60-computer-use.md]
 
   - id: agent.workspaces
@@ -841,6 +849,8 @@ features:
           - {doc: docs/88-agent-visible-work.md, date: 2026-09-29, note: "前两条之后都是 Luna 自己写的中文说明"}
     code:
       - agent/computer-use/rungic_cua/activity.py
+      - tools/tests/test_cua_caption_qml.py
+      - tools/system/tests/cua_captions.py
     docs: [docs/88-agent-visible-work.md, docs/research/91-agent-workspaces.md]
 
   - id: agent.keep-awake
