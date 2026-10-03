@@ -53,6 +53,8 @@ features:
       - agent/screen/com.rungic.DesktopMode.desktop
       - packaging/rungic-agent-screen/
       - tools/tests/test_platform_bridge_contract.py
+      - tools/tests/test_desktop_mode_switch.py
+      - tools/tests/test_desktop_mode_tile.py
     docs: [docs/research/97-headless-agent-work.md, docs/65-agent-screen.md, docs/research/91-agent-workspaces.md]
 
   - id: desktop-mode.independent-desktop

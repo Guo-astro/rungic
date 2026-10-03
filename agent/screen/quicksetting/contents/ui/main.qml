@@ -34,6 +34,18 @@ QS.QuickSetting {
         executable.connectSource("/usr/bin/" + program + " " + command);
     }
 
+    // Why it failed, from what the program wrote: its {"error": ...} line, else its last line (a
+    // Python error's own words).
+    function reason(stderr) {
+        const text = (stderr || "").trim();
+        try {
+            const error = JSON.parse(text).error;
+            if (error) return error;
+        } catch (e) {}
+        const lines = text.split("\n");
+        return lines[lines.length - 1] || program + " returned no result";
+    }
+
     function toggle() {
         if (busy) return;
         error = "";
@@ -67,12 +79,12 @@ QS.QuickSetting {
             try {
                 result = JSON.parse(data["stdout"]);
             } catch (e) {
-                result = { error: (data["stderr"] || root.program + " returned no result").trim() };
+                result = { error: root.reason(data["stderr"]) };
             }
             if (command === "toggle") root.busy = false;
             if (result.error) {
                 console.warn(root.program + " " + command + ": " + result.error);
-                root.error = i18nc("@info:status", "Something went wrong");
+                root.error = i18nc("@info:status %1 is why desktop mode could not be turned on or off", "Failed: %1", result.error);
                 return;
             }
             root.on = !!result.enabled;

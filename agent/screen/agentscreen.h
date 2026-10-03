@@ -81,6 +81,9 @@ public:
     // The TV's view of desktop mode wants a picture: a fresh stream, which starts with a frame (a
     // second consumer of the running one waited for the screen to change, up to a minute).
     Q_INVOKABLE void setTvShown(bool shown);
+    // Desktop mode's window is fullscreen (or no longer): marked for rungic-desktop-mode status, which
+    // the quick setting shows. Nothing for an assistant's screen.
+    Q_INVOKABLE void setFullscreen(bool fullscreen);
     // Typing on the phone into the focused field: text as an input method commits it, and keys
     // (Linux key codes: Enter, Backspace, arrows...) pressed or released.
     Q_INVOKABLE void typeText(const QString &text);
@@ -101,6 +104,7 @@ private:
     void update();
     void setStatus(const QString &status);
     QString op() const;     // the platform bridge's request for this screen
+    QString fullscreenMark() const;
     void readActivity();
     void startWorkspaceStream();
     void stopWorkspaceStream();
