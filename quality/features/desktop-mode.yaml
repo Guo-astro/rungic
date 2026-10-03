@@ -114,6 +114,7 @@ features:
       - tools/tests/test_desktop_plasma.py
       - tools/tests/test_bus_forward.py
       - tools/tests/test_workspace_env.py
+      - tools/system/tests/independent_desktop_session.py
     docs: [docs/research/97-headless-agent-work.md, docs/research/91-agent-workspaces.md]
 
   - id: desktop-mode.clipboard
