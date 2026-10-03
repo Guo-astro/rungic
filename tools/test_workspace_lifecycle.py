@@ -206,7 +206,8 @@ def test_a_frozen_workspace_is_thawed_before_a_tool_reaches_it():
         router.Router(ENV).call('desktop_windows', {})
     thaw.assert_called_once_with(1)
     with mock.patch.object(router, 'Child', FakeChild), \
-            mock.patch.object(router, 'bridge', return_value={'enabled': True, 'tv': False}), \
+            mock.patch.object(router, 'desktop_running', return_value=True), \
+            mock.patch.object(router, 'workspace_env', side_effect=lambda env, slot: dict(env)), \
             mock.patch.object(workspace, 'thaw') as thaw:
         router.Router(ENV).call('desktop_windows', {})      # on the user's desktop: nothing to thaw
     thaw.assert_not_called()
@@ -217,6 +218,7 @@ def test_closing_thaws_first():
     with mock.patch.object(workspace, 'ready', return_value=True), \
             mock.patch.object(workspace, 'thaw') as thaw:
         workspace.close(1, run=run)
+    # Desktop mode on is the independent desktop running (docs/research/97 §19), not the app's switch.
     assert thaw.call_count == 2           # at the start, and again right before the stop
 
 

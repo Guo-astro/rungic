@@ -30,6 +30,7 @@ class UsageBridgeTests(unittest.TestCase):
         # The agent's model (docs/98): what model_catalog resolved the user's choice to.
         self.agent.agent_model = Mock(return_value={'model': 'test-model', 'name': 'test-model', 'effort': 'low'})
         self.agent.catalog = Mock()
+        self.agent.phone = None     # no phone session (docs/101)
 
     def pushed(self, method):
         return [c.args[1:] for c in self.agent.usage_push.call_args_list if c.args[0] == method]
