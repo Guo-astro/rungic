@@ -145,6 +145,7 @@ features:
     code:
       - agent/workspace/rungic-workspace
       - shared/platform/clipboard.py
+      - tools/system/tests/desktop_clipboard.py
     docs: [docs/research/97-headless-agent-work.md, docs/research/clipboard-background.md, docs/research/clipboard-history.md]
 
   - id: desktop-mode.floating-window
