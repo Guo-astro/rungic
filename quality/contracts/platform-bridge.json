@@ -1,0 +1,120 @@
+{
+  "interface": "platform-bridge",
+  "comment": "The read-only queries of the platform bridge (quality/interfaces.yaml) and what Linux consumers rely on in their replies: a key in an example reply is required, with that value's type (null: any value or null; display-get refreshPolicy: 0 automatic, else a fixed rate in Hz). Framing: a Unix stream socket, one JSON object per line each way, one request per connection. Errors are {\"error\": string}. The socket is $RUNGIC_PLATFORM_SOCKET, by default /mnt/android-wayland/platform.sock in the container. Tested from both ends: tools/tests/test_platform_bridge_contract.py (consumers against tools/contracts.py's stand-in) and acceptance scenario contract.platform-bridge (the Rungic app on the phone).",
+  "queries": [
+    {
+      "name": "status",
+      "request": {
+        "op": "status"
+      },
+      "reply": {
+        "version": 1,
+        "model": "XT2537-4",
+        "android": "16",
+        "orientation": "portrait",
+        "foreground": true,
+        "keepAwake": false
+      }
+    },
+    {
+      "name": "display-get",
+      "request": {
+        "op": "display-get"
+      },
+      "reply": {
+        "version": 1,
+        "physicalWidth": 1080,
+        "physicalHeight": 2400,
+        "densityDpi": 400,
+        "renderWidth": 1080,
+        "renderHeight": 2400,
+        "refreshRates": [
+          60,
+          120
+        ],
+        "refreshPolicy": 0,
+        "currentRefresh": 120.0
+      }
+    },
+    {
+      "name": "brightness-get",
+      "request": {
+        "op": "brightness-get"
+      },
+      "reply": {
+        "level": 40,
+        "followAndroid": true
+      }
+    },
+    {
+      "name": "desktop-mode",
+      "request": {
+        "op": "desktop-mode"
+      },
+      "reply": {
+        "enabled": false,
+        "width": 1920,
+        "height": 1080,
+        "tv": false,
+        "fullscreen": false,
+        "watched": false
+      }
+    },
+    {
+      "name": "agent-screen",
+      "request": {
+        "op": "agent-screen"
+      },
+      "reply": {
+        "enabled": false,
+        "workspace": 1,
+        "width": 1920,
+        "height": 1080,
+        "tv": false,
+        "fullscreen": false,
+        "tvShown": [],
+        "tvHeard": -1,
+        "directorFocus": 1,
+        "directorFullscreen": false
+      }
+    },
+    {
+      "name": "tv",
+      "request": {
+        "op": "tv"
+      },
+      "reply": {
+        "members": [],
+        "focus": 1,
+        "level": 0,
+        "version": 0,
+        "tv": {
+          "connected": false,
+          "content": null,
+          "shown": [],
+          "heard": -1
+        },
+        "picking": false
+      }
+    },
+    {
+      "name": "director",
+      "request": {
+        "op": "director"
+      },
+      "reply": {
+        "members": [],
+        "focus": 1,
+        "level": 0,
+        "version": 0,
+        "tv": {
+          "connected": false,
+          "content": null,
+          "shown": [],
+          "heard": -1
+        },
+        "fullscreen": false
+      }
+    }
+  ]
+}

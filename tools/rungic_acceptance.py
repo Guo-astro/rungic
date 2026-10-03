@@ -99,6 +99,45 @@ def new_crashes(ctx):
                          for g in groups if g['signature'] in known])
 
 
+# ---------------------------------------------------------------- interface contracts
+
+@check
+def interface_contract(ctx, interface='platform-bridge'):
+    """The Android provider of an interface keeps its contract (quality/contracts/, tools/contracts.py):
+    each read-only query of the contract, sent from the container as the Linux consumers send it, gets
+    a reply with every field they rely on, of the right type. The consumers' side is tested offline
+    against a stand-in of the same contract."""
+    import contracts
+    contract = contracts.load(interface)
+    requests = [q['request'] for q in contract['queries']]
+    script = ('''python3 - <<'ASK'
+import json, os, socket
+for request in %s:
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as c:
+            c.settimeout(5)
+            c.connect(os.environ.get('RUNGIC_PLATFORM_SOCKET', '/mnt/android-wayland/platform.sock'))
+            c.sendall(json.dumps(request).encode() + b'\\n')
+            print(json.dumps({'request': request, 'reply': json.loads(c.makefile('rb').readline() or b'null')}))
+    except (OSError, ValueError) as error:
+        print(json.dumps({'request': request, 'error': repr(error)}))
+ASK''' % json.dumps(requests))
+    lines = [json.loads(line) for line in user(script).stdout.splitlines() if line.startswith('{')]
+    problems = {}
+    for q in contract['queries']:
+        answer = next((a for a in lines if a['request'] == q['request']), None)
+        if answer is None or 'error' in answer:
+            problems[q['name']] = [answer.get('error') if answer else 'no answer']
+        elif isinstance(answer['reply'], dict) and 'error' in answer['reply']:
+            problems[q['name']] = [f"error reply: {answer['reply']['error']}"]
+        else:
+            found = contracts.validate(q['reply'], answer['reply'])
+            if found:
+                problems[q['name']] = found
+    return result(not problems, {'queries': len(contract['queries']), 'broken': len(problems)},
+                  interface=interface, problems=problems)
+
+
 # ---------------------------------------------------------------- display and input
 
 @check
@@ -369,33 +408,42 @@ def _cast_outputs():
 
 
 @check
-def desktop_mode_output(ctx):
-    """Desktop mode is a cast output of the Android host (docs/65; "the assistant's screen" before
-    docs/research/91 made that the agent's workspace): turning it on makes KWin's output CAST-n of
-    the host output's size, turning it off removes it (docs/72, the Android backend's host outputs)."""
-    # rungic-agent-screen was desktop mode on releases before the split.
-    program = '"$(command -v rungic-desktop-mode || command -v rungic-agent-screen || command -v moto-agent-screen)"'
+def desktop_mode(ctx, timeout=90):
+    """Desktop mode is the independent desktop, workspace 0 (docs/research/97 §19): turning it on
+    starts rungic-workspace@0 with its own plasmashell and the floating window that shows it, and
+    adds no output to the phone's KWin; turning it off ends all of it. In use already: checks it is
+    all there and leaves it as it was."""
+    program = '"$(command -v rungic-desktop-mode)"'
 
-    def state(command, timeout=60):
+    def state(command):
+        out = user(f'{program} {command}', timeout=timeout).stdout
         try:
-            return json.loads(user(f"{program} {command}", timeout=timeout).stdout)
-        except ValueError:
-            return {}
-    before = state('status')
-    if before.get('enabled'):
-        # In use: only check that its output is there.
-        return result(bool(before.get('output')), note='already on; left as it was', status=before)
-    on = state('on', timeout=90)
-    name = on.get('output') or ''
-    outputs = {o['name']: o for o in _cast_outputs()}
-    mode = next((m for m in outputs.get(name, {}).get('modes', [])
-                 if m.get('id') == outputs.get(name, {}).get('currentModeId')), {})
-    size = mode.get('size', {})
+            return json.loads(out.strip().splitlines()[-1])
+        except (ValueError, IndexError):
+            return {'unreadable': out[-300:]}
+
+    def parts():
+        text = user('systemctl --user is-active -q rungic-workspace@0 && echo unit; '
+                    'pgrep -f "^plasmashell -p org.kde.plasma.desktop" >/dev/null && echo shell; '
+                    'test -S "$XDG_RUNTIME_DIR/wayland-ws-0" && echo socket; '
+                    'pgrep -f "^/usr/libexec/rungic-agent-screen-window --desktop" >/dev/null && echo window').stdout
+        return {name: name in text.split() for name in ('unit', 'shell', 'socket', 'window')}
+
+    # What runs decides, not only what status says: a desktop the user has open is never turned off.
+    # Unreadable state: nothing is switched (a status read as {} once turned the user's desktop off).
+    now, before = parts(), state('status')
+    if 'unreadable' in before:
+        return result(False, error='desktop mode status unreadable; nothing switched', status=before, parts=now)
+    if before.get('enabled') or now['unit']:
+        now = parts()
+        return result(all(now.values()) and not _cast_outputs(), note='already on; left as it was', parts=now,
+                      cast_outputs=[o['name'] for o in _cast_outputs()])
+    on = state('on')
+    up = wait_for(lambda: (lambda p: p if all(p.values()) else None)(parts()), timeout=60, interval=2) or parts()
+    cast = [o['name'] for o in _cast_outputs()]
     off = state('off')
-    gone = wait_for(lambda: not _cast_outputs(), timeout=20, interval=1)
-    expected = on.get('size', '1920x1080')
-    ok = name.startswith('CAST') and f"{size.get('width')}x{size.get('height')}" == expected and gone
-    return result(ok, output=name, size=size, expected=expected, removed=gone, off=off)
+    gone = wait_for(lambda: not any(parts().values()), timeout=40, interval=2)
+    return result(all(up.values()) and not cast and gone, up=up, cast_outputs=cast, gone=bool(gone), on=on, off=off)
 
 
 @check

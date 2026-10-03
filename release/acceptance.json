@@ -6,7 +6,10 @@
       "id": "session.ready",
       "level": "smoke",
       "check": "session_ready",
-      "title": "KWin and plasmashell running, session environment written"
+      "title": "KWin and plasmashell running, session environment written",
+      "covers": [
+        "desktop.session/E4"
+      ]
     },
     {
       "id": "session.units",
@@ -30,13 +33,33 @@
       "id": "crash.new",
       "level": "smoke",
       "check": "new_crashes",
-      "title": "No crash signatures during the deploy and the run, except known ones"
+      "title": "No crash signatures during the deploy and the run, except known ones",
+      "covers": [
+        "delivery.acceptance/E5",
+        "delivery.crash-reports/E2"
+      ]
+    },
+    {
+      "id": "contract.platform-bridge",
+      "level": "smoke",
+      "check": "interface_contract",
+      "params": {
+        "interface": "platform-bridge"
+      },
+      "title": "The Rungic app answers the platform bridge's read-only queries with every field the Linux consumers rely on (quality/contracts/platform-bridge.json)",
+      "covers": [
+        "iface:platform-bridge"
+      ]
     },
     {
       "id": "display.geometry",
       "level": "smoke",
       "check": "display_geometry",
-      "title": "The phone's KScreen output matches the Android display size"
+      "title": "The phone's KScreen output matches the Android display size",
+      "covers": [
+        "desktop.resolution-refresh/E1",
+        "iface:kwin-android-host"
+      ]
     },
     {
       "id": "input.text",
@@ -47,7 +70,11 @@
         "expect": "Calculator",
         "absent": "Clock"
       },
-      "title": "Android text input reaches the focused drawer search, which filters to the matching app"
+      "title": "Android text input reaches the focused drawer search, which filters to the matching app",
+      "covers": [
+        "desktop.android-text/E1",
+        "iface:host-input"
+      ]
     },
     {
       "id": "camera.frames",
@@ -57,31 +84,53 @@
         "node": "rungic.camera.0",
         "frames": 20
       },
-      "title": "PipeWire camera delivers varied frames with increasing timestamps and goes idle after"
+      "title": "PipeWire camera delivers varied frames with increasing timestamps and goes idle after",
+      "covers": [
+        "apps.camera/E1",
+        "apps.camera/E2",
+        "iface:camera"
+      ]
     },
     {
       "id": "idle.inhibit",
       "level": "smoke",
       "check": "idle_inhibit",
-      "title": "A Wayland client inhibiting idle keeps the phone screen on while it does (rungic-idle-probe through KWin to the host)"
+      "title": "A Wayland client inhibiting idle keeps the phone screen on while it does (rungic-idle-probe through KWin to the host)",
+      "covers": [
+        "delivery.probes/E1",
+        "iface:kwin-android-host",
+        "desktop.power/E2"
+      ]
     },
     {
       "id": "audio.playback",
       "level": "smoke",
       "check": "audio_playback",
-      "title": "A (quiet) stream enters the default sink, which suspends again afterwards"
+      "title": "A (quiet) stream enters the default sink, which suspends again afterwards",
+      "covers": [
+        "apps.phone-audio/E2",
+        "iface:audio"
+      ]
     },
     {
       "id": "audio.record",
       "level": "smoke",
       "check": "audio_record",
-      "title": "The default source records a non-zero level and suspends afterwards"
+      "title": "The default source records a non-zero level and suspends afterwards",
+      "covers": [
+        "apps.phone-audio/E3",
+        "iface:audio"
+      ]
     },
     {
       "id": "input.rime",
       "level": "full",
       "check": "rime_input",
-      "title": "Rime engine commits Chinese first candidates; a focused Qt text field brings up the keyboard"
+      "title": "Rime engine commits Chinese first candidates; a focused Qt text field brings up the keyboard",
+      "covers": [
+        "desktop.rime/E1",
+        "desktop.keyboard/E4"
+      ]
     },
     {
       "id": "app.launch",
@@ -92,25 +141,42 @@
         "process": "kalk",
         "rounds": 2
       },
-      "title": "Launch and close an app through the launcher by accessible names"
+      "title": "Launch and close an app through the launcher by accessible names",
+      "covers": [
+        "delivery.ui-automation/E1",
+        "desktop.shell/E2",
+        "agent.dev-diagnostics/E3"
+      ]
     },
     {
-      "id": "cast.agent_screen",
+      "id": "desktop-mode.workspace",
       "level": "full",
-      "check": "agent_screen_output",
-      "title": "The assistant's screen appears as KWin output CAST-n of the host output's size and goes away when turned off"
+      "check": "desktop_mode",
+      "title": "Desktop mode starts the independent desktop (workspace 0: its KWin, plasmashell and the floating window) without a cast output on the phone's KWin, and turning it off ends all of it; already on, it is only checked",
+      "covers": [
+        "desktop-mode.on-off/E1",
+        "desktop-mode.independent-desktop/E1",
+        "desktop-mode.independent-desktop/E6"
+      ]
     },
     {
       "id": "display.mode",
       "level": "full",
       "check": "display_scale_roundtrip",
-      "title": "KScreen applies and reverts a scale change on the phone output"
+      "title": "KScreen applies and reverts a scale change on the phone output",
+      "covers": [
+        "desktop.display-size/E3"
+      ]
     },
     {
       "id": "display.refresh",
       "level": "full",
       "check": "display_refresh_policy",
-      "title": "KScreen's adaptive refresh policy and a fixed-rate mode set Android's refresh policy, then restore it"
+      "title": "KScreen's adaptive refresh policy and a fixed-rate mode set Android's refresh policy, then restore it",
+      "covers": [
+        "desktop.resolution-refresh/E2",
+        "iface:kwin-android-host"
+      ]
     },
     {
       "id": "camera.back",
@@ -120,13 +186,21 @@
         "node": "rungic.camera.1",
         "frames": 20
       },
-      "title": "Second camera node delivers frames"
+      "title": "Second camera node delivers frames",
+      "covers": [
+        "apps.camera/E1",
+        "iface:camera"
+      ]
     },
     {
       "id": "codec.hw",
       "level": "full",
       "check": "codec_roundtrip",
-      "title": "Hardware encode (GStreamer) of a test pattern, decode through FFmpeg, duration and frames checked"
+      "title": "Hardware encode (GStreamer) of a test pattern, decode through FFmpeg, duration and frames checked",
+      "covers": [
+        "apps.hw-codec/E2",
+        "iface:codec"
+      ]
     },
     {
       "id": "recording.quicksetting",
@@ -135,13 +209,22 @@
       "params": {
         "seconds": 4
       },
-      "title": "The recording quick setting writes a playable file with video and audio tracks"
+      "title": "The recording quick setting writes a playable file with video and audio tracks",
+      "covers": [
+        "apps.hw-codec/E5",
+        "apps.phone-audio/E6",
+        "desktop.screen-recording/E1"
+      ]
     },
     {
       "id": "rebrand.residue",
       "level": "full",
       "check": "rebrand_residue",
-      "title": "Rungic rename, phase B: no installed package, unit or package name is still moto (docs/70)"
+      "title": "Rungic rename, phase B: no installed package, unit or package name is still moto (docs/70)",
+      "covers": [
+        "delivery.rebrand/E2",
+        "install.rebrand-migration/E4"
+      ]
     },
     {
       "id": "perf.compositor",
@@ -150,7 +233,12 @@
       "params": {
         "max_regression": 0.15
       },
-      "title": "Frame timing of a scripted scroll, compared with the previous release"
+      "title": "Frame timing of a scripted scroll, compared with the previous release",
+      "covers": [
+        "apps.gpu/E3",
+        "delivery.acceptance/E4",
+        "desktop.host-display/E2"
+      ]
     }
   ],
   "manual": [
