@@ -42,10 +42,12 @@ features:
         text: 从哪块屏发起，回复就从哪里播放：手机上发起在手机本机（耳机优先，否则扬声器），电视上发起在电视。
         evidence:
           - {doc: docs/59-voice-agent.md, date: 2026-09-24, note: "按 Android 路由核对，尚待人耳确认"}
+        device: 手机本机里耳机优先还是扬声器、电视那一路由 Android 的音频路由决定，系统测试只能核对 Linux 选了哪个 sink，声音实际从哪里出来要在手机上听
       - id: E4
         text: 回复连续播放，不快进、不卡顿、不丢句。
         evidence:
           - {doc: docs/59-voice-agent.md, date: 2026-09-24, note: "复测无不连续或重新同步记录"}
+        device: 回复是否连续、不快进、不卡顿取决于 PulseAudio 到 Android 音频桥的缓冲与时序，只有手机上实际播出的声音能判断
       - id: E5
         text: 点“停止”立即停播并中止当前任务，任务显示“已停止”，之后不再播出残句。
         evidence:
@@ -82,6 +84,7 @@ features:
       - agent/assistant/prompts/realtime.md
       - agent/assistant/app/qml/Composer.qml
       - packaging/rungic-voice-agent/
+      - tools/tests/test_voice_agent_service.py
     docs: [docs/59-voice-agent.md, docs/87-agent-app-redesign.md, docs/89-agent-progress.md, docs/agent-ready-interfaces.md]
 
   - id: agent.home-hold
@@ -430,6 +433,7 @@ features:
       - agent/assistant/app/qml/account.js
       - agent/computer-use/rungic_cua/keys.py
       - tools/tests/test_api_key_file.py
+      - tools/tests/test_voice_agent_key_page.py
       - tools/tests/test_codex_login.py
       - tools/tests/test_app_server.py
     docs: [docs/101-codex-sign-in-and-api-key.md, docs/87-agent-app-redesign.md]
