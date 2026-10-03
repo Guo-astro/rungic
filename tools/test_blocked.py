@@ -1,3 +1,4 @@
+# covers: agent.computer-use/E4
 """rungic_cua.blocked (docs/103): a program held by a dialog nobody can see, told apart from an
 ordinary dialog and from a portal's dialog window showing in its stead. Accessibility nodes and
 KWin windows are stand-ins, as the phone listed them for Krita."""

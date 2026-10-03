@@ -12,7 +12,7 @@ and NVIDIA nodes. Only the system heap: Android's other heaps (secure, carveouts
 Forwarded: no
 Last-Update: 2026-09-30
 X-Rungic-Status: Pending [not planned for upstream: the device list of an Android-container setup]
-X-Rungic-Tests: L3:flatpak.dri-kgsl (a --device=dri Flatpak app sees /dev/kgsl-3d0 and renders on FD710)
+X-Rungic-Tests: L3:flatpak.dri-kgsl (to write) (a --device=dri Flatpak app sees /dev/kgsl-3d0 and renders on FD710)
 X-Rungic-Docs: docs/49
 ---
  common/flatpak-run.c | 4 ++++

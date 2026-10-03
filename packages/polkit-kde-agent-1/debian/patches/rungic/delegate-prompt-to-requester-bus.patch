@@ -32,7 +32,7 @@ X-Rungic-Docs: docs/research/97 §21
 ---
  CMakeLists.txt           |  11 +++
  autotests/CMakeLists.txt |   4 +
- autotests/routetest.cpp  |  60 +++++++++++++
+ autotests/routetest.cpp  |  61 +++++++++++++
  delegate.cpp             | 225 +++++++++++++++++++++++++++++++++++++++++++++++
  delegate.h               | 106 ++++++++++++++++++++++
  main.cpp                 |  10 +++
@@ -40,7 +40,7 @@ X-Rungic-Docs: docs/research/97 §21
  policykitlistener.h      |   8 ++
  promptroute.cpp          |  54 ++++++++++++
  promptroute.h            |  27 ++++++
- 10 files changed, 550 insertions(+)
+ 10 files changed, 551 insertions(+)
  create mode 100644 autotests/CMakeLists.txt
  create mode 100644 autotests/routetest.cpp
  create mode 100644 delegate.cpp
@@ -98,10 +98,10 @@ index 0000000..e8ebd90
 +ecm_add_test(routetest.cpp ../promptroute.cpp TEST_NAME routetest LINK_LIBRARIES Qt::Core Qt::Test)
 diff --git a/autotests/routetest.cpp b/autotests/routetest.cpp
 new file mode 100644
-index 0000000..4d364a6
+index 0000000..ab19d62
 --- /dev/null
 +++ b/autotests/routetest.cpp
-@@ -0,0 +1,60 @@
+@@ -0,0 +1,61 @@
 +/*  This file is part of the KDE project
 +    SPDX-FileCopyrightText: 2026 Rungic
 +
@@ -114,6 +114,7 @@ index 0000000..4d364a6
 +
 +using namespace Qt::StringLiterals;
 +
++// covers: desktop-mode.auth-prompts/E1
 +class RouteTest : public QObject
 +{
 +    Q_OBJECT

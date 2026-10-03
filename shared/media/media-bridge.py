@@ -28,6 +28,8 @@ import rungic_host_watch
 _ = gettext.translation('rungic-shared', fallback=True).gettext
 
 RUNTIME = Path(os.environ['XDG_RUNTIME_DIR'])
+# The app's capture socket (CaptureBridge); another one only for a stand-in (tools/system/tests).
+CAPTURE_SOCKET = os.environ.get('RUNGIC_CAPTURE_SOCKET', '/mnt/android-wayland/capture.sock')
 FIFO = RUNTIME / 'rungic-microphone.pcm'
 SOURCE = 'android_microphone'
 PHONE_FIFO = RUNTIME / 'rungic-phone-output.pcm'
@@ -80,7 +82,7 @@ def read_header(client):
 def host_info():
     with socket.socket(socket.AF_UNIX) as client:
         client.settimeout(2)
-        client.connect('/mnt/android-wayland/platform.sock')
+        client.connect(os.environ.get('RUNGIC_PLATFORM_SOCKET', '/mnt/android-wayland/platform.sock'))
         client.sendall(b'{"op":"capture-info"}\n')
         return read_header(client)
 
@@ -124,7 +126,7 @@ class Microphone:
                 if self.cancel.is_set():
                     return
                 client.settimeout(50)  # Android's interactive runtime permission dialog.
-                client.connect('/mnt/android-wayland/capture.sock')
+                client.connect(CAPTURE_SOCKET)
                 client.sendall(b'{"op":"microphone"}\n')
                 header = read_header(client)
                 if header != {'ok': True, 'rate': 48000, 'channels': 1, 'format': 's16le'}:
@@ -220,7 +222,7 @@ class PhoneOutput:
             with socket.socket(socket.AF_UNIX) as client:
                 client.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 8192)
                 client.settimeout(3)
-                client.connect('/mnt/android-wayland/capture.sock')
+                client.connect(CAPTURE_SOCKET)
                 client.sendall(b'{"op":"phone-output"}\n')
                 if read_header(client) != PHONE_HEADER:
                     raise OSError('Unsupported phone output format')

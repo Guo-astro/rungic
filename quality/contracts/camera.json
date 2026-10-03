@@ -1,0 +1,33 @@
+{
+  "interface": "camera",
+  "comment": "Android's cameras for the Linux side's PipeWire camera nodes. capture-info (the platform bridge's socket, $RUNGIC_PLATFORM_SOCKET): whether the desktop is in front (visible), the camera permission and Android's cameras; shared/media/media-bridge.py starts one /usr/bin/rungic-camera-source ID WIDTH HEIGHT ROTATION FACING per listed camera while visible and permitted. camera (the capture socket /mnt/android-wayland/capture.sock, private to the app and the container): opens Android's camera ID; the reply line is its metadata with ok true and format android-yuv420, then frames until the connection closes, each big-endian: int32 magic 0x4d43414d, version 1, width, height, rotation, the three planes' row strides, pixel strides and lengths, int64 timestamp (ns), then the three planes (Y, U, V). shared/media/camera-source.cpp reads them into a PipeWire Video/Source node. Opening a camera turns on Android's camera indicator, so the provider check never sends it; acceptance camera.frames (front) and camera.back record frames from the node on the phone. Errors are {\"error\": string}, before any frame. Tested from both ends: tools/tests/test_contract_media.py (media-bridge.py against tools/contracts.py's stand-in; the frame reader camera-source.cpp needs PipeWire and is checked by camera.frames) and acceptance scenarios contract.camera (capture-info), camera.frames and camera.back.",
+  "sockets": {
+    "platform": {"path": "/mnt/android-wayland/platform.sock", "env": "RUNGIC_PLATFORM_SOCKET"},
+    "capture": {"path": "/mnt/android-wayland/capture.sock"}
+  },
+  "queries": [
+    {
+      "name": "capture-info",
+      "request": {"op": "capture-info"},
+      "reply": {
+        "version": 1,
+        "visible": true,
+        "cameraPermission": true,
+        "cameraDenied": false,
+        "cameras": [
+          {"id": "0", "facing": "back", "width": 1920, "height": 1080, "rotation": 90, "fps": 30},
+          {"id": "1", "facing": "front", "width": 1280, "height": 720, "rotation": 270, "fps": 30}
+        ]
+      },
+      "read_only": true
+    },
+    {
+      "name": "camera",
+      "socket": "capture",
+      "request": {"op": "camera", "id": "0"},
+      "match": ["op"],
+      "reply": {"ok": true, "format": "android-yuv420", "id": "0", "facing": "back", "width": 1920, "height": 1080, "rotation": 90},
+      "read_only": false
+    }
+  ]
+}

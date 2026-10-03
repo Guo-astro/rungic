@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# covers[system]: agent.care-ledger/E1 agent.care-ledger/E2 agent.care-ledger/E3 agent.care-ledger/E4 agent.suggestion-tasks/E1 agent.suggestion-tasks/E2 agent.suggestion-tasks/E3 agent.suggestion-tasks/E4 agent.suggestion-tasks/E6 agent.compat-knowledge/E3
 """Private-bus acceptance of the real C++ service. Synthetic observations never reach a phone.
 
 dbus-run-session -- python3 tools/test_suggestions_integration.py BINARY KB [PREVIEW SHOT]

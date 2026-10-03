@@ -37,18 +37,21 @@ class SyncTest(unittest.TestCase):
             (self.base / path).write_text(text)
         self.ns = load(self.base)
 
+    # covers: agent.instructions/E1
     def test_every_skill_gets_a_copy(self):
         self.ns['sync_user_instructions']()
         user = self.base / 'user/skills'
         self.assertEqual((user / 'rungic-agent-team/SKILL.md').read_text(), 'team skill')
         self.assertEqual((user / 'rungic-phone-desktop/SKILL.md').read_text(), 'desktop')
 
+    # covers: agent.instructions/E3
     def test_a_dropped_default_takes_its_untouched_copy_along(self):
         self.ns['sync_user_instructions']()
         (self.base / 'pkg/skills/rungic-phone-desktop/team.md').unlink()
         self.ns['sync_user_instructions']()
         self.assertFalse((self.base / 'user/skills/rungic-phone-desktop/team.md').exists())
 
+    # covers: agent.instructions/E3
     def test_a_dropped_default_leaves_a_changed_copy(self):
         self.ns['sync_user_instructions']()
         (self.base / 'user/skills/rungic-phone-desktop/team.md').write_text('mine')

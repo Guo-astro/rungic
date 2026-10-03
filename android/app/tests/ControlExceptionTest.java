@@ -10,6 +10,7 @@ import java.util.regex.*;
  * APK's classification; no Android device needed. args[0]: path to system/account/setup.py. */
 public final class ControlExceptionTest {
     static void require(boolean value,String what) { if(!value)throw new AssertionError(what); }
+    // covers: install.account-setup/E3
     public static void main(String[] args) throws Exception {
         String setup=new String(Files.readAllBytes(Paths.get(args[0])),StandardCharsets.UTF_8);
         List<String> errors=new ArrayList<>();

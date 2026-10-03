@@ -17,6 +17,7 @@ command = importlib.util.module_from_spec(spec)
 loader.exec_module(command)
 
 
+# covers: desktop-mode.cast-install/E3
 class CastBuildTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -56,6 +57,7 @@ class CastBuildTests(unittest.TestCase):
         self.assertFalse(self.jar.with_suffix('.build.json').exists())
 
 
+# covers: desktop-mode.cast-connect/E5
 class CastContractTests(unittest.TestCase):
     def test_old_scan_with_real_display_is_not_an_empty_success(self):
         old = {'active_state': 0, 'displays': [{'name': 'TV', 'available': True}]}

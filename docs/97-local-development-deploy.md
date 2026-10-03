@@ -164,3 +164,20 @@ python3 tools/rungic_dev.py reset [rungic-design]                     # 回到�
 - 问题：已装发布里没有的组件（例如刚加入 `rebuilt` 的 `ksystemstats`，发布 `20260930.10` 不含它），原来 `deploy` 直接拒绝：“the installed release has none of its packages”。
 - 现在：这类组件以手机上已装的发行版版本为基准，覆盖记录里写 `base`（如 `6.6.6-0ubuntu0.1`）；再次部署沿用第一次记下的 `base`；`reset` 时把它按该版本装回（`apt-get install 包=版本`），而不是留在开发版本。离线测试 `test_component_new_to_the_release`、`test_reset_restores_the_distribution_build`。
 - 实测：2026-10-03 部署 `ksystemstats`（增量构建 54 s），apt 校验通过；reset 路径尚未在实机执行。见 docs/104。
+
+## 增量构建与缓存过期（2026-10-03，Mac mini 实测）
+
+**起因**：一次部署 10 个自有包用了约 15 分钟，每个包 70–200 秒，即使只改了一行。用户要求改成增量构建，30 天没有增量编译过的缓存自动清空。
+
+**原因**（逐步计时，`rungic-agent-screen`）：
+- 每次构建前删掉 Mac mini 上的源码目录 `/root/rungic-packages/<包>/src`，CMake 的构建目录在源码树里，跟着被删，所以每次全量编译。
+- 更大的开销是 SSH：一次构建约 80 次往返，每次新建连接约 3.3 秒；真正的编译与打包只占几秒。
+
+**做法**：
+- 源码树和构建目录保留（`rungic_package.sync_script`）：新源码先解压到 `incoming/`，按内容同步过去，内容没变的文件保留原来的时间，make/ninja 只重编改过的部分；从仓库删掉的源文件按上次的文件清单 `src.manifest` 删除，构建产物不在清单里，不受影响。第一次（没有清单）或 `--clean` 时直接用新树。
+- 构建脚本：FFmpeg 的 `configure` 只在参数或脚本变了时重跑（它重写 config.h，会让所有对象重编）；snapshot 只在没有配置过时 `meson setup`；Flatpak GL 的 Mesa 构建目录保留，选项变了才重建。
+- SSH 连接复用（`ControlMaster`，保持 10 分钟，socket 在 `$XDG_RUNTIME_DIR`）：单次往返从 3.3 秒降到 0.6 秒。
+- 过期：每个构建目录（自有包的、上游组件的 `/root/rungic-build/<组件>`）构建时写 `.rungic-last-build`；每次构建前删掉 30 天没构建过的（`build_on_device.expire`，`CACHE_DAYS`）。只清这些构建目录，不动发布池、垫片和工具。
+- 从头构建：`rungic_dev.py deploy 包 --clean`、`rungic_package.py build 包 --clean`。
+
+**实测**（只构建，不部署）：同一个包没有改动时，120 秒（每次全量）→ 112 秒（只加增量，仍是全量的 SSH 开销）→ 36 秒（加连接复用），其中约 12 秒是实测脚本把 deb 拉回 K8；部署时 deb 从 Mac mini 直接送到手机，没有这一段。第二次构建的日志里没有编译输出。

@@ -43,7 +43,11 @@ static int connect_broker(void) {
  if(broker>=0)close(broker);broker=-1;broker_pid=getpid();
  int fd=socket(AF_UNIX,SOCK_STREAM|SOCK_CLOEXEC,0);if(fd<0)return -1;
  struct sockaddr_un addr={.sun_family=AF_UNIX};
- strcpy(addr.sun_path,"/mnt/android-wayland/codec.sock");
+ /* The app's codec broker; another one only for a stand-in (tools/system/tests). */
+ const char *path=getenv("RUNGIC_CODEC_SOCKET");
+ if(!path || !*path)path="/mnt/android-wayland/codec.sock";
+ if(strlen(path)>=sizeof(addr.sun_path)){close(fd);errno=ENAMETOOLONG;return -1;}
+ strcpy(addr.sun_path,path);
  /* A frozen Rungic app (the phone asleep, docs/research/97) stops accepting: once its backlog is
   * full a blocking connect waited forever. A Unix connect waits for SO_SNDTIMEO at most. */
  struct timeval wait={.tv_sec=2},none={0};

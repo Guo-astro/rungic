@@ -54,6 +54,7 @@ class CallConversationTest(unittest.TestCase):
         with patch.dict(sys.modules, {'call_proxy':types.SimpleNamespace(CallProxy=FakeCall)}):
             return self.agent._start_call({'backend':'app','app':'wechat','contact':'Test'})
 
+    # covers: agent.call-card/E3
     def test_events_and_persistence_follow_origin_after_switch(self):
         result = self.start()
         self.agent.thread_id = 'other'
@@ -67,12 +68,14 @@ class CallConversationTest(unittest.TestCase):
         self.assertEqual(self.agent.store.append.call_args.args[0], 'origin')
         namespace['threading'].Thread.assert_not_called()  # no speech in the unrelated conversation
 
+    # covers: agent.call-card/E1
     def test_no_implicit_default_call(self):
         with patch.dict(sys.modules, {'call_proxy':types.SimpleNamespace(CallProxy=Mock())}) as modules:
             with self.assertRaises(ValueError):
                 self.agent._start_call({'contact':'Test'})
             modules['call_proxy'].CallProxy.assert_not_called()
 
+    # covers: agent.call-card/E4
     def test_old_card_cannot_hang_up_or_instruct_another_call(self):
         self.start()
         for op in ('hang-up','take-over','instruct','dtmf'):
@@ -82,6 +85,7 @@ class CallConversationTest(unittest.TestCase):
         self.agent.call.instruct.assert_not_called()
         self.agent.call.take_over.assert_not_called()
 
+    # covers: agent.call-card/E3
     def test_current_card_and_existing_cli_controls(self):
         result = self.start()
         self.agent.call_command(json.dumps({'callId':result['callId'],'op':'instruct','text':' 请询问进度 '}))
@@ -91,6 +95,7 @@ class CallConversationTest(unittest.TestCase):
         self.agent.call_command(json.dumps({'callId':result['callId'],'op':'hang-up'}))
         self.agent.call.hang_up.assert_called_once()
 
+    # covers: agent.call-card/E4
     def test_delayed_old_events_do_not_pause_new_call(self):
         self.start()
         previous = self.agent.call

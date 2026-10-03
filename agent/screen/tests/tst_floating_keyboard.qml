@@ -25,6 +25,7 @@ TestCase {
         inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText }
     function click(c) { InputContext.inputEngine.virtualKeyClick(Qt.Key_A + c.charCodeAt(0) - 97, c, 0) }
     function init() { field.forceActiveFocus(); Qt.inputMethod.show() }
+    // covers: desktop-mode.floating-keyboard/E6
     function test_1_load() {
         wait(1500)
         console.log("BOARD", kb.x, kb.y, kb.width, kb.height, "locale", Qt.inputMethod.locale.name, "state", kb.barState)
@@ -32,6 +33,7 @@ TestCase {
         verify(kb.height > 150 && kb.height < 300)
         verify(kb.y + kb.height <= 360)
     }
+    // covers: desktop-mode.floating-keyboard/E2
     function test_2_pinyin() {
         typed = ""
         for (const c of "nihao") click(c)

@@ -136,7 +136,7 @@ public:
         if (qEnvironmentVariable("RUNGIC_WORKSPACE_BACKEND") != QLatin1String("virtual"))
             return;
         QLocalSocket socket;
-        socket.connectToServer(QStringLiteral("/mnt/android-wayland/platform.sock"));
+        socket.connectToServer(qEnvironmentVariable("RUNGIC_PLATFORM_SOCKET", QStringLiteral("/mnt/android-wayland/platform.sock")));
         if (!socket.waitForConnected(500))
             return;
         socket.write(QJsonDocument(QJsonObject{{QStringLiteral("op"), QStringLiteral("director")},
@@ -274,7 +274,7 @@ private:
     bool shown()
     {
         QLocalSocket socket;
-        socket.connectToServer(QStringLiteral("/mnt/android-wayland/platform.sock"));
+        socket.connectToServer(qEnvironmentVariable("RUNGIC_PLATFORM_SOCKET", QStringLiteral("/mnt/android-wayland/platform.sock")));
         if (!socket.waitForConnected(2000)) {
             return true; // unknown: as if shown, nothing is frozen on a guess
         }
@@ -298,23 +298,11 @@ private:
             return true;
         }
         m_heard = true;
-        // The director fullscreen (docs/58): every workspace shown, only its focus heard. Whether the
-        // assistant's screen is turned on is the floating window's matter, not the director's.
-        if (state.value(QStringLiteral("directorFullscreen")).toBool()) {
-            m_heard = state.value(QStringLiteral("directorFocus")).toInt(-1) == m_slot.toInt();
-            m_onHost = true;
-            return true;
-        }
         if (!state.value(QStringLiteral("enabled")).toBool()) {
             return false;
         }
-        // Fullscreen: the one workspace the host presents. Else its own floating window
-        // (several workspaces' can be out at once, rungic-agent-screen).
-        if (state.value(QStringLiteral("fullscreen")).toBool()) {
-            m_onHost = QString::number(state.value(QStringLiteral("workspace")).toInt(1)) == m_slot;
-            return m_onHost;
-        }
-        // The director's window shows every workspace running (docs/58); only its focus is heard.
+        // Its own floating window (several workspaces' can be out at once, rungic-agent-screen),
+        // in a window or fullscreen there. The director's window shows every workspace running (docs/58); only its focus is heard.
         if (QProcess::execute(QStringLiteral("pgrep"), {QStringLiteral("-f"), QStringLiteral("^/usr/libexec/rungic-agent-screen-window --director")}) == 0) {
             m_heard = state.value(QStringLiteral("directorFocus")).toInt(-1) == m_slot.toInt();
             return true;
@@ -393,7 +381,7 @@ private:
     bool m_wasQuiet = false;
     std::optional<bool> m_soundShown;
     bool m_heard = true;    // shown() found it heard (false: a thumbnail of the TV's director view)
-    bool m_onHost = false;  // shown() found the host showing it (TV, fullscreen)
+    bool m_onHost = false;  // shown() found the host showing it (the TV)
     QProcess *m_presenter = nullptr;
     qint64 m_presenterStarted = 0, m_presenterRetry = 0, m_presenterBackoff = 15000;
     qint64 m_quietSince = 0;
@@ -467,7 +455,7 @@ int main(int argc, char *argv[])
             retry(0);
         });
         QObject::connect(socket, &QLocalSocket::errorOccurred, socket, [retry](QLocalSocket::LocalSocketError) { retry(5000); });
-        socket->connectToServer(QStringLiteral("/mnt/android-wayland/platform.sock"));
+        socket->connectToServer(qEnvironmentVariable("RUNGIC_PLATFORM_SOCKET", QStringLiteral("/mnt/android-wayland/platform.sock")));
     };
     watchScreens();
 

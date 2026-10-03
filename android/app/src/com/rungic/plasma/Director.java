@@ -24,12 +24,11 @@ import org.json.JSONObject;
  * 0 standard (the other screens in a column on its right, about a quarter of the width), 1
  * enlarged (a narrow column), 2 solo (the focus only). Members are the workspaces running now (the host's liveSources).
  *
- * It is laid out large where there is room: fullscreen on the phone (AgentFullscreen, entered from
- * the director's floating window) and on a TV, the same picture there and there. A TV shows the
- * director, or the user's desktop in computer mode ("desktop"): chosen in the cast controls; a new
- * TV shows the director while there is one. The host puts each tile on a layer of its own in the
- * presenter's window (NativeBridge.setDirector); the labels are drawn above it (on the TV a window
- * of its own, fullscreen AgentFullscreen's layer). A change of focus or level puts the tiles in
+ * It is laid out large on a TV. On the phone, the director is the Linux floating window, in its
+ * window or fullscreen (agent/screen, docs/research/97 §17). A TV shows the director, or the user's
+ * desktop in computer mode ("desktop"): chosen in the cast controls; a new TV shows the director
+ * while there is one. The host puts each tile on a layer of its own in the presenter's window
+ * (NativeBridge.setDirector); the labels are drawn above it, in a window of their own. A change of focus or level puts the tiles in
  * place at once; the new focus then breathes in, from a little smaller to its size, eased out
  * (a spring's overshoot drew the eye away, the user found). Only its layer moves (NativeBridge.placeTile, no new frame): moving
  * every tile through a new layout each frame made the host present every screen anew, and
@@ -67,13 +66,10 @@ final class Director {
     private final java.util.Map<Integer, String[]> captions = new java.util.HashMap<>();
     private final java.util.Map<Integer, Long> captionTimes = new java.util.HashMap<>();
     private static final long CAPTION_STALE_MS = 120_000, ENDING_MS = 4000;
-    /** Fullscreen on the phone shows the director (it then owns the presenter, not a TV). */
-    private boolean fullscreen;
-    private final List<Runnable> listeners = new ArrayList<>();
     private android.animation.ValueAnimator animation;
     private static final long BREATHE_MS = 260;
     private static final float BREATHE_FROM = 0.95f;
-    /** Width over height of the window the director is laid out in (the TV, the phone turned). */
+    /** Width over height of the window the director is laid out in (the TV). */
     private float aspect = 16f / 9f;
     /** Bumped at every change: the phone's director window follows it. */
     private int version;
@@ -104,8 +100,8 @@ final class Director {
     }
 
     /**
-     * The picture under the tiles of a presenter window `width` x `height` turned `rotation` (90:
-     * fullscreen on the portrait phone): the user's wallpaper, blurred and dimmed by the Linux side
+     * The picture under the tiles of a presenter window `width` x `height` turned `rotation` (90: a
+     * quarter turn): the user's wallpaper, blurred and dimmed by the Linux side
      * (rungic-agent-screen background, kept as files/director-background.jpg), cropped to the
      * window's shape and handed to the host; black without it.
      */
@@ -119,7 +115,7 @@ final class Director {
         int w = 0, h = 0;
         android.graphics.Bitmap source = file.isFile() ? android.graphics.BitmapFactory.decodeFile(file.getPath()) : null;
         if (source != null && width > 0 && height > 0) {
-            // The picture's shape upright: the window turned back for fullscreen.
+            // The picture's shape upright: the window turned back.
             int uw = rotation == 90 ? height : width, uh = rotation == 90 ? width : height;
             float scale = Math.max(uw / (float) source.getWidth(), uh / (float) source.getHeight());
             int sw = Math.round(source.getWidth() * scale), sh = Math.round(source.getHeight() * scale);
@@ -143,27 +139,12 @@ final class Director {
         try { NativeBridge.setCastBackground(pixels, w, h); } catch (UnsatisfiedLinkError e) { /* an older host */ }
     }
 
-    /** Fullscreen on the phone shows the director, or no longer. */
-    void setFullscreen(boolean value, float windowAspect) {
-        // Bound again (a new window): laid out anew all the same.
-        if (fullscreen == value && !value) return;
-        fullscreen = value;
-        if (value && windowAspect > 0) aspect = windowAspect;
-        changedVersion();
-        if (value) { tiles = new float[0][]; tileSlots = new int[0]; apply(false); }
-    }
-    boolean fullscreen() { return fullscreen; }
-
-    /** Laid out in tiles now: on the TV, or fullscreen on the phone. */
-    private boolean laidOut() { return (onTv() || fullscreen) && !members.isEmpty(); }
+    /** Laid out in tiles now: on the TV. */
+    private boolean laidOut() { return onTv() && !members.isEmpty(); }
 
     /** The tiles as shown now (fractions of the 16:9 picture), the focus first; `tileSlots` their screens. */
     float[][] tiles() { return tiles; }
     int[] tileSlots() { return tileSlots; }
-
-    /** Called after every change of the tiles (fullscreen's touches and labels follow them). */
-    void addListener(Runnable listener) { listeners.add(listener); }
-    void removeListener(Runnable listener) { listeners.remove(listener); }
 
     /** The source the TV's presenter shows first (0 the user's desktop, n workspace n). */
     int tvSource() { return onTv() ? picture(focus) : 0; }
@@ -196,7 +177,7 @@ final class Director {
             refreshMembers();
             if (!before.equals(members)) {
                 changedVersion();
-                if (bound || fullscreen) apply(true);
+                if (bound) apply(true);
                 redraw();
             }
         }
@@ -293,7 +274,7 @@ final class Director {
         refreshMembers();
         // A new version either way: the phone's director window draws the board too.
         changedVersion();
-        if (!before.equals(members) && (bound || fullscreen)) apply(true);
+        if (!before.equals(members) && bound) apply(true);
         redraw();
         // A finished board leaves once it is old.
         handler.postDelayed(this::refreshBoard, BOARD_KEPT_MS + 1000);
@@ -302,7 +283,7 @@ final class Director {
     private void refreshBoard() {
         List<Integer> before = members;
         refreshMembers();
-        if (!before.equals(members)) { changedVersion(); if (bound || fullscreen) apply(true); redraw(); }
+        if (!before.equals(members)) { changedVersion(); if (bound) apply(true); redraw(); }
     }
 
     /** The board while its team works, and for a while after it finished. */
@@ -364,14 +345,13 @@ final class Director {
         refreshMembers();
         if (!before.equals(members)) {
             changedVersion();
-            if (bound || fullscreen) apply(true);
+            if (bound) apply(true);
         }
         redraw();
     }
 
     private void redraw() {
         if (labels != null) labels.invalidate();
-        for (Runnable listener : new ArrayList<>(listeners)) listener.run();
     }
 
     private void remember(int slot, String line) {
@@ -466,11 +446,9 @@ final class Director {
         captionTimes.put(slot, android.os.SystemClock.uptimeMillis());
         if (!text.isEmpty()) remember(slot, text);
         if (labels != null) labels.invalidate();
-        for (Runnable listener : new ArrayList<>(listeners)) listener.run();
         // An ending shows a few seconds, then goes.
         if (!"working".equals(state)) handler.postDelayed(() -> {
             if (labels != null) labels.invalidate();
-            for (Runnable listener : new ArrayList<>(listeners)) listener.run();
         }, ENDING_MS + 50);
     }
 
@@ -523,7 +501,7 @@ final class Director {
             // the host presents and the placeholder, with the members the same.
             if (!before.equals(members) || !liveBefore.equals(live)) {
                 changedVersion();
-                if (bound || fullscreen) apply(true);
+                if (bound) apply(true);
             }
             handler.postDelayed(this, POLL_MS);
         }
@@ -594,12 +572,11 @@ final class Director {
             if (slot != BOARD)
                 try { NativeBridge.placeTile(slot, now[0], now[1], now[2], now[3]); } catch (UnsatisfiedLinkError e) { a.cancel(); }
             if (labels != null) labels.invalidate();
-            for (Runnable listener : new ArrayList<>(listeners)) listener.run();
         });
         animation.start();
     }
 
-    /** The tiles to the host, the labels and the listeners. */
+    /** The tiles to the host, and the labels. */
     private void send(float[][] rects, int[] slots) {
         // The board is drawn by the labels: the host lays out the workspaces only.
         int n = 0;
@@ -616,7 +593,6 @@ final class Director {
         catch (UnsatisfiedLinkError e) { NativeBridge.presentWorkspace(presented); }
         if (labels != null) labels.invalidate();
         else if (bound && onTv()) addLabels();
-        for (Runnable listener : new ArrayList<>(listeners)) listener.run();
     }
 
     /**

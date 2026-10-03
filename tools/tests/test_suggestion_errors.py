@@ -10,7 +10,8 @@ from unittest.mock import Mock
 source = Path(__file__).resolve().parents[2] / 'agent/assistant/rungic_voice_agent.py'
 node = next(n for n in ast.parse(source.read_text()).body if isinstance(n, ast.ClassDef) and n.name == 'VoiceAgent')
 node.body = [n for n in node.body if isinstance(n, ast.FunctionDef) and n.name == 'on_notification']
-namespace = {'time': time, 'screen_activity': lambda: {}, 'forget_screen_dismissal': lambda: None, 'GLib': types.SimpleNamespace(idle_add=Mock()),
+namespace = {'time': time, 'screen_activity': lambda: {}, 'forget_screen_dismissal': lambda: None, 'mark_agent_busy': lambda busy: None,
+             'GLib': types.SimpleNamespace(idle_add=Mock()),
              '_': lambda message: message}
 exec(compile(ast.Module(body=[node], type_ignores=[]), str(source), 'exec'), namespace)
 
@@ -19,14 +20,18 @@ class SuggestionErrorTests(unittest.TestCase):
         a = namespace['VoiceAgent']()
         a.thread_id = 'thread'; a.emit = Mock(); a.set_state = Mock(); a.usage_push = Mock()
         a.turn = None; a.turn_lock = threading.Lock()
+        a.phone = None      # no phone session (docs/101): its notifications stay the agent's
+        a.background = {}    # no background turns (docs/research/97): the agent is idle after this one
         return a
 
+    # covers: agent.suggestion-tasks/E4
     def test_failed_completion_reports_reason(self):
         a = self.agent()
         a.on_notification('turn/completed', {'threadId': 'thread', 'turn': {'status': 'failed', 'error': {'message': '401 authentication missing'}}})
         self.assertEqual(a.emit.call_args_list[0].args[0], {'type': 'error', 'text': '401 authentication missing'})
         self.assertFalse(a.agent_busy)
 
+    # covers: agent.suggestion-tasks/E4
     def test_retry_does_not_prematurely_fail_task(self):
         a = self.agent()
         a.on_notification('error', {'threadId': 'thread', 'willRetry': True, 'error': {'message': 'temporary'}})

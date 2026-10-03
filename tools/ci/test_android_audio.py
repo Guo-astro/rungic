@@ -1,3 +1,4 @@
+# covers: install.cold-start/E2
 """Exercise private PID recovery with real processes, including PID reuse."""
 import os
 from pathlib import Path

@@ -47,6 +47,7 @@ def sleeper(display):
     return process
 
 
+# covers: agent.app-switching/E4
 def test_single_instance_by_program():
     with tempfile.TemporaryDirectory() as runtime:
         switch = load(runtime)
@@ -56,6 +57,7 @@ def test_single_instance_by_program():
         assert not switch.single_instance({'id': 'blender', 'exec': 'blender %f'})
 
 
+# covers: agent.app-switching/E4
 def test_processes_by_session():
     with tempfile.TemporaryDirectory() as runtime:
         switch = load(runtime)
@@ -69,6 +71,7 @@ def test_processes_by_session():
             theirs.kill(); ours.kill(); theirs.wait(); ours.wait()
 
 
+# covers: agent.app-switching/E4
 def test_a_browser_is_found_by_its_name_and_only_its_main_process():
     with tempfile.TemporaryDirectory() as runtime:
         switch = load(runtime)
@@ -82,6 +85,7 @@ def test_a_browser_is_found_by_its_name_and_only_its_main_process():
             process.wait()
 
 
+# covers: agent.app-switching/E3
 def test_close_records_and_restore_gives_back():
     with tempfile.TemporaryDirectory() as runtime:
         switch = load(runtime)
@@ -106,6 +110,7 @@ def test_close_records_and_restore_gives_back():
         assert switch.switched() == {}
 
 
+# covers: agent.app-switching/E3
 def test_restore_from_inside_a_workspace_opens_on_the_phone():
     """Called with only the workspace's environment (no RUNGIC_USER_*): still the user's session."""
     with tempfile.TemporaryDirectory() as runtime:
@@ -124,6 +129,7 @@ def test_restore_from_inside_a_workspace_opens_on_the_phone():
 
 
 
+# covers: agent.app-switching/E3 agent.workspaces/E5
 def test_restore_gives_the_phone_its_own_values_back():
     """The workspace sets these as Plasma's desktop session has them (docs/103); an app given back to
     the phone gets the user's values."""
@@ -144,6 +150,7 @@ def test_restore_gives_the_phone_its_own_values_back():
             assert env.get('QT_QPA_PLATFORMTHEME') == (theme or None)
             assert not any(k.startswith('RUNGIC_USER_') for k in env)
 
+# covers: agent.app-switching/E2
 def test_restore_waits_for_a_call():
     with tempfile.TemporaryDirectory() as runtime:
         switch = load(runtime)

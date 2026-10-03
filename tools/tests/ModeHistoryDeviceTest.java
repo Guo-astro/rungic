@@ -10,6 +10,7 @@ import org.json.JSONObject;
 /** Run alongside the deployed root jar. Uses a unique result file; never changes a display. */
 public final class ModeHistoryDeviceTest {
     static void check(boolean condition,String message){if(!condition)throw new AssertionError(message);}
+    // covers[device]: desktop-mode.cast-video-modes/E2
     public static void main(String[] args)throws Exception {
         Looper.prepareMainLooper();
         Constructor<ModeHistory> ctor=ModeHistory.class.getDeclaredConstructor(String.class,String.class);ctor.setAccessible(true);

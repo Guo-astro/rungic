@@ -45,12 +45,14 @@ class Clock:
         self.now += seconds
 
 
+# covers: agent.workspace-lifecycle/E3
 def test_apps_are_named_and_grouped_as_systemd_has_it_and_bound_to_the_workspace():
     assert workspace.scope_name(2, 'org.kde.kalk', '123') == 'app-rungicws2-org.kde.kalk-123.scope'
     assert workspace.scope_properties(2) == ['--slice=app-rungicws2.slice', '-p', 'BindsTo=rungic-workspace@2.service',
                                              '-p', 'After=rungic-workspace@2.service', '-p', 'TimeoutStopSec=10']
 
 
+# covers: agent.workspace-lifecycle/E2
 def test_apps_are_asked_once_and_the_workspaces_own_windows_stay():
     kwin = FakeKWin([window('a', 10), window('b', 11, 'blender'), window('own', 5, 'rungic-workspace-desktop')])
     clock = Clock()
@@ -58,6 +60,7 @@ def test_apps_are_asked_once_and_the_workspaces_own_windows_stay():
     assert sorted(kwin.asked) == ['a', 'b']
 
 
+# covers: agent.workspace-lifecycle/E2
 def test_an_app_asking_about_unsaved_work_is_reported_not_answered():
     kwin = FakeKWin([window('a', 10)], dialogs=[window('d', 10)], stubborn={'a'})
     clock = Clock()
@@ -66,6 +69,7 @@ def test_an_app_asking_about_unsaved_work_is_reported_not_answered():
     assert [(r['app'], r['dialog']) for r in remaining] == [('ardour', False), ('ardour', True)]
 
 
+# covers: agent.workspace-lifecycle/E4
 def test_an_x11_program_without_wm_delete_window_is_reported_not_closed():
     kwin = FakeKWin([window('x', 20, 'xterm'), window('a', 10)])
     clock = Clock()
@@ -76,6 +80,7 @@ def test_an_x11_program_without_wm_delete_window_is_reported_not_closed():
     assert clock.now < 1                         # nothing left to wait for
 
 
+# covers: agent.workspace-lifecycle/E4
 def test_an_x11_program_without_a_pid_is_known_by_its_class():
     kwin = FakeKWin([window('x', 0, 'XOld'), window('a', 10)])
     clock = Clock()
@@ -83,6 +88,7 @@ def test_an_x11_program_without_a_pid_is_known_by_its_class():
     assert kwin.asked == ['a'] and remaining[0]['app'] == 'XOld' and 'not_asked' in remaining[0]
 
 
+# covers: agent.workspace-lifecycle/E4
 def test_x11_windows_are_read_with_xprop():
     replies = {
         ('-root', '_NET_CLIENT_LIST'): '_NET_CLIENT_LIST(WINDOW): window id # 0x200001, 0x400003, 0x600005\n',
@@ -116,12 +122,14 @@ def stops(calls):
     return [c[3] for c in calls if c[:3] == ['systemctl', '--user', 'stop']]
 
 
+# covers: agent.workspace-lifecycle/E2
 def test_a_workspace_that_is_not_running_is_closed():
     run, calls = runner(active=False)
     assert workspace.close(1, run=run) == {'closed': True, 'was_running': False}
     assert stops(calls) == []
 
 
+# covers: agent.workspace-lifecycle/E2
 def test_closing_gives_switched_apps_back_then_closes_windows_then_stops():
     run, calls = runner()
     with mock.patch.object(workspace, 'ready', return_value=True):
@@ -135,6 +143,7 @@ def test_closing_gives_switched_apps_back_then_closes_windows_then_stops():
     assert calls[2][:5] == ['rungic-workspace-env', '1', 'rungic-cua', 'close-windows', '20.0']
 
 
+# covers: agent.workspace-lifecycle/E2
 def test_an_open_app_keeps_the_workspace_unless_forced():
     still = [{'caption': 'Save changes?', 'app': 'ardour', 'pid': 10, 'dialog': True}]
     run, calls = runner(close_windows=still)
@@ -169,6 +178,7 @@ ENV = {'WAYLAND_DISPLAY': 'wayland-ws-1', 'RUNGIC_WORKSPACE': '1', 'XDG_RUNTIME_
        'RUNGIC_USER_DBUS_SESSION_BUS_ADDRESS': 'unix:path=/run/user/1000/bus'}
 
 
+# covers: agent.workspace-lifecycle/E1
 def test_the_agent_closes_its_workspace_and_the_next_call_starts_it_again():
     with mock.patch.object(router, 'Child', FakeChild), \
             mock.patch.object(router, 'bridge', return_value={'enabled': False, 'tv': False}), \
@@ -185,6 +195,7 @@ def test_the_agent_closes_its_workspace_and_the_next_call_starts_it_again():
         assert r.children['workspace'] is not first and ensure.call_count == 2
 
 
+# covers: agent.workspaces/E3
 def test_a_workspace_that_does_not_start_is_an_error():
     with mock.patch.object(router, 'Child', FakeChild), \
             mock.patch.object(router, 'bridge', return_value={'enabled': False, 'tv': False}), \
@@ -198,6 +209,7 @@ def test_a_workspace_that_does_not_start_is_an_error():
             raise AssertionError('no error')
 
 
+# covers: agent.workspace-lifecycle/E1
 def test_a_frozen_workspace_is_thawed_before_a_tool_reaches_it():
     with mock.patch.object(router, 'Child', FakeChild), \
             mock.patch.object(router, 'bridge', return_value={'enabled': False, 'tv': False}), \
@@ -205,13 +217,16 @@ def test_a_frozen_workspace_is_thawed_before_a_tool_reaches_it():
             mock.patch.object(workspace, 'thaw', return_value=True) as thaw:
         router.Router(ENV).call('desktop_windows', {})
     thaw.assert_called_once_with(1)
+    # Desktop mode on is the independent desktop running (docs/research/97 §19), not the app's switch.
     with mock.patch.object(router, 'Child', FakeChild), \
-            mock.patch.object(router, 'bridge', return_value={'enabled': True, 'tv': False}), \
+            mock.patch.object(router, 'desktop_running', return_value=True), \
+            mock.patch.object(router, 'workspace_env', side_effect=lambda env, slot: dict(env)), \
             mock.patch.object(workspace, 'thaw') as thaw:
         router.Router(ENV).call('desktop_windows', {})      # on the user's desktop: nothing to thaw
     thaw.assert_not_called()
 
 
+# covers: agent.workspace-lifecycle/E5
 def test_closing_thaws_first():
     run, calls = runner()
     with mock.patch.object(workspace, 'ready', return_value=True), \
@@ -220,6 +235,7 @@ def test_closing_thaws_first():
     assert thaw.call_count == 2           # at the start, and again right before the stop
 
 
+# covers: agent.workspace-lifecycle/E5
 def test_the_keeper_is_told_while_a_workspace_closes(tmp_path):
     run, calls = runner()
     seen = []
@@ -232,6 +248,7 @@ def test_the_keeper_is_told_while_a_workspace_closes(tmp_path):
 
 
 # ---- the phone asleep: the Rungic app frozen (docs/research/97) -------------------------------------
+# covers: agent.workspaces/E3
 def test_a_start_that_failed_ends_the_wait_at_once_and_says_why(tmp_path, monkeypatch):
     monkeypatch.setenv('XDG_RUNTIME_DIR', str(tmp_path))
     started = []
@@ -245,6 +262,7 @@ def test_a_start_that_failed_ends_the_wait_at_once_and_says_why(tmp_path, monkey
     assert started and workspace.failure(3) == 'the Android host is not responding'
 
 
+# covers: agent.workspaces/E3
 def test_the_agent_hears_why_its_workspace_did_not_start(tmp_path, monkeypatch):
     monkeypatch.setenv('XDG_RUNTIME_DIR', str(tmp_path))
     workspace.failure_path(1).write_text('the Android host is not responding')

@@ -26,8 +26,8 @@ ROOT = Path(__file__).resolve().parent.parent
 # Whole files or trees left as they are: history, phase C (Android side), upstream text.
 SKIP = [
     r'^docs/', r'^benchmarks/', r'^provenance/', r'^signing/', r'^\.work/',
-    r'(^|/)debian/changelog$', r'^tools/pq-history/', r'^tools/rebrand\.py$',
-    r'^(?!packages/).*\.patch$',          # historical patches: import evidence the pq-history plans name
+    r'(^|/)debian/changelog$', r'^tools/rebrand\.py$',
+    r'^(?!packages/).*\.patch$',          # patches outside the patch queues: experiments, kept as written
     r'^packages/(android-host|smithay|winit)/', r'^android/host/',
     r'^android/app/', r'^shared/android/', r'^docker/', r'^lxc/', r'^kernel/', r'^android/build-apk\.sh$', r'^android/build-native-core\.sh$',
     r'^tools/moto-magisk-bootstrap\.', r'^tools/moto_.*enter', r'enter\.c$',

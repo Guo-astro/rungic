@@ -18,7 +18,7 @@ fi
 if [ "$1" = configure ] && [ -f /etc/apt/apt.conf.d/80moto-proxy ] && [ ! -e /etc/apt/apt.conf.d/80rungic-proxy ]; then
     cp -p /etc/apt/apt.conf.d/80moto-proxy /etc/apt/apt.conf.d/80rungic-proxy
 fi
-# Services kept off by default (docs/83). Each unit's default from service-policy.json is applied
+# Services' defaults (docs/83): kept off, masked, or on (SSH). Each unit's default from service-policy.json is applied
 # once and recorded; a unit already recorded is left as it is, so what the user turned on or off in
 # Settings -> Services survives upgrades. Up to 0.305 this package owned the masks itself: the
 # upgrade has just removed them, and the first run here puts them back as local state.
@@ -44,6 +44,9 @@ for g in json.load(open("/usr/share/rungic/service-policy.json"))["groups"]:
                 # Ubuntu's openssh-server enables ssh.socket; deb-systemd-helper records the
                 # disable, so that package's own upgrades keep it off.
                 if [ "$scope" = system ]; then deb-systemd-helper disable "$unit" >/dev/null 2>&1 || true; fi ;;
+            enabled)
+                # On, and the user may turn it off (SSH, AGENTS.md 2026-09-29): recorded as enabled.
+                if [ "$scope" = system ]; then deb-systemd-helper enable "$unit" >/dev/null 2>&1 || true; fi ;;
         esac
         echo "$scope $unit" >> "$state"
         changed=1

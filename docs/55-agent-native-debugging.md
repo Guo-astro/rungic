@@ -93,7 +93,7 @@ Claude Code原生支持MCP工具，Agent可以直接获得带参数模式的工�
 **P1：崩溃现场、会话journal、宿主统计**
 
 - 核实：全局`core_pattern=/data/app_dump/%e_%p_%t.core.gz`由内核在崩溃进程自身根目录下解析。在容器内建`/data/app_dump`后，用户进程崩溃的core写在容器里，Android侧该目录不存在、不受影响。文件虽名为`.gz`，实为未压缩core。KWin源码无`PR_SET_DUMPABLE`，KWin进程UID全为1000、无额外能力，`suid_dumpable=0`不影响。
-- `plasma/diagnostics/`：`60-moto-core.conf`给system与user管理器设`DefaultLimitCORE=2G:infinity`；tmpfiles建立spool；`moto-coredump.path`（DirectoryNotEmpty）触发`moto-coredump-collect`：等待core写完→gdb取头信息与全部线程backtrace→Python 3.14自带zstd压缩→写`info.json`→在journal记一条err级`coredump:`。保留最近8个core（总计≤4GiB）和200份报告；无法处理的文件移入`unprocessed`，确保path单元不会循环触发。部署用`tools/deploy_plasma_diagnostics.py`，只在显式`--restart-session`时重启桌面。
+- `system/diagnostics/`：`60-moto-core.conf`给system与user管理器设`DefaultLimitCORE=2G:infinity`；tmpfiles建立spool；`moto-coredump.path`（DirectoryNotEmpty）触发`moto-coredump-collect`：等待core写完→gdb取头信息与全部线程backtrace→Python 3.14自带zstd压缩→写`info.json`→在journal记一条err级`coredump:`。保留最近8个core（总计≤4GiB）和200份报告；无法处理的文件移入`unprocessed`，确保path单元不会循环触发。部署用`tools/deploy_plasma_diagnostics.py`，只在显式`--restart-session`时重启桌面。
 - 会话入口服务改为`StandardOutput=journal`、`SyslogIdentifier=moto-plasma-session`；Android侧`moto-plasma log`在容器运行时读journal。
 - 验收：`systemd-run --user sleep`与`kalk`（KDE应用，经KCrash）分别收到SIGSEGV，systemd记录`Result: core-dump`，各生成报告与journal条目；kalk的core为268MB，zstd后7.4MB，收集用4.7秒。`crashes`/`crash_detail`已读取报告和`/var/crash`（apport的Python异常报告）。KWin/plasmashell重启后的core上限为2GiB。
 - 符号：Ubuntu库没有随系统安装调试符号，帧多为`??`，但Qt/GLib导出符号可读。debuginfod需`-iex 'set debuginfod enabled on'`，直连下载很慢，经代理超时，因此没有放进自动收集流程；按需符号化留待后续。
@@ -102,7 +102,7 @@ Claude Code原生支持MCP工具，Agent可以直接获得带参数模式的工�
 
 ## P2：统一追踪
 
-- 容器内挂载tracefs：systemd自带`sys-kernel-tracing.mount`因`ConditionVirtualization=!lxc`在容器中跳过；`plasma/diagnostics/sys-kernel-tracing.conf`只清空该条件，复用标准单元，开机即挂载。容器进程为真实root（无user namespace），`trace_marker`本身在Android上即全体可写，没有扩大权限面。
+- 容器内挂载tracefs：systemd自带`sys-kernel-tracing.mount`因`ConditionVirtualization=!lxc`在容器中跳过；`system/diagnostics/sys-kernel-tracing.conf`只清空该条件，复用标准单元，开机即挂载。容器进程为真实root（无user namespace），`trace_marker`本身在Android上即全体可写，没有扩大权限面。
 - `tools/rungic_trace.py`：Android perfetto v49一次录制sched、cpu/gpu频率、dma_fence、atrace（gfx/view/input）、SurfaceFlinger帧时间线与全体进程名；容器进程以全局PID出现（例如kwin_wayland、plasmashell），与SurfaceFlinger、APK在同一时间线。录制期间经D-Bus打开KWin `/FTrace`，结束恢复原状态。
 - 本机为user版，perfetto只接受其白名单ftrace事件，KGSL事件被静默忽略。改为同时建立tracefs实例`moto_gpu`（`trace_clock=boot`与perfetto一致，`record-tgid`），记录`adreno_cmdbatch_queued/submitted/retired`、上下文切换与功率级别。`retired`带GPU常开计数器的start/retire（19.2MHz；实测29295 ticks=1.53ms，与事件时间差1.62ms一致），可得每次提交的GPU执行时间；`queued`的提交线程tgid给出上下文所属进程。
 - `tools/rungic_trace_report.py`（trace_processor）：APK `queueBuffer`（主机提交）、SurfaceFlinger显示帧、KWin标记区间、各进程CPU、各进程GPU时间与GPU忙碌率、GPU频率分布。本机SurfaceView为原生EGL，SurfaceFlinger帧时间线没有该层的逐帧条目，因此以`queueBuffer`为主机提交时间。
@@ -118,7 +118,7 @@ Claude Code原生支持MCP工具，Agent可以直接获得带参数模式的工�
 - 设备端`moto-a11y`（随diagnostics安装）：apps、tree、find、act（AT-SPI动作）、text、windows。Wayland客户端不知道全局坐标，`windows`用一次性KWin脚本（D-Bus `/Scripting`）取窗口全局逻辑几何，经journal读回。主机侧`ui_find/ui_press/ui_tap/ui_set_text`；无动作元素（启动器图标、Kalk自绘键盘）按“窗口原点+元素中心”×（物理/逻辑宽度）经Android input点击。
 - 验收：打开抽屉后按名称找到Calculator并点击，kalk启动并注册；在Kalk中按名称点C、7、+、8、=，截屏显示15。未使用任何固定坐标。
 - 发现Plasma Mobile导航栏三个按钮无无障碍名称（辅助技术与Agent都无法区分）。上游master已给`NavigationPanelAction`增加`accessibleText`并绑定`Accessible.name`；已原样回移到vendor 6.6.5。mobileshell的qmldir使用`prefer :/…`，QML编进插件资源，因此在手机上以CMake单独构建`mobileshellplugin`与`org.kde.plasma.mobile.taskpanel`（`tools/build_on_device.py plasma-mobile targets`），经dpkg-divert替换发行版文件，原件保留为`.distrib`。重启会话后三个按钮名称为Task switcher、Home、Close app，均有Press动作。
-- 构建环境：Ubuntu以打包补丁放宽Plasma内部依赖版本，KPipeWire为6.6.4而上游6.6.5要求同版本；未改vendor源码，改用`plasma/build-shims/KPipeWire`版本垫片（仅接受6.6.x）。容器新增只含源码索引的`/etc/apt/sources.list.d/moto-build-src.sources`，以`apt-get build-dep plasma-mobile`安装构建依赖。
+- 构建环境：Ubuntu以打包补丁放宽Plasma内部依赖版本，KPipeWire为6.6.4而上游6.6.5要求同版本；未改vendor源码，改用`desktop/build-shims/KPipeWire`版本垫片（仅接受6.6.x）。容器新增只含源码索引的`/etc/apt/sources.list.d/moto-build-src.sources`，以`apt-get build-dep plasma-mobile`安装构建依赖。
 
 ## P4：交付、完整性与崩溃链（2026-09-26）
 

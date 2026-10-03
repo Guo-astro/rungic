@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 """Android-owned device capabilities for the Plasma session (private Unix IPC)."""
+import os
 import configparser
 import gettext
 import json
@@ -8,7 +9,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-SOCKET = '/mnt/android-wayland/platform.sock'
+SOCKET = os.environ.get('RUNGIC_PLATFORM_SOCKET', '/mnt/android-wayland/platform.sock')
 # Follows the Plasma desktop language (LANGUAGE/LANG of the session).
 _translation = gettext.translation('rungic-platform', localedir='/usr/share/locale', fallback=True)
 _, pgettext = _translation.gettext, _translation.pgettext
@@ -177,6 +178,7 @@ class DeviceApp(Adw.Application):
         future=self.pool.submit(read)
         def done(f):
             try:data,error=f.result(),None
+            except OSError:data,error=None,_('Cannot reach the Android side. Open Rungic on the phone.')
             except Exception as e:data,error=None,str(e)
             GLib.idle_add(self.update, data, error)
         future.add_done_callback(done)
@@ -185,7 +187,11 @@ class DeviceApp(Adw.Application):
     def update(self, data, error):
         self.busy=False
         if not self.window:return False
-        if error:self.message.set_description(error);return False
+        if error:
+            # What was read before may no longer be true: show nothing rather than old values.
+            self.message.set_description(error)
+            for row in self.rows.values():row.set_subtitle(_('Not available'))
+            return False
         self.message.set_description('')
         self.changing=True
         self.orientation.set_selected(['system','portrait','landscape'].index(data.get('orientation','portrait')))

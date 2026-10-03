@@ -8,12 +8,13 @@ before the op makes it poll every `legacy` seconds instead, as the services did.
 Topics: network, telephony, bluetooth, capture (see HostEvents.java in the app).
 Installed as rungic_host_watch.
 """
+import os
 import json
 import socket
 import threading
 import time
 
-SOCKET = '/mnt/android-wayland/platform.sock'
+SOCKET = os.environ.get('RUNGIC_PLATFORM_SOCKET', '/mnt/android-wayland/platform.sock')
 
 
 def _request(request, timeout):

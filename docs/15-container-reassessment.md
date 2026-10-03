@@ -1,6 +1,6 @@
 # Docker / LXC 重新评估（2026-09-22）
 
-> 后续进展：LXC 第一阶段及直接 Docker/Compose 均已实机运行，见 [17-lxc-installation.md](17-lxc-installation.md) 和 [19-docker-installation.md](19-docker-installation.md)。当前 Docker 保持 SELinux Enforcing，已解决存储、代理、基础 bridge/DNS/端口发布；下文是部署前的评估记录，不能当作最新状态。
+> 后续进展：LXC 第一阶段及直接 Docker/Compose 均已实机运行，见 [17-lxc-installation.md](17-lxc-installation.md) 和 19 篇（Android 侧 Docker，2026-09-29 删除，见 git 历史；现为容器内 rootless Docker，见 [85 篇](85-lxc-rootless-docker.md)）。当前 Docker 保持 SELinux Enforcing，已解决存储、代理、基础 bridge/DNS/端口发布；下文是部署前的评估记录，不能当作最新状态。
 
 结论：这台设备已有原生容器的实验基础，Docker hello-world 在之前的定制内核上跑通过。但当前原厂 Android 16 精简/Magisk v3 恢复了原厂 boot，缺少 PID、IPC、USER namespace，当前不能按常规方式运行 Docker/LXC。先恢复容器内核基线，再解决运行环境、SELinux、存储、联网和资源限制。
 

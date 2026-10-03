@@ -1,3 +1,4 @@
+# covers: install.device-spec/E1
 """Reject wrong-device and incomplete Motorola archives before extraction."""
 
 import hashlib

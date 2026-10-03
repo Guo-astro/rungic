@@ -50,6 +50,7 @@ class CodexLoginTests(unittest.TestCase):
     def events(self):
         return [c.args[0] for c in self.agent.emit_raw.call_args_list if c.args[0]['type'] == 'account']
 
+    # covers: agent.sign-in/E2
     def test_second_tap_shows_the_same_code(self):
         first = self.agent.codex_login('chatgpt')
         clock[0] += 60
@@ -57,17 +58,20 @@ class CodexLoginTests(unittest.TestCase):
         self.assertEqual((first['userCode'], second['userCode']), ('CODE-1', 'CODE-1'))
         self.assertEqual(self.codex.started, 1)          # Codex never replaced the first sign-in
 
+    # covers: agent.sign-in/E2
     def test_an_expired_code_is_asked_again(self):
         self.agent.codex_login('chatgpt')
         clock[0] += 15 * 60
         self.assertEqual(self.agent.codex_login('chatgpt')['userCode'], 'CODE-2')
 
+    # covers: agent.sign-in/E2
     def test_a_replaced_sign_in_ending_is_not_shown(self):
         self.agent.login = {'loginId': 'login-2', 'userCode': 'CODE-2', 'verificationUrl': '', 'started': clock[0]}
         self.agent.login_completed({'loginId': 'login-1', 'success': False, 'error': 'Login was not completed'})
         self.assertEqual(self.events(), [])
         self.assertEqual(self.agent.login['loginId'], 'login-2')
 
+    # covers: agent.sign-in/E2
     def test_the_current_sign_in_ending_is_shown(self):
         self.agent.codex_login('chatgpt')
         self.agent.login_completed({'loginId': 'login-1', 'success': True})
@@ -81,18 +85,21 @@ class CodexLoginTests(unittest.TestCase):
         self.agent.login_completed({'loginId': 'login-2', 'success': False, 'error': 'expired'})
         self.assertEqual(self.events()[-1]['error'], 'expired')
 
+    # covers: agent.sign-in/E2
     def test_cancel_reaches_codex(self):
         self.agent.codex_login('chatgpt')
         self.agent.cancel_codex_login()
         self.assertIn(('account/login/cancel', {'loginId': 'login-1'}), self.codex.calls)
         self.assertIsNone(self.agent.login)
 
+    # covers: agent.sign-in/E2
     def test_a_cancelled_sign_in_ending_is_not_a_failure_on_the_page(self):
         self.agent.codex_login('chatgpt')
         self.agent.cancel_codex_login()
         self.agent.login_completed({'loginId': 'login-1', 'success': False, 'error': 'Login was not completed'})
         self.assertEqual(self.events(), [])
 
+    # covers: agent.sign-in/E3
     def test_api_key_forgets_the_device_code(self):
         self.agent.codex_login('chatgpt')
         self.agent.codex_login('apiKey')

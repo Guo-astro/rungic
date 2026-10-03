@@ -81,13 +81,13 @@ public:
     // The TV's view of desktop mode wants a picture: a fresh stream, which starts with a frame (a
     // second consumer of the running one waited for the screen to change, up to a minute).
     Q_INVOKABLE void setTvShown(bool shown);
+    // Desktop mode's window is fullscreen (or no longer): marked for rungic-desktop-mode status, which
+    // the quick setting shows. Nothing for an assistant's screen.
+    Q_INVOKABLE void setFullscreen(bool fullscreen);
     // Typing on the phone into the focused field: text as an input method commits it, and keys
     // (Linux key codes: Enter, Backspace, arrows...) pressed or released.
     Q_INVOKABLE void typeText(const QString &text);
     Q_INVOKABLE void key(int code, bool pressed);
-    // Fullscreen on the phone: the Android host presents the output itself (zero-copy), and this
-    // window hides and stops recording until it leaves fullscreen.
-    Q_INVOKABLE void fullscreen();
     // Turn the screen off and quit.
     Q_INVOKABLE void close();
 
@@ -104,6 +104,7 @@ private:
     void update();
     void setStatus(const QString &status);
     QString op() const;     // the platform bridge's request for this screen
+    QString fullscreenMark() const;
     void readActivity();
     void startWorkspaceStream();
     void stopWorkspaceStream();
@@ -120,7 +121,6 @@ private:
     bool m_enabled = true;
     bool m_onTv = false;
     bool m_prompting = false;
-    bool m_fullscreen = false;
     QFileSystemWatcher m_activityWatcher;
     QString m_activityPath;
     QString m_activityState;
@@ -186,8 +186,6 @@ class Director : public QObject
     Q_PROPERTY(int focus READ focus NOTIFY changed)
     // 0 standard, 1 enlarged (thumbnails a thin strip), 2 solo (the focus only).
     Q_PROPERTY(int level READ level NOTIFY changed)
-    // The director is fullscreen on the phone (the Android app shows it; this window hides).
-    Q_PROPERTY(bool fullscreenShown READ fullscreenShown NOTIFY changed)
 
 public:
     explicit Director(QObject *parent = nullptr);
@@ -198,9 +196,6 @@ public:
     int focus() const { return m_focus; }
     int level() const { return m_level; }
     bool empty() const { return m_screens.isEmpty(); }
-    bool fullscreenShown() const { return m_fullscreen; }
-    // The director fullscreen on the phone (docs/58).
-    Q_INVOKABLE void fullscreen();
 
     Q_INVOKABLE void setFocus(int workspace);
     // Standard, enlarged, solo, standard ...
@@ -218,7 +213,6 @@ private:
     bool m_boardShown = false;
     int m_focus = 0;
     int m_level = 0;
-    bool m_fullscreen = false;
     int m_version = -1;
     QTimer m_poll;
 };

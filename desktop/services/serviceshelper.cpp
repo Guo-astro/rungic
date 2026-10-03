@@ -63,8 +63,8 @@ public Q_SLOTS:
 };
 
 // args: group (an id in the policy), enabled (bool). A 'masked' group is unmasked or masked (and
-// stopped); a 'disabled' group has its 'start' units enabled and started, or all its units
-// disabled and stopped.
+// stopped); a 'disabled' or 'enabled' group (optional: off or on by default) has its 'start' units
+// enabled and started, or all its units disabled and stopped.
 KAuth::ActionReply ServicesHelper::set(const QVariantMap &args)
 {
     QFile file(POLICY);
@@ -85,7 +85,9 @@ KAuth::ActionReply ServicesHelper::set(const QVariantMap &args)
     const auto system = strings(group.value(u"system"_s));
     const auto user = strings(group.value(u"user"_s));
     QString error;
-    if (group.value(u"default"_s).toString() == u"disabled") {
+    // Optional services (off or on by default) are enabled and disabled; the others masked and unmasked.
+    const auto kind = group.value(u"default"_s).toString();
+    if (kind == u"disabled" || kind == u"enabled") {
         if (!system.isEmpty()) {
             error = enabled ? systemctl(QStringList{u"enable"_s, u"--now"_s, u"--"_s} + strings(group.value(u"start"_s)))
                             : systemctl(QStringList{u"disable"_s, u"--now"_s, u"--"_s} + system);

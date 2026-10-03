@@ -27,6 +27,8 @@ class UserDirsTests(unittest.TestCase):
         self.assertEqual(result.returncode == 0, success, result.stderr)
         return result
 
+    # covers: apps.shared-storage/E1
+    # covers: install.user-dirs/E1
     def test_fresh_home_and_repeat(self):
         self.run_helper()
         first = (self.home / '.config/user-dirs.dirs').read_text()
@@ -41,6 +43,8 @@ class UserDirsTests(unittest.TestCase):
         self.assertIn('XDG_PICTURES_DIR="$HOME/Pictures"', first)
         self.assertEqual(sum(line.startswith('XDG_') for line in first.splitlines()), 8)
 
+    # covers: apps.shared-storage/E2
+    # covers: install.user-dirs/E2
     def test_existing_content_and_link_preserved(self):
         (self.home / 'Downloads').mkdir()
         (self.home / 'Downloads/keep.txt').write_text('user data')
@@ -51,11 +55,15 @@ class UserDirsTests(unittest.TestCase):
         self.assertFalse((self.home / 'Downloads').is_symlink())
         self.assertEqual(os.readlink(self.home / 'Pictures'), 'Albums')
 
+    # covers: apps.shared-storage/E3
+    # covers: install.user-dirs/E3
     def test_unmounted_storage_refused_without_false_directories(self):
         self.mountpoint.write_text('#!/bin/sh\nexit 1\n')
         self.run_helper(False)
         self.assertEqual(list(self.home.iterdir()), [])
 
+    # covers: apps.shared-storage/E2
+    # covers: install.user-dirs/E2
     def test_conflicting_file_is_not_deleted(self):
         (self.home / 'Pictures').write_text('keep')
         self.run_helper(False)

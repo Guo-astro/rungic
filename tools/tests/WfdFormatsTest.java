@@ -26,6 +26,7 @@ public final class WfdFormatsTest {
         for(byte[] p:packets){b.write(ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN).putInt(0).putInt(0).putInt(p.length).putInt(p.length).array());b.write(p);}
         return b.toByteArray();
     }
+    // covers: desktop-mode.cast-video-modes/E4
     public static void main(String[] args)throws Exception{
         List<WfdFormats.Codec> codecs=WfdFormats.parse(OFFER,true);
         check(codecs.size()==1,"R2 codec");

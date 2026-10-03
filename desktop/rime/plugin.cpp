@@ -33,13 +33,16 @@ class RimeInputMethod : public QVirtualKeyboardAbstractInputMethod {
     QStringList candidates;
     bool composing = false;
 
-    bool ensureSession() {
+    bool ensureSession(bool sensitive) {
+        // A field whose text must not be remembered gets a guest session, which does not learn:
+        // librime has no option to stop a session with the user dictionary from learning.
+        if (session.id && sensitive && session.shared && !composing) { rime.close(session); emit sessionChanged(); }
         // A guest session moves to the user dictionary between words once it is free again.
-        if (session.id && !session.shared && !composing) {
+        if (session.id && !sensitive && !session.shared && !composing) {
             RimeRuntime::Session shared;
             if (rime.open(shared, true)) { rime.close(session); session = shared; emit sessionChanged(); }
         }
-        if (!session.id && rime.open(session)) emit sessionChanged();
+        if (!session.id && (sensitive ? rime.openGuest(session) : rime.open(session))) emit sessionChanged();
         return session.id;
     }
     void release() {
@@ -135,8 +138,7 @@ public:
         }
         // Editing keys reach Rime only during a composition; they need no session otherwise.
         if (!composing && symbol > 0xff00) return false;
-        if (!ensureSession()) return false;
-        api->set_option(session.id, "_no_learning", hints.testFlag(Qt::ImhSensitiveData));
+        if (!ensureSession(hints.testFlag(Qt::ImhSensitiveData))) return false;
         const bool handled = api->process_key(session.id, symbol, 0);
         refresh();
         used();

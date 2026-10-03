@@ -1600,7 +1600,10 @@ class VoiceAgent:
         if self.talking:
             log('reply audio dropped while talking')
             return False
-        if self.muted or not self.prefs['speak']:
+        # Speak off ("朗读回答") silences replies, not a reading the user asked for ("朗读" on one answer):
+        # asked and not begun, or its segment still going.
+        reading = self.aloud_pending or bool(self.aloud_items)
+        if self.muted or not (self.prefs['speak'] or reading):
             return False
         data = base64.b64decode(audio['data'])
         rate = audio.get('sampleRate', RATE)
@@ -3170,7 +3173,7 @@ def platform_request(request, timeout=1.0):
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as bridge:
             bridge.settimeout(timeout)
-            bridge.connect('/mnt/android-wayland/platform.sock')
+            bridge.connect(os.environ.get('RUNGIC_PLATFORM_SOCKET', '/mnt/android-wayland/platform.sock'))
             bridge.sendall(json.dumps(request).encode() + b'\n')
             reply = b''
             while not reply.endswith(b'\n'):

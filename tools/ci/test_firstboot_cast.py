@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# covers: install.standalone-install/E7
 """Run firstboot's optional casting install (docs/58) in a temporary path sandbox.
 
 The archive holds the host seed's rungic-wfd entries as build_host_seed.py lays
@@ -73,6 +74,7 @@ class FirstbootCastTest(unittest.TestCase):
         script = f"set -eu\nseed={seed}\n{body}wait\necho section-done\n"
         return subprocess.run(["sh", "-c", script], env=self.env, capture_output=True, text=True)
 
+    # covers: desktop-mode.cast-install/E1
     def test_clean_data(self):
         result = self.run_section(self.seed())
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -88,6 +90,7 @@ class FirstbootCastTest(unittest.TestCase):
         self.assertFalse((self.root / "data/adb/.rungic-wfd-stage").exists())
         self.assertEqual(self.starts.read_text().split(), ["setsid"])
 
+    # covers: desktop-mode.cast-install/E2
     def test_partial_install_keeps_state(self):
         wfd = self.root / "data/adb/rungic-wfd"
         (wfd / "run").mkdir(parents=True)
@@ -97,6 +100,7 @@ class FirstbootCastTest(unittest.TestCase):
         self.assertEqual((wfd / "last-sink").read_text(), "66:57:25:45:fd:a5\nTV\n")
         self.assertTrue(os.access(wfd / "rungic-cast", os.X_OK))
 
+    # covers: desktop-mode.cast-install/E1
     def test_incomplete_seed_is_optional(self):
         result = self.run_section(self.seed(with_jar=False))
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -105,6 +109,7 @@ class FirstbootCastTest(unittest.TestCase):
         self.assertFalse((self.root / "data/adb/rungic-wfd").exists())
         self.assertFalse(self.starts.exists())
 
+    # covers: desktop-mode.cast-install/E2
     def test_healthy_install_is_left_alone(self):
         seed = self.seed()
         self.assertEqual(self.run_section(seed).returncode, 0)
@@ -117,6 +122,7 @@ class FirstbootCastTest(unittest.TestCase):
         self.assertEqual(watch.read_text(), original)
         self.assertFalse(self.starts.exists())
 
+    # covers: desktop-mode.cast-install/E2
     def test_damaged_jar_and_missing_service_are_repaired(self):
         seed = self.seed()
         self.assertEqual(self.run_section(seed).returncode, 0)

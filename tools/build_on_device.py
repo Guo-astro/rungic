@@ -43,6 +43,39 @@ import rungic_device
 from rungic_device import WORKSPACE
 
 BASE = '/root/rungic-build'
+# This project's own packages build in PACKAGE_BASE/<name> (rungic_package.py); one built in another
+# image (a Flatpak SDK) in BASE/packages/<name>.
+PACKAGE_BASE = '/root/rungic-packages'
+# Build trees are kept between builds, so a build compiles only what changed (sync above;
+# rungic_package.sync_script). One not built for CACHE_DAYS is removed before the next build
+# (expire): its marker MARKER says when it was last used.
+CACHE_DAYS = 30
+MARKER = '.rungic-last-build'
+
+
+def cache_dirs():
+    """The build trees expire() may remove: a component's (packages/<name>) and a package's
+    (packaging/<name>); nothing else under BASE (pools, shims, tools)."""
+    components = sorted(p.parent.name for p in (WORKSPACE / 'packages').glob('*/recipe.json'))
+    own = sorted(p.parent.name for p in (WORKSPACE / 'packaging').glob('*/package.json'))
+    return ([f'{BASE}/{c}' for c in components] + [f'{PACKAGE_BASE}/{n}' for n in own]
+            + [f'{BASE}/packages/{n}' for n in own])
+
+
+def expire_script(dirs, days=CACHE_DAYS):
+    """Shell that removes each of `dirs` last built more than `days` ago (its MARKER's time, else
+    the directory's own for a tree from before the markers) and says which."""
+    quoted = ' '.join(shlex.quote(d) for d in dirs)
+    return (f'now=$(date +%s); for d in {quoted}; do [ -d "$d" ] || continue; '
+            f't=$(stat -c %Y "$d/{MARKER}" 2>/dev/null || stat -c %Y "$d"); '
+            f'if [ $((now - t)) -gt {days * 86400} ]; then rm -rf "$d" && echo "build cache expired: $d"; fi; done; true')
+
+
+def expire():
+    """Remove the build trees on the build host not built for CACHE_DAYS days."""
+    out = host.run(expire_script(cache_dirs()), timeout=600).stdout.strip()
+    if out:
+        print(out, flush=True)
 # Line tables only (-g1): enough for symbolized backtraces (docs/61) at a fraction of -g2's
 # compile memory; debhelper strips the packages and puts the symbols into -dbgsym packages
 # for the release repository.
@@ -92,7 +125,12 @@ class MacMini:
     with scutil each session; neither ssh commands nor containers pick it up by themselves): every
     command in the container gets http(s)_proxy, a local proxy reached as host.docker.internal."""
     name, jobs = 'macmini', 10
-    SSH = ['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', 'choukevin@macmini.wire.net']
+    # One connection, kept ten minutes and shared by every command: a new one takes about 3.3 s to the
+    # Mac mini, a shared one 0.6 s, and a package build makes dozens (most of a build's time was ssh).
+    # The socket is under the runtime directory: a short path of this user only.
+    SSH = ['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '-o', 'ControlMaster=auto',
+           '-o', f"ControlPath={os.environ.get('XDG_RUNTIME_DIR') or '/tmp'}/rungic-ssh-%C", '-o', 'ControlPersist=600',
+           'choukevin@macmini.wire.net']
     DOCKER = '/usr/local/bin/docker'
     CONTAINER = 'rungic-build'
     # The phone reaches the build container directly with its own restricted key
@@ -139,17 +177,24 @@ class MacMini:
             raise rungic_device.DeviceError(f'Exit {result.returncode}: {text}')
         return result
 
+    # Build context: the Dockerfile and the debug symbol source it copies (the phone's own file).
+    IMAGE_FILES = {'Dockerfile': WORKSPACE / 'tools/pq/arm64-host.Dockerfile',
+                   'rungic-ddebs.sources': WORKSPACE / 'system/config/etc/apt/rungic-ddebs.sources',
+                   'arm64-host-packages.txt': WORKSPACE / 'tools/pq/arm64-host-packages.txt'}
+
+    @classmethod
+    def image(cls):
+        """The build image's tag: its build context's hash (tools/system_test.py builds on it too)."""
+        digest = hashlib.sha256()
+        for name, path in cls.IMAGE_FILES.items():
+            digest.update(name.encode() + b'\0' + path.read_bytes())
+        return 'rungic-arm64-host:' + digest.hexdigest()[:12]
+
     def ensure(self):
         if self.ready:
             return
-        # Build context: the Dockerfile and the debug symbol source it copies (the phone's own file).
-        files = {'Dockerfile': WORKSPACE / 'tools/pq/arm64-host.Dockerfile',
-                 'rungic-ddebs.sources': WORKSPACE / 'system/config/etc/apt/rungic-ddebs.sources',
-                 'arm64-host-packages.txt': WORKSPACE / 'tools/pq/arm64-host-packages.txt'}
-        digest = hashlib.sha256()
-        for name, path in files.items():
-            digest.update(name.encode() + b'\0' + path.read_bytes())
-        image = 'rungic-arm64-host:' + digest.hexdigest()[:12]
+        files = self.IMAGE_FILES
+        image = self.image()
         current = self.ssh(f"{self.DOCKER} inspect -f '{{{{.Config.Image}}}} {{{{.State.Running}}}}' {self.CONTAINER} "
                            f"2>/dev/null || true", 60).stdout.decode().split()
         if current[:1] != [image]:
@@ -283,6 +328,7 @@ def stage(component):
 
 def sync(component):
     work = f'{BASE}/{component}'
+    expire()
     host.run(f'rm -rf {work}/incoming')
     host.put_tar(stage(component), f'{work}/incoming')
     # Keep obj-* (build output) and debhelper state; everything else mirrors the stage.
@@ -297,6 +343,7 @@ rsync -a --checksum --no-times --delete --itemize-changes --exclude '/obj-*' --e
 rm -rf {BASE}/cmake-shims && mv {work}/incoming/cmake-shims {BASE}/cmake-shims
 if [ -f {work}/incoming/meson-options ]; then mv {work}/incoming/meson-options {work}/meson-options; fi
 rm -rf {work}/incoming
+touch {work}/{MARKER}
 ''', timeout=600))
 
 

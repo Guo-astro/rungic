@@ -59,6 +59,7 @@ def gdbus(address, *args):
 
 
 @pytest.mark.skipif(not shutil.which('dbus-daemon') or not shutil.which('gdbus'), reason='needs dbus-daemon and gdbus')
+# covers: desktop-mode.independent-desktop/E3
 def test_calls_errors_and_signals_reach_the_users_service(tmp_path):
     user, user_bus = bus(tmp_path, 'user')
     desktop, desktop_bus = bus(tmp_path, 'desktop')

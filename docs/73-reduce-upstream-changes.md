@@ -119,6 +119,8 @@ plasma-settings `+rungic3`删除`android-hardware-settings`补丁：蜂窝、蓝
 
 未覆盖：SIM PIN输入、选网、APN编辑与数据漫游开关留在Android设置（模拟服务明确返回不支持）；配对需要在Android弹窗确认，未用实际设备配对；手机无SIM，移动数据开关只验证了无SIM路径。
 
+2026-10-03补记：离线测试`tools/tests/test_platform_bridges.py`发现移动数据连接的`Update`改APN时返回成功、实际什么也没改（只比较了漫游和自动连接）；现在改APN同样返回`NotSupported`，修复前该测试失败、修复后通过（离线，非实机）。
+
 ### 第五阶段（2026-09-27）：不可行，维持现状
 
 详见[74篇](research/74-vaapi-feasibility.md)（只读源码调研）。VA-API驱动本身做得出来（同类设备已有先例），但替换不了目标中的三项：Firefox在glxtest能力探测处就因KGSL的软件EGL设备而强制关闭VA-API硬解，`force-enabled`盖不过；Firefox 156在Linux上没有VA-API编码路径，WebCodecs/WebRTC硬编仍依赖私有FFmpeg；RDD沙箱不放行`codec.sock`与`/dev/dma_heap`，预连仍然需要。唯一可替换的Snapshot补丁（17行）需要上千行驱动并把msm_drm显示节点映射进容器，不划算。FFmpeg的2条补丁、Snapshot补丁与Firefox的`LD_PRELOAD`保留。VA-API驱动若要做，应作为给mpv、FFmpeg命令行、GStreamer va、Chromium的新增能力单独立项，并与驱动直接调用原厂V4L2的做法比较。
@@ -192,3 +194,15 @@ Smithay/Winit固定的是**Winland当时带入的子树**，不是仅凭Cargo版
 4. **工具回归**：`tools/test_pq.py`共18项通过，包括6项新增的实际本地Git子树归档及固定时间戳、原整树归档兼容性、缓存选择、树哈希拒绝、排除路径升级检查与越界路径拒绝。四个新配方的补丁字段校验通过。
 
 原始清单、源码差异、构建日志、测试DEB位于`.work/migration/20260930-pq/`；可同步的基线与校验摘要在`provenance/source-patch-migration-20260930.json`。本轮是源码管理及构建验收，不是新一轮手机部署、触摸/显示/投屏实机验收，也没有重新验证APK安装；运行行为继续引用原对应版本的实机记录。
+
+## 下沉的边界条件（自原 54 篇迁入）
+
+54 篇（vendor/ 时期）逐项判断过哪些修改能下沉到共享后端，方案已由本篇执行。下沉时不能跳过的条件仍然有效：
+
+- **不谎报能力、不伪造设备**：Android 的 30/60/90/120 刷新率切换不是 VRR/Adaptive-Sync，不能为免改界面而宣布 VRR；KGSL 不是 DRM render node，不能伪造 DRM 设备或 DMA-BUF 反馈的设备身份（research/74 的 Firefox VA-API 结论即受此约束）。宣布支持一个协议不等于实现了它。
+- **同步不能靠删**：KWin 的两处 `glFinish` 只有在 Android/GL/Vulkan 双方真实传递并等待兼容 fence 后才能去掉；不能假定 KGSL 支持 DRM syncobj。去掉前检查破帧、提前复用和泄漏，并量化延迟与 CPU/GPU 占用。
+- **共享一个头文件不等于职责统一**：显示控制在 KWin 和 KScreen 各有入口，下沉到统一后端须处理事务、异步状态、回滚和宿主变化。
+- **插件机制要核实是否真的能外置**：FFmpeg 8.1.2 的 codec_list 是构建时生成的静态列表；libcamera 0.7.0 的 Pipeline Handler 用内部 API 编进库里；Mesa 的 GBM 外部 backend 接口存在，但 KGSL 上的设备发现、导入导出、format/modifier、跨进程同步都未打通。
+- **权限不靠放宽 SELinux**：SHM 与 DMA heap 的访问保持窄范围修改，验证来源标签、映射/读写、释放和同接口的其他客户端。
+- **独立 KCM 不能替代尚未实现的标准服务**：Settings 里的 Android 网络/蓝牙入口可抽成插件，但普通网络状态仍要补 NetworkManager 等标准接口；模块发现、分类与隐藏要回归。
+- **应用自身的缺陷留在应用**：Qt PulseAudio 的错误 maxlength、Plasma Camera 改写已提交帧的元数据等，不要求后端迁就。

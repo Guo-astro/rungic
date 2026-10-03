@@ -15,7 +15,7 @@ import unittest
 sys.dont_write_bytecode = True
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 os.environ.setdefault('QT_QUICK_BACKEND', 'software')
-from PySide6.QtCore import QObject, QUrl, Slot
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, QUrl, Slot
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlComponent, QQmlEngine, QQmlExpression
 from PySide6.QtQuick import QQuickItem
@@ -86,6 +86,10 @@ class CallCardsTest(unittest.TestCase):
     def tearDown(self):
         self.model.deleteLater()
         self.engine.deleteLater()
+        # processEvents() leaves deferred deletions alone: the model (and its 15 s sweep Timer) outlived
+        # the test and fired later into a context whose Python i18n object was gone, a segfault in
+        # whichever Qt test ran next once the suite took long enough between them.
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
         APP.processEvents()
 
     def js(self, code):
@@ -113,6 +117,7 @@ class CallCardsTest(unittest.TestCase):
                              'backend':'cellular','number':'10000','started':100,'connectedAt':125,
                              'privateVoiceInstructions':False,'independentMonitor':False})
 
+    # covers: agent.call-card/E3
     def test_one_card_owns_status_transcript_errors_and_result(self):
         self.start(contact='客服')
         self.start(contact='客服')
@@ -130,6 +135,7 @@ class CallCardsTest(unittest.TestCase):
         self.assertEqual(self.js('model.entries.get(0).steps.get(2).kind'), 'error')
         self.assertFalse(self.js('model.inCall'))
 
+    # covers: agent.call-card/E4
     def test_old_call_cannot_control_new_card_state(self):
         self.start()
         self.event('call-ended',callId='one',time=140)
@@ -142,6 +148,7 @@ class CallCardsTest(unittest.TestCase):
         self.assertEqual(self.row(0)['status'], 'done')
         self.assertTrue(self.js('model.inCall'))
 
+    # covers: agent.call-card/E3
     def test_history_reconnect_restores_only_matching_call(self):
         history = [{'type':'call-started','callId':'old','backend':'wechat','time':100},
                    {'type':'call-state','callId':'old','state':'connected','time':110}]
@@ -154,6 +161,7 @@ class CallCardsTest(unittest.TestCase):
         self.snapshot('new')
         self.assertEqual(self.js('model.entries.count'), 2)
 
+    # covers: agent.call-card/E3
     def test_same_call_restored_without_duplicate(self):
         self.load([{'type':'call-started','callId':'one','backend':'cellular','time':100}])
         self.snapshot()
@@ -162,11 +170,13 @@ class CallCardsTest(unittest.TestCase):
         self.assertFalse(self.row()['privateVoiceInstructions'])
         self.assertFalse(self.row()['independentMonitor'])
 
+    # covers: agent.call-card/E3
     def test_call_from_other_conversation_does_not_create_card(self):
         self.load([], conversation='different')
         self.snapshot()
         self.assertEqual(self.js('model.entries.count'), 0)
 
+    # covers: agent.call-card/E3
     def test_legacy_wechat_history_still_loads(self):
         self.load([{'type':'call-started','contact':'旧联系人','time':10},
                    {'type':'call-transcript','role':'agent','text':'你好','time':12},
@@ -175,6 +185,7 @@ class CallCardsTest(unittest.TestCase):
         self.assertEqual(self.row()['output'], '旧总结')
         self.assertEqual(self.js('model.entries.get(0).steps.count'), 1)
 
+    # covers: agent.call-card/E3
     def test_actual_card_loads_with_shared_design_controls(self):
         # Use the actual QML controls; replace only native platform/DBus singletons.
         with tempfile.TemporaryDirectory(prefix='rungic-call-qml-') as directory:

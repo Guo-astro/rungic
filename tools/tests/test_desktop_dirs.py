@@ -28,6 +28,7 @@ def setup(tmp_path):
     return tmp_path / 'state'
 
 
+# covers: desktop-mode.independent-desktop/E2 desktop-mode.clipboard/E3
 def test_shared_entries_are_links_and_private_ones_absent(tmp_path, monkeypatch):
     d = load(tmp_path, monkeypatch)
     state = setup(tmp_path)
@@ -40,6 +41,7 @@ def test_shared_entries_are_links_and_private_ones_absent(tmp_path, monkeypatch)
     assert not os.path.lexists(state / 'data/klipper')             # its clipboard history apart
 
 
+# covers: desktop-mode.independent-desktop/E2
 def test_a_file_made_on_the_desktop_becomes_the_users_once_left_alone(tmp_path, monkeypatch):
     d = load(tmp_path, monkeypatch)
     state = setup(tmp_path)
@@ -54,6 +56,7 @@ def test_a_file_made_on_the_desktop_becomes_the_users_once_left_alone(tmp_path, 
     assert made.is_symlink()
 
 
+# covers: desktop-mode.independent-desktop/E2
 def test_private_and_lock_files_stay(tmp_path, monkeypatch):
     d = load(tmp_path, monkeypatch)
     state = setup(tmp_path)
@@ -66,6 +69,7 @@ def test_private_and_lock_files_stay(tmp_path, monkeypatch):
     assert (tmp_path / 'config/kwinrc').read_text() == '[Phone]\n'
 
 
+# covers: desktop-mode.independent-desktop/E2
 def test_the_phones_new_and_removed_files_follow(tmp_path, monkeypatch):
     d = load(tmp_path, monkeypatch)
     state = setup(tmp_path)
@@ -78,6 +82,7 @@ def test_the_phones_new_and_removed_files_follow(tmp_path, monkeypatch):
     assert not os.path.lexists(state / 'config/dolphinrc')
 
 
+# covers: desktop-mode.independent-desktop/E2
 def test_rebuilding_keeps_the_private_files(tmp_path, monkeypatch):
     d = load(tmp_path, monkeypatch)
     state = setup(tmp_path)

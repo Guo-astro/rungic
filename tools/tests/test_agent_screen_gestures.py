@@ -116,6 +116,7 @@ class Gestures(unittest.TestCase):
         frames.append([(0, 'release', a, Y), (1, 'release', b, Y)])
         return frames
 
+    # covers: desktop-mode.floating-window/E2
     def test_a_pinch_never_tucks(self):
         for px, first, direction in ((60, 200, -1), (110, 300, 1)):
             with self.subTest(side='left' if direction < 0 else 'right'):
@@ -126,6 +127,7 @@ class Gestures(unittest.TestCase):
                 self.assertGreaterEqual(win.property('px'), 0)               # and came back on screen
                 self.assertLessEqual(win.property('px') + win.property('panelWidth'), 400)
 
+    # covers: desktop-mode.floating-window/E2
     def test_both_fingers_down_together_then_one_lifts(self):
         win = self.window(110)
         frames = [[(0, 'press', 220, Y), (1, 'press', 280, Y)]]
@@ -146,16 +148,19 @@ class Gestures(unittest.TestCase):
         self.play(win, frames, dt)
         return win
 
+    # covers: desktop-mode.floating-window/E1
     def test_a_drag_a_quarter_past_the_edge_tucks(self):
         win = self.drag(60, [200 - 10 * k for k in range(17)], 30)
         self.assertEqual((win.property('mode'), win.property('edge')), ('tab', 'left'))
 
+    # covers: desktop-mode.floating-window/E1
     def test_a_flick_towards_a_near_edge_tucks(self):
         win = self.drag(20, [200 - 14 * k for k in range(8)], 8)
         self.assertEqual((win.property('mode'), win.property('edge')), ('tab', 'left'))
         win = self.drag(110, [300 + 14 * k for k in range(8)], 8)
         self.assertEqual((win.property('mode'), win.property('edge')), ('tab', 'right'))
 
+    # covers: desktop-mode.floating-window/E1
     def test_a_drag_inside_the_screen_stays(self):
         win = self.drag(60, [200 + 5 * k for k in range(10)], 30)
         self.assertEqual(win.property('mode'), 'window')

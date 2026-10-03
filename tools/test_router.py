@@ -79,6 +79,7 @@ def routed(desktop_state, name='desktop_launch', setting=None, desktop_on=False)
     return FakeChild.made[-1], note
 
 
+# covers: agent.where/E1
 def test_desktop_mode_on_works_on_the_users_desktop():
     """The user's desktop is workspace 0 (docs/research/97 §19): the child works in it."""
     child, note = routed({'enabled': False, 'tv': False}, desktop_on=True)
@@ -88,18 +89,21 @@ def test_desktop_mode_on_works_on_the_users_desktop():
     assert note['started'] == []
 
 
+# covers: agent.where/E1
 def test_a_tv_showing_the_desktop_works_there():
     child, note = routed({'enabled': False, 'tv': True})
     assert note['where'] == 'desktop' and 'TV' in note['why']
     assert note['started'] == [['rungic-desktop-mode', 'on']] and child.env['RUNGIC_WORKSPACE'] == '0'
 
 
+# covers: agent.where/E1
 def test_otherwise_its_own_workspace():
     child, note = routed({'enabled': False, 'tv': False})
     assert note['where'] == 'workspace'
     assert child.env['WAYLAND_DISPLAY'] == 'wayland-ws-1' and child.env['RUNGIC_WORKSPACE'] == '1'
 
 
+# covers: agent.where/E2
 def test_the_users_word_wins():
     child, note = routed({'enabled': False, 'tv': False}, setting='workspace', desktop_on=True)
     assert note['where'] == 'workspace' and note['why'] == 'the user said so'
@@ -110,6 +114,7 @@ def test_the_users_word_wins():
     assert note['started'] == [['rungic-desktop-mode', 'on']]
 
 
+# covers: agent.where/E4
 def test_no_bridge_means_the_workspace():
     FakeChild.made.clear()
     with mock.patch.object(router, 'Child', FakeChild), \
@@ -118,6 +123,7 @@ def test_no_bridge_means_the_workspace():
         assert r.where()[0] == 'workspace'
 
 
+# covers: agent.where/E3
 def test_the_where_note_comes_only_when_it_changes():
     FakeChild.made.clear()
     with mock.patch.object(router, 'Child', FakeChild), \
@@ -129,6 +135,7 @@ def test_the_where_note_comes_only_when_it_changes():
 
 
 
+# covers: agent.workspaces/E5
 def test_the_users_session_gets_its_own_values_back():
     """The workspace sets these as Plasma's desktop session has them (docs/103); the user's session
     gets its own values back, and loses one it never had."""
@@ -164,6 +171,7 @@ def sub_router(meta=SUBAGENT_META):
     return r, json.loads(r.call('desktop_where', {}, meta)['content'][-1]['text'])
 
 
+# covers: agent.team/E1
 def test_a_subagent_takes_a_workspace_of_its_own(host):
     FakeChild.made.clear()
     with mock.patch.object(router, 'Child', FakeChild), \
@@ -178,6 +186,7 @@ def test_a_subagent_takes_a_workspace_of_its_own(host):
     assert record['thread'] == 'child-a' and record['parent'] == 'parent' and record['pid'] > 0
 
 
+# covers: agent.team/E1
 def test_subagents_get_different_workspaces_and_the_parent_keeps_its_own(host):
     with mock.patch.object(router, 'Child', FakeChild), \
             mock.patch.object(router, 'bridge', return_value={'enabled': False, 'tv': False}):
@@ -190,6 +199,7 @@ def test_subagents_get_different_workspaces_and_the_parent_keeps_its_own(host):
     assert 'yours' not in parent
 
 
+# covers: agent.team/E2
 def test_a_claim_of_an_ended_process_is_free_again(host):
     (host / 'rungic-workspace-2.busy').write_text(json.dumps({'pid': 999999999}))
     with mock.patch.object(router, 'Child', FakeChild), \
@@ -198,6 +208,7 @@ def test_a_claim_of_an_ended_process_is_free_again(host):
     assert note['workspace'] == 2
 
 
+# covers: agent.team/E2
 def test_closing_gives_the_workspace_back(host):
     with mock.patch.object(router, 'Child', FakeChild), \
             mock.patch.object(router, 'bridge', return_value={'enabled': False, 'tv': False}), \
@@ -208,6 +219,7 @@ def test_closing_gives_the_workspace_back(host):
     assert not (host / 'rungic-workspace-2.busy').exists()
 
 
+# covers: agent.team/E1
 def test_all_taken(host):
     for slot in (2, 3, 4):
         (host / f'rungic-workspace-{slot}.busy').write_text('')     # runners' claims (tools/team)
@@ -219,6 +231,7 @@ def test_all_taken(host):
 
 
 # ---- the team journal (team.py, docs/research/91 "实时看到团队讨论") --------------------------------
+# covers: agent.team/E5
 def test_a_members_post_goes_to_the_journal_and_its_tile(host, tmp_path, monkeypatch):
     told = []
     monkeypatch.setattr(router.team, 'tell_app', lambda slot, entry: told.append((slot, entry['kind'])))
@@ -236,6 +249,7 @@ def test_a_members_post_goes_to_the_journal_and_its_tile(host, tmp_path, monkeyp
     assert tile['text'] == 'Bird drawn' and told == [(2, 'review'), (2, 'progress')]
 
 
+# covers: agent.team/E5
 def test_a_member_ending_silent_gets_ended(host, tmp_path, monkeypatch):
     monkeypatch.setattr(router.team, 'tell_app', lambda slot, entry: None)
     project = tmp_path / 'game'
@@ -249,6 +263,7 @@ def test_a_member_ending_silent_gets_ended(host, tmp_path, monkeypatch):
     assert kinds == ['progress', 'ended']
 
 
+# covers: agent.team/E5
 def test_the_leads_post_goes_on_its_own_workspace(host, tmp_path, monkeypatch):
     told = []
     monkeypatch.setattr(router.team, 'tell_app', lambda slot, entry: told.append(slot))
@@ -262,6 +277,7 @@ def test_the_leads_post_goes_on_its_own_workspace(host, tmp_path, monkeypatch):
 
 
 # ---- the murmur: tool calls as a few words (team.describe_call) ------------------------------------
+# covers: agent.team/E4
 def test_shell_commands_as_words():
     d = router.team.describe_command
     assert d("cat > /home/u/Projects/card/art/draw_card.py <<'PY'\nprint(1)\nPY") == 'Write draw_card.py'
@@ -272,6 +288,7 @@ def test_shell_commands_as_words():
     assert d('LC_ALL=C ffprobe -v error chime.wav') == 'Process the audio with ffprobe'
 
 
+# covers: agent.team/E4
 def test_code_mode_calls_as_words():
     code = ('text(await tools.exec_command({cmd:"cat /p/BRIEF.md"})); '
             'text(await tools.mcp__rungic_desktop__desktop_goal({goal:"取消 Recover Files 恢复对话框"}));')
@@ -281,6 +298,7 @@ def test_code_mode_calls_as_words():
     assert router.team.describe_call('wait_agent', '{}') == []
 
 
+# covers: agent.team/E4
 def test_a_chain_is_described_by_its_step_not_its_last_word():
     d = router.team.describe_command
     assert d('mkdir -p .team; printf x > BRIEF.md') == 'Make the folder .team'
@@ -300,6 +318,7 @@ def run_board(*entries):
     return board
 
 
+# covers: agent.team-board/E1
 def test_the_board_follows_a_team_from_brief_to_done():
     b = run_board(
         {'role': 'lead', 'kind': 'brief', 'text': 'Pixel Flappy', 'thread': LEAD, 'workspace': 1},
@@ -318,6 +337,7 @@ def test_the_board_follows_a_team_from_brief_to_done():
     assert b['phase'] == 'done' and b['result'] == 'Ready to play' and len(b['posts']) == 5
 
 
+# covers: agent.team-board/E1
 def test_a_new_leads_brief_starts_a_new_board():
     b = run_board({'role': 'lead', 'kind': 'brief', 'text': 'One', 'thread': LEAD},
                   {'role': 'lead', 'kind': 'done', 'text': 'Done', 'thread': LEAD},
@@ -325,6 +345,7 @@ def test_a_new_leads_brief_starts_a_new_board():
     assert b['title'] == 'Two' and b['phase'] == 'review' and b['result'] == '' and len(b['posts']) == 1
 
 
+# covers: agent.team-board/E1
 def test_a_post_updates_the_board_file(host):
     with mock.patch.object(router, 'Child', FakeChild):
         r = router.Router(WORKSPACE_ENV)
@@ -334,6 +355,7 @@ def test_a_post_updates_the_board_file(host):
 
 
 # ---- a workspace started again: its child's bus is gone (2026-10-02, the phone dozed) ------------
+# covers: agent.workspaces/E8
 def test_a_child_on_a_bus_gone_is_replaced(host, tmp_path, monkeypatch):
     bus = tmp_path / 'ws-bus'
     bus.write_text('')
@@ -351,6 +373,7 @@ def test_a_child_on_a_bus_gone_is_replaced(host, tmp_path, monkeypatch):
         assert len(FakeChild.made) == 2
 
 
+# covers: agent.workspaces/E8
 def test_a_closed_connection_is_tried_once_more_with_a_new_child(host, monkeypatch):
     class Stale(FakeChild):
         def request(self, method, params):

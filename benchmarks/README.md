@@ -21,6 +21,10 @@ python3 tools/analyze_plasma_gpu.py benchmarks/plasma-vulkan-20260923
 ```
 
 Methods and limits: [report](../docs/51-plasma-vulkan-benchmark.md).
+Every set has a SHA256SUMS of its own files (tools/tests/test_benchmark_evidence.py checks them). The sets
+other than plasma-vulkan got theirs on 2026-10-03, from the files as first committed: the history shows
+none of them changed after being added.
+
 New exploratory runs, screenshots and recordings belong in `.work/` first.
 The original REPRO-SHA256SUMS describes the pre-migration layout; it is historical
 provenance. Use SHA256SUMS for the migrated evidence files.

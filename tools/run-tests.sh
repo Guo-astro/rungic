@@ -1,6 +1,7 @@
 #!/bin/sh
-# Offline tests in one run (docs/95): Python and shell-sandbox tests, the account setup,
-# the APK's plain-Java logic and the syntax of the Android/system shell scripts.
+# Offline tests in one run (docs/95): Python and shell-sandbox tests, the account setup, the feature
+# inventory (quality/README.md: tools/test_feature_inventory.py), the patch queues' headers, the APK's
+# plain-Java logic and the syntax of the Android/system shell scripts.
 # Device use cases are separate: tools/rungic_acceptance.py (smoke, full, install).
 set -u
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -20,6 +21,8 @@ if ! "$python" -c 'import PySide6' 2>/dev/null; then
 fi
 # shellcheck disable=SC2086
 "$python" -m pytest -q -p no:cacheprovider $ignore tools/ci tools/test_*.py tools/tests system/account || failed="$failed python"
+# Patch headers of the patch queues (docs/71): fields, series, and the acceptance scenarios they name.
+"$python" tools/pq.py lint || failed="$failed pq-lint"
 
 java_out=$root/.work/build/tests-java
 rm -rf "$java_out"

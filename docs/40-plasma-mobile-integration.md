@@ -20,7 +20,7 @@
 
 Ubuntu rootfs SHA256：`a6a90ffe1cabfd721b3f0472c1f3db7eeb4a16d5c00e7874510a72308088bc8e`。SHA256SUMS.gpg由Ubuntu cloud image keyring验证，签名指纹`D2EB44626FDDC30B513D5BB71A5D6C4C7DB87C81`。APT使用签名验证后的resolute、updates、backports依赖；26.04镜像自带ARM64 archive.ubuntu.com配置有效，未强行套用旧ports配置。代理`http://192.168.5.45:6152`。
 
-容器`plasma`位于`/data/adb/moto-lxc/runtime/var/lib/lxc/plasma/rootfs`，旧forky引导目录另存`rootfs-forky-bootstrap`。2026-09-26起rootfs改为同目录下`images/rootfs.img`（ext4镜像，经loop与device-mapper由`lxc.hook.pre-mount`挂到`rootfs`），`/home`等可变数据在`state/`下以bind mount挂入；布局、快照与回滚见61篇P6。APK `dev.moto.plasma`独立于`dev.moto.phosh`，Linux用户UID1000。Android音频、显示、硬件桥socket都使用Plasma APK自己的私有目录。
+容器`plasma`位于`/data/adb/rungic-lxc/runtime/var/lib/lxc/plasma/rootfs`，旧forky引导目录另存`rootfs-forky-bootstrap`。2026-09-26起rootfs改为同目录下`images/rootfs.img`（ext4镜像，经loop与device-mapper由`lxc.hook.pre-mount`挂到`rootfs`），`/home`等可变数据在`state/`下以bind mount挂入；布局、快照与回滚见61篇P6。APK `dev.moto.plasma`独立于`dev.moto.phosh`，Linux用户UID1000。Android音频、显示、硬件桥socket都使用Plasma APK自己的私有目录。
 
 基础系统采用systemd259 PID1、logind PAM登录和systemd用户会话，参考[systemd容器接口](https://systemd.io/CONTAINER_INTERFACE/)和[cgroup委派](https://systemd.io/CGROUP_DELEGATION/)。挂载命名空间内修正根挂载suid和私有/dev/shm标签；没有改Android全局挂载。禁用容器中的实体网络、蓝牙、调制解调器和云初始化服务，Android继续拥有这些设备。
 
@@ -85,7 +85,7 @@ KWin补丁目前涉及：
 
 ## 桌面如何接入后端
 
-- **显示**：`plasma/kwin` 启动内层 KWin；`gpu-env` 固定KGSL选择及OpenGL渲染，清除会话遗留 `QT_QUICK_BACKEND=software`；APK原生Wayland通过AHBuffer承接整屏。
+- **显示**：`desktop/kwin` 启动内层 KWin；`gpu-env` 固定KGSL选择及OpenGL渲染，清除会话遗留 `QT_QUICK_BACKEND=software`；APK原生Wayland通过AHBuffer承接整屏。
 - **会话**：systemd259 + logind/PAM + UID1000用户服务。`session` 设置 `XDG_MENU_PREFIX=plasma-`，启动时重建菜单缓存；旧X11服务禁用。root控制器使用阻塞flock串行化start/stop/restart，避免同时点APK和命令操作造成错误状态。
 - **刷新率 / 挖孔**：Android写 `android-refresh.ini` / `android-display.ini`；`display.py`消费数据更新KWin/KScreen和Plasma panel。`wp_presentation`在成功eglSwapBuffers后返回CLOCK_MONOTONIC估计，flags=0、sequence=0，不伪造硬件时钟/VSYNC标志。
 - **网络**：Android `ConnectivityManager`、`WifiManager`和已授权root身份缓存→私有 `platform.sock`→Python NetworkManager D-Bus桥→Qt/GTK应用。Android仍拥有实体连接。
@@ -122,7 +122,7 @@ python3 tools/rungic_plasma.py stop
 
 构建入口：`build-mesa.sh` / `package-mesa.py`、`kwin-android.patch` / `kwin-idle.patch`、`build-native-core.sh` / `build-apk.sh`、`build-codec-linux.sh` / `build-codec-ffmpeg.sh`、`build-snapshot.sh`、`build-desktop-fixes.sh`、`rime/install.sh`。Ubuntu官方依赖及所有定制包版本另存release清单；不要仅凭旧的构建日志判断当前安装内容。
 
-> 2026-09-26起，容器内本项目的程序与配置都来自包：自有包在`plasma/packaging/`（`tools/rungic_package.py`），重建的Ubuntu包在`vendor/*/debian`（`tools/build_on_device.py`），经发布仓库部署（`tools/rungic_release.py`，61篇）。上面的构建入口中已被取代的脚本已删除。
+> 2026-09-26起，容器内本项目的程序与配置都来自包：自有包在`packaging/`（`tools/rungic_package.py`），重建的Ubuntu包是`packages/`的补丁队列（`tools/build_on_device.py`），经发布仓库部署（`tools/rungic_release.py`，61篇）。上面的构建入口中已被取代的脚本已删除。
 
 材料位于 `.work/refs/plasma-mobile-20260923/`：GPU探针、呈现统计、截图、输入/音频/相机测试、`browser/`自动化JSON、构建日志及`release/`本地恢复材料。原始相机/录音文件不收入发布归档；应用用户profile、Rime用户词频和签名私钥不归档。
 

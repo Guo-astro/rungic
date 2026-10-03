@@ -36,7 +36,7 @@ Window {
     readonly property QtObject screen: director ? director.focusScreen : agent
     readonly property bool directing: !!director
     readonly property int others: directing ? director.screens.length - 1 : 0
-    visible: ready && !!root.screen && root.screen.status !== "tv" && root.screen.status !== "fullscreen" && !(directing && director.fullscreenShown)
+    visible: ready && !!root.screen && root.screen.status !== "tv"
     title: "rungic-agent-screen"
     color: "transparent"
 
@@ -536,7 +536,12 @@ Window {
         }
     }
     property bool typing: false
-    onFullChanged: if (!full) typing = false
+    onFullChanged: {
+        if (!full)
+            typing = false
+        if (root.screen)
+            root.screen.setFullscreen(full)   // desktop mode's: what its quick setting shows
+    }
     onTypingChanged: {
         if (typing) {
             keyboardField.forceActiveFocus()

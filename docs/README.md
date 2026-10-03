@@ -111,13 +111,15 @@ Boundaries and migration notes: [repository scope](52-git-repository-scope.md). 
 - Graphics and backend architecture: [40](40-plasma-mobile-integration.md) and the [shared bridges](../shared/README.md). A fresh build machine still needs the SDK/NDK and some dependencies.
 - Remote source checks and multi-machine work: [53](53-remote-system-development.md). Upstream modifications live in `packages/` and are edited through `tools/pq.py prepare/export`. Linux upstream packages use `tools/build_on_device.py`. For Android, `tools/prepare_android_host.py` assembles the host and its Smithay/Winit dependencies under `.work/`, then `android/build-native-core.sh` cross-compiles the library. Firefox mobile configuration is prepared from its recipe by `tools/rungic_package.py`. No directly tracked upstream source-tree exceptions remain; see [73](73-reduce-upstream-changes.md#remaining-source-trees-migrated-2026-09-30).
 
-Which layer a vendor adaptation belongs in, and what can move to a shared backend: [54](54-vendor-adaptation-boundaries.md).
+Which layer a vendor adaptation belongs in, and the conditions for moving it to a shared backend: [73](73-reduce-upstream-changes.md#下沉的边界条件自原-54-篇迁入).
 
 Delivery, acceptance and diagnostics: [61](61-delivery-diagnostics-plan.md). Every file this project puts on the container's rootfs comes from a package (`packaging`, patch queues and vendor rebuilds), deployed through the local APT repository and the release metapackage (`tools/rungic_release.py deploy|rollback|status`), followed by automatic acceptance (`tools/rungic_acceptance.py`); `rungic-integrity` checks for drift. The rootfs is an ext4 image (`system/rootfs-image`); deployment can take a dm-snapshot first and return to it when acceptance fails. `/home`, crash reports and the local repository are not rolled back with it.
 
 Current delivery direction: prepare the Android/GKI base once when compatible, build RungicOS independently, and install or update Rungic separately; contracts, existing tools and remaining work: [75](75-image-build-separation.md).
 
 ## Documentation index
+
+Every feature, the experience it must give and the code, tests and documents behind it: the [feature inventory](feature-inventory.md) (generated from `quality/`, rules in [quality/README.md](../quality/README.md)). Before changing a feature, look it up there; before deleting a file, ask it who owns it.
 
 01–21 cover the device, ROM and container history; the early Phosh-only installation documents were removed. 28–35 keep research on shared interfaces; 38 onward cover Plasma. A status recorded as verified at the time does not mean the feature is accepted today.
 
@@ -141,13 +143,11 @@ Current delivery direction: prepare the Android/GKI base once when compatible, b
 | [16-lxc-prerequisites.md](16-lxc-prerequisites.md) | LXC prerequisites measured (2026-09-22) |
 | [17-lxc-installation.md](17-lxc-installation.md) | LXC deployment and verification (2026-09-22) |
 | [18-termux-lxc.md](18-termux-lxc.md) | Managing LXC from Termux (2026-09-22) |
-| [19-docker-installation.md](19-docker-installation.md) | Docker on stock Android 16 (2026-09-22; superseded by rootless Docker in the container, 85, and removed) |
-| [20-docker-storage.md](20-docker-storage.md) | Docker volumes and the phone's shared storage (2026-09-22) |
 | [21-memory-audit.md](21-memory-audit.md) | RAM use of the stock system (2026-09-22) |
 | [28-capability-audit.md](research/28-capability-audit.md) | Phosh everyday capabilities and Android hardware interfaces |
 | [29-reuse-research.md](research/29-reuse-research.md) | Existing solutions researched before adapting Phosh |
-| [30-feature-adaptation.md](research/30-feature-adaptation.md) | Phosh feature-by-feature adaptation |
-| [31-backend-integration.md](research/31-backend-integration.md) | How Phosh connects to the Android backend: architecture, research and maintenance |
+| [30-feature-adaptation.md](research/30-feature-adaptation.md) | Feature-by-feature adaptation and its acceptance scope (began with Phosh; kept current for Plasma) |
+| [31-backend-integration.md](research/31-backend-integration.md) | How the desktop connects to the Android backend: architecture, interfaces, research and where to change what |
 | [32-network-integration.md](research/32-network-integration.md) | Android networking in GNOME and Phosh |
 | [33-capture-integration.md](research/33-capture-integration.md) | Microphone, camera, photos and video recording |
 | [34-hardware-codec-audit.md](research/34-hardware-codec-audit.md) | Hardware video encoding and decoding: device checks and candidates |
@@ -211,4 +211,29 @@ Current delivery direction: prepare the Android/GKI base once when compatible, b
 | [92-agent-task-speed.md](research/92-agent-task-speed.md) | Why tasks like Blender modelling are slow, and how other agents speed them up (2026-09-30) |
 | [93-xwayland-kgsl-gpu.md](research/93-xwayland-kgsl-gpu.md) | X11 apps on the GPU with KGSL: approaches for Xwayland (2026-09-30) |
 | [94-mesa-base.md](research/94-mesa-base.md) | The Mesa base: the lfdevs branch or upstream with our own patches (2026-09-30) |
+| [91-x70-independent-install.md](91-x70-independent-install.md) | X70 Air Pro: the independent three-stage installation |
+| [92-x70-android-base-end-to-end.md](92-x70-android-base-end-to-end.md) | X70: installing on a freshly flashed Android base, end to end |
+| [93-x70-independent-image-revalidation.md](93-x70-independent-image-revalidation.md) | X70: the rebuilt independent image and its first-install recheck |
+| [94-build-fingerprints.md](94-build-fingerprints.md) | Building, reusing and verifying images by input fingerprint |
+| [95-install-use-case-tests.md](95-install-use-case-tests.md) | Installation use-case tests: how they are written, and the first three fixes |
+| [96-desktop-recovery-after-apk-restart.md](96-desktop-recovery-after-apk-restart.md) | The desktop recovering after the APK's data is cleared or it is force-stopped |
+| [97-local-development-deploy.md](97-local-development-deploy.md) | Development overlays on top of a release (2026-09-30) |
+| [98-agent-model-selection.md](98-agent-model-selection.md) | Choosing the agent's model and reasoning effort (2026-10-01) |
+| [99-codex-standalone.md](99-codex-standalone.md) | Codex from its official standalone install, with update prompts in Settings (2026-10-01) |
+| [100-login-environment.md](100-login-environment.md) | The desktop session's login environment: ~/.local/bin and ~/.profile (2026-10-01) |
 | [101-full-duplex-phone-mode.md](101-full-duplex-phone-mode.md) | Agent phone mode: GPT Realtime, task control and shared communication audio (2026-10-02) |
+| [101-codex-sign-in-and-api-key.md](101-codex-sign-in-and-api-key.md) | Codex sign-in and the OpenAI API key: two separate credentials (2026-10-01) |
+| [102-design-system-choices-and-swipe-back.md](102-design-system-choices-and-swipe-back.md) | Design system gaps: choice feedback, bottom sheets, swipe back (2026-10-01) |
+| [103-krita-save-dialog-hang.md](103-krita-save-dialog-hang.md) | Krita stops responding: the portal's Save As result never arrived (2026-10-01) |
+| [104-system-monitor-gpu-disks.md](104-system-monitor-gpu-disks.md) | GPU and disks in the system monitor: ksystemstats with KGSL and mountinfo (2026-10-03) |
+| [105-test-debt-2026-10-03.md](105-test-debt-2026-10-03.md) | Paying down the feature inventory's test debt: results, defects found and fixed, what is left (2026-10-03) |
+| [95-agent-usage-providers.md](research/95-agent-usage-providers.md) | A common interface for agent usage, and where Claude Code's data comes from (2026-09-30) |
+| [96-agent-curated-briefing.md](research/96-agent-curated-briefing.md) | Suggestion cards the agent curates (the briefing layer) |
+| [97-headless-agent-work.md](research/97-headless-agent-work.md) | The agent working with the phone locked and the screen off; desktop-mode fullscreen and auth prompts (§21) |
+| [cellular-call-agent.md](research/cellular-call-agent.md) | The agent making calls with the SIM: feasibility |
+| [clipboard-background.md](research/clipboard-background.md) | The background clipboard bridge rework (2026-09-29) |
+| [g100-ssh-connectivity-20260929.md](research/g100-ssh-connectivity-20260929.md) | G100 SSH over the LAN (2026-09-29) |
+| [g100-system-update-20260929.md](research/g100-system-update-20260929.md) | A G100 full-system incremental update (2026-09-29) |
+| [g100-ugreen-miracast.md](research/g100-ugreen-miracast.md) | G100 casting to a UGREEN receiver, covered by Moto's external-display UI |
+| [mac-offline-desktop-link.md](research/mac-offline-desktop-link.md) | A MacBook reaching the phone's desktop without a network: opendrop-rs assessed |
+| [miracast-video-modes.md](research/miracast-video-modes.md) | Miracast video modes: real capabilities, exact selection and acceptance |

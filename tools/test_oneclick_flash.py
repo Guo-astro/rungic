@@ -47,6 +47,7 @@ class FakeDevice(Flasher):
 
 
 class FlashTests(unittest.TestCase):
+    # covers: install.legacy-oneclick-v3/E1
     def test_full_restores_original_chunks_then_product_then_root_then_wipe(self):
         d = FakeDevice()
         d.prepare('full')
@@ -63,20 +64,24 @@ class FlashTests(unittest.TestCase):
         self.assertEqual([c[i][2] for i in erases], ['userdata', 'metadata'])
         self.assertFalse(any('partition' in x or 'modemst1' in x or 'modemst2' in x for x in c))
 
+    # covers: install.legacy-oneclick-v3/E1
     def test_update_does_not_write_stock_or_erase(self):
         d = FakeDevice(); d.serial = 'ZX'; d.flash('update')
         self.assertFalse(any('erase' in x or any('/stock/' in y for y in x) for x in d.commands))
 
+    # covers: install.legacy-oneclick-v3/E1
     def test_product_write_failure_prevents_root_write_and_erase(self):
         d = FakeDevice(fail=lambda a: 'flash' in a and 'product_a' in a); d.serial = 'ZX'
         with self.assertRaises(FlashError): d.flash('full')
         self.assertFalse(any('erase' in x or 'init_boot_a' in x for x in d.commands))
 
+    # covers: install.legacy-oneclick-v3/E1
     def test_root_write_failure_prevents_erase(self):
         d = FakeDevice(fail=lambda a: a[:2] == ('flash', 'init_boot_a')); d.serial = 'ZX'
         with self.assertRaises(FlashError): d.flash('full')
         self.assertFalse(any('erase' in x for x in d.commands))
 
+    # covers: install.legacy-oneclick-v3/E1
     def test_wrong_device_or_locked_or_new_bootloader_prevents_writes(self):
         for bad in [{'sku':'XT0000'}, {'securestate':'locked'}, {'version-bootloader':'newer'}]:
             with self.subTest(bad=bad):
@@ -84,16 +89,19 @@ class FlashTests(unittest.TestCase):
                 with self.assertRaises(FlashError): d.prepare('full')
                 self.assertFalse(any('flash' in x or 'erase' in x or 'set_active' in x for x in d.commands))
 
+    # covers: install.legacy-oneclick-v3/E1
     def test_wrong_partition_size_prevents_product_and_erase(self):
         d = FakeDevice(bad={'partition-size:product_a':'0x1234'}); d.serial = 'ZX'
         with self.assertRaises(FlashError): d.flash('update')
         self.assertFalse(any('erase' in x or ('product_a' in x and 'flash' in x) for x in d.commands))
 
+    # covers: install.legacy-oneclick-v3/E1
     def test_update_refuses_unverifiable_fastboot_only_start(self):
         d = FakeDevice()
         with self.assertRaises(FlashError): d.prepare('update')
         self.assertFalse(any('flash' in x or 'erase' in x for x in d.commands))
 
+    # covers: install.legacy-oneclick-v3/E2
     def test_payload_corruption_is_detected(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -107,6 +115,7 @@ class FlashTests(unittest.TestCase):
             (root/'images/product.img').write_bytes(b'corrupted')
             with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(FlashError): verify_payload(root)
 
+    # covers: install.legacy-oneclick-v3/E2
     def test_reconstruction_failure_prevents_device_connection(self):
         with patch('sys.argv', ['flash.py']), patch('oneclick_flash.verify_payload'), \
              patch('oneclick_flash.prepare_product', side_effect=ValueError('corrupt delta')), \
@@ -115,6 +124,7 @@ class FlashTests(unittest.TestCase):
                 main()
             flasher.assert_not_called()
 
+    # covers: install.legacy-oneclick-v3/E2
     def test_prepare_only_never_connects_device(self):
         with patch('sys.argv', ['flash.py', '--prepare-only']), patch('oneclick_flash.verify_payload'), \
              patch('oneclick_flash.prepare_product') as prepare, patch('oneclick_flash.Flasher') as flasher, \

@@ -34,6 +34,7 @@ class SuggestionTaskTests(unittest.TestCase):
                               'approvedPlan': {'planRevision': 'r1', 'plan': 'APPROVED SNAPSHOT', 'verification': 'check', 'rollback': 'undo'}}}
         connection.call_sync.return_value.unpack.side_effect = lambda: (json.dumps(self.item),)
 
+    # covers: agent.suggestion-tasks/E2
     def test_apply_uses_frozen_snapshot(self):
         self.a.investigate_suggestion(self.id, 'task', apply=True)
         text = self.a.send_text.call_args.args[0]
@@ -41,16 +42,19 @@ class SuggestionTaskTests(unittest.TestCase):
         self.assertNotIn('UNAPPROVED LATER PLAN', text)
         self.assertEqual(self.a.store.index['conversation']['suggestionTask'], 'task')
 
+    # covers: agent.suggestion-tasks/E2
     def test_wrong_task_and_wrong_mode_cannot_execute(self):
         with self.assertRaises(RuntimeError): self.a.investigate_suggestion(self.id, 'old-task', apply=True)
         with self.assertRaises(RuntimeError): self.a.investigate_suggestion(self.id, 'task', apply=False)
         self.a.send_text.assert_not_called()
 
+    # covers: agent.suggestion-tasks/E4
     def test_auth_setup_failure_is_not_a_started_task(self):
         self.a.needs_setup.return_value = True
         with self.assertRaises(RuntimeError): self.a.investigate_suggestion(self.id, 'task', apply=True)
         self.a.open_conversation.assert_not_called()
 
+    # covers: agent.suggestion-tasks/E5
     def test_stopping_old_task_does_not_interrupt_other_conversation(self):
         self.a.agent_busy = True
         self.a.store.index['conversation'] = {'suggestion': 'different', 'suggestionTask': 'new-task'}
@@ -58,6 +62,7 @@ class SuggestionTaskTests(unittest.TestCase):
         self.a.server.call.assert_not_called()
         self.assertEqual(self.a.emit.call_args.args[0]['suggestionTask'], 'task')
 
+    # covers: agent.suggestion-tasks/E5
     def test_failed_interrupt_keeps_task_running(self):
         self.a.agent_busy = True
         self.a.store.index['conversation'] = {'suggestion': self.id, 'suggestionTask': 'task'}
@@ -66,6 +71,7 @@ class SuggestionTaskTests(unittest.TestCase):
         self.a.emit.assert_not_called()
         self.assertEqual(self.a.suggestion_task(self.id, 'task')['state'], 'running')
 
+    # covers: agent.suggestion-tasks/E3
     def test_finished_result_can_be_recovered_after_switching_conversations(self):
         self.a.store.index['original'] = {'suggestion': self.id, 'suggestionTask': 'task',
                                          'suggestionTaskState': 'finished', 'suggestionResult': 'saved result'}
@@ -73,6 +79,7 @@ class SuggestionTaskTests(unittest.TestCase):
         self.assertEqual(status['state'], 'finished')
         self.assertEqual(status['result'], 'saved result')
 
+    # covers: agent.suggestion-tasks/E3
     def test_terminal_result_is_persisted_before_event_delivery(self):
         self.a.store.index['conversation'] = {'suggestion': self.id, 'suggestionTask': 'task', 'suggestionTaskState': 'running'}
         self.a.store.save_index = Mock(); self.a.store.append = Mock(); self.a.emit_raw = Mock()

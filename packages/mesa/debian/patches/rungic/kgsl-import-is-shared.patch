@@ -14,7 +14,7 @@ mark it so, and its export duplicates the imported fd (kgsl_bo_dmabuf).
 Forwarded: no
 Last-Update: 2026-09-30
 X-Rungic-Status: Pending [a fix of the branch's KGSL dma-buf path]
-X-Rungic-Tests: L3:xwayland.kgsl-glamor (glxgears and glmark2 on X11 draw in their windows; import then export keeps the inode)
+X-Rungic-Tests: L3:xwayland.kgsl-glamor (to write) (glxgears and glmark2 on X11 draw in their windows; import then export keeps the inode)
 X-Rungic-Docs: docs/research/93
 ---
  src/gallium/drivers/freedreno/freedreno_resource.c | 6 ++++++

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
+# covers[consumer]: iface:telephony
 """Lifecycle regressions using the actual call classes, without API/socket/device I/O."""
 from pathlib import Path
 import sys
@@ -30,6 +31,7 @@ class CellularStateTest(unittest.TestCase):
         call.call_id = 'our-call'
         return call
 
+    # covers: agent.cellular-call/E4
     def test_unbound_bridge_idle_is_a_confirmed_end(self):
         call = self.new_call()
         call.phase, call.active = 'user', False
@@ -39,16 +41,19 @@ class CellularStateTest(unittest.TestCase):
         self.assertEqual(call.phase, 'ended')
         self.assertEqual(self.events[-1]['type'], 'call-ended')
 
+    # covers: agent.cellular-call/E4
     def test_missing_or_recreated_bridge_is_not_hangup(self):
         for state in ({'available':False,'phoneState':2,'calls':[]},
                       {'available':True,'phoneState':2,'calls':[{'id':'new-id','state':4}]},
                       {}):
             self.assertFalse(cellular_call.confirmed_ended(state, 'our-call'))
 
+    # covers: agent.cellular-call/E4
     def test_explicit_disconnect_belongs_to_our_call(self):
         self.assertTrue(cellular_call.confirmed_ended({'calls':[{'id':'ours','state':7}]}, 'ours'))
         self.assertFalse(cellular_call.confirmed_ended({'calls':[{'id':'other','state':7}]}, 'ours'))
 
+    # covers: agent.cellular-call/E1
     def test_cancel_before_realtime_ready_never_dials(self):
         call = self.new_call()
         call.ready.set()
@@ -58,6 +63,7 @@ class CellularStateTest(unittest.TestCase):
                 call.dial()
             request.assert_not_called()
 
+    # covers: agent.cellular-call/E1
     def test_ringback_does_not_open_audio(self):
         call = self.new_call()
         ringing = {'phoneState':2,'calls':[{'id':'our-call','state':1}]}
@@ -67,6 +73,7 @@ class CellularStateTest(unittest.TestCase):
         call.player.open.assert_not_called()
         self.assertEqual(call.phase, 'ended')
 
+    # covers: agent.cellular-call/E6
     def test_ui_failure_keeps_the_audio_call_running(self):
         call = self.new_call()
         active = {'phoneState':2,'calls':[{'id':'our-call','state':4}]}
@@ -86,6 +93,7 @@ class CellularStateTest(unittest.TestCase):
         self.assertTrue(call.active)
         self.assertTrue(any(e['type']=='call-note' for e in self.events))
 
+    # covers: agent.cellular-call/E3
     def test_recreated_call_id_hands_over_never_redials(self):
         call = self.new_call()
         replacement = {'phoneState':2,'calls':[{'id':'new-id','state':4}]}
@@ -98,6 +106,7 @@ class CellularStateTest(unittest.TestCase):
         self.assertTrue(all(args.args == ('status',) for args in request.call_args_list))
         call.player.close.assert_called_once()
 
+    # covers: agent.cellular-call/E3
     def test_handover_is_idempotent(self):
         call = self.new_call()
         with patch.object(cellular_call.threading,'Thread') as worker:

@@ -48,6 +48,8 @@ class RebrandUser(unittest.TestCase):
             '/usr/share/moto-voice-agent/skills/moto-phone-desktop')
         self.m = load(self.home)
 
+    # covers: delivery.rebrand/E1
+    # covers: install.rebrand-migration/E1
     def test_up_renames_and_runs_once(self):
         report = self.m.up()
         c = self.home / '.config'
@@ -71,6 +73,8 @@ class RebrandUser(unittest.TestCase):
         self.assertEqual(sorted(report['records']), ['rungic-voice-agent.upd', 'rungic.upd'])
         self.assertEqual(self.m.up(), {'done': 'already'})
 
+    # covers: delivery.rebrand/E1
+    # covers: install.rebrand-migration/E2
     def test_down_gives_back_what_up_took(self):
         self.m.up()
         c = self.home / '.config'
@@ -93,6 +97,8 @@ class RebrandUser(unittest.TestCase):
         self.assertEqual((c / 'kconf_updaterc').read_text().count('[rungic.upd]'), 1)
 
 
+    # covers: delivery.rebrand/E1
+    # covers: install.rebrand-migration/E3
     def test_rehome_after_the_account_setup_moved_the_home(self):
         (self.home / '.config/dolphinrc').write_text('[General]\nLast=/home/rungic/Shared\nOther=/home/rungicx\nHome=/home/rungic\n')
         with patch('sys.argv', ['rungic-rebrand-user', 'rehome', '/home/rungic', '/home/alice']):
@@ -101,6 +107,8 @@ class RebrandUser(unittest.TestCase):
                          '[General]\nLast=/home/alice/Shared\nOther=/home/rungicx\nHome=/home/alice\n')
 
 
+    # covers: delivery.rebrand/E1
+    # covers: install.rebrand-migration/E3
     def test_setup_already_rerun_under_the_new_names(self):
         # kconf_update ran the renamed steps as for a new user before up could carry the records.
         c = self.home / '.config'

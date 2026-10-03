@@ -9,7 +9,7 @@
 - **现象**：微信4.1登录后提示数据库损坏并自动修复；清空数据重新登录后依旧，每次启动都卡很久，然后再修复一次，无限循环。微信的提示建议检查目录权限。
 - **原因**：
   - 微信把账号数据库放在`$XDG_DOCUMENTS_DIR/xwechat_files`。`~/Documents`是指向`~/Shared/Documents`的链接，也就是Android共享存储。
-  - `~/Shared`是bindfs挂载（`plasma/shared-storage`），原先带`--direct-io`。FUSE对direct-io打开的文件拒绝可写的共享内存映射（`mmap MAP_SHARED`返回`ENODEV`）。
+  - `~/Shared`是bindfs挂载（`system/shared-storage`），原先带`--direct-io`。FUSE对direct-io打开的文件拒绝可写的共享内存映射（`mmap MAP_SHARED`返回`ENODEV`）。
   - SQLite的WAL模式需要这样映射`-shm`文件，于是每次访问数据库都返回`disk I/O error`。微信的数据库全部是WAL模式（`*.db-wal`、`*.db-shm`）。
   - 权限不是原因：这个挂载确实改不了权限位（一律0666），但不影响SQLite。
 - **修复**：去掉`--direct-io`。
@@ -35,7 +35,7 @@
 
 ## 检查工具：`moto-fs-audit`
 
-`plasma/diagnostics/moto-fs-audit`由`plasma/diagnostics/install.sh`安装到`/usr/local/bin`，以桌面用户身份运行。
+`system/diagnostics/rungic-fs-audit`由`rungic-plasma-diagnostics`包安装到`/usr/bin`，以桌面用户身份运行（改名前为`/usr/local/bin/moto-fs-audit`）。
 
 > 2026-09-26起由`moto-plasma-diagnostics`包安装到`/usr/bin/moto-fs-audit`（61篇）。
 
@@ -101,3 +101,13 @@ X70 完成账户改名后，用户打开照片（Koko）报 `/home/kevinzhow/Pic
 核对上游 xdg-user-dirs 0.19 的 `xdg-user-dirs-update.c`（[官方发布包](https://user-dirs.freedesktop.org/releases/xdg-user-dirs-0.19.tar.xz)，COPYING 为 GPL v2）：显式 `--set` 分支直接更新配置，不受普通自动更新 enabled=False 影响。保留标准工具，不修改 Koko。新增 `plasma/user-dirs` 在实际 Shared mount 就绪后创建公共位置：Pictures/Videos/Music/Downloads/Templates/Public 缺失时链接到 Shared，同名本地目录、文件和自定义链接不覆盖；Documents/Desktop 首次创建为本地目录。随后通过 xdg-user-dirs-update --set 注册全部八个位置。缺失挂载时失败且不制造假目录。session 在启动 Plasma 前调用该共用入口；软件包显式依赖 xdg-user-dirs。
 
 四项测试覆盖全新账户及幂等重复、保留已有下载文件/自定义链接、挂载缺失时无副作用、同名文件冲突不删除。实机以桌面用户执行后 Pictures 链接与目标存在，XDG、Qt QStandardPaths（qtpaths6）和 GLib 三个入口均返回 `/home/kevinzhow/Pictures`；Documents 为本地目录。照片应用的实际重开结果另存 X70 83 篇，未进行摄像头或媒体采集验收。
+
+## 容器数据与共享目录（2026-09-22 Android 侧 Docker 的结论，自原 20 篇迁入）
+
+上面的限制同样适用于放在共享目录里的容器数据（当时为 Android 侧 Docker，2026-09-29 已删除；容器内 rootless Docker 见 85 篇）：
+
+- 共享目录适合放数据，不适合放程序和依赖：两层 `noexec`、`nosuid,nodev`，权限一律映射，不支持符号链接。数据库、`node_modules` 等依赖这些特性的目录放在普通卷或本地目录。
+- 额外的 FUSE 层不适合高频小 I/O；inotify 不保证与原生目录一致，应用可能要重载或轮询。
+- 加锁设备首次开机时共享存储可能要先解锁，依赖它的服务应等待共享目录出现，而不是失败退出。
+- 普通 Docker 卷不会出现在文件管理器里。要给用户看的，用数据库自己的导出，或用容器只读挂载卷、归档写进共享目录；运行中数据库的文件归档不等于一致的备份。
+- 当时实测（证据 `.work/refs/docker-install-20260922/`）：UID 0、101、999、1000、10001、65534 在共享目录读写与重命名；Android 修改后容器内 HTTP 立即返回新内容；整机重启后标记文件保留。

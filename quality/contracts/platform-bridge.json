@@ -1,0 +1,164 @@
+{
+  "interface": "platform-bridge",
+  "comment": "The read-only queries of the platform bridge (quality/interfaces.yaml) and what Linux consumers rely on in their replies: a key in an example reply is required, with that value's type (null: any value or null; display-get refreshPolicy: 0 automatic, else a fixed rate in Hz). Framing: a Unix stream socket, one JSON object per line each way, one request per connection. Errors are {\"error\": string}. The socket is $RUNGIC_PLATFORM_SOCKET, by default /mnt/android-wayland/platform.sock in the container. All of them are read-only (read_only: the provider check on the phone sends them). Tested from both ends: tools/tests/test_platform_bridge_contract.py (consumers against tools/contracts.py's stand-in) and acceptance scenario contract.platform-bridge (the Rungic app on the phone).",
+  "queries": [
+    {
+      "name": "status",
+      "request": {
+        "op": "status"
+      },
+      "reply": {
+        "version": 1,
+        "model": "XT2537-4",
+        "android": "16",
+        "orientation": "portrait",
+        "foreground": true,
+        "keepAwake": false
+      },
+      "read_only": true
+    },
+    {
+      "name": "display-get",
+      "request": {
+        "op": "display-get"
+      },
+      "reply": {
+        "version": 1,
+        "physicalWidth": 1080,
+        "physicalHeight": 2400,
+        "densityDpi": 400,
+        "renderWidth": 1080,
+        "renderHeight": 2400,
+        "refreshRates": [
+          60,
+          120
+        ],
+        "refreshPolicy": 0,
+        "currentRefresh": 120.0
+      },
+      "read_only": true
+    },
+    {
+      "name": "brightness-get",
+      "request": {
+        "op": "brightness-get"
+      },
+      "reply": {
+        "level": 40,
+        "followAndroid": true
+      },
+      "read_only": true
+    },
+    {
+      "name": "desktop-mode",
+      "request": {
+        "op": "desktop-mode"
+      },
+      "reply": {
+        "enabled": false,
+        "width": 1920,
+        "height": 1080,
+        "tv": false,
+        "watched": false
+      },
+      "read_only": true
+    },
+    {
+      "name": "agent-screen",
+      "request": {
+        "op": "agent-screen"
+      },
+      "reply": {
+        "enabled": false,
+        "workspace": 1,
+        "width": 1920,
+        "height": 1080,
+        "tv": false,
+        "tvShown": [],
+        "tvHeard": -1,
+        "directorFocus": 1
+      },
+      "read_only": true
+    },
+    {
+      "name": "tv",
+      "request": {
+        "op": "tv"
+      },
+      "reply": {
+        "members": [],
+        "focus": 1,
+        "level": 0,
+        "version": 0,
+        "tv": {
+          "connected": false,
+          "content": null,
+          "shown": [],
+          "heard": -1
+        },
+        "picking": false
+      },
+      "read_only": true
+    },
+    {
+      "name": "director",
+      "request": {
+        "op": "director"
+      },
+      "reply": {
+        "members": [],
+        "focus": 1,
+        "level": 0,
+        "version": 0,
+        "tv": {
+          "connected": false,
+          "content": null,
+          "shown": [],
+          "heard": -1
+        }
+      },
+      "read_only": true
+    },
+    {
+      "name": "capture-info",
+      "request": {
+        "op": "capture-info"
+      },
+      "reply": {
+        "version": 1,
+        "visible": true,
+        "microphonePermission": true,
+        "microphoneActive": false,
+        "cameraActive": false,
+        "cameraPermission": true,
+        "cameraDenied": false,
+        "microphoneDenied": false,
+        "communication": {
+          "version": 1,
+          "active": false,
+          "aecAvailable": true,
+          "playbackCursor": true
+        },
+        "cameras": [
+          {
+            "id": "0",
+            "facing": "back",
+            "width": 1280,
+            "height": 720,
+            "rotation": 90,
+            "fps": 30
+          },
+          {
+            "id": "1",
+            "facing": "front",
+            "width": 1280,
+            "height": 720,
+            "rotation": 270,
+            "fps": 30
+          }
+        ]
+      },
+      "read_only": true
+    }
+  ]
+}

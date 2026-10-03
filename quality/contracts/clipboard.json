@@ -1,0 +1,33 @@
+{
+  "interface": "clipboard",
+  "comment": "Android's clipboard backend (com.rungic.clipboard.ClipboardDaemon, run by Magisk as Shell, uid 2000) and its Linux consumer shared/platform/clipboard.py (rungic-plasma-clipboard), which syncs it with the Wayland selection through wl-copy/wl-paste. Framing: the abstract Unix socket com.rungic.clipboard.v1, one JSON object per line each way, one request per connection; the consumer refuses a server that is not uid 2000 (SO_PEERCRED), the daemon answers uid 0, 1000 and the app. Plain text only, at most 65536 characters / 262144 UTF-8 bytes. clipboard-get: available false (with a reason: locked-or-other-user, sensitive, non-text, too-large) leaves the Linux selection alone; text null is an empty Android clipboard. watch: a long poll that answers when the clipboard's version moves or the daemon restarted (a new epoch), at most after timeout ms. Errors are {\"error\": string}. Tested from both ends: tools/tests/test_contract_clipboard.py (the real clipboard.py against tools/contracts.py's stand-in, fake wl-copy/wl-paste) and acceptance scenario contract.clipboard (the daemon on the phone; the text is blanked on the phone and never read back).",
+  "sockets": {
+    "clipboard": {"abstract": "com.rungic.clipboard.v1", "peer_uid": 2000}
+  },
+  "queries": [
+    {
+      "name": "clipboard-get",
+      "request": {"op": "clipboard-get"},
+      "replies": [
+        {"available": true, "text": null},
+        {"available": false, "reason": "sensitive"}
+      ],
+      "private": ["text"],
+      "read_only": true
+    },
+    {
+      "name": "watch",
+      "request": {"op": "watch", "epoch": null, "seen": null, "timeout": 1},
+      "match": ["op"],
+      "reply": {"epoch": "0b5e4c1a-uuid", "versions": {"clipboard": 0}},
+      "read_only": true
+    },
+    {
+      "name": "clipboard-set",
+      "request": {"op": "clipboard-set", "text": null},
+      "match": ["op"],
+      "reply": {"ok": true},
+      "read_only": false
+    }
+  ]
+}

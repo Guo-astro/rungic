@@ -13,7 +13,7 @@ own (.work/apt/dev here, /var/lib/rungic-apt-dev on the phone, label rungic-dev)
 (/etc/apt/preferences.d/rungic-dev, 1002): apt and Discover take the overlay for the installed
 system and offer nothing back. No rootfs snapshot: a reset returns the packages to the release.
 
-  rungic_dev.py deploy NAME... [--host macmini|phone] [--restart auto|never]
+  rungic_dev.py deploy NAME... [--host macmini|phone] [--restart auto|never] [--clean]
                                   build NAME... from the working tree and install them over the release
                                   (earlier overrides stay). NAME is one of this project's packages
                                   (packaging/) or an upstream component the release rebuilds
@@ -175,7 +175,7 @@ def in_pool(name):
     return (POOL / name).exists() or (POOL / (name + rungic_release.REMOTE)).exists()
 
 
-def build(names, host, stamp, record):
+def build(names, host, stamp, record, clean=False):
     """Development .debs of `names` from the working tree, in POOL. -> {name: override}"""
     import build_on_device
     import rungic_package
@@ -199,7 +199,7 @@ def build(names, host, stamp, record):
         dev = {'version': version, 'dest': POOL, 'take': taker(build_on_device.host)}
         started = time.time()
         deb = (rungic_package.build_host(pkg, None, dev) if pkg['build'] == 'host'
-               else rungic_package.build_device(pkg, None, build_on_device.host.jobs, dev))
+               else rungic_package.build_device(pkg, None, build_on_device.host.jobs, dev, clean=clean))
         overrides[name] = {'version': version, 'commit': git('rev-parse', 'HEAD'), 'dirty': dirty,
                            'built': datetime.datetime.now().isoformat(timespec='seconds'), 'file': deb.name}
         record.step('build', package=name, version=version, seconds=round(time.time() - started))
@@ -427,11 +427,11 @@ def apply(info, record, restart, restore=None):
     return record.log
 
 
-def deploy(names, host, restart):
+def deploy(names, host, restart, clean=False):
     record = Record('deploy')
     stamp = stamp_now()
     _, info = installed_release()
-    overrides = build(names, host, stamp, record)
+    overrides = build(names, host, stamp, record, clean)
     earlier = info.get('dev', {}).get('overrides', {})
     if set(earlier) - set(overrides):
         # Earlier overrides stay: their .debs are still in the pool (a reset takes them back).
@@ -482,12 +482,13 @@ def main():
     p.add_argument('--host', choices=['macmini', 'phone'], default=os.environ.get('RUNGIC_BUILD_HOST', 'macmini'),
                    help='where device packages build (default $RUNGIC_BUILD_HOST, else macmini)')
     p.add_argument('--restart', choices=['auto', 'never'], default='auto')
+    p.add_argument('--clean', action='store_true', help='build this project\'s packages from nothing, not incrementally')
     p = sub.add_parser('reset'); p.add_argument('names', nargs='*')
     p.add_argument('--restart', choices=['auto', 'never'], default='auto')
     sub.add_parser('status')
     a = parser.parse_args()
     if a.cmd == 'deploy':
-        result = deploy(a.names, a.host, a.restart)
+        result = deploy(a.names, a.host, a.restart, a.clean)
     elif a.cmd == 'reset':
         result = reset(a.names, a.restart)
     else:

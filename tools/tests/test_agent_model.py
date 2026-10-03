@@ -58,17 +58,20 @@ def agent(codex, model='gpt-6-astra', effort='medium', history=True):
 
 
 class ResumeTests(unittest.TestCase):
+    # covers: agent.model-choice/E3
     def test_loaded_on_another_model_is_reloaded(self):
         codex = FakeCodex()
         reply = agent(codex).resume_with_settings('t1')
         self.assertEqual((reply['model'], reply['reasoningEffort']), ('gpt-6-astra', 'medium'))
         self.assertEqual(codex.calls, ['thread/resume', 'thread/unsubscribe', 'thread/resume'])
 
+    # covers: agent.model-choice/E3
     def test_already_on_the_model_is_left_alone(self):
         codex = FakeCodex(('gpt-6-astra', 'medium'))
         agent(codex).resume_with_settings('t1')
         self.assertEqual(codex.calls, ['thread/resume'])
 
+    # covers: agent.model-choice/E3
     def test_unknown_catalog_never_reloads(self):
         codex = FakeCodex()
         agent(codex, model=None, effort=None).resume_with_settings('t1')
@@ -76,6 +79,7 @@ class ResumeTests(unittest.TestCase):
 
 
 class ApplyTests(unittest.TestCase):
+    # covers: agent.model-choice/E3
     def test_idle_conversation_takes_it_now_and_the_voice_comes_back(self):
         codex = FakeCodex()
         a = agent(codex)
@@ -85,6 +89,7 @@ class ApplyTests(unittest.TestCase):
         self.assertEqual(codex.loaded['t1'], ('gpt-6-astra', 'medium'))
         self.assertFalse(a.model_pending)
 
+    # covers: agent.model-choice/E3
     def test_busy_or_empty_conversation_waits(self):
         for kwargs, setup in (({}, {'agent_busy': True}), ({}, {'talking': True}), ({'history': False}, {})):
             codex = FakeCodex()

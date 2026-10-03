@@ -1,10 +1,10 @@
 {
- "comment": "Services the container keeps off by default, and why (docs/83). rungic-plasma-config installs this as /usr/share/rungic/service-policy.json and applies each unit's default once (masked: a /dev/null link in /etc/systemd/<scope>; disabled: not enabled), recording it in /var/lib/rungic/service-defaults, so a change made later in Settings -> Services survives upgrades. The Services page (rungic-plasma-services) lists the groups and changes them through its KAuth helper, which only acts on units named here. evidence: recorded = the reason is documented (see the doc named in summary); inferred = the reason is our reading, not verified on the phone; unknown = not recorded. risk: remote (reachable from the network), android (can take a function over from Android), unknown, none (has no use here). start: for a 'disabled' group, the units enabling turns on. name, summary and warning are English messages that the Services page translates (catalog kcm_rungic_services, desktop/services/po).",
+ "comment": "Services the container keeps off by default, and why (docs/83). rungic-plasma-config installs this as /usr/share/rungic/service-policy.json and applies each unit's default once (masked: a /dev/null link in /etc/systemd/<scope>; disabled: not enabled; enabled: enabled, the user may turn it off: SSH, which the user requires on (AGENTS.md 2026-09-29)), recording it in /var/lib/rungic/service-defaults, so a change made later in Settings -> Services survives upgrades. The Services page (rungic-plasma-services) lists the groups and changes them through its KAuth helper, which only acts on units named here. evidence: recorded = the reason is documented (see the doc named in summary); inferred = the reason is our reading, not verified on the phone; unknown = not recorded. risk: remote (reachable from the network), android (can take a function over from Android), unknown, none (has no use here). start: for a 'disabled' or 'enabled' group, the units enabling turns on. name, summary and warning are English messages that the Services page translates (catalog kcm_rungic_services, desktop/services/po).",
  "groups": [
   {
    "id": "ssh",
    "name": "SSH login",
-   "default": "disabled",
+   "default": "enabled",
    "risk": "remote",
    "evidence": "recorded",
    "summary": "When on, devices on the same local network can sign in with this device's Linux account password or an SSH key (the phone's IP address, port 22).",

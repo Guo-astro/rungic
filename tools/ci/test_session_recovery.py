@@ -54,17 +54,20 @@ class StaleWaylandDirectory(Sandbox):
         return subprocess.run(["sh", "-c", "set -eu\n" + script], env=self.env,
                               capture_output=True, text=True, timeout=10)
 
+    # covers: install.app-restart-recovery/E1
     def test_recreated_directory_restarts_the_container(self):
         result = self.run_block("2002", "1001")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.calls(), ["enter /usr/bin/lxc-stop -n plasma -t 15"])
         self.assertIn("recreated", result.stderr)
 
+    # covers: install.app-restart-recovery/E2
     def test_same_directory_keeps_the_container(self):
         result = self.run_block("1001", "1001")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.calls(), [])
 
+    # covers: install.app-restart-recovery/E2
     def test_unreadable_side_keeps_the_container(self):
         for apk, bound in (("", "1001"), ("1001", "")):
             result = self.run_block(apk, bound)
@@ -86,16 +89,19 @@ class FailedShellOnRetry(Sandbox):
         return subprocess.run(["sh", "-c", "set -eu\n" + script], env=self.env,
                               capture_output=True, text=True, timeout=10)
 
+    # covers: install.app-restart-recovery/E3
     def test_failed_shell_turns_start_into_a_session_restart(self):
         result = self.run_block("start", shell_failed=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("action=restart-session", result.stdout)
         self.assertIn("is-failed --quiet plasma-plasmashell.service", self.calls()[0])
 
+    # covers: install.app-restart-recovery/E3
     def test_running_shell_keeps_start(self):
         result = self.run_block("start", shell_failed=False)
         self.assertIn("action=start", result.stdout)
 
+    # covers: install.app-restart-recovery/E3
     def test_restart_session_is_not_queried(self):
         result = self.run_block("restart-session", shell_failed=True)
         self.assertIn("action=restart-session", result.stdout)
@@ -121,6 +127,7 @@ exit 0''')
         return subprocess.run(["sh", "-c", "set -eu\n" + tail], env=self.env,
                               capture_output=True, text=True, timeout=10)
 
+    # covers: install.app-restart-recovery/E4
     def test_session_starts_after_the_previous_stop_jobs(self):
         result = self.run_tail(stop_polls=3)
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -129,12 +136,14 @@ exit 0''')
         self.assertEqual(sum(c.startswith("systemctl --user list-jobs") for c in calls), 4)
         self.assertIn("Waited 3x0.1 s", result.stdout)
 
+    # covers: install.app-restart-recovery/E4
     def test_start_jobs_alone_do_not_delay(self):
         result = self.run_tail(stop_polls=0)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.calls(), ["systemctl --user list-jobs --no-legend", "startplasmamobile"])
         self.assertNotIn("Waited", result.stdout)
 
+    # covers: install.app-restart-recovery/E4
     def test_wait_is_bounded(self):
         result = self.run_tail(stop_polls=10**6)
         self.assertEqual(result.returncode, 0, result.stderr)

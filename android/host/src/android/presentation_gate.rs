@@ -39,6 +39,7 @@ impl PresentationGate {
 #[cfg(test)]
 mod tests {
     use super::*;
+    // covers: install.desktop-entry/E1
     #[test]
     fn old_frame_cannot_open_new_attempt() {
         let gate = PresentationGate::new();
@@ -48,12 +49,14 @@ mod tests {
         gate.confirm(new); assert!(gate.ready(new)); assert_eq!(gate.pending(), 0);
         gate.confirm(old); assert!(gate.ready(new));
     }
+    // covers: install.desktop-entry/E1
     #[test]
     fn cancelled_command_cannot_arm_later() {
         let gate = PresentationGate::new();
         let ticket = gate.request(); gate.cancel(ticket); gate.arm(ticket); gate.confirm(ticket);
         assert!(!gate.ready(ticket)); assert_eq!(gate.pending(), 0);
     }
+    // covers: install.desktop-entry/E1
     #[test]
     fn submission_before_barrier_is_not_evidence() {
         let gate = PresentationGate::new();

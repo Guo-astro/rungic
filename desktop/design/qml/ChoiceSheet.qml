@@ -30,6 +30,13 @@ QQC2.Drawer {
     enter: Transition { NumberAnimation { property: "position"; to: 1; duration: Theme.slide; easing.type: Easing.Bezier; easing.bezierCurve: Theme.easing } }
     exit: Transition { NumberAnimation { property: "position"; to: 0; duration: Theme.normal; easing.type: Easing.Bezier; easing.bezierCurve: Theme.easing } }
     onClosed: pending = undefined
+    // The phone's back (Android's edge gesture, Alt+Left here, docs/46): the Drawer itself closes on
+    // Escape only, and while it is open, modal, the page's own Back shortcut does not fire.
+    Shortcut {
+        sequence: StandardKey.Back
+        enabled: sheet.opened
+        onActivated: sheet.close()
+    }
 
     contentItem: ColumnLayout {
         id: column

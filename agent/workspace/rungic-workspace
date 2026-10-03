@@ -28,11 +28,11 @@ if [ "$backend" = virtual ]; then :; else
 # freezer, docs/research/97) takes the connection but never the first roundtrip, and KWin and every
 # app started in it would hang there with no end.
 python3 - <<'PROBE' || fail "the Android host is not responding (the phone is asleep or Rungic is frozen, docs/research/97)"
-import json, socket, sys
+import json, os, socket, sys
 try:
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as c:
         c.settimeout(3)
-        c.connect('/mnt/android-wayland/platform.sock')
+        c.connect(os.environ.get('RUNGIC_PLATFORM_SOCKET', '/mnt/android-wayland/platform.sock'))
         c.sendall(b'{"op": "status"}\n')
         sys.exit(0 if json.loads(c.makefile('rb').readline() or b'null') else 1)
 except (OSError, ValueError):
@@ -62,7 +62,10 @@ if [ "$slot" = 0 ]; then
     # and Qt Quick's mobile controls (Kirigami's isMobile layouts).
     unset PLASMA_DEFAULT_SHELL PLASMA_PLATFORM QT_QUICK_CONTROLS_MOBILE
 else
-    [ -e "$state/config/kdeglobals" ] || ln -s "$RUNGIC_USER_CONFIG_HOME/kdeglobals" "$state/config/kdeglobals"
+    # The link stays from the last start; while the user has no kdeglobals yet it dangles (-e is false
+    # for it), and a second ln failed the start under set -e.
+    [ -e "$state/config/kdeglobals" ] || [ -L "$state/config/kdeglobals" ] \
+        || ln -s "$RUNGIC_USER_CONFIG_HOME/kdeglobals" "$state/config/kdeglobals"
 fi
 export XDG_CONFIG_HOME="$state/config"
 # A desktop's window behaviour, not the phone's: Plasma Mobile's configuration leaves the search
@@ -166,7 +169,9 @@ if [ "$slot" = 0 ]; then
     fi
     # Its clipboard in step with Android's, as the phone session's is (rungic-clipboard, one per
     # display): what is copied on the phone, in an Android app or on the desktop is pasted on the others.
-    ( while kill -0 $kwin 2>/dev/null; do rungic-clipboard 2>>"$state/clipboard.log"; sleep 3; done ) &
+    # (The loops run under this script's set -e: a program's failure must not end its loop, which
+    # ended for good the first time the bridge or the shell exited with an error or was killed.)
+    ( while kill -0 $kwin 2>/dev/null; do rungic-clipboard 2>>"$state/clipboard.log" || true; sleep 3; done ) &
     ( while kill -0 $kwin 2>/dev/null; do
           # Its layout set first (rungic-desktop-plasma: the volume applet shows the phone's devices);
           # a layout the shell has just made lacks it, and the shell starts once more.
@@ -174,7 +179,7 @@ if [ "$slot" = 0 ]; then
           plasmashell -p org.kde.plasma.desktop --no-respawn >"$state/plasmashell.log" 2>&1 &
           shell=$!
           ( sleep 20; ! rungic-desktop-plasma --needed || kill $shell ) &
-          wait $shell
+          wait $shell || true
           sleep 2
       done ) &
 else

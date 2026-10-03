@@ -9,7 +9,6 @@ not required. Android-side services are in `android/app/`.
 | `media/camera-source.cpp` | Android Camera2 → PipeWire cameras → libcamera / Snapshot / Firefox |
 | `media/media-bridge.py` | Demand-driven camera and microphone lifecycle; PulseAudio microphone source; `android_phone` sink that always plays on the phone (not the cast screen); virtual "Linux 扬声器"/"Linux 麦克风" devices for software taking part in calls ([docs/62](../docs/62-linux-virtual-audio.md)) |
 | `media/codec-client.*`, `gst-rungic-codec.c`, `ffmpeg-rungic-codec.c` | Android MediaCodec IPC → GStreamer / FFmpeg / Firefox |
-| `media/snapshot-moto-codec.patch` | Historical Snapshot import patch; active source is `packages/snapshot/` (patch queue) |
 | `platform/network-manager.py` | Android networking → NetworkManager D-Bus interface |
 | `platform/clipboard.py` | 独立 Android ClipboardDaemon ↔ Wayland clipboard；无 Activity 焦点依赖，历史由 Klipper 维护 |
 | `graphics/` | EGL/GBM/AHB diagnostic helpers |
@@ -18,6 +17,6 @@ not required. Android-side services are in `android/app/`.
 | `android/miracast-probe/` | Parked, unfinished experiment: a self-written Wi-Fi Display source (P2P via WifiP2pManager, RTSP M1–M16, MPEG-TS/RTP ported from AOSP 8.1 wifi-display, Apache-2.0) run as root with `app_process`; negotiates with the TCL TV but no picture yet. Not built into the APK ([docs/84](../docs/84-miracast-source.md)) |
 | `android/wfd.sepolicy.rule`, `android/rungic-wfd-sepolicy.sh` | SELinux fixes for Qualcomm Wi-Fi Display (Miracast), loaded at boot from `/data/adb/service.d` ([docs/58](../docs/58-miracast-desktop-feasibility.md)) |
 
-Runtime service definitions and Ubuntu build scripts remain in `plasma/`.
+Their service units and packaging are in `desktop/` and `packaging/`; upstream components they patch are in `packages/`.
 Detailed pipeline mapping: [media](../docs/48-plasma-media-pipelines.md) and
 [desktop integration](../docs/40-plasma-mobile-integration.md).

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# covers: install.first-run-progress/E6
 """Use case (docs/95): Rungic's app data is cleared after installation, then the app is opened.
 
 Runs the controller's install-publish action and the real first-boot script in a temporary

@@ -119,3 +119,10 @@ enabledLocales=zh_CN,en_US
 5. 收起再打开键盘后，刚选过的非首位候选仍排第一，说明会话关闭时已写盘。全屏键盘接入后，再在两边交替输入同一拼音核对共享；对方持有词库时，本边应能输入中文但不学习。
 
 **剩余风险**：访客会话依赖 librime 方案配置缓存共享这一实现细节。启动时虽有探测，升级 librime 后仍须重新核对 `UserDictionary::Load` 的恢复逻辑和配置缓存。访客会话的引擎只在建立时读取开关；VKB 不发送切换方案的热键，所以不会重建翻译器。两个进程在 rime-data 升级后同时启动时，可能并发执行 `workspace_update` 写 `build/`，这是原有风险，现在两进程更容易遇到。实机上的 fsync 延迟未知。全屏键盘须加载同一插件、不设 `RUNGIC_RIME_USER_DIR`，并通过 `QInputMethod` 显示和隐藏面板；否则只能等空闲超时释放。
+
+## 2026-10-03：敏感字段其实在学习词频（已修，离线验证）
+
+- **发现**：Mac mini 上的无头系统测试 `rime_keyboard`（`tools/system/tests/`，Ubuntu 26.04 arm64 容器，librime 1.16.1，非实机）新增“敏感字段不学习”的检查：在 `Qt::ImhSensitiveData` 字段里输入 shi、选第 6 个候选“式”，再到普通字段输入 shi，首位变成了“式”。
+- **原因**：插件对敏感字段调用 `set_option(session, "_no_learning", true)`，但 librime 没有这个开关（`librime.so.1.16.1` 中不含任何 `learn` 字样），设了等于没设；共享会话照常把选词写进用户词库。
+- **修复**：敏感字段改用访客会话（`RimeRuntime::openGuest`，建会话时关闭 `enable_user_dict`），既不读也不写用户词库；离开敏感字段、没有组合时再回到共享会话。`sessionShared` 在敏感字段里为 false。
+- **验证**：`tst_session.qml` 的 `test_7_sensitive_field_does_not_learn` 修复前失败、修复后通过；同一轮还检查了密码字段不进 Rime（`test_6`）、用户目录 0700 与 `default.custom.yaml` 只在没有时创建（`check.cpp`、`run.sh`）。实机尚未复核。

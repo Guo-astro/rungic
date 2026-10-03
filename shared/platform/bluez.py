@@ -13,6 +13,7 @@ Bluetooth settings, the quick setting, bluedevil) work unchanged:
 Requests go to the APK's platform socket ("bluetooth"); unsupported calls fail with
 org.bluez.Error.NotSupported. Requires PyGObject.
 """
+import os
 import concurrent.futures
 import json
 import logging
@@ -28,7 +29,7 @@ BLUEZ = 'org.bluez'
 ADAPTER = '/org/bluez/hci0'
 OM = 'org.freedesktop.DBus.ObjectManager'
 PROPS = 'org.freedesktop.DBus.Properties'
-SOCKET = '/mnt/android-wayland/platform.sock'
+SOCKET = os.environ.get('RUNGIC_PLATFORM_SOCKET', '/mnt/android-wayland/platform.sock')
 LOG = logging.getLogger('android-bluetooth')
 V = GLib.Variant
 POLL, POLL_DISCOVERING = 5, 2

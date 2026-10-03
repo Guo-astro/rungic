@@ -23,6 +23,7 @@ def write(path, data):
     os.utime(path, (stat.st_atime, stat.st_mtime + 1 + data['updated'] / 1e6))
 
 
+# covers: agent.team-board/E2
 def test_each_change_once_with_only_new_posts(tmp_path):
     path = tmp_path / 'team-board.json'
     feed = team_feed.Feed(path, clock=lambda: 1010.0)
@@ -36,6 +37,7 @@ def test_each_change_once_with_only_new_posts(tmp_path):
     assert [p['kind'] for p in feed.poll()[1]] == ['done']
 
 
+# covers: agent.team-board/E5
 def test_an_old_board_is_not_announced_again(tmp_path):
     path = tmp_path / 'team-board.json'
     write(path, board([{'role': 'art', 'kind': 'done', 'text': 'x', 'time': 990.0}], updated=1000.0))
@@ -43,6 +45,7 @@ def test_an_old_board_is_not_announced_again(tmp_path):
     assert b is not None and new == []
 
 
+# covers: agent.team-board/E3
 def test_only_what_matters_is_said_or_notified():
     b = board([])
     m = team_feed.milestone
@@ -59,5 +62,6 @@ def test_only_what_matters_is_said_or_notified():
     assert over['notify'] and not over['say'], "the lead's answer is spoken with its turn"
 
 
+# covers: agent.team-board/E2
 def test_the_card_leaves_the_posts_out():
     assert 'posts' not in team_feed.card(board([{'kind': 'brief'}])) and team_feed.card(board([]))['title']

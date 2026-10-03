@@ -24,7 +24,7 @@ opened), this keeps upstream's allocation, DRI3 and Present code.
 Forwarded: no
 Last-Update: 2026-09-30
 X-Rungic-Status: Pending [Android/KGSL only; not planned for upstream]
-X-Rungic-Tests: L3:xwayland.kgsl-glamor (glamor on FD710 in Xorg log; glmark2 and X11 GL apps on the GPU)
+X-Rungic-Tests: L3:xwayland.kgsl-glamor (to write) (glamor on FD710 in Xorg log; glmark2 and X11 GL apps on the GPU)
 X-Rungic-Docs: docs/research/93
 ---
  hw/xwayland/xwayland-glamor-gbm.c | 54 +++++++++++++++++++++++++++++++++++++++

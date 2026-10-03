@@ -43,6 +43,7 @@ else:
         self.device.log.close()
         self.temp.cleanup()
 
+    # covers: install.legacy-full-bundle/E2
     def test_stream_is_visible_before_process_finishes(self):
         results = []
         thread = threading.Thread(target=lambda: results.append(self.device.run("stream", timeout=3)))
@@ -55,12 +56,14 @@ else:
         thread.join(3)
         self.assertIn("Writing OKAY", results[0])
 
+    # covers: install.legacy-full-bundle/E2
     def test_timeout_and_device_failure_stop_the_command(self):
         with self.assertRaises(subprocess.TimeoutExpired):
             self.device.run("slow", timeout=.15)
         with self.assertRaises(RuntimeError):
             self.device.run("fail", timeout=3)
 
+    # covers: install.legacy-full-bundle/E3
     def test_segmented_identity_remains_parseable(self):
         self.assertEqual(self.device.var("version-bootloader"), "abcdef")
 
@@ -73,16 +76,19 @@ class FastbootMappingTest(unittest.TestCase):
                         "fastboot_bootloader": "firmware-ab", "securestate": "flashing_unlocked:SDP",
                         "target_slot": "a", "super_mode": "userspace", "mode_probe_verified": True}
 
+    # covers: install.legacy-full-bundle/E3
     def test_existing_default_stays_strict(self):
         self.assertEqual(flash.fastboot_settings(self.spec, "sha", "firmware-abc"),
                          "flashing_unlocked")
         with self.assertRaises(RuntimeError):
             flash.fastboot_settings(self.spec, "sha", "firmware-ab")
 
+    # covers: install.legacy-full-bundle/E3
     def test_explicit_observed_mapping(self):
         self.assertEqual(flash.fastboot_settings(self.spec, "sha", "firmware-ab", self.adapter),
                          "flashing_unlocked:SDP")
 
+    # covers: install.legacy-full-bundle/E3
     def test_wrong_firmware_spec_or_unverified_plan_is_rejected(self):
         mutations = {"device_spec_id": "other", "device_spec_sha256": "other",
                      "android_bootloader": "other", "fastboot_bootloader": "other",

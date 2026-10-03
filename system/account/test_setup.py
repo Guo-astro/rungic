@@ -21,6 +21,7 @@ class Tests(unittest.TestCase):
             patch.object(m.os,'getgrouplist',return_value=[1000,29]),
             patch.object(m.grp,'getgrgid',return_value=SimpleNamespace(gr_name='audio'))]:
    p.start();self.addCleanup(p.stop)
+ # covers: install.account-setup/E2
  def test_validation(self):
   for name,password in [('root;id','abcdefgh'),('../name','abcdefgh'),('Alice','abcdefgh'),('alice','short'),('alice','abcde\nfgh'),('alice','密'*100)]:
    with self.assertRaises(m.SetupError):m.validate({'username':name,'password':password},current)
@@ -28,6 +29,7 @@ class Tests(unittest.TestCase):
    with self.assertRaises(m.SetupError):m.validate({'username':'root','password':'abcdefgh'},current)
   with patch.object(m.os.path,'lexists',return_value=True):
    with self.assertRaises(m.SetupError):m.validate({'username':'bob','password':'abcdefgh'},current)
+ # covers: install.account-setup/E4
  def test_success_uses_stdin_and_writes_once(self):
   calls=[]
   def call(argv,payload=None,check=True):
@@ -42,14 +44,17 @@ class Tests(unittest.TestCase):
    self.assertTrue(any(a==['chpasswd'] and b==b'alice:test-only-pass\n' for a,b in calls))
    self.assertFalse(any('test-only-pass' in ' '.join(a) for a,_ in calls))
    with self.assertRaises(m.SetupError):m.configure({'username':'alice','password':'another-test-pass'})
+ # covers: install.account-setup/E7
  def test_rename_moves_subordinate_ids(self):
   def call(argv,payload=None,check=True):return 1 if argv[0]=='pgrep' else 0
   with patch.object(m,'call',side_effect=call):m.configure({'username':'alice','password':'test-only-pass'})
   for f in self.sub:self.assertEqual(f.read_text(),'alice:100000:65536\nother:165536:65536\n')
+ # covers: install.account-setup/E7
  def test_subordinate_ids_kept_when_new_name_has_them(self):
   for f in self.sub:f.write_text('rungic:100000:65536\nalice:231072:65536\n')
   m.rename_subordinate('rungic','alice')
   for f in self.sub:self.assertEqual(f.read_text(),'rungic:100000:65536\nalice:231072:65536\n')
+ # covers: install.account-setup/E5
  def test_failure_rolls_back(self):
   calls=[]
   def call(argv,payload=None,check=True):
@@ -62,11 +67,13 @@ class Tests(unittest.TestCase):
   self.assertIn((['chpasswd','--encrypted'],b'alice:!\n'),calls)
   self.assertIn((['usermod','--groups','audio','alice'],None),calls)
   self.assertIn((['usermod','--login','rungic','--home','/home/rungic','--move-home','alice'],None),calls)
+ # covers: install.account-setup/E5
  def test_existing_password_cannot_be_bootstrapped(self):
   with patch.object(m,'shadow_entry',return_value='$y$existing'),patch.object(m,'call') as c:
    with self.assertRaises(m.SetupError):m.configure({'username':'alice','password':'test-only-pass'})
    c.assert_not_called()
 
+ # covers: install.account-setup/E6
  def test_status_does_not_create_account(self):
   import io
   from contextlib import redirect_stdout
@@ -76,6 +83,7 @@ class Tests(unittest.TestCase):
   self.assertEqual(json.loads(output.getvalue()),{'configured':False})
   call.assert_not_called()
   self.assertFalse(self.state.exists())
+ # covers: install.account-setup/E6
  def test_status_reports_inflight_before_committed_marker(self):
   import io, fcntl
   from contextlib import redirect_stdout

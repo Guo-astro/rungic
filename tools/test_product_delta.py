@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# covers: install.legacy-oneclick-v3/E2
 """Check reconstruction correctness and failure handling without any device."""
 import contextlib
 import gzip

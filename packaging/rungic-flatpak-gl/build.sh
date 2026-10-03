@@ -11,11 +11,16 @@ BUILD=$DESTDIR/../flatpak-gl-build
 # Mesa's build scripts need PyYAML, which the SDK does not have.
 python3 -c 'import yaml' 2>/dev/null || python3 -m pip install -q --target "$BUILD-py" pyyaml
 export PYTHONPATH=$BUILD-py
-rm -rf "$BUILD"
-# shellcheck disable=SC2046
-meson setup "$BUILD" "$SRC/upstream/mesa" --prefix="$PREFIX" --libdir=lib \
-  $(grep -v -e '^--prefix' -e '^--libdir' -e '^-Dgallium-drivers=' "$SRC/desktop/mesa-meson-options") \
-  -Dgallium-drivers=freedreno,zink,softpipe
+# The build tree is kept between builds (only what changed recompiles); set up again when the
+# options change. Its install root goes every time.
+options="--prefix=$PREFIX --libdir=lib $(grep -v -e '^--prefix' -e '^--libdir' -e '^-Dgallium-drivers=' "$SRC/desktop/mesa-meson-options" | tr '\n' ' ') -Dgallium-drivers=freedreno,zink,softpipe"
+if [ ! -f "$BUILD/build.ninja" ] || [ "$(cat "$BUILD/.rungic-options" 2>/dev/null)" != "$options" ]; then
+  rm -rf "$BUILD"
+  # shellcheck disable=SC2086
+  meson setup "$BUILD" "$SRC/upstream/mesa" $options
+  printf '%s' "$options" > "$BUILD/.rungic-options"
+fi
+rm -rf "$BUILD/root"
 ninja -C "$BUILD" -j"${JOBS:-4}"
 DESTDIR=$BUILD/root ninja -C "$BUILD" install
 # The extension's directory is what Flatpak mounts at $PREFIX; the runtime merges the vendor

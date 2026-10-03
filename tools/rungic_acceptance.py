@@ -99,6 +99,121 @@ def new_crashes(ctx):
                          for g in groups if g['signature'] in known])
 
 
+# ---------------------------------------------------------------- interface contracts
+
+# Sends the read-only socket queries of a contract from the container, as the desktop user (as the
+# Linux consumers do), and prints one JSON line per query. Private reply fields are blanked there, on
+# the phone, keeping their types: the clipboard's text or a caller's number never reaches this computer.
+CONTRACT_ASK = r"""python3 - <<'ASK'
+import json, os, socket, struct
+def blank(value):
+    if isinstance(value, str):
+        return ''
+    if isinstance(value, list):
+        return [blank(v) for v in value]
+    if isinstance(value, dict):
+        return {k: blank(v) for k, v in value.items()}
+    return value
+for ask in json.loads(%s):
+    out = {'name': ask['name']}
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as c:
+            c.settimeout(ask['timeout'])
+            c.connect(os.environ.get(ask['env'], ask['address']) if ask['env'] else ask['address'])
+            if ask['peer_uid'] is not None:
+                out['peer_uid'] = struct.unpack('3i', c.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))[1]
+            c.sendall(json.dumps(ask['request']).encode() + b'\n' + bytes(ask['payload']))
+            reply = json.loads(c.makefile('rb').readline() or b'null')
+            for key in ask['private'] if isinstance(reply, dict) else ():
+                if key in reply:
+                    reply[key] = blank(reply[key])
+            out['reply'] = reply
+    except (OSError, ValueError) as error:
+        out['error'] = repr(error)
+    print(json.dumps(out))
+ASK"""
+
+
+def _parse_command(q, text):
+    """A command query's reply: its last JSON line, or its key=value lines (format properties)."""
+    if q.get('format', 'json') == 'properties':
+        reply = dict(line.split('=', 1) for line in text.splitlines() if '=' in line and not line.startswith('#'))
+    else:
+        lines = [line for line in text.splitlines() if line.startswith('{')]
+        reply = json.loads(lines[-1]) if lines else None
+    for key in q.get('private', []) if isinstance(reply, dict) else ():
+        if isinstance(reply.get(key), str):
+            reply[key] = ''        # not kept in the report (a command's output does reach this computer)
+    return reply
+
+
+def _command_problems(q):
+    done = run(q['command'], q.get('as', 'root'), q.get('timeout', 30), check=False)
+    fmt = q.get('format', 'json')
+    if fmt == 'exit':
+        if done.returncode != q.get('exit', 0):
+            return [f'exit {done.returncode}, not {q.get("exit", 0)}: {(done.stdout + done.stderr)[-300:]}']
+        return []
+    if fmt == 'text':
+        return [] if re.search(q['expect'], done.stdout) else [f'output does not match {q["expect"]!r}: {done.stdout[-300:]!r}']
+    if done.returncode != 0:
+        return [f'exit {done.returncode}: {(done.stdout + done.stderr)[-300:]}']
+    import contracts
+    try:
+        return contracts.check_reply(q, _parse_command(q, done.stdout))
+    except ValueError as error:
+        return [f'unreadable output: {error}']
+
+
+@check
+def interface_contract(ctx, interface='platform-bridge'):
+    """The Android provider of an interface keeps its contract (quality/contracts/, tools/contracts.py):
+    each read-only query of the contract, sent from the container as the Linux consumers send it (or
+    its read-only command, run where the contract says), gets a reply with every field they rely on, of
+    the right type, from the server they trust (peer_uid). Queries not marked read_only are never sent:
+    nothing changes on the phone. The consumers' side is tested offline against a stand-in of the same
+    contract."""
+    import contracts
+    contract = contracts.load(interface)
+    read = [q for q in contract['queries'] if q.get('read_only') is True]
+    asks = []
+    for q in read:
+        if 'command' not in q:
+            spec = contracts.socket_of(contract, q)[1]
+            asks.append({'name': q['name'], 'request': q['request'], 'address': contracts.address(spec),
+                         'env': spec.get('env'), 'peer_uid': spec.get('peer_uid'), 'timeout': q.get('timeout', 5),
+                         'payload': int(q['request'].get(q['payload'], 0)) if q.get('payload') else 0,
+                         'private': q.get('private', [])})
+    answers = {}
+    if asks:
+        wait = sum(a['timeout'] for a in asks) + 30
+        for line in user(CONTRACT_ASK % repr(json.dumps(asks)), timeout=wait).stdout.splitlines():
+            if line.startswith('{'):
+                answer = json.loads(line)
+                answers[answer['name']] = answer
+    problems = {}
+    for q in read:
+        name = q['name']
+        if 'command' in q:
+            found = _command_problems(q)
+        else:
+            answer, spec = answers.get(name), contracts.socket_of(contract, q)[1]
+            if answer is None or 'error' in answer:
+                found = [answer.get('error') if answer else 'no answer']
+            elif spec.get('peer_uid') is not None and answer.get('peer_uid') != spec['peer_uid']:
+                found = [f"served by uid {answer.get('peer_uid')}, not {spec['peer_uid']}"]
+            elif isinstance(answer['reply'], dict) and 'error' in answer['reply'] \
+                    and not any('error' in r for r in contracts.replies(q)):
+                found = [f"error reply: {answer['reply']['error']}"]
+            else:
+                found = contracts.check_reply(q, answer['reply'])
+        if found:
+            problems[name] = found
+    details = {} if read else {'error': 'the contract has no read-only query'}
+    return result(read and not problems, {'queries': len(read), 'broken': len(problems)},
+                  interface=interface, problems=problems, **details)
+
+
 # ---------------------------------------------------------------- display and input
 
 @check
@@ -369,33 +484,42 @@ def _cast_outputs():
 
 
 @check
-def desktop_mode_output(ctx):
-    """Desktop mode is a cast output of the Android host (docs/65; "the assistant's screen" before
-    docs/research/91 made that the agent's workspace): turning it on makes KWin's output CAST-n of
-    the host output's size, turning it off removes it (docs/72, the Android backend's host outputs)."""
-    # rungic-agent-screen was desktop mode on releases before the split.
-    program = '"$(command -v rungic-desktop-mode || command -v rungic-agent-screen || command -v moto-agent-screen)"'
+def desktop_mode(ctx, timeout=90):
+    """Desktop mode is the independent desktop, workspace 0 (docs/research/97 §19): turning it on
+    starts rungic-workspace@0 with its own plasmashell and the floating window that shows it, and
+    adds no output to the phone's KWin; turning it off ends all of it. In use already: checks it is
+    all there and leaves it as it was."""
+    program = '"$(command -v rungic-desktop-mode)"'
 
-    def state(command, timeout=60):
+    def state(command):
+        out = user(f'{program} {command}', timeout=timeout).stdout
         try:
-            return json.loads(user(f"{program} {command}", timeout=timeout).stdout)
-        except ValueError:
-            return {}
-    before = state('status')
-    if before.get('enabled'):
-        # In use: only check that its output is there.
-        return result(bool(before.get('output')), note='already on; left as it was', status=before)
-    on = state('on', timeout=90)
-    name = on.get('output') or ''
-    outputs = {o['name']: o for o in _cast_outputs()}
-    mode = next((m for m in outputs.get(name, {}).get('modes', [])
-                 if m.get('id') == outputs.get(name, {}).get('currentModeId')), {})
-    size = mode.get('size', {})
+            return json.loads(out.strip().splitlines()[-1])
+        except (ValueError, IndexError):
+            return {'unreadable': out[-300:]}
+
+    def parts():
+        text = user('systemctl --user is-active -q rungic-workspace@0 && echo unit; '
+                    'pgrep -f "^plasmashell -p org.kde.plasma.desktop" >/dev/null && echo shell; '
+                    'test -S "$XDG_RUNTIME_DIR/wayland-ws-0" && echo socket; '
+                    'pgrep -f "^/usr/libexec/rungic-agent-screen-window --desktop" >/dev/null && echo window').stdout
+        return {name: name in text.split() for name in ('unit', 'shell', 'socket', 'window')}
+
+    # What runs decides, not only what status says: a desktop the user has open is never turned off.
+    # Unreadable state: nothing is switched (a status read as {} once turned the user's desktop off).
+    now, before = parts(), state('status')
+    if 'unreadable' in before:
+        return result(False, error='desktop mode status unreadable; nothing switched', status=before, parts=now)
+    if before.get('enabled') or now['unit']:
+        now = parts()
+        return result(all(now.values()) and not _cast_outputs(), note='already on; left as it was', parts=now,
+                      cast_outputs=[o['name'] for o in _cast_outputs()])
+    on = state('on')
+    up = wait_for(lambda: (lambda p: p if all(p.values()) else None)(parts()), timeout=60, interval=2) or parts()
+    cast = [o['name'] for o in _cast_outputs()]
     off = state('off')
-    gone = wait_for(lambda: not _cast_outputs(), timeout=20, interval=1)
-    expected = on.get('size', '1920x1080')
-    ok = name.startswith('CAST') and f"{size.get('width')}x{size.get('height')}" == expected and gone
-    return result(ok, output=name, size=size, expected=expected, removed=gone, off=off)
+    gone = wait_for(lambda: not any(parts().values()), timeout=40, interval=2)
+    return result(all(up.values()) and not cast and gone, up=up, cast_outputs=cast, gone=bool(gone), on=on, off=off)
 
 
 @check

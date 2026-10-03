@@ -14,6 +14,8 @@ Item {
     TextInput { id: field; width: parent.width; height: 50 }
     TextInput { id: number; y: 60; width: parent.width; height: 50; inputMethodHints: Qt.ImhPreferNumbers }
     Rectangle { id: elsewhere; y: 120; width: 50; height: 50; focus: false }
+    TextInput { id: password; y: 180; width: parent.width; height: 50; echoMode: TextInput.Password }
+    TextInput { id: sensitive; y: 240; width: parent.width; height: 50; inputMethodHints: Qt.ImhSensitiveData }
     InputPanel { id: panel; y: parent.height - height; width: parent.width }
 
     TestCase {
@@ -49,6 +51,7 @@ Item {
             number.text = ""
         }
 
+        // covers: desktop.rime/E3
         // Runs first: the symbols page is the first page, and it must create Rime (layouts.py).
         function test_1_symbols_page_first() {
             show(number)
@@ -60,6 +63,7 @@ Item {
             Qt.inputMethod.hide()
             tryVerify(closed, 2000, "hiding the keyboard closes the session")
         }
+        // covers: desktop.rime/E4
         function test_2_typing_then_hide() {
             show(field)
             compare(im().sessionOpen, false, "showing the keyboard opens no session")
@@ -76,6 +80,7 @@ Item {
             commitFirst()
             tryCompare(field, "text", "你好中国")
         }
+        // covers: desktop.rime/E4
         function test_3_composition_survives_hide() {
             show(field)
             type("zhong")
@@ -88,6 +93,7 @@ Item {
             compare(field.text, "")
             im().idleInterval = 5000
         }
+        // covers: desktop.rime/E4
         function test_4_idle_closes_while_visible() {
             show(field)
             im().idleInterval = 200
@@ -104,6 +110,7 @@ Item {
             tryCompare(field, "text", "好好")
             im().idleInterval = 5000
         }
+        // covers: desktop.rime/E4
         function test_5_focus_loss() {
             show(field)
             type("ni")
@@ -112,6 +119,48 @@ Item {
             elsewhere.forceActiveFocus()
             tryVerify(() => !Qt.inputMethod.visible, 2000, "no input item: the panel hides")
             tryVerify(closed, 2000, "and the session closes")
+        }
+        // covers: desktop.rime/E6
+        // A password field never reaches Rime: its keys are plain letters, no session, no candidates.
+        function test_6_password_field() {
+            password.text = ""
+            password.forceActiveFocus()
+            Qt.inputMethod.show()
+            tryVerify(() => Qt.inputMethod.visible, 5000, "the panel shows")
+            type("nihao")
+            tryCompare(password, "text", "nihao")
+            verify(!isRime() || !im().sessionOpen, "no Rime session for a password field")
+            compare(InputContext.inputEngine.wordCandidateListModel.count, 0, "no candidates")
+            Qt.inputMethod.hide()
+        }
+        // covers: desktop.rime/E6
+        // A word picked in a sensitive field is not learned; the same pick in an ordinary field is.
+        function test_7_sensitive_field_does_not_learn() {
+            const model = InputContext.inputEngine.wordCandidateListModel
+            function candidates(item) {
+                show(item)
+                type("shi")
+                tryVerify(() => model.count > 6, 2000, "candidates for shi")
+                const list = []
+                for (let i = 0; i < 6; ++i) list.push(model.dataAt(i))
+                return list
+            }
+            const before = candidates(sensitive)
+            verify(im().sessionOpen && !im().sessionShared, "a sensitive field types in a session without the user dictionary")
+            model.selectItem(5)
+            tryCompare(sensitive, "text", before[5])
+            Qt.inputMethod.hide()
+            tryVerify(closed, 2000, "hiding the keyboard closes the session")
+            const after = candidates(field)
+            compare(after[0], before[0], "the sensitive field's pick is not first now")
+            model.selectItem(after.indexOf(before[5]))
+            Qt.inputMethod.hide()
+            tryVerify(closed, 2000, "hiding the keyboard closes the session")
+            const learned = candidates(field)
+            compare(learned[0], before[5], "the ordinary field's pick is first from then on")
+            model.selectItem(0)
+            Qt.inputMethod.hide()
+            tryVerify(closed, 2000, "hiding the keyboard closes the session")
         }
     }
 }

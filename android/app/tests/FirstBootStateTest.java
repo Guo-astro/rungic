@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets;
 public final class FirstBootStateTest {
     static void write(Path p,String text) throws Exception { Files.write(p,text.getBytes(StandardCharsets.UTF_8)); }
     static void require(boolean value) { if(!value)throw new AssertionError(); }
+    // covers: install.first-run-progress/E1 install.first-run-progress/E2 install.first-run-progress/E3 install.first-run-progress/E4 install.first-run-progress/E6
     public static void main(String[] args) throws Exception {
         Path root=Files.createTempDirectory(Paths.get(args[0]),"firstboot-state-");
         Path seed=root.resolve("seed.env"), status=root.resolve("status");

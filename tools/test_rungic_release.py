@@ -62,6 +62,7 @@ class AndroidFilesTests(unittest.TestCase):
         return [patch.object(rungic_release, name, getattr(device, name)) for name in ('run', 'push', 'pull')] + \
                [patch.object(rungic_release, 'WORKSPACE', self.root)]
 
+    # covers: delivery.release-deploy/E3
     def test_rollback_restores_replaced_and_removes_added_files(self):
         device = FakeDevice({'/data/adb/x/config': b'old config', '/data/adb/x/same': b'same'})
         info = self.release({'/data/adb/x/config': ('system/config', b'new config'),
@@ -84,6 +85,7 @@ class AndroidFilesTests(unittest.TestCase):
         self.assertEqual(device.files['/data/adb/x/same'], b'same')
         self.assertFalse([p for p in device.files if p.startswith('/data/local/tmp/')])
 
+    # covers: delivery.release-deploy/E3
     def test_nothing_to_restore_without_changes(self):
         device = FakeDevice({'/data/adb/x/same': b'same'})
         info = self.release({'/data/adb/x/same': ('system/same', b'same')})
@@ -145,12 +147,14 @@ class DeployFailureTests(unittest.TestCase):
             before_start()
         return True, action
 
+    # covers: delivery.release-deploy/E4
     def test_changed_android_source_aborts_before_the_snapshot(self):
         (self.root / 'system/config').write_bytes(b'edited since the build')
         log = rungic_release.deploy('test')
         self.assertEqual(log['result'], 'aborted')
         self.assertEqual(self.calls, [])
 
+    # covers: delivery.release-deploy/E3 delivery.rootfs-snapshot/E1
     def test_an_error_after_the_install_rolls_back(self):
         def broken(info, record):
             raise SystemExit('boom')
