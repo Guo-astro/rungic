@@ -139,17 +139,24 @@ class MacMini:
             raise rungic_device.DeviceError(f'Exit {result.returncode}: {text}')
         return result
 
+    # Build context: the Dockerfile and the debug symbol source it copies (the phone's own file).
+    IMAGE_FILES = {'Dockerfile': WORKSPACE / 'tools/pq/arm64-host.Dockerfile',
+                   'rungic-ddebs.sources': WORKSPACE / 'system/config/etc/apt/rungic-ddebs.sources',
+                   'arm64-host-packages.txt': WORKSPACE / 'tools/pq/arm64-host-packages.txt'}
+
+    @classmethod
+    def image(cls):
+        """The build image's tag: its build context's hash (tools/system_test.py builds on it too)."""
+        digest = hashlib.sha256()
+        for name, path in cls.IMAGE_FILES.items():
+            digest.update(name.encode() + b'\0' + path.read_bytes())
+        return 'rungic-arm64-host:' + digest.hexdigest()[:12]
+
     def ensure(self):
         if self.ready:
             return
-        # Build context: the Dockerfile and the debug symbol source it copies (the phone's own file).
-        files = {'Dockerfile': WORKSPACE / 'tools/pq/arm64-host.Dockerfile',
-                 'rungic-ddebs.sources': WORKSPACE / 'system/config/etc/apt/rungic-ddebs.sources',
-                 'arm64-host-packages.txt': WORKSPACE / 'tools/pq/arm64-host-packages.txt'}
-        digest = hashlib.sha256()
-        for name, path in files.items():
-            digest.update(name.encode() + b'\0' + path.read_bytes())
-        image = 'rungic-arm64-host:' + digest.hexdigest()[:12]
+        files = self.IMAGE_FILES
+        image = self.image()
         current = self.ssh(f"{self.DOCKER} inspect -f '{{{{.Config.Image}}}} {{{{.State.Running}}}}' {self.CONTAINER} "
                            f"2>/dev/null || true", 60).stdout.decode().split()
         if current[:1] != [image]:
