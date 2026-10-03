@@ -135,7 +135,7 @@
 
 部署中发现并已修正的问题：
 - APT拒绝仓库Origin变化：`apt-get update --allow-releaseinfo-change`。
-- 改名后的系统单元全部是disabled（桌面不启动）：旧包已被移除、旧的启用链接已被obsolete清理，`was-enabled`无法判断旧单元。改为读取deb-systemd-helper的记录（`.dsh-also`及其链接镜像），继承后purge旧记录；在容器中验证了5种情况。
+- 改名后的系统单元全部是disabled（桌面不启动）：旧包已被移除、旧的启用链接已被obsolete清理，`was-enabled`无法判断旧单元。改为读取deb-systemd-helper的记录（`.dsh-also`及其链接镜像），继承后purge旧记录；在容器中验证了5种情况。2026-10-03补正：管理员`systemctl disable`不更新deb-systemd-helper的链接镜像，按镜像判断会把已禁用的旧单元当成启用；postinst改为在obsolete清理之前检查`.dsh-also`列出的实际启用链接（系统测试`tools/system/tests/package_unit_state.py`）。
 - 用户设置迁移没有执行：`kconf_updaterc`第一行是不属于任何组的键，configparser拒绝读取。改为按KDE配置格式读取；首次设置步骤已按新名称重新执行过时，重复的节会删除旧节，快捷设置列表会去重。
 - `libmotocodec`、`libgstmotocodec`的库名没有改（规则要求`moto`前不是字母），而GStreamer按插件文件名查找入口符号，编码器因此全部不可用；package.json描述中`\n`后的名称同理。
 - `packages.json`中残留的`version`字段，把plasma-mobile、plasma-settings、kscreen钉在了`+moto`构建上，旧的录屏快捷设置去调用已删除的程序。补丁队列组件的版本改为一律取changelog。
