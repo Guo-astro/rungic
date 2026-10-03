@@ -226,3 +226,9 @@ USB G100 已部署 `20260930.12`：suggestions `0.452`、voice-agent `0.453`、d
 ## 2026-10-03：系统监视器的 GPU 与磁盘
 
 系统监视器“概览”“历史”页提示缺少传感器：ksystemstats 的 GPU 插件只认 DRM 设备，本机 Adreno 710 由 KGSL 驱动、没有 DRM 节点；磁盘插件只用 Solid，容器里没有 udev/UDisks2，列不出卷。在共享层修：`packages/ksystemstats`（Ubuntu 6.6.6-0ubuntu0.1 + 两条补丁）给 GPU 插件加 KGSL 设备（使用率取 `gpu_clock_stats` 增量、频率取 devfreq、温度取 `temp`，显存与功耗不提供），给磁盘插件加 Solid 无卷时的 `/proc/self/mountinfo` 后备（`System`=`rungic-root`、`Home`=`userdata`，statvfs 容量、diskstats 速率）。所有读 `org.kde.ksystemstats1` 的程序（系统监视器、System Monitor 与 Disk Usage 小组件）都受益，不改页面。离线测试、实机结果与剩余边界见 [104 篇](../104-system-monitor-gpu-disks.md)。
+
+## 2026-10-03：全屏的窗口层级与授权框
+
+- 浮窗的全屏改为标准全屏窗口（xdg_toplevel），位于 KWin 的 Active 层。会被激活的对话框（polkit 授权框）、屏幕键盘、Plasma Mobile 的通知和 OSD 按标准层级显示在它上面，Plasma Mobile 的面板按全屏应用的方式自己隐藏。手机实测：授权框显示在全屏桌面之上，键盘在授权框之上，取消后回到全屏；进出全屏没有空白帧。
+- 0 号（独立桌面）里应用的授权请求画在 0 号里：横屏、桌面外观（polkit-kde-agent 的代理界面，`packages/polkit-kde-agent-1`）。桌面只在浮窗里时，浮窗显示“需要授权”提示，点击后进入全屏输入。手机实测：0 号请求、浮窗提示、全屏输入、取消、polkit 发起的取消、手机端回归，均已通过。
+- 未验收：电视的电脑模式和远程观看时的授权框、授权成功的路径、KAuth 应用的挂靠窗口、0 号密码库的解锁提示。详见 [97 篇 §21](97-headless-agent-work.md)。

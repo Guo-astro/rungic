@@ -1227,3 +1227,65 @@ KWin 的层从低到高（`effect/globals.h`）：Desktop、Below、Normal、Abo
 **后续**：
 - `input-panel-above-overlay.patch`（§19.5）只是为原来的 overlay 全屏加的。手机实测确认键盘照常显示在新的全屏之上后，按“缩小补丁”的原则移除。
 - 授权框出现在 0 号里（21.5 的方向）另行实现。
+
+### 21.7 授权框出现在 0 号里：横屏、桌面外观（2026-10-03，用户决定方案；已部署为开发覆盖，手机实测通过）
+
+**用户决定**：0 号里的授权框画在 0 号里。桌面只在浮窗里、没有全屏时，授权框仍留在 0 号，浮窗上显示提示，用户点了全屏再输入；不自动切换模式，也不改到手机上弹。
+
+**各模式的规则**：
+
+| 桌面所在 | 授权框 |
+|---|---|
+| 手机上全屏 | 在 0 号桌面里（横屏、桌面外观），用全屏的浮动键盘输入 |
+| 只在浮窗里 | 在 0 号桌面里；浮窗画面底部显示“需要授权 · 点此全屏后输入”（琥珀色圆点），点它进入全屏；收到边缘时，标签上的圆点变为琥珀色并呼吸 |
+| 电视的电脑模式、RemoteSurface 远程观看 `ws-0` | 在 0 号桌面里，在哪看就在哪输 |
+| 助理屏工作区（无头，没有人在里面看） | 手机上，和以前一样 |
+| 手机自己的应用 | 手机上，和以前一样 |
+
+**调研补充**（源码）：
+- polkit 127 回应验证结果时（`authentication_agent_response`），只要求调用者是 uid 0，也就是辅助程序 polkit-agent-helper-1；会话按 cookie 查找，并核对 `agent->creator_uid` 等于辅助程序调用者的 uid（`get_authentication_session_for_uid_and_cookie`）。不要求必须是注册代理的那个进程。所以同一用户的另一个进程拿着 cookie 就能完成验证。
+- `polkit.subject-pid`：请求方以 D-Bus 名字作为 subject 时（KAuth），polkit 会把它解析成进程号（`add_pid`）。
+- polkit-qt 0.200 的 `Agent::AsyncResult` 只是包了一层 `GSimpleAsyncResult`。自己创建一个，就能让 `PolicyKitListener` 原样弹框和验证，并在完成回调里拿到结果。
+- 上游和类似项目：本轮没有找到“一个登录会话、多个合成器和会话总线”的 polkit 代理分发方案。搜到的都是同一合成器、多块显示器各开一个对话框（例如 Ukishima PR #8）。
+- 0 号的外观：0 号的 `XDG_CONFIG_DIRS` 里没有 plasma-mobile 那一层，`kdedefaults/` 也是 0 号私有的（§19.2），所以 `LookAndFeelPackage` 取默认值 `org.kde.breeze.desktop`。它的 `SystemDialog` 是带标题的 `Qt.Dialog`，用 `show()` 显示，不会像手机外观那样最大化。
+
+**做法**：
+- **分发规则**：按请求进程的**会话总线**来分，不按显示名。授权框交给请求方所在会话总线上的代理界面来画。0 号的应用用 0 号的私有总线（`$XDG_RUNTIME_DIR/rungic-workspace-0.bus`）。这条规则不是 0 号专用的：哪条总线上运行着代理界面，那条总线上的应用的授权框就画在那里。
+- **`packages/polkit-kde-agent-1`**（新增组件，Ubuntu `4:6.6.4-0ubuntu1`，`+rungic1`，登记在发布的 `rebuilt` 里），补丁 `rungic/delegate-prompt-to-requester-bus.patch`：
+  - **路由**：手机会话里向 polkit 注册的代理，从 `/proc/<subject-pid>/environ` 读请求进程的 `DBUS_SESSION_BUS_ADDRESS`。
+    - 只接受同一用户、在 `$XDG_RUNTIME_DIR` 下、不是自己那条总线的 Unix socket 地址（`promptroute.cpp`，单元测试 `routetest`）；
+    - 地址可以接受时，调用那条总线上 `org.kde.polkit-kde-authentication-agent-1` 的 `org.kde.Polkit1AuthAgent.Delegate.Begin`，等待 `Finished(cookie, error)`；
+    - polkit 取消时转发 `Cancel`；代理界面中途退出，请求按出错结束；
+    - 环境读不到、地址不可接受，或 `Begin` 调用失败时，照常在手机上弹框。
+  - **代理界面**：同一个程序加 `--delegate`。它不向 polkit 注册，在所在总线上提供 `Delegate` 接口，用 `PolicyKitListener` 原有的对话框和 `Session` 完成验证；`Prompting` 属性和 `PromptingChanged` 信号表示有请求在等待。
+    - 它同时以标准名字导出 `/org/kde/Polkit1AuthAgent`，所以 0 号里 KAuth 应用调用 `setWindowHandleForAction` 时，对话框会挂到该应用的窗口上。
+- **0 号总线**：`agent/workspace/dbus/desktop-services/org.kde.polkit-kde-authentication-agent-1.service`，按需激活 `--delegate`。
+- **浮窗**：
+  - `rungic-workspace-stream` 在工作区总线上监听 `PromptingChanged`，输出 `prompting 1|0`；
+  - `AgentScreen.prompting` 据此更新；`Main.qml` 在非全屏时显示上表中的提示。
+- **部署时重启**：`release/packages.json` 的 `user_restart` 里登记了 `plasma-polkit-agent.service`，以及带 `--delegate` 的完整命令行（`pkill -xf` 精确匹配，不会误杀刚重启的手机端代理）。
+
+**测试**：
+- **L1**：`routetest`（13 种地址：本用户的另一条总线、带 guid、自己那条总线及其另一种写法、`$XDG_RUNTIME_DIR` 之外、`..` 越界、别的用户、abstract、tcp、相对路径、未知键、空、多个地址取第一个；另测环境变量解析和没有运行目录的情况）。在 Mac mini 的 arm64 构建容器里另开 `BUILD_TESTING=ON` 的构建目录编译运行，通过。打包构建本身带 `nocheck`，不跑测试。
+- **手机实测**（G100 S，2026-10-03 06:51–07:03，用户同意重启桌面模式浮窗并在屏幕上测试；测试前确认没有触点；截图在 `.work/verify/20261003-polkit-delegate/`）：
+  - 发起方式同 21.6：从 0 号的环境经 `systemd-run --user --scope` 运行 `pkcheck … --allow-user-interaction`，只询问、不执行任何操作。
+  - **0 号的请求**：手机端代理日志 “goes to the delegate on /run/user/1000/rungic-workspace-0.bus”；0 号总线激活了 `--delegate`。0 号里出现桌面外观的横向对话框 “Authentication Required”，带标题栏，任务栏里有它的图标（`1-ws0.jpg`）。手机上没有再弹竖屏框。
+  - **浮窗状态下的提示**：画面底部显示提示条，琥珀色圆点（`1-phone-s.png`）。点提示条后进入全屏，授权框横着出现在全屏桌面里，提示条消失（`2-full-s.png`）。
+  - **输入**：打开全屏的浮动键盘，用 adb 输入 `abc`（经隐藏输入框，以输入法提交的方式送进 0 号），密码框显示 3 个圆点（`4-ws0-crop.jpg`）。没有提交；按 Esc 取消后返回 Not authorized，`Prompting` 变回 false。
+  - **由 polkit 发起的取消**：结束等待中的 `pkcheck` 后，手机端代理打出 “Cancelling authentication” 并转发给代理界面，0 号里的对话框关闭，浮窗提示消失（`8-s.png`）。
+  - **回归**：手机会话自己的请求仍弹出手机外观的框（`5-s.png`），取消后返回 Not authorized。
+- **发现并修复的崩溃**：第一版的代理界面在用户取消后崩溃（KCrash，pid 6920）。
+  - 原因：原版 `PolicyKitListener` 取消一次会多次调用 `finishObtainPrivilege`（取消按钮、`Session` 的 completed、窗口关闭），每次都会完成结果对象。手机端代理（未改动的那部分逻辑）的日志里也能看到同样的重复。polkit-qt 从不释放它的 `AsyncResult`，所以原版没事；第一版代理界面在完成回调后用 `singleShot(0)` 删掉了自己的 `AsyncResult`，13 ms 后的那次重复调用用了已释放的对象。
+  - 修法：完成后保留到下一个请求完成时才删除。修复后，日志里同样出现了完成之后的第二次 “Dialog cancelled”，进程 9606 没有崩溃，之后也没有新的崩溃记录。
+- **测试方法上的教训**：浮动键盘没打开时，全屏里的 Esc 按设计会退出全屏，而不是送进 0 号；第一次重测时把“退出了全屏”误当成“没有取消”。键盘打开时，Esc 才会送进 0 号。
+- **部署**：开发覆盖 `4:6.6.4-0ubuntu1+rungic1+dev20261002t225644.f9d1056.dirty`，以及同一轮的 `rungic-agent-screen`；`apt=ok`。完整性检查是 drift，与 21.6 相同，都是已有的开发覆盖和两个早已存在的 `/usr` 文件。
+- **工具修正**：`rungic_dev.py` 原先优先用基线发布里记录的 `user_restart`，工作区新登记的重启项被忽略，第一次部署后手机端代理没有重启（只好手动重启）。现在把发布的清单和工作区的清单合并，工作区优先；`tools/test_rungic_dev.py` 19 项通过。重启时 systemd 提示单元文件已变、需要 `daemon-reload`，重启脚本不执行它，暂未处理。
+
+**未测和遗留**：
+- 电视的电脑模式、RemoteSurface 远程观看 `ws-0` 时的授权框（按设计应和全屏时一样）；
+- 输入正确密码后授权成功（测试中不输入用户密码）；
+- KAuth 应用（Discover、系统设置）把对话框挂到自己窗口上的行为；
+- 对话框在 0 号里被放在左上角（0 号 KWin 默认的摆放方式），可以改成居中；
+- 手机端浮窗显示英文提示：浮窗进程的语言本来就是英文（标签 “Desktop” 也是），和这次改动无关；
+- 0 号的密码库解锁提示（经 `rungic-bus-forward` 转到手机）仍在手机上，属于同一类问题，尚未处理。
+

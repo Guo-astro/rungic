@@ -596,3 +596,7 @@ G100 ZY32M9MRVP / Android 16 / APK 2.29 开发版通过标准 PA 客户端检查
 ## 2026-10-03：系统监视器传感器（GPU、磁盘）
 
 链路：系统监视器 / System Monitor 小组件 → 会话 D-Bus `org.kde.ksystemstats1`（手机会话与工作区 0 各有一个按需激活的 ksystemstats）→ GPU 插件 `LinuxKgslGpu` → `/sys/class/kgsl/kgsl-3d0/{gpu_model,gpu_clock_stats,gpubusy,temp,devfreq/*}` → KGSL → Adreno 710；磁盘插件（Solid 无卷时）→ `/proc/self/mountinfo` + `statvfs` + `/proc/diskstats` → `rungic-root`（userdata 上 loop 的 ext4 镜像）与 `userdata`（f2fs）。只在传感器被订阅时读 sysfs；不读 `devfreq/gpu_load`（读后重置调频器统计）。没有按进程的 GPU 使用率（KGSL 无 DRM fdinfo），不提供显存与功耗。实现与验收见 [104 篇](../104-system-monitor-gpu-disks.md)。
+
+## 2026-10-03：授权框跟随请求方的桌面（polkit 代理界面）
+
+链路：0 号（独立桌面）里的应用或 KAuth 辅助程序 → 系统总线 polkitd（只认会话 c126 里唯一注册的代理）→ 手机会话的 polkit-kde-agent（路由，`packages/polkit-kde-agent-1`）→ 读请求进程 `polkit.subject-pid` 的 `DBUS_SESSION_BUS_ADDRESS` → 0 号私有总线上按需激活的 `polkit-kde-authentication-agent-1 --delegate` → 0 号 KWin 里桌面外观的对话框 → polkit-agent-helper-1 凭 cookie 校验密码。代理界面的 `Prompting` 经 `rungic-workspace-stream` 的 `prompting 1|0` 传给浮窗，用来显示提示条。手机会话和无头助理屏工作区的请求不走转发，仍弹在手机上。全屏改为标准全屏窗口后，手机上的授权框、键盘、通知、OSD 都在全屏之上。研究、实现与验收见 [97 篇 §21](97-headless-agent-work.md)。
