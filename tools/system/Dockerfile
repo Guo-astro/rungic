@@ -2,6 +2,7 @@
 # Rungic's Linux system features run on, and an unprivileged user. A headless KWin (--virtual) is the
 # compositor; nothing of Android is here: its interfaces are stand-ins of their contracts. A fresh
 # Ubuntu rootfs too: tests marked "system-test: as root" install into it (openssh-server: SSH on first install).
+# The AT-SPI bus and its GObject binding: rungic-a11y drives applications by their controls' names.
 ARG BASE
 FROM ${BASE}
 ARG http_proxy
@@ -14,5 +15,6 @@ RUN apt-get update -q && DEBIAN_FRONTEND=noninteractive apt-get install -y -q --
         qml6-module-qtquick-virtualkeyboard qt6-virtualkeyboard-plugin qml6-module-qtcore qml6-module-qtquick-window \
         qml6-module-qtquick-effects qml6-module-org-kde-kirigami qml6-module-org-kde-pipewire qml6-module-org-kde-layershell \
         fonts-noto-core openssh-server \
+        at-spi2-core gir1.2-atspi-2.0 qml6-module-qtquick-controls qml6-module-qtquick-layouts \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m tester
