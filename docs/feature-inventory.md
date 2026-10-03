@@ -884,6 +884,8 @@ Linux 应用用手机的相机拍照录像，用手机的扬声器和麦克风�
 - 描述里有空格时整个属性列表要加引号，否则 Module initialization failed。 [docs/62-linux-virtual-audio.md](../docs/62-linux-virtual-audio.md)
 - 首版把虚拟设备创建失败当成音频服务不可用，连带停掉了手机输出；虚拟设备必须与原有设备隔离。 [docs/62-linux-virtual-audio.md](../docs/62-linux-virtual-audio.md)
 - stream-restore 要设 restore_device=false，否则 pactl move 会按应用名记住设备、波及同名的其他应用。 [docs/62-linux-virtual-audio.md](../docs/62-linux-virtual-audio.md)
+- 安卓一侧的 PulseAudio 停掉时隧道 sink android 随之消失，PulseAudio 把默认输出改到 linux_speaker（2026-10-03 系统测试里停掉替身时看到），这段时间应用的声音进了无声的虚拟设备；桥只在创建虚拟设备时交还默认设备，隧道回来后是 PulseAudio 自己切回 android。停掉期间该落到哪里（例如“手机本机”）尚未决定。 [docs/62-linux-virtual-audio.md](../docs/62-linux-virtual-audio.md)
+- 按住说话（hold）的代发语音没在 4 秒内移到 Linux 麦克风时只能松开，而松开就是发送，真麦克风录到的那几秒可能被发出；点按模式会点取消。这类应用怎样取消录音尚未知道。 [docs/62-linux-virtual-audio.md](../docs/62-linux-virtual-audio.md)
 
 文档：[docs/62-linux-virtual-audio.md](../docs/62-linux-virtual-audio.md)
 

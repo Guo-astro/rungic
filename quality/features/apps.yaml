@@ -634,6 +634,10 @@ features:
         docs: [docs/62-linux-virtual-audio.md]
       - text: stream-restore 要设 restore_device=false，否则 pactl move 会按应用名记住设备、波及同名的其他应用。
         docs: [docs/62-linux-virtual-audio.md]
+      - text: 安卓一侧的 PulseAudio 停掉时隧道 sink android 随之消失，PulseAudio 把默认输出改到 linux_speaker（2026-10-03 系统测试里停掉替身时看到），这段时间应用的声音进了无声的虚拟设备；桥只在创建虚拟设备时交还默认设备，隧道回来后是 PulseAudio 自己切回 android。停掉期间该落到哪里（例如“手机本机”）尚未决定。
+        docs: [docs/62-linux-virtual-audio.md]
+      - text: 按住说话（hold）的代发语音没在 4 秒内移到 Linux 麦克风时只能松开，而松开就是发送，真麦克风录到的那几秒可能被发出；点按模式会点取消。这类应用怎样取消录音尚未知道。
+        docs: [docs/62-linux-virtual-audio.md]
     code:
       - shared/media/media-bridge.py
       - shared/media/audio-route.py
