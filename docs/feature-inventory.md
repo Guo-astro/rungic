@@ -2627,12 +2627,12 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 `install.ssh-access` · Linux 系统功能 — 装好后容器的 SSH 自动可用（用户 2026-09-29 要求），每台手机有自己的主机密钥，账户密码和密钥都能登录。
 
-- **E1** 新装的系统 ssh.socket 已启用并在 22 端口（IPv4 与 IPv6）监听，开机后自动可连；有连接时才启动 sshd。（人工）
+- **E1** 新装的系统 ssh.socket 已启用并在 22 端口（IPv4 与 IPv6）监听，开机后自动可连；有连接时才启动 sshd。（系统测试、人工）
 - **E2** 账户密码和 ~/.ssh/authorized_keys 里的密钥都能登录；root 只能用密钥。（人工）
 - **E3** 镜像里不带主机密钥；每台手机在安装时生成自己的三组主机密钥，之后缺失时自动补上。（人工）
 
 注意：
-- 用户明确要求 SSH 自动开启；升级和排障时不得按旧文档“默认关闭”停用 SSH 或加关闭策略。desktop/services/policy.json 里 SSH 组的默认值和 10-rungic.conf 的注释仍写着默认关闭，自动开启靠首装时启用 ssh.socket。 [docs/research/g100-system-update-20260929.md](../docs/research/g100-system-update-20260929.md) [docs/83-service-policy.md](../docs/83-service-policy.md)
+- 用户明确要求 SSH 自动开启；升级和排障时不得按旧文档“默认关闭”停用 SSH 或加关闭策略。2026-10-03 前 desktop/services/policy.json 的 SSH 默认值仍是 disabled，新装设备首装会停用 ssh.socket；现为 enabled（tools/system/tests/ssh_on_first_install.py）。deb-systemd-helper 的 enable 不会撤销它自己先前的 disable。 [docs/research/g100-system-update-20260929.md](../docs/research/g100-system-update-20260929.md) [docs/83-service-policy.md](../docs/83-service-policy.md)
 - 容器与 Android 共用网络命名空间，没有独立的局域网 IP，sshd 监听在手机自己的地址上；局域网连通先看 ARP 等证据。 [docs/83-service-policy.md](../docs/83-service-policy.md) [docs/research/g100-ssh-connectivity-20260929.md](../docs/research/g100-ssh-connectivity-20260929.md)
 
 文档：[docs/83-service-policy.md](../docs/83-service-policy.md)、[docs/research/g100-system-update-20260929.md](../docs/research/g100-system-update-20260929.md)、[docs/research/g100-ssh-connectivity-20260929.md](../docs/research/g100-ssh-connectivity-20260929.md)

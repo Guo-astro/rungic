@@ -153,3 +153,15 @@ def test_the_real_inventory_keeps_within_its_baseline():
     over = [w for w in fi.Inventory(ROOT).check().over_baseline() if w[0] != 'stale-evidence']
     assert not over, '\n'.join(f'{k}: {w}: {n}' for k, w, n in over) + \
         '\n(fix these; for test backlog that is meant to grow, run check --update-baseline and say why)'
+
+
+# covers: delivery.feature-inventory/E1
+def test_an_experience_only_the_phone_can_show_says_why(tmp_path):
+    files = {'src/thing.py': '', 'docs/a.md': ''}
+    acceptance = '{"scenarios": [{"id": "s", "level": "smoke", "covers": ["a.thing/E1"]}]}'
+    area = AREA.replace('{id: E1, text: It works.}', '{id: E1, text: It works., device: frame pacing is the phone GPU}')
+    inventory = repo(tmp_path, files, area, DOCS, acceptance=acceptance)
+    assert not [w for w in inventory.warnings if w[0] == 'device-only' and w[1] == 'a.thing/E1']
+    inventory = repo(tmp_path, files, AREA.replace('{id: E1, text: It works.}', "{id: E1, text: It works., device: ''}"), DOCS,
+                     acceptance=acceptance)
+    assert any('device needs the reason' in e for e in inventory.errors)

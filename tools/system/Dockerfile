@@ -1,6 +1,7 @@
 # The system test image (tools/system_test.py, quality/README.md 分层): the build image with what
 # Rungic's Linux system features run on, and an unprivileged user. A headless KWin (--virtual) is the
-# compositor; nothing of Android is here: its interfaces are stand-ins of their contracts.
+# compositor; nothing of Android is here: its interfaces are stand-ins of their contracts. A fresh
+# Ubuntu rootfs too: tests marked "system-test: as root" install into it (openssh-server: SSH on first install).
 ARG BASE
 FROM ${BASE}
 ARG http_proxy
@@ -12,6 +13,6 @@ RUN apt-get update -q && DEBIAN_FRONTEND=noninteractive apt-get install -y -q --
         libkpipewire-dev libegl-dev libgles-dev libdrm-dev \
         qml6-module-qtquick-virtualkeyboard qt6-virtualkeyboard-plugin qml6-module-qtcore qml6-module-qtquick-window \
         qml6-module-qtquick-effects qml6-module-org-kde-kirigami qml6-module-org-kde-pipewire qml6-module-org-kde-layershell \
-        fonts-noto-core \
+        fonts-noto-core openssh-server \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m tester

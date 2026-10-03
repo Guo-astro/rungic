@@ -218,8 +218,12 @@ class Inventory:
                 checks = self.coverage(fid, item)
                 if f.get('status') != 'retired' and not checks and not item.get('gap'):
                     self.warnings.append(('untested', f'{fid}/{eid}', item.get('text', '')))
-                # A Linux system feature checked only on the phone: a system test can do it without Android.
-                if f.get('platform') == 'linux' and checks and not {k for k, _ in checks} & {'unit', 'system'}:
+                # A Linux system feature checked only on the phone: a system test can do it without Android,
+                # unless what the experience is about is the phone itself (`device: why`, quality/README.md).
+                if 'device' in item and not str(item['device'] or '').strip():
+                    self.errors.append(f'{where}/{eid}: device needs the reason only the phone can show it')
+                if f.get('platform') == 'linux' and checks and not {k for k, _ in checks} & {'unit', 'system'} \
+                        and not item.get('device'):
                     self.warnings.append(('device-only', f'{fid}/{eid}', 'a Linux feature checked only on the phone or by hand'))
             if f.get('status') == 'live' and not f['experience']:
                 self.warnings.append(('no-experience', fid, 'a live feature with no experience to check'))
@@ -372,6 +376,8 @@ class Inventory:
             kinds = [k for k in ('unit', 'system', 'device', 'manual') if k in {c for c, _ in checks}]
             label = '、'.join({'unit': '单元测试', 'system': '系统测试', 'device': '实机验收', 'manual': '人工'}[k] for k in kinds) if kinds \
                 else ('缺口：' + str(item['gap']).strip() if item.get('gap') else '**未检查**')
+            if item.get('device'):
+                label += '；只能在手机上看：' + str(item['device']).strip()
             lines.append(f'- **{item.get("id")}** {str(item.get("text", "")).strip()}（{label}）')
         if f['pitfalls']:
             lines += ['', '注意：']
@@ -391,6 +397,8 @@ class Inventory:
                 out.append(f'      {kind}: {where}')
             if item.get('gap'):
                 out.append(f'      gap: {item["gap"]}')
+            if item.get('device'):
+                out.append(f'      device: {item["device"]}')
         for pitfall in f['pitfalls']:
             out.append(f'  ! {pitfall.get("text")} {" ".join(pitfall.get("docs", []))}')
         out += [f'  code: {p} ({len(self.matches(p))} files)' for p in f['code']]

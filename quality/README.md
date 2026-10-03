@@ -34,6 +34,7 @@ Rungic 的功能、它们必须做到的体验，以及背后的代码、文档�
       evidence:                      # 人工验证：文档位置和日期（超过 90 天算过期）
         - {doc: docs/research/97-headless-agent-work.md, date: 2026-10-03, note: §21.6}
       gap: 只能人眼判断，等录屏比对工具       # 暂时无法检查的原因（可选，写明就不算“未检查”）
+      device: 帧率取决于手机的 GPU 与 Android 的刷新   # 只有手机能说明这条体验的原因（可选，见“分层”）
   pitfalls:                          # 需要注意的问题：踩过的坑、限制、容易误判的地方
     - text: 手机上全屏窗口第一帧要晚约 0.6 秒。
       docs: [docs/research/97-headless-agent-work.md]
@@ -74,6 +75,8 @@ Rungic 的功能、它们必须做到的体验，以及背后的代码、文档�
 | 实机 | 手机（`tools/rungic_acceptance.py`、人工） | 接上之后整体可用；性能、时序、功耗 |
 
 `report` 会指出只在手机上检查的 Linux 功能（`device-only`，应当补系统测试）和只测了一头的接口（`one-sided-contract`）。
+
+Linux 功能里也有只能在手机上看的体验：性能、帧率、时序、功耗、画质、音质，或者结果取决于 Android 和硬件本身（例如摄像头出画、120 Hz）。这类体验写 `device: 原因`，仍然要有实机验收或人工验证，但不算 `device-only` 欠账。原因要具体到为什么系统测试替代不了；能拆出 Linux 一侧逻辑的，那部分照样写单元或系统测试。
 
 ### 文档类别
 

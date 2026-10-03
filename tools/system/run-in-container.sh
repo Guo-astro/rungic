@@ -1,7 +1,8 @@
 #!/bin/sh
 # In the system test container (tools/system_test.py): build the Linux programs the tests use from
 # the working tree in /src, install them as their packages do, then run each test as an ordinary
-# user in a session bus of its own. One line of JSON per test on stdout ({"test", "passed", ...}).
+# user in a session bus of its own (or as root, the container being a fresh system, for a test that
+# says "# system-test: as root"). One line of JSON per test on stdout ({"test", "passed", ...}).
 set -eu
 export LANG=C.UTF-8
 for dir in agent/screen agent/workspace; do
@@ -12,7 +13,12 @@ for dir in agent/screen agent/workspace; do
 done
 failed=0
 for test in "$@"; do
-    out=$(su tester -c "cd /tmp && PYTHONPATH=/src/tools/system:/src/tools:/src/agent/computer-use dbus-run-session -- python3 /src/tools/system/tests/$test.py" 2>/tmp/$test.err) || failed=1
+    path=/src/tools/system:/src/tools:/src/agent/computer-use
+    if grep -q '^# system-test: as root' "/src/tools/system/tests/$test.py"; then
+        out=$(cd /tmp && PYTHONPATH=$path python3 "/src/tools/system/tests/$test.py" 2>/tmp/$test.err) || failed=1
+    else
+        out=$(su tester -c "cd /tmp && PYTHONPATH=$path dbus-run-session -- python3 /src/tools/system/tests/$test.py" 2>/tmp/$test.err) || failed=1
+    fi
     printf '%s\n' "$out" | grep '^{' || { echo "{\"test\": \"$test\", \"passed\": false, \"log\": \"$(tail -8 /tmp/$test.err | tr '\"\n' "' ")\"}"; failed=1; }
 done
 exit $failed

@@ -264,7 +264,7 @@ features:
         evidence:
           - {doc: docs/91-x70-independent-install.md, date: 2026-09-30, note: "镜像构建去除主机密钥，首装在设备生成"}
     pitfalls:
-      - text: 用户明确要求 SSH 自动开启；升级和排障时不得按旧文档“默认关闭”停用 SSH 或加关闭策略。desktop/services/policy.json 里 SSH 组的默认值和 10-rungic.conf 的注释仍写着默认关闭，自动开启靠首装时启用 ssh.socket。
+      - text: 用户明确要求 SSH 自动开启；升级和排障时不得按旧文档“默认关闭”停用 SSH 或加关闭策略。2026-10-03 前 desktop/services/policy.json 的 SSH 默认值仍是 disabled，新装设备首装会停用 ssh.socket；现为 enabled（tools/system/tests/ssh_on_first_install.py）。deb-systemd-helper 的 enable 不会撤销它自己先前的 disable。
         docs: [docs/research/g100-system-update-20260929.md, docs/83-service-policy.md]
       - text: 容器与 Android 共用网络命名空间，没有独立的局域网 IP，sshd 监听在手机自己的地址上；局域网连通先看 ARP 等证据。
         docs: [docs/83-service-policy.md, docs/research/g100-ssh-connectivity-20260929.md]
