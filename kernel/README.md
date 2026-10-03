@@ -1,6 +1,6 @@
 # GKI baseline（零修改）
 
-> Docker 后续验证已完成基础部署：见 [2026-09-22 Docker 记录](../docs/19-docker-installation.md)。沿用 LXC 容器内核，保持 SELinux Enforcing；通过 containerd 的显式 OverlayFS 挂载参数修复普通容器写入，并适配 Android 网络。下段“本次仅 LXC”及下文 Docker 脚本均属于此前阶段。
+> Docker 后续验证已完成基础部署（2026-09-22 Android 侧 Docker，已删除；现为容器内 rootless Docker，内核支持核对见 [85 篇末节](../docs/85-lxc-rootless-docker.md)）。沿用 LXC 容器内核，保持 SELinux Enforcing；通过 containerd 的显式 OverlayFS 挂载参数修复普通容器写入，并适配 Android 网络。下段“本次仅 LXC”及下文 Docker 脚本均属于此前阶段。
 
 > 2026-09-22 最新状态：已在原厂 Android 16 上运行 LXC，见 [实机部署记录](../docs/17-lxc-installation.md)。当前 boot 是 `~/moto-lxc-20260922/boot-lxc-stockcert.img`。旧 `boot-gki-userns.img` 直接用于原厂系统会缺少 97 个模块并阻碍开机；已通过恢复内核中的原厂 GKI 信任证书解决，441 个模块完整加载。下面“已刷/当前”均为 2026-09-17 历史。`out/kernel_aarch64/dist/` 最后一次实验有 3,252 个符号 CRC 变化，仍不能使用。旧 Docker 脚本执行 `setenforce 0`，不代表本次 Docker 验证；本次仅 LXC，保持 Enforcing。
 

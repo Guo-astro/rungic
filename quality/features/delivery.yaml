@@ -712,7 +712,7 @@ features:
       - tools/prepare_android_host.py
       - packages/WORKFLOW.md
       - packages/*/recipe.json
-    docs: [docs/71-upstream-patch-queue.md, docs/73-reduce-upstream-changes.md, docs/54-vendor-adaptation-boundaries.md, packages/WORKFLOW.md]
+    docs: [docs/71-upstream-patch-queue.md, docs/73-reduce-upstream-changes.md, packages/WORKFLOW.md]
 
   - id: delivery.vendor-history-import
     title: 由 vendor 历史生成补丁队列

@@ -8,7 +8,7 @@
 
 **按第五阶段的目标，不可行，维持现状。** VA-API驱动本身能做出来（同类设备已有先例，见“已有工作”），但它替换不掉要删除的这三项：
 
-1. **Firefox过不了自己的能力探测。** Firefox先用glxtest探测GPU，探测结果不含DRM节点时，VA-API硬解会被强制关闭。本机Mesa在KGSL上只提供软件EGL设备，glxtest因此记为`MESA_ACCELERATED FALSE`，也拿不到`DRM_RENDERDEVICE`，vaapitest根本不会运行。`media.hardware-video-decoding.force-enabled`绕不过这一关（源码见下文）。要过这关，只能让Mesa把KGSL谎报成DRM设备，这违反[54篇](../54-vendor-adaptation-boundaries.md)“不能伪造DRM设备”的边界。
+1. **Firefox过不了自己的能力探测。** Firefox先用glxtest探测GPU，探测结果不含DRM节点时，VA-API硬解会被强制关闭。本机Mesa在KGSL上只提供软件EGL设备，glxtest因此记为`MESA_ACCELERATED FALSE`，也拿不到`DRM_RENDERDEVICE`，vaapitest根本不会运行。`media.hardware-video-decoding.force-enabled`绕不过这一关（源码见下文）。要过这关，只能让Mesa把KGSL谎报成DRM设备，这违反[73篇](../73-reduce-upstream-changes.md#下沉的边界条件自原-54-篇迁入)“不能伪造DRM设备”的边界。
 2. **Firefox 156在Linux上没有VA-API编码路径。** 编码器不建立硬件设备上下文，输入格式固定为YUV420P，`h264_vaapi`无法打开。WebCodecs/WebRTC的H.264硬编仍要依赖私有FFmpeg中的`h264_rungic_auto`等编码器，因此FFmpeg的2条补丁和预加载都得保留。
 3. **RDD沙箱仍然挡着桥接连接。** Firefox的RDD沙箱不允许新连接`codec.sock`，也不允许打开`/dev/dma_heap`。VA驱动在RDD里同样需要“沙箱前预连”；否则就得关闭沙箱，已有先例正是这么做的（`MOZ_DISABLE_RDD_SANDBOX=1`），但这违背本项目的原则。
 4. **Snapshot是唯一可替换的一项，但得不偿失。** Snapshot 51原生识别`vah264enc`，但前提是：VA编码入口（EncSlice）映射到MediaCodec编码器；设置`GST_VA_ALL_DRIVERS=1`；把Android的msm_drm render节点映射进容器。换来的只是删除一个17行的补丁，却要新增并长期维护数千行驱动代码。

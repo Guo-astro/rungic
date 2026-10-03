@@ -917,10 +917,10 @@ features:
       - id: E1
         text: 手机的内部存储目录能 bind mount 进 Docker 容器，和命名卷同时使用。
     pitfalls:
-      - text: 代码已删除（最后一版见提交 86f56970）；文档只作历史证据。
-        docs: [docs/20-docker-storage.md]
+      - text: 代码（最后一版见提交 86f56970）和 19、20 篇都已删除；仍适用的共享目录结论在 69 篇末节，内核核对在 85 篇末节。
+        docs: [docs/69-filesystem-capabilities.md, docs/85-lxc-rootless-docker.md]
     code: []
-    docs: [docs/19-docker-installation.md, docs/20-docker-storage.md]
+    docs: []
 
   - id: apps.system-monitor
     title: 系统监视器里的 GPU 与磁盘

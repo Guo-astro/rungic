@@ -1058,9 +1058,7 @@ Linux 应用用手机的相机拍照录像，用手机的扬声器和麦克风�
 - **E1** 手机的内部存储目录能 bind mount 进 Docker 容器，和命名卷同时使用。（**未检查**）
 
 注意：
-- 代码已删除（最后一版见提交 86f56970）；文档只作历史证据。 [docs/20-docker-storage.md](../docs/20-docker-storage.md)
-
-文档：[docs/19-docker-installation.md](../docs/19-docker-installation.md)、[docs/20-docker-storage.md](../docs/20-docker-storage.md)
+- 代码（最后一版见提交 86f56970）和 19、20 篇都已删除；仍适用的共享目录结论在 69 篇末节，内核核对在 85 篇末节。 [docs/69-filesystem-capabilities.md](../docs/69-filesystem-capabilities.md) [docs/85-lxc-rootless-docker.md](../docs/85-lxc-rootless-docker.md)
 
 #### 系统监视器里的 GPU 与磁盘
 
@@ -1422,7 +1420,7 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 - Winland 固定提交缺根 LICENSE（README 声明 MIT），这是已记录的来源缺口，没有补造许可证。 [docs/52-git-repository-scope.md](../docs/52-git-repository-scope.md) [docs/73-reduce-upstream-changes.md](../docs/73-reduce-upstream-changes.md)
 - desktop/patches/qt-video-duration.patch 是未验收实验，不在 qt6-multimedia 的补丁队列里，不要手动叠加到源码树。 [packages/WORKFLOW.md](../packages/WORKFLOW.md)
 
-文档：[docs/71-upstream-patch-queue.md](../docs/71-upstream-patch-queue.md)、[docs/73-reduce-upstream-changes.md](../docs/73-reduce-upstream-changes.md)、[docs/54-vendor-adaptation-boundaries.md](../docs/54-vendor-adaptation-boundaries.md)、[packages/WORKFLOW.md](../packages/WORKFLOW.md)
+文档：[docs/71-upstream-patch-queue.md](../docs/71-upstream-patch-queue.md)、[docs/73-reduce-upstream-changes.md](../docs/73-reduce-upstream-changes.md)、[packages/WORKFLOW.md](../packages/WORKFLOW.md)
 
 #### 由 vendor 历史生成补丁队列（已退役）
 

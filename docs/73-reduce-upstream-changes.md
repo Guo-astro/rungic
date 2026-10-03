@@ -192,3 +192,15 @@ Smithay/Winit固定的是**Winland当时带入的子树**，不是仅凭Cargo版
 4. **工具回归**：`tools/test_pq.py`共18项通过，包括6项新增的实际本地Git子树归档及固定时间戳、原整树归档兼容性、缓存选择、树哈希拒绝、排除路径升级检查与越界路径拒绝。四个新配方的补丁字段校验通过。
 
 原始清单、源码差异、构建日志、测试DEB位于`.work/migration/20260930-pq/`；可同步的基线与校验摘要在`provenance/source-patch-migration-20260930.json`。本轮是源码管理及构建验收，不是新一轮手机部署、触摸/显示/投屏实机验收，也没有重新验证APK安装；运行行为继续引用原对应版本的实机记录。
+
+## 下沉的边界条件（自原 54 篇迁入）
+
+54 篇（vendor/ 时期）逐项判断过哪些修改能下沉到共享后端，方案已由本篇执行。下沉时不能跳过的条件仍然有效：
+
+- **不谎报能力、不伪造设备**：Android 的 30/60/90/120 刷新率切换不是 VRR/Adaptive-Sync，不能为免改界面而宣布 VRR；KGSL 不是 DRM render node，不能伪造 DRM 设备或 DMA-BUF 反馈的设备身份（research/74 的 Firefox VA-API 结论即受此约束）。宣布支持一个协议不等于实现了它。
+- **同步不能靠删**：KWin 的两处 `glFinish` 只有在 Android/GL/Vulkan 双方真实传递并等待兼容 fence 后才能去掉；不能假定 KGSL 支持 DRM syncobj。去掉前检查破帧、提前复用和泄漏，并量化延迟与 CPU/GPU 占用。
+- **共享一个头文件不等于职责统一**：显示控制在 KWin 和 KScreen 各有入口，下沉到统一后端须处理事务、异步状态、回滚和宿主变化。
+- **插件机制要核实是否真的能外置**：FFmpeg 8.1.2 的 codec_list 是构建时生成的静态列表；libcamera 0.7.0 的 Pipeline Handler 用内部 API 编进库里；Mesa 的 GBM 外部 backend 接口存在，但 KGSL 上的设备发现、导入导出、format/modifier、跨进程同步都未打通。
+- **权限不靠放宽 SELinux**：SHM 与 DMA heap 的访问保持窄范围修改，验证来源标签、映射/读写、释放和同接口的其他客户端。
+- **独立 KCM 不能替代尚未实现的标准服务**：Settings 里的 Android 网络/蓝牙入口可抽成插件，但普通网络状态仍要补 NetworkManager 等标准接口；模块发现、分类与隐藏要回归。
+- **应用自身的缺陷留在应用**：Qt PulseAudio 的错误 maxlength、Plasma Camera 改写已提交帧的元数据等，不要求后端迁就。

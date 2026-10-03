@@ -111,7 +111,7 @@ Boundaries and migration notes: [repository scope](52-git-repository-scope.md). 
 - Graphics and backend architecture: [40](40-plasma-mobile-integration.md) and the [shared bridges](../shared/README.md). A fresh build machine still needs the SDK/NDK and some dependencies.
 - Remote source checks and multi-machine work: [53](53-remote-system-development.md). Upstream modifications live in `packages/` and are edited through `tools/pq.py prepare/export`. Linux upstream packages use `tools/build_on_device.py`. For Android, `tools/prepare_android_host.py` assembles the host and its Smithay/Winit dependencies under `.work/`, then `android/build-native-core.sh` cross-compiles the library. Firefox mobile configuration is prepared from its recipe by `tools/rungic_package.py`. No directly tracked upstream source-tree exceptions remain; see [73](73-reduce-upstream-changes.md#remaining-source-trees-migrated-2026-09-30).
 
-Which layer a vendor adaptation belongs in, and what can move to a shared backend: [54](54-vendor-adaptation-boundaries.md).
+Which layer a vendor adaptation belongs in, and the conditions for moving it to a shared backend: [73](73-reduce-upstream-changes.md#下沉的边界条件自原-54-篇迁入).
 
 Delivery, acceptance and diagnostics: [61](61-delivery-diagnostics-plan.md). Every file this project puts on the container's rootfs comes from a package (`packaging`, patch queues and vendor rebuilds), deployed through the local APT repository and the release metapackage (`tools/rungic_release.py deploy|rollback|status`), followed by automatic acceptance (`tools/rungic_acceptance.py`); `rungic-integrity` checks for drift. The rootfs is an ext4 image (`system/rootfs-image`); deployment can take a dm-snapshot first and return to it when acceptance fails. `/home`, crash reports and the local repository are not rolled back with it.
 
@@ -141,8 +141,6 @@ Current delivery direction: prepare the Android/GKI base once when compatible, b
 | [16-lxc-prerequisites.md](16-lxc-prerequisites.md) | LXC prerequisites measured (2026-09-22) |
 | [17-lxc-installation.md](17-lxc-installation.md) | LXC deployment and verification (2026-09-22) |
 | [18-termux-lxc.md](18-termux-lxc.md) | Managing LXC from Termux (2026-09-22) |
-| [19-docker-installation.md](19-docker-installation.md) | Docker on stock Android 16 (2026-09-22; superseded by rootless Docker in the container, 85, and removed) |
-| [20-docker-storage.md](20-docker-storage.md) | Docker volumes and the phone's shared storage (2026-09-22) |
 | [21-memory-audit.md](21-memory-audit.md) | RAM use of the stock system (2026-09-22) |
 | [28-capability-audit.md](research/28-capability-audit.md) | Phosh everyday capabilities and Android hardware interfaces |
 | [29-reuse-research.md](research/29-reuse-research.md) | Existing solutions researched before adapting Phosh |

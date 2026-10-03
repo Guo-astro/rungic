@@ -25,8 +25,6 @@
 - {path: docs/16-lxc-prerequisites.md, kind: history, note: 部署前的 LXC 内核条件审计；后续见 17 篇}
 - {path: docs/17-lxc-installation.md, kind: history, note: 第一个 Alpine LXC 容器的部署；已被 Ubuntu Plasma 容器取代，但仍是内核/enter 程序来源的证据}
 - {path: docs/18-termux-lxc.md, kind: history, note: 用 Termux 管理 Alpine 容器；该容器与入口已不再使用}
-- {path: docs/19-docker-installation.md, kind: superseded, superseded_by: docs/85-lxc-rootless-docker.md, note: Android 侧 Docker 已于 2026-09-29 从设备和仓库删除；末节“整包内核是否支持 Docker”仍被 85 篇和 kernel/README.md 引用，需先迁走}
-- {path: docs/20-docker-storage.md, kind: superseded, superseded_by: docs/85-lxc-rootless-docker.md, note: Android 侧 Docker 的卷与共享存储；代码已删除。“共享目录的边界”一节在 85、69 篇中没有对应内容，删除前要判断是否迁移}
 - {path: docs/21-memory-audit.md, kind: journal, note: G100 S 原厂系统 RAM 实测，2026-10-01 又补了四个工作区的内存需求}
 
 # 28–35、74：共享接口研究（research/）
@@ -61,7 +59,6 @@
 - {path: docs/51-plasma-vulkan-benchmark.md, kind: research, note: Vulkan 链路与 GLES 的同机性能对照}
 - {path: docs/52-git-repository-scope.md, kind: reference, note: 仓库目录与同步边界（AGENTS.md 指定）}
 - {path: docs/53-remote-system-development.md, kind: reference, note: 多机协作与“到哪里改代码”；表中 native/plasma、plasma/ 入口已过时}
-- {path: docs/54-vendor-adaptation-boundaries.md, kind: superseded, superseded_by: docs/73-reduce-upstream-changes.md, note: vendor/ 时期的下沉建议，已由 73 篇的总方案执行；“不能谎报能力/伪造设备”的边界条件仍被 research/74 引用}
 - {path: docs/55-agent-native-debugging.md, kind: reference, note: 开发用诊断 MCP 的架构与限制（rungic MCP 服务说明指向本篇）；部分路径为 plasma/ 时期}
 - {path: docs/56-kwin-vulkan-quantification.md, kind: research, note: KWin 改原生 Vulkan 的收益量化（只省 CPU），未实现}
 - {path: docs/57-zero-copy-explicit-sync.md, kind: journal, note: 零拷贝呈现与显式同步的实施与 A/B}
