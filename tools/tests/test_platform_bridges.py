@@ -475,6 +475,24 @@ def test_data_roaming_is_refused_by_the_mobile_connection(network):
     assert not host.ops(op='telephony', action='data')
 
 
+# covers: desktop.cellular/E3
+def test_an_apn_change_is_refused_not_dropped(network):
+    """The APN stays Android's: an Update that changes it fails with NotSupported (until 2026-10-03 it
+    returned success and nothing changed)."""
+    service, host, android = network
+    android.telephony = dict(android.telephony, sim='ready', service=0, dataEnabled=True, simOperator='46001',
+                             simOperatorName='China Unicom')
+    host.bump('telephony')
+    mobile = NM_PATH + '/Settings/modem'
+    wait(lambda: mobile in service.call(NM_PATH + '/Settings', NM + '.Settings', 'ListConnections')[0], 5, 'mobile data')
+    apn = {'connection': {'autoconnect': V('b', True)}, 'gsm': {'home-only': V('b', True), 'apn': V('s', 'internet')}}
+    for method, args in (('Update', V('(a{sa{sv}})', (apn,))), ('Update2', V('(a{sa{sv}}ua{sv})', (apn, 0, {})))):
+        assert service.error(mobile, NM + '.Settings.Connection', method, args) == NM + '.Settings.Connection.NotSupported'
+    assert service.call(mobile, NM + '.Settings.Connection', 'GetSettings')[0]['gsm']['apn'] == ''
+    same = {'connection': {'autoconnect': V('b', True)}, 'gsm': {'home-only': V('b', True), 'apn': V('s', '')}}
+    service.call(mobile, NM + '.Settings.Connection', 'Update', V('(a{sa{sv}})', (same,)))   # no change: fine
+
+
 # ----------------------------------------------------------------------------------------- BlueZ
 @pytest.fixture
 def bluetooth(bus):
