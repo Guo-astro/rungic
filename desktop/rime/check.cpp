@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <csignal>
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #include "runtime.h"
@@ -102,6 +103,15 @@ int main(int argc, char **argv) {
     auto &rime = RimeRuntime::instance();
     if (!rime.ready) { out << "FAIL schema " << RimeRuntime::schema << " is not deployed" << Qt::endl; return 1; }
     if (app.arguments().contains("--second")) return second();
+
+    // covers: desktop.rime/E6
+    // The user's dictionary and settings: a directory only the user can read, and the default
+    // settings written there when there are none (run.sh checks that a user's own are kept).
+    struct stat dir {};
+    check(::stat(rime.user.constData(), &dir) == 0 && (dir.st_mode & 0777) == 0700, "the user directory is 0700");
+    QFile defaults(QFile::decodeName(rime.user + "/default.custom.yaml"));
+    check(defaults.open(QIODevice::ReadOnly) && defaults.readAll().contains("luna_pinyin_simp"),
+          "default.custom.yaml created with the simplified pinyin schema");
 
     // Lazy sessions and the 300 compositions.
     check(userDbLocks() == 0, "no session: the user dictionary is closed");

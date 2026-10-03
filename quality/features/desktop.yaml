@@ -336,6 +336,7 @@ features:
         text: 建会话加第一个键在实机上远低于 50 ms，不需要预建会话。
         evidence:
           - {doc: docs/41-plasma-rime-input.md, date: 2026-10-03, note: "首次 24.6 ms、重开中位数 13.5 ms"}
+        device: 耗时取决于手机的 CPU 和存储（LevelDB 每次打开都写 MANIFEST 并 fsync）；离线在 tmpfs 与 NVMe 上就相差十倍，只有手机上量的数字能说明。
       - id: E6
         text: 密码字段不交给 Rime，敏感字段不学习词频；用户词频和定制在 ~/.local/share/plasma-rime（0700），default.custom.yaml 只首次创建。
     pitfalls:
@@ -355,6 +356,7 @@ features:
       - desktop/rime/
       - packaging/rungic-plasma-input/
       - tools/tests/test_plasma_rime.py
+      - tools/system/tests/rime_keyboard.py
     docs: [docs/41-plasma-rime-input.md]
 
   - id: desktop.keyboard

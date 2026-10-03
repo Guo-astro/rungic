@@ -14,6 +14,8 @@ Item {
     TextInput { id: field; width: parent.width; height: 50 }
     TextInput { id: number; y: 60; width: parent.width; height: 50; inputMethodHints: Qt.ImhPreferNumbers }
     Rectangle { id: elsewhere; y: 120; width: 50; height: 50; focus: false }
+    TextInput { id: password; y: 180; width: parent.width; height: 50; echoMode: TextInput.Password }
+    TextInput { id: sensitive; y: 240; width: parent.width; height: 50; inputMethodHints: Qt.ImhSensitiveData }
     InputPanel { id: panel; y: parent.height - height; width: parent.width }
 
     TestCase {
@@ -117,6 +119,19 @@ Item {
             elsewhere.forceActiveFocus()
             tryVerify(() => !Qt.inputMethod.visible, 2000, "no input item: the panel hides")
             tryVerify(closed, 2000, "and the session closes")
+        }
+        // covers: desktop.rime/E6
+        // A password field never reaches Rime: its keys are plain letters, no session, no candidates.
+        function test_6_password_field() {
+            password.text = ""
+            password.forceActiveFocus()
+            Qt.inputMethod.show()
+            tryVerify(() => Qt.inputMethod.visible, 5000, "the panel shows")
+            type("nihao")
+            tryCompare(password, "text", "nihao")
+            verify(!isRime() || !im().sessionOpen, "no Rime session for a password field")
+            compare(InputContext.inputEngine.wordCandidateListModel.count, 0, "no candidates")
+            Qt.inputMethod.hide()
         }
     }
 }
