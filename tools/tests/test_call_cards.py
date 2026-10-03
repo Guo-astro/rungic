@@ -15,7 +15,7 @@ import unittest
 sys.dont_write_bytecode = True
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 os.environ.setdefault('QT_QUICK_BACKEND', 'software')
-from PySide6.QtCore import QObject, QUrl, Slot
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, QUrl, Slot
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlComponent, QQmlEngine, QQmlExpression
 from PySide6.QtQuick import QQuickItem
@@ -86,6 +86,10 @@ class CallCardsTest(unittest.TestCase):
     def tearDown(self):
         self.model.deleteLater()
         self.engine.deleteLater()
+        # processEvents() leaves deferred deletions alone: the model (and its 15 s sweep Timer) outlived
+        # the test and fired later into a context whose Python i18n object was gone, a segfault in
+        # whichever Qt test ran next once the suite took long enough between them.
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
         APP.processEvents()
 
     def js(self, code):
