@@ -42,3 +42,8 @@ RUN apt-get update -q && DEBIAN_FRONTEND=noninteractive apt-get install -y -q --
         gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-pipewire \
         python3-gst-1.0 gir1.2-gst-plugins-base-1.0 \
     && rm -rf /var/lib/apt/lists/*
+# The Rime keyboard's engine and session tests (desktop/rime/tests/run.sh; system test rime_keyboard).
+RUN apt-get update -q && DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends \
+        librime-dev rime-data-luna-pinyin rime-prelude rime-essay qt6-virtualkeyboard-dev \
+        qml6-module-qttest qt6-declarative-dev-tools ninja-build \
+    && rm -rf /var/lib/apt/lists/*

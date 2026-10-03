@@ -94,9 +94,10 @@ def run(names):
         mark = 'PASS' if line.get('passed') else 'FAIL'
         print(f'{mark} {line["test"]} ({line.get("seconds", "-")} s)' + (f': {line["error"]}' if line.get('error') else '')
               + (f': {line["log"]}' if line.get('log') else ''))
-    # Trees unused for three hours (longer than a run): other runs, of other working trees, may be using
-    # newer ones (keeping only the newest three removed a running test's tree under it).
-    host.ssh(f"find {REMOTE} -maxdepth 1 -name 'src-*' -mmin +180 -exec rm -rf {{}} +", 120, check=False)
+    # Trees of runs that may still be going stay: keeping only the last three removed /src under
+    # other agents' running tests (files missing in /src). Older than three hours, a tree is done.
+    host.ssh(f'find {REMOTE} -maxdepth 1 \\( -name "tree-*" -o -name "src-*" \\) -mmin +180 -exec rm -rf {{}} +', 120,
+             check=False)
     passed = lines and all(l.get('passed') for l in lines) and len([l for l in lines if 'build' not in l['test']]) == len(names)
     print(f'{"passed" if passed else "FAILED"}; record {record.relative_to(ROOT)}')
     return 0 if passed else 1

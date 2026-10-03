@@ -4,12 +4,12 @@ import configparser
 import dbus
 import json
 import logging
+import os
 from pathlib import Path
 import subprocess
 import time
 
-source = Path('/mnt/android-wayland/android-display.ini')
-previous = None
+source = Path(os.environ.get('RUNGIC_ANDROID_DISPLAY', '/mnt/android-wayland/android-display.ini'))
 
 def notify_panel_config(keys):
     # KConfigWatcher protocol (KF6 6.24). Publish one notification after all
@@ -48,34 +48,40 @@ def panel_values(info, qt_screen, kscreen_output):
         'statusBarRightPadding': (max(24, min(info.getint('safe-right'), 256)) if has_hole else 24) * factor,
     }
 
-while True:
-    try:
-        data = source.read_text()
-        settings = Path.home() / '.config/kwinoutputconfig.json'
-        signature = (data, settings.stat().st_mtime_ns if settings.exists() else 0)
-        if signature != previous:
-            config = configparser.ConfigParser()
-            config.read_string(data)
-            info = config['display']
-            if info.getint('version') != 1:
-                raise ValueError('Unsupported display protocol')
-            screens = json.loads(subprocess.check_output(['rungic-plasma-screen-metrics'], timeout=10))
-            outputs = json.loads(subprocess.check_output(['kscreen-doctor', '-j'], timeout=10))['outputs']
-            # Qt exposes the same output identity as KScreen. Never apply the handset
-            # cutout to an external screen merely because it is first or primary.
-            screen = next(s for s in screens if s.get('manufacturer') == 'Rungic'
-                          and s.get('model') == 'Handset')
-            output = next(o for o in outputs if o['name'] == screen['name'])
-            values = panel_values(info, screen, output)
-            for key, value in values.items():
-                subprocess.run(['kwriteconfig6', '--file', 'plasmamobilerc',
-                                '--group', 'Panels', '--group', 'WhenOnTop',
-                                '--key', key, '--', str(value)], check=True)
-            notify_panel_config(values)
-            previous = signature
-            logging.warning('Android centerline-aligned panel: %s; Qt=%s; KScreen scale=%s',
-                            values, screen, output['scale'])
-    except (OSError, ValueError, KeyError, IndexError, StopIteration, configparser.Error,
-            subprocess.SubprocessError, dbus.DBusException) as error:
-        logging.warning('Display metadata unavailable: %s', error)
-    time.sleep(1)
+def main():
+    previous = None
+    while True:
+        try:
+            data = source.read_text()
+            settings = Path.home() / '.config/kwinoutputconfig.json'
+            signature = (data, settings.stat().st_mtime_ns if settings.exists() else 0)
+            if signature != previous:
+                config = configparser.ConfigParser()
+                config.read_string(data)
+                info = config['display']
+                if info.getint('version') != 1:
+                    raise ValueError('Unsupported display protocol')
+                screens = json.loads(subprocess.check_output(['rungic-plasma-screen-metrics'], timeout=10))
+                outputs = json.loads(subprocess.check_output(['kscreen-doctor', '-j'], timeout=10))['outputs']
+                # Qt exposes the same output identity as KScreen. Never apply the handset
+                # cutout to an external screen merely because it is first or primary.
+                screen = next(s for s in screens if s.get('manufacturer') == 'Rungic'
+                              and s.get('model') == 'Handset')
+                output = next(o for o in outputs if o['name'] == screen['name'])
+                values = panel_values(info, screen, output)
+                for key, value in values.items():
+                    subprocess.run(['kwriteconfig6', '--file', 'plasmamobilerc',
+                                    '--group', 'Panels', '--group', 'WhenOnTop',
+                                    '--key', key, '--', str(value)], check=True)
+                notify_panel_config(values)
+                previous = signature
+                logging.warning('Android centerline-aligned panel: %s; Qt=%s; KScreen scale=%s',
+                                values, screen, output['scale'])
+        except (OSError, ValueError, KeyError, IndexError, StopIteration, configparser.Error,
+                subprocess.SubprocessError, dbus.DBusException) as error:
+            logging.warning('Display metadata unavailable: %s', error)
+        time.sleep(1)
+
+
+if __name__ == '__main__':
+    main()

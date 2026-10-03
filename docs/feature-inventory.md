@@ -4,7 +4,7 @@
 
 以产品功能和用户场景为骨架：每条功能是用户能感知的一件事；“体验”是它必须做到的，每条都标明由什么检查（自动测试、实机验收、人工验证或已登记的缺口）。数据在 `quality/`，规则见 [quality/README.md](../quality/README.md)。
 
-共 160 条功能、663 条体验，其中 598 条有检查。
+共 160 条功能、663 条体验，其中 619 条有检查。
 
 ## Agent 能力
 
@@ -1996,9 +1996,9 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 - **E1** 应用更新或宿主进程重启时，KWin 记录“Host connection lost”、等宿主 socket 可连接后以 133 退出并被重启，不留核心转储；Qt 客户端不在重连空窗里段错误，桌面恢复。（人工）
 - **E2** 一次 GPU 启动失败（宿主重启时 EGL 暂不可用）不会让 plasmashell 永久改用软件渲染；有 GPU 时每次会话都清掉 SceneGraphBackend=software，应用抽屉不会空白。（人工）
-- **E3** 新会话等上一个会话的 startplasma-wayland 真正退出后才设置环境，plasmashell 总以手机 shell 启动，不会变成桌面版 shell。（**未检查**）
+- **E3** 新会话等上一个会话的 startplasma-wayland 真正退出后才设置环境，plasmashell 总以手机 shell 启动，不会变成桌面版 shell。（系统测试、人工）
 - **E4** GPU 设置、登录 PATH 在任何会话单元启动前导入用户管理器；Qt 按 XDG_CURRENT_DESKTOP 选平台主题，旧会话强加的主题不残留到新会话。（实机验收）
-- **E5** 桌面上没有 Linux 锁屏挡住（锁定交给安卓），kaccess 不在没有 X 显示的会话里反复崩溃。（**未检查**）
+- **E5** 桌面上没有 Linux 锁屏挡住（锁定交给安卓），kaccess 不在没有 X 显示的会话里反复崩溃。（系统测试）
 
 注意：
 - 上一个会话的 startplasma-wayland 退出时会把用户管理器环境恢复成它启动前的样子，曾删掉 PLASMA_DEFAULT_SHELL，让 plasmashell 以桌面版 shell 启动。 [docs/96-desktop-recovery-after-apk-restart.md](../docs/96-desktop-recovery-after-apk-restart.md)
@@ -2014,10 +2014,10 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 `desktop.settings-migration` · Linux 系统功能 — 本项目对每个用户的一次性迁移（快捷设置位置、录屏图块、旧程序路径）在 KWin 读配置前做完，只做一次，不覆盖用户自己的选择。改名迁移见 install.rebrand-migration。
 
-- **E1** 用户有自定义的快捷设置列表时，投屏图块放在蓝牙之后、助理屏在投屏之后；用默认列表时不改动。（**未检查**）
-- **E2** 录屏图块换成本项目的录屏插件，用户原来禁用的录屏仍是禁用。（**未检查**）
-- **E3** 设置里指向旧 /usr/local 路径的输入法、门户覆盖、Codex 配置和 Firefox 启动器改到新路径；用户自己改过的值不动。（**未检查**）
-- **E4** 迁移在 KWin 启动前运行，KWin 第一次就读到新的输入法路径；每个迁移只运行一次。旧的固定 3 倍显示迁移已退役，不凭 scale=3 猜测用户选择。（**未检查**）
+- **E1** 用户有自定义的快捷设置列表时，投屏图块放在蓝牙之后、助理屏在投屏之后；用默认列表时不改动。（单元测试、系统测试）
+- **E2** 录屏图块换成本项目的录屏插件，用户原来禁用的录屏仍是禁用。（单元测试、系统测试）
+- **E3** 设置里指向旧 /usr/local 路径的输入法、门户覆盖、Codex 配置和 Firefox 启动器改到新路径；用户自己改过的值不动。（单元测试、系统测试）
+- **E4** 迁移在 KWin 启动前运行，KWin 第一次就读到新的输入法路径；每个迁移只运行一次。旧的固定 3 倍显示迁移已退役，不凭 scale=3 猜测用户选择。（单元测试、系统测试）
 
 注意：
 - 家目录不随 rootfs 快照回滚，失败部署期间写进 ~/.config 的内容会留下；排查部署后异常时要看部署时段改过的用户配置。 [docs/61-delivery-diagnostics-plan.md](../docs/61-delivery-diagnostics-plan.md)
@@ -2034,7 +2034,7 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 - **E1** 桌面、应用抽屉、触摸、回主屏和任务切换都可用；普通应用（Dolphin、Koko、QmlKonsole、Haruna 等）能从抽屉启动并显示。（人工）
 - **E2** 导航栏按钮有无障碍名称（任务切换、主屏、关闭应用），按名称能经启动器打开和关闭应用。（实机验收）
-- **E3** 主屏静止时 plasmashell 几乎不占 CPU（约 0.6% 单核、每秒十几次唤醒）；关着的快捷设置面板里溢出的文字不再滚动。（人工）
+- **E3** 主屏静止时 plasmashell 几乎不占 CPU（约 0.6% 单核、每秒十几次唤醒）；关着的快捷设置面板里溢出的文字不再滚动。（人工；只能在手机上看：静止时 plasmashell 的单核占用和每秒唤醒次数取决于手机的 CPU 和宿主的帧节拍，只能在手机上量。关着的快捷设置不再滚动文字是 plasma-mobile 补丁（marquee-stop-when-hidden）的逻辑，系统测试镜像里只有 Ubuntu 原版 plasma-mobile，这一半还没有自动检查。）
 - **E4** 横屏时主屏边距按当前可用区域计算，小组件和收藏栏都在屏幕内；默认不再行列互换，小组件保持形状，图标隐藏名称。（人工）
 - **E5** 按住导航栏 Home 超过 400 ms 唤起语音助手，单击 Home 照常回主屏，滑动不算按住。（人工）
 
@@ -2053,10 +2053,10 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 经由接口：`kwin-android-host`
 
-- **E1** 状态栏中心线与安卓挖孔中心对齐；应用窗口顶端紧贴状态栏实际厚度（38 逻辑像素时应用 y=38），不被遮住。（人工）
+- **E1** 状态栏中心线与安卓挖孔中心对齐；应用窗口顶端紧贴状态栏实际厚度（38 逻辑像素时应用 y=38），不被遮住。（单元测试、人工）
 - **E2** 全屏和自动隐藏时应用占满整屏（y=0），退出后恢复；横竖屏切换和重启 plasmashell 后工作区仍与面板一致。（人工）
 - **E3** 前台应用声明了自己的配色时，状态栏和导航栏用它的背景色，深色背景上图标和文字变浅；没有声明配色的应用不受影响。（人工）
-- **E4** 只有挖孔落在状态栏那一行时才用侧边安全区作为状态栏左右内边距；状态栏安全区只用到手机内屏，不套到外屏上。（**未检查**）
+- **E4** 只有挖孔落在状态栏那一行时才用侧边安全区作为状态栏左右内边距；状态栏安全区只用到手机内屏，不套到外屏上。（单元测试）
 
 注意：
 - PanelView.setThickness 与更新 layer-shell exclusive zone 不是同一个动作；面板变厚后应用仍从旧位置开始，问题在面板预留区而不是每个应用。 [docs/43-plasma-panel-workarea.md](../docs/43-plasma-panel-workarea.md)
@@ -2072,10 +2072,10 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 经由接口：`host-input`
 
-- **E1** 横屏、竖屏和缩放下点哪里就点中哪里，多指触点各自保留 ID 和按下/移动/抬起。（人工）
-- **E2** 宿主暂停渲染时，还没抬起的触点先收到取消，KWin 里不会留下一直按着的手指。（人工）
-- **E3** 触屏模式下屏幕上没有鼠标指针（开机左上角不再有黑框光标），切到鼠标或触控板模式才出现指针。（人工）
-- **E4** 每次按下不会让 KWin 重新应用输出配置（宿主只在状态变化时发 configure），点按不引起卡顿。（人工）
+- **E1** 横屏、竖屏和缩放下点哪里就点中哪里，多指触点各自保留 ID 和按下/移动/抬起。（人工；只能在手机上看：触点是安卓的 MotionEvent，横竖屏与缩放下的坐标换算在 Rungic 应用的原生宿主（packages/android-host）里做，再经 KWin 的 Android 后端（android-backend.patch）进入 KWin；宿主只能在安卓上运行（它的单元测试也在手机上跑，android/test-native-core.sh），无头 KWin（--virtual）没有 Android 后端，系统测试走不到这条输入通路。）
+- **E2** 宿主暂停渲染时，还没抬起的触点先收到取消，KWin 里不会留下一直按着的手指。（人工；只能在手机上看：取消由安卓宿主在暂停渲染（Activity 进入后台、熄屏）时发出（packages/android-host 的 smithay 补丁），要安卓的生命周期才会发生；宿主只能在安卓上运行（它的单元测试也在手机上跑，android/test-native-core.sh），无头 KWin（--virtual）没有 Android 后端，系统测试走不到这条输入通路。）
+- **E3** 触屏模式下屏幕上没有鼠标指针（开机左上角不再有黑框光标），切到鼠标或触控板模式才出现指针。（人工；只能在手机上看：有没有指针取决于宿主报告的输入设备（触摸屏，或安卓连着的鼠标、触控板），由 KWin 的 Android 后端（android-backend.patch，只在 --android-host 下工作）处理；宿主只能在安卓上运行（它的单元测试也在手机上跑，android/test-native-core.sh），无头 KWin（--virtual）没有 Android 后端，系统测试走不到这条输入通路。）
+- **E4** 每次按下不会让 KWin 重新应用输出配置（宿主只在状态变化时发 configure），点按不引起卡顿。（人工；只能在手机上看：configure 由安卓宿主发出（它只在尺寸、方向等状态变化时发），点按会不会让 KWin 重新应用输出配置要在宿主与 KWin 的 Android 后端之间看；宿主只能在安卓上运行（它的单元测试也在手机上跑，android/test-native-core.sh），无头 KWin（--virtual）没有 Android 后端，系统测试走不到这条输入通路。）
 
 注意：
 - 蓝牙鼠标模式的指针能力增删尚未实机验证。 [docs/57-zero-copy-explicit-sync.md](../docs/57-zero-copy-explicit-sync.md)
@@ -2122,8 +2122,8 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 `desktop.app-windows` · Linux 系统功能 — 为 PC 写的应用在手机竖屏上也不会因为窗口尺寸冲突被断开，缩放下的窗口重绘不越界。
 
-- **E1** 应用给出的最小尺寸大于最大尺寸（静态 Qt 的微信按手机主屏算最大值）时，KWin 丢弃冲突的最大值并记警告，应用不被断开。（人工）
-- **E2** 缩放与缓冲不一致时为采样加宽的损伤区不超出窗口自身，不会把邻近内容重画坏。（**未检查**）
+- **E1** 应用给出的最小尺寸大于最大尺寸（静态 Qt 的微信按手机主屏算最大值）时，KWin 丢弃冲突的最大值并记警告，应用不被断开。（单元测试、人工）
+- **E2** 缩放与缓冲不一致时为采样加宽的损伤区不超出窗口自身，不会把邻近内容重画坏。（缺口：要带本项目 KWin 补丁（clip-scaled-damage-to-surface）的测试：两块缩放不同、边挨边的输出，一侧窗口出帧时另一侧不重画；系统测试镜像里只有 Ubuntu 原版 kwin-wayland，KWin 的 L1 测试构建（docs/71）也还没有这一项。2026-09-28 在手机上量过（docs/65：助理屏上 60 fps 动画时手机每秒重画 0 次）。）
 
 注意：
 - 放宽“最小大于最大必须报错”不符合 xdg-shell 协议，是本机为兼容这类客户端做的；微信登录后主窗口的真实尺寸还待抓取。 [docs/42-plasma-runtime-acceptance.md](../docs/42-plasma-runtime-acceptance.md)
@@ -2143,8 +2143,8 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 - **E2** 连续输入、四次收起再打开、切到 English 输入 hello 再切回中文都正常，键盘进程不崩溃不重启；整机重启后默认就是简体中文。（人工）
 - **E3** 中文键盘的字母页和符号页都用 Rime：数字框先出符号页时 `,` 打出 `，`；上游布局变化时构建报错，不会静默退回 Qt 默认输入法。（单元测试）
 - **E4** 用户词库只在打字时打开：键盘收起、失焦或显示时 5 秒不按键就关闭会话并释放词库，组合中不关闭；另一个进程正持有词库时本边仍能打中文（不学习），对方释放后转为共享，学到的词两边都排第一，词库不被修复程序改写。（单元测试、人工）
-- **E5** 建会话加第一个键在实机上远低于 50 ms，不需要预建会话。（人工）
-- **E6** 密码字段不交给 Rime，敏感字段不学习词频；用户词频和定制在 ~/.local/share/plasma-rime（0700），default.custom.yaml 只首次创建。（**未检查**）
+- **E5** 建会话加第一个键在实机上远低于 50 ms，不需要预建会话。（人工；只能在手机上看：耗时取决于手机的 CPU 和存储（LevelDB 每次打开都写 MANIFEST 并 fsync）；离线在 tmpfs 与 NVMe 上就相差十倍，只有手机上量的数字能说明。）
+- **E6** 密码字段不交给 Rime，敏感字段不学习词频；用户词频和定制在 ~/.local/share/plasma-rime（0700），default.custom.yaml 只首次创建。（单元测试）
 
 注意：
 - librime 打开词库失败会安排 userdb_recovery_task，LevelDB RepairDB 不取 LOCK，会改写另一进程正在用的词库；所以在确认能独占词库之前，任何会话都不能尝试打开它。 [docs/41-plasma-rime-input.md](../docs/41-plasma-rime-input.md)
@@ -2162,7 +2162,7 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 - **E1** 反复点同一个正在输入的文本框，窗口不再上下跳动（Marknote 12 次、GTK4 20 次无几何变化）；两个字段交替切换时键盘不收起再弹出。（人工）
 - **E2** 切换语言后旋转屏幕，语言菜单不访问已销毁的按键，没有报错；键盘尺寸变化时菜单关闭。（人工）
-- **E3** 屏幕键盘只出现在手机内屏，不出现在电视等外屏。（**未检查**）
+- **E3** 屏幕键盘只出现在手机内屏，不出现在电视等外屏。（缺口：要一个带本项目 KWin 补丁（inputmethod-host-text 的内屏规则）和 plasma-keyboard 的无头系统测试：一块内屏、一块外屏，聚焦外屏上的文本框；系统测试镜像里只有 Ubuntu 原版 kwin-wayland。2026-09-24 在电视上实机看过（docs/58 第3步），但那时还没有实机场景记录它。）
 - **E4** 聚焦一个 Qt 文本框时键盘弹出。（实机验收）
 
 注意：
@@ -2178,7 +2178,7 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 经由接口：`host-input`
 
 - **E1** 用安卓输入法打的文字到达 Linux 里获得焦点的输入框（例如应用抽屉的搜索框，结果按输入过滤）。（实机验收）
-- **E2** 安卓输入法提交的中文经宿主 text-input 交给 KWin，直接进入焦点应用；键盘布局数据由 APK 安装，缺失时明确报错。（**未检查**）
+- **E2** 安卓输入法提交的中文经宿主 text-input 交给 KWin，直接进入焦点应用；键盘布局数据由 APK 安装，缺失时明确报错。（缺口：中文经安卓输入法提交只在 2026-09-24 投屏时实机试过（docs/58 第3步，进入电视上的 KRunner）；手机屏上的提交和布局数据缺失时的报错（KeyboardAssets.java）还没有检查。要一个实机场景：input.text 用 adb input text 直接发 ASCII 按键，不经输入法的提交通路。）
 
 注意：
 - 容器刚启动后的第一次安卓文字输入偶尔大小写错乱（Calcul 到达为 CaICUL），原因未确认；验收的读回不区分大小写并重试一次。 [docs/61-delivery-diagnostics-plan.md](../docs/61-delivery-diagnostics-plan.md)
@@ -2192,10 +2192,10 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 经由接口：`clipboard`
 
-- **E1** 在安卓里复制的中文、emoji、换行约 200 ms 内出现在 Linux 剪贴板；在 Linux 里复制的文字能在安卓应用里粘贴。（人工）
-- **E2** Rungic 不在前台、处于自己的全屏或 APK 重建时同步照常进行。（人工）
-- **E3** 安卓标记为敏感的内容、非文本内容不同步，Linux 原内容保留；超长或格式错误的请求被拒绝；重启 Linux 桥时不把旧 Linux 文本写回安卓。（人工）
-- **E4** 安卓侧剪贴板后端被杀后自动重启，安卓当前文字重新同步到 Linux。（人工）
+- **E1** 在安卓里复制的中文、emoji、换行约 200 ms 内出现在 Linux 剪贴板；在 Linux 里复制的文字能在安卓应用里粘贴。（单元测试、人工）
+- **E2** Rungic 不在前台、处于自己的全屏或 APK 重建时同步照常进行。（人工；只能在手机上看：不在前台、全屏或 APK 重建时照常同步，靠的是安卓侧以 Shell 身份（UID 2000）独立于 APK 窗口运行的剪贴板后端（ClipboardDaemon、system/android-clipboard）；后台读剪贴板的权限和 APK 的重建只有手机上才有。Linux 一侧的同步与重连由离线测试检查。）
+- **E3** 安卓标记为敏感的内容、非文本内容不同步，Linux 原内容保留；超长或格式错误的请求被拒绝；重启 Linux 桥时不把旧 Linux 文本写回安卓。（单元测试、人工）
+- **E4** 安卓侧剪贴板后端被杀后自动重启，安卓当前文字重新同步到 Linux。（单元测试、人工）
 - **E5** 设备锁定或非主用户时不交换剪贴板内容；日志里从不记录正文。（缺口：锁屏与多用户只在实现上拒绝，未在实机锁屏或建用户实测（clipboard-background））
 
 注意：
@@ -2301,8 +2301,8 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 经由接口：`platform-bridge`
 
-- **E1** Plasma 亮度设为 45 时安卓窗口亮度跟着变，读回 45；恢复跟随后回到安卓的亮度设置。（人工）
-- **E2** 不申请整机写设置权限、不写宿主 sysfs；安卓的自动亮度开关不被改动。（**未检查**）
+- **E1** Plasma 亮度设为 45 时安卓窗口亮度跟着变，读回 45；恢复跟随后回到安卓的亮度设置。（单元测试、人工）
+- **E2** 不申请整机写设置权限、不写宿主 sysfs；安卓的自动亮度开关不被改动。（单元测试）
 
 注意：
 - 跟随时显示的是安卓用户设定值，不是实时自动亮度或 nits。 [docs/research/30-feature-adaptation.md](../docs/research/30-feature-adaptation.md)
@@ -2319,11 +2319,11 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 经由接口：`network`
 
-- **E1** 状态栏、设置和其他 NetworkManager 客户端显示安卓真实的 SSID、IP、DNS 与联网状态（Connectivity=4）。（人工）
-- **E2** Wi-Fi 设置页列出已保存的当前网络和附近网络，能扫描、激活已保存网络、删除网络；点未保存的加密网络弹出 KDE 密码框。（人工）
-- **E3** 在 Linux 里打开或关闭 Wi-Fi，安卓的 Wi-Fi 跟着变，显示状态以安卓随后读数为准。（**未检查**）
-- **E4** 安卓网络变化后很快反映到 Linux，而且不靠高频轮询（SSID 与信号正常，空闲时无持续开销）。（人工）
-- **E5** 安卓接口异常或超时时状态变为未知，不继续显示过期的“已连接”；不支持的操作明确返回 NotSupported，不伪造成功。（**未检查**）
+- **E1** 状态栏、设置和其他 NetworkManager 客户端显示安卓真实的 SSID、IP、DNS 与联网状态（Connectivity=4）。（单元测试、人工）
+- **E2** Wi-Fi 设置页列出已保存的当前网络和附近网络，能扫描、激活已保存网络、删除网络；点未保存的加密网络弹出 KDE 密码框。（单元测试、人工）
+- **E3** 在 Linux 里打开或关闭 Wi-Fi，安卓的 Wi-Fi 跟着变，显示状态以安卓随后读数为准。（单元测试）
+- **E4** 安卓网络变化后很快反映到 Linux，而且不靠高频轮询（SSID 与信号正常，空闲时无持续开销）。（单元测试、人工）
+- **E5** 安卓接口异常或超时时状态变为未知，不继续显示过期的“已连接”；不支持的操作明确返回 NotSupported，不伪造成功。（单元测试）
 
 注意：
 - 没有 Linux NetworkManager 守护进程、wpa_supplicant 或 DHCP；安卓独占网卡、路由、DNS 与凭据。在服务页打开 NetworkManager 等服务可能抢走网卡、断开无线调试。 [docs/research/32-network-integration.md](../docs/research/32-network-integration.md) [docs/83-service-policy.md](../docs/83-service-policy.md)
@@ -2340,9 +2340,9 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 经由接口：`bluetooth`
 
-- **E1** 蓝牙设置页显示适配器和开关（不再是“没有找到蓝牙适配器”），配对向导能扫描并列出附近设备。（人工）
-- **E2** 搜索期间安卓每约 12 秒结束一次扫描时自动续开，客户端退出后停止搜索。（人工）
-- **E3** 在安卓里开关蓝牙后，容器里的 BlueZ 状态约 2–6 秒内跟上。（人工）
+- **E1** 蓝牙设置页显示适配器和开关（不再是“没有找到蓝牙适配器”），配对向导能扫描并列出附近设备。（单元测试、人工）
+- **E2** 搜索期间安卓每约 12 秒结束一次扫描时自动续开，客户端退出后停止搜索。（单元测试、人工）
+- **E3** 在安卓里开关蓝牙后，容器里的 BlueZ 状态约 2–6 秒内跟上。（单元测试、人工）
 - **E4** 配对时安卓弹窗请用户确认，确认后设备在 Linux 里显示为已配对并可连接。（缺口：还没有用实际蓝牙设备配对验证）
 
 注意：
@@ -2357,9 +2357,9 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 经由接口：`telephony`
 
-- **E1** 状态栏信号图标和蜂窝设置页显示真实状态；无 SIM 时显示“尚未插入 SIM 卡”，调制解调器详情给出型号和原因。（人工）
+- **E1** 状态栏信号图标和蜂窝设置页显示真实状态；无 SIM 时显示“尚未插入 SIM 卡”，调制解调器详情给出型号和原因。（单元测试、人工）
 - **E2** 有 SIM 时，快捷设置的移动数据开关真正打开或关闭安卓的移动数据。（缺口：测试手机没有 SIM，只验证了无 SIM 路径）
-- **E3** SIM PIN、选网、APN 与漫游等操作明确返回不支持，留在安卓设置里完成。（**未检查**）
+- **E3** SIM PIN、选网、APN 与漫游等操作明确返回不支持，留在安卓设置里完成。（单元测试）
 
 注意：
 - 模拟服务要先发布对象再占用总线名，否则 ModemManagerQt 只枚举一次、之后看不到调制解调器。 [docs/73-reduce-upstream-changes.md](../docs/73-reduce-upstream-changes.md)
@@ -2372,9 +2372,9 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 经由接口：`platform-bridge`
 
-- **E1** 安卓状态变化时，watch 在版本号变化时立即返回，服务取完整状态；没有变化时最长 60 秒兜底一次。（人工）
-- **E2** 遇到不支持 watch 的旧 APK，服务退回原来的轮询间隔继续工作。（**未检查**）
-- **E3** APK 每次启动换 epoch，看到旧 epoch 的服务会重新取状态；平台 socket 只接受 UID 0/1000 的请求。（**未检查**）
+- **E1** 安卓状态变化时，watch 在版本号变化时立即返回，服务取完整状态；没有变化时最长 60 秒兜底一次。（单元测试、人工）
+- **E2** 遇到不支持 watch 的旧 APK，服务退回原来的轮询间隔继续工作。（单元测试）
+- **E3** APK 每次启动换 epoch，看到旧 epoch 的服务会重新取状态；平台 socket 只接受 UID 0/1000 的请求。（单元测试）
 
 注意：
 - 平台桥只在 APK 私有目录，校验对端 UID；剪贴板后端走抽象 Unix socket，依赖 LXC 与安卓共享网络命名空间，仍须校验对端 UID。 [docs/research/31-backend-integration.md](../docs/research/31-backend-integration.md) [docs/research/clipboard-background.md](../docs/research/clipboard-background.md)
@@ -2389,8 +2389,8 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 `desktop.chinese` · Linux 系统功能 — 桌面、门户对话框和本项目的程序都跟随桌面语言显示简体中文。
 
-- **E1** Ubuntu 最小镜像删掉的中文翻译被恢复，KDE 门户等系统对话框显示中文；恢复的文件属 root，不改 /、/usr 的属主和权限。（人工）
-- **E2** 本项目的设备页、电源策略、录屏、服务页等程序跟随桌面语言显示中文。（**未检查**）
+- **E1** Ubuntu 最小镜像删掉的中文翻译被恢复，KDE 门户等系统对话框显示中文；恢复的文件属 root，不改 /、/usr 的属主和权限。（单元测试、人工）
+- **E2** 本项目的设备页、电源策略、录屏、服务页等程序跟随桌面语言显示中文。（单元测试）
 
 注意：
 - 曾把带构建者 UID 和目录模式的暂存树解包到 /，让桌面用户拥有 /usr（等同 root），systemd-tmpfiles 也因 unsafe path transition 拒绝执行；归档只能含 root 所有的普通文件。 [docs/55-agent-native-debugging.md](../docs/55-agent-native-debugging.md)
@@ -2403,12 +2403,12 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 经由接口：`platform-bridge`、`kwin-android-host`
 
-- **E1** 视频播放时（PowerDevil/ScreenSaver 请求）安卓窗口保持亮屏，暂停后租约释放；请求方退出或断开时租约自动回收，别的客户端不能替它释放。（人工）
-- **E2** 显示出来的 Wayland 窗口请求空闲抑制时，经 KWin 到宿主保持亮屏，释放后恢复正常息屏。（实机验收、人工）
-- **E3** Plasma 移动电源页的“关闭屏幕”时间与安卓 screen_off_timeout 双向同步；页面只显示真能发生的动作（不显示调暗和挂起）。（人工）
-- **E4** Rungic 离开前台后不强制亮屏，不创建 CPU 唤醒锁；Linux 桥意外退出后亮屏租约 12 秒内过期。（**未检查**）
-- **E5** ScreenSaver.Lock 让安卓息屏，D-Bus 调用先返回成功；没有 Linux 锁屏密码，唤醒后回到桌面。（人工）
-- **E6** 电池电量、温度和充电状态来自真实 UPower；低电量的危急动作不会关机或休眠容器。（人工）
+- **E1** 视频播放时（PowerDevil/ScreenSaver 请求）安卓窗口保持亮屏，暂停后租约释放；请求方退出或断开时租约自动回收，别的客户端不能替它释放。（单元测试、人工）
+- **E2** 显示出来的 Wayland 窗口请求空闲抑制时，经 KWin 到宿主保持亮屏，释放后恢复正常息屏。（实机验收、人工；只能在手机上看：Wayland 窗口的空闲抑制由 KWin 的 Android 后端在宿主的输出面上建抑制器，经 Rungic 应用的原生宿主（idle_inhibit.rs，单元测试只能在手机上跑：android/test-native-core.sh）设置 FLAG_KEEP_SCREEN_ON；无头 KWin 没有 Android 后端，系统测试走不到这条路。）
+- **E3** Plasma 移动电源页的“关闭屏幕”时间与安卓 screen_off_timeout 双向同步；页面只显示真能发生的动作（不显示调暗和挂起）。（单元测试、人工）
+- **E4** Rungic 离开前台后不强制亮屏，不创建 CPU 唤醒锁；Linux 桥意外退出后亮屏租约 12 秒内过期。（单元测试）
+- **E5** ScreenSaver.Lock 让安卓息屏，D-Bus 调用先返回成功；没有 Linux 锁屏密码，唤醒后回到桌面。（单元测试、人工）
+- **E6** 电池电量、温度和充电状态来自真实 UPower；低电量的危急动作不会关机或休眠容器。（单元测试、人工）
 
 注意：
 - KWin 只对显示出的窗口计算空闲抑制；探针只在裸 wl_surface 上建抑制器时直连宿主有效、经 KWin 无效。 [docs/72-kwin-android-host-isolation.md](../docs/72-kwin-android-host-isolation.md)
@@ -2439,9 +2439,9 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 经由接口：`platform-bridge`
 
 - **E1** 设备页显示真实 SSID、IP/DNS、刷新率与提交帧率、电量与温度、充电状态和 Linux 内存用量。（人工）
-- **E2** 声音、蓝牙、日期、定位、网络和安卓显示设置按钮打开安卓对应的系统页面；测试振动能让手机振动。（**未检查**）
-- **E3** 屏幕方向可选跟随安卓、竖屏、横屏，选择立即生效。内存上限的档位见 install.memory-limit。（**未检查**）
-- **E4** 安卓侧太旧或连不上时显示明确提示，不显示过期数据；响应过大时报错。（**未检查**）
+- **E2** 声音、蓝牙、日期、定位、网络和安卓显示设置按钮打开安卓对应的系统页面；测试振动能让手机振动。（单元测试）
+- **E3** 屏幕方向可选跟随安卓、竖屏、横屏，选择立即生效。内存上限的档位见 install.memory-limit。（单元测试）
+- **E4** 安卓侧太旧或连不上时显示明确提示，不显示过期数据；响应过大时报错。（单元测试）
 
 注意：
 - 网络等入口只是打开安卓页面，不能当作硬件控制已逐项验收。 [docs/research/30-feature-adaptation.md](../docs/research/30-feature-adaptation.md)
@@ -2452,10 +2452,10 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 `desktop.services-ssh` · Linux 系统功能 — 设置 → 系统管理 → 系统服务列出容器默认关闭的服务、原因和风险，可以重新打开或关闭，SSH 也在这里管理。
 
-- **E1** 服务页按分组列出被屏蔽的服务、原因、依据和风险；Ubuntu 自带的 /usr/lib 屏蔽只显示不能改。（人工）
+- **E1** 服务页按分组列出被屏蔽的服务、原因、依据和风险；Ubuntu 自带的 /usr/lib 屏蔽只显示不能改。（系统测试、人工）
 - **E2** 打开有风险的服务先确认一次，再弹 polkit 密码框；在确认框或密码框取消时开关回到原状态，系统不变；输入密码晚于 25 秒也能完成。（人工）
-- **E3** 服务页的 SSH 一项显示运行状态，以及手机各个地址的连接命令和 ED25519 主机密钥指纹（与 ssh-keyscan 一致）；在这里关闭或重新打开 SSH。SSH 自动开启本身见 install.ssh-access。（人工）
-- **E4** 用户在服务页的改动在升级后保留（每个单元的默认值只落地一次）。（人工）
+- **E3** 服务页的 SSH 一项显示运行状态，以及手机各个地址的连接命令和 ED25519 主机密钥指纹（与 ssh-keyscan 一致）；在这里关闭或重新打开 SSH。SSH 自动开启本身见 install.ssh-access。（系统测试、人工）
+- **E4** 用户在服务页的改动在升级后保留（每个单元的默认值只落地一次）。（系统测试、人工）
 
 注意：
 - 用户明确要求 SSH 自动开启；docs/83 的“默认关闭”、policy.json 的 ssh 组 default=disabled 和 sshd 配置注释都是旧设计，不能据此关闭 SSH 或增加关闭策略。自动开启目前靠首启脚本 enable ssh.socket。 [docs/83-service-policy.md](../docs/83-service-policy.md) [docs/research/g100-system-update-20260929.md](../docs/research/g100-system-update-20260929.md)
@@ -2472,12 +2472,12 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 经由接口：`codec`、`audio`、`shared-storage`
 
-- **E1** 录屏快捷设置写出可播放的 MP4，含 H.264 视频和 AAC 音频两轨，保存在 ~/Videos。（实机验收、人工）
-- **E2** 停止录屏后很快收尾（约 0.3 秒），不会超时只留下 .partial.mp4；编码跟不上时丢帧而不积压。（人工）
-- **E3** 录到的是完整桌面和应用画面，方向正确，不是黑屏。（人工）
-- **E4** 接着电视时手机和电视同时录、各存一个文件（电视上带光标），录制中断开电视两个文件都保存。（人工）
-- **E5** 设置里可选声音来源（无、系统声音、麦克风、两者）和画质档位；只用硬件编码器，拿不到时报错而不改用软件编码。（**未检查**）
-- **E6** 录屏结束时弹出“录屏已保存或失败”的通知。（**未检查**）
+- **E1** 录屏快捷设置写出可播放的 MP4，含 H.264 视频和 AAC 音频两轨，保存在 ~/Videos。（单元测试、系统测试、实机验收、人工）
+- **E2** 停止录屏后很快收尾（约 0.3 秒），不会超时只留下 .partial.mp4；编码跟不上时丢帧而不积压。（单元测试、人工）
+- **E3** 录到的是完整桌面和应用画面，方向正确，不是黑屏。（人工；只能在手机上看：画面是手机上 KWin 的录屏流在 Adreno GPU 上回读的像素（screencast-gles-readback），方向随安卓；像素对不对只有手机的 GPU 和驱动能说明。不黑屏的另一半（录屏不排除 plasmashell，screencast-mobile-shell）是 KWin 补丁的逻辑，系统测试镜像里是 Ubuntu 原版 KWin，这一半还没有自动检查。）
+- **E4** 接着电视时手机和电视同时录、各存一个文件（电视上带光标），录制中断开电视两个文件都保存。（单元测试、系统测试、人工）
+- **E5** 设置里可选声音来源（无、系统声音、麦克风、两者）和画质档位；只用硬件编码器，拿不到时报错而不改用软件编码。（单元测试）
+- **E6** 录屏结束时弹出“录屏已保存或失败”的通知。（系统测试）
 
 注意：
 - KWin 默认把请求进程的窗口从录屏中排除，而 Plasma Mobile 的桌面、面板和录屏按钮都在 plasmashell 里，整个桌面因此黑屏。 [docs/46-plasma-recording-and-edge-back.md](../docs/46-plasma-recording-and-edge-back.md)
@@ -2494,7 +2494,7 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 `desktop.account-password` · Linux 系统功能 — 首次设置之后（见 install.account-setup），在“用户与密码”（kcm_users 与 AccountsService）里改 Linux 账户的密码；软件管理和系统设置的授权随之使用新密码。
 
 - **E1** 在“用户与密码”里输入旧密码和新密码后修改成功，之后 polkit 授权（软件管理、系统服务页）要的是新密码。（缺口：kcm_users 改密码与 Discover 内的密码认证都还没有实机验证（docs/44））
-- **E2** 改 Linux 密码不会重新启用 Linux 锁屏，手机锁定仍由安卓管理。（**未检查**）
+- **E2** 改 Linux 密码不会重新启用 Linux 锁屏，手机锁定仍由安卓管理。（缺口：要在无头会话里经 kcm_users 与 AccountsService 真的改一次密码，再核对 Linux 锁屏仍关着；系统测试镜像没有 accountsservice，也没有可用的系统总线。锁屏设置以 [$i] 固定、用户配置改不动，由系统测试 session_restart 检查。）
 
 注意：
 - 设置 Linux 管理密码不重新启用第二层 Linux 锁屏；试验中的 PackageKit 免密码授权规则已移除，不设固定默认密码。 [docs/44-plasma-user-account.md](../docs/44-plasma-user-account.md)
@@ -2505,11 +2505,11 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 `desktop.design-system` · Linux 系统功能 — 设计系统 com.rungic.design：深浅色跟随系统，控件按状态有明确反馈，底部选择面板和页面横滑返回。
 
-- **E1** 应用和 Home 浮层的深浅色跟随系统配色变化，也可在应用里固定为浅色或深色，重启后保留。（人工）
-- **E2** 点选项行、开关行、列表行时有按下反馈，快速一点也至少显示 150 ms。（人工）
-- **E3** 底部选择面板点一项后先显示选中再收起；点遮罩、下拖或返回键关闭且不做选择。（人工）
-- **E4** 在页面任意位置向右横滑返回上一页，跟手、按松手方向判断；纵向滚动不受影响，手指下的控件不会被当成一次点击。（人工）
-- **E5** 各控件的全部状态（关、开、按下、禁用、聚焦）在浅色和深色下颜色对比达标，状态总览可离线和在手机上渲染核对。（人工）
+- **E1** 应用和 Home 浮层的深浅色跟随系统配色变化，也可在应用里固定为浅色或深色，重启后保留。（系统测试、人工）
+- **E2** 点选项行、开关行、列表行时有按下反馈，快速一点也至少显示 150 ms。（单元测试、人工）
+- **E3** 底部选择面板点一项后先显示选中再收起；点遮罩、下拖或返回键关闭且不做选择。（单元测试、人工）
+- **E4** 在页面任意位置向右横滑返回上一页，跟手、按松手方向判断；纵向滚动不受影响，手指下的控件不会被当成一次点击。（系统测试、人工）
+- **E5** 各控件的全部状态（关、开、按下、禁用、聚焦）在浅色和深色下颜色对比达标，状态总览可离线和在手机上渲染核对。（单元测试、人工）
 
 注意：
 - ListRow 只在设了 accessory 时才算可交互，11 个可点击行曾没有按下反馈；在设计系统里改，不在页面打补丁。 [docs/102-design-system-choices-and-swipe-back.md](../docs/102-design-system-choices-and-swipe-back.md)
@@ -2952,7 +2952,7 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 | 接口 | 说明 | 使用它的功能 | 使用方测试 | 提供方测试 |
 |---|---|---|---|---|
-| `platform-bridge` 平台桥 | 逐行 JSON 的 Unix socket（Rungic 应用 files/tmp/platform.sock）：状态、显示、亮度、方向、振动、设置面板、桌面模式、助理屏、电视与导播台、文字提交。 | `agent.voice`、`agent.progress`、`agent.phone-mode`、`agent.workspaces`、`agent.where`、`delivery.acceptance`、`delivery.agent-diagnostics`、`delivery.system-tests`、`desktop-mode.on-off`、`desktop-mode.floating-window`、`desktop-mode.fullscreen`、`desktop-mode.cast-connect`、`desktop-mode.tv-computer-mode`、`desktop-mode.tv-touchpad`、`desktop-mode.audio-follow`、`desktop-mode.director`、`desktop-mode.tv-director`、`desktop-mode.remote-viewing`、`desktop-mode.cast-test-pattern`、`desktop.orientation`、`desktop.resolution-refresh`、`desktop.brightness`、`desktop.host-bridges`、`desktop.power`、`desktop.device-panel` | 8 | 1 |
+| `platform-bridge` 平台桥 | 逐行 JSON 的 Unix socket（Rungic 应用 files/tmp/platform.sock）：状态、显示、亮度、方向、振动、设置面板、桌面模式、助理屏、电视与导播台、文字提交。 | `agent.voice`、`agent.progress`、`agent.phone-mode`、`agent.workspaces`、`agent.where`、`delivery.acceptance`、`delivery.agent-diagnostics`、`delivery.system-tests`、`desktop-mode.on-off`、`desktop-mode.floating-window`、`desktop-mode.fullscreen`、`desktop-mode.cast-connect`、`desktop-mode.tv-computer-mode`、`desktop-mode.tv-touchpad`、`desktop-mode.audio-follow`、`desktop-mode.director`、`desktop-mode.tv-director`、`desktop-mode.remote-viewing`、`desktop-mode.cast-test-pattern`、`desktop.orientation`、`desktop.resolution-refresh`、`desktop.brightness`、`desktop.host-bridges`、`desktop.power`、`desktop.device-panel` | 10 | 1 |
 | `kwin-android-host` KWin 安卓宿主 | KWin 的 android-host 后端与 Rungic 应用里的宿主：输出、帧时钟、零拷贝呈现、显式同步、空闲抑制、投屏输出。 | `agent.workspaces`、`apps.gpu`、`apps.vulkan`、`apps.xwayland-gpu`、`delivery.acceptance`、`delivery.trace`、`delivery.probes`、`desktop-mode.tv-computer-mode`、`desktop-mode.external-screen`、`desktop-mode.tv-director`、`desktop-mode.apk-fullscreen`、`desktop.session`、`desktop.panels`、`desktop.orientation`、`desktop.host-display`、`desktop.resolution-refresh`、`desktop.display-size`、`desktop.power`、`install.desktop-entry`、`install.app-restart-recovery`、`install.apk-build` | — | 5 |
 | `host-input` 宿主输入 | 安卓的触摸、按键、指针、手势与输入法文字送进 KWin（直接触摸、触控板、电视遥控与键盘）。 | `delivery.acceptance`、`delivery.ui-automation`、`desktop-mode.fullscreen`、`desktop-mode.fullscreen-touch`、`desktop-mode.tv-computer-mode`、`desktop-mode.tv-touchpad`、`desktop-mode.apk-fullscreen`、`desktop.touch`、`desktop.edge-back`、`desktop.android-text` | — | 1 |
 | `camera` 相机 | 安卓 Camera2 的画面作为 PipeWire 相机节点（rungic.camera.N），按需开关；有哪些相机由平台桥的 capture-info 回答。 | `apps.camera`、`apps.snapshot`、`apps.plasma-camera`、`apps.firefox`、`delivery.acceptance`、`delivery.probes` | 2 | 3 |

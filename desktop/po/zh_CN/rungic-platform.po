@@ -17,6 +17,14 @@ msgid "The Android host sent a response that is too large"
 msgstr "宿主响应过大"
 
 #: desktop/device-panel.py
+msgid "Cannot reach the Android side. Open Rungic on the phone."
+msgstr "连不上 Android 侧，请在手机上打开 Rungic。"
+
+#: desktop/device-panel.py
+msgid "Not available"
+msgstr "暂不可用"
+
+#: desktop/device-panel.py
 msgid "Android Device"
 msgstr "Android 设备"
 

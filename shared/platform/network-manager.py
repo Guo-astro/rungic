@@ -760,6 +760,8 @@ class Bridge:
                 home_only = new.get('gsm', {}).get('home-only', False)
                 if home_only != current['gsm']['home-only'].unpack():
                     return invocation.return_dbus_error(NM + '.Settings.Connection.NotSupported', 'Data roaming is set in Android settings')
+                if new.get('gsm', {}).get('apn', '') != current['gsm']['apn'].unpack():
+                    return invocation.return_dbus_error(NM + '.Settings.Connection.NotSupported', 'The APN is set in Android settings')
                 autoconnect = new.get('connection', {}).get('autoconnect', True)
                 done = (lambda: ('a{sv}', {})) if method == 'Update2' else (lambda: ('',))
                 if autoconnect == current['connection']['autoconnect'].unpack():
