@@ -1,0 +1,893 @@
+From: clawd20130 <clawd20130@gmail.com>
+Date: Mon, 5 Oct 2026 03:09:04 +0900
+Subject: Android host: the desktop session survives the host going away
+
+When the Android host (the Rungic app) was closed, killed (a vendor's battery manager, low memory),
+updated or restarted, KWin exited with 133 for kwin_wayland_wrapper to restart it, and the app then
+restarted the whole desktop session: every window and anything unsaved was lost, though the Linux
+container and its processes were alive.
+
+Now the lost connection is reported once and never read again (WaylandDisplay). The phone's output
+stays for the workspace and its clients: with no output at all plasmashell exits (its panels get a
+zero-width layer surface on the placeholder screen, a protocol error). The output stops rendering,
+drops the frames still waiting for the host and the buffers leased from it, and destroys its host
+window and the layers' subsurfaces (WaylandOutput::unbindHost). Cast outputs go with the host, as
+do the input devices and the buffers imported on the connection (WaylandBackend::disconnectHost).
+The dead display stays allocated, as proxies of it may still be released. Every 500 ms the backend
+checks whether the host's socket answers, then connects again (connectHost, without the initial
+60 s wait): the output gets a new host window and subsurfaces, is configured by the host (a size
+the host changed meanwhile is taken as any host resize) and draws its next frame in full; a new
+seat, the host's globals, text input and idle inhibition follow.
+
+Forwarded: not-needed
+Last-Update: 2026-10-05
+X-Rungic-Status: Pending
+X-Rungic-Tests: L3:session.ready
+X-Rungic-Docs: docs/72
+Origin: vendor
+---
+ src/backends/android/android_backend.cpp          |  99 ++++++++++++---
+ src/backends/android/android_backend.h            |   6 +
+ src/backends/wayland/wayland_backend.cpp          | 106 ++++++++++++++--
+ src/backends/wayland/wayland_backend.h            |  12 ++
+ src/backends/wayland/wayland_display.cpp          |  28 ++++-
+ src/backends/wayland/wayland_egl_backend.cpp      |  10 +-
+ src/backends/wayland/wayland_layer.cpp            |  34 ++++-
+ src/backends/wayland/wayland_layer.h              |   4 +
+ src/backends/wayland/wayland_output.cpp           | 144 ++++++++++++++++++----
+ src/backends/wayland/wayland_output.h             |  12 ++
+ src/backends/wayland/wayland_qpainter_backend.cpp |   4 +-
+ 11 files changed, 397 insertions(+), 62 deletions(-)
+
+diff --git a/src/backends/android/android_backend.cpp b/src/backends/android/android_backend.cpp
+index 571b49d..973357b 100644
+--- a/src/backends/android/android_backend.cpp
++++ b/src/backends/android/android_backend.cpp
+@@ -40,6 +40,8 @@ AndroidBackend::AndroidBackend(const Wayland::WaylandBackendOptions &options, co
+     : WaylandBackend(options, parent)
+     , m_android(android)
+ {
++    m_reconnectTimer.setInterval(500);
++    connect(&m_reconnectTimer, &QTimer::timeout, this, &AndroidBackend::reconnectHost);
+     // Input exists once the workspace does.
+     connect(kwinApp(), &Application::workspaceCreated, this, [this]() {
+         connect(input(), &InputRedirection::idleInhibitedChanged, this, &AndroidBackend::setIdleInhibited);
+@@ -213,27 +215,92 @@ Wayland::WaylandOutput *AndroidBackend::createOutputObject(const QString &name,
+ 
+ void AndroidBackend::configureDisplay(Wayland::WaylandDisplay *display)
+ {
+-    // The host goes away whenever its app is updated or restarted. Waiting for its socket and
+-    // asking kwin_wayland_wrapper for a restart (exit code 133) replaces an abort per host
+-    // restart: no core dump, and the wrapper's crash counter (it gives up after ten) is not
+-    // consumed. Clients stay on the wrapper's socket and reconnect.
++    // The host goes away whenever its app is closed, killed (a vendor's battery manager, low
++    // memory), updated or restarted. KWin and the whole desktop session stay: the phone's output
++    // stays for the clients without drawing, and input goes until the host is back (hostLost). It
++    // used to exit (133) for kwin_wayland_wrapper to restart it, and the app then restarted the
++    // desktop session: every window and anything unsaved was lost.
+     connect(display, &Wayland::WaylandDisplay::globalAnnounced, this, &AndroidBackend::handleGlobal);
+     connect(display, &Wayland::WaylandDisplay::globalRemoved, this, &AndroidBackend::handleGlobalRemoved);
+-    display->setConnectTimeout(std::chrono::seconds(60));
+-    const QByteArray socket = options().socketName.toUtf8();
+-    display->setConnectionLostHandler([socket]() {
+-        qCWarning(KWIN_WAYLAND_BACKEND) << "Host connection lost; waiting for the Android host to restart";
+-        for (int waited = 0; waited < 120000; waited += 250) {
+-            if (wl_display *probe = wl_display_connect(socket.constData())) {
+-                wl_display_disconnect(probe);
+-                break;
+-            }
+-            usleep(250 * 1000);
+-        }
+-        ::_exit(133); // kwin_wayland_wrapper: restart without counting a crash
++    // The first connection waits for a host that may still be starting; a reconnection is only
++    // tried once the host's socket answers (reconnectHost), so nothing blocks the session.
++    display->setConnectTimeout(m_initialized || m_reconnecting ? std::chrono::seconds(0) : std::chrono::seconds(60));
++    display->setConnectionLostHandler([this]() {
++        // Called while dispatching the lost connection: leave it before tearing anything down.
++        QTimer::singleShot(0, this, &AndroidBackend::hostLost);
+     });
+ }
+ 
++void AndroidBackend::hostLost()
++{
++    if (m_reconnecting) {
++        return;
++    }
++    qCWarning(KWIN_WAYLAND_BACKEND) << "Android host connection lost; keeping the session and waiting for the host";
++    m_reconnecting = true;
++    m_initialized = false;
++    // Everything bound on the dead connection is destroyed now, so that the connection itself can go
++    // once the host is back (connectHost): its socket and the event thread's pipe would stay open.
++    m_textInput.reset();
++    if (m_textInputManager) {
++        zwp_text_input_manager_v3_destroy(m_textInputManager);
++        m_textInputManager = nullptr;
++    }
++    if (m_idleInhibitor) {
++        zwp_idle_inhibitor_v1_destroy(m_idleInhibitor);
++        m_idleInhibitor = nullptr;
++    }
++    if (m_idleInhibitManager) {
++        zwp_idle_inhibit_manager_v1_destroy(m_idleInhibitManager);
++        m_idleInhibitManager = nullptr;
++    }
++    if (m_queue) {
++        wl_event_queue_destroy(m_queue);
++        m_queue = nullptr;
++    }
++    // A cast display was a host output: it goes with the host. Its host window goes now, even if
++    // the output object is kept a while longer. The phone's output stays (disconnectHost) and is
++    // bound to the next host window (reconnectHost).
++    for (Wayland::WaylandOutput *output : std::as_const(m_castOutputs)) {
++        qCInfo(KWIN_WAYLAND_BACKEND) << "Cast output removed with the host" << output->name();
++        output->unbindHost();
++        removeOutput(output);
++    }
++    m_castOutputs.clear();
++    qDeleteAll(m_hostOutputs);
++    m_hostOutputs.clear();
++    disconnectHost();
++    m_reconnectTimer.start();
++}
++
++void AndroidBackend::reconnectHost()
++{
++    // Only connect once the host's socket answers: a connection attempt must not block.
++    if (wl_display *probe = wl_display_connect(options().socketName.toUtf8().constData())) {
++        wl_display_disconnect(probe);
++    } else {
++        return;
++    }
++    if (!connectHost()) {
++        qCWarning(KWIN_WAYLAND_BACKEND) << "Android host answered but the connection failed; retrying";
++        return;
++    }
++    m_reconnectTimer.stop();
++    bindHostGlobals();
++    if (m_textInputManager) {
++        m_textInput = std::make_unique<HostTextInput>(m_textInputManager, *display()->seat());
++    }
++    m_initialized = true;
++    m_reconnecting = false;
++    for (HostOutput *hostOutput : std::as_const(m_hostOutputs)) {
++        handleHostOutput(hostOutput);
++    }
++    if (InputRedirection *redirect = input()) {
++        setIdleInhibited(!redirect->idleInhibitors().isEmpty());
++    }
++    qCInfo(KWIN_WAYLAND_BACKEND) << "Reconnected to the Android host";
++}
++
+ QString AndroidBackend::renderDevicePath() const
+ {
+     return m_android.renderDevice;
+diff --git a/src/backends/android/android_backend.h b/src/backends/android/android_backend.h
+index 380c88c..0b6b330 100644
+--- a/src/backends/android/android_backend.h
++++ b/src/backends/android/android_backend.h
+@@ -7,6 +7,8 @@
+ 
+ #include "backends/wayland/wayland_backend.h"
+ 
++#include <QTimer>
++
+ struct wl_event_queue;
+ struct wl_registry;
+ struct wl_output;
+@@ -67,6 +69,8 @@ private:
+     void handleHostOutput(HostOutput *hostOutput);
+     void handleHostOutputRemoved(HostOutput *hostOutput);
+     void setIdleInhibited(bool inhibited);
++    void hostLost();
++    void reconnectHost();
+ 
+     const AndroidBackendOptions m_android;
+     wl_event_queue *m_queue = nullptr;
+@@ -76,6 +80,8 @@ private:
+     QHash<uint32_t, HostOutput *> m_hostOutputs;
+     QHash<HostOutput *, Wayland::WaylandOutput *> m_castOutputs;
+     bool m_initialized = false;
++    bool m_reconnecting = false;
++    QTimer m_reconnectTimer;
+     zwp_text_input_manager_v3 *m_textInputManager = nullptr;
+     std::unique_ptr<HostTextInput> m_textInput;
+ };
+diff --git a/src/backends/wayland/wayland_backend.cpp b/src/backends/wayland/wayland_backend.cpp
+index 713bac0..4ed2d06 100644
+--- a/src/backends/wayland/wayland_backend.cpp
++++ b/src/backends/wayland/wayland_backend.cpp
+@@ -56,6 +56,11 @@ WaylandInputDevice::WaylandInputDevice(KWayland::Client::Keyboard *keyboard, Way
+     : m_seat(seat)
+     , m_keyboard(keyboard)
+ {
++    // The host's keymap is not used (KWin has its own), but its file descriptor is the receiver's
++    // to close: a keyboard of every host connection (connectHost) would leave one open.
++    connect(keyboard, &Keyboard::keymapChanged, this, [](int fd, quint32 size) {
++        close(fd);
++    });
+     connect(keyboard, &Keyboard::left, this, [this](quint32 time) {
+         for (quint32 key : std::as_const(m_pressedKeys)) {
+             Q_EMIT keyChanged(key, KeyboardKeyState::Released, std::chrono::milliseconds(time), this);
+@@ -97,7 +102,7 @@ WaylandInputDevice::WaylandInputDevice(KWayland::Client::Pointer *pointer, Wayla
+         const auto outputs = m_seat->backend()->outputs();
+         for (BackendOutput *output : outputs) {
+             WaylandOutput *waylandOutput = static_cast<WaylandOutput *>(output);
+-            if (waylandOutput->cursor()->pointer()) {
++            if (waylandOutput->cursor() && waylandOutput->cursor()->pointer()) {
+                 waylandOutput->cursor()->setPointer(nullptr);
+             }
+         }
+@@ -326,8 +331,19 @@ WaylandInputBackend::WaylandInputBackend(WaylandBackend *backend, QObject *paren
+ }
+ 
+ void WaylandInputBackend::initialize()
++{
++    connect(m_backend, &WaylandBackend::seatChanged, this, [this]() {
++        addSeatDevices();
++    });
++    addSeatDevices();
++}
++
++void WaylandInputBackend::addSeatDevices()
+ {
+     WaylandSeat *seat = m_backend->seat();
++    if (!seat) {
++        return;
++    }
+     if (seat->relativePointerDevice()) {
+         Q_EMIT deviceAdded(seat->relativePointerDevice());
+     }
+@@ -471,13 +487,39 @@ WaylandBackend::~WaylandBackend()
+ 
+ bool WaylandBackend::initialize()
+ {
+-    m_display = std::make_unique<WaylandDisplay>();
+-    configureDisplay(m_display.get());
+-    if (!m_display->initialize(m_options.socketName)) {
++    if (!connectHost()) {
++        return false;
++    }
++
++    connect(this, &WaylandBackend::pointerLockChanged, this, [this](bool locked) {
++        if (!m_seat) {
++            return; // the host is away (disconnectHost)
++        }
++        if (locked) {
++            m_seat->createRelativePointer();
++        } else {
++            m_seat->destroyRelativePointer();
++        }
++    });
++
++    return true;
++}
++
++bool WaylandBackend::connectHost()
++{
++    auto display = std::make_unique<WaylandDisplay>();
++    configureDisplay(display.get());
++    if (!display->initialize(m_options.socketName)) {
+         return false;
+     }
++    // A connection lost before (disconnectHost) stays allocated until the outputs are bound to the
++    // new one: proxies must not outlive their display.
++    if (m_display) {
++        m_lostDisplays.push_back(std::move(m_display));
++    }
++    m_display = std::move(display);
+ 
+-    if (m_display->linuxDmabuf()) {
++    if (!m_drmDevice && m_display->linuxDmabuf()) {
+         const QString path = renderDevicePath();
+         m_drmDevice = DrmDevice::open(path);
+         if (!m_drmDevice) {
+@@ -487,22 +529,60 @@ bool WaylandBackend::initialize()
+         }
+     }
+ 
+-    createOutputs();
++    // Buffers imported on a lost connection belong to it.
++    m_buffers.clear();
++    if (m_outputs.isEmpty()) {
++        createOutputs();
++    } else if (!rebindOutputs()) {
++        return false;
++    }
+ 
+     m_seat = std::make_unique<WaylandSeat>(m_display->seat(), this);
+ 
+     QAbstractEventDispatcher *dispatcher = QAbstractEventDispatcher::instance();
+     QObject::connect(dispatcher, &QAbstractEventDispatcher::aboutToBlock, m_display.get(), &WaylandDisplay::flush);
+     QObject::connect(dispatcher, &QAbstractEventDispatcher::awake, m_display.get(), &WaylandDisplay::flush);
++    Q_EMIT seatChanged();
++    // Nothing is bound on the lost connections any more: the outputs are on the new one, and seat,
++    // imported buffers and what a derived backend bound went with the host (disconnectHost).
++    m_lostDisplays.clear();
++    return true;
++}
+ 
+-    connect(this, &WaylandBackend::pointerLockChanged, this, [this](bool locked) {
+-        if (locked) {
+-            m_seat->createRelativePointer();
+-        } else {
+-            m_seat->destroyRelativePointer();
+-        }
+-    });
++void WaylandBackend::disconnectHost()
++{
++    // The host is gone (src/backends/android). Its outputs stay for the workspace and its clients
++    // (a workspace without outputs ends plasmashell: its panels get a zero size), but stop
++    // rendering and let go of the host window (WaylandOutput::unbindHost) until connectHost binds
++    // them to the next host. The input devices and every buffer imported on the connection go. The
++    // dead display itself stays until connectHost replaces it.
++    for (WaylandOutput *output : std::as_const(m_outputs)) {
++        output->unbindHost();
++    }
++    m_seat.reset();
++    m_buffers.clear();
++}
+ 
++bool WaylandBackend::rebindOutputs()
++{
++    for (WaylandOutput *output : std::as_const(m_outputs)) {
++        output->bindHost();
++    }
++    // Wait until the host configured the windows again, as for new ones (createOutput).
++    while (std::ranges::any_of(m_outputs, [](WaylandOutput *output) {
++        return !output->isReady();
++    })) {
++        if (wl_display_roundtrip(m_display->nativeDisplay()) < 0) {
++            qCWarning(KWIN_WAYLAND_BACKEND) << "Host connection lost before the outputs were configured";
++            for (WaylandOutput *output : std::as_const(m_outputs)) {
++                output->unbindHost();
++            }
++            return false;
++        }
++    }
++    for (WaylandOutput *output : std::as_const(m_outputs)) {
++        output->resumeRendering();
++    }
+     return true;
+ }
+ 
+diff --git a/src/backends/wayland/wayland_backend.h b/src/backends/wayland/wayland_backend.h
+index 5733377..322294f 100644
+--- a/src/backends/wayland/wayland_backend.h
++++ b/src/backends/wayland/wayland_backend.h
+@@ -113,6 +113,8 @@ public:
+     void initialize() override;
+ 
+ private:
++    void addSeatDevices();
++
+     WaylandBackend *m_backend;
+ };
+ 
+@@ -267,8 +269,16 @@ public:
+ 
+ Q_SIGNALS:
+     void pointerLockChanged(bool locked);
++    /// A new seat (connectHost): its devices replace the previous ones.
++    void seatChanged();
+ 
+ protected:
++    /// The host connection: display, outputs (new ones, or the existing ones bound to it), seat
++    /// (the render device once). False if the host is not there or went again.
++    bool connectHost();
++    /// After the host connection was lost: the outputs stop rendering and leave the host (they stay
++    /// for the workspace); seat and imported buffers go.
++    void disconnectHost();
+     const WaylandBackendOptions &options() const
+     {
+         return m_options;
+@@ -288,6 +298,7 @@ protected:
+ 
+ private:
+     void createOutputs();
++    bool rebindOutputs();
+     void destroyOutputs();
+ 
+     WaylandBackendOptions m_options;
+@@ -299,6 +310,7 @@ private:
+     std::unique_ptr<DrmDevice> m_drmDevice;
+     std::unique_ptr<EglDisplay> m_eglDisplay;
+     std::map<GraphicsBuffer *, std::unique_ptr<WaylandBuffer>> m_buffers;
++    std::vector<std::unique_ptr<WaylandDisplay>> m_lostDisplays;
+ };
+ 
+ } // namespace Wayland
+diff --git a/src/backends/wayland/wayland_display.cpp b/src/backends/wayland/wayland_display.cpp
+index a87e830..3d7410d 100644
+--- a/src/backends/wayland/wayland_display.cpp
++++ b/src/backends/wayland/wayland_display.cpp
+@@ -24,6 +24,8 @@
+ #include <QThread>
+ #include <QWaitCondition>
+ 
++#include <atomic>
++
+ #include <drm_fourcc.h>
+ #include <fcntl.h>
+ #include <poll.h>
+@@ -86,7 +88,12 @@ public:
+         while (true) {
+             if (wl_display_dispatch_pending(m_display) < 0) {
+                 if (m_connectionLost) {
+-                    m_connectionLost(); // a backend whose host restarts (src/backends/android)
++                    // A backend whose host restarts (src/backends/android) reconnects: the dead
++                    // connection is reported once and never read again.
++                    if (!m_lost.exchange(true)) {
++                        m_connectionLost();
++                    }
++                    return;
+                 }
+                 qFatal("Wayland connection broke");
+             }
+@@ -106,6 +113,11 @@ public:
+         }
+     }
+ 
++    bool isLost() const
++    {
++        return m_lost.load();
++    }
++
+     void stop()
+     {
+         if (m_quitPipe[1] != -1) {
+@@ -150,9 +162,17 @@ protected:
+             }
+ 
+             if (fds[0].revents & POLLIN) {
+-                wl_display_read_events(m_display);
++                if (wl_display_read_events(m_display) < 0 && m_connectionLost) {
++                    // The host went away: let the main thread notice (dispatch) and stop polling.
++                    Q_EMIT available();
++                    break;
++                }
+             } else {
+                 wl_display_cancel_read(m_display);
++                if ((fds[0].revents & (POLLHUP | POLLERR)) && m_connectionLost) {
++                    Q_EMIT available();
++                    break;
++                }
+             }
+         }
+     }
+@@ -160,6 +180,7 @@ protected:
+ private:
+     wl_display *const m_display;
+     const std::function<void()> m_connectionLost;
++    std::atomic<bool> m_lost = false;
+     int m_fd;
+     int m_quitPipe[2];
+     QAtomicInteger<bool> m_reading;
+@@ -223,6 +244,9 @@ WaylandDisplay::~WaylandDisplay()
+ 
+ void WaylandDisplay::flush()
+ {
++    if (m_eventThread->isLost()) {
++        return;
++    }
+     m_eventThread->dispatch();
+ }
+ 
+diff --git a/src/backends/wayland/wayland_egl_backend.cpp b/src/backends/wayland/wayland_egl_backend.cpp
+index 7339691..0edb816 100644
+--- a/src/backends/wayland/wayland_egl_backend.cpp
++++ b/src/backends/wayland/wayland_egl_backend.cpp
+@@ -168,6 +168,9 @@ QHash<uint32_t, QList<uint64_t>> WaylandEglLayer::supportedDrmFormats() const
+ 
+ void WaylandEglLayer::releaseBuffers()
+ {
++    // Also while not rendering (WaylandOutput::unbindHost): the framebuffers and textures go with
++    // the context current.
++    m_backend->openglContext()->makeCurrent();
+     m_buffer.reset();
+     m_swapchain.reset();
+ }
+@@ -238,7 +241,9 @@ bool WaylandEglCursorLayer::doEndFrame(const Region &renderedDeviceRegion, const
+     wl_buffer *buffer = m_backend->backend()->importBuffer(m_buffer->buffer());
+     Q_ASSERT(buffer);
+ 
+-    static_cast<WaylandOutput *>(m_output.get())->cursor()->update(buffer, m_buffer->buffer()->size() / m_output->scale(), (hotspot() / m_output->scale()).toPoint());
++    if (WaylandCursor *cursor = static_cast<WaylandOutput *>(m_output.get())->cursor()) {
++        cursor->update(buffer, m_buffer->buffer()->size() / m_output->scale(), (hotspot() / m_output->scale()).toPoint());
++    }
+ 
+     EGLNativeFence releaseFence{m_backend->eglDisplayObject()};
+     m_swapchain->release(m_buffer, releaseFence.takeFileDescriptor());
+@@ -257,6 +262,9 @@ QHash<uint32_t, QList<uint64_t>> WaylandEglCursorLayer::supportedDrmFormats() co
+ 
+ void WaylandEglCursorLayer::releaseBuffers()
+ {
++    // Also while not rendering (WaylandOutput::unbindHost): the framebuffers and textures go with
++    // the context current.
++    m_backend->openglContext()->makeCurrent();
+     m_buffer.reset();
+     m_swapchain.reset();
+ }
+diff --git a/src/backends/wayland/wayland_layer.cpp b/src/backends/wayland/wayland_layer.cpp
+index 72fa24c..5163449 100644
+--- a/src/backends/wayland/wayland_layer.cpp
++++ b/src/backends/wayland/wayland_layer.cpp
+@@ -28,12 +28,23 @@ namespace Wayland
+ 
+ WaylandLayer::WaylandLayer(WaylandOutput *output, OutputLayerType type, int zpos)
+     : OutputLayer(output, type, zpos, zpos, zpos)
+-    , m_surface(output->backend()->display()->compositor()->createSurface())
+-    , m_subSurface(output->backend()->display()->subCompositor()->createSubSurface(m_surface.get(), output->surface()))
+ {
++    bindHost();
++}
++
++WaylandLayer::~WaylandLayer()
++{
++    unbindHost();
++}
++
++void WaylandLayer::bindHost()
++{
++    const auto output = static_cast<WaylandOutput *>(m_output.get());
++    const auto display = output->backend()->display();
++    m_surface.reset(display->compositor()->createSurface());
++    m_subSurface.reset(display->subCompositor()->createSubSurface(m_surface.get(), output->surface()));
+     // make presentation atomic with WaylandOutput::present
+     m_subSurface->setMode(KWayland::Client::SubSurface::Mode::Synchronized);
+-    const auto display = output->backend()->display();
+     if (auto manager = display->tearingControl()) {
+         m_tearingControl = wp_tearing_control_manager_v1_get_tearing_control(manager, *m_surface);
+     }
+@@ -47,16 +58,22 @@ WaylandLayer::WaylandLayer(WaylandOutput *output, OutputLayerType type, int zpos
+         }
+     }
+     m_viewport = display->viewporter()->createViewport(*m_surface);
++    m_previousColor.reset();
+ }
+ 
+-WaylandLayer::~WaylandLayer()
++void WaylandLayer::unbindHost()
+ {
+     if (m_tearingControl) {
+         wp_tearing_control_v1_destroy(m_tearingControl);
++        m_tearingControl = nullptr;
+     }
+     if (m_colorSurface) {
+         wp_color_management_surface_v1_destroy(m_colorSurface);
++        m_colorSurface = nullptr;
+     }
++    m_viewport.reset();
++    m_subSurface.reset();
++    m_surface.reset();
+ }
+ 
+ bool WaylandLayer::test() const
+@@ -81,10 +98,16 @@ void WaylandLayer::setBuffer(wl_buffer *buffer, const Region &deviceDamagedRegio
+ {
+     if (type() == OutputLayerType::Primary && static_cast<WaylandOutput *>(m_output.get())->singleSurface()) {
+         auto surface = static_cast<WaylandOutput *>(m_output.get())->surface();
++        if (!surface) {
++            return; // the host is away (WaylandOutput::unbindHost)
++        }
+         surface->attachBuffer(buffer);
+         surface->damageBuffer(QRegion(deviceDamagedRegion));
+         return;
+     }
++    if (!m_surface) {
++        return; // the host is away (WaylandOutput::unbindHost)
++    }
+     m_surface->attachBuffer(buffer);
+     m_surface->damageBuffer(QRegion(deviceDamagedRegion));
+ }
+@@ -94,6 +117,9 @@ void WaylandLayer::commit(PresentationMode presentationMode)
+     if (type() == OutputLayerType::Primary && static_cast<WaylandOutput *>(m_output.get())->singleSurface()) {
+         return; // Parent commit and frame callback are owned by WaylandOutput.
+     }
++    if (!m_surface) {
++        return;
++    }
+     if (!isEnabled()) {
+         setBuffer(nullptr, Region{});
+         m_surface->commit(KWayland::Client::Surface::CommitFlag::None);
+diff --git a/src/backends/wayland/wayland_layer.h b/src/backends/wayland/wayland_layer.h
+index 6ac14d6..3df8b57 100644
+--- a/src/backends/wayland/wayland_layer.h
++++ b/src/backends/wayland/wayland_layer.h
+@@ -50,6 +50,10 @@ public:
+     KWayland::Client::Surface *surface() const;
+     KWayland::Client::SubSurface *subSurface() const;
+ 
++    /// The layer's objects on the host, on the output's host window (WaylandOutput::bindHost).
++    void bindHost();
++    void unbindHost();
++
+ protected:
+     std::unique_ptr<KWayland::Client::Surface> m_surface;
+     std::unique_ptr<KWayland::Client::SubSurface> m_subSurface;
+diff --git a/src/backends/wayland/wayland_output.cpp b/src/backends/wayland/wayland_output.cpp
+index a9d2b0c..61be8d2 100644
+--- a/src/backends/wayland/wayland_output.cpp
++++ b/src/backends/wayland/wayland_output.cpp
+@@ -22,6 +22,7 @@
+ #include <KWayland/Client/pointer.h>
+ #include <KWayland/Client/pointerconstraints.h>
+ #include <KWayland/Client/seat.h>
++#include <KWayland/Client/subsurface.h>
+ #include <KWayland/Client/surface.h>
+ #include <KWayland/Client/xdgdecoration.h>
+ 
+@@ -123,22 +124,46 @@ const wp_fractional_scale_v1_listener WaylandOutput::s_fractionalScaleListener{
+ WaylandOutput::WaylandOutput(const QString &name, WaylandBackend *backend, wl_output *fullscreenOn)
+     : BackendOutput()
+     , m_renderLoop(std::make_unique<RenderLoop>(this))
+-    , m_surface(backend->display()->compositor()->createSurface())
+-    , m_xdgShellSurface(backend->display()->xdgShell()->createSurface(m_surface.get()))
+     , m_backend(backend)
+-    , m_cursor(std::make_unique<WaylandCursor>(backend))
+     , m_fullscreenOn(fullscreenOn)
+ {
+     m_renderLoop->setMaxPendingFrameCount(2);
+-    if (KWayland::Client::XdgDecorationManager *manager = m_backend->display()->xdgDecorationManager()) {
+-        m_xdgDecoration.reset(manager->getToplevelDecoration(m_xdgShellSurface.get()));
+-        m_xdgDecoration->setMode(KWayland::Client::XdgDecoration::Mode::ServerSide);
+-    }
+     Capabilities caps = Capability::Dpms;
+     if (backend->display()->tearingControl()) {
+         caps |= Capability::Tearing;
+     }
+-    if (auto manager = backend->display()->colorManager()) {
++    setInformation(Information{
++        .name = name,
++        .model = name,
++        .capabilities = caps,
++    });
++
++    m_configureThrottleTimer.setSingleShot(true);
++    connect(&m_configureThrottleTimer, &QTimer::timeout, this, [this]() {
++        applyConfigure(m_pendingConfigureSize, m_pendingConfigureSerial);
++    });
++
++    createHostWindow();
++    connect(this, &WaylandOutput::enabledChanged, this, &WaylandOutput::updateWindowTitle);
++    connect(this, &WaylandOutput::dpmsModeChanged, this, &WaylandOutput::updateWindowTitle);
++}
++
++WaylandOutput::~WaylandOutput()
++{
++    destroyHostWindow();
++}
++
++void WaylandOutput::createHostWindow()
++{
++    WaylandDisplay *display = m_backend->display();
++    m_surface.reset(display->compositor()->createSurface());
++    m_xdgShellSurface.reset(display->xdgShell()->createSurface(m_surface.get()));
++    m_cursor = std::make_unique<WaylandCursor>(m_backend);
++    if (KWayland::Client::XdgDecorationManager *manager = display->xdgDecorationManager()) {
++        m_xdgDecoration.reset(manager->getToplevelDecoration(m_xdgShellSurface.get()));
++        m_xdgDecoration->setMode(KWayland::Client::XdgDecoration::Mode::ServerSide);
++    }
++    if (auto manager = display->colorManager()) {
+         const bool supportsMinFeatures = manager->supportsFeature(WP_COLOR_MANAGER_V1_FEATURE_PARAMETRIC)
+             && manager->supportsFeature(WP_COLOR_MANAGER_V1_FEATURE_SET_PRIMARIES)
+             && manager->supportsFeature(WP_COLOR_MANAGER_V1_FEATURE_SET_LUMINANCES)
+@@ -148,24 +173,14 @@ WaylandOutput::WaylandOutput(const QString &name, WaylandBackend *backend, wl_ou
+             connect(m_colorSurfaceFeedback.get(), &ColorSurfaceFeedback::preferredColorChanged, this, &WaylandOutput::updateColor);
+         }
+     }
+-    if (auto manager = backend->display()->fractionalScale()) {
++    if (auto manager = display->fractionalScale()) {
+         m_fractionalScale = wp_fractional_scale_manager_v1_get_fractional_scale(manager, *m_surface);
+         wp_fractional_scale_v1_add_listener(m_fractionalScale, &s_fractionalScaleListener, this);
+     }
+-    m_viewport = backend->display()->viewporter()->createViewport(*m_surface);
+-    setInformation(Information{
+-        .name = name,
+-        .model = name,
+-        .capabilities = caps,
+-    });
+-
+-    m_configureThrottleTimer.setSingleShot(true);
+-    connect(&m_configureThrottleTimer, &QTimer::timeout, this, [this]() {
+-        applyConfigure(m_pendingConfigureSize, m_pendingConfigureSerial);
+-    });
++    m_viewport = display->viewporter()->createViewport(*m_surface);
+ 
+     updateWindowTitle();
+-    if (auto toplevelIconManager = backend->display()->toplevelIconManager()) {
++    if (auto toplevelIconManager = display->toplevelIconManager()) {
+         auto toplevelIcon = xdg_toplevel_icon_manager_v1_create_icon(toplevelIconManager);
+         xdg_toplevel_icon_v1_set_name(toplevelIcon, "kwin");
+         xdg_toplevel_icon_manager_v1_set_icon(toplevelIconManager, *m_xdgShellSurface, toplevelIcon);
+@@ -174,28 +189,97 @@ WaylandOutput::WaylandOutput(const QString &name, WaylandBackend *backend, wl_ou
+ 
+     connect(m_xdgShellSurface.get(), &XdgShellSurface::configureRequested, this, &WaylandOutput::handleConfigure);
+     connect(m_xdgShellSurface.get(), &XdgShellSurface::closeRequested, qApp, &QCoreApplication::quit);
+-    connect(this, &WaylandOutput::enabledChanged, this, &WaylandOutput::updateWindowTitle);
+-    connect(this, &WaylandOutput::dpmsModeChanged, this, &WaylandOutput::updateWindowTitle);
+ }
+ 
+-WaylandOutput::~WaylandOutput()
++void WaylandOutput::destroyHostWindow()
+ {
+     m_frames.clear();
++    m_cursor.reset();
++    m_pointerLock.reset();
++    m_hasPointerLock = false;
+     if (m_shortcutInhibition) {
+         zwp_keyboard_shortcuts_inhibitor_v1_destroy(m_shortcutInhibition);
++        m_shortcutInhibition = nullptr;
+     }
+     m_viewport.reset();
++    if (m_fractionalScale) {
++        wp_fractional_scale_v1_destroy(m_fractionalScale);
++        m_fractionalScale = nullptr;
++    }
++    m_colorSurfaceFeedback.reset();
+     m_xdgDecoration.reset();
+     m_xdgShellSurface.reset();
+     if (m_surfaceSynchronization) {
+         zwp_linux_surface_synchronization_v1_destroy(m_surfaceSynchronization);
++        m_surfaceSynchronization = nullptr;
+     }
+     m_surface.reset();
+ }
+ 
++void WaylandOutput::unbindHost()
++{
++    if (!m_hostBound) {
++        return;
++    }
++    m_hostBound = false;
++    // Nothing is drawn until the host is back: frames still waiting for the lost host are dropped,
++    // and buffers leased from it go (the next frames are drawn in full into new ones).
++    m_renderLoop->inhibit();
++    m_configureThrottleTimer.stop();
++    m_frames.clear();
++    for (const auto &layer : m_layers) {
++        layer->releaseBuffers();
++        if (layer->type() != OutputLayerType::CursorOnly) {
++            static_cast<WaylandLayer *>(layer.get())->unbindHost();
++        }
++    }
++    destroyHostWindow();
++}
++
++void WaylandOutput::bindHost()
++{
++    if (m_hostBound) {
++        return;
++    }
++    createHostWindow();
++    // The layers' subsurfaces in their order above the window (WaylandEglBackend::createOutputLayers).
++    KWayland::Client::Surface *below = m_surface.get();
++    for (const auto &layer : m_layers) {
++        if (layer->type() == OutputLayerType::CursorOnly) {
++            continue;
++        }
++        auto waylandLayer = static_cast<WaylandLayer *>(layer.get());
++        waylandLayer->bindHost();
++        waylandLayer->subSurface()->placeAbove(below);
++        below = waylandLayer->surface();
++    }
++    m_hostBound = true;
++    m_mapped = false;
++    m_ready = false;
++    if (m_fullscreen && m_fullscreenOn) {
++        xdg_toplevel_set_fullscreen(*m_xdgShellSurface, m_fullscreenOn);
++    } else {
++        m_xdgShellSurface->setFullscreen(m_fullscreen);
++    }
++    m_surface->commit(KWayland::Client::Surface::CommitFlag::None);
++}
++
++void WaylandOutput::resumeRendering()
++{
++    m_renderLoop->uninhibit();
++    for (const auto &layer : m_layers) {
++        layer->addDeviceRepaint(Region::infinite());
++    }
++}
++
++bool WaylandOutput::isHostBound() const
++{
++    return m_hostBound;
++}
++
+ zwp_linux_surface_synchronization_v1 *WaylandOutput::surfaceSynchronization()
+ {
+-    if (!m_surfaceSynchronization) {
++    if (!m_surfaceSynchronization && m_surface) {
+         if (auto manager = m_backend->display()->explicitSynchronization()) {
+             m_surfaceSynchronization = zwp_linux_explicit_synchronization_v1_get_synchronization(manager, *m_surface);
+         }
+@@ -312,6 +396,9 @@ WaylandOutput::FrameData::~FrameData()
+ 
+ bool WaylandOutput::present(const QList<OutputLayer *> &layersToUpdate, const std::shared_ptr<OutputFrame> &frame)
+ {
++    if (!m_hostBound) {
++        return false;
++    }
+     auto cursorLayers = layersToUpdate | std::views::filter([](OutputLayer *layer) {
+         return layer->type() == OutputLayerType::CursorOnly;
+     });
+@@ -500,6 +587,7 @@ void WaylandOutput::init(const QSize &pixelSize, qreal scale, bool fullscreen)
+     initialState.scale = scale;
+     setState(initialState);
+ 
++    m_fullscreen = fullscreen;
+     if (fullscreen && m_fullscreenOn) {
+         xdg_toplevel_set_fullscreen(*m_xdgShellSurface, m_fullscreenOn);
+     } else {
+@@ -555,6 +643,9 @@ void WaylandOutput::applyConfigure(const QSize &size, quint32 serial)
+ 
+ void WaylandOutput::updateWindowTitle()
+ {
++    if (!m_xdgShellSurface) {
++        return;
++    }
+     QString grab;
+     if (m_hasPointerLock) {
+         grab = i18n("Press right control to ungrab pointer");
+@@ -589,6 +680,9 @@ void WaylandOutput::lockPointer(Pointer *pointer, bool lock)
+         return;
+     }
+ 
++    if (!m_hostBound) {
++        return;
++    }
+     Q_ASSERT(!m_pointerLock);
+     m_pointerLock.reset(m_backend->display()->pointerConstraints()->lockPointer(surface(), pointer, nullptr, PointerConstraints::LifeTime::OneShot));
+     if (!m_pointerLock->isValid()) {
+diff --git a/src/backends/wayland/wayland_output.h b/src/backends/wayland/wayland_output.h
+index e606cc2..e101a21 100644
+--- a/src/backends/wayland/wayland_output.h
++++ b/src/backends/wayland/wayland_output.h
+@@ -91,6 +91,14 @@ public:
+     bool presentAsync(OutputLayer *layer, std::optional<std::chrono::nanoseconds> allowedVrrDelay) override;
+ 
+     void init(const QSize &pixelSize, qreal scale, bool fullscreen);
++    /// The host connection was lost: the output stays for the workspace and its clients, but stops
++    /// rendering and lets go of everything bound on the host (WaylandBackend::disconnectHost).
++    void unbindHost();
++    /// On a new host connection: a new host window for the output, as at init; isReady() once the
++    /// host configured it, and resumeRendering() then.
++    void bindHost();
++    void resumeRendering();
++    bool isHostBound() const;
+ 
+     bool isReady() const;
+     /// Whether the output gets a cursor layer; without one KWin draws the cursor into the frame.
+@@ -134,6 +142,8 @@ protected:
+     void setRefreshRate(uint32_t rate);
+ 
+ private:
++    void createHostWindow();
++    void destroyHostWindow();
+     void handleConfigure(const QSize &size, KWayland::Client::XdgShellSurface::States states, quint32 serial);
+     void updateWindowTitle();
+     void applyConfigure(const QSize &size, quint32 serial);
+@@ -158,6 +168,8 @@ private:
+     bool m_ready = false;
+     wl_output *const m_fullscreenOn;
+     bool m_mapped = false;
++    bool m_fullscreen = false;
++    bool m_hostBound = true;
+     struct FrameData
+     {
+         explicit FrameData(const std::shared_ptr<OutputFrame> &frame, struct wp_presentation_feedback *presentationFeedback, struct wl_callback *frameCallback);
+diff --git a/src/backends/wayland/wayland_qpainter_backend.cpp b/src/backends/wayland/wayland_qpainter_backend.cpp
+index 8498918..0998d51 100644
+--- a/src/backends/wayland/wayland_qpainter_backend.cpp
++++ b/src/backends/wayland/wayland_qpainter_backend.cpp
+@@ -124,7 +124,9 @@ bool WaylandQPainterCursorLayer::doEndFrame(const Region &renderedDeviceRegion,
+     wl_buffer *buffer = static_cast<WaylandOutput *>(m_output.get())->backend()->importBuffer(m_back->buffer());
+     Q_ASSERT(buffer);
+ 
+-    static_cast<WaylandOutput *>(m_output.get())->cursor()->update(buffer, m_back->buffer()->size() / m_output->scale(), hotspot().toPoint());
++    if (WaylandCursor *cursor = static_cast<WaylandOutput *>(m_output.get())->cursor()) {
++        cursor->update(buffer, m_back->buffer()->size() / m_output->scale(), hotspot().toPoint());
++    }
+     m_swapchain->release(m_back);
+     return true;
+ }
