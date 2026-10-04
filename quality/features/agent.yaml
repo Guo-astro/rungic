@@ -352,6 +352,10 @@ features:
         gap: 只有离线 QML 测试和截图；未在手机上做真人通话下的状态切换验收。
       - id: E15
         text: 通话结束在对话里留下摘要：时长、这次通话发起和完成的任务数，有任务在等回答时可直接去回答，也可以再打给它。
+      - id: E16
+        text: Agent 说话连贯不卡：回复的声音按 Android 实际播放的进度送出，Android 不因等数据而停顿；停顿之后不会把空档补成一阵突发。
+        evidence:
+          - {doc: docs/101-full-duplex-phone-mode.md, date: 2026-10-04, note: "G100 S 真人通话不卡；AudioFlinger 14.72 s 欠载为 0（修复前 10%–21%）"}
     pitfalls:
       - text: 发给协调器的每条指令都必须带 id，否则回复不带 id，曾让读取线程退出并杀掉协调器。
         docs: [docs/101-full-duplex-phone-mode.md]
