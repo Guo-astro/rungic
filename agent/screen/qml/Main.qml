@@ -115,6 +115,9 @@ Window {
         px = edge === "left" ? 8 : area.width - panelWidth - 8
         settle()
     }
+    // The close button: this screen, or the director's every screen (Director.close, 2026-10-05).
+    function closeScreens() { if (root.directing) director.close(); else root.screen.close() }
+
     // ---- the director's focus changes (docs/58) ----------------------------------------------------
     // A screen's name: in a team the member's role and state (rungic_cua.team), else its number.
     function teamState(screen) {
@@ -1095,11 +1098,11 @@ Window {
               // The phone's keyboard into the screen.
               .concat([{ icon: "input-keyboard", checked: root.typing, act: () => { root.typing = !root.typing } }])
               .concat([{ icon: "video-television", act: () => { root.leaveFullscreen(); root.screen.castToTv() } },
-                       { icon: "window-close", act: () => { root.leaveFullscreen(); root.screen.close() } }])
+                       { icon: "window-close", act: () => { root.leaveFullscreen(); root.closeScreens() } }])
             : [{ icon: "view-fullscreen", act: () => root.setFullscreen() },
                { icon: "video-television", act: () => root.screen.castToTv() },
                { icon: root.onLeftHalf ? "go-previous" : "go-next", act: () => root.tuck(root.onLeftHalf ? "left" : "right") },
-               { icon: "window-close", act: () => root.screen.close() }]
+               { icon: "window-close", act: () => root.closeScreens() }]
         onUsed: root.showToolbar()
     }
 

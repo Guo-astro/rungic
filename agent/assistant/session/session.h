@@ -29,7 +29,7 @@ public:
     QSet<QString> steeredTasks;
     QString controlUtterance,controlledTask;
     bool connected=false,configured=false,localSpeech=false,serverSpeech=false,commitPending=false,submitted=false,responseActive=false,muted=false,externalBusy=false;
-    qint64 lastVoice=0,lastUser=0,lastProgress=0,lastPlaybackPush=-10000;
+    qint64 lastVoice=0,lastUser=0,lastProgress=0,lastPlaybackPush=-10000,lastFacts=-10000;
     qint64 started=0;   // the call's start, seconds since the epoch (its time on the app's call bar)
     QElapsedTimer clock;
     QString journal,leases,processStart;

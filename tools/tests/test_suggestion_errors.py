@@ -9,7 +9,7 @@ from unittest.mock import Mock
 
 source = Path(__file__).resolve().parents[2] / 'agent/assistant/rungic_voice_agent.py'
 node = next(n for n in ast.parse(source.read_text()).body if isinstance(n, ast.ClassDef) and n.name == 'VoiceAgent')
-node.body = [n for n in node.body if isinstance(n, ast.FunctionDef) and n.name == 'on_notification']
+node.body = [n for n in node.body if isinstance(n, ast.FunctionDef) and n.name in ('on_notification', 'update_at_work', 'at_work', 'phone_work')]
 namespace = {'time': time, 'screen_activity': lambda: {}, 'forget_screen_dismissal': lambda: None, 'mark_agent_busy': lambda busy: None,
              'GLib': types.SimpleNamespace(idle_add=Mock()),
              '_': lambda message: message}

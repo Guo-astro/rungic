@@ -110,6 +110,11 @@ python3 -c 'import json,sys; print(json.dumps(sys.argv[1:], ensure_ascii=False))
 echo "$NOTIFY_CHOICE"
 ''',
     'systemctl': '#!/bin/sh\nexit 0\n',
+    # The windows out: one per workspace in $WINDOWS (rungic-agent-screen windows_shown); no director.
+    'pgrep': '''#!/bin/sh
+case "$*" in *--director*) exit 1 ;; esac
+for n in $WINDOWS; do echo "4$n /usr/libexec/rungic-agent-screen-window --workspace $n"; done
+''',
 }
 
 
@@ -139,11 +144,36 @@ class DismissTest(unittest.TestCase):
                     'RUNGIC_PLATFORM_SOCKET': self.screen.path, 'PYTHONPATH': str(tmp / 'site'),
                     'LANGUAGE': 'zh_CN', 'LANG': 'zh_CN.UTF-8', 'CALLS': str(self.calls),
                     'NOTIFIED': str(self.notified), 'VOICE_STATE': json.dumps({'agentBusy': False, 'workspace': 1}),
-                    'CLOSE_RESULT': json.dumps({'closed': True}), 'NOTIFY_CHOICE': ''}
+                    'CLOSE_RESULT': json.dumps({'closed': True}), 'NOTIFY_CHOICE': '', 'WINDOWS': ''}
 
     def tearDown(self):
         self.screen.__exit__()
         self.tmp.cleanup()
+
+    # covers: agent.workspace-lifecycle/E6
+    def test_a_task_given_in_a_call_is_an_agent_at_work(self):
+        # 2026-10-05: the voice agent's turn alone counted, and the ✕ closed the workspace of a
+        # team's lead working for a call. atWork counts the call's tasks too.
+        self.env['VOICE_STATE'] = json.dumps({'agentBusy': False, 'atWork': True, 'workspace': 1})
+        result = self.dismiss()
+        self.assertEqual(result['workspace'], {'closed': False, 'hidden': 'an agent is at work'})
+        self.assertEqual(self.closes(), [])
+
+    # covers: agent.workspace-lifecycle/E6
+    def test_the_directors_close_button_is_every_screen(self):
+        # 2026-10-05: the director's ✕ closed only its focus; the others stayed out and the director
+        # with them. Each screen goes as its own window's would: hidden where an agent is at work.
+        self.env['WINDOWS'] = '1 2 3'
+        self.env['VOICE_STATE'] = json.dumps({'agentBusy': False, 'atWork': True, 'workspace': 1})
+        (self.runtime / 'rungic-workspace-2.busy').write_text(json.dumps({'pid': os.getpid()}))
+        done = subprocess.run([str(SCRIPT), 'dismiss', 'director'], env=self.env, capture_output=True, text=True, timeout=60)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        result = json.loads(done.stdout)
+        self.assertTrue((self.runtime / 'rungic-agent-screen-dismissed-1').exists(), 'the lead at work: hidden')
+        self.assertTrue((self.runtime / 'rungic-agent-screen-dismissed-2').exists(), 'a member at work: hidden')
+        self.assertEqual(self.closes(), ['rungic-cua close-workspace 3'], 'only the idle one closes')
+        self.assertEqual(len(result['workspaces']), 3)
+        self.assertFalse(self.screen.state['enabled'], 'nothing is left out')
 
     def dismiss(self, slot=1):
         done = subprocess.run([str(SCRIPT), 'dismiss', str(slot)], env=self.env, capture_output=True, text=True,

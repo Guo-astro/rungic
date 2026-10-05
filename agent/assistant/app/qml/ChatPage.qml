@@ -336,7 +336,11 @@ Item {
         chat: chat
         busy: page.busy
         speaking: page.speaking
-        canTalk: chat.callPhase !== "user" && !page.phone.sessionId && !(page.phone.tasks || []).some(t => ["queued", "starting", "running", "stopping", "waiting_input"].indexOf(t.status) >= 0)
+        canTalk: chat.callPhase !== "user" && !page.phone.sessionId && !callWork
+        // Tasks given in a call go on after it: typing adds to them (the service routes it to the
+        // call's task scheduler); holding to talk waits, as the voice of a call is closed (2026-10-05:
+        // the bar said "You're on a call" with no call and nothing could be typed).
+        callWork: !page.phone.sessionId && (page.phone.tasks || []).some(t => ["queued", "starting", "running", "stopping", "waiting_input"].indexOf(t.status) >= 0)
         // On a call with the Agent: here, just talk (typing still works); elsewhere, Hold to talk waits.
         call: page.inCallHere ? "here" : page.callMode === "elsewhere" ? "elsewhere" : ""
         onTalkPressed: {

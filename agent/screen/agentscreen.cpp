@@ -444,6 +444,16 @@ void Director::setFocus(int workspace)
     apply(bridge({{QStringLiteral("op"), QStringLiteral("director")}, {QStringLiteral("focus"), workspace}}));
 }
 
+void Director::close()
+{
+    // rungic-agent-screen decides per screen (an agent at work: hidden for this task; else closed),
+    // in a unit of its own that outlives this window. Closing only the focus left the others out,
+    // and the director with them (2026-10-05).
+    QProcess::startDetached(QStringLiteral("systemd-run"), {QStringLiteral("--user"), QStringLiteral("--collect"), QStringLiteral("--quiet"),
+                                                            QStringLiteral("rungic-agent-screen"), QStringLiteral("dismiss"), QStringLiteral("director")});
+    QCoreApplication::quit();
+}
+
 void Director::nextLevel()
 {
     apply(bridge({{QStringLiteral("op"), QStringLiteral("director")}, {QStringLiteral("level"), (m_level + 1) % 3}}));

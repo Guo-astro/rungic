@@ -31,6 +31,7 @@ Item {
     property bool busy: false
     property bool speaking: false
     property bool canTalk: true
+    property bool callWork: false             // tasks from a call run on, with no call: type to add
     property string call: ""                  // the call with the Agent: "here", "elsewhere" or none
     property real micLevel: -90
     property var attachments: []              // [{path, name, kind}]
@@ -59,6 +60,7 @@ Item {
         : keyboard ? "keyboard"
         : call === "here" ? "call"
         : call === "elsewhere" ? "callElsewhere"
+        : callWork ? "callWork"
         : !canTalk ? "unavailable"
         : busy || speaking ? "busy" : "voice"
     state: phase
@@ -90,6 +92,10 @@ Item {
         State {
             name: "call"
             PropertyChanges { composer.label: i18nc("@info the voice bar on a call with the Agent", "On a call · just talk"); composer.canHold: false; composer.showPlus: false }
+        },
+        State {
+            name: "callWork"
+            PropertyChanges { composer.label: i18nc("@info the voice bar while tasks given in a call with the Agent run on after it", "A task from the call is running · type to add"); composer.canHold: false }
         },
         State {
             name: "callElsewhere"

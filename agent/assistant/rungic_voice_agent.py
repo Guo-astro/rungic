@@ -980,7 +980,7 @@ class VoiceAgent:
         else:
             phase = 'ready'
         call_phase = self.call.phase if self.call and self.call.phase in ('agent', 'user') else None
-        return {'conversation': self.thread_id, 'phase': phase, 'agentBusy': self.agent_busy, 'workspace': WORKSPACE,
+        return {'conversation': self.thread_id, 'phase': phase, 'agentBusy': self.agent_busy, 'atWork': self.at_work(), 'workspace': WORKSPACE,
                 'handsFree': self.talking and self.hands_free, 'assistant': self.thread_id == self.assistant_id(),
                 'call': call_phase == 'agent', 'callPhase': call_phase,
                 'callInfo': {'id': getattr(self.call, 'id', ''),
@@ -1002,7 +1002,7 @@ class VoiceAgent:
                 log('phone session: the coordinator stopped, starting it again')
             if self.phone is None or stopped:
                 old = self.phone
-                self.phone = PhoneSession(lambda: self.server, self.thread_settings, self.emit,
+                self.phone = PhoneSession(lambda: self.server, self.thread_settings, self.phone_emit,
                     lambda: platform_request({'op': 'status'}).get('foreground', False),
                     lambda: prompt('phone.md') + language_note(),
                     lambda: desktop_language().split('_')[0].split('-')[0], history=self.store.history)
@@ -1818,6 +1818,34 @@ class VoiceAgent:
             subprocess.Popen(['rungic-voice-assistant', '--conversation', conversation],
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 
+    # ---- the agent at work ------------------------------------------------------------
+    def phone_work(self):
+        """A task given in a call that may act (not read-only) is under way, call or no call."""
+        tasks = self.phone.snapshot.get('tasks', []) if self.phone else []
+        return any(t.get('status') in ('queued', 'starting', 'running', 'stopping', 'waiting_input') and not t.get('readOnly')
+                   for t in tasks)
+
+    def at_work(self):
+        """The agent at work on the desktop, whichever way it was asked: a push-to-talk turn or a
+        task given in a call (2026-10-05: the latter was missed, and closing the director closed
+        the workspace of a team's lead at work). What the assistant's screen and the director go by."""
+        return bool(self.agent_busy or self.phone_work())
+
+    def update_at_work(self):
+        """The wake lock's marker (background call steps count too) and, once the work is over, the
+        screens the user closed meanwhile come back with the next task."""
+        working = self.at_work()
+        mark_agent_busy(working or bool(self.background))
+        if not working and getattr(self, 'was_at_work', False):
+            forget_screen_dismissal()
+        self.was_at_work = working
+
+    def phone_emit(self, event, keep=True):
+        """The call's events, as any; its tasks' changes also change whether the agent is at work."""
+        if event.get('type') in ('phone-state', 'phone-task'):
+            self.update_at_work()
+        self.emit(event, keep)
+
     # ---- the turn in words (task_state, docs/89) ----------------------------------------
     def task_changed(self):
         """The card changed: tell the app, a few times a second at most."""
@@ -2006,7 +2034,7 @@ class VoiceAgent:
         elif method == 'turn/started':
             self.turn_id = (params.get('turn') or {}).get('id')
             self.agent_busy = True
-            mark_agent_busy(True)
+            self.update_at_work()
             if self.phone:
                 self.phone.post("ExternalBusy", {"busy": True})
             self.turn_started = self.last_voice = time.monotonic()
@@ -2027,11 +2055,10 @@ class VoiceAgent:
                 self.emit({'type': 'error', 'text': error.get('message', _("The agent couldn't finish this task"))})
             self.turn_id = None
             self.agent_busy = False
-            mark_agent_busy(bool(self.background))
+            self.update_at_work()
             if self.phone:
                 self.phone.post("ExternalBusy", {"busy": bool(self.background)})
             self.agent_idle_since = time.monotonic()
-            forget_screen_dismissal()
             if getattr(self, 'model_pending', False):
                 threading.Thread(target=self.apply_agent_model, daemon=True).start()
             # A caption left "working" (a tool call cut short) must not stay on the screen.
@@ -3352,10 +3379,11 @@ def platform_request(request, timeout=1.0):
 
 
 def forget_screen_dismissal():
-    """The task is over: the assistant's screen, closed by the user while the agent was at work
-    (rungic-agent-screen dismiss), comes back with the next one."""
+    """The work is over: the assistant's screens, closed by the user while agents were at work
+    (rungic-agent-screen dismiss; every screen of the director), come back with the next task."""
     runtime = Path(os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}')
-    (runtime / f'rungic-agent-screen-dismissed-{WORKSPACE}').unlink(missing_ok=True)
+    for marker in runtime.glob('rungic-agent-screen-dismissed-*'):
+        marker.unlink(missing_ok=True)
 
 
 def screen_activity():

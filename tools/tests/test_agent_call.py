@@ -154,6 +154,21 @@ class CallInTheApp(unittest.TestCase):
         self.assertIn('The Agent is on a call for you: call it when that ends', q.texts(self.content))
 
     # covers: agent.phone-mode/E14
+    # covers: agent.phone-mode/E4
+    def test_after_the_call_its_task_runs_on_and_typing_adds_to_it(self):
+        # 2026-10-05: with no call and a task from it still running, the bar said "You're on a
+        # call" and nothing could be typed. The task runs on; typing adds to it.
+        task = {'taskId': 't1', 'conversation': 'c1', 'status': 'running', 'created': time.time(), 'text': 'make a game'}
+        self.state(sessionId='', phase='closed', tasks=[task])
+        composer = q.of_type(self.page, 'Composer')[0]
+        self.assertEqual(composer.property('phase'), 'callWork')
+        texts = q.texts(self.content)
+        self.assertIn('A task from the call is running · type to add', texts)
+        self.assertNotIn("You're on a call", texts)
+        self.assertFalse(composer.property('canHold'), 'the voice of the call is closed: holding waits')
+        self.state(sessionId='', phase='closed', tasks=[dict(task, status='completed')])
+        self.assertEqual(composer.property('phase'), 'voice', 'when it is done, the bar is as before')
+
     def test_the_call_bar_follows_the_session(self):
         self.state(phase='connecting')
         self.assertTrue(q.shown(self.bar()))

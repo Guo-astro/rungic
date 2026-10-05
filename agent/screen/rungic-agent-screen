@@ -509,18 +509,29 @@ def busy(slot):
 
 
 def dismiss():
-    """rungic-agent-screen dismiss [N]: workspace N's floating window's close button (docs/research/91).
+    """rungic-agent-screen dismiss [N|director]: workspace N's floating window's close button
+    (docs/research/91), or the director's, which is every screen it shows (docs/58; it used to
+    close only its focus, the others stayed and the director with them, 2026-10-05).
     An agent at work there: only hidden, and not brought back during this task; else the workspace
     closed, its apps asked first. One that stays (unsaved work) keeps the workspace, and the user is
     told. The assistant's screen stays on while other workspaces' windows are out."""
     if DESKTOP:
         return off()
     state = bridge({'op': OP})
-    slot = int(sys.argv[2] if len(sys.argv) > 2 else state.get('workspace') or os.environ.get('RUNGIC_WORKSPACE') or 1)
-    others = [n for n in windows_shown() if n != slot]
+    which = sys.argv[2] if len(sys.argv) > 2 else ''
+    if which == 'director':
+        slots = [n for n in windows_shown() if n != 100]      # 100: the team's board, not a workspace
+        results = [dismiss_slot(slot, [n for n in slots[i + 1:]]) for i, slot in enumerate(slots)]
+        return {**status(), 'workspaces': [r.get('workspace') for r in results]}
+    slot = int(which or state.get('workspace') or os.environ.get('RUNGIC_WORKSPACE') or 1)
+    return dismiss_slot(slot, [n for n in windows_shown() if n != slot])
+
+
+def dismiss_slot(slot, others):
+    """One screen closed by the user (dismiss). `others`: the screens that stay out after it."""
     hide = (lambda: status()) if others else off
     voice = voice_state()
-    if (voice.get('agentBusy') and int(voice.get('workspace') or 1) == slot) or busy(slot):
+    if (voice.get('atWork', voice.get('agentBusy')) and int(voice.get('workspace') or 1) == slot) or busy(slot):
         open(dismissed_marker(slot), 'w').close()
         return {**hide(), 'workspace': {'closed': False, 'hidden': 'an agent is at work'}}
     if others:

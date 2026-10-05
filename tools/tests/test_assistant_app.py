@@ -168,6 +168,26 @@ class AppTest(unittest.TestCase):
         q.spin(0.3)
         self.assertIn('Command · Done', self.texts())
 
+    # covers: agent.phone-mode/E17
+    def test_a_phone_task_shows_the_same_card_as_a_turn(self):
+        # A task given in a call has the plan and the current activity of a push-to-talk turn's
+        # card: the same task state (task_state.py) and the same card (TaskProgress), 2026-10-05.
+        self.open('call', [message(1, text='做个茶园游戏')])
+        task = {'taskId': 'task_1', 'conversation': 'call', 'text': '做个茶园游戏', 'status': 'running', 'created': time.time()}
+        self.event(type='phone-task', task=task)
+        self.event(type='task', taskId='task_1', plan=[{'step': '写游戏简报', 'status': 'completed'},
+                                                       {'step': '画像素素材', 'status': 'inProgress'}],
+                   current={'kind': 'command', 'text': 'Run Krita', 'detail': '', 'progress': None, 'seconds': 3},
+                   recent=[], files=[], preview=None)
+        q.spin(0.4)
+        plan = sorted((p for p in q.of_type(self.page, 'PlanStep') if q.shown(p)), key=lambda p: p.property('y'))
+        self.assertEqual([p.property('text') for p in plan], ['写游戏简报', '画像素素材'])
+        self.assertTrue([a for a in q.of_type(self.page, 'ActivityCard') if q.shown(a) and a.property('text') == 'Run Krita'])
+        # A later update of the task itself keeps its card.
+        self.event(type='phone-task', task={**task, 'status': 'waiting_input'})
+        q.spin(0.3)
+        self.assertEqual(len([p for p in q.of_type(self.page, 'PlanStep') if q.shown(p)]), 2)
+
     # covers: agent.chat-app/E5
     def test_after_a_service_restart_the_conversation_reopens_and_the_open_turn_ends(self):
         self.open('r1', [message(1, text='渲染甜甜圈')])

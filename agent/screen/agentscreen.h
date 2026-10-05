@@ -200,6 +200,8 @@ public:
     Q_INVOKABLE void setFocus(int workspace);
     // Standard, enlarged, solo, standard ...
     Q_INVOKABLE void nextLevel();
+    // The director's close button: every screen it shows, each as its own window's (dismiss).
+    Q_INVOKABLE void close();
 
 Q_SIGNALS:
     void changed();

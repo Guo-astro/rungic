@@ -11,6 +11,8 @@ import subprocess
 import threading
 import tomllib
 
+import task_state
+
 
 class PhoneSession:
     def __init__(self, server, settings, emit, foreground, prompt, language, executable='rungic-agent-session', history=lambda conversation: []):
@@ -21,6 +23,10 @@ class PhoneSession:
         self.write_lock = threading.Lock()
         self.pending = {}
         self.threads = {}
+        # What each phone task is doing, kept as for a push-to-talk turn (task_state, docs/89): the
+        # same plan, current activity and files, shown on the same task card.
+        self.cards = {}
+        self.card_timers = {}
         self.serial = 0
         self.snapshot = {'sessionId': '', 'phase': 'closed', 'tasks': [], 'conversation': ''}
         self.process = subprocess.Popen(['sh', '-c', '[ ! -r /etc/profile.d/proxy.sh ] || . /etc/profile.d/proxy.sh; exec "$@"', 'rungic-phone-session', executable], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
@@ -94,8 +100,69 @@ class PhoneSession:
     def notification(self, method, params):
         if not self.owns(params.get('threadId')):
             return False
+        self._track(method, params)
         self._write({'type': 'notification', 'method': method, 'params': params})
         return True
+
+    def _track(self, method, params):
+        """Codex's notifications of a phone task into its TurnState, as the push-to-talk turn does."""
+        thread = params.get('threadId')
+        with self.lock:
+            info = self.threads.get(thread)
+            if not info:
+                return
+            if method == 'turn/started' or thread not in self.cards:
+                self.cards[thread] = task_state.TurnState()
+            state = self.cards[thread]
+            changed = False
+            if method == 'turn/plan/updated':
+                state.on_plan(params.get('plan') or [], params.get('explanation'))
+                changed = True
+            elif method in ('item/started', 'item/completed'):
+                item = params.get('item') or {}
+                completed = method.endswith('completed')
+                changed = state.on_item(item, completed)
+                if completed and item.get('type') == 'agentMessage' and item.get('phase') != 'final_answer' and item.get('text'):
+                    state.on_commentary(item['text'])
+                    changed = True
+            elif method == 'item/commandExecution/outputDelta':
+                changed = state.on_output(params.get('itemId', ''), params.get('delta', ''))
+            elif method == 'item/fileChange/patchUpdated':
+                changed = state.on_patch(params.get('itemId', ''), params.get('changes') or [])
+            elif method == 'turn/completed':
+                # The card as it ended stays with the task (plan, files, steps), as for a turn.
+                final = state.snapshot()
+                final.pop('current', None)
+                timer = self.card_timers.pop(thread, None)
+                if timer:
+                    timer.cancel()
+        if method == 'turn/completed':
+            self.emit({'type': 'task', 'taskId': info.get('taskId', ''), 'conversation': info.get('conversation', ''), 'final': True, **final})
+            return
+        if changed:
+            self._card_changed(thread)
+
+    def _card_changed(self, thread):
+        """Tell the app, a few times a second at most (as VoiceAgent.task_changed)."""
+        with self.lock:
+            if thread in self.card_timers:
+                return
+            timer = threading.Timer(0.4, self._flush_card, (thread,))
+            timer.daemon = True
+            self.card_timers[thread] = timer
+        timer.start()
+
+    def _flush_card(self, thread):
+        with self.lock:
+            self.card_timers.pop(thread, None)
+            info, state = self.threads.get(thread), self.cards.get(thread)
+            snapshot = state.snapshot() if state else None
+            facts = state.facts() if state else ''
+        if info and snapshot is not None:
+            self.emit({'type': 'task', 'taskId': info.get('taskId', ''), 'conversation': info.get('conversation', ''), **snapshot}, False)
+            # What the voice may say of it, as push-to-talk's voice is told (TurnState.facts).
+            if info.get('taskId'):
+                self.post('TaskFacts', {'taskId': info['taskId'], 'facts': facts})
 
     def request(self, rid, method, params):
         if not self.owns(params.get('threadId')):

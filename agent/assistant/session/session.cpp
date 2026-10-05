@@ -110,6 +110,15 @@ void Session::command(QString method,QJsonObject args,std::function<void(QJsonOb
     // A call goes on with Plasma hidden or the screen locked, as a phone call does: hanging up ends
     // it (2026-10-05; it used to end here, "Voice paused while Plasma is hidden", docs/101).
     else if(method=="Foreground") {done({{"ok",true}});}
+    // The task's progress as the push-to-talk turn has it (TurnState.facts, phone_session.py):
+    // part of the trusted snapshot, so "how far is it" is answered from it.
+    else if(method=="TaskFacts"){
+        auto *t=tasks.find(args["taskId"].toString());if(t&&!t->terminal())t->facts=args["facts"].toString().left(1200);
+        // The voice's snapshot follows every 5 s at most; a task's own change sends it at once.
+        if(t&&configured&&clock.elapsed()-lastFacts>5000){lastFacts=clock.elapsed();
+            send({{"type","session.update"},{"session",QJsonObject{{"type","realtime"},{"instructions",prompt+"\nTrusted task snapshot:\n"+QString::fromUtf8(QJsonDocument(trusted()).toJson(QJsonDocument::Compact))}}}});}
+        done({{"ok",true}});
+    }
     else if(method=="ExternalBusy"){externalBusy=args["busy"].toBool();if(!externalBusy)runQueue();done({{"ok",true}});}
     else if(method=="SendPhoneText"){
         if(id.isEmpty()||args["conversationId"].toString()!=conversation){done({{"error","Text belongs to another conversation"}});return;}
@@ -449,7 +458,9 @@ QJsonArray Session::trusted() const {
     for(auto i=tasks.rows.crbegin();i!=tasks.rows.crend();++i){
         const auto &t=*i;if(t.conversation!=conversation)continue;
         if(t.terminal()&&finished++>=8)continue;
-        result.append(QJsonObject{{"taskId",t.id},{"text",t.text.left(500)},{"status",t.status},{"readOnly",t.readOnly},{"result",t.result.left(500)},{"question",t.question}});
+        QJsonObject o{{"taskId",t.id},{"text",t.text.left(500)},{"status",t.status},{"readOnly",t.readOnly},{"result",t.result.left(500)},{"question",t.question}};
+        if(!t.terminal()&&!t.facts.isEmpty())o["progress"]=t.facts;
+        result.append(o);
     }
     return result;
 }
