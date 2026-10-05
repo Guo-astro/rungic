@@ -163,8 +163,11 @@ class CallInTheApp(unittest.TestCase):
         composer = q.of_type(self.page, 'Composer')[0]
         self.assertEqual(composer.property('phase'), 'callWork')
         texts = q.texts(self.content)
-        self.assertIn('A task from the call is running · type to add', texts)
+        self.assertIn('Call task running · type to add', texts)
         self.assertNotIn("You're on a call", texts)
+        label = next(t for t in q.of_type(composer, 'QQuickText') if t.property('text') == 'Call task running · type to add')
+        self.assertLessEqual(composer.width(), self.page.width() + 0.5, 'the label never widens the bar')
+        self.assertLessEqual(label.property('contentWidth'), label.width() + 0.5)
         self.assertFalse(composer.property('canHold'), 'the voice of the call is closed: holding waits')
         self.state(sessionId='', phase='closed', tasks=[dict(task, status='completed')])
         self.assertEqual(composer.property('phase'), 'voice', 'when it is done, the bar is as before')
