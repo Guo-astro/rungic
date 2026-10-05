@@ -547,6 +547,7 @@ features:
       - agent/assistant/prompts/agent.md
       - agent/assistant/prompts/realtime.md
       - agent/assistant/prompts/capabilities.yaml
+      - agent/assistant/prompts/voice-common.md
       - agent/assistant/skills/rungic-phone-desktop/SKILL.md
       - agent/assistant/skills/rungic-messages-calls/SKILL.md
       - agent/assistant/skills/rungic-screens/SKILL.md

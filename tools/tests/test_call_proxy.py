@@ -223,7 +223,7 @@ source = ROOT / 'agent/assistant/rungic_voice_agent.py'
 tree = ast.parse(source.read_text())
 agent_class = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'VoiceAgent')
 agent_class.body = [n for n in agent_class.body if isinstance(n, ast.FunctionDef) and n.name in
-                    {'dial', '_start_call', 'emit', 'play', 'progress_tick', 'call_in_progress', 'speak_call_result',
+                    {'dial', '_start_call', 'emit', 'play', 'progress_tick', 'call_here', 'call_in_progress', 'speak_call_result',
                      'tell_owner'}]
 
 

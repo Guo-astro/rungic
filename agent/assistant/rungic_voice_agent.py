@@ -1865,8 +1865,8 @@ class VoiceAgent:
 
     def call_here(self):
         """A call with the Agent is open in this conversation: its voice is the one to speak."""
-        return bool(self.phone and self.phone.snapshot.get('sessionId')
-                    and self.phone.snapshot.get('conversation') == self.thread_id)
+        phone = getattr(self, 'phone', None)
+        return bool(phone and phone.snapshot.get('sessionId') and phone.snapshot.get('conversation') == self.thread_id)
 
     # ---- the agent at work ------------------------------------------------------------
     def phone_work(self):
