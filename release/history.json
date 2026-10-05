@@ -46,5 +46,30 @@
   "channel": "dev",
   "serial": "ZY32MVJS25",
   "result": "ok"
+ },
+ {
+  "time": "2026-10-05T13:32:12+08:00",
+  "version": "20261005.5",
+  "commit": "f53597776e97c5e787ae8fe24a85b395de7d3015",
+  "channel": "dev",
+  "serial": "ZY32M9MRVP",
+  "result": "verify-failed"
+ },
+ {
+  "time": "2026-10-05T13:33:11+08:00",
+  "version": "20261005.5",
+  "commit": "f53597776e97c5e787ae8fe24a85b395de7d3015",
+  "channel": "dev",
+  "serial": "ZY32M9MRVP",
+  "result": "acceptance recheck: smoke 19/19 passed (same installed APK 2.39/87, no redeploy, desktop not restarted)",
+  "note": "The deploy's acceptance ran with the phone dozing (black screenshots, KWin on the 1080x1920 fallback output): display.geometry, input.text, camera.frames, idle.inhibit and audio.record failed, and input, camera and record still failed on retry. After an explicit wake and unlock every check passed; the acceptance does not wake the screen."
+ },
+ {
+  "time": "2026-10-05T14:35:14+09:00",
+  "version": "20261005.5",
+  "commit": "f53597776e97c5e787ae8fe24a85b395de7d3015",
+  "channel": "dev",
+  "serial": "ZY32MVJS25",
+  "result": "ok"
  }
 ]
