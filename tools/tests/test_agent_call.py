@@ -171,6 +171,18 @@ class CallInTheApp(unittest.TestCase):
         self.assertIn('On a call · just talk', q.texts(self.content))
 
     # covers: agent.phone-mode/E14
+    def test_muted_shows_while_the_agent_speaks_or_thinks(self):
+        # Muted was only the state's last choice: while the Agent spoke or thought the mute control
+        # looked unmuted, and the user could not tell (2026-10-05).
+        for fields, mode in [({'speaking': True}, 'agent'), ({'thinking': True}, 'thinking'), ({}, 'muted')]:
+            with self.subTest(mode=mode):
+                self.state(muted=True, **fields)
+                self.assertEqual(self.bar().property('visualState'), mode)
+                self.assertTrue(self.bar().property('micShownOff'), 'the mute control shows the microphone is off')
+        self.state(speaking=True)
+        self.assertFalse(self.bar().property('micShownOff'))
+
+    # covers: agent.phone-mode/E14
     def test_mute_hang_up_and_the_panel(self):
         self.state(speaking=True)
         q.click(self.button('Mute'))
