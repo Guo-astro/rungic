@@ -89,7 +89,7 @@ int main(int argc,char **argv){
         // $XDG_RUNTIME_DIR/rungic-communication.sock): muting stops the microphone capture and tells
         // Android to close the physical microphone, while the reply keeps playing; hanging up releases
         // the capture, the playback and the backend's call audio. No sound server here: a capture that
-        // cannot start stays as it is (its failure is recorded, not acted on).
+        // cannot start is tried again while the call is open (Audio::capture).
         qputenv("PULSE_SERVER","unix:/nonexistent");
         QLocalServer backend;check(backend.listen(dir.path()+"/rungic-communication.sock"),"stand-in backend listens");
         QLocalSocket *peer=nullptr;QList<QJsonObject> requests;bool released=false;
@@ -117,7 +117,7 @@ int main(int argc,char **argv){
         check(!states.last()["microphone"].toBool()&&states.last()["muted"].toBool(),"muted: the card shows the microphone off");
         m.command("SetPhoneMuted",{{"sessionId","mute-test"},{"muted",false}},[&](QJsonObject r){reply=r;});
         check(until([&]{auto o=last("mute");return o.contains("muted")&&!o["muted"].toBool();}),"unmuted: Android opens the microphone again");
-        check(m.audio.recorder!=nullptr||!failures.isEmpty(),"unmuted: capture starts again");
+        check(m.audio.recorder!=nullptr||m.audio.captureRetrying,"unmuted: capture starts again, or is tried again");
         // covers: agent.phone-mode/E4
         // The screen locked or Plasma hidden: the call goes on, as a phone call does (2026-10-05).
         reply={};m.command("Foreground",{{"visible",false}},[&](QJsonObject r){reply=r;});
@@ -130,6 +130,36 @@ int main(int argc,char **argv){
         check(!m.audio.recorder&&!m.audio.player&&!m.audio.opened,"hung up: capture and playback released");
         check(until([&]{return released;}),"hung up: the backend's call audio is released");
         check(m.phase=="closed"&&m.id.isEmpty(),"hung up: the session is closed");
+    }
+    {
+        // covers: agent.phone-mode/E4
+        // The call's audio recovers instead of ending the call (2026-10-05): the backend going away or
+        // reporting an error opens the audio again while the call lasts; the bar says "reconnecting".
+        QLocalServer::removeServer(dir.path()+"/rungic-communication.sock");
+        QLocalServer backend;check(backend.listen(dir.path()+"/rungic-communication.sock"),"stand-in backend listens again");
+        QLocalSocket *peer=nullptr;int opens=0;
+        QObject::connect(&backend,&QLocalServer::newConnection,[&]{peer=backend.nextPendingConnection();
+            QObject::connect(peer,&QLocalSocket::readyRead,[&,peer]{while(peer->canReadLine())if(QJsonDocument::fromJson(peer->readLine()).object()["op"]=="open")++opens;});});
+        auto until=[&](std::function<bool()> done){QElapsedTimer t;t.start();while(!done()&&t.elapsed()<8000)QCoreApplication::processEvents(QEventLoop::AllEvents,20);return done();};
+        auto ready=[&]{peer->write(QJsonDocument(QJsonObject{{"type","ready"},{"microphone",false}}).toJson(QJsonDocument::Compact)+'\n');};
+        Session r;QStringList failures;QList<QJsonObject> states;
+        r.output=[&](QJsonObject o){auto e=o["event"].toObject();if(e["type"]=="phone-state")states.append(e);};
+        r.audio.failed=[&](QString reason){failures.append(reason);};
+        r.id="recover-test";r.conversation="origin";r.configured=true;r.phase="connected";r.muted=true;
+        r.audio.start(r.id);r.audio.muted=true;     // muted: no capture is needed without a sound server
+        check(until([&]{return opens==1;}),"recovery: the call audio is opened");
+        ready();check(until([&]{return r.audio.opened;}),"recovery: ready");
+        peer->disconnectFromServer();
+        check(until([&]{return r.phase=="reconnecting";}),"backend gone: the call is reconnecting, not ended");
+        check(r.id=="recover-test"&&failures.isEmpty(),"backend gone: the session goes on");
+        check(!states.isEmpty()&&states.last()["phase"]=="reconnecting","backend gone: the bar is told");
+        check(until([&]{return opens==2;}),"backend gone: the audio is opened again");
+        ready();check(until([&]{return r.audio.opened&&r.phase=="connected";}),"opened again: the call is connected");
+        peer->write(QJsonDocument(QJsonObject{{"type","error"},{"error","Communication audio disconnected"}}).toJson(QJsonDocument::Compact)+'\n');
+        check(until([&]{return opens==3;}),"the backend's error: the audio is opened again");
+        ready();check(until([&]{return r.audio.opened&&r.id=="recover-test";}),"after the backend's error the call goes on");
+        r.stop();
+        check(r.id.isEmpty()&&!r.audio.reopening,"hung up: no more reopening");
     }
     // covers: agent.phone-mode/E14 agent.phone-mode/E15
     // The app's call bar and its summary (docs/101): the state says when the call began and when the

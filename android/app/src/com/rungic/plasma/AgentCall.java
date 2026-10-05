@@ -2,6 +2,8 @@ package com.rungic.plasma;
 
 import android.content.ComponentName;
 import android.content.Context;
+import android.media.AudioDeviceInfo;
+import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Bundle;
 import android.telecom.CallAudioState;
@@ -21,6 +23,10 @@ import android.util.Log;
  * the call notification or a headset. CaptureBridge opens and closes it with the call's audio; a
  * hang-up from Android is reported in the call's position (hungUp), and the Linux session ends the
  * call as when hung up in the Agent app. Should Telecom refuse the call, it goes on without it.
+ *
+ * Telecom owns the call's audio mode and route. The call's playback starts only once Telecom has
+ * the call and has set the mode (start): a track started before was routed again while Telecom
+ * took over, and paused long enough for the Linux side to end the call (the G100 S, 2026-10-05).
  */
 final class AgentCall {
     private static final String TAG="RungicAgentCall";
@@ -28,8 +34,8 @@ final class AgentCall {
     static volatile boolean hungUp;
     /** Android holds the call for another one: the Agent neither hears nor is heard meanwhile. */
     static volatile boolean held;
-    private static AgentConnection connection;
-    private static boolean wanted;
+    private static volatile AgentConnection connection;
+    private static volatile boolean wanted;
 
     private AgentCall() {}
 
@@ -37,23 +43,63 @@ final class AgentCall {
         return new PhoneAccountHandle(new ComponentName(context,Service.class),"agent");
     }
 
-    /** The call's audio opened (on the UI thread). */
-    static void start(Context context) {
+    /**
+     * The call's audio is about to open (not on the UI thread): the call is placed, and this waits
+     * up to `wait` ms for Telecom to have it and to set the audio mode. -> whether Telecom has the
+     * call (it then owns the mode and route); false: the call goes on without Telecom.
+     */
+    static boolean start(Context context,long wait) {
         hungUp=false;held=false;wanted=true;
+        if(!place(context)) { wanted=false;return false; }
+        AudioManager audio=context.getSystemService(AudioManager.class);
+        long deadline=android.os.SystemClock.uptimeMillis()+wait;
+        while(android.os.SystemClock.uptimeMillis()<deadline
+                && (connection==null || audio.getMode()!=AudioManager.MODE_IN_COMMUNICATION)) {
+            try { Thread.sleep(20); } catch(InterruptedException e) { Thread.currentThread().interrupt();break; }
+        }
+        AgentConnection c=connection;
+        if(c==null) { wanted=false;Log.w(TAG,"Telecom did not take the call in time; it goes on without it");return false; }
+        // A conversation with the phone in hand, not at the ear: the speaker, unless a headset or
+        // Bluetooth is there. Asked once Telecom owns the mode: asked before, Telecom showed the
+        // speaker while Android's communication device fell back to the earpiece.
+        AudioDeviceInfo device=audio.getCommunicationDevice();
+        Log.i(TAG,"call active; mode="+audio.getMode()+" device="+(device==null?"none":device.getType()));
+        if(!headset(audio) && (device==null || device.getType()!=AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)) {
+            c.speaker();
+            // Playback starts on the speaker, not on the earpiece and then moved.
+            long until=android.os.SystemClock.uptimeMillis()+1000;
+            while(android.os.SystemClock.uptimeMillis()<until && ((device=audio.getCommunicationDevice())==null
+                    || device.getType()!=AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)) {
+                try { Thread.sleep(20); } catch(InterruptedException e) { Thread.currentThread().interrupt();break; }
+            }
+            Log.i(TAG,"routed; device="+(device==null?"none":device.getType()));
+        }
+        return true;
+    }
+    private static boolean headset(AudioManager audio) {
+        for(AudioDeviceInfo d:audio.getAvailableCommunicationDevices()) switch(d.getType()) {
+            case AudioDeviceInfo.TYPE_WIRED_HEADSET: case AudioDeviceInfo.TYPE_USB_HEADSET:
+            case AudioDeviceInfo.TYPE_BLUETOOTH_SCO: case AudioDeviceInfo.TYPE_BLE_HEADSET: return true;
+            default: break;
+        }
+        return false;
+    }
+    private static boolean place(Context context) {
         try {
             TelecomManager telecom=context.getSystemService(TelecomManager.class);
             PhoneAccountHandle handle=account(context);
             telecom.registerPhoneAccount(PhoneAccount.builder(handle,"Rungic Agent")
                 .setCapabilities(PhoneAccount.CAPABILITY_SELF_MANAGED).addSupportedUriScheme(PhoneAccount.SCHEME_SIP).build());
-            if(!telecom.isOutgoingCallPermitted(handle)) { Log.w(TAG,"Telecom does not permit the call now");return; }
+            if(!telecom.isOutgoingCallPermitted(handle)) { Log.w(TAG,"Telecom does not permit the call now");return false; }
             Bundle extras=new Bundle();
             extras.putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE,handle);
             extras.putBoolean(TelecomManager.EXTRA_START_CALL_WITH_SPEAKERPHONE,true);
             telecom.placeCall(Uri.fromParts(PhoneAccount.SCHEME_SIP,"agent",null),extras);
-        } catch(RuntimeException e) { Log.w(TAG,"The call goes on without Telecom",e); }
+            return true;
+        } catch(RuntimeException e) { Log.w(TAG,"The call goes on without Telecom",e);return false; }
     }
 
-    /** The call's audio closed (on the UI thread): the Linux session ended the call. */
+    /** The call's audio closed: the Linux session ended the call. */
     static void end() {
         wanted=false;held=false;
         AgentConnection c=connection;connection=null;
@@ -68,7 +114,6 @@ final class AgentCall {
     }
 
     private static final class AgentConnection extends Connection {
-        private boolean routed;
         AgentConnection() {
             setConnectionProperties(PROPERTY_SELF_MANAGED);
             setConnectionCapabilities(CAPABILITY_HOLD|CAPABILITY_SUPPORT_HOLD);
@@ -86,14 +131,7 @@ final class AgentCall {
         @Override public void onHold() { held=true;setOnHold(); }
         @Override public void onUnhold() { held=false;setActive(); }
         @SuppressWarnings("deprecation")
-        @Override public void onCallAudioStateChanged(CallAudioState state) {
-            // A conversation with the phone in hand, not at the ear: the earpiece Telecom may start on
-            // becomes the speaker, once; a headset or Bluetooth it picks stays.
-            if(routed || state==null)return;
-            routed=true;
-            if(state.getRoute()==CallAudioState.ROUTE_EARPIECE && (state.getSupportedRouteMask()&CallAudioState.ROUTE_SPEAKER)!=0)
-                setAudioRoute(CallAudioState.ROUTE_SPEAKER);
-        }
+        void speaker() { setAudioRoute(CallAudioState.ROUTE_SPEAKER); }
     }
 
     /** Telecom's side: binds while the call lasts, which also keeps the app running as a call's. */

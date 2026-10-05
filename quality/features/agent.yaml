@@ -330,7 +330,7 @@ features:
         evidence:
           - {doc: docs/101-full-duplex-phone-mode.md, date: 2026-10-02, note: "等待任务从 stopping 到后端确认 stopped"}
       - id: E4
-        text: 像打电话一样：锁屏或 Plasma 退到后台时通话继续，Android 把它当作一通电话（通话通知可挂断，来电时挂起、挂完恢复）。挂断（Agent 应用、通知或耳机）、音频或网络断开时关闭话音连接，任务继续执行。断开后不自动恢复，要再点“和 Agent 通话”。
+        text: 像打电话一样：锁屏或 Plasma 退到后台时通话继续，Android 把它当作一通电话（通话通知可挂断，来电时挂起、挂完恢复）。只有挂断（Agent 应用、通知或耳机）才结束通话。通话音频卡顿时丢掉过时的声音继续，音频服务断开或出错时自动重新连接，通话条显示“正在重新连接”。和模型的网络连接断开时仍会结束通话，任务继续执行，要再点“和 Agent 通话”。
         gap: 2026-10-05 改为锁屏继续（自管理 Telecom 通话），只有会话测试和 APK 编译，尚未在手机上做锁屏超过 3 分钟、通知挂断和来电挂起的实测。
         evidence:
           - {doc: docs/101-full-duplex-phone-mode.md, date: 2026-10-02, note: "旧规则（遮住即断）下：挂断后 137×29 仍完成"}
@@ -377,7 +377,7 @@ features:
         docs: [docs/101-full-duplex-phone-mode.md]
       - text: G100 的 Home 键返回同一个入口，不能用它测试“隐藏”。2026-10-03 的协调器修复尚未部署。
         docs: [docs/101-full-duplex-phone-mode.md]
-      - text: 断线直接结束通话（不重连），所以通话条的“正在重新连接”状态目前不会出现。对话列表也还没有通话中的标记。
+      - text: 通话音频断开会自动重连（通话条显示“正在重新连接”），但和 Realtime 模型的网络连接断开仍直接结束通话（不重连）。对话列表也还没有通话中的标记。
         docs: [docs/101-full-duplex-phone-mode.md]
     code:
       - agent/assistant/phone_session.py

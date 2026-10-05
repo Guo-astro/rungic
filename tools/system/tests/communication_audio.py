@@ -171,7 +171,7 @@ def consumer(client, steps):
     events = {}
     for event in map(json.loads, done.stdout.splitlines()):
         events.setdefault(event['event'], event)   # the first of each (closing the client reports a disconnect)
-    if 'timeout' in events or 'failed' not in events:
+    if 'timeout' in events or 'interrupted' not in events:
         raise harness.Failed(f'the client did not finish: {done.stdout[-500:]} {done.stderr[-300:]}')
     if service.problems:
         raise harness.Failed(f'the client broke the contract: {service.problems}')
@@ -190,9 +190,9 @@ def consumer(client, steps):
     if not 0 < events['after-flush']['played'] < 999999:
         raise harness.Failed(f'a position of the old epoch was taken: {events["after-flush"]}')
     steps.append('a flush moves the client to the new epoch; positions of the old one are ignored')
-    if events['failed']['error'] != REPLIES['error']['error']:
-        raise harness.Failed(f'error: {events["failed"]}')
-    steps.append("the service's error reaches the session")
+    if events['interrupted']['error'] != REPLIES['error']['error'] or not events['interrupted']['reopening']:
+        raise harness.Failed(f'error: {events["interrupted"]}')
+    steps.append("the service's error reaches the session, which opens the call's audio again")
 
 
 # ---- provider ------------------------------------------------------------------------------------

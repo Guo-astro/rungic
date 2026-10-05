@@ -54,6 +54,7 @@ class CallRules(unittest.TestCase):
             (None, ''),
             (phone(conversation='other'), 'elsewhere'),
             (phone(phase='connecting', speaking=True), 'connecting'),
+            (phone(phase='reconnecting', speaking=True, tasks=[waiting]), 'reconnecting'),
             (phone(speaking=True, tasks=[waiting]), 'answer'),
             (phone(speaking=True, listening=True), 'agent'),
             (phone(listening=True, thinking=True), 'you'),
@@ -82,6 +83,8 @@ class CallRules(unittest.TestCase):
         self.assertEqual((label, detail), ('Call in another conversation', 'Tidy up · 04:12'))
         label, detail = self.run_js('words', self.tr, phone(phase='connecting'), 'c1', now_ms, '', 'Pause, then say it again')
         self.assertEqual((label, detail), ('Connecting…', 'Pause, then say it again'))
+        label, detail = self.run_js('words', self.tr, phone(phase='reconnecting', startedAt=started), 'c1', now_ms, '', '')
+        self.assertEqual((label, detail), ('Reconnecting…', '04:12'), 'the call goes on while its audio is opened again')
         waiting = dict(tasks[1], status='waiting_input', question={'questions': [{'question': 'Where should they go?'}]})
         label, detail = self.run_js('words', self.tr, phone(startedAt=started, tasks=[waiting]), 'c1', now_ms, '', '')
         self.assertEqual((label, detail), ('Waiting for your answer', 'Where should they go? · 04:12'))

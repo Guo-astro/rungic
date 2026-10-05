@@ -27,13 +27,28 @@ Session::Session(QObject *parent):QObject(parent),audio(this){
     connect(&ws,&QWebSocket::textMessageReceived,this,[this](QString text){incoming(QJsonDocument::fromJson(text.toUtf8()).object());});
     connect(&ws,&QWebSocket::disconnected,this,[this]{if(!id.isEmpty())stop("Voice connection ended; tap to resume");});
     connect(&ws,&QWebSocket::errorOccurred,this,[this](QAbstractSocket::SocketError){if(!id.isEmpty())stop("Voice connection failed; tap to resume");});
-    audio.ready=[this]{if(configured&&!inputBlocked){phase="connected";state();}};
+    audio.ready=[this]{
+        // Opened again after an interruption: the reply goes on from what is still to be played.
+        if(phase=="reconnecting"){playStart=audio.written;playedSamples=0;phase="connecting";}
+        if(configured&&!inputBlocked){phase="connected";}
+        state();
+    };
     audio.failed=[this](QString reason){stop(reason);};
-    // Hung up from Android's call notification or a headset: as the app's hang-up (AgentCall, docs/101).
+    // The call's audio broke and is being opened again (Audio::recover): the call goes on, the bar says
+    // "Reconnecting". A pending interruption is reported to the model as what was pushed.
+    audio.interrupted=[this](QString){
+        if(id.isEmpty())return;
+        if(!truncateItem.isEmpty()&&configured)
+            send({{"type","conversation.item.truncate"},{"item_id",truncateItem},{"content_index",0},{"audio_end_ms",double(truncateSamples*1000/24000)}});
+        truncateItem.clear();phase="reconnecting";state();
+    };
+    // Hung up by the platform (on Android its call notification or a headset): as the app's hang-up (docs/101).
     audio.hungUp=[this]{stop();};
     audio.microphone=[this](const QByteArray &data){
         if(!configured||muted||inputBlocked||id.isEmpty())return;
-        if(ws.bytesToWrite()>32768){stop("Network cannot keep up with live audio; tap to resume");return;}
+        // The network behind for a moment: this piece of live audio is dropped, the call goes on.
+        if(ws.bytesToWrite()>32768){if(!micDropped)qWarning()<<"network behind: dropping microphone audio";micDropped=true;return;}
+        micDropped=false;
         send({{"type","input_audio_buffer.append"},{"audio",QString::fromLatin1(data.toBase64())}});
     };
     audio.speech=[this](bool value){onSpeech(value);};

@@ -117,7 +117,7 @@ final class CaptureBridge implements Closeable {
         FutureTask<Void> change=new FutureTask<>(() -> {
             if(inCall()!=callOpen) {
                 callOpen=inCall();
-                if(callOpen)AgentCall.start(activity);else AgentCall.end();
+                if(!callOpen)AgentCall.end();       // placed by communicationOutput
             }
             updateCaptureService();
             android.os.PowerManager power=activity.getSystemService(android.os.PowerManager.class);
@@ -306,14 +306,16 @@ final class CaptureBridge implements Closeable {
         communicationSession(session);audioPriority();
         if(!phoneOutputBusy.compareAndSet(false,true))throw new IOException("Phone output busy");
         AudioManager audio=activity.getSystemService(AudioManager.class);AudioTrack track=null;
-        boolean header=false,modeSet=false;int oldMode=audio.getMode();
+        boolean header=false,modeSet=false,telecom=false;int oldMode=audio.getMode();
         CommunicationOutput stream=null;
         try {
             if(!visible)throw new IOException("Open Plasma before starting communication audio");
             if(oldMode!=AudioManager.MODE_NORMAL)throw new IOException("A phone call is using communication audio");
-            audio.setMode(AudioManager.MODE_IN_COMMUNICATION);modeSet=true;
+            // A call Android knows (AgentCall): Telecom sets the mode and the route. Without it, as before.
+            telecom=AgentCall.start(activity,2000);
+            if(!telecom) { audio.setMode(AudioManager.MODE_IN_COMMUNICATION);modeSet=true; }
             int[] order={AudioDeviceInfo.TYPE_WIRED_HEADSET,AudioDeviceInfo.TYPE_USB_HEADSET,AudioDeviceInfo.TYPE_BUILTIN_SPEAKER};
-            for(int type:order) {
+            if(!telecom)for(int type:order) {
                 boolean selected=false;
                 for(AudioDeviceInfo device:audio.getAvailableCommunicationDevices())if(device.getType()==type) {
                     selected=audio.setCommunicationDevice(device);if(selected)break;
@@ -343,6 +345,7 @@ final class CaptureBridge implements Closeable {
         } catch(Exception e) { if(!header)json(socket.getOutputStream(),new JSONObject().put("error",e.getMessage()==null?"Communication unavailable":e.getMessage())); }
         finally {
             if(stream!=null){communicationOutputs.remove(session,stream);HostEvents.bump(HostEvents.CAPTURE);callChanged();}
+            else if(telecom)AgentCall.end();       // placed, but the call's audio never opened
             if(track!=null) { try { track.stop(); } catch(Exception ignored) {}track.release(); }
             if(modeSet) { audio.clearCommunicationDevice();if(audio.getMode()==AudioManager.MODE_IN_COMMUNICATION)audio.setMode(oldMode); }
             phoneOutputBusy.set(false);android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_DEFAULT);

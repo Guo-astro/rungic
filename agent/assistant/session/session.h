@@ -23,7 +23,7 @@ public:
     ReplyBuffer playback;
     QString truncateItem;
     quint64 generation=0,playStart=0,playedSamples=0,truncateStart=0,truncateSamples=0;
-    bool narrationSuppressed=false,inputBlocked=false;
+    bool narrationSuppressed=false,inputBlocked=false,micDropped=false;
     QList<ResponseContext> acknowledgements;
     QString steerUtterance;
     QSet<QString> steeredTasks;
