@@ -27,7 +27,9 @@ ColumnLayout {
     signal interrupt()
     signal hangUp()
     signal answer(int index)
-    readonly property bool muted: visualState === "muted"
+    // The microphone is off, whatever the state shows (CallBar's micOff).
+    property bool micOff: false
+    readonly property bool muted: visualState === "muted" || micOff
     readonly property bool agentSpeaks: visualState === "agent"
     spacing: Theme.spaceL
 

@@ -190,6 +190,7 @@ Item {
             anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: Theme.spaceM; rightMargin: Theme.spaceM }
             visible: page.callMode !== ""
             mode: page.callMode === "" ? "idle" : page.callMode
+            micOff: !!page.phone.muted
             readonly property var said: Call.words(i18nc, page.phone, page.conversationId, page.now,
                                                    page.titleOf(page.phone.conversation || ""), page.notice)
             label: said[0]
