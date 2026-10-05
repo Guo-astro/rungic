@@ -115,6 +115,13 @@ Item {
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.metaSize
             }
+            // What the task is doing, as on a push-to-talk turn's card (the same task state).
+            TaskProgress {
+                Layout.fillWidth: true
+                card: taskBox.question.card || null
+                running: taskBox.active
+                expanded: !taskBox.active
+            }
             Body { visible: entry.taskResult.text !== ""; text: entry.taskResult.text; Layout.fillWidth: true }
             Flow {
                 Layout.fillWidth: true
@@ -404,9 +411,6 @@ Item {
             // The task card (docs/89): the plan and what is happening now, from the service's
             // task state; a turn without one (older history) shows the spoken progress instead.
             readonly property var card: entry.task ? JSON.parse(entry.task) : null
-            readonly property var current: card && card.current ? card.current : null
-            property real cardAt: Date.now() / 1000       // when `current` came, to count on from it
-            onCurrentChanged: cardAt = Date.now() / 1000
             ShineText {
                 Layout.fillWidth: true
                 visible: turn.running
@@ -423,54 +427,12 @@ Item {
                 expanded: entry.expanded
                 onClicked: entry.model.setProperty(entry.index, "expanded", !entry.expanded)
             }
-            // The plan: while it runs, and when the finished turn is opened.
-            Repeater {
-                model: turn.card && (turn.running || entry.expanded) ? turn.card.plan : []
-                PlanStep {
-                    required property var modelData
-                    Layout.fillWidth: true
-                    text: modelData.step
-                    status: modelData.status
-                }
-            }
-            ActivityCard {
+            // The plan, what is happening now, a live picture and the files (TaskProgress).
+            TaskProgress {
                 Layout.fillWidth: true
-                visible: turn.running && turn.card !== null
-                kind: turn.current ? turn.current.kind : ""
-                text: turn.current ? turn.current.text : ""
-                detail: turn.current ? turn.current.detail || "" : ""
-                progress: turn.current && turn.current.progress !== null && turn.current.progress !== undefined ? turn.current.progress : -1
-                seconds: turn.current ? turn.current.seconds + Math.max(0, Math.round(turn.now - turn.cardAt)) : 0
-            }
-            // A live picture of the work (a render's passes, docs/90) while it runs; the finished
-            // picture comes with the answer.
-            LivePicture {
-                readonly property var preview: turn.card ? turn.card.preview : null
-                visible: turn.running && preview !== null && preview !== undefined
-                source: visible ? "file://" + preview.image.split("/").map(encodeURIComponent).join("/") : ""
-                text: visible ? preview.text : ""
-                progress: visible && preview.progress !== null && preview.progress !== undefined ? preview.progress : -1
-                finished: visible && preview.done === true
-                maxWidth: Math.min(entry.column, 360)
-                maxHeight: 360
-                onClicked: entry.openImage(source, i18nc("@title a live picture of a render", "Render preview"))
-            }
-            // The files the turn changed, when opened: a tap opens one.
-            Flow {
-                Layout.fillWidth: true
-                visible: entry.expanded && turn.card !== null && turn.card.files.length > 0
-                spacing: 8
-                Repeater {
-                    model: entry.expanded && turn.card ? turn.card.files : []
-                    FileChip {
-                        required property var modelData
-                        name: modelData.path.split("/").pop() + " · " + (modelData.kind === "delete" ? i18nc("@info a file the turn deleted", "Deleted")
-                              : "+" + modelData.added + " −" + modelData.removed)
-                        maxWidth: entry.column
-                        enabled: modelData.kind !== "delete"
-                        onClicked: Qt.openUrlExternally("file://" + modelData.path)
-                    }
-                }
+                card: turn.card
+                running: turn.running
+                expanded: entry.expanded
             }
             // The steps, when opened: what was said, notes, commands with their output.
             Repeater {
@@ -507,6 +469,70 @@ Item {
                 }
             }
             Actions { visible: entry.finalAnswer !== ""; answer: entry.finalAnswer }
+        }
+    }
+
+    // What a task is doing (docs/89), from the service's task state: its plan, what happens now, a
+    // live picture and the files it changed. One card for a push-to-talk turn and for a phone task.
+    component TaskProgress: ColumnLayout {
+        id: taskProgress
+        property var card: null
+        property bool running: false
+        property bool expanded: false
+        readonly property var current: card && card.current ? card.current : null
+        property real now: Date.now() / 1000
+        property real cardAt: Date.now() / 1000       // when `current` came, to count on from it
+        onCurrentChanged: cardAt = Date.now() / 1000
+        Timer { interval: 1000; repeat: true; running: taskProgress.running; onTriggered: taskProgress.now = Date.now() / 1000 }
+        spacing: 8
+        // The plan: while it runs, and when the finished turn is opened.
+        Repeater {
+            model: taskProgress.card && (taskProgress.running || taskProgress.expanded) ? taskProgress.card.plan : []
+            PlanStep {
+                required property var modelData
+                Layout.fillWidth: true
+                text: modelData.step
+                status: modelData.status
+            }
+        }
+        ActivityCard {
+            Layout.fillWidth: true
+            visible: taskProgress.running && taskProgress.card !== null
+            kind: taskProgress.current ? taskProgress.current.kind : ""
+            text: taskProgress.current ? taskProgress.current.text : ""
+            detail: taskProgress.current ? taskProgress.current.detail || "" : ""
+            progress: taskProgress.current && taskProgress.current.progress !== null && taskProgress.current.progress !== undefined ? taskProgress.current.progress : -1
+            seconds: taskProgress.current ? taskProgress.current.seconds + Math.max(0, Math.round(taskProgress.now - taskProgress.cardAt)) : 0
+        }
+        // A live picture of the work (a render's passes, docs/90) while it runs; the finished
+        // picture comes with the answer.
+        LivePicture {
+            readonly property var preview: taskProgress.card ? taskProgress.card.preview : null
+            visible: taskProgress.running && preview !== null && preview !== undefined
+            source: visible ? "file://" + preview.image.split("/").map(encodeURIComponent).join("/") : ""
+            text: visible ? preview.text : ""
+            progress: visible && preview.progress !== null && preview.progress !== undefined ? preview.progress : -1
+            finished: visible && preview.done === true
+            maxWidth: Math.min(entry.column, 360)
+            maxHeight: 360
+            onClicked: entry.openImage(source, i18nc("@title a live picture of a render", "Render preview"))
+        }
+        // The files the turn changed, when opened: a tap opens one.
+        Flow {
+            Layout.fillWidth: true
+            visible: taskProgress.expanded && taskProgress.card !== null && taskProgress.card.files.length > 0
+        spacing: 8
+            Repeater {
+                model: taskProgress.expanded && taskProgress.card ? taskProgress.card.files : []
+                FileChip {
+                    required property var modelData
+                    name: modelData.path.split("/").pop() + " · " + (modelData.kind === "delete" ? i18nc("@info a file the turn deleted", "Deleted")
+                          : "+" + modelData.added + " −" + modelData.removed)
+                    maxWidth: entry.column
+                    enabled: modelData.kind !== "delete"
+                    onClicked: Qt.openUrlExternally("file://" + modelData.path)
+                }
+            }
         }
     }
 

@@ -12,6 +12,7 @@ struct Task {
     QJsonObject question;
     QJsonArray input;
     QString id, conversation, thread, turn, text, status="queued", result, requestKey;
+    QString facts;      // what the voice may say of its progress (task_state.py, via the adapter)
     bool readOnly=false,cancelRequested=false,backendStopped=false;
     qint64 created=QDateTime::currentSecsSinceEpoch();
     QJsonObject json() const;

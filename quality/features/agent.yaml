@@ -361,6 +361,9 @@ features:
         gap: 只有离线 QML 测试和截图。未在手机上做真人通话下的状态切换验收。
       - id: E15
         text: 通话结束在对话里留下摘要：时长、这次通话发起和完成的任务数，有任务在等回答时可直接去回答，也可以再打给它。
+      - id: E17
+        text: 通话里交出去的任务，任务卡和按住说话的一样：计划清单、当前在做什么、改动的文件。问「做到哪了」，Agent 按实际进度回答。
+        gap: 助理屏上的操作说明和渲染预览还没接到电话任务卡上；未在手机上实测。
       - id: E16
         text: Agent 说话连贯不卡：回复的声音按 Android 实际播放的进度送出，Android 不因等数据而停顿。停顿之后不会把空档补成一阵突发。
         evidence:
@@ -825,6 +828,7 @@ features:
       - agent/computer-use/rungic_cua/workspace.py
       - tools/test_workspace_lifecycle.py
       - tools/tests/test_workspace_dismiss.py
+      - tools/tests/test_agent_at_work.py
     docs: [docs/research/91-agent-workspaces.md]
 
   - id: agent.where

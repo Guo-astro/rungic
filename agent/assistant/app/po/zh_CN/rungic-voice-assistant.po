@@ -1653,3 +1653,7 @@ msgstr "通话中 · 直接说就行"
 msgctxt "@info the voice bar while the call with the Agent is in another conversation"
 msgid "On a call in another conversation"
 msgstr "通话在另一段对话中"
+
+msgctxt "@info the voice bar while tasks given in a call with the Agent run on after it"
+msgid "A task from the call is running · type to add"
+msgstr "通话里交代的任务还在进行 · 可以打字补充"

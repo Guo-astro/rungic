@@ -123,6 +123,17 @@ int main(int argc,char **argv){
         check(until([&]{return released;}),"hung up: the backend's call audio is released");
         check(m.phase=="closed"&&m.id.isEmpty(),"hung up: the session is closed");
     }
+    {
+        // covers: agent.phone-mode/E17
+        // A task's progress, as the push-to-talk turn has it (TaskFacts from the adapter), is in the
+        // voice's trusted snapshot while it runs, and not after.
+        Session f;f.conversation="facts";auto id=f.tasks.add("make a game",false,"facts","k1");f.tasks.find(id)->status="running";
+        QJsonObject reply;f.command("TaskFacts",{{"taskId",id},{"facts","Done: Write the brief\nNow: Run Krita (12 s)"}},[&](QJsonObject r){reply=r;});
+        check(reply["ok"].toBool(),"facts accepted");
+        auto snap=f.trusted();check(snap.size()==1&&snap[0].toObject()["progress"].toString().contains("Run Krita"),"the voice knows what the task is doing");
+        f.tasks.find(id)->status="completed";
+        check(!f.trusted()[0].toObject().contains("progress"),"a finished task has its result, not progress");
+    }
     // covers: agent.phone-mode/E14 agent.phone-mode/E15
     // The app's call bar and its summary (docs/101): the state says when the call began and when the
     // Agent is taking in what was said; hanging up leaves the call's summary in its conversation.

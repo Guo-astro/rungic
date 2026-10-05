@@ -2,9 +2,11 @@
 """Offline: inspect native transport settings without a phone, key or server."""
 import importlib.util
 from pathlib import Path
+import sys
 import threading
 
 MODULE = Path(__file__).resolve().parents[2] / 'agent/assistant/phone_session.py'
+sys.path.insert(0, str(MODULE.parent))      # task_state, as the service finds it
 spec = importlib.util.spec_from_file_location('phone_session', MODULE)
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
@@ -16,6 +18,8 @@ def bridge(settings=None):
         'mcp_servers.rungic-desktop.env': {'WAYLAND_DISPLAY': 'agent-0'}}}
     obj.lock = threading.RLock()
     obj.threads = {}
+    obj.cards, obj.card_timers = {}, {}
+    obj.emit = lambda event, keep=True: None
     obj.history = lambda conversation: []
     return obj
 
@@ -151,3 +155,33 @@ def test_the_agent_writes_no_command_without_an_id():
     # Every command to the coordinator goes through command() or post(), which number it.
     source = (MODULE.parent / 'rungic_voice_agent.py').read_text()
     assert 'phone._write(' not in source
+
+
+# covers: agent.phone-mode/E17
+def test_a_phone_task_is_tracked_as_a_turn():
+    # The same task state as a push-to-talk turn (task_state.py): plan and commentary make the
+    # task's card; the card as it ended stays with the task.
+    import time as clock
+    events = []
+    obj = module.PhoneSession.__new__(module.PhoneSession)
+    obj.lock = threading.RLock()
+    obj.threads = {'th1': {'taskId': 'task_1', 'conversation': 'c1'}}
+    obj.cards, obj.card_timers = {}, {}
+    obj.emit = lambda event, keep=True: events.append((event, keep))
+    posted = []
+    obj.post = lambda method, args=None: posted.append((method, args))
+    obj._track('turn/started', {'threadId': 'th1'})
+    obj._track('turn/plan/updated', {'threadId': 'th1', 'plan': [{'step': 'Write the brief', 'status': 'inProgress'}]})
+    obj._track('item/completed', {'threadId': 'th1', 'item': {'type': 'agentMessage', 'id': 'm1', 'phase': 'commentary',
+                                                              'text': 'Next I draw the tiles.'}})
+    clock.sleep(0.6)
+    live = [e for e, keep in events if e['type'] == 'task' and not keep]
+    assert live and live[-1]['taskId'] == 'task_1' and live[-1]['conversation'] == 'c1'
+    assert live[-1]['plan'] == [{'step': 'Write the brief', 'status': 'inProgress'}]
+    assert posted and posted[-1][0] == 'TaskFacts' and 'In progress: Write the brief' in posted[-1][1]['facts'], \
+        'the voice is told the same facts as in push-to-talk'
+    obj._track('turn/completed', {'threadId': 'th1', 'turn': {'status': 'completed'}})
+    final = [e for e, keep in events if e.get('final')]
+    assert final and final[-1]['plan'] and 'current' not in final[-1]
+    obj._track('turn/plan/updated', {'threadId': 'other', 'plan': []})
+    assert len(events) == len(live) + 1, 'a thread that is not a phone task is left alone'

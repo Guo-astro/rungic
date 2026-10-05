@@ -6,6 +6,15 @@
 
 Read [Agent OS: Working together](docs/philosophy.md). Agents are lasting participants in work; their workspaces hold their environments, context, tools and tasks. Design for people to participate naturally: see progress, understand decisions, problems and attempted approaches, discuss the work, change direction, take over a step and hand it back. Help people focus on understanding, judgment, learning and creation. This philosophy guides features and interactions; acceptance records establish which capabilities are implemented.
 
+## 复用优先，拆开先问（用户于 2026-10-05 明确要求）
+
+1. 能复用的，优先复用：新功能先找项目里已有的实现（模块、组件、协议、界面），在它上面扩展，不另写一份平行的。
+2. 实在要拆开（另写一份、分叉一条路径、复制一段逻辑），动手前先征求用户意见：说明为什么不能复用、拆开的代价，以及以后怎么合回去。
+
+起因：电话模式（docs/101）为低延迟语音另写了 C++ 协调器，把任务的进度模型和任务卡也重做成了简化版。结果电话里交出去的任务没有计划清单和当前进展，而按住说话的任务卡（task_state.py）早就有这些。
+
+Reuse first; ask before splitting (required by the user, 2026-10-05). Extend what the project already has (modules, components, protocols, UI) rather than writing a parallel copy. Before splitting a path or duplicating logic, ask the user: say why reuse does not work, what the split costs and how it can be merged back.
+
 ## SSH 自动开启（用户于 2026-09-29 明确要求）
 
 用户明确要求 SSH 自动开启。升级和排障时保留启用状态，不得根据旧文档的“默认关闭”擅自关闭 SSH 或增加关闭策略。`ssh.socket` 的开机启用与监听即是自动接入入口，`ssh.service` 可按连接触发启动。

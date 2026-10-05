@@ -131,7 +131,10 @@ QtObject {
             const t = e.task
             let at = -1
             for (let i = entries.count - 1; i >= 0; --i) if (entries.get(i).kind === "phone-task" && entries.get(i).itemId === t.taskId) { at = i; break }
-            const fields = {kind: "phone-task", itemId: t.taskId, text: t.text || "", status: t.status || "interrupted", output: t.result || "", task: JSON.stringify(t.question || {}), started: t.created || 0}
+            // `task`: the task's question, and its card (the same as a push-to-talk turn's, below).
+            const card = at >= 0 ? (JSON.parse(entries.get(at).task || "{}").card || null) : null
+            const fields = {kind: "phone-task", itemId: t.taskId, text: t.text || "", status: t.status || "interrupted", output: t.result || "",
+                            task: JSON.stringify(Object.assign({}, t.question || {}, {card: card})), started: t.created || 0}
             if (at < 0) entries.append(entry(fields))
             else for (const key in fields) entries.setProperty(at, key, fields[key])
             return
@@ -228,10 +231,22 @@ QtObject {
             break
         }
         case "task": {
-            // What the turn is doing, in words (docs/89): the task card of the work entry.
-            if (root.workAt < 0) return
+            // What the turn is doing, in words (docs/89): the task card of the work entry, or of
+            // a phone task (e.taskId), kept by the same task state.
             const card = Object.assign({}, e)
-            delete card.type; delete card.time; delete card.conversation
+            delete card.type; delete card.time; delete card.conversation; delete card.taskId
+            if (e.taskId) {
+                for (let i = entries.count - 1; i >= 0; --i) {
+                    if (entries.get(i).kind === "phone-task" && entries.get(i).itemId === e.taskId) {
+                        const task = JSON.parse(entries.get(i).task || "{}")
+                        task.card = card
+                        entries.setProperty(i, "task", JSON.stringify(task))
+                        break
+                    }
+                }
+                return
+            }
+            if (root.workAt < 0) return
             entries.setProperty(root.workAt, "task", JSON.stringify(card))
             break
         }
