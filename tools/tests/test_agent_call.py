@@ -54,6 +54,7 @@ class CallRules(unittest.TestCase):
             (None, ''),
             (phone(conversation='other'), 'elsewhere'),
             (phone(phase='connecting', speaking=True), 'connecting'),
+            (phone(phase='reconnecting', speaking=True, tasks=[waiting]), 'reconnecting'),
             (phone(speaking=True, tasks=[waiting]), 'answer'),
             (phone(speaking=True, listening=True), 'agent'),
             (phone(listening=True, thinking=True), 'you'),
@@ -82,6 +83,8 @@ class CallRules(unittest.TestCase):
         self.assertEqual((label, detail), ('Call in another conversation', 'Tidy up · 04:12'))
         label, detail = self.run_js('words', self.tr, phone(phase='connecting'), 'c1', now_ms, '', 'Pause, then say it again')
         self.assertEqual((label, detail), ('Connecting…', 'Pause, then say it again'))
+        label, detail = self.run_js('words', self.tr, phone(phase='reconnecting', startedAt=started), 'c1', now_ms, '', '')
+        self.assertEqual((label, detail), ('Reconnecting…', '04:12'), 'the call goes on while its audio is opened again')
         waiting = dict(tasks[1], status='waiting_input', question={'questions': [{'question': 'Where should they go?'}]})
         label, detail = self.run_js('words', self.tr, phone(startedAt=started, tasks=[waiting]), 'c1', now_ms, '', '')
         self.assertEqual((label, detail), ('Waiting for your answer', 'Where should they go? · 04:12'))
@@ -151,6 +154,18 @@ class CallInTheApp(unittest.TestCase):
         self.assertIn('The Agent is on a call for you: call it when that ends', q.texts(self.content))
 
     # covers: agent.phone-mode/E14
+    # covers: agent.phone-mode/E4
+    def test_after_the_call_its_task_runs_on_and_typing_adds_to_it(self):
+        # 2026-10-05: with no call and a task from it still running, the bar said "You're on a
+        # call" and nothing could be typed. A call's task is this conversation's work as any
+        # (phone_session.py): the bar is as for push-to-talk, holding and typing join the work.
+        task = {'taskId': 't1', 'conversation': 'c1', 'status': 'running', 'created': time.time(), 'text': 'make a game', 'shared': True}
+        self.state(sessionId='', phase='closed', tasks=[task])
+        composer = q.of_type(self.page, 'Composer')[0]
+        self.assertIn(composer.property('phase'), ('voice', 'busy'))
+        self.assertTrue(composer.property('canHold'))
+        self.assertNotIn("You're on a call", q.texts(self.content))
+
     def test_the_call_bar_follows_the_session(self):
         self.state(phase='connecting')
         self.assertTrue(q.shown(self.bar()))
@@ -169,6 +184,18 @@ class CallInTheApp(unittest.TestCase):
         composer = q.of_type(self.page, 'Composer')[0]
         self.assertEqual(composer.property('phase'), 'call')
         self.assertIn('On a call · just talk', q.texts(self.content))
+
+    # covers: agent.phone-mode/E14
+    def test_muted_shows_while_the_agent_speaks_or_thinks(self):
+        # Muted was only the state's last choice: while the Agent spoke or thought the mute control
+        # looked unmuted, and the user could not tell (2026-10-05).
+        for fields, mode in [({'speaking': True}, 'agent'), ({'thinking': True}, 'thinking'), ({}, 'muted')]:
+            with self.subTest(mode=mode):
+                self.state(muted=True, **fields)
+                self.assertEqual(self.bar().property('visualState'), mode)
+                self.assertTrue(self.bar().property('micShownOff'), 'the mute control shows the microphone is off')
+        self.state(speaking=True)
+        self.assertFalse(self.bar().property('micShownOff'))
 
     # covers: agent.phone-mode/E14
     def test_mute_hang_up_and_the_panel(self):

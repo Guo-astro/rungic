@@ -190,6 +190,7 @@ Item {
             anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: Theme.spaceM; rightMargin: Theme.spaceM }
             visible: page.callMode !== ""
             mode: page.callMode === "" ? "idle" : page.callMode
+            micOff: !!page.phone.muted
             readonly property var said: Call.words(i18nc, page.phone, page.conversationId, page.now,
                                                    page.titleOf(page.phone.conversation || ""), page.notice)
             label: said[0]
@@ -335,7 +336,9 @@ Item {
         chat: chat
         busy: page.busy
         speaking: page.speaking
-        canTalk: chat.callPhase !== "user" && !page.phone.sessionId && !(page.phone.tasks || []).some(t => ["queued", "starting", "running", "stopping", "waiting_input"].indexOf(t.status) >= 0)
+        // A call's tasks go on after it as this conversation's turn (or read-only beside it): the bar
+        // is as for any turn at work (2026-10-05: it said "You're on a call" with no call).
+        canTalk: chat.callPhase !== "user" && !page.phone.sessionId
         // On a call with the Agent: here, just talk (typing still works); elsewhere, Hold to talk waits.
         call: page.inCallHere ? "here" : page.callMode === "elsewhere" ? "elsewhere" : ""
         onTalkPressed: {

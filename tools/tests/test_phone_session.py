@@ -2,9 +2,11 @@
 """Offline: inspect native transport settings without a phone, key or server."""
 import importlib.util
 from pathlib import Path
+import sys
 import threading
 
 MODULE = Path(__file__).resolve().parents[2] / 'agent/assistant/phone_session.py'
+sys.path.insert(0, str(MODULE.parent))      # task_state, as the service finds it
 spec = importlib.util.spec_from_file_location('phone_session', MODULE)
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
@@ -16,6 +18,9 @@ def bridge(settings=None):
         'mcp_servers.rungic-desktop.env': {'WAYLAND_DISPLAY': 'agent-0'}}}
     obj.lock = threading.RLock()
     obj.threads = {}
+    obj.cards, obj.card_timers = {}, {}
+    obj.executor, obj.shared = None, {}
+    obj.emit = lambda event, keep=True: None
     obj.history = lambda conversation: []
     return obj
 
@@ -151,3 +156,156 @@ def test_the_agent_writes_no_command_without_an_id():
     # Every command to the coordinator goes through command() or post(), which number it.
     source = (MODULE.parent / 'rungic_voice_agent.py').read_text()
     assert 'phone._write(' not in source
+
+
+# covers: agent.phone-mode/E4
+def test_an_open_call_keeps_the_phone_awake(tmp_path, monkeypatch):
+    # A call goes on with the screen locked (2026-10-05): while it is open the session's process is
+    # named in rungic-call.busy, which rungic-agent-wakelock holds the phone awake for.
+    import json
+    monkeypatch.setenv('XDG_RUNTIME_DIR', str(tmp_path))
+    obj = reader([json.dumps({'type': 'event', 'event': {'type': 'phone-state', 'sessionId': 'voice_1'}}) + '\n'])
+    obj.process.pid = 4242
+    obj._read()
+    marker = tmp_path / 'rungic-call.busy'
+    assert json.loads(marker.read_text()) == {'pid': 4242}
+    obj = reader([json.dumps({'type': 'event', 'event': {'type': 'phone-state', 'sessionId': ''}}) + '\n'])
+    obj._read()
+    assert not marker.exists()
+
+# covers: agent.phone-mode/E17
+def test_a_phone_task_is_tracked_as_a_turn():
+    # The same task state as a push-to-talk turn (task_state.py): plan and commentary make the
+    # task's card; the card as it ended stays with the task.
+    import time as clock
+    events = []
+    obj = module.PhoneSession.__new__(module.PhoneSession)
+    obj.lock = threading.RLock()
+    obj.threads = {'th1': {'taskId': 'task_1', 'conversation': 'c1'}}
+    obj.cards, obj.card_timers = {}, {}
+    obj.emit = lambda event, keep=True: events.append((event, keep))
+    posted = []
+    obj.post = lambda method, args=None: posted.append((method, args))
+    obj._track('turn/started', {'threadId': 'th1'})
+    obj._track('turn/plan/updated', {'threadId': 'th1', 'plan': [{'step': 'Write the brief', 'status': 'inProgress'}]})
+    obj._track('item/completed', {'threadId': 'th1', 'item': {'type': 'agentMessage', 'id': 'm1', 'phase': 'commentary',
+                                                              'text': 'Next I draw the tiles.'}})
+    clock.sleep(0.6)
+    live = [e for e, keep in events if e['type'] == 'task' and not keep]
+    assert live and live[-1]['taskId'] == 'task_1' and live[-1]['conversation'] == 'c1'
+    assert live[-1]['plan'] == [{'step': 'Write the brief', 'status': 'inProgress'}]
+    assert posted and posted[-1][0] == 'TaskFacts' and 'In progress: Write the brief' in posted[-1][1]['facts'], \
+        'the voice is told the same facts as in push-to-talk'
+    obj._track('turn/completed', {'threadId': 'th1', 'turn': {'status': 'completed'}})
+    final = [e for e, keep in events if e.get('final')]
+    assert final and final[-1]['plan'] and 'current' not in final[-1]
+    obj._track('turn/plan/updated', {'threadId': 'other', 'plan': []})
+    assert len(events) == len(live) + 1, 'a thread that is not a phone task is left alone'
+
+
+class Executor:
+    """VoiceAgent as a call's executor: the conversation's own thread and its running turn."""
+    def __init__(self, running=None):
+        self.running = running
+        self.opened = []
+
+    def main_thread(self, conversation):
+        self.opened.append(conversation)
+        return 'main-thread'
+
+    def running_turn(self, thread):
+        return self.running
+
+    def turn_params(self, thread):
+        return {'threadId': thread, 'model': 'gpt-x'}
+
+
+class Server:
+    def __init__(self, fail_start=False):
+        self.calls, self.fail_start = [], fail_start
+
+    def call(self, method, params, timeout=None):
+        self.calls.append((method, params))
+        if method == 'turn/start' and self.fail_start:
+            raise RuntimeError('a turn is active')
+        if method == 'turn/start':
+            return {'turn': {'id': 'turn-new'}}
+        return {}
+
+
+def shared_bridge(executor, server):
+    obj = bridge()
+    obj.executor, obj.shared = executor, {}
+    obj.server = lambda: server
+    written = []
+    obj._write = written.append
+    return obj, written
+
+
+# covers: agent.phone-mode/E7
+def test_work_that_acts_goes_to_the_conversation_s_own_thread():
+    # 2026-10-05: a call's tasks each had a thread of their own, queued behind one another; push-to-
+    # talk joins the turn at work. Now a call's acting work is push-to-talk's: the same thread.
+    executor, server = Executor(), Server()
+    obj, written = shared_bridge(executor, server)
+    obj._rpc({'id': 1, 'method': 'thread/start', 'params': {'taskId': 't1', 'readOnly': False, 'conversation': 'c1'}})
+    assert written[-1]['result'] == {'thread': {'id': 'main-thread'}, 'shared': True}
+    assert executor.opened == ['c1'] and not server.calls, 'no thread of its own'
+    obj._rpc({'id': 2, 'method': 'turn/start', 'params': {'threadId': 'main-thread', 'input': [{'type': 'text', 'text': 'draw'}]}})
+    assert server.calls[-1] == ('turn/start', {'threadId': 'main-thread', 'model': 'gpt-x', 'input': [{'type': 'text', 'text': 'draw'}]})
+    assert written[-1]['result'] == {'turn': {'id': 'turn-new'}}
+    # A second request while the turn works joins it, as push-to-talk does (the cast and the drawing).
+    executor.running = 'turn-new'
+    obj._rpc({'id': 3, 'method': 'thread/start', 'params': {'taskId': 't2', 'readOnly': False, 'conversation': 'c1'}})
+    obj._rpc({'id': 4, 'method': 'turn/start', 'params': {'threadId': 'main-thread', 'input': [{'type': 'text', 'text': 'cast it'}]}})
+    assert server.calls[-1] == ('turn/steer', {'threadId': 'main-thread', 'expectedTurnId': 'turn-new',
+                                               'input': [{'type': 'text', 'text': 'cast it'}]})
+    assert written[-1]['result'] == {'turn': {'id': 'turn-new'}, 'joined': True}
+    assert obj.shared_tasks('main-thread') == ['t1', 't2']
+
+
+# covers: agent.phone-mode/E7
+def test_a_turn_begun_meanwhile_is_joined():
+    executor, server = Executor(), Server(fail_start=True)
+    obj, written = shared_bridge(executor, server)
+    obj._rpc({'id': 1, 'method': 'thread/start', 'params': {'taskId': 't1', 'readOnly': False, 'conversation': 'c1'}})
+    executor.running = 'ptt-turn'     # push-to-talk began one between
+    obj._rpc({'id': 2, 'method': 'turn/start', 'params': {'threadId': 'main-thread', 'input': []}})
+    assert server.calls[-1][0] == 'turn/steer' and written[-1]['result']['turn']['id'] == 'ptt-turn'
+
+
+# covers: agent.phone-mode/E2
+def test_read_only_work_runs_beside_in_a_thread_of_its_own():
+    executor, server = Executor(), Server()
+    obj, written = shared_bridge(executor, server)
+    server.call = lambda method, params, timeout=None: server.calls.append((method, params)) or {'thread': {'id': 'side'}}
+    obj._rpc({'id': 1, 'method': 'thread/start', 'params': {'taskId': 't3', 'readOnly': True, 'conversation': 'c1'}})
+    method, params = server.calls[-1]
+    assert method == 'thread/start' and params['sandbox'] == 'read-only'
+    assert 'This task is read-only' in params['developerInstructions'], 'it says so rather than "I cannot"'
+    assert obj.owns('side') and not executor.opened
+
+
+# covers: agent.phone-mode/E7
+def test_the_conversation_s_thread_stays_push_to_talk_s():
+    executor, server = Executor(), Server()
+    obj, written = shared_bridge(executor, server)
+    obj._rpc({'id': 1, 'method': 'thread/start', 'params': {'taskId': 't1', 'readOnly': False, 'conversation': 'c1'}})
+    assert obj.notification('turn/completed', {'threadId': 'main-thread'}) is False, 'its card, approvals and progress'
+    assert written[-1] == {'type': 'notification', 'method': 'turn/completed', 'params': {'threadId': 'main-thread'}}
+    assert obj.request(9, 'item/tool/requestUserInput', {'threadId': 'main-thread'}) is True, 'a task question is the call\'s'
+    assert obj.request(10, 'item/commandExecution/requestApproval', {'threadId': 'main-thread'}) is False, 'approvals stay cards'
+
+
+# covers: agent.phone-mode/E7
+def test_the_voice_agent_s_executor_methods_are_not_shadowed():
+    # 2026-10-05: VoiceAgent.turn (its TurnState, often None) shadowed an executor method named
+    # turn, and a call's task failed with "'NoneType' object is not callable".
+    import ast, re
+    source = (MODULE.parent / 'rungic_voice_agent.py').read_text()
+    agent = next(n for n in ast.parse(source).body if isinstance(n, ast.ClassDef) and n.name == 'VoiceAgent')
+    methods = {n.name for n in agent.body if isinstance(n, ast.FunctionDef)}
+    used = set(re.findall(r'self\.executor\.([a-z_]+)\(', MODULE.read_text()))
+    assert used and used <= methods, used - methods
+    for name in used:
+        assert not re.search(rf'\bself\.{name}\s*=(?!=)', source), f'VoiceAgent assigns self.{name}'

@@ -172,6 +172,10 @@ final class Director {
         if (slot <= 0 || slot >= 31) return;
         boolean known = headless.containsKey(slot);
         headless.put(slot, android.os.SystemClock.uptimeMillis());
+        // A headless workspace that stops saying so leaves the members when its word is old: looked
+        // at again then, not only at the next event (the director held closed workspaces).
+        handler.removeCallbacks(expireHeadless);
+        handler.postDelayed(expireHeadless, HEADLESS_FRESH_MS + 500);
         if (!known) {
             List<Integer> before = members;
             refreshMembers();
@@ -182,6 +186,8 @@ final class Director {
             }
         }
     }
+
+    private final Runnable expireHeadless = this::refreshBoard;
 
     /** A member running headless: its picture is not here (the Linux side records it). */
     boolean headless(int slot) {
@@ -284,6 +290,13 @@ final class Director {
         List<Integer> before = members;
         refreshMembers();
         if (!before.equals(members)) { changedVersion(); if (bound) apply(true); redraw(); }
+    }
+
+    /** A team at work now (its board not done or failed). */
+    private boolean boardWorking() {
+        if (board == null) return false;
+        String phase = board.optString("phase");
+        return !"done".equals(phase) && !"failed".equals(phase);
     }
 
     /** The board while its team works, and for a while after it finished. */
@@ -517,9 +530,12 @@ final class Director {
         long now = android.os.SystemClock.uptimeMillis();
         headless.values().removeIf(at -> now - at >= HEADLESS_FRESH_MS);
         for (int slot : headless.keySet()) if (!found.contains(slot)) found.add(slot);
-        // A team member that spoke shows before its workspace opens (a placeholder tile).
-        for (java.util.Map.Entry<Integer, String[]> m : membersSaid.entrySet())
-            if (!found.contains(m.getKey()) && !"ended".equals(m.getValue()[1])) found.add(m.getKey());
+        // A team member that spoke shows before its workspace opens (a placeholder tile), while its
+        // team works: an ended team's members do not hold the director (2026-10-05: one assistant's
+        // screen was cast as a director of four).
+        if (boardWorking())
+            for (java.util.Map.Entry<Integer, String[]> m : membersSaid.entrySet())
+                if (!found.contains(m.getKey()) && !"ended".equals(m.getValue()[1])) found.add(m.getKey());
         found.sort(Integer::compare);
         if (board() != null && !found.isEmpty()) found.add(BOARD);
         members = found;

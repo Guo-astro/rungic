@@ -871,6 +871,15 @@ class VoiceAgent:
         GLib.timeout_add_seconds(30, self.idle_check)
         # A team led from a conversation (docs/research/91 §14): its board there, its milestones heard.
         self.team = team_feed.Feed()
+        # No turn outlives a restart (docs/101 E12): a team still at work on its board was cut
+        # off with its lead; it ends, so the director does not keep its members.
+        try:
+            from rungic_cua import team
+            board = json.loads(team.board_path().read_text())
+            if board.get('lead') and board.get('phase') not in ('done', 'failed'):
+                team.end(board['lead'], 'failed', _('Stopped when the assistant restarted'))
+        except Exception:  # noqa: BLE001 - no board, or none to end
+            pass
         self.team_notes = {}
         self.team_note_signal = 0
         GLib.timeout_add_seconds(2, self.team_tick)
@@ -980,7 +989,7 @@ class VoiceAgent:
         else:
             phase = 'ready'
         call_phase = self.call.phase if self.call and self.call.phase in ('agent', 'user') else None
-        return {'conversation': self.thread_id, 'phase': phase, 'agentBusy': self.agent_busy, 'workspace': WORKSPACE,
+        return {'conversation': self.thread_id, 'phase': phase, 'agentBusy': self.agent_busy, 'atWork': self.at_work(), 'workspace': WORKSPACE,
                 'handsFree': self.talking and self.hands_free, 'assistant': self.thread_id == self.assistant_id(),
                 'call': call_phase == 'agent', 'callPhase': call_phase,
                 'callInfo': {'id': getattr(self.call, 'id', ''),
@@ -1002,10 +1011,10 @@ class VoiceAgent:
                 log('phone session: the coordinator stopped, starting it again')
             if self.phone is None or stopped:
                 old = self.phone
-                self.phone = PhoneSession(lambda: self.server, self.thread_settings, self.emit,
+                self.phone = PhoneSession(lambda: self.server, self.thread_settings, self.phone_emit,
                     lambda: platform_request({'op': 'status'}).get('foreground', False),
                     lambda: prompt('phone.md') + language_note(),
-                    lambda: desktop_language().split('_')[0].split('-')[0], history=self.store.history)
+                    lambda: desktop_language().split('_')[0].split('-')[0], history=self.store.history, executor=self)
                 if old is not None:
                     self.phone.threads.update(old.threads)   # its tasks' Codex threads still report to it
                 phone = self.phone
@@ -1192,8 +1201,9 @@ class VoiceAgent:
             parts.append(f"The desktop's language is {language_name()} now. Use it for what the user sees or hears "
                          'whenever you cannot tell which language they use.')
         if had.get('skill') != now['skill']:
-            parts.append('The rungic-phone-desktop skill has changed: a copy you read earlier in this conversation '
-                         'is out of date. Read the skill again before you next use it.')
+            names = sorted(path.name for path in SKILLS.iterdir() if path.is_dir()) if SKILLS.is_dir() else []
+            parts.append(f'A phone skill has changed ({", ".join(names) or USER_SKILL.name}). A copy that you read '
+                         'earlier in this conversation can be out of date. Read a skill again before you use it next.')
         try:
             self.server.call('thread/inject_items', {'threadId': thread_id, 'items': [
                 {'type': 'message', 'role': 'developer', 'content': [{'type': 'input_text', 'text': '\n\n'.join(parts)}]}]})
@@ -1432,7 +1442,9 @@ class VoiceAgent:
         return False
 
     def start_talking(self, sink=None):
-        if self.phone and (self.phone.snapshot.get("sessionId") or any(t.get("status") in ("queued", "starting", "running", "stopping", "waiting_input") for t in self.phone.snapshot.get("tasks", []))):
+        # In a call the call is how to talk; a call's tasks after it are this conversation's turn
+        # (or read-only beside it) and do not keep push-to-talk from it.
+        if self.phone and self.phone.snapshot.get("sessionId"):
             return False
         if self.call and self.call.active and not self.call.private_voice_instructions:
             self.call.emit({'type': 'call-note', 'text': _('During a phone call, give the assistant instructions in '
@@ -1666,7 +1678,15 @@ class VoiceAgent:
                     | self.turn.on_live(screen))
             if changed:
                 self.task_changed()
-        if not self.realtime:
+        # The facts of this turn for the call's voice too (its trusted snapshot): a call's tasks
+        # that went to this thread.
+        if self.call_here():
+            with self.turn_lock:
+                facts = self.turn.facts() if self.turn else ''
+            for task in self.phone.shared_tasks(self.thread_id) if facts else ():
+                self.phone.post('TaskFacts', {'taskId': task, 'facts': facts})
+        # Spoken by push-to-talk's voice, or by the call's (speak_progress).
+        if not self.realtime and not self.call_here():
             return True
         now = time.monotonic()
         if self.call_in_progress():
@@ -1817,6 +1837,67 @@ class VoiceAgent:
             subprocess.Popen(['rungic-voice-assistant', '--conversation', conversation],
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 
+    # ---- the executor a call shares with push-to-talk (phone_session.py) -------------------
+    def main_thread(self, conversation):
+        """The conversation's own Codex thread, the one push-to-talk and typing use, opened and
+        resumed (the call's conversation is normally the open one) -> its id, or None."""
+        if not conversation or not self.server:
+            return None
+        if conversation != self.thread_id:
+            self.open_conversation(conversation, connect=False)
+        if not self.resumed.wait(60) or self.thread_id != conversation:
+            return None
+        return self.thread_id
+
+    def running_turn(self, thread):
+        """The turn at work on `thread` (push-to-talk's or a call's), or None."""
+        return self.turn_id if thread == self.thread_id and self.agent_busy else None
+
+    def turn_params(self, thread):
+        """A new turn on the conversation's thread, as typing starts one (send_text). (Not `turn`:
+        that is the turn's TurnState; the name shadowed it and a call's task failed with "'NoneType'
+        object is not callable", 2026-10-05.)"""
+        turn = {'threadId': thread}
+        agent = self.agent_model()
+        if agent['model']:
+            turn['model'] = agent['model']
+            if agent['effort']:
+                turn['effort'] = agent['effort']
+        return turn
+
+    def call_here(self):
+        """A call with the Agent is open in this conversation: its voice is the one to speak."""
+        phone = getattr(self, 'phone', None)
+        return bool(phone and phone.snapshot.get('sessionId') and phone.snapshot.get('conversation') == self.thread_id)
+
+    # ---- the agent at work ------------------------------------------------------------
+    def phone_work(self):
+        """A task given in a call that may act (not read-only) is under way, call or no call."""
+        tasks = self.phone.snapshot.get('tasks', []) if self.phone else []
+        return any(t.get('status') in ('queued', 'starting', 'running', 'stopping', 'waiting_input') and not t.get('readOnly')
+                   for t in tasks)
+
+    def at_work(self):
+        """The agent at work on the desktop, whichever way it was asked: a push-to-talk turn or a
+        task given in a call (2026-10-05: the latter was missed, and closing the director closed
+        the workspace of a team's lead at work). What the assistant's screen and the director go by."""
+        return bool(self.agent_busy or self.phone_work())
+
+    def update_at_work(self):
+        """The wake lock's marker (background call steps count too) and, once the work is over, the
+        screens the user closed meanwhile come back with the next task."""
+        working = self.at_work()
+        mark_agent_busy(working or bool(self.background))
+        if not working and getattr(self, 'was_at_work', False):
+            forget_screen_dismissal()
+        self.was_at_work = working
+
+    def phone_emit(self, event, keep=True):
+        """The call's events, as any; its tasks' changes also change whether the agent is at work."""
+        if event.get('type') in ('phone-state', 'phone-task'):
+            self.update_at_work()
+        self.emit(event, keep)
+
     # ---- the turn in words (task_state, docs/89) ----------------------------------------
     def task_changed(self):
         """The card changed: tell the app, a few times a second at most."""
@@ -1835,6 +1916,9 @@ class VoiceAgent:
 
     def speak_progress(self, text):
         log('progress:', ' | '.join(line for line in text.splitlines()[1:] if line)[:400])
+        if self.call_here():
+            self.phone.post('Narrate', {'text': text})     # a call's voice says it (docs/101)
+            return
         try:
             self.server.call('thread/realtime/appendSpeech', {'threadId': self.thread_id, 'text': text}, timeout=10)
         except Exception as error:
@@ -2005,7 +2089,7 @@ class VoiceAgent:
         elif method == 'turn/started':
             self.turn_id = (params.get('turn') or {}).get('id')
             self.agent_busy = True
-            mark_agent_busy(True)
+            self.update_at_work()
             if self.phone:
                 self.phone.post("ExternalBusy", {"busy": True})
             self.turn_started = self.last_voice = time.monotonic()
@@ -2026,11 +2110,10 @@ class VoiceAgent:
                 self.emit({'type': 'error', 'text': error.get('message', _("The agent couldn't finish this task"))})
             self.turn_id = None
             self.agent_busy = False
-            mark_agent_busy(bool(self.background))
+            self.update_at_work()
             if self.phone:
                 self.phone.post("ExternalBusy", {"busy": bool(self.background)})
             self.agent_idle_since = time.monotonic()
-            forget_screen_dismissal()
             if getattr(self, 'model_pending', False):
                 threading.Thread(target=self.apply_agent_model, daemon=True).start()
             # A caption left "working" (a tool call cut short) must not stay on the screen.
@@ -2038,6 +2121,14 @@ class VoiceAgent:
                 from rungic_cua import activity
                 activity.report('', state='done', workspace=working_screen())
             self.last_activity = time.monotonic()
+            # A team this turn led ends with it, if its lead did not say so (an interrupted turn).
+            try:
+                from rungic_cua import team
+                status = completed.get('status')
+                team.end(params.get('threadId') or self.thread_id, 'done' if status == 'completed' else 'failed',
+                         _('The lead finished') if status == 'completed' else _('The lead stopped'))
+            except Exception as error:  # noqa: BLE001 - the turn's end is told regardless
+                log('team end', error)
             # The card as it ended stays with the history (plan, files, steps).
             with self.turn_lock:
                 final = self.turn.snapshot() if self.turn else None
@@ -2741,8 +2832,8 @@ class VoiceAgent:
             turn['model'] = agent['model']
             if agent['effort']:
                 turn['effort'] = agent['effort']
-        phone_work = self.phone and any(t.get('conversation') == self.thread_id and t.get('status') in ('queued', 'starting', 'running', 'stopping', 'waiting_input') for t in self.phone.snapshot.get('tasks', []))
-        phone_route = self.phone and (self.phone.snapshot.get('sessionId') or any(t.get('status') in ('queued', 'starting', 'running', 'stopping', 'waiting_input') for t in self.phone.snapshot.get('tasks', [])))
+        # In a call, text with attachments goes to the call's tasks; else it is typing as always.
+        phone_route = self.phone and self.phone.snapshot.get('sessionId')
         if phone_route:
             self.phone.command('SubmitTask', {'conversationId': self.thread_id, 'text': text or 'Attachments', 'input': items})
         else:
@@ -3351,10 +3442,11 @@ def platform_request(request, timeout=1.0):
 
 
 def forget_screen_dismissal():
-    """The task is over: the assistant's screen, closed by the user while the agent was at work
-    (rungic-agent-screen dismiss), comes back with the next one."""
+    """The work is over: the assistant's screens, closed by the user while agents were at work
+    (rungic-agent-screen dismiss; every screen of the director), come back with the next task."""
     runtime = Path(os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}')
-    (runtime / f'rungic-agent-screen-dismissed-{WORKSPACE}').unlink(missing_ok=True)
+    for marker in runtime.glob('rungic-agent-screen-dismissed-*'):
+        marker.unlink(missing_ok=True)
 
 
 def screen_activity():

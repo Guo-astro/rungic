@@ -529,3 +529,12 @@ msgstr "告诉团队"
 
 msgid "Finish or stop the current task before changing desktop mode"
 msgstr "请先完成或停止当前任务，再切换桌面操作模式"
+
+msgid "The lead finished"
+msgstr "组长已完成"
+
+msgid "The lead stopped"
+msgstr "组长已停止"
+
+msgid "Stopped when the assistant restarted"
+msgstr "助理重启时已停止"

@@ -318,6 +318,10 @@ Item {
                     Text {
                         visible: !composer.showWave
                         Layout.fillWidth: true
+                        // A long label is cut, never widens the bar past the screen (2026-10-05).
+                        Layout.minimumWidth: 0
+                        elide: Text.ElideRight
+                        maximumLineCount: 1
                         horizontalAlignment: Text.AlignHCenter
                         text: composer.label
                         font.family: Theme.fontFamily

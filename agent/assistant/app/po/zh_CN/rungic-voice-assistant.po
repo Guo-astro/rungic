@@ -1491,6 +1491,10 @@ msgid "Connecting…"
 msgstr "正在连接…"
 
 msgctxt "@info:status the call with the Agent"
+msgid "Reconnecting…"
+msgstr "正在重新连接…"
+
+msgctxt "@info:status the call with the Agent"
 msgid "Waiting for your answer"
 msgstr "等你回答"
 

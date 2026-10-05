@@ -23,13 +23,13 @@ public:
     ReplyBuffer playback;
     QString truncateItem;
     quint64 generation=0,playStart=0,playedSamples=0,truncateStart=0,truncateSamples=0;
-    bool narrationSuppressed=false,inputBlocked=false;
+    bool narrationSuppressed=false,inputBlocked=false,micDropped=false;
     QList<ResponseContext> acknowledgements;
     QString steerUtterance;
     QSet<QString> steeredTasks;
     QString controlUtterance,controlledTask;
     bool connected=false,configured=false,localSpeech=false,serverSpeech=false,commitPending=false,submitted=false,responseActive=false,muted=false,externalBusy=false;
-    qint64 lastVoice=0,lastUser=0,lastProgress=0,lastPlaybackPush=-10000;
+    qint64 lastVoice=0,lastUser=0,lastProgress=0,lastPlaybackPush=-10000,lastFacts=-10000;
     qint64 started=0;   // the call's start, seconds since the epoch (its time on the app's call bar)
     QElapsedTimer clock;
     QString journal,leases,processStart;
@@ -61,6 +61,7 @@ public:
     void tool(QString name,QJsonObject args,QString callId,QString responseId);
     void rpc(QString method,QJsonObject params,std::function<void(QJsonObject)> done={});
     void notification(QString method,QJsonObject params);
+    void taskNotification(Task &task,QString method,QJsonObject params);
     void question(QJsonObject message);
     QJsonObject answer(QString taskId,QJsonObject answers);
     void runQueue();

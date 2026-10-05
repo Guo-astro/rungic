@@ -18,6 +18,7 @@ function mode(phone, conversation) {
     if (!phone || !phone.sessionId) return ""
     if (phone.conversation !== conversation) return "elsewhere"
     if (phone.phase === "connecting") return "connecting"
+    if (phone.phase === "reconnecting") return "reconnecting"
     if (tasks(phone, conversation).some(t => t.status === "waiting_input")) return "answer"
     if (phone.speaking) return "agent"
     if (phone.listening) return "you"
@@ -47,6 +48,7 @@ function words(tr, phone, conversation, now, title, notice) {
         : tr("@info:status tasks of the call; %1 is a count above 1", "%1 tasks running", running))
     switch (which) {
     case "connecting": return [tr("@info:status the call with the Agent", "Connecting…"), notice || ""]
+    case "reconnecting": return [tr("@info:status the call with the Agent", "Reconnecting…"), time]
     case "answer": {
         const waiting = tasks(phone, conversation).find(t => t.status === "waiting_input")
         return [tr("@info:status the call with the Agent", "Waiting for your answer"), question(waiting) + (question(waiting) ? " · " : "") + time]

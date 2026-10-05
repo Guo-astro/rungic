@@ -27,6 +27,11 @@ public:
     bool stopped=false,closing=false;
     qint64 workerGroup=0;
     TaskTools(QString id,QStringList cmd):task(id) {
+        // Codex starts MCP servers with a short list of variables, without XDG_RUNTIME_DIR: the lease
+        // was then looked for in /rungic-task-leases and every desktop tool of a task was refused
+        // ("Task has no desktop operation lease", the G100 S, 2026-10-05). The session's runtime
+        // directory, as it writes the lease; the worker gets it too.
+        if(qEnvironmentVariableIsEmpty("XDG_RUNTIME_DIR"))qputenv("XDG_RUNTIME_DIR",QByteArray("/run/user/")+QByteArray::number(::getuid()));
         leasePath=QString::fromLocal8Bit(qgetenv("XDG_RUNTIME_DIR"))+"/rungic-task-leases/"+task+".json";statusPath=leasePath+".tools";
         input.open(STDIN_FILENO,QIODevice::ReadOnly,QFileDevice::DontCloseHandle);output.open(STDOUT_FILENO,QIODevice::WriteOnly,QFileDevice::DontCloseHandle);
         ::fcntl(STDIN_FILENO,F_SETFL,::fcntl(STDIN_FILENO,F_GETFL)|O_NONBLOCK);

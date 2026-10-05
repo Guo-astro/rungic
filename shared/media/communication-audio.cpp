@@ -41,10 +41,10 @@ public:
     QSocketNotifier *outputWatch=nullptr;
     // The call's playback is paced by the clock (readOutput): what was sent since `paced` started,
     // against the time that has passed, keeping Android `Lead` bytes ahead of what it plays.
-    static constexpr qint64 BytesPerSecond=48000*2, Lead=BytesPerSecond*80/1000;
+    static constexpr qint64 BytesPerSecond=48000*2, Lead=BytesPerSecond*80/1000, MaxBacklog=BytesPerSecond/10;
     QElapsedTimer paced; qint64 sent=0; bool drained=false;
     GstElement *pipeline=nullptr,*micSrc=nullptr,*speakerSrc=nullptr;
-    bool micHeader=false,outHeader=false,controlHeader=false,muted=false,flushing=false,closing=false;
+    bool micHeader=false,outHeader=false,controlHeader=false,muted=false,flushing=false,closing=false,micDropped=false,dspDropped=false,outDropped=false;
     quint64 epoch=1; QTimer position;
     QHash<int,QJsonObject> pending; int ids=0;
     Communication() {
@@ -143,7 +143,7 @@ public:
                 while(s->canReadLine())controlReply(QJsonDocument::fromJson(s->readLine()).object());
             } else if(s->bytesAvailable())s->readAll();
         });
-        connect(s,&QLocalSocket::disconnected,this,[this,s]{if(!closing&&(s==output||s==control||s==mic))fail("Communication audio disconnected; resume explicitly");});
+        connect(s,&QLocalSocket::disconnected,this,[this,s]{if(!closing&&(s==output||s==control||s==mic))fail("Communication audio disconnected");});
         connect(s,&QLocalSocket::errorOccurred,this,[this,s](QLocalSocket::LocalSocketError){if(!closing&&(s==output||s==control||s==mic))fail("Android communication backend is unavailable");});
         s->connectToServer("/mnt/android-wayland/capture.sock");return s;
     }
@@ -165,7 +165,9 @@ public:
             auto *c=static_cast<AudioContext *>(p);auto *self=c->audio;auto token=c->session;auto data=pcm(sink);
             QMetaObject::invokeMethod(self,[self,data,token]{if(self->session==token&&self->inputFd>=0&&!self->muted&&!self->closing) {
                 const auto n=::write(self->inputFd,data.data(),data.size());
-                if(n!=data.size())self->fail("Communication microphone consumer stalled");
+                // The consumer behind for a moment: this piece of live audio is dropped, the call goes on.
+                if(n!=data.size()&&!self->micDropped){self->micDropped=true;qWarning("call microphone consumer behind; dropping audio");}
+                else if(n==data.size())self->micDropped=false;
                 // Other standard PulseAudio clients share this physical recording.
                 // Their independent queues may drop a frame, but cannot stall phone audio.
                 if(self->sharedFd>=0)::write(self->sharedFd,data.data(),data.size());
@@ -183,7 +185,7 @@ public:
     }
     void ready(){if((muted||micHeader)&&outHeader&&controlHeader)reply(owner,{{"type","ready"},{"sessionId",session},{"epoch",double(epoch)},{"microphone",!muted&&micHeader},{"source","android_communication_microphone"},{"sink","android_communication"}});}
     void push(GstElement *src,const QByteArray &data,quint64 e) {
-        if(!src||data.isEmpty())return;guint64 queued=0;g_object_get(src,"current-level-bytes",&queued,nullptr);if(queued>19200){fail("Shared audio processing stalled");return;}GstBuffer *b=gst_buffer_new_allocate(nullptr,data.size(),nullptr);gst_buffer_fill(b,0,data.data(),data.size());GST_BUFFER_OFFSET(b)=e;gst_app_src_push_buffer(GST_APP_SRC(src),b);
+        if(!src||data.isEmpty())return;guint64 queued=0;g_object_get(src,"current-level-bytes",&queued,nullptr);if(queued>19200){if(!dspDropped)qWarning("call audio processing behind; dropping audio");dspDropped=true;return;}dspDropped=false;GstBuffer *b=gst_buffer_new_allocate(nullptr,data.size(),nullptr);gst_buffer_fill(b,0,data.data(),data.size());GST_BUFFER_OFFSET(b)=e;gst_app_src_push_buffer(GST_APP_SRC(src),b);
     }
     // PulseAudio's pipe sink writes as fast as the pipe is read, so the reading sets the pace: as much
     // as the time since the start allows, plus Lead; the rest waits in the pipe (PA's backpressure
@@ -215,7 +217,12 @@ public:
     }
     void speaker(const QByteArray &data,quint64 e) {
         if(flushing||closing||!output||!outHeader||e!=epoch)return;
-        if(output->bytesToWrite()>9600){fail("Communication playback stalled");return;}
+        // The platform may stop taking the call's playback for a moment, e.g. while it routes the
+        // call's audio again (Android's Telecom taking a call over, 2026-10-05). What does not fit in
+        // 100 ms is dropped: live audio, already late, and a longer queue would delay the rest of the
+        // call. The call goes on; it used to end here.
+        if(output->bytesToWrite()>MaxBacklog){if(!outDropped)qWarning("call playback not taken; dropping audio");outDropped=true;return;}
+        outDropped=false;
         QByteArray packet(12,0);qToBigEndian<quint64>(e,reinterpret_cast<uchar *>(packet.data()));qToBigEndian<quint32>(data.size(),reinterpret_cast<uchar *>(packet.data()+8));packet+=data;output->write(packet);
     }
     void android(QJsonObject o,QJsonObject client={}) {

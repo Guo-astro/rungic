@@ -57,6 +57,7 @@ QQC2.Drawer {
             Layout.rightMargin: Theme.gutter
             Layout.bottomMargin: Theme.space3xl
             mode: sheet.mode === "" || sheet.mode === "elsewhere" ? "idle" : sheet.mode
+            micOff: !!sheet.phone.muted
             title: i18nc("@title the call with the Agent", "Call with the Agent")
             detail: Call.clock(Call.elapsed(sheet.phone, sheet.now)) + (sheet.title ? " · " + sheet.title : "")
             label: Call.words(i18nc, sheet.phone, sheet.conversation, sheet.now, sheet.title, "")[0]

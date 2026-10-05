@@ -35,6 +35,11 @@ Rectangle {
     property string marker: "dot"              // dot, wave, ring
     property bool waveActive: false
     property bool muted: false
+    // The microphone is off, whatever the state shows (the Agent may speak, or think, while it is):
+    // the mute control shows it at all times. Muted was only the state's last choice, so while the
+    // Agent spoke or thought the control looked unmuted (2026-10-05).
+    property bool micOff: false
+    readonly property bool micShownOff: muted || micOff
     property bool shine: false                 // the label passes light over it (thinking)
     states: [
         State { name: "connecting"; PropertyChanges { bar.color: Theme.fill; bar.border.width: 0; bar.ink: Theme.dim; bar.accent: Theme.text; bar.marker: "ring" } },
@@ -139,14 +144,14 @@ Rectangle {
         }
         // Mute; muted, a strong round button that unmutes (the state shows at a glance).
         IconButton {
-            visible: bar.visualState !== "elsewhere" && !bar.muted
+            visible: bar.visualState !== "elsewhere" && !bar.micShownOff
             iconName: "mic"
             text: bar.muteText
             onClicked: bar.muteToggled()
         }
         T.AbstractButton {
             id: unmute
-            visible: bar.visualState !== "elsewhere" && bar.muted
+            visible: bar.visualState !== "elsewhere" && bar.micShownOff
             implicitWidth: Theme.touch
             implicitHeight: Theme.touch
             Accessible.name: bar.unmuteText

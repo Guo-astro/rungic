@@ -35,6 +35,12 @@ int main(int argc, char **argv) {
         say({{"event", "failed"}, {"error", error}});
         QTimer::singleShot(100, &app, &QCoreApplication::quit);
     };
+    // The service's error: the client opens the call's audio again (Audio::recover); reported here
+    // and then the test ends.
+    audio.interrupted = [&](const QString &error) {
+        say({{"event", "interrupted"}, {"error", error}, {"opened", audio.opened}, {"reopening", audio.reopening}});
+        QTimer::singleShot(100, &app, &QCoreApplication::quit);
+    };
     // Audio::start() muted: what start() does (it always opens unmuted, and a local socket connects at
     // once, sending open before start() returns), with the session muted before the connection, so that
     // no microphone pipeline (PulseAudio's pulsesrc, webrtcdsp) is needed here.

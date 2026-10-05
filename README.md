@@ -331,15 +331,19 @@ The Redmi K40S community port uses device-specific kernel and compatibility chan
 
 ## Skills
 
-Skills are reusable instructions that an agent reads to complete a task. Rungic provides three project skills:
+Skills are reusable instructions that an agent reads to complete a task. Rungic provides these skills:
 
 | Skill | Where to use it | What it does |
 |---|---|---|
 | [`rungic-three-stage-image`](.agents/skills/rungic-three-stage-image/SKILL.md) | Codex working in this repository | Guides device/GKI preparation, independent RungicOS image builds, and separate Rungic installation or upgrades. Covers existing tools, implementation gaps and acceptance. |
 | [`rungic-dev-release`](.agents/skills/rungic-dev-release/SKILL.md) | Codex or Claude Code working in this repository | Deploys changes through a visible, reversible development overlay (`tools/rungic_dev.py`) or a formal release. Formal releases follow commit, package build, release, deploy and acceptance steps. Covers screenshots of UI states for interface changes. |
-| [`rungic-phone-desktop`](agent/assistant/skills/rungic-phone-desktop/SKILL.md) | The assistant running on the phone | Operates desktop apps and windows, controls phone functions, casts to a TV and handles supported call workflows. |
+| [`rungic-phone-desktop`](agent/assistant/skills/rungic-phone-desktop/SKILL.md) | The assistant running on the phone | Operates desktop apps and windows with the desktop tools, takes screenshots and renders in Blender. |
+| [`rungic-messages-calls`](agent/assistant/skills/rungic-messages-calls/SKILL.md) | The assistant running on the phone | Sends and reads SMS, makes SIM and WeChat calls through the call agent, and sends WeChat text and voice messages. |
+| [`rungic-screens`](agent/assistant/skills/rungic-screens/SKILL.md) | The assistant running on the phone | Casts to a TV and shows the assistant's screen or the user's desktop mode. |
+| [`rungic-phone-settings`](agent/assistant/skills/rungic-phone-settings/SKILL.md) | The assistant running on the phone | Reads device status and changes Android functions: brightness, clipboard, orientation and settings panels. |
+| [`rungic-agent-team`](agent/assistant/skills/rungic-agent-team/SKILL.md) | The assistant running on the phone | Leads a team of sub-agents on a large job with independent parts. |
 
-The desktop skill ships with the bundled assistant. Its editable copy lives at `~/.codex/skills/rungic-phone-desktop/` on the phone. Package updates preserve your changes to that copy. These locations and invocation examples describe the current Codex integration. Claude Code finds linked repository skills through `.claude/skills/`. Other agents can reuse the instructions and tools by adapting skill loading to their own format.
+The phone skills ship with the bundled assistant. Their editable copies live at `~/.codex/skills/<skill>/` on the phone. Package updates preserve your changes to these copies. These locations and invocation examples describe the current Codex integration. Claude Code finds linked repository skills through `.claude/skills/`. Other agents can reuse the instructions and tools by adapting skill loading to their own format.
 
 ### Choose what to build and install
 

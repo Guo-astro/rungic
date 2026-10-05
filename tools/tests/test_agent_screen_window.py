@@ -196,6 +196,10 @@ class Director(QObject):
         self._level = (self._level + 1) % 3
         self.changed.emit()
 
+    @Slot()
+    def close(self):
+        self.calls.append(('close',))
+
 
 class Floater(QObject):
     """Floater (floater.h): the phone's screen and the window's surfaces."""
@@ -935,6 +939,16 @@ class DirectorWindow(WindowTest):
         self.assertTrue(all(b >= a for a, b in zip(scales, scales[1:])) and max(scales) <= 1, 'no overshoot')
         self.assertEqual(sorted(p.property('nodeId') for p in self.pictures() if p.property('nodeId')), nodes,
                          'no picture switched (switching one showed black while it connected)')
+
+    # covers: desktop-mode.director/E2
+    def test_the_close_button_closes_the_director_not_only_its_focus(self):
+        # 2026-10-05: ✕ closed only the focus; the others stayed out and the director with them.
+        win, director = self.directing()
+        win.setProperty('toolbarShown', True)
+        QTest.qWait(300)
+        self.tap_action('window-close')
+        self.assertEqual(director.calls, [('close',)])
+        self.assertNotIn(('close',), director.focusScreen.calls, 'not the focus alone')
 
     # covers: desktop-mode.director/E3
     def test_zoom_cycles_three_levels_and_fullscreen_lays_out_as_the_tv(self):

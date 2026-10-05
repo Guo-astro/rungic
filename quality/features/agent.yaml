@@ -324,15 +324,16 @@ features:
       - id: E1
         text: Agent 的回合开始、结束不会影响电话会话。协调器意外退出后，下一次使用时自动恢复，不需要用户重开应用。
       - id: E2
-        text: 只读任务不能调用任何可能改动外部的 MCP 工具。可写任务独占自己的工具进程。
+        text: 只读任务在自己的只读线程里和当前工作并行（最多两个），不能调用任何可能改动外部的 MCP 工具，并被告知这一点。
       - id: E3
         text: 用户开口就停止播报，已有任务继续。只有明确的停止请求或任务卡片的停止按钮才取消任务，取消显示“正在停止”，直到 Codex 真的停下才显示已停止。
         evidence:
           - {doc: docs/101-full-duplex-phone-mode.md, date: 2026-10-02, note: "等待任务从 stopping 到后端确认 stopped"}
       - id: E4
-        text: 挂断、Plasma 被遮住、音频或网络断开时关闭话音连接，任务继续执行。返回后不自动恢复，要再点“和 Agent 通话”。
+        text: 像打电话一样：锁屏或 Plasma 退到后台时通话继续，Android 把它当作一通电话（通话通知可挂断，来电时挂起、挂完恢复）。只有挂断（Agent 应用、通知或耳机）才结束通话。通话音频卡顿时丢掉过时的声音继续，音频服务断开或出错时自动重新连接，通话条显示“正在重新连接”。和模型的网络连接断开时仍会结束通话，任务继续执行，要再点“和 Agent 通话”。
+        gap: 2026-10-05 改为锁屏继续（自管理 Telecom 通话），只有会话测试和 APK 编译，尚未在手机上做锁屏超过 3 分钟、通知挂断和来电挂起的实测。
         evidence:
-          - {doc: docs/101-full-duplex-phone-mode.md, date: 2026-10-02, note: "Android 设置遮住 Plasma；挂断后 137×29 仍完成"}
+          - {doc: docs/101-full-duplex-phone-mode.md, date: 2026-10-02, note: "旧规则（遮住即断）下：挂断后 137×29 仍完成"}
       - id: E5
         text: 只按完整的最终转写开始任务：同一句话最多开始一个任务，句中停顿不提前执行，连接就绪前说了一半的话要求重说。执行器拿到的是转写原文，不是模型改写的话。
         evidence:
@@ -340,7 +341,7 @@ features:
       - id: E6
         text: 任务需要用户回答时，问题出现在任务卡上，必须由用户回答，不自动选默认。答案只能回到提问的那个任务，已停止的任务不会被迟到的问题复活。
       - id: E7
-        text: 任务和它的历史留在发起它的对话里。一句更正只送到一个任务，目标不明确时先问。
+        text: 通话和按住说话是同一个执行端：通话里要动手的事进入这个对话自己的 Codex 线程，有一轮在跑时并进这一轮，不排队；任务卡、进度播报、审批、错误、团队面板都和按住说话一样。任务和它的历史留在发起它的对话里，一句更正只送到一个任务，目标不明确时先问。
       - id: E8
         text: 静音关闭物理麦克风、播放继续。挂断后通话音频和麦克风都释放。
         evidence:
@@ -349,7 +350,7 @@ features:
         text: 有效语音到播报静音 P95 不超过 200 ms，完整话语到首音 P95 不超过 2.5 s（兜底 4 s），意图路由大样本不低于 95%，可连续进行 30 分钟。
         gap: 只有小样本云端探针和传输层测试，未做声学实测、大样本和 30 分钟真人对话
       - id: E10
-        text: 停止任务或撤销它的工具租约时，只结束这个任务的工具进程组（包括忽略 SIGTERM 的后代和工具进程意外退出后留下的），用户自己运行的应用不受影响。没有租约的工具调用被拒绝。
+        text: 通话代理的桌面步骤（以及没有共用执行端时的任务）停止或撤销工具租约时，只结束它自己的工具进程组（包括忽略 SIGTERM 的后代和工具进程意外退出后留下的），用户自己运行的应用不受影响。没有租约的工具调用被拒绝。通话里要动手的任务和按住说话一样，停止即中断这一轮。
       - id: E11
         text: 按用户实际说的语言识别和回答，不强制用桌面界面的语言。
       - id: E12
@@ -361,11 +362,16 @@ features:
         gap: 只有离线 QML 测试和截图。未在手机上做真人通话下的状态切换验收。
       - id: E15
         text: 通话结束在对话里留下摘要：时长、这次通话发起和完成的任务数，有任务在等回答时可直接去回答，也可以再打给它。
+      - id: E17
+        text: 通话里交出去的任务，任务卡和按住说话的一样：计划清单、当前在做什么、改动的文件。问「做到哪了」，Agent 按实际进度回答。
+        gap: 助理屏上的操作说明和渲染预览还没接到电话任务卡上；未在手机上实测。
       - id: E16
         text: Agent 说话连贯不卡：回复的声音按 Android 实际播放的进度送出，Android 不因等数据而停顿。停顿之后不会把空档补成一阵突发。
         evidence:
           - {doc: docs/101-full-duplex-phone-mode.md, date: 2026-10-04, note: "G100 S 真人通话不卡；AudioFlinger 14.72 s 欠载为 0（修复前 10%–21%）"}
     pitfalls:
+      - text: Codex 启动 MCP 服务时不传 XDG_RUNTIME_DIR。rungic-task-tools 曾因此找不到租约，电话任务的桌面工具全部被拒，现在会退回 /run/user/<uid>。
+        docs: [docs/101-full-duplex-phone-mode.md]
       - text: 发给协调器的每条指令都必须带 id，否则回复不带 id，曾让读取线程退出并杀掉协调器。
         docs: [docs/101-full-duplex-phone-mode.md]
       - text: Codex app-server 的 Realtime 封装把任务入口固定为 background_agent/remain_silent，VAD 也由它内部设置。所以电话模式直接连同一个 Realtime 模型，按住说话仍用原封装。
@@ -376,7 +382,7 @@ features:
         docs: [docs/101-full-duplex-phone-mode.md]
       - text: G100 的 Home 键返回同一个入口，不能用它测试“隐藏”。2026-10-03 的协调器修复尚未部署。
         docs: [docs/101-full-duplex-phone-mode.md]
-      - text: 断线直接结束通话（不重连），所以通话条的“正在重新连接”状态目前不会出现。对话列表也还没有通话中的标记。
+      - text: 通话音频断开会自动重连（通话条显示“正在重新连接”），但和 Realtime 模型的网络连接断开仍直接结束通话（不重连）。对话列表也还没有通话中的标记。
         docs: [docs/101-full-duplex-phone-mode.md]
     code:
       - agent/assistant/phone_session.py
@@ -390,6 +396,7 @@ features:
       - desktop/design/qml/CallBar.qml
       - desktop/design/qml/CallPanel.qml
       - tools/tests/test_agent_call.py
+      - android/app/src/com/rungic/plasma/AgentCall.java
     docs: [docs/101-full-duplex-phone-mode.md]
 
   # ---- 安装、设置和接入 ---------------------------------------------------------------------------
@@ -529,6 +536,8 @@ features:
         text: 包里删掉的默认技能，用户没改过的副本一起删掉，改过的保留。
       - id: E4
         text: 每个桌面用户首次登录时自动配好 rungic-desktop MCP 服务和技能目录（kconf_update，重复执行无副作用）。
+      - id: E5
+        text: 三份提示词（agent.md、phone.md、realtime.md）里的能力清单由同一个 capabilities.yaml 生成，各用对应模型的口吻；清单过期时测试失败。
     pitfalls:
       - text: Codex 把开发者指令固定在对话加载的那一刻。同一个 app-server 里再次恢复只是重新加入。包升级只 reload systemd、不重启用户服务。所以要注入新指令，而不是等下次打开。
         docs: [docs/59-voice-agent.md, docs/88-agent-visible-work.md]
@@ -537,8 +546,15 @@ features:
     code:
       - agent/assistant/prompts/agent.md
       - agent/assistant/prompts/realtime.md
+      - agent/assistant/prompts/capabilities.yaml
+      - agent/assistant/prompts/voice-common.md
       - agent/assistant/skills/rungic-phone-desktop/SKILL.md
+      - agent/assistant/skills/rungic-messages-calls/SKILL.md
+      - agent/assistant/skills/rungic-screens/SKILL.md
+      - agent/assistant/skills/rungic-phone-settings/SKILL.md
       - agent/assistant/kconf_update/
+      - tools/agent_capabilities.py
+      - tools/tests/test_agent_capabilities.py
       - tools/tests/test_instructions_sync.py
       - tools/tests/test_codex_setup_update.py
     docs: [docs/59-voice-agent.md, docs/88-agent-visible-work.md]
@@ -823,6 +839,7 @@ features:
       - agent/computer-use/rungic_cua/workspace.py
       - tools/test_workspace_lifecycle.py
       - tools/tests/test_workspace_dismiss.py
+      - tools/tests/test_agent_at_work.py
     docs: [docs/research/91-agent-workspaces.md]
 
   - id: agent.where
@@ -1053,7 +1070,7 @@ features:
         docs: [docs/63-call-proxy.md]
     code:
       - agent/assistant/call_backends.py
-      - agent/assistant/skills/rungic-phone-desktop/calls.md
+      - agent/assistant/skills/rungic-messages-calls/calls.md
       - agent/assistant/app/qml/ChatEntry.qml
       - agent/assistant/app/qml/AssistantOverlay.qml
       - tools/tests/test_call_backends.py

@@ -1,0 +1,89 @@
+# What the executor (the Codex task agent) can do on this phone: one source for the capability
+# sections of agent.md, phone.md and realtime.md. After a change, run
+#   python3 tools/agent_capabilities.py render --write
+# tools/tests/test_agent_capabilities.py fails while a prompt is out of date.
+# This file is not installed: the prompts carry the rendered text.
+#
+# Each entry:
+#   name      short name, with the Chinese word that the user says when it helps
+#   can       what the executor can do. All three prompts use it. The voice prompts must stay
+#             short: one or two short sentences.
+#   when      the situations and the user's words (Chinese and English) that call for it
+#   how       agent.md only: the skill that holds the commands and rules, and the main command
+#   external  the part of the capability that has an effect outside the phone ("Sending").
+#             The prompts say that this part needs the user's go-ahead.
+# Write in Simplified Technical English (.agents/skills/asd-ste100): short active sentences,
+# one meaning for each word, no semicolons. Keep the user's words as they are.
+capabilities:
+  - name: Phone status and settings
+    can: Read battery, storage, memory and network. Set brightness, orientation and the clipboard. Open Android settings panels.
+    when: '"还剩多少电", "存储满了吗", "屏幕太暗了", "copy this", "turn on Bluetooth", or a task that needs a value of the phone'
+    how: skill `rungic-phone-settings` (`rungic-platform`, `upower`, `df`). It also tells how to send a notification to the user.
+
+  - name: Files and pictures
+    can: Find, sort, convert and make files. Show a picture or a file in the chat.
+    when: '"找一下昨天的照片", "发给我", "给我看看", "show me the recording", or a result that the user wants to see'
+    how: the shell (`~/Shared` holds Android's Pictures, Videos and Downloads). Show files as "What you can do" tells.
+
+  - name: Desktop apps
+    can: Use Linux desktop apps (Firefox, LibreOffice, Blender, WeChat) while the user watches.
+    when: '"打开…", "在 Firefox 里…", "帮我填这个表", "fill in this form", or a task inside an app'
+    how: skill `rungic-phone-desktop` (`rungic-desktop` MCP tools, screenshots, windows)
+
+  - name: Install software
+    can: Install Ubuntu packages and Flatpak apps. The user types the password in a dialog on their screen.
+    when: '"装一个…", "install …", or a task that needs a program that the phone does not have'
+    how: '`pkgcli install -y` ("Where you run" tells the rules)'
+
+  - name: Find and fix problems
+    can: Find the cause of a problem on the phone and fix it.
+    when: '"…打不开", "为什么没声音", "it does not work", or an error in a task'
+    how: '`journalctl`, the desktop tools, package tools ("Be the one who solves it" tells the rules)'
+
+  - name: TV casting (投屏)
+    can: Connect a TV and disconnect it. The TV shows the user's desktop or the assistant's screen.
+    when: '"投屏", "投到电视", "在电视上看", "断开投屏", or a result that is better on a big screen'
+    how: skill `rungic-screens` (`rungic-cast`). To show your own work on the TV, run only `rungic-agent-screen tv`.
+
+  - name: The assistant's screen (助理屏)
+    can: Show the assistant's own desktop with a live caption, on the phone or on the TV. App work goes there while the user's desktop is not out.
+    when: '"让我看看你在做什么", "打开助理屏", "把助理屏投到电视", "关掉助理屏"'
+    how: skill `rungic-screens` (`rungic-agent-screen on|off|tv|notv`)
+
+  - name: Desktop mode (桌面模式)
+    can: Start and stop the user's own full desktop, on the phone or on the TV. App work goes there while it is on.
+    when: 'only on the user''s request: "打开桌面模式", "电脑模式", "关掉桌面模式"'
+    how: skill `rungic-screens` (`rungic-desktop-mode`)
+
+  - name: SMS (短信)
+    can: Send SMS from the SIM. Read received SMS. Wait for a reply or a verification code.
+    when: '"发短信给…", "text Anna that…", "有没有新短信", "验证码是多少", or a login that sends a code by SMS'
+    how: skill `rungic-messages-calls` (`rungic-sms`)
+    external: Sending
+
+  - name: Phone calls (打电话)
+    can: Call a number from the SIM. A call agent speaks for the user and reports the result. The user can take control of the call or end it.
+    when: '"打电话给…", "帮我问一下餐厅还有没有位", "call the shop and ask if it is open"'
+    how: skill `rungic-messages-calls` (`rungic-voice-agent --start-call`, backend `cellular`)
+    external: Calling
+
+  - name: WeChat messages and calls (微信)
+    can: Send text and voice messages in WeChat. Make or join a WeChat call that a call agent speaks in.
+    when: '"发微信给…", "发语音告诉…", "打微信电话", "send her a voice message on WeChat"'
+    how: skill `rungic-messages-calls` (WeChat on the screen, `desktop_voice_recording`, `--start-call` with backend `app`)
+    external: Sending or calling
+
+  - name: Code, research and making things
+    can: Write and run code. Search the web. Make documents, pictures and 3D renders.
+    when: '"查一下…", "写个脚本", "画一张…", "render a …", or a question that needs a search'
+    how: the shell and visible apps. Blender rules are in skill `rungic-phone-desktop`.
+
+  - name: Agent team (团队, skill rungic-agent-team)
+    can: Divide a large job among two to four sub-agents. The user sees each member in a tile.
+    when: '"组个团队", "use a team", or a large job with independent parts (a game, a video, a report, a website)'
+    how: skill `rungic-agent-team` (`spawn_agent`)
+
+  - name: Screen recording (录屏)
+    can: Only the user can start it, with the quick-settings button 录屏. Files go to `~/Videos`.
+    when: '"录屏", "record the screen"'
+    how: skill `rungic-phone-settings`. Tell the user where the button is.

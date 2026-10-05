@@ -88,6 +88,9 @@
     <string name="capture_both">Linux 正在使用相机和麦克风</string>
     <string name="capture_microphone">Linux 正在使用麦克风</string>
     <string name="capture_camera">Linux 正在使用相机</string>
+    <string name="agent_call">正在与 Agent 通话</string>
+    <string name="agent_call_hint">可以在这里或 Agent 应用中挂断</string>
+    <string name="agent_call_hang_up">挂断</string>
     <string name="capture_stop_hint">退出采集应用或离开 Plasma Mobile可停止采集</string>
     <string name="capture_permissions_on">麦克风和相机权限已开启</string>
 

@@ -99,7 +99,7 @@
   - 调研：Termux PulseAudio 17.0-4的`module-aaudio-sink`与`module-sles-sink`都不能指定输出设备（参数只有sink名、格式、延迟、性能模式等）；OpenSL ES也只能选流类型。因此没有改Termux模块。
   - 做法与麦克风对称：容器内`module-pipe-sink`（PulseAudio 17，LGPL-2.1+）→ `media-bridge`在sink未挂起时读FIFO → 私有`capture.sock`的`phone-output` → APK的AudioTrack（`USAGE_MEDIA`）。`setPreferredDevice`优先选有线/USB/蓝牙耳机，没有时用扬声器；设备增减时重新选择。
   - 延迟：pipe-sink由读取速度计时，按FIFO内未读数据上报延迟。FIFO缩到16 KiB，socket收发缓冲各16 KiB（各约85 ms）。sink空闲3 s挂起后停止读取，并丢弃FIFO残留。
-  - 播放不要求Plasma在前台（与Termux输出一致），采集仍要求。
+  - 播放不要求Plasma在前台（与Termux输出一致），采集仍要求。例外：和 Agent 的通话在锁屏、后台时继续收音（2026-10-05，docs/101「锁屏继续通话」）。
   - PulseAudio 17的`pactl -f json`遇到UTF-8描述（“手机本机”的monitor source）会报错。media-bridge改用`pactl list short`查麦克风source，否则主循环会一直走异常分支，麦克风也会停用。
 - **语音助手**：`StartTalking(s screen)`由按钮传入所在屏幕名。KWin把投屏输出命名为`CAST-n`，此时回复用默认sink（跟随Android路由，在电视上）；否则用`android_phone`，该sink不存在时退回默认。
 - **实测**（投屏连接中，用合成语音）：
@@ -444,3 +444,22 @@
 - **实测**：
   - 用户正在用的对话在恢复时收到了当前指令。
   - 测试对话里编辑用户的 `agent.md`（追加标记）后约 30 秒，rollout 中出现带标记的第 4 条 developer 消息，下一轮已经用上。
+
+## 能力清单单一来源；技能拆分；主动提议（2026-10-05）
+
+- **问题**（用户反映 Agent 不知道什么时候该用手机的工具，也不主动）：
+  - 电话模式的提示词 `phone.md` 只有任务分派规则，没有能力清单，语音模型无从提议。
+  - 按住说话的 `realtime.md` 有一份简短清单，缺短信、手机卡通话、团队，也没分清电视、助理屏和桌面模式。
+  - `agent.md` 的清单偏重“怎么做”，说通话只在聊天应用里，和技能里的手机卡通话矛盾，也没提短信。
+  - 技能 `rungic-phone-desktop` 包了十几个领域。Codex 打开技能前只看到三行描述，短信和通话的细节常常没读到。
+  - 实时语音模型读不了文件和技能，执行端能做什么必须写在它的提示词里。
+- **能力清单单一来源**：`agent/assistant/prompts/capabilities.yaml` 每项写名称、能做什么、什么情况下用（附中英文说法）、细节在哪个技能，以及有对外影响的部分（发送、拨打）。改完运行 `python3 tools/agent_capabilities.py render --write`，它把清单写进三份提示词标记之间的段落：`agent.md` 写成“什么时候用、看哪个技能”，`phone.md` 和 `realtime.md` 写成“执行端能做什么、什么时候开任务或提议”。`tools/tests/test_agent_capabilities.py` 在清单过期时失败。这个 yaml 不进安装包，打包仍只装 `prompts/*.md`，运行时照旧读这三份文件。标记是两行 HTML 注释，原样进提示词，约几十个 token。
+- **技能拆分**（原有内容只搬不删）：
+  - `rungic-phone-desktop`：桌面应用操作（`desktop_*` 工具、窗口、截图、选屏、Blender、团队和方案二入口）。名字不变：用户目录的副本、迁移脚本和改名工具都指向它。
+  - `rungic-messages-calls`：短信、手机卡通话、微信消息、语音代发和通话代理，`calls.md` 搬到这里。
+  - `rungic-screens`：投屏、助理屏、桌面模式。
+  - `rungic-phone-settings`：安卓功能（`rungic-platform`）、电量和存储、通知、录屏。
+  - 每个技能的描述写明触发情境，正文先有“什么时候用”一节（照 `rungic-agent-team` 的写法）。包里删掉的 `rungic-phone-desktop/calls.md`，用户没改过的副本由同步一并删掉；新技能目录照旧逐个复制到 `~/.codex/skills/`。技能变动时注入的提醒列出全部技能名。
+- **主动**：三份提示词各加一节。明显隐含、可撤销、只在手机上的步骤直接做；用户多半想要的下一步只提议一句，最多一个；发送、拨打、发布、购买、付款、删除只在用户明确要求或答应后做，不自作主张。原有的 read_only/exclusive 分派、停止任务等规则不变。
+- **通话矛盾**：`agent.md` 的清单写明短信、手机卡通话和微信通话都可以做，对外的部分要用户点头。
+- 新写和搬动时改写的英文按项目的 asd-ste100 技能（简化技术英语）书写。
