@@ -146,6 +146,29 @@ def update_board(entry: dict, project: str = '') -> dict | None:
     return board
 
 
+def end(lead: str, kind: str, text: str) -> dict | None:
+    """The lead's turn ended (rungic-voice-agent): a board of that lead still at work ends `kind`
+    (done, failed) with `text`, so the director no longer holds its members (2026-10-05: an
+    interrupted team left the TV on the director with four workspaces). Never raises; no window."""
+    try:
+        target = board_path()
+        board = json.loads(target.read_text())
+    except (OSError, ValueError):
+        return None
+    if board.get('lead') != lead or board.get('phase') in ('done', 'failed'):
+        return None
+    role = next((m.get('role') for m in board.get('members', []) if m.get('lead')), '') or 'lead'
+    board = apply_to_board(board, {'thread': lead, 'role': role, 'kind': kind, 'text': text})
+    try:
+        temporary = target.with_suffix('.tmp')
+        temporary.write_text(json.dumps(board, ensure_ascii=False))
+        os.replace(temporary, target)
+    except OSError:
+        return None
+    _send({'op': 'director', 'board': {k: v for k, v in board.items() if k != 'posts'}})
+    return board
+
+
 def _send(request: dict) -> None:
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:

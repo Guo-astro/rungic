@@ -1,8 +1,12 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """Transport adapter for the native phone-session coordinator.
 
-Scheduling, audio and intent control live in C++. This adapter reuses the
-resident service's authenticated Codex connection and conversation store.
+Audio and intent control live in C++. The work is push-to-talk's (2026-10-05, the user: a call is
+only another way to talk; what it does must be the same): a task that may act goes to the
+conversation's own Codex thread, the one push-to-talk and typing use, through `executor`; while a
+turn runs there it joins it (turn/steer). Read-only tasks run beside it, each in a read-only thread
+of its own (at most two, the C++ scheduler), as before. This adapter reuses the resident service's
+authenticated Codex connection and conversation store.
 """
 import json
 import os
@@ -15,10 +19,16 @@ import task_state
 
 
 class PhoneSession:
-    def __init__(self, server, settings, emit, foreground, prompt, language, executable='rungic-agent-session', history=lambda conversation: []):
+    def __init__(self, server, settings, emit, foreground, prompt, language, executable='rungic-agent-session',
+                 history=lambda conversation: [], executor=None):
         self.server, self.settings, self.emit = server, settings, emit
         self.foreground, self.prompt, self.language = foreground, prompt, language
         self.history = history
+        # The conversation's own thread and its running turn (VoiceAgent): main_thread(conversation)
+        # -> thread id or None, running_turn(thread) -> turn id or None, turn(thread, input) -> the
+        # parameters of a new turn there (model, effort), as push-to-talk and typing start one.
+        self.executor = executor
+        self.shared = {}            # the conversation's thread -> the C++ tasks that went to it
         self.lock = threading.RLock()
         self.write_lock = threading.Lock()
         self.pending = {}
@@ -98,11 +108,27 @@ class PhoneSession:
             return thread in self.threads
 
     def notification(self, method, params):
-        if not self.owns(params.get('threadId')):
+        thread = params.get('threadId')
+        with self.lock:
+            shared = thread in self.shared
+        if shared:
+            # The conversation's own thread: the coordinator follows its tasks' state, and the turn
+            # is push-to-talk's all the same (its card, approvals, progress, errors): not claimed.
+            try:
+                self._write({'type': 'notification', 'method': method, 'params': params})
+            except (RuntimeError, OSError):
+                pass
+            return False
+        if not self.owns(thread):
             return False
         self._track(method, params)
         self._write({'type': 'notification', 'method': method, 'params': params})
         return True
+
+    def shared_tasks(self, thread):
+        """The coordinator's tasks that went to the conversation's own thread `thread`."""
+        with self.lock:
+            return sorted(self.shared.get(thread, ()))
 
     def _track(self, method, params):
         """Codex's notifications of a phone task into its TurnState, as the push-to-talk turn does."""
@@ -165,7 +191,12 @@ class PhoneSession:
                 self.post('TaskFacts', {'taskId': info['taskId'], 'facts': facts})
 
     def request(self, rid, method, params):
-        if not self.owns(params.get('threadId')):
+        thread = params.get('threadId')
+        with self.lock:
+            shared = thread in self.shared
+        # On the conversation's own thread a task's question is the call's to ask (answer_task);
+        # approvals stay push-to-talk's cards.
+        if not self.owns(thread) and not (shared and method == 'item/tool/requestUserInput'):
             return False
         self._write({'type': 'request', 'id': rid, 'method': method, 'params': params})
         return True
@@ -186,6 +217,12 @@ class PhoneSession:
             settings['sandbox'] = 'read-only'
             for name in names:
                 config[f'mcp_servers.{name}.enabled'] = False
+            # agent.md speaks of full access and the desktop tools: this task has neither, and says
+            # so plainly instead of "I cannot" (it runs beside the work, docs/101).
+            settings['developerInstructions'] = (settings.get('developerInstructions') or '') + (
+                '\n\nThis task is read-only: it runs beside the conversation\'s main work. Read, search, '
+                'look up and calculate. Do not change files, apps or settings, and do not use desktop tools. '
+                'If the request needs any of that, say that the main work must do it.')
         else:
             # Each writable task owns all its MCP workers; revoking the lease
             # cancels their process group without killing detached GUI apps.
@@ -199,12 +236,58 @@ class PhoneSession:
             config['mcp_servers.rungic-desktop.env'] = env
         return settings
 
+    def _shared_rpc(self, method, params, task, read_only, conversation):
+        """A task that may act, on the conversation's own thread (the executor's): thread/start is
+        that thread, turn/start a turn there or, while one runs, joining it. -> the result, or None
+        when the task is not for that thread (read-only, or no executor)."""
+        if self.executor is None:
+            return None
+        if method == 'thread/start' and not read_only:
+            thread = self.executor.main_thread(conversation)
+            if not thread:
+                return None
+            with self.lock:
+                self.shared.setdefault(thread, set()).add(task)
+            return {'thread': {'id': thread}, 'shared': True}
+        thread = params.get('threadId')
+        with self.lock:
+            shared = thread in self.shared
+        if not shared:
+            return None
+        if method == 'thread/resume':
+            return {'thread': {'id': thread}, 'shared': True}
+        if method == 'turn/start':
+            running = self.executor.running_turn(thread)
+            if running:
+                self.server().call('turn/steer', {'threadId': thread, 'expectedTurnId': running, 'input': params['input']})
+                return {'turn': {'id': running}, 'joined': True}
+            try:
+                return self.server().call('turn/start', {**self.executor.turn(thread), 'input': params['input']})
+            except Exception:
+                # A turn began meanwhile (push-to-talk, typing, a request just before): join it,
+                # once Codex has said it started.
+                running = None
+                for _ in range(20):
+                    running = self.executor.running_turn(thread)
+                    if running:
+                        break
+                    threading.Event().wait(0.1)
+                if not running:
+                    raise
+                self.server().call('turn/steer', {'threadId': thread, 'expectedTurnId': running, 'input': params['input']})
+                return {'turn': {'id': running}, 'joined': True}
+        return None
+
     def _rpc(self, message):
         params = dict(message.get('params') or {})
         method, task = message['method'], params.pop('taskId', '')
         read_only = params.pop('readOnly', False)
         conversation = params.pop('conversation', '')
         try:
+            shared = self._shared_rpc(method, params, task, read_only, conversation)
+            if shared is not None:
+                self._write({'type': 'rpc-result', 'id': message['id'], 'result': shared})
+                return
             if method in ('thread/start', 'thread/resume'):
                 params = {**self._task_settings(task, read_only), **params}
                 if conversation:

@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MIT
-"""The capability sections of the assistant's prompts (tools/agent_capabilities.py, docs/59): one
-source, agent/assistant/prompts/capabilities.yaml, rendered into agent.md, phone.md and realtime.md.
+"""The generated sections of the assistant's prompts (tools/agent_capabilities.py, docs/59): the
+capabilities (capabilities.yaml) in agent.md, and voice-common.md with them in both voice prompts
+(phone.md and realtime.md).
 The real prompts must be current, and every skill a capability names must ship with the package."""
 from pathlib import Path
 import re
@@ -28,8 +29,10 @@ capabilities:
 
 def prompts(tmp_path):
     (tmp_path / 'capabilities.yaml').write_text(SOURCE)
-    for name in ac.INTRO:
-        (tmp_path / name).write_text(f'Before.\n{ac.BEGIN}\nold\n{ac.END}\nAfter.\n')
+    (tmp_path / 'voice-common.md').write_text('<!-- a note -->\n\n## Shared\n\n{{capabilities}}\n* After.\n')
+    (tmp_path / 'agent.md').write_text(f'Before.\n{ac.BEGIN}\nold\n{ac.END}\nAfter.\n')
+    for name in ac.VOICES:
+        (tmp_path / name).write_text(f'{name} own.\n{ac.VOICE_BEGIN}\nold\n{ac.VOICE_END}\n{name} tail.\n')
     return tmp_path
 
 
@@ -41,25 +44,29 @@ def test_the_real_prompts_are_current():
 # covers: agent.instructions/E5
 def test_a_stale_section_is_found_and_rendered_in_each_voice(tmp_path):
     base = prompts(tmp_path)
-    changed = ac.stale(base, base / 'capabilities.yaml')
-    assert set(changed) == set(ac.INTRO)
+    changed = ac.stale(base, base / 'capabilities.yaml', base / 'voice-common.md')
+    assert set(changed) == {'agent.md', *ac.VOICES}
     agent = changed['agent.md']
     assert agent.startswith('Before.\n') and agent.endswith(f'{ac.END}\nAfter.\n')
     assert ('- **SMS**: Send SMS. Use when: "发短信". How: skill `rungic-messages-calls`. '
             'Sending has an external effect') in agent
     assert '- **Files**: Find files. Use when: a file to find. How: the shell.\n' in agent
-    assert '- SMS: Send SMS. When: "发短信". Sending needs the user\'s go-ahead.\n' in changed['phone.md']
-    assert '* Files: Find files. When: a file to find.\n' in changed['realtime.md']
+    # Both voices: the same shared section (2026-10-05: a call is only another way to talk), each
+    # with its own text around it, and the note of voice-common.md left out.
+    shared = [changed[name].split(ac.VOICE_BEGIN)[1].split(ac.VOICE_END)[0] for name in ac.VOICES]
+    assert shared[0] == shared[1] and '## Shared' in shared[0] and 'a note' not in shared[0]
+    assert '* SMS: Send SMS. When: "发短信". Sending needs the user\'s go-ahead.\n' in shared[0]
+    assert changed['phone.md'].startswith('phone.md own.\n') and changed['phone.md'].endswith('phone.md tail.\n')
     for name, text in changed.items():
         (base / name).write_text(text)
-    assert ac.stale(base, base / 'capabilities.yaml') == {}
+    assert ac.stale(base, base / 'capabilities.yaml', base / 'voice-common.md') == {}
 
 
 def test_a_prompt_without_the_markers_is_an_error(tmp_path):
     base = prompts(tmp_path)
     (base / 'phone.md').write_text('No section here.\n')
     with pytest.raises(ValueError, match='phone.md'):
-        ac.stale(base, base / 'capabilities.yaml')
+        ac.stale(base, base / 'capabilities.yaml', base / 'voice-common.md')
 
 
 def test_every_named_skill_ships():
@@ -78,5 +85,5 @@ def test_both_voices_speak_as_the_assistant_that_operates_the_phone():
     prompts = Path(__file__).resolve().parents[2] / 'agent/assistant/prompts'
     phone = (prompts / 'phone.md').read_text()
     realtime = (prompts / 'realtime.md').read_text()
-    assert 'Never say that you cannot use' in phone and 'only a\nvoice assistant' in phone
+    assert 'Never say that you cannot use' in phone and 'only a voice assistant' in phone
     assert 'Do not claim that you cannot perform some actions' in realtime

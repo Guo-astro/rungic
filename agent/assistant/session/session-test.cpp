@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // covers: agent.phone-mode/E3 agent.phone-mode/E4 agent.phone-mode/E5 agent.phone-mode/E6 agent.phone-mode/E7
 #include "session.h"
+#include <algorithm>
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QElapsedTimer>
@@ -170,6 +171,35 @@ int main(int argc,char **argv){
         auto snap=f.trusted();check(snap.size()==1&&snap[0].toObject()["progress"].toString().contains("Run Krita"),"the voice knows what the task is doing");
         f.tasks.find(id)->status="completed";
         check(!f.trusted()[0].toObject().contains("progress"),"a finished task has its result, not progress");
+    }
+    {
+        // covers: agent.phone-mode/E7
+        // A call's work that acts goes to the conversation's own thread (phone_session.py), where it
+        // starts a turn or joins the running one: a second request does not wait (2026-10-05: a cast
+        // waited behind a Krita drawing). The thread's notifications reach each task of its turn,
+        // and a task of an earlier turn is left as it ended.
+        Session w;QList<QJsonObject> rpcs,events;w.conversation="c1";w.leases=dir.path();
+        w.output=[&](QJsonObject o){if(o["type"]=="rpc")rpcs.append(o);else if(o["type"]=="event")events.append(o["event"].toObject());};
+        auto reply=[&](int at,QJsonObject result){w.receive({{"type","rpc-result"},{"id",rpcs[at]["id"]},{"result",result}});};
+        auto old=w.tasks.add("draw earlier",false,"c1","k0");w.tasks.find(old)->status="completed";w.tasks.find(old)->thread="main";w.tasks.find(old)->shared=true;w.tasks.find(old)->turn="turn-0";
+        auto a=w.tasks.add("draw a tea garden",false,"c1","k1");w.runQueue();
+        check(rpcs.size()==1&&rpcs[0]["method"]=="thread/start","the first request asks for its thread");
+        reply(0,{{"thread",QJsonObject{{"id","main"}}},{"shared",true}});
+        check(w.tasks.find(a)->shared&&!QFile::exists(dir.path()+"/"+a+".json"),"the conversation's thread: no lease of its own");
+        reply(1,{{"turn",QJsonObject{{"id","turn-1"}}}});
+        check(w.tasks.find(a)->status=="running","the drawing runs");
+        auto b=w.tasks.add("cast it to the TV",false,"c1","k2");w.runQueue();
+        check(w.tasks.find(b)->status=="starting","the cast does not wait behind the drawing");
+        reply(2,{{"thread",QJsonObject{{"id","main"}}},{"shared",true}});reply(3,{{"turn",QJsonObject{{"id","turn-1"}}},{"joined",true}});
+        check(w.tasks.find(b)->status=="running"&&w.tasks.find(b)->turn=="turn-1","it joined the drawing's turn");
+        check(std::none_of(events.begin(),events.end(),[](const QJsonObject &e){return e["type"]=="phone-task";}),"its card is the turn's (push-to-talk's)");
+        w.receive({{"type","notification"},{"method","item/completed"},{"params",QJsonObject{{"threadId","main"},{"turnId","turn-1"},{"item",QJsonObject{{"type","agentMessage"},{"phase","final_answer"},{"text","Drawn and cast"}}}}}});
+        w.receive({{"type","notification"},{"method","turn/completed"},{"params",QJsonObject{{"threadId","main"},{"turn",QJsonObject{{"id","turn-1"},{"status","completed"}}}}}});
+        check(w.tasks.find(a)->status=="completed"&&w.tasks.find(b)->status=="completed","both end with their turn");
+        check(w.tasks.find(a)->result=="Drawn and cast"&&w.tasks.find(old)->result.isEmpty(),"the turn's answer is theirs, not an earlier task's");
+        // Progress for the voice from push-to-talk's rules (Narrate) is accepted with no call open.
+        QJsonObject said;w.command("Narrate",{{"text","Progress: now drawing"}},[&](QJsonObject r){said=r;});
+        check(said["ok"].toBool(),"narration accepted");
     }
     // covers: agent.phone-mode/E14 agent.phone-mode/E15
     // The app's call bar and its summary (docs/101): the state says when the call began and when the

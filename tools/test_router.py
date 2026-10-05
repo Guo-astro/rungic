@@ -354,6 +354,25 @@ def test_a_post_updates_the_board_file(host):
     assert board['title'] == 'Card' and board['project'] == str(host / 'card')
 
 
+# covers: agent.team-board/E1
+def test_a_team_whose_lead_stopped_ends(tmp_path):
+    # 2026-10-05: a lead's turn cut off (a restart) left its board "working" for good, and the
+    # director held its members: one assistant's screen was cast to the TV as four.
+    sent = []
+    with mock.patch.object(router.team, 'board_path', lambda: tmp_path / 'team-board.json'), \
+            mock.patch.object(router.team, '_send', sent.append):
+        assert router.team.end(LEAD, 'failed', 'stopped') is None, 'no board, nothing to end'
+        board = run_board({'role': 'lead', 'kind': 'brief', 'text': 'Tea', 'thread': LEAD},
+                          {'role': 'art', 'kind': 'progress', 'text': 'tiles', 'thread': 'a', 'parent': LEAD})
+        (tmp_path / 'team-board.json').write_text(json.dumps(board))
+        assert router.team.end('another-lead', 'failed', 'stopped') is None, 'only its own lead ends it'
+        ended = router.team.end(LEAD, 'failed', 'The lead stopped')
+        assert ended['phase'] == 'failed' and ended['result'] == 'The lead stopped'
+        assert json.loads((tmp_path / 'team-board.json').read_text())['phase'] == 'failed'
+        assert sent and sent[-1]['board']['phase'] == 'failed', 'the app is told: the director lets go'
+        assert router.team.end(LEAD, 'done', 'again') is None, 'an ended board stays as it ended'
+
+
 # ---- a workspace started again: its child's bus is gone (2026-10-02, the phone dozed) ------------
 # covers: agent.workspaces/E8
 def test_a_child_on_a_bus_gone_is_replaced(host, tmp_path, monkeypatch):

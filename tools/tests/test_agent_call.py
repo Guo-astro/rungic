@@ -157,20 +157,14 @@ class CallInTheApp(unittest.TestCase):
     # covers: agent.phone-mode/E4
     def test_after_the_call_its_task_runs_on_and_typing_adds_to_it(self):
         # 2026-10-05: with no call and a task from it still running, the bar said "You're on a
-        # call" and nothing could be typed. The task runs on; typing adds to it.
-        task = {'taskId': 't1', 'conversation': 'c1', 'status': 'running', 'created': time.time(), 'text': 'make a game'}
+        # call" and nothing could be typed. A call's task is this conversation's work as any
+        # (phone_session.py): the bar is as for push-to-talk, holding and typing join the work.
+        task = {'taskId': 't1', 'conversation': 'c1', 'status': 'running', 'created': time.time(), 'text': 'make a game', 'shared': True}
         self.state(sessionId='', phase='closed', tasks=[task])
         composer = q.of_type(self.page, 'Composer')[0]
-        self.assertEqual(composer.property('phase'), 'callWork')
-        texts = q.texts(self.content)
-        self.assertIn('Call task running · type to add', texts)
-        self.assertNotIn("You're on a call", texts)
-        label = next(t for t in q.of_type(composer, 'QQuickText') if t.property('text') == 'Call task running · type to add')
-        self.assertLessEqual(composer.width(), self.page.width() + 0.5, 'the label never widens the bar')
-        self.assertLessEqual(label.property('contentWidth'), label.width() + 0.5)
-        self.assertFalse(composer.property('canHold'), 'the voice of the call is closed: holding waits')
-        self.state(sessionId='', phase='closed', tasks=[dict(task, status='completed')])
-        self.assertEqual(composer.property('phase'), 'voice', 'when it is done, the bar is as before')
+        self.assertIn(composer.property('phase'), ('voice', 'busy'))
+        self.assertTrue(composer.property('canHold'))
+        self.assertNotIn("You're on a call", q.texts(self.content))
 
     def test_the_call_bar_follows_the_session(self):
         self.state(phase='connecting')

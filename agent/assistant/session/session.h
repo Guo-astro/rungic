@@ -61,6 +61,7 @@ public:
     void tool(QString name,QJsonObject args,QString callId,QString responseId);
     void rpc(QString method,QJsonObject params,std::function<void(QJsonObject)> done={});
     void notification(QString method,QJsonObject params);
+    void taskNotification(Task &task,QString method,QJsonObject params);
     void question(QJsonObject message);
     QJsonObject answer(QString taskId,QJsonObject answers);
     void runQueue();

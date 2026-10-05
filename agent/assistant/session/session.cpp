@@ -119,6 +119,12 @@ void Session::command(QString method,QJsonObject args,std::function<void(QJsonOb
             send({{"type","session.update"},{"session",QJsonObject{{"type","realtime"},{"instructions",prompt+"\nTrusted task snapshot:\n"+QString::fromUtf8(QJsonDocument(trusted()).toJson(QJsonDocument::Compact))}}}});}
         done({{"ok",true}});
     }
+    // Progress for the voice to say, from the same progress rules as push-to-talk's
+    // (VoiceAgent.progress_tick): one sentence, told as the instruction says.
+    else if(method=="Narrate"){
+        if(configured&&!id.isEmpty()&&!localSpeech&&!narrationSuppressed)requestReply({args["text"].toString(),{},generation,true},"Say one short sentence to the user, as the message asks. Do not start, steer or stop any task.");
+        done({{"ok",true}});
+    }
     else if(method=="ExternalBusy"){externalBusy=args["busy"].toBool();if(!externalBusy)runQueue();done({{"ok",true}});}
     else if(method=="SendPhoneText"){
         if(id.isEmpty()||args["conversationId"].toString()!=conversation){done({{"error","Text belongs to another conversation"}});return;}
@@ -373,17 +379,24 @@ bool Session::toolsActive(const Task &t){
     return o["active"].toBool()&&pid>0&&o["startTime"].toString().toLatin1()==startTime(pid);
 }
 void Session::changed(QString tid){
-    auto *t=tasks.find(tid);if(!t)return;save();event({{"type","phone-task"},{"conversation",t->conversation},{"task",t->json()}});
+    // A shared task's card is push-to-talk's turn card (the same thread); a read-only one has its own.
+    auto *t=tasks.find(tid);if(!t)return;save();if(!t->shared)event({{"type","phone-task"},{"conversation",t->conversation},{"task",t->json()}});
     if(t->terminal()&&t->conversation==conversation)notices.append(t->text.left(80)+": "+t->status+". "+t->result.left(500));
     if(configured)send({{"type","session.update"},{"session",QJsonObject{{"type","realtime"},{"instructions",prompt+"\nTrusted task snapshot:\n"+QString::fromUtf8(QJsonDocument(trusted()).toJson(QJsonDocument::Compact))}}}});
     state();
 }
-void Session::runQueue(){if(externalBusy)return;for(auto tid:tasks.schedule())startTask(tid);}
+// Push-to-talk at work no longer holds the call's tasks (ExternalBusy is kept, unused): they join
+// its turn on the same thread.
+void Session::runQueue(){for(auto tid:tasks.schedule())startTask(tid);}
 void Session::startTask(QString tid){
-    auto *t=tasks.find(tid);if(!t)return;changed(tid);lease(*t,true);
+    auto *t=tasks.find(tid);if(!t)return;changed(tid);
     rpc("thread/start",{{"taskId",tid},{"readOnly",t->readOnly},{"conversation",t->conversation}},[this,tid](QJsonObject o){
         auto *t=tasks.find(tid);if(!t)return;
         if(o.contains("error")){t->status=t->cancelRequested?"stopped":"failed";t->result=o["error"].toString();lease(*t,false);changed(tid);runQueue();return;}
+        t->shared=o["result"].toObject()["shared"].toBool();
+        // A task of its own (no executor) owns its tools by a lease; a shared one uses the
+        // conversation's, as push-to-talk does.
+        if(!t->shared)lease(*t,true);
         t->thread=o["result"].toObject()["thread"].toObject()["id"].toString();
         if(t->thread.isEmpty()){t->status="failed";t->result="No task thread returned";lease(*t,false);changed(tid);runQueue();return;}
         if(t->cancelRequested){t->backendStopped=true;changed(tid);return;}
@@ -407,7 +420,20 @@ void Session::stopTask(QString tid){
     runQueue();
 }
 void Session::notification(QString method,QJsonObject p){
-    auto *t=tasks.byThread(p["threadId"].toString());if(!t)return;const auto tid=t->id;
+    // The conversation's own thread carries several tasks over time, and push-to-talk's turns:
+    // each live task follows its own turn (shared tasks take the turn they joined).
+    const auto live=tasks.onThread(p["threadId"].toString());
+    if(!live.isEmpty()&&live.first()->shared){
+        const auto turnId=method=="turn/completed"||method=="turn/started"?p["turn"].toObject()["id"].toString():p["turnId"].toString();
+        QStringList ids;for(auto *s:live)if(!s->turn.isEmpty()&&s->turn==turnId)ids.append(s->id);
+        for(const auto &id:ids)if(auto *s=tasks.find(id))taskNotification(*s,method,p);
+        return;
+    }
+    auto *t=tasks.byThread(p["threadId"].toString());if(!t)return;
+    taskNotification(*t,method,p);
+}
+void Session::taskNotification(Task &task,QString method,QJsonObject p){
+    auto *t=&task;const auto tid=t->id;
     if(method=="turn/started"){
         t->turn=p["turn"].toObject()["id"].toString();if(t->cancelRequested)t->status="stopping";if(t->status=="starting")t->status="running";if(t->cancelRequested)stopTask(tid);else changed(tid);
     } else if(method=="turn/completed"){
@@ -420,8 +446,8 @@ void Session::notification(QString method,QJsonObject p){
     } else if(method=="item/completed"){
         auto item=p["item"].toObject();auto type=item["type"].toString();
         if(type=="agentMessage"&&item["phase"]=="final_answer"){t->result=item["text"].toString().left(16000);changed(tid);}
-        else if(type=="commandExecution"||type=="mcpToolCall"||type=="fileChange")event({{"type","phone-task-detail"},{"conversation",t->conversation},{"taskId",tid},{"item",item}});
-    } else if(method=="item/started"){
+        else if(!t->shared&&(type=="commandExecution"||type=="mcpToolCall"||type=="fileChange"))event({{"type","phone-task-detail"},{"conversation",t->conversation},{"taskId",tid},{"item",item}});
+    } else if(method=="item/started"&&!t->shared){
         auto item=p["item"].toObject();event({{"type","phone-task-detail"},{"conversation",t->conversation},{"taskId",tid},{"item",item}},false);
     }
 }
@@ -431,7 +457,11 @@ void Session::save(){
 void Session::restore(){QFile f(journal);if(f.open(QIODevice::ReadOnly))tasks.restore(QJsonDocument::fromJson(f.readAll()).array());}
 
 void Session::question(QJsonObject message){
-    auto p=message["params"].toObject();auto *t=tasks.byThread(p["threadId"].toString());if(!t)return;
+    auto p=message["params"].toObject();Task *t=nullptr;
+    // On the conversation's own thread: the live task of the asking turn.
+    for(auto *s:tasks.onThread(p["threadId"].toString()))if(!s->shared||s->turn==p["turnId"].toString()){t=s;break;}
+    if(!t)t=tasks.byThread(p["threadId"].toString());
+    if(!t){rpc("ServerResponse",{{"requestId",message["id"]},{"result",QJsonObject{{"answers",QJsonObject{}}}}});return;}
     if(message["method"]=="item/tool/requestUserInput"){
         if(t->terminal()||t->cancelRequested||(!p["turnId"].toString().isEmpty()&&p["turnId"].toString()!=t->turn)){
             rpc("ServerResponse",{{"requestId",message["id"]},{"result",QJsonObject{{"answers",QJsonObject{}}}}});return;

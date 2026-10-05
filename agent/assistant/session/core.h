@@ -14,6 +14,9 @@ struct Task {
     QString id, conversation, thread, turn, text, status="queued", result, requestKey;
     QString facts;      // what the voice may say of its progress (task_state.py, via the adapter)
     bool readOnly=false,cancelRequested=false,backendStopped=false;
+    // On the conversation's own thread (push-to-talk's): its turn may be shared with other tasks
+    // and with push-to-talk; its card is push-to-talk's (phone_session.py).
+    bool shared=false;
     qint64 created=QDateTime::currentSecsSinceEpoch();
     QJsonObject json() const;
     bool terminal() const;
@@ -26,6 +29,7 @@ public:
     QString add(QString text,bool readOnly,QString conversation,QString requestKey);
     Task *find(const QString &id);
     Task *byThread(const QString &thread);
+    QList<Task *> onThread(const QString &thread);      // the live tasks of a thread
     Task *target(const QString &id);
     QList<QString> schedule();
     bool stop(const QString &id);

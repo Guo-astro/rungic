@@ -19,6 +19,7 @@ def bridge(settings=None):
     obj.lock = threading.RLock()
     obj.threads = {}
     obj.cards, obj.card_timers = {}, {}
+    obj.executor, obj.shared = None, {}
     obj.emit = lambda event, keep=True: None
     obj.history = lambda conversation: []
     return obj
@@ -200,3 +201,97 @@ def test_a_phone_task_is_tracked_as_a_turn():
     assert final and final[-1]['plan'] and 'current' not in final[-1]
     obj._track('turn/plan/updated', {'threadId': 'other', 'plan': []})
     assert len(events) == len(live) + 1, 'a thread that is not a phone task is left alone'
+
+
+class Executor:
+    """VoiceAgent as a call's executor: the conversation's own thread and its running turn."""
+    def __init__(self, running=None):
+        self.running = running
+        self.opened = []
+
+    def main_thread(self, conversation):
+        self.opened.append(conversation)
+        return 'main-thread'
+
+    def running_turn(self, thread):
+        return self.running
+
+    def turn(self, thread):
+        return {'threadId': thread, 'model': 'gpt-x'}
+
+
+class Server:
+    def __init__(self, fail_start=False):
+        self.calls, self.fail_start = [], fail_start
+
+    def call(self, method, params, timeout=None):
+        self.calls.append((method, params))
+        if method == 'turn/start' and self.fail_start:
+            raise RuntimeError('a turn is active')
+        if method == 'turn/start':
+            return {'turn': {'id': 'turn-new'}}
+        return {}
+
+
+def shared_bridge(executor, server):
+    obj = bridge()
+    obj.executor, obj.shared = executor, {}
+    obj.server = lambda: server
+    written = []
+    obj._write = written.append
+    return obj, written
+
+
+# covers: agent.phone-mode/E7
+def test_work_that_acts_goes_to_the_conversation_s_own_thread():
+    # 2026-10-05: a call's tasks each had a thread of their own, queued behind one another; push-to-
+    # talk joins the turn at work. Now a call's acting work is push-to-talk's: the same thread.
+    executor, server = Executor(), Server()
+    obj, written = shared_bridge(executor, server)
+    obj._rpc({'id': 1, 'method': 'thread/start', 'params': {'taskId': 't1', 'readOnly': False, 'conversation': 'c1'}})
+    assert written[-1]['result'] == {'thread': {'id': 'main-thread'}, 'shared': True}
+    assert executor.opened == ['c1'] and not server.calls, 'no thread of its own'
+    obj._rpc({'id': 2, 'method': 'turn/start', 'params': {'threadId': 'main-thread', 'input': [{'type': 'text', 'text': 'draw'}]}})
+    assert server.calls[-1] == ('turn/start', {'threadId': 'main-thread', 'model': 'gpt-x', 'input': [{'type': 'text', 'text': 'draw'}]})
+    assert written[-1]['result'] == {'turn': {'id': 'turn-new'}}
+    # A second request while the turn works joins it, as push-to-talk does (the cast and the drawing).
+    executor.running = 'turn-new'
+    obj._rpc({'id': 3, 'method': 'thread/start', 'params': {'taskId': 't2', 'readOnly': False, 'conversation': 'c1'}})
+    obj._rpc({'id': 4, 'method': 'turn/start', 'params': {'threadId': 'main-thread', 'input': [{'type': 'text', 'text': 'cast it'}]}})
+    assert server.calls[-1] == ('turn/steer', {'threadId': 'main-thread', 'expectedTurnId': 'turn-new',
+                                               'input': [{'type': 'text', 'text': 'cast it'}]})
+    assert written[-1]['result'] == {'turn': {'id': 'turn-new'}, 'joined': True}
+    assert obj.shared_tasks('main-thread') == ['t1', 't2']
+
+
+# covers: agent.phone-mode/E7
+def test_a_turn_begun_meanwhile_is_joined():
+    executor, server = Executor(), Server(fail_start=True)
+    obj, written = shared_bridge(executor, server)
+    obj._rpc({'id': 1, 'method': 'thread/start', 'params': {'taskId': 't1', 'readOnly': False, 'conversation': 'c1'}})
+    executor.running = 'ptt-turn'     # push-to-talk began one between
+    obj._rpc({'id': 2, 'method': 'turn/start', 'params': {'threadId': 'main-thread', 'input': []}})
+    assert server.calls[-1][0] == 'turn/steer' and written[-1]['result']['turn']['id'] == 'ptt-turn'
+
+
+# covers: agent.phone-mode/E2
+def test_read_only_work_runs_beside_in_a_thread_of_its_own():
+    executor, server = Executor(), Server()
+    obj, written = shared_bridge(executor, server)
+    server.call = lambda method, params, timeout=None: server.calls.append((method, params)) or {'thread': {'id': 'side'}}
+    obj._rpc({'id': 1, 'method': 'thread/start', 'params': {'taskId': 't3', 'readOnly': True, 'conversation': 'c1'}})
+    method, params = server.calls[-1]
+    assert method == 'thread/start' and params['sandbox'] == 'read-only'
+    assert 'This task is read-only' in params['developerInstructions'], 'it says so rather than "I cannot"'
+    assert obj.owns('side') and not executor.opened
+
+
+# covers: agent.phone-mode/E7
+def test_the_conversation_s_thread_stays_push_to_talk_s():
+    executor, server = Executor(), Server()
+    obj, written = shared_bridge(executor, server)
+    obj._rpc({'id': 1, 'method': 'thread/start', 'params': {'taskId': 't1', 'readOnly': False, 'conversation': 'c1'}})
+    assert obj.notification('turn/completed', {'threadId': 'main-thread'}) is False, 'its card, approvals and progress'
+    assert written[-1] == {'type': 'notification', 'method': 'turn/completed', 'params': {'threadId': 'main-thread'}}
+    assert obj.request(9, 'item/tool/requestUserInput', {'threadId': 'main-thread'}) is True, 'a task question is the call\'s'
+    assert obj.request(10, 'item/commandExecution/requestApproval', {'threadId': 'main-thread'}) is False, 'approvals stay cards'
