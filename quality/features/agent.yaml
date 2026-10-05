@@ -366,6 +366,8 @@ features:
         evidence:
           - {doc: docs/101-full-duplex-phone-mode.md, date: 2026-10-04, note: "G100 S 真人通话不卡；AudioFlinger 14.72 s 欠载为 0（修复前 10%–21%）"}
     pitfalls:
+      - text: Codex 启动 MCP 服务时不传 XDG_RUNTIME_DIR。rungic-task-tools 曾因此找不到租约，电话任务的桌面工具全部被拒，现在会退回 /run/user/<uid>。
+        docs: [docs/101-full-duplex-phone-mode.md]
       - text: 发给协调器的每条指令都必须带 id，否则回复不带 id，曾让读取线程退出并杀掉协调器。
         docs: [docs/101-full-duplex-phone-mode.md]
       - text: Codex app-server 的 Realtime 封装把任务入口固定为 background_agent/remain_silent，VAD 也由它内部设置。所以电话模式直接连同一个 Realtime 模型，按住说话仍用原封装。

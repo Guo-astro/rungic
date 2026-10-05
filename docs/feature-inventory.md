@@ -150,6 +150,7 @@
 - **E16** Agent 说话连贯不卡：回复的声音按 Android 实际播放的进度送出，Android 不因等数据而停顿。停顿之后不会把空档补成一阵突发。（单元测试、系统测试、人工）
 
 注意：
+- Codex 启动 MCP 服务时不传 XDG_RUNTIME_DIR。rungic-task-tools 曾因此找不到租约，电话任务的桌面工具全部被拒，现在会退回 /run/user/<uid>。 [docs/101-full-duplex-phone-mode.md](../docs/101-full-duplex-phone-mode.md)
 - 发给协调器的每条指令都必须带 id，否则回复不带 id，曾让读取线程退出并杀掉协调器。 [docs/101-full-duplex-phone-mode.md](../docs/101-full-duplex-phone-mode.md)
 - Codex app-server 的 Realtime 封装把任务入口固定为 background_agent/remain_silent，VAD 也由它内部设置。所以电话模式直接连同一个 Realtime 模型，按住说话仍用原封装。 [docs/101-full-duplex-phone-mode.md](../docs/101-full-duplex-phone-mode.md)
 - semantic VAD 可能延迟很久，改为等本地静默和完整最终转写，2 秒仍未提交时手动 commit。 [docs/101-full-duplex-phone-mode.md](../docs/101-full-duplex-phone-mode.md)
