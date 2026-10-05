@@ -4,7 +4,7 @@
 
 以产品功能和用户场景为骨架：每条功能是用户能感知的一件事；“体验”是它必须做到的，每条都标明由什么检查（自动测试、实机验收、人工验证或已登记的缺口）。数据在 `quality/`，规则见 [quality/README.md](../quality/README.md)。
 
-共 162 条功能、703 条体验，其中 659 条有检查。
+共 162 条功能、704 条体验，其中 660 条有检查。
 
 ## Agent 能力
 
@@ -586,6 +586,7 @@ Agent 在自己的工作区（或用户指定的桌面）上打开应用、看�
 - **E2** 改了 agent.md 或技能后约 30 秒内（Agent 空闲、没在说话时），进行中的对话也用上新指令。改了 realtime.md 在空闲时重启实时会话。（单元测试、人工）
 - **E3** 包里删掉的默认技能，用户没改过的副本一起删掉，改过的保留。（单元测试）
 - **E4** 每个桌面用户首次登录时自动配好 rungic-desktop MCP 服务和技能目录（kconf_update，重复执行无副作用）。（单元测试）
+- **E5** 三份提示词（agent.md、phone.md、realtime.md）里的能力清单由同一个 capabilities.yaml 生成，各用对应模型的口吻；清单过期时测试失败。（单元测试）
 
 注意：
 - Codex 把开发者指令固定在对话加载的那一刻。同一个 app-server 里再次恢复只是重新加入。包升级只 reload systemd、不重启用户服务。所以要注入新指令，而不是等下次打开。 [docs/59-voice-agent.md](../docs/59-voice-agent.md) [docs/88-agent-visible-work.md](../docs/88-agent-visible-work.md)

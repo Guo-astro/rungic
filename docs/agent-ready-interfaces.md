@@ -72,12 +72,12 @@ uv run --quiet --script tools/rungic_agent_mcp.py
 
 | 入口 | 当前用途 | 参数与实现 |
 |---|---|---|
-| `rungic-platform --request '<json>'` | `status`、`network-get`、`display-get`、亮度、剪贴板、方向、振动、系统设置面板及投屏控制 | [手机桌面 Skill 的请求表](../agent/assistant/skills/rungic-phone-desktop/SKILL.md) |
+| `rungic-platform --request '<json>'` | `status`、`network-get`、`display-get`、亮度、剪贴板、方向、振动、系统设置面板及投屏控制 | [手机状态与设置 Skill 的请求表](../agent/assistant/skills/rungic-phone-settings/SKILL.md)、[投屏请求](../agent/assistant/skills/rungic-screens/SKILL.md) |
 | `rungic-cast` | `capabilities`、`status`、`scan`、`connect`、`disconnect`、`settings`、`modes`、`resolution` | [CLI 源码](../desktop/cast/rungic-cast)；不同固件的可用后端不同 |
 | `rungic-agent-screen`, `rungic-desktop-mode` | 独立助理屏/用户桌面模式的显示、隐藏、状态与投屏 | [共用实现](../agent/screen/rungic-agent-screen) |
 | `rungic-workspace-env N COMMAND...`, `rungic-user COMMAND...` | 选择工作区/用户桌面的图形和 D-Bus 会话 | [工作区环境](../agent/workspace/rungic-workspace-env)、[用户会话](../agent/workspace/rungic-user) |
 | `rungic-cua` CLI | 窗口、启动、截图、动作、任务及模式选择；与 MCP 共用实现 | [命令分派](../agent/computer-use/rungic_cua/server.py) |
-| `rungic-voice-agent --call-capabilities`, `--start-call`, `--call-command` | 查询通话前提、启动/控制内置通话代理 | [通话契约](../agent/assistant/skills/rungic-phone-desktop/calls.md)、[63](63-call-proxy.md)；通话代理仍在测试，接收拨号请求不代表已接通 |
+| `rungic-voice-agent --call-capabilities`, `--start-call`, `--call-command` | 查询通话前提、启动/控制内置通话代理 | [通话契约](../agent/assistant/skills/rungic-messages-calls/calls.md)、[63](63-call-proxy.md)；通话代理仍在测试，接收拨号请求不代表已接通 |
 
 只读查询示例：
 
