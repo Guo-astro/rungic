@@ -1192,8 +1192,9 @@ class VoiceAgent:
             parts.append(f"The desktop's language is {language_name()} now. Use it for what the user sees or hears "
                          'whenever you cannot tell which language they use.')
         if had.get('skill') != now['skill']:
-            parts.append('The rungic-phone-desktop skill has changed: a copy you read earlier in this conversation '
-                         'is out of date. Read the skill again before you next use it.')
+            names = sorted(path.name for path in SKILLS.iterdir() if path.is_dir()) if SKILLS.is_dir() else []
+            parts.append(f'A phone skill has changed ({", ".join(names) or USER_SKILL.name}). A copy that you read '
+                         'earlier in this conversation can be out of date. Read a skill again before you use it next.')
         try:
             self.server.call('thread/inject_items', {'threadId': thread_id, 'items': [
                 {'type': 'message', 'role': 'developer', 'content': [{'type': 'input_text', 'text': '\n\n'.join(parts)}]}]})

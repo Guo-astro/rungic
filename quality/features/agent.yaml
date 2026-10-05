@@ -531,6 +531,8 @@ features:
         text: 包里删掉的默认技能，用户没改过的副本一起删掉，改过的保留。
       - id: E4
         text: 每个桌面用户首次登录时自动配好 rungic-desktop MCP 服务和技能目录（kconf_update，重复执行无副作用）。
+      - id: E5
+        text: 三份提示词（agent.md、phone.md、realtime.md）里的能力清单由同一个 capabilities.yaml 生成，各用对应模型的口吻；清单过期时测试失败。
     pitfalls:
       - text: Codex 把开发者指令固定在对话加载的那一刻。同一个 app-server 里再次恢复只是重新加入。包升级只 reload systemd、不重启用户服务。所以要注入新指令，而不是等下次打开。
         docs: [docs/59-voice-agent.md, docs/88-agent-visible-work.md]
@@ -539,8 +541,14 @@ features:
     code:
       - agent/assistant/prompts/agent.md
       - agent/assistant/prompts/realtime.md
+      - agent/assistant/prompts/capabilities.yaml
       - agent/assistant/skills/rungic-phone-desktop/SKILL.md
+      - agent/assistant/skills/rungic-messages-calls/SKILL.md
+      - agent/assistant/skills/rungic-screens/SKILL.md
+      - agent/assistant/skills/rungic-phone-settings/SKILL.md
       - agent/assistant/kconf_update/
+      - tools/agent_capabilities.py
+      - tools/tests/test_agent_capabilities.py
       - tools/tests/test_instructions_sync.py
       - tools/tests/test_codex_setup_update.py
     docs: [docs/59-voice-agent.md, docs/88-agent-visible-work.md]
@@ -1055,7 +1063,7 @@ features:
         docs: [docs/63-call-proxy.md]
     code:
       - agent/assistant/call_backends.py
-      - agent/assistant/skills/rungic-phone-desktop/calls.md
+      - agent/assistant/skills/rungic-messages-calls/calls.md
       - agent/assistant/app/qml/ChatEntry.qml
       - agent/assistant/app/qml/AssistantOverlay.qml
       - tools/tests/test_call_backends.py
