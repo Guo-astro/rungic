@@ -69,3 +69,14 @@ def test_every_named_skill_ships():
         skill = SKILLS / name / 'SKILL.md'
         assert skill.exists(), f'capabilities.yaml names skill {name}, which does not exist'
         assert f'\nname: {name}\n' in skill.read_text()
+
+
+# covers: agent.instructions/E5
+def test_both_voices_speak_as_the_assistant_that_operates_the_phone():
+    # 2026-10-05: in a call the voice said "I am only a voice assistant, I cannot use Krita" while
+    # the executor was drawing in it. Push-to-talk's voice already had the rule; the call's lacked it.
+    prompts = Path(__file__).resolve().parents[2] / 'agent/assistant/prompts'
+    phone = (prompts / 'phone.md').read_text()
+    realtime = (prompts / 'realtime.md').read_text()
+    assert 'Never say that you cannot use' in phone and 'only a\nvoice assistant' in phone
+    assert 'Do not claim that you cannot perform some actions' in realtime
