@@ -1655,5 +1655,5 @@ msgid "On a call in another conversation"
 msgstr "通话在另一段对话中"
 
 msgctxt "@info the voice bar while tasks given in a call with the Agent run on after it"
-msgid "A task from the call is running · type to add"
-msgstr "通话里交代的任务还在进行 · 可以打字补充"
+msgid "Call task running · type to add"
+msgstr "通话任务进行中 · 可打字补充"
