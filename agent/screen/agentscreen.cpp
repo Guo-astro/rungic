@@ -142,7 +142,7 @@ void AgentScreen::poll()
         const QString runtime = qEnvironmentVariable("XDG_RUNTIME_DIR", QStringLiteral("/run/user/%1").arg(getuid()));
         if (!QFile::exists(runtime + QStringLiteral("/wayland-ws-0"))) {
             setStatus(QStringLiteral("off"));
-            QTimer::singleShot(0, qApp, &QCoreApplication::quit);
+            QTimer::singleShot(0, qApp, [] { QCoreApplication::exit(0); });
             return;
         }
         m_onTv = bridge({{QStringLiteral("op"), op()}}).value(QStringLiteral("tv")).toBool();
@@ -164,7 +164,7 @@ void AgentScreen::poll()
         // poll() also runs in the constructor, before app.exec(): a direct quit is lost.
         // Mark it off before QML can map its black placeholder, then quit on the event loop.
         setStatus(QStringLiteral("off"));
-        QTimer::singleShot(0, qApp, &QCoreApplication::quit);
+        QTimer::singleShot(0, qApp, [] { QCoreApplication::exit(0); });
         return;
     }
     update();
@@ -369,7 +369,10 @@ void AgentScreen::close()
         QProcess::startDetached(QStringLiteral("systemd-run"), {QStringLiteral("--user"), QStringLiteral("--collect"), QStringLiteral("--quiet"),
                                                                 QStringLiteral("rungic-desktop-mode"), QStringLiteral("dismiss")});
     }
-    QCoreApplication::quit();
+    // exit, not quit: Qt 6 cancels quit() when a window refuses to close, and the fullscreen window
+    // refuses (it goes back to the floating one): closed from fullscreen, the window came straight
+    // back (the G100 S, 2026-10-05).
+    QCoreApplication::exit(0);
 }
 
 Director::Director(QObject *parent)
@@ -436,7 +439,7 @@ void Director::apply(const QJsonObject &state)
     Q_EMIT changed();
     // No assistant's screen left: nothing to show.
     if (m_screens.isEmpty())
-        QCoreApplication::quit();
+        QCoreApplication::exit(0);
 }
 
 void Director::setFocus(int workspace)
@@ -451,7 +454,7 @@ void Director::close()
     // and the director with them (2026-10-05).
     QProcess::startDetached(QStringLiteral("systemd-run"), {QStringLiteral("--user"), QStringLiteral("--collect"), QStringLiteral("--quiet"),
                                                             QStringLiteral("rungic-agent-screen"), QStringLiteral("dismiss"), QStringLiteral("director")});
-    QCoreApplication::quit();
+    QCoreApplication::exit(0);     // as AgentScreen::close: quit() is cancelled by the fullscreen window
 }
 
 void Director::nextLevel()
