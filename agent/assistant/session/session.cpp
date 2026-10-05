@@ -122,13 +122,16 @@ void Session::command(QString method,QJsonObject args,std::function<void(QJsonOb
     // Progress for the voice to say, from the same progress rules as push-to-talk's
     // (VoiceAgent.progress_tick): one sentence, told as the instruction says.
     else if(method=="Narrate"){
-        if(configured&&!id.isEmpty()&&!localSpeech&&!narrationSuppressed)requestReply({args["text"].toString(),{},generation,true},"Say one short sentence to the user, as the message asks. Do not start, steer or stop any task.");
+        // Not over the voice's own words: an update waits for 12 s of quiet after it spoke (the
+        // updates came every few seconds over its acknowledgements, 2026-10-05).
+        const bool quiet=!responseActive&&playback.pending.isEmpty()&&clock.elapsed()-lastPlaybackPush>12000;
+        if(configured&&!id.isEmpty()&&!localSpeech&&!narrationSuppressed&&quiet)requestReply({args["text"].toString(),{},generation,true},"Say one short sentence to the user, as the message asks. Do not start, steer or stop any task.");
         done({{"ok",true}});
     }
     else if(method=="ExternalBusy"){externalBusy=args["busy"].toBool();if(!externalBusy)runQueue();done({{"ok",true}});}
     else if(method=="SendPhoneText"){
         if(id.isEmpty()||args["conversationId"].toString()!=conversation){done({{"error","Text belongs to another conversation"}});return;}
-        QString text=args["text"].toString().trimmed();if(text.isEmpty()){done({{"ok",true}});return;}
+        QString text=args["text"].toString().trimmed();if(text.isEmpty()){done({{"ok",true}});return;}lastUserText=text;
         stopSpeaking();++generation;utterance=uuid();submitted=true;localSpeech=serverSpeech=false;inputItems.clear();transcripts.clear();send({{"type","input_audio_buffer.clear"}});
         QJsonObject item{{"type","message"},{"role","user"},{"content",QJsonArray{QJsonObject{{"type","input_text"},{"text",text}}}}};
         send({{"type","conversation.item.create"},{"item",item}});
@@ -185,7 +188,7 @@ void Session::configure(){
     QJsonObject words{{"original_words",QJsonObject{{"type","string"},{"description","The user's original words, with negations, constraints and corrections"}}}};
     QJsonObject target=words;target["task_id"]=QJsonObject{{"type","string"},{"description","Exact taskId from the trusted task snapshot"}};
     auto start=words;start["access"]=QJsonObject{{"type","string"},{"enum",QJsonArray{"read_only","exclusive"}},{"description","read_only for research, web queries and terminal commands that only read, wait or calculate; exclusive for edits, GUI interaction, device control, external writes or uncertain effects"}};
-    QJsonArray tools{fn("start_task","Start a clear complete new request; independent tasks may run in parallel. Never execute discussions or hypotheses.",start,{"original_words","access"}),fn("steer_task","Correct or constrain the named running task. This does not stop it.",target,{"task_id","original_words"}),fn("stop_task","Explicitly cancel the named execution task. Speaking, backchannels and negated stop are not cancellation.",{{"task_id",target["task_id"]}},{"task_id"}),fn("task_status","Read the actual status of a named task.",{{"task_id",target["task_id"]}},{"task_id"}),fn("stop_speaking","Stop narration only; leave all tasks running.",{}, {}),fn("answer_task","Answer a pending task question using the user's explicit answer. Never invent an answer or approve a change implicitly.",{{"task_id",target["task_id"]},{"answers",QJsonObject{{"type","object"},{"additionalProperties",QJsonObject{{"type","array"},{"items",QJsonObject{{"type","string"}}}}}}}},{"task_id","answers"})};
+    QJsonArray tools{fn("start_task","Start a clear complete new request. While work runs it runs beside that work, at the same time. Never execute discussions or hypotheses.",start,{"original_words","access"}),fn("steer_task","Correct or constrain the named running task, or add what it does next (after its current work). This does not stop it.",target,{"task_id","original_words"}),fn("stop_task","Explicitly cancel the named execution task. Speaking, backchannels and negated stop are not cancellation.",{{"task_id",target["task_id"]}},{"task_id"}),fn("task_status","Read the actual status of a named task.",{{"task_id",target["task_id"]}},{"task_id"}),fn("stop_speaking","Stop narration only; leave all tasks running.",{}, {}),fn("answer_task","Answer a pending task question using the user's explicit answer. Never invent an answer or approve a change implicitly.",{{"task_id",target["task_id"]},{"answers",QJsonObject{{"type","object"},{"additionalProperties",QJsonObject{{"type","array"},{"items",QJsonObject{{"type","string"}}}}}}}},{"task_id","answers"})};
     QJsonObject input{{"format",QJsonObject{{"type","audio/pcm"},{"rate",24000}}},{"transcription",QJsonObject{{"model","gpt-4o-mini-transcribe"}}},{"turn_detection",QJsonObject{{"type","semantic_vad"},{"eagerness","medium"},{"create_response",false},{"interrupt_response",true}}}};
     if(QRegularExpression("^[a-z]{2}$").match(language).hasMatch()){auto t=input["transcription"].toObject();t["language"]=language;input["transcription"]=t;}
     QJsonObject out{{"format",QJsonObject{{"type","audio/pcm"},{"rate",24000}}},{"voice","marin"}};
@@ -209,7 +212,15 @@ void Session::incoming(QJsonObject o){
     if(type=="error"){
         auto e=o["error"].toObject();auto code=e["code"].toString();
         if(code.contains("cancel_not_active")||code.contains("truncate")||code.contains("commit_empty")){if(code.contains("commit_empty"))commitPending=false;return;}
-        stop(e["message"].toString("Voice protocol error; tap to resume"));return;
+        // Recovery first (2026-10-05): one refused request (a reply, an update) does not end the call;
+        // the reply it was for is given up. Only a session that cannot go on (expired, the key or
+        // quota refused) ends it.
+        if(code.contains("session_expired")||code.contains("api_key")||code.contains("quota")||code.contains("unauthorized")){
+            stop(e["message"].toString("Voice protocol error; tap to resume"));return;
+        }
+        qWarning().noquote()<<"voice request refused:"<<code<<e["message"].toString();
+        if(!expected.isEmpty()&&!responseActive){expected.removeFirst();state();}
+        return;
     }
     if(type=="input_audio_buffer.speech_started"){
         if(muted||inputBlocked)return;
@@ -287,8 +298,16 @@ void Session::tick(){
             for(const auto &item:inputItems){if(!transcripts.contains(item)){complete=false;break;}parts.append(transcripts[item]);}
             if(complete&&!serverSpeech&&!commitPending&&now-lastVoice>=700){
                 submitted=true;QString text=parts.join(" ").trimmed();
-                if(!text.isEmpty()){event({{"type","message"},{"id",utterance},{"role","user"},{"text",text}});requestReply({text,utterance,generation,false});}
-            } else if(now-lastVoice>10000){submitted=true;event({{"type","phone-notice"},{"text","That utterance was not completed; please repeat"}});}
+                if(!text.isEmpty()){lastUserText=text;event({{"type","message"},{"id",utterance},{"role","user"},{"text",text}});requestReply({text,utterance,generation,false});}
+            } else if(now-lastVoice>10000){
+                // Not completed in time (a transcript late or lost, the end of speech not heard): what
+                // was heard is acted on, not dropped (a request for Ardour music was lost so,
+                // 2026-10-05). Only nothing heard at all asks to repeat.
+                submitted=true;QStringList heard;for(const auto &item:inputItems)if(transcripts.contains(item)&&!transcripts[item].isEmpty())heard.append(transcripts[item]);
+                const QString text=heard.join(" ").trimmed();
+                if(!text.isEmpty()){lastUserText=text;event({{"type","message"},{"id",utterance},{"role","user"},{"text",text}});requestReply({text,utterance,generation,false});}
+                else event({{"type","phone-notice"},{"text","That utterance was not completed; please repeat"}});
+            }
         }
         // The reply is kept ahead of what Android has played of it. Not by Android's own buffer: the
         // communication service keeps that a little ahead with PulseAudio's silence whatever is played,
@@ -304,7 +323,7 @@ void Session::tick(){
     }
     if(configured&&!narrationSuppressed&&!responseActive&&expected.isEmpty()&&!localSpeech&&playback.pending.isEmpty()&&now-lastPlaybackPush>300&&!acknowledgements.isEmpty()){
         const auto c=acknowledgements.takeLast();acknowledgements.clear();
-        if(c.generation==generation)requestReply({c.text,c.utterance,generation,true},"Acknowledge the actual tool result accurately in one short sentence. Do not call tools.");
+        if(c.generation==generation)requestReply({c.text,c.utterance,generation,true},"Acknowledge the actual tool result accurately in one short sentence: say that you do it. Do not ask the user anything that the tool result does not ask. Do not call tools.");
     }
     if(configured&&!responseActive&&expected.isEmpty()&&!localSpeech&&!deferred.isEmpty()&&(!deferred.last().progress||(playback.pending.isEmpty()&&now-lastPlaybackPush>300))){
         auto c=deferred.takeLast();deferred.clear();if(c.generation==generation)requestReply(c,c.instruction);
@@ -317,9 +336,39 @@ void Session::requestReply(ResponseContext context,QString instruction){
     if(!configured||context.generation!=generation)return;
     if(responseActive||!expected.isEmpty()||(context.progress&&(!playback.pending.isEmpty()||clock.elapsed()-lastPlaybackPush<300))){context.instruction=instruction;deferred.append(context);if(deferred.size()>8)deferred.removeFirst();return;}
     expected.append(context);state();
+    send({{"type","response.create"},{"response",replyRequest(context,instruction)}});
+}
+// The language of the user's last words, named for the voice: an update outside the conversation came
+// in English and in Korean with only "the user's language" to go by (2026-10-05).
+static QString languageOf(const QString &text){
+    int han=0,kana=0,hangul=0,latin=0;
+    for(const QChar c:text){const auto u=c.unicode();
+        if(u>=0x4E00&&u<=0x9FFF)++han;else if(u>=0x3040&&u<=0x30FF)++kana;else if(u>=0xAC00&&u<=0xD7AF)++hangul;else if(c.isLetter()&&u<0x250)++latin;}
+    if(hangul>0&&hangul>=han)return "Korean";
+    if(kana>0)return "Japanese";
+    if(han>0)return "Chinese";
+    if(latin>0)return "the language of these words";
+    return {};
+}
+QJsonObject Session::replyRequest(const ResponseContext &context,const QString &instruction) const{
     QJsonObject response;
-    if(context.progress){response["tool_choice"]="none";response["instructions"]=instruction+"\nVerified updates:\n"+context.text;}
-    send({{"type","response.create"},{"response",response}});
+    const auto language=languageOf(lastUserText);
+    if(context.progress){
+        response["tool_choice"]="none";
+        // A response's instructions replace the session's: the rules stay with it (one assistant, no
+        // steps for the user, the user's language). Without them an acknowledgement told the user to
+        // choose the TV's input, and an update came in Korean (the G100 S, 2026-10-05).
+        response["instructions"]=prompt+"\nTrusted task snapshot:\n"+QString::fromUtf8(QJsonDocument(trusted()).toJson(QJsonDocument::Compact))
+            +"\n\n"+instruction+(language.isEmpty()?QString():"\nSpeak "+language+", as the user does.")+"\nVerified updates:\n"+context.text;
+        if(context.utterance.isEmpty()){
+            // An update of its own (progress, a task's end) is spoken outside the conversation: inside
+            // it, it answered a request the user had just made, with no tools ("I can't do that").
+            response["conversation"]="none";
+            const QString said=lastUserText.isEmpty()?QString():"\nThe user's last words (speak "+(language.isEmpty()?QString("their language"):language)+"): "+lastUserText.left(200);
+            response["input"]=QJsonArray{QJsonObject{{"type","message"},{"role","user"},{"content",QJsonArray{QJsonObject{{"type","input_text"},{"text","Give this update to the user now."+said}}}}}};
+        }
+    }
+    return response;
 }
 void Session::tool(QString name,QJsonObject args,QString callId,QString responseId){
     if(callId.isEmpty())return;const auto context=responses.value(responseId);
