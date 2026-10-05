@@ -34,10 +34,15 @@ public:
 // Reply audio belongs to one response and generation. Cancelled deltas must never be replayed.
 class ReplyBuffer {
 public:
+    // 24 kHz 16-bit mono: half an hour of reply audio not yet played, about 86 MB.
+    static constexpr qsizetype MaxPendingBytes=qsizetype(24000)*2*1800;
     QString item,response;
     QByteArray pending;
     quint64 generation=0;
     bool cancelled=false;
+    // The reply ran past MaxPendingBytes: what was buffered still plays, the rest is dropped (the
+    // session cuts the reply there, Session::replyTooLong); the conversation goes on.
+    bool full=false;
     QSet<QString> retired;
     bool append(QString responseId,QString itemId,const QByteArray &data);
     void clear();
