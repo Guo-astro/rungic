@@ -1853,8 +1853,10 @@ class VoiceAgent:
         """The turn at work on `thread` (push-to-talk's or a call's), or None."""
         return self.turn_id if thread == self.thread_id and self.agent_busy else None
 
-    def turn(self, thread):
-        """A new turn on the conversation's thread, as typing starts one (send_text)."""
+    def turn_params(self, thread):
+        """A new turn on the conversation's thread, as typing starts one (send_text). (Not `turn`:
+        that is the turn's TurnState; the name shadowed it and a call's task failed with "'NoneType'
+        object is not callable", 2026-10-05.)"""
         turn = {'threadId': thread}
         agent = self.agent_model()
         if agent['model']:

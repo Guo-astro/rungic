@@ -216,7 +216,7 @@ class Executor:
     def running_turn(self, thread):
         return self.running
 
-    def turn(self, thread):
+    def turn_params(self, thread):
         return {'threadId': thread, 'model': 'gpt-x'}
 
 
@@ -295,3 +295,17 @@ def test_the_conversation_s_thread_stays_push_to_talk_s():
     assert written[-1] == {'type': 'notification', 'method': 'turn/completed', 'params': {'threadId': 'main-thread'}}
     assert obj.request(9, 'item/tool/requestUserInput', {'threadId': 'main-thread'}) is True, 'a task question is the call\'s'
     assert obj.request(10, 'item/commandExecution/requestApproval', {'threadId': 'main-thread'}) is False, 'approvals stay cards'
+
+
+# covers: agent.phone-mode/E7
+def test_the_voice_agent_s_executor_methods_are_not_shadowed():
+    # 2026-10-05: VoiceAgent.turn (its TurnState, often None) shadowed an executor method named
+    # turn, and a call's task failed with "'NoneType' object is not callable".
+    import ast, re
+    source = (MODULE.parent / 'rungic_voice_agent.py').read_text()
+    agent = next(n for n in ast.parse(source).body if isinstance(n, ast.ClassDef) and n.name == 'VoiceAgent')
+    methods = {n.name for n in agent.body if isinstance(n, ast.FunctionDef)}
+    used = set(re.findall(r'self\.executor\.([a-z_]+)\(', MODULE.read_text()))
+    assert used and used <= methods, used - methods
+    for name in used:
+        assert not re.search(rf'\bself\.{name}\s*=(?!=)', source), f'VoiceAgent assigns self.{name}'

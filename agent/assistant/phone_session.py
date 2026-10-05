@@ -25,7 +25,7 @@ class PhoneSession:
         self.foreground, self.prompt, self.language = foreground, prompt, language
         self.history = history
         # The conversation's own thread and its running turn (VoiceAgent): main_thread(conversation)
-        # -> thread id or None, running_turn(thread) -> turn id or None, turn(thread, input) -> the
+        # -> thread id or None, running_turn(thread) -> turn id or None, turn_params(thread) -> the
         # parameters of a new turn there (model, effort), as push-to-talk and typing start one.
         self.executor = executor
         self.shared = {}            # the conversation's thread -> the C++ tasks that went to it
@@ -262,7 +262,7 @@ class PhoneSession:
                 self.server().call('turn/steer', {'threadId': thread, 'expectedTurnId': running, 'input': params['input']})
                 return {'turn': {'id': running}, 'joined': True}
             try:
-                return self.server().call('turn/start', {**self.executor.turn(thread), 'input': params['input']})
+                return self.server().call('turn/start', {**self.executor.turn_params(thread), 'input': params['input']})
             except Exception:
                 # A turn began meanwhile (push-to-talk, typing, a request just before): join it,
                 # once Codex has said it started.
