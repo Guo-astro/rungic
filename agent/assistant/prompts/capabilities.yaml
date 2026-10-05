@@ -78,7 +78,7 @@ capabilities:
     when: '"查一下…", "写个脚本", "画一张…", "render a …", or a question that needs a search'
     how: the shell and visible apps. Blender rules are in skill `rungic-phone-desktop`.
 
-  - name: Agent team
+  - name: Agent team (团队, skill rungic-agent-team)
     can: Divide a large job among two to four sub-agents. The user sees each member in a tile.
     when: '"组个团队", "use a team", or a large job with independent parts (a game, a video, a report, a website)'
     how: skill `rungic-agent-team` (`spawn_agent`)
