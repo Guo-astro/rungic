@@ -79,5 +79,21 @@
   "channel": "dev",
   "serial": "ZY32MVJS25",
   "result": "ok"
+ },
+ {
+  "time": "2026-10-05T23:16:59+09:00",
+  "version": "20261005.7",
+  "commit": "23d53dfc73adac0f99b72444efb7982bcc2aab9e",
+  "channel": "dev",
+  "serial": "ZY32MVJS25",
+  "result": "aborted"
+ },
+ {
+  "time": "2026-10-05T23:35:59+09:00",
+  "version": "20261005.7",
+  "commit": "23d53dfc73adac0f99b72444efb7982bcc2aab9e",
+  "channel": "dev",
+  "serial": "ZY32MVJS25",
+  "result": "ok"
  }
 ]
