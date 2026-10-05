@@ -183,3 +183,9 @@ APK 2.29/77 单独构建安装。Java-only 构建复用 G100 已安装 APK 的�
 
 测试：`test_workspace_dismiss`（通话任务算在干活；导播台 ✕ 后，在干活的屏隐藏，空闲的关闭）、`test_agent_at_work`、`test_agent_screen_window`（导播台的 ✕ 调用 `Director.close`，不只是焦点屏）。
 
+**导播台点叉后立刻又弹出来（同日，装上上面的修正之后）**：
+- 当时屏幕上的导播台窗口 19:11 就已启动，仍是旧程序，点叉执行的还是“只关焦点”。
+- 还有一个新旧版都有的缺陷：窗口关闭时调用 `QCoreApplication::quit()`。Qt 6 中，只要有一个窗口拒绝关闭，`quit()` 就会被取消。全屏窗口的 `onClosing` 会拒绝关闭（它的设计是“关全屏 = 回到浮窗”），于是从全屏点叉时程序没有退出，反而回到浮窗。手机上该进程（`--director`，19:11 起）在两次点叉后仍在运行，主线程停在事件循环里。
+- 用一个最小的 PySide6 6.11 程序复现：一个可见窗口拒绝关闭时，`quit()` 不退出，`exit(0)` 退出。
+- 修正：AgentScreen 和 Director 的关闭及其他退出路径都改用 `QCoreApplication::exit(0)`。
+
