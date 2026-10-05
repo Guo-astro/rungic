@@ -87,3 +87,17 @@ def test_both_voices_speak_as_the_assistant_that_operates_the_phone():
     realtime = (prompts / 'realtime.md').read_text()
     assert 'Never say that you cannot use' in phone and 'only a voice assistant' in phone
     assert 'Do not claim that you cannot perform some actions' in realtime
+
+
+# covers: agent.instructions/E5
+def test_found_in_the_acceptance_call_of_2026_10_05():
+    # Asked to draw in Krita, the task generated an image and placed it there; asked to cast, the
+    # voice told the user to choose the TV's input; progress named SKILL.md.
+    prompts = Path(__file__).resolve().parents[2] / 'agent/assistant/prompts'
+    agent = (prompts / 'agent.md').read_text()
+    assert 'make it in that app with the app\'s own tools' in agent
+    assert 'Do not name files you read, skills, tools or commands.' in agent
+    for voice in ('phone.md', 'realtime.md'):
+        text = (prompts / voice).read_text()
+        assert 'Do not tell the user steps to take for it' in text, voice
+        assert 'Do not mention files that execution read, skills, tools or commands.' in text, voice
