@@ -1,6 +1,6 @@
 # Agent 电话模式（2026-10-02）
 
-本次按用户要求继续使用 `gpt-realtime-2.1-mini` 和 Codex。电话模式持续采集与播放；用户开口先停止播报，已有任务继续。只有明确的停止任务请求或任务卡片的停止按钮取消执行。挂断、Plasma 隐藏、音频或网络连接失败会关闭话音连接，任务调度器继续运行；恢复必须再次点击电话模式。
+本次按用户要求继续使用 `gpt-realtime-2.1-mini` 和 Codex。电话模式持续采集与播放；用户开口先停止播报，已有任务继续。只有明确的停止任务请求或任务卡片的停止按钮取消执行。挂断、音频或网络连接失败会关闭话音连接，任务调度器继续运行；恢复必须再次点击电话模式。锁屏或 Plasma 退到后台时通话继续，像打电话一样（2026-10-05 起，见文末「锁屏继续通话」；此前 Plasma 隐藏也会关闭话音连接）。
 
 ## 选型依据与边界
 
@@ -33,7 +33,7 @@ request_user_input 通过任务卡片和 answer_task 处理，绑定任务及服
 
 `Agent/GStreamer → PulseAudio android_communication / android_communication_microphone → rungic-communication-audio → Android CaptureBridge → AudioTrack/AudioRecord`。
 
-Android 使用 MODE_IN_COMMUNICATION、VOICE_COMMUNICATION、AEC/NS 和有线/USB 优先的路由；没有硬件 AEC 时在共享后端使用 WebRTC echo probe/dsp。共享 DSP 的两个 appsink 使用 async=false、sync=false，并先用静音数据协商 echo reference，避免麦克风等待尚未播放的分支完成 preroll。其他标准 microphone 客户端复用同一次采集，不再各开 AudioRecord。静音关闭物理采集，保持播放。后台隐藏会关闭 Android capture sockets。蓝牙不作为本版验收范围。
+Android 使用 MODE_IN_COMMUNICATION、VOICE_COMMUNICATION、AEC/NS 和有线/USB 优先的路由；没有硬件 AEC 时在共享后端使用 WebRTC echo probe/dsp。共享 DSP 的两个 appsink 使用 async=false、sync=false，并先用静音数据协商 echo reference，避免麦克风等待尚未播放的分支完成 preroll。其他标准 microphone 客户端复用同一次采集，不再各开 AudioRecord。静音关闭物理采集，保持播放。后台隐藏会关闭 Android capture sockets，通话的除外（2026-10-05，见文末）。蓝牙不作为本版验收范围。
 
 播放控制具有独立 session/epoch；flush 后旧帧不再进入 AudioTrack。截断采用 Android playback-head cursor，并限制在实际提交的模型音频长度内。当前 PA 管道起点与 Android 100 ms 游标更新仍有边界误差，必须经声学实测，不能把 cursor 读取等同于已证明“听到了什么”。
 
@@ -76,7 +76,7 @@ APK 2.29/77 单独构建安装。Java-only 构建复用 G100 已安装 APK 的�
 | 原生 Agent 与 Android 音频 | 最终共享 DSP 修正后，真实 Realtime 回应进入 AudioTrack，playedFrames=960、writtenFrames=6720；停止播报使 epoch 递增且游标归零，无播放时恢复原生 GStreamer 采集成功。静音释放物理麦克风，挂断后 communication 与 microphoneActive 均为 false。真人音质和回声效果尚未验收。 |
 | PulseAudio 标准接口 | pacat/parecord 检查单 owner、静音开始仍播放、恢复采集、epoch 递增与关闭清理。1.5 秒收到 72,000 帧；该轮 PCM 全零，证明传输连续性，不证明真人声音可识别。flush 约 108/109 ms 为控制确认，不能当作声学 P95。静音后 microphoneActive=false；停止客户端并关闭会话后模块为零、通信和物理采集均 inactive。 |
 | 真实 Codex 执行 | 只读终端等待 20 秒并计算 137×29。挂断时仍 running，之后 completed，结果 3973。另一个等待任务从 stopping 到后端确认 stopped；不是仅验证发送 interrupt 成功。 |
-| 前后台 | 用 Android Settings 实际遮住 Plasma，话音关闭而任务仍 running；返回后没有自动恢复，任务可明确停止。G100 的 Home 键返回同一个入口，不能用它当作真正隐藏测试。 |
+| 前后台 | （2026-10-05 前的规则，现已改为通话继续，见文末）用 Android Settings 实际遮住 Plasma，话音关闭而任务仍 running；返回后没有自动恢复，任务可明确停止。G100 的 Home 键返回同一个入口，不能用它当作真正隐藏测试。 |
 | 界面 | 真实聊天窗口显示电话入口、任务结果与状态；共享设计状态图库离屏渲染通过，截图保存在本轮 .work。 |
 
 用户随后要求低音量：G100 的 `android` 和 `android_phone` sink 为 10%。新 communication sink 在创建时继承 android_phone 音量，不因开始通话恢复为 100%；Android 系统音量命令未观察到实际改变，因此这里记录的是已核验的 Rungic/PulseAudio 输出设置。
@@ -147,3 +147,33 @@ APK 2.29/77 单独构建安装。Java-only 构建复用 G100 已安装 APK 的�
 **部署与实机复核（G100 S，2026-10-04）**：
 - `rungic-plasma-bridges` 和 `rungic-voice-agent` 一起以开发覆盖安装（`…dev20261004t145738.a8a0c74`，由 PR #10 合并本修复后构建），apt 核对正常。
 - 实机复核：用户和 Agent 通话后确认“不卡了”。AudioFlinger 记录里，这次通话（手机时间 23:06）的通话播放轨道累计播放 14.72 s，欠载为 0（修复前为 10%–21%）。
+
+## 锁屏继续通话（2026-10-05）
+
+**用户反馈**：一锁屏，和 Agent 的对话就断了。用户要求像打电话一样，并按 Android 的最佳实践做。
+
+**原因**：锁屏会从两处断开，只改一处不够。
+- 会话每 0.5 秒问一次 APK 是否在前台（`phone_session.py` 的前台监视，`Foreground` 指令），锁屏后回答否，会话就结束（“Voice paused while Plasma is hidden”）。
+- APK 在退到后台时关掉所有采集连接，包括通话的输出、控制和麦克风；Linux 侧随即报“通话音频断开”。
+- 这是此前按隐私定的规则：只在用户看得到界面时收音。
+
+**做法**：通话期间不再要求前台，挂断才停。
+- **APK 把通话登记为 Android 的一通电话**：Telecom 的自管理通话（`AgentCall`，self-managed `ConnectionService`，权限 `MANAGE_OWN_CALLS`），聊天应用的网络通话也是这样做的。
+  - 通话音频打开时登记（`placeCall`，带开扬声器的请求），关闭时结束。Telecom 刚接通若走听筒，改为扬声器一次；耳机或蓝牙由它选。
+  - 采集服务在通话期间加上 `phoneCall` 类型，通知改为 Android 的通话通知（`CallStyle`），上面有挂断键。
+  - Android 一侧挂断（通知、耳机、Telecom）时，通话位置回报里 `hungUp` 为真，经通信音频服务转给会话，会话按普通挂断结束（不是失败）。
+  - Android 为来电挂起通话时（`held`），APK 把麦克风数据清零、通话播放音量设为 0，双方都听不到；恢复后照常。会话不另做处理。
+  - Telecom 拒绝这通电话时（比如正在紧急通话），通话不经 Telecom 照常进行，只少了上面这些系统行为。
+- **APK 的采集规则**：通话的连接（`communication-*`）在后台不关闭；通话打开后，在后台也允许打开通话麦克风和控制连接（取消静音时要用）。采集服务在整个通话期间保持麦克风类型，静音时也保持，因为 Android 只允许前台应用启动它。其他采集仍要求 Plasma 在前台。
+- **不休眠**：通话期间 APK 持有部分唤醒锁（上限 4 小时，以防漏掉结束）；会话写 `$XDG_RUNTIME_DIR/rungic-call.busy`（会话进程的 pid），`rungic-agent-wakelock` 因此让手机保持唤醒，Linux 侧在锁屏时不被冻结。
+- **会话**：`Foreground` 指令只回答 ok，不再结束通话；`phone_session.py` 去掉前台监视。开始通话仍要求在前台。
+
+**隐私**：收音期间 Android 的通话通知和麦克风指示一直显示，挂断或静音即停。
+
+**扬声器与麦克风的另一条路**：默认输出 `android` 走手机上的 PulseAudio（OpenSL ES，docs/42），本来就不要求前台；麦克风只有 APK 这一条路。Android 14 起后台进程不能自己开麦克风，必须由在前台时启动的前台服务持有，所以麦克风这一侧绕不开 APK。
+
+**验证**：
+- 会话测试（Mac mini）：隐藏时通话保持、继续播放；位置回报 `hungUp` 后会话按普通挂断结束，音频释放。
+- `test_phone_session`：通话开着时 `rungic-call.busy` 写着会话进程的 pid，结束后删除；唤醒锁测试通过。
+- APK 2.40/88 编译通过。
+- 尚未在手机上实测：锁屏超过 3 分钟、通知挂断、来电挂起与恢复。

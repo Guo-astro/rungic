@@ -7,8 +7,8 @@ apps and workspace stop with it. While any agent is at work this holds a kernel 
 root in the container, never through the Rungic app (frozen while the phone sleeps):
 
   at work: a workspace held by an agent ($XDG_RUNTIME_DIR/rungic-workspace-N.busy, rungic_cua
-  workspace.claim) or the assistant's own turn ($XDG_RUNTIME_DIR/rungic-agent.busy), each
-  {"pid": n, ...} of a live process.
+  workspace.claim), the assistant's own turn ($XDG_RUNTIME_DIR/rungic-agent.busy) or a call with
+  the Agent ($XDG_RUNTIME_DIR/rungic-call.busy, phone_session), each {"pid": n, ...} of a live process.
 
 The lock is taken with a 60 s timeout and renewed every 5 s, so it ends on its own if this
 service does. /sys is read-only in the container; the unit remounts it writable in this service's
@@ -39,7 +39,8 @@ def alive(pid) -> bool:
 def busy() -> list[str]:
     """The live holders' marker files."""
     out = []
-    for path in glob.glob(f'{RUNTIME}/*/rungic-workspace-*.busy') + glob.glob(f'{RUNTIME}/*/rungic-agent.busy'):
+    for path in (glob.glob(f'{RUNTIME}/*/rungic-workspace-*.busy') + glob.glob(f'{RUNTIME}/*/rungic-agent.busy')
+                 + glob.glob(f'{RUNTIME}/*/rungic-call.busy')):
         try:
             if alive(json.load(open(path)).get('pid')):
                 out.append(os.path.basename(path))

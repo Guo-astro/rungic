@@ -330,9 +330,10 @@ features:
         evidence:
           - {doc: docs/101-full-duplex-phone-mode.md, date: 2026-10-02, note: "等待任务从 stopping 到后端确认 stopped"}
       - id: E4
-        text: 挂断、Plasma 被遮住、音频或网络断开时关闭话音连接，任务继续执行。返回后不自动恢复，要再点“和 Agent 通话”。
+        text: 像打电话一样：锁屏或 Plasma 退到后台时通话继续，Android 把它当作一通电话（通话通知可挂断，来电时挂起、挂完恢复）。挂断（Agent 应用、通知或耳机）、音频或网络断开时关闭话音连接，任务继续执行。断开后不自动恢复，要再点“和 Agent 通话”。
+        gap: 2026-10-05 改为锁屏继续（自管理 Telecom 通话），只有会话测试和 APK 编译，尚未在手机上做锁屏超过 3 分钟、通知挂断和来电挂起的实测。
         evidence:
-          - {doc: docs/101-full-duplex-phone-mode.md, date: 2026-10-02, note: "Android 设置遮住 Plasma；挂断后 137×29 仍完成"}
+          - {doc: docs/101-full-duplex-phone-mode.md, date: 2026-10-02, note: "旧规则（遮住即断）下：挂断后 137×29 仍完成"}
       - id: E5
         text: 只按完整的最终转写开始任务：同一句话最多开始一个任务，句中停顿不提前执行，连接就绪前说了一半的话要求重说。执行器拿到的是转写原文，不是模型改写的话。
         evidence:
@@ -390,6 +391,7 @@ features:
       - desktop/design/qml/CallBar.qml
       - desktop/design/qml/CallPanel.qml
       - tools/tests/test_agent_call.py
+      - android/app/src/com/rungic/plasma/AgentCall.java
     docs: [docs/101-full-duplex-phone-mode.md]
 
   # ---- 安装、设置和接入 ---------------------------------------------------------------------------

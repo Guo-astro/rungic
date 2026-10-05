@@ -118,7 +118,15 @@ int main(int argc,char **argv){
         m.command("SetPhoneMuted",{{"sessionId","mute-test"},{"muted",false}},[&](QJsonObject r){reply=r;});
         check(until([&]{auto o=last("mute");return o.contains("muted")&&!o["muted"].toBool();}),"unmuted: Android opens the microphone again");
         check(m.audio.recorder!=nullptr||!failures.isEmpty(),"unmuted: capture starts again");
-        m.stop();
+        // covers: agent.phone-mode/E4
+        // The screen locked or Plasma hidden: the call goes on, as a phone call does (2026-10-05).
+        reply={};m.command("Foreground",{{"visible",false}},[&](QJsonObject r){reply=r;});
+        check(reply["ok"].toBool()&&m.id=="mute-test"&&m.audio.opened&&m.audio.player!=nullptr,"hidden: the call stays open and keeps playing");
+        // Hung up from Android's call notification (AgentCall): its position says so, and the call ends.
+        const auto failedBefore=failures.size();
+        peer->write(QJsonDocument(QJsonObject{{"type","position"},{"epoch",1},{"playedFrames",0},{"writtenFrames",0},{"hungUp",true}}).toJson(QJsonDocument::Compact)+'\n');
+        check(until([&]{return m.id.isEmpty();}),"hung up on Android: the session ends the call");
+        check(failures.size()==failedBefore,"hung up on Android: an ordinary hang-up, not a failure");
         check(!m.audio.recorder&&!m.audio.player&&!m.audio.opened,"hung up: capture and playback released");
         check(until([&]{return released;}),"hung up: the backend's call audio is released");
         check(m.phase=="closed"&&m.id.isEmpty(),"hung up: the session is closed");

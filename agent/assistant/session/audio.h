@@ -11,6 +11,7 @@ public:
     std::function<void(bool)> speech;
     std::function<void()> ready;
     std::function<void(QString)> failed;
+    std::function<void()> hungUp;     // Android hung the call up (its notification, a headset)
     std::function<void(quint64,quint64)> flushed;
     QLocalSocket backend;
     QString session,captureToken;

@@ -1,4 +1,4 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.rungic.plasma" android:versionCode="87" android:versionName="2.39">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.rungic.plasma" android:versionCode="88" android:versionName="2.40">
   <uses-sdk android:minSdkVersion="30" android:targetSdkVersion="35" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
@@ -23,6 +23,11 @@
   <uses-permission android:name="android.permission.RECORD_AUDIO" />
   <uses-permission android:name="android.permission.CAMERA" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+  <!-- A call with the Agent is a self-managed Telecom call (AgentCall): it goes on with the screen locked,
+       and a wake lock keeps the phone awake for the Linux side meanwhile. -->
+  <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
+  <uses-permission android:name="android.permission.WAKE_LOCK" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
   <uses-feature android:name="android.hardware.camera.any" android:required="false" />
   <uses-feature android:name="android.hardware.microphone" android:required="false" />
@@ -37,7 +42,10 @@
     <service android:name=".DesktopService" android:exported="false" android:foregroundServiceType="specialUse">
       <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="Local Wayland display server for the user's Linux desktop session" />
     </service>
-    <service android:name=".CaptureService" android:exported="false" android:foregroundServiceType="camera|microphone" />
+    <service android:name=".CaptureService" android:exported="false" android:foregroundServiceType="camera|microphone|phoneCall" />
+    <service android:name=".AgentCall$Service" android:permission="android.permission.BIND_TELECOM_CONNECTION_SERVICE" android:exported="true">
+      <intent-filter><action android:name="android.telecom.ConnectionService" /></intent-filter>
+    </service>
     <!-- OCR on the Adreno GPU through OpenCL (LiteRT, docs/64); a vendor library apps must declare. -->
     <uses-native-library android:name="libOpenCL.so" android:required="false" />
   </application>

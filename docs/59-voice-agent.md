@@ -99,7 +99,7 @@
   - 调研：Termux PulseAudio 17.0-4的`module-aaudio-sink`与`module-sles-sink`都不能指定输出设备（参数只有sink名、格式、延迟、性能模式等）；OpenSL ES也只能选流类型。因此没有改Termux模块。
   - 做法与麦克风对称：容器内`module-pipe-sink`（PulseAudio 17，LGPL-2.1+）→ `media-bridge`在sink未挂起时读FIFO → 私有`capture.sock`的`phone-output` → APK的AudioTrack（`USAGE_MEDIA`）。`setPreferredDevice`优先选有线/USB/蓝牙耳机，没有时用扬声器；设备增减时重新选择。
   - 延迟：pipe-sink由读取速度计时，按FIFO内未读数据上报延迟。FIFO缩到16 KiB，socket收发缓冲各16 KiB（各约85 ms）。sink空闲3 s挂起后停止读取，并丢弃FIFO残留。
-  - 播放不要求Plasma在前台（与Termux输出一致），采集仍要求。
+  - 播放不要求Plasma在前台（与Termux输出一致），采集仍要求。例外：和 Agent 的通话在锁屏、后台时继续收音（2026-10-05，docs/101「锁屏继续通话」）。
   - PulseAudio 17的`pactl -f json`遇到UTF-8描述（“手机本机”的monitor source）会报错。media-bridge改用`pactl list short`查麦克风source，否则主循环会一直走异常分支，麦克风也会停用。
 - **语音助手**：`StartTalking(s screen)`由按钮传入所在屏幕名。KWin把投屏输出命名为`CAST-n`，此时回复用默认sink（跟随Android路由，在电视上）；否则用`android_phone`，该sink不存在时退回默认。
 - **实测**（投屏连接中，用合成语音）：

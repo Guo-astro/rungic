@@ -151,3 +151,19 @@ def test_the_agent_writes_no_command_without_an_id():
     # Every command to the coordinator goes through command() or post(), which number it.
     source = (MODULE.parent / 'rungic_voice_agent.py').read_text()
     assert 'phone._write(' not in source
+
+
+# covers: agent.phone-mode/E4
+def test_an_open_call_keeps_the_phone_awake(tmp_path, monkeypatch):
+    # A call goes on with the screen locked (2026-10-05): while it is open the session's process is
+    # named in rungic-call.busy, which rungic-agent-wakelock holds the phone awake for.
+    import json
+    monkeypatch.setenv('XDG_RUNTIME_DIR', str(tmp_path))
+    obj = reader([json.dumps({'type': 'event', 'event': {'type': 'phone-state', 'sessionId': 'voice_1'}}) + '\n'])
+    obj.process.pid = 4242
+    obj._read()
+    marker = tmp_path / 'rungic-call.busy'
+    assert json.loads(marker.read_text()) == {'pid': 4242}
+    obj = reader([json.dumps({'type': 'event', 'event': {'type': 'phone-state', 'sessionId': ''}}) + '\n'])
+    obj._read()
+    assert not marker.exists()

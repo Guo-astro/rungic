@@ -97,6 +97,9 @@
     <string name="capture_both">Linux is using the camera and microphone</string>
     <string name="capture_microphone">Linux is using the microphone</string>
     <string name="capture_camera">Linux is using the camera</string>
+    <string name="agent_call">Call with the Agent</string>
+    <string name="agent_call_hint">Hang up here or in the Agent app</string>
+    <string name="agent_call_hang_up">Hang up</string>
     <string name="capture_stop_hint">Quit the recording app or leave Plasma Mobile to stop</string>
     <string name="capture_permissions_on">Microphone and camera access is on</string>
 

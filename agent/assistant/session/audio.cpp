@@ -26,6 +26,7 @@ void Audio::message(QJsonObject o){
     if(o["type"]=="ready"){
         sourceReady=!muted&&o["microphone"].toBool(true);opened=true;capture();if((muted||(sourceReady&&captureReady))&&ready)ready();
     } else if(o["type"]=="position"){
+        if(o["hungUp"].toBool()&&opened){if(hungUp)hungUp();return;}
         if(quint64(o["epoch"].toDouble())==epoch){played=quint64(o["playedFrames"].toDouble());written=quint64(o["writtenFrames"].toDouble());}
     } else if(o["id"].toInt()==flushId && flushId!=0){
         flushId=0;flushing=false;epoch=quint64(o["newEpoch"].toDouble());played=written=0;

@@ -29,6 +29,8 @@ Session::Session(QObject *parent):QObject(parent),audio(this){
     connect(&ws,&QWebSocket::errorOccurred,this,[this](QAbstractSocket::SocketError){if(!id.isEmpty())stop("Voice connection failed; tap to resume");});
     audio.ready=[this]{if(configured&&!inputBlocked){phase="connected";state();}};
     audio.failed=[this](QString reason){stop(reason);};
+    // Hung up from Android's call notification or a headset: as the app's hang-up (AgentCall, docs/101).
+    audio.hungUp=[this]{stop();};
     audio.microphone=[this](const QByteArray &data){
         if(!configured||muted||inputBlocked||id.isEmpty())return;
         if(ws.bytesToWrite()>32768){stop("Network cannot keep up with live audio; tap to resume");return;}
@@ -90,7 +92,9 @@ void Session::command(QString method,QJsonObject args,std::function<void(QJsonOb
     } else if(method=="FocusTask"){
         auto *t=tasks.find(args["taskId"].toString());if(!t){done({{"error","Unknown task"}});return;}tasks.focused=t->id;state();done({{"ok",true}});
     } else if(method=="PhoneSnapshot"){done(fields());}
-    else if(method=="Foreground") {if(!args["visible"].toBool()&&!id.isEmpty())stop("Voice paused while Plasma is hidden");done({{"ok",true}});}
+    // A call goes on with Plasma hidden or the screen locked, as a phone call does: hanging up ends
+    // it (2026-10-05; it used to end here, "Voice paused while Plasma is hidden", docs/101).
+    else if(method=="Foreground") {done({{"ok",true}});}
     else if(method=="ExternalBusy"){externalBusy=args["busy"].toBool();if(!externalBusy)runQueue();done({{"ok",true}});}
     else if(method=="SendPhoneText"){
         if(id.isEmpty()||args["conversationId"].toString()!=conversation){done({{"error","Text belongs to another conversation"}});return;}

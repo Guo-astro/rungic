@@ -30,6 +30,13 @@ final class CaptureBridge implements Closeable {
     private final CameraManager cameras;
     private final ExecutorService clients=Executors.newFixedThreadPool(6);
     private final Set<LocalSocket> sockets=ConcurrentHashMap.newKeySet();
+    // A call with the Agent goes on with the screen locked or Plasma in the background, as a phone
+    // call does (2026-10-05, the user): it is a call Android knows (AgentCall), its sockets stay open
+    // when the app is hidden, the capture service stays up for the whole call (Android lets only an
+    // app in front start it), and a wake lock keeps the phone awake for the Linux side meanwhile.
+    // Other capture still needs Plasma in front.
+    private final Set<LocalSocket> communicationSockets=ConcurrentHashMap.newKeySet();
+    private android.os.PowerManager.WakeLock callWakeLock;
     private final Semaphore slots=new Semaphore(6);
     private final AtomicBoolean microphoneBusy=new AtomicBoolean();
     private final AtomicBoolean cameraBusy=new AtomicBoolean();
@@ -50,7 +57,7 @@ final class CaptureBridge implements Closeable {
         if(visible!=value)HostEvents.bump(HostEvents.CAPTURE);   // the media bridge follows it (HostEvents)
         visible=value;
         if(!value) {
-            for(LocalSocket socket:sockets)try { socket.close(); } catch(IOException ignored) {}
+            for(LocalSocket socket:sockets)if(!communicationSockets.contains(socket))try { socket.close(); } catch(IOException ignored) {}
             CountDownLatch latch=permissionResult;if(latch!=null)latch.countDown();
         }
     }
@@ -66,8 +73,8 @@ final class CaptureBridge implements Closeable {
     }
     private void ensurePermission(String permission) throws Exception {
         synchronized(permissionLock) {
-            if(!visible)throw new IOException("请先返回 Plasma Mobile");
             if(activity.checkSelfPermission(permission)==PackageManager.PERMISSION_GRANTED)return;
+            if(!visible)throw new IOException("请先返回 Plasma Mobile");
             String key=permission.equals(Manifest.permission.CAMERA)?"denied-camera":"denied-microphone";
             if(activity.getPreferences(Activity.MODE_PRIVATE).getBoolean(key,false))throw new SecurityException("请在 Plasma Mobile菜单中开启麦克风与相机权限");
             CountDownLatch latch=new CountDownLatch(1);permissionResult=latch;
@@ -83,14 +90,47 @@ final class CaptureBridge implements Closeable {
     }
     private void captureState(boolean mic,boolean active) throws Exception {
         FutureTask<Void> change=new FutureTask<>(() -> {
-            if(active && !visible)throw new IOException("请先返回 Plasma Mobile");
+            if(active && !visible && !(mic && inCall()))throw new IOException("请先返回 Plasma Mobile");
             if(mic)micActive=active;else cameraActive=active;
-            if(micActive || cameraActive) {
-                Intent intent=new Intent(activity,CaptureService.class).putExtra("microphone",micActive).putExtra("camera",cameraActive);
-                activity.startForegroundService(intent);
-            } else activity.stopService(new Intent(activity,CaptureService.class));
+            updateCaptureService();
             return null;
         });activity.runOnUiThread(change);change.get(2,TimeUnit.SECONDS);
+    }
+    private boolean inCall() { return !communicationOutputs.isEmpty(); }
+    /** The capture service (the notification Android shows) for what is in use; during a call the
+     *  microphone stays in it even while muted, as it could not be started again from the background. */
+    private boolean serviceMic, serviceCamera, serviceCall;
+    private void updateCaptureService() {
+        boolean call=inCall(), mic=micActive || call;
+        // Only on a change: Android refuses a foreground service started from the background, and a
+        // muted call, unmuted with the screen locked, asked for the same service again.
+        if(mic==serviceMic && cameraActive==serviceCamera && call==serviceCall)return;
+        serviceMic=mic;serviceCamera=cameraActive;serviceCall=call;
+        if(mic || cameraActive) {
+            Intent intent=new Intent(activity,CaptureService.class).putExtra("microphone",mic).putExtra("camera",cameraActive).putExtra("call",call);
+            activity.startForegroundService(intent);
+        } else activity.stopService(new Intent(activity,CaptureService.class));
+    }
+    /** The call started or ended: Telecom's call, the service and the wake lock follow (on the UI thread). */
+    private boolean callOpen;
+    private void callChanged() {
+        FutureTask<Void> change=new FutureTask<>(() -> {
+            if(inCall()!=callOpen) {
+                callOpen=inCall();
+                if(callOpen)AgentCall.start(activity);else AgentCall.end();
+            }
+            updateCaptureService();
+            android.os.PowerManager power=activity.getSystemService(android.os.PowerManager.class);
+            if(inCall() && callWakeLock==null) {
+                callWakeLock=power.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK,"rungic:agent-call");
+                callWakeLock.acquire(4*60*60*1000L);     // a bound, should the call's end be missed
+            } else if(!inCall() && callWakeLock!=null) {
+                if(callWakeLock.isHeld())callWakeLock.release();
+                callWakeLock=null;
+            }
+            return null;
+        });activity.runOnUiThread(change);
+        try { change.get(2,TimeUnit.SECONDS); } catch(Exception ignored) {}
     }
     private JSONArray cameraList;
     JSONObject info() throws Exception {
@@ -147,7 +187,7 @@ final class CaptureBridge implements Closeable {
                 if((uid!=1000 && uid!=0) || !slots.tryAcquire()) { socket.close();continue; }
                 sockets.add(socket);
                 clients.execute(() -> { try(LocalSocket client=socket) { serve(client); }
-                    catch(Exception ignored) {} finally { sockets.remove(socket);slots.release(); } });
+                    catch(Exception ignored) {} finally { sockets.remove(socket);communicationSockets.remove(socket);slots.release(); } });
             } catch(Exception ignored) {}
         },"rungic-capture-accept");acceptor.setDaemon(true);acceptor.start();
     }
@@ -164,8 +204,11 @@ final class CaptureBridge implements Closeable {
         JSONObject request=new JSONObject(line.toString("UTF-8"));
         try {
             String op=request.getString("op");
-            // Playback follows the Linux sink, like the Termux output; only capture needs the app in front.
-            if(!visible && !op.equals("phone-output"))throw new IOException("请先返回 Plasma Mobile");
+            // Playback follows the Linux sink, like the Termux output; only capture needs the app in front,
+            // except a call's microphone and control once the call is open (communicationSockets).
+            boolean call=op.equals("communication-microphone")||op.equals("communication-control");
+            if(!visible && !op.equals("phone-output") && !(call && inCall()))throw new IOException("请先返回 Plasma Mobile");
+            if(op.startsWith("communication-"))communicationSockets.add(socket);
             switch(op) {
                 case "microphone": microphone(socket);break;
                 case "camera":camera(socket,request.getString("id"));break;
@@ -212,9 +255,10 @@ final class CaptureBridge implements Closeable {
             if(communication)spec.put("aec",aec!=null&&aec.getEnabled());
             json(socket.getOutputStream(),spec);header=true;
             byte[] block=new byte[1920];
-            while(running && visible) {
+            while(running && (visible || communication && inCall())) {
                 int count=recorder.read(block,0,block.length,AudioRecord.READ_BLOCKING);
                 if(count<=0)throw new IOException("Microphone read failed");
+                if(communication && AgentCall.held)java.util.Arrays.fill(block,0,count,(byte)0);   // held for a phone call
                 socket.getOutputStream().write(block,0,count);
             }
         } catch(Exception e) { if(!header)json(socket.getOutputStream(),new JSONObject().put("error",e.getMessage()==null?"Microphone unavailable":e.getMessage())); }
@@ -231,6 +275,7 @@ final class CaptureBridge implements Closeable {
     private static final class CommunicationOutput {
         final AudioTrack track;
         long epoch=1,written;
+        boolean silent;
         CommunicationOutput(AudioTrack track) { this.track=track; }
         synchronized int write(long generation,byte[] pcm,int offset,int count) {
             if(generation!=epoch)return count;
@@ -239,7 +284,11 @@ final class CaptureBridge implements Closeable {
             return n;
         }
         synchronized JSONObject position() throws JSONException {
-            return new JSONObject().put("ok",true).put("epoch",epoch)
+            // Held for another call, the Agent is not heard; hung up from Android's side, the Linux
+            // session ends the call (AgentCall).
+            boolean held=AgentCall.held;
+            if(held!=silent) { silent=held;track.setVolume(held?0f:1f); }
+            return new JSONObject().put("ok",true).put("epoch",epoch).put("hungUp",AgentCall.hungUp).put("held",held)
                 .put("playedFrames",Integer.toUnsignedLong(track.getPlaybackHeadPosition())).put("writtenFrames",written).put("rate",48000);
         }
         synchronized JSONObject flush(long generation) throws Exception {
@@ -278,14 +327,14 @@ final class CaptureBridge implements Closeable {
                 .setAudioFormat(new AudioFormat.Builder().setSampleRate(48000).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).setEncoding(AudioFormat.ENCODING_PCM_16BIT).build())
                 .setTransferMode(AudioTrack.MODE_STREAM).setBufferSizeInBytes(Math.max(min,9600)).build();
             if(track.getState()!=AudioTrack.STATE_INITIALIZED)throw new IOException("Communication output unavailable");
-            stream=new CommunicationOutput(track);communicationOutputs.put(session,stream);HostEvents.bump(HostEvents.CAPTURE);track.play();
+            stream=new CommunicationOutput(track);communicationOutputs.put(session,stream);HostEvents.bump(HostEvents.CAPTURE);callChanged();track.play();
             json(socket.getOutputStream(),new JSONObject().put("ok",true).put("rate",48000).put("channels",1).put("format","s16le").put("version",1));header=true;
             DataInputStream in=new DataInputStream(socket.getInputStream());socket.setSoTimeout(0);
-            while(running&&visible) {
+            while(running) {
                 long generation=in.readLong();int count=in.readInt();
                 if(count<=0||count>9600||(count%2)!=0)throw new IOException("Invalid communication PCM frame");
                 byte[] pcm=new byte[count];in.readFully(pcm);int offset=0;
-                while(offset<count&&running&&visible) {
+                while(offset<count&&running) {
                     int n=stream.write(generation,pcm,offset,count-offset);
                     if(n<0)throw new IOException("Communication output write failed");
                     if(n==0)Thread.sleep(2);else offset+=n;
@@ -293,7 +342,7 @@ final class CaptureBridge implements Closeable {
             }
         } catch(Exception e) { if(!header)json(socket.getOutputStream(),new JSONObject().put("error",e.getMessage()==null?"Communication unavailable":e.getMessage())); }
         finally {
-            if(stream!=null){communicationOutputs.remove(session,stream);HostEvents.bump(HostEvents.CAPTURE);}
+            if(stream!=null){communicationOutputs.remove(session,stream);HostEvents.bump(HostEvents.CAPTURE);callChanged();}
             if(track!=null) { try { track.stop(); } catch(Exception ignored) {}track.release(); }
             if(modeSet) { audio.clearCommunicationDevice();if(audio.getMode()==AudioManager.MODE_IN_COMMUNICATION)audio.setMode(oldMode); }
             phoneOutputBusy.set(false);android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_DEFAULT);
@@ -305,7 +354,7 @@ final class CaptureBridge implements Closeable {
         json(socket.getOutputStream(),new JSONObject().put("ok",true).put("version",1));
         BufferedReader in=new BufferedReader(new InputStreamReader(socket.getInputStream(),StandardCharsets.UTF_8));
         String line;
-        while(running&&visible&&(line=in.readLine())!=null) {
+        while(running&&(line=in.readLine())!=null) {
             if(line.length()>4096)throw new IOException("Control request too large");
             JSONObject req=new JSONObject(line);JSONObject result;
             try {

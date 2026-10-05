@@ -26,7 +26,6 @@ class PhoneSession:
         self.process = subprocess.Popen(['sh', '-c', '[ ! -r /etc/profile.d/proxy.sh ] || . /etc/profile.d/proxy.sh; exec "$@"', 'rungic-phone-session', executable], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                         stderr=None, text=True, bufsize=1)
         threading.Thread(target=self._read, daemon=True).start()
-        threading.Thread(target=self._watch_foreground, daemon=True).start()
 
     def _write(self, message):
         with self.write_lock:
@@ -195,13 +194,20 @@ class PhoneSession:
             if event.get('type') == 'phone-state':
                 with self.lock:
                     self.snapshot.update(event)
+                self._mark_call(bool(self.snapshot.get('sessionId')))
             self.emit(event, message.get('keep', True))
 
-    def _watch_foreground(self):
-        while self.process.poll() is None:
-            threading.Event().wait(0.5)
-            if self.snapshot.get('sessionId'):
-                try:
-                    self.command('Foreground', {'visible': self.foreground()}, timeout=5)
-                except (RuntimeError, OSError):
-                    pass
+    def _mark_call(self, active):
+        """While a call is open the phone stays awake (rungic-agent-wakelock): the call goes on with
+        the screen locked, as a phone call does (2026-10-05). Plasma hidden no longer ends it; it
+        ends when the user hangs up. The marker names the session's process, so a crashed session
+        holds nothing."""
+        path = Path(os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}') / 'rungic-call.busy'
+        try:
+            if active:
+                if not path.exists():
+                    path.write_text(json.dumps({'pid': getattr(self.process, 'pid', 0)}))
+            else:
+                path.unlink(missing_ok=True)
+        except OSError:
+            pass
