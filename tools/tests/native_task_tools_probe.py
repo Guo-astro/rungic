@@ -38,16 +38,27 @@ for line in sys.stdin:
 ''')
         unrelated = subprocess.Popen(['sleep', '30'])
         try:
-            for mode in ('notification', 'lease', 'stubborn_notification', 'stubborn_lease', 'worker_exit', 'denied'):
+            for mode in ('notification', 'lease', 'stubborn_notification', 'stubborn_lease', 'worker_exit', 'denied', 'codex_env'):
                 task = f'task_{mode}'
                 lease = leases / f'{task}.json'
+                env = {**os.environ, 'XDG_RUNTIME_DIR': directory}
+                if mode == 'codex_env':
+                    # Codex starts MCP servers without XDG_RUNTIME_DIR: the lease is found in
+                    # /run/user/UID, where the session writes it.
+                    env.pop('XDG_RUNTIME_DIR')
+                    lease = Path(f'/run/user/{os.getuid()}/rungic-task-leases/{task}.json')
+                    try:
+                        lease.parent.mkdir(parents=True, exist_ok=True)
+                    except OSError:
+                        print('codex_env: /run/user is not writable here; skipped')
+                        continue
                 marker = root / f'{mode}.marker'
                 if mode != 'denied':
                     lease.write_text(json.dumps({'taskId': task, 'exclusive': True,
                                      'pid': os.getpid(), 'startTime': identity(os.getpid())}))
                 process = subprocess.Popen([binary, '--task', task, '--', sys.executable, str(worker)],
                     stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                    env={**os.environ, 'XDG_RUNTIME_DIR': directory, 'PROBE_MARKER': str(marker),
+                    env={**env, 'PROBE_MARKER': str(marker),
                          'PROBE_STUBBORN': str(int(mode.startswith('stubborn') or mode=='worker_exit')),
                          'PROBE_CRASH': str(int(mode=='worker_exit'))}, text=True)
                 def send(message):
@@ -81,6 +92,7 @@ for line in sys.stdin:
                         print(f'{mode}: task process group stopped in {elapsed*1000:.1f} ms; unrelated process alive')
                 finally:
                     process.stdin.close();process.wait(timeout=3)
+                    if mode == 'codex_env': lease.unlink(missing_ok=True)
             print('No-lease tool request rejected; all native worker probes passed')
         finally:
             unrelated.terminate();unrelated.wait()

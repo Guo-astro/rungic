@@ -205,3 +205,12 @@ APK 2.29/77 单独构建安装。Java-only 构建复用 G100 已安装 APK 的�
 - 会话测试（Mac mini）：音频服务断开时通话进入“正在重新连接”，会话不结束，自动重新打开；服务报错后同样重新打开；挂断后不再重试。
 - 系统测试 `communication_audio`：服务的错误到达会话后，会话重新打开通话音频。
 - 通话条测试：“正在重新连接”优先显示，并带通话时长。
+
+## 电话任务的桌面工具全部被拒（2026-10-05）
+
+**现象**：用户在通话里要求用 Agent 团队做游戏。执行端读了 rungic-agent-team 技能，写好了分工，但它的桌面工具（`desktop_launch`、`desktop_where`、`team_post`）每次都失败，返回“Task has no desktop operation lease”，团队面板也就没有出现。
+
+**原因**：Codex 启动 MCP 服务时只传一小组环境变量，不包括 `XDG_RUNTIME_DIR`。`rungic-task-tools` 用这个变量找任务的操作租约，于是去 `/rungic-task-leases` 下找，永远找不到。会话写的租约（`$XDG_RUNTIME_DIR/rungic-task-leases/<task>.json`）其实是有效的，pid 和启动时间都对得上。在手机上查任务工具进程的环境确认了这一点。
+
+**修正**：`rungic-task-tools` 在没有 `XDG_RUNTIME_DIR` 时使用 `/run/user/<uid>`（会话写租约的位置），并把它传给工具进程。`native_task_tools_probe.py` 增加 `codex_env` 一项：不带 `XDG_RUNTIME_DIR` 启动时，租约照样有效。修正前这一项失败，修正后通过（Mac mini）。
+
