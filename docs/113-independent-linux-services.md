@@ -73,7 +73,7 @@ root `app_process` 不经过应用 Zygote 的 telephony / Bluetooth 初始化，
 - Linux 真实 socket / 对端身份、请求大小与不确定结果不重放、后台与显示路由、bounded supervisor / inherited-app-cgroup 拒绝、Agent 单元生命周期和无 DISPLAY 启动在离线回归中验证。
 - 临时实际 DeviceDaemon PID 13339 由 Linux UID 1000 连接，核对 socket 对端 UID 0。另一个 KWin PR 的 20 次 APK 强停重连以及超过 35 秒断开、熄屏轮次中，该 PID 与 epoch 保持不变。此证据只证明候选后台进程的独立寿命；看守和新 Agent 用户服务尚未装入生产路径，不能据此算作完整部署验收。
 
-真实 root SmsManager 提交、长短信/多 SIM/运营商结果、后台网络写入、实际用户管理器跨图形会话的任务连续性以及整夜待机仍待配套版本部署验收。既有 APK 2.32 的 10000 实机结果见 [docs/107](107-android-sms.md)，不冒充这个新 backend 的发送结果。夜间整容器被杀的根因仍未证实；此 PR 解决可观察的依赖，不宣称已修复全部夜间问题。
+真实 root SmsManager 提交、长短信/多 SIM/运营商结果、后台网络写入、实际用户管理器跨图形会话的任务连续性仍待配套版本部署验收。整夜待机：USB G100 上的 20261005.5 接电源、Plasma 停在前台熄屏，19 小时 54 分后桌面、Agent、独立硬件后台和未保存文本都还在，亮屏后触摸和输入正常（2026-10-06，mibook，release/history.json）；不接电源、Plasma 先切到后台的整夜待机还没验。既有 APK 2.32 的 10000 实机结果见 [docs/107](107-android-sms.md)，不冒充这个新 backend 的发送结果。夜间整容器被杀的根因仍未证实；此 PR 解决可观察的依赖，不宣称已修复全部夜间问题。
 
 最终离线回归：112 项通过；`DeviceBuildTests.test_library_dependencies_and_debug_symbols_by_build_id` 在 Fedora 本机得不到 Debian `libc6` 依赖字段，同一未改 main `c9d549ce` 精确复现，列为既有构建环境限制。完整 Java / D8 / APK 2.36 构建和 shell 语法检查通过，严格功能清单 162 功能、0 错误、44 项既有仅设备缺口。
 

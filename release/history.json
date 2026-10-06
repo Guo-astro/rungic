@@ -65,6 +65,15 @@
   "note": "The deploy's acceptance ran with the phone dozing (black screenshots, KWin on the 1080x1920 fallback output): display.geometry, input.text, camera.frames, idle.inhibit and audio.record failed, and input, camera and record still failed on retry. After an explicit wake and unlock every check passed; the acceptance does not wake the screen."
  },
  {
+  "time": "2026-10-06T09:31:53+08:00",
+  "version": "20261005.5",
+  "commit": "f53597776e97c5e787ae8fe24a85b395de7d3015",
+  "channel": "dev",
+  "serial": "ZY32M9MRVP",
+  "result": "standby recheck: passed after 19 h 54 m on connected power (same installed APK 2.39/87, no redeploy)",
+  "note": "Plasma was in the foreground when the screen went off. Before wake: Linux init, KWin, Plasma shell, Agent, two test editors and the independent root hardware backend kept the same PID and start time; unsaved editor text intact; KWin averaged 0.0017% of one core, RSS unchanged. After wake: the text showed 2.5 s after the activity start, a real tap and paced typing worked. Not covered: unplugged standby, Plasma in the background, a natural OEM kill (none seen). Evidence: mibook, .work/verify/20261005-dev-release-5/morning-20261006."
+ },
+ {
   "time": "2026-10-05T14:35:14+09:00",
   "version": "20261005.5",
   "commit": "f53597776e97c5e787ae8fe24a85b395de7d3015",
