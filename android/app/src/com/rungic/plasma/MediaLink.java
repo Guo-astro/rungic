@@ -29,6 +29,7 @@ final class MediaLink implements Closeable {
     private int permissionRequest;
     private boolean serviceMicrophone, serviceCamera, serviceCall;
     private volatile boolean callWanted;
+    private final Object callLock=new Object();
     private Thread thread;
 
     MediaLink(Activity activity) { this.activity=activity; }
@@ -140,7 +141,7 @@ final class MediaLink implements Closeable {
             }
             case "call-start": {
                 int id=message.getInt("id");
-                callWanted=true;
+                synchronized(callLock) { callWanted=true;callLock.notifyAll(); }
                 new Thread(() -> {
                     boolean telecom=AgentCall.start(activity,2000);
                     try { send(reply(id).put("telecom",telecom)); } catch(Exception ignored) {}
@@ -153,11 +154,15 @@ final class MediaLink implements Closeable {
             default: break;
         }
     }
-    /** Android's side of the call (held for another call, hung up from the notification). */
+    /** Android's side of the call (held for another call, hung up from the notification), followed
+     *  only while there is a call: no wake-ups otherwise. */
     private void followCall() {
         boolean held=false,hungUp=false;
         while(running) {
-            try { Thread.sleep(200); } catch(InterruptedException e) { return; }
+            try {
+                synchronized(callLock) { while(running && !callWanted)callLock.wait(); }
+                Thread.sleep(200);
+            } catch(InterruptedException e) { return; }
             boolean h=AgentCall.held,u=AgentCall.hungUp;
             if(callWanted && (h!=held || u!=hungUp)) {
                 held=h;hungUp=u;
@@ -170,6 +175,9 @@ final class MediaLink implements Closeable {
      *  it: started when it can, so only on a change. */
     private void service(boolean microphone,boolean camera,boolean call) {
         if(microphone==serviceMicrophone && camera==serviceCamera && call==serviceCall)return;
+        // Started from behind (the app came back while the backend was recording), Android refuses
+        // it; a call's is started while the desktop is in front, when the call starts.
+        if((microphone || camera) && !visible && !call && !serviceMicrophone && !serviceCamera)return;
         serviceMicrophone=microphone;serviceCamera=camera;serviceCall=call;
         activity.runOnUiThread(() -> {
             try {
