@@ -84,6 +84,22 @@ class InstallRepublishTest(unittest.TestCase):
         self.assertEqual(self.source(), "RELEASE_ID=standalone-new\n")
         status = self.status()
         self.assertEqual((status["release"], status["state"], status["phase"]), ("standalone-new", "ready", "complete"))
+        # The app names the provider when su is refused (RootAccess, install.desktop-entry/E7).
+        self.assertEqual(status["root"], "magisk")
+
+    def test_status_names_kernelsu_when_it_is_the_active_provider(self):
+        (self.root / "debug_ramdisk/magisk").unlink()
+        ksud = self.root / "data/adb/ksud"
+        ksud.write_text("#!/bin/sh\nexit 0\n")
+        busybox = self.root / "data/adb/ksu/bin/busybox"
+        busybox.parent.mkdir(parents=True)
+        busybox.write_text((self.root / "data/adb/magisk/busybox").read_text())
+        for tool in (ksud, busybox):
+            tool.chmod(0o755)
+        self.standalone("standalone-new")
+        result = self.publish_action()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.status()["state"], self.status()["root"]), ("ready", "kernelsu"))
 
     def test_legacy_product_republishes_status_and_drops_foreign_source(self):
         self.install(self.product, "legacy-new")

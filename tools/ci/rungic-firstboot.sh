@@ -12,9 +12,11 @@ umask 077
 if [ -x /debug_ramdisk/magisk ]; then
     RUNGIC_BUSYBOX=/data/adb/magisk/busybox
     RUNGIC_MAGISK=/debug_ramdisk/magisk
+    RUNGIC_ROOT=magisk
 elif [ -x /data/adb/ksud ]; then
     RUNGIC_BUSYBOX=/data/adb/ksu/bin/busybox
     RUNGIC_MAGISK=
+    RUNGIC_ROOT=kernelsu
 else
     echo 'No active root provider: neither Magisk (/debug_ramdisk/magisk) nor KernelSU (/data/adb/ksud)' >&2
     exit 1
@@ -49,10 +51,11 @@ chown "$rungic_uid:$rungic_uid" "$rungic_files"
 rungic_label=$(ls -dZ /data/user/0/com.rungic.plasma | cut -d ' ' -f1)
 chcon "$rungic_label" "$rungic_files"
 # App-private, atomic, credential-free status; reading it needs no su prompt.
-# This is a UI signal only. The root controller also checks the release marker.
+# This is a UI signal only. The root controller also checks the release marker. root names the
+# provider, so the app can say where to grant it root when su is refused (KernelSU's manager).
 publish() {
     status_tmp=$rungic_files/.rungic-install.properties.tmp
-    printf 'schema=2\nrelease=%s\nstate=%s\nphase=%s\nupdated=%s\nerror=%s\n' "$RELEASE_ID" "$1" "$2" "$(date +%s)" "${failure_code:-none}" > "$status_tmp"
+    printf 'schema=2\nrelease=%s\nstate=%s\nphase=%s\nupdated=%s\nerror=%s\nroot=%s\n' "$RELEASE_ID" "$1" "$2" "$(date +%s)" "${failure_code:-none}" "$RUNGIC_ROOT" > "$status_tmp"
     chmod 0600 "$status_tmp"
     chown "$rungic_uid:$rungic_uid" "$status_tmp"
     chcon "$rungic_label" "$status_tmp"
