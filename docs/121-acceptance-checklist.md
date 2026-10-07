@@ -148,3 +148,31 @@ python3 tools/rungic_agent.py screenshot .work/acceptance/<run>/00-start.png
 其他发现：开发覆盖装完不重启 rungic-voice-agent；Firefox 首次打开弹“设为默认浏览器”吞掉输入；adb 文字输入偶发冒号后的字符变成 Shift 字符；切到别的应用的输入框时键盘不自动弹出、窗口缩小后露出壁纸；全屏工具栏图标显示成白块、按钮没有无障碍名称；电池磁贴显示 0%（Android 是 80%）；xdg-document-portal.service 启动失败；不在工作区里运行的 rungic-cua 还在等 CAST 输出（桌面模式改成独立 KWin 之后不会再有）。
 
 判定靠截图加一条命令有效：每项都留了前后截图，屏幕看不出的（文件字节、媒体库、服务端日志、声音流、相机占用、工作区单元）用命令核对。
+
+## 2026-10-08 KernelSU 实跑（G100，PR #57，非发版验收）
+
+编号 20261008a（装机后第一遍）和 20261008b（重启后第二遍），记录和截图在 K8 `.work/acceptance/20261008a/`（notes.md）。用来验证 KernelSU 下的 root 路径，不算发版验收：G100 的 init_boot 换成 KernelSU v3.3.0 LKM（android15-6.6），安装包是第 2 轮 rootfs 加 PR #57 的 APK、host-seed 和 firstboot，之后用开发覆盖装上 main 的 9 个包。
+
+| 项 | 第一遍 | 重启后 | 要点 |
+| --- | --- | --- | --- |
+| A0 | 通过 | — | 首装完成后在 KernelSU 管理器给 Rungic 授权（打开“显示系统应用”才看得到它），账户表单建好 tester，进入桌面 |
+| 重启 | — | 通过 | boot_completed 33 秒；kernelsu 模块已加载；不打开 App，56 秒内容器和 Plasma 都起来了（KernelSU 运行 /data/adb/service.d）；打开 App 直接进桌面 |
+| E2E-01 | 通过 | 通过 | |
+| E2E-02 | 通过 | 失败后修复通过 | 重启后语言键变灰、只剩中文：浮动键盘写坏了 plasmakeyboardrc（见下） |
+| E2E-03 | 通过 | 通过 | 37 字节，SHA256 一致 |
+| E2E-04 | 部分失败 | 部分失败 | 同 20261007a；原因已查清（见下） |
+| E2E-05 | 通过（听音没跑，相机画面太暗） | 同左 | 声音流进 android，AudioFlinger 有活动音轨；凌晨房间暗，相机只能确认在出帧、关掉后释放 |
+| E2E-06 | 通过 | 失败后修复通过 | 重启后 Linux 断网：own-network 目录权限（见下） |
+| E2E-07 | 通过（范围：未安装至未登录） | 通过 | codex-cli 0.161.0，重启后仍在 |
+| E2E-08 | 退出时失败 | 退出时失败 | 同 20261007a |
+| E2E-09 | 通过 | 通过 | |
+
+KernelSU 特有的只有一处：没授权时 App 只显示笼统的“暂时无法进入”。已在 #57 补上提示（install.desktop-entry/E7）：KernelSU 不给未授权的应用提供 su，启动 su 报 `error=2`；App 认出这种失败，按首次启动记下的 root 方式（安装状态里的 `root=`）写出去管理器哪里授权。实机撤销授权后看到提示，重新授权后点“重新检查”进入桌面。
+
+重启后发现的 main 问题，都和 root 方式无关：
+
+- **重启后 Linux 断网。**“自己的网络”默认开启（#43）。开机由 rungic-runtime 拉起容器，它设了 `umask 077`，`/run/rungic-own-network` 被建成 0700，以 App uid 运行的 pasta 打不开 netns，每 30 秒重试一次。目录改成 755 后 pasta 立刻起来。
+- **浮动键盘写坏手机键盘的配置。**`agent/screen/qml/FloatingKeyboard.qml` 用 QML Settings（QSettings 的 INI 格式）读 `plasmakeyboardrc`：QSettings 把 General 组写成 `[%General] enabledLocales=@Invalid()`，又把原来的列表改写成 `zh_CN, en_US`，KConfig 读到的是带空格的 " en_US"。用一次浮动键盘就会触发，两遍都复现。
+- **媒体库（E2E-04）。**Linux 的 `~/Shared` 是 root 身份的 bindfs，挂在 Android 的 FUSE 上。MediaProvider 对 uid 0 的操作直接放行，但不更新数据库。对照：adb shell（uid 2000）写的文件进了媒体库，Linux 写的、改名的、`su 0` 写的都没进。
+
+其他：重装 A0 时家目录归 root 所有，是重新打包安装包时用了 `tar --owner=0` 造成的，不是产品问题；全新账户的无障碍默认关闭，`keyboard-*` 工具要先 `rungic-a11y enable`；Linux 走自己的网络时 Plasma 状态栏没有 Wi-Fi 图标；Plasma 时钟用的是 UTC，Android 是 Asia/Shanghai。

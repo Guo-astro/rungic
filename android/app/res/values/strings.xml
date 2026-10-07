@@ -36,6 +36,10 @@
     <string name="waiting_frame">Waiting for the desktop to appear…</string>
     <string name="start_failed">Can\'t open Rungic right now. Check the system setup status again.</string>
     <string name="start_failed_details">Startup or mount checks didn\'t finish. The diagnostic log has the exact cause.</string>
+    <string name="root_needed">Rungic needs superuser access</string>
+    <string name="root_needed_kernelsu">Open the KernelSU manager and go to Superuser. If Rungic isn\'t listed, turn on “Show system apps” in the menu. Allow Rungic, then come back and check again.</string>
+    <string name="root_needed_magisk">Allow Rungic in Magisk\'s Superuser list, or on its request prompt, then check again.</string>
+    <string name="root_needed_other">Allow Rungic in your root manager, then check again. In KernelSU: Superuser; if Rungic isn\'t listed, turn on “Show system apps” in the menu.</string>
     <string name="control_timeout">System setup timed out. Try again later and check the installation status.</string>
 
     <!-- First-boot installation stages (FirstBootState) -->

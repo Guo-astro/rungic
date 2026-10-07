@@ -28,6 +28,10 @@ class InstallRepublishTest(unittest.TestCase):
         stubs = self.root / "bin"
         stubs.mkdir()
         (stubs / "chcon").write_text("#!/bin/sh\n:\n")
+        magisk = self.root / "debug_ramdisk/magisk"      # Magisk's runtime is up
+        magisk.parent.mkdir(parents=True)
+        magisk.write_text("#!/bin/sh\nexit 0\n")
+        magisk.chmod(0o755)
         busybox = self.root / "data/adb/magisk/busybox"
         busybox.parent.mkdir(parents=True)
         # busybox flock -n LOCK sh SCRIPT SEED: run the command without the lock.
@@ -41,7 +45,7 @@ class InstallRepublishTest(unittest.TestCase):
         self.product = self.root / "product/etc/rungic"
 
     def sandbox(self, text):
-        text = re.sub(r"(?<![\w/])(/data/adb|/data/user/0|/product/etc/rungic)\b", f"{self.root}\\1", text)
+        text = re.sub(r"(?<![\w/])(/data/adb|/data/user/0|/product/etc/rungic|/debug_ramdisk)\b", f"{self.root}\\1", text)
         text = text.replace("/system/bin/sh", "bash")
         return text.replace("export PATH=", "export IGNORED_PATH=")
 
@@ -80,6 +84,22 @@ class InstallRepublishTest(unittest.TestCase):
         self.assertEqual(self.source(), "RELEASE_ID=standalone-new\n")
         status = self.status()
         self.assertEqual((status["release"], status["state"], status["phase"]), ("standalone-new", "ready", "complete"))
+        # The app names the provider when su is refused (RootAccess, install.desktop-entry/E7).
+        self.assertEqual(status["root"], "magisk")
+
+    def test_status_names_kernelsu_when_it_is_the_active_provider(self):
+        (self.root / "debug_ramdisk/magisk").unlink()
+        ksud = self.root / "data/adb/ksud"
+        ksud.write_text("#!/bin/sh\nexit 0\n")
+        busybox = self.root / "data/adb/ksu/bin/busybox"
+        busybox.parent.mkdir(parents=True)
+        busybox.write_text((self.root / "data/adb/magisk/busybox").read_text())
+        for tool in (ksud, busybox):
+            tool.chmod(0o755)
+        self.standalone("standalone-new")
+        result = self.publish_action()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.status()["state"], self.status()["root"]), ("ready", "kernelsu"))
 
     def test_legacy_product_republishes_status_and_drops_foreign_source(self):
         self.install(self.product, "legacy-new")

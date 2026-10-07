@@ -337,7 +337,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
                     installRepublishAsked=true;
                     try { control("install-publish"); }
                     catch(Exception e) {
-                        if(showRemovalFailure(e,generation)) { installRepublishAsked=false; return; }
+                        if(showRootNeeded(e,generation) || showRemovalFailure(e,generation)) { installRepublishAsked=false; return; }
                         Log.w("RungicWayland","Install status not republished",e);
                     }
                 }
@@ -452,7 +452,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
                 if(resume)resumeChecks();
             } catch (Throwable e) {
                 Log.e("RungicWayland", "Start failed", e);
-                if(showRemovalFailure(e,generation))return;
+                if(showRootNeeded(e,generation) || showRemovalFailure(e,generation))return;
                 runOnUiThread(() -> {
                     if(!isDestroyed() && generation==surfaceGeneration)
                         showProblem(getString(R.string.start_failed), getString(R.string.start_failed_details), true);
@@ -462,6 +462,23 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
                 if(generation!=surfaceGeneration && !isDestroyed())runOnUiThread(()->{ if(started)display.post(installPoll); });
             }
         });
+    }
+
+    /** su refused or not offered to Rungic (KernelSU before the grant in its manager): say where to
+     * grant it; Check again retries once it is granted. Runs on a worker, after failure only. */
+    private boolean showRootNeeded(Throwable failure, int generation) {
+        if(!RootAccess.denied(failure))return false;
+        RootAccess.Provider provider=RootAccess.provider(
+            FirstBootState.rootProvider(new File(getFilesDir(),"rungic-install.properties")));
+        int details=provider==RootAccess.Provider.KERNELSU?R.string.root_needed_kernelsu:
+            provider==RootAccess.Provider.MAGISK?R.string.root_needed_magisk:R.string.root_needed_other;
+        // The steps are the message itself, not behind Details: the user cannot go on without them.
+        runOnUiThread(() -> {
+            if(isDestroyed() || generation!=surfaceGeneration)return;
+            loading.show(getString(R.string.root_needed),getString(details),false,true,"");
+            notifyState(getString(R.string.state_attention));
+        });
+        return true;
     }
 
     /** Runs on a worker, after failure only; no extra root call on a normal return to the front. */
@@ -785,8 +802,8 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
 
     private static synchronized String control(String action, String payload) throws Exception {
         String command=action.equals("removal-status")?RemovalState.ROOT_COMMAND:"/data/adb/rungic-plasma/rungic-plasma " + action;
-        ProcessBuilder b = new ProcessBuilder("/product/bin/su", "--mount-master", "-c", command);
-        b.environment().put("PATH", "/product/bin:/system/bin:/system/xbin:/vendor/bin");
+        ProcessBuilder b = new ProcessBuilder(RootShell.su(), "--mount-master", "-c", command);
+        b.environment().put("PATH", RootShell.PATH);
         b.environment().remove("LD_PRELOAD"); b.environment().remove("LD_LIBRARY_PATH");
         Process p = b.redirectErrorStream(true).start();
         try (OutputStream input=p.getOutputStream()) {

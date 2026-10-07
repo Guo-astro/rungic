@@ -31,6 +31,10 @@
     <string name="waiting_frame">正在等待桌面画面…</string>
     <string name="start_failed">暂时无法进入 Rungic。请重新检查系统准备状态。</string>
     <string name="start_failed_details">启动或挂载检查未完成。诊断日志包含具体原因。</string>
+    <string name="root_needed">Rungic 需要超级用户权限</string>
+    <string name="root_needed_kernelsu">打开 KernelSU 管理器，进入“超级用户”。列表里没有 Rungic 时，在菜单里打开“显示系统应用”。允许 Rungic 后，回到这里重新检查。</string>
+    <string name="root_needed_magisk">在 Magisk 的“超级用户”列表里，或在它弹出的授权请求里允许 Rungic，然后重新检查。</string>
+    <string name="root_needed_other">在你的 root 管理器里允许 Rungic，然后重新检查。KernelSU：进入“超级用户”，列表里没有 Rungic 时，在菜单里打开“显示系统应用”。</string>
     <string name="control_timeout">系统准备超时，请稍后重试并检查安装状态</string>
 
     <string name="install_verify">正在检查安装文件…</string>

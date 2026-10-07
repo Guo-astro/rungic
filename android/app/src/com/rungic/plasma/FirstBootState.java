@@ -74,6 +74,11 @@ final class FirstBootState {
             return new FirstBootState(false,false,stale || value.equals("waiting"),stale,message,null,release,phase,value,code);
         } catch(IOException | IllegalArgumentException ignored) { return unknown(Reason.UNREADABLE); }
     }
+    /** The root provider first boot recorded (root=magisk|kernelsu); "" when absent or unreadable. */
+    static String rootProvider(File status) {
+        try { return readProperties(status).getProperty("root",""); }
+        catch(IOException | IllegalArgumentException ignored) { return ""; }
+    }
     private static FirstBootState unknown(Reason reason) {
         return new FirstBootState(false,false,true,false,Message.WAITING,reason,"","","","");
     }

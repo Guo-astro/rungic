@@ -335,6 +335,10 @@ features:
       - id: E5
         text: 关闭会话前确认并说明会结束 Linux 应用。切到 Android 时会话继续运行。
         gap: 关闭会话的确认对话框在 MainActivity 的宿主菜单里（AlertDialog），离线无法运行。82 篇只记录了切到 Android 后返回（2026-09-28），没有关闭会话确认的实机记录
+      - id: E7
+        text: root 管理器没有给 Rungic 授权时（KernelSU 只对管理器里允许的应用提供 su，Magisk 拒绝请求），不显示笼统的启动失败，而是直接写出去哪里授权：KernelSU 写明进入管理器的“超级用户”、必要时打开“显示系统应用”；授权后点“重新检查”即可继续。root 方式取自首次启动写入的安装状态（root=）。
+        evidence:
+          - {doc: docs/121-acceptance-checklist.md, date: 2026-10-08, note: "G100 KernelSU v3.3.0：撤销授权后显示 KernelSU 授权步骤，重新授权后重新检查进入桌面"}
       - id: E6
         text: 验收在 60 秒内确认桌面进程稳定、启动画面进程退出并保存截图；人工观察完整主屏后才给出可见桌面通过。自动进程检查或截图文件存在不能代替该观察，三轮整机重启分别留证。
         device: 第 2 轮候选需逐轮记录实际版本、启动标识、耗时及可见主屏。
@@ -347,6 +351,9 @@ features:
         docs: [docs/80-g100-image-installation-retrospective.md]
     code:
       - android/app/src/com/rungic/plasma/MainActivity.java
+      - android/app/src/com/rungic/plasma/RootShell.java
+      - android/app/src/com/rungic/plasma/RootAccess.java
+      - android/app/tests/RootAccessTest.java
       - android/app/src/com/rungic/plasma/DesktopService.java
       - android/app/AndroidManifest.xml
       - android/app/res/values/strings.xml
@@ -602,6 +609,7 @@ features:
       - packaging/rungic-plasma-config/
       - tools/ci/build_host_seed.py
       - tools/ci/test_container_control.py
+      - tools/tests/test_root_provider.py
     docs:
       - docs/61-delivery-diagnostics-plan.md
 
