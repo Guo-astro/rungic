@@ -28,6 +28,13 @@
     "page_size": 4096,
     "module_trust_certificate_sha256": "c60d10b8c4a39e05390d5585f639932bba426eecdbc2d0f04ee70ddb0ed28ea2"
   },
+  "root": {
+    "provider": "kernelsu",
+    "mode": "lkm",
+    "kmi": "android15-6.6",
+    "release": "v3.3.0",
+    "patched_init_boot_sha256": "1798a6e3cdfaf0b1eed6e983693fb0305a16a5caef42d01a284a113fc9597b12"
+  },
   "release_requirements": {
     "arch": "aarch64",
     "android_api": 36,

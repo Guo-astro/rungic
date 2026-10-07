@@ -64,6 +64,19 @@ Pin these inputs:
 
 Check OEM module ABI/CRC, signature trust, and the root provider.
 Add only the capabilities that Rungic/LXC requires.
+
+Choose the root provider in CI1 and record it in the device spec (`root.provider`).
+It decides how `init_boot` is patched:
+
+- KernelSU (default for GKI kernels): LKM mode, `ksud boot-patch -b <stock init_boot> --kmi <KMI>` from the pinned official release, digests checked against its GitHub release.
+  Its module must match the kernel's KMI (G100: `android15-6.6`).
+- Magisk (non-GKI or older bases): its own `init_boot` patch.
+
+CI2 does not depend on the choice.
+CI3 detects the active provider (`system/root-provider`): Magisk if `/debug_ramdisk/magisk` exists, else KernelSU if `/data/adb/ksud` exists.
+Under KernelSU the user grants Rungic root in the KernelSU manager (Superuser; turn on "Show system apps" when Rungic is a system app).
+The app says so when su is refused.
+Changing the provider on an installed phone means reflashing `init_boot` only; uninstall Rungic first and reinstall after, as on 2026-10-07 for the G100 (docs/121 run 20261008a).
 Maintain modified upstream components through patch queues in `packages/`.
 
 Use a candidate boot or flashing method already checked for this device.
