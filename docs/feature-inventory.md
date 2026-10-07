@@ -4,7 +4,7 @@
 
 以产品功能和用户场景为骨架：每条功能是用户能感知的一件事；“体验”是它必须做到的，每条都标明由什么检查（自动测试、实机验收、人工验证或已登记的缺口）。数据在 `quality/`，规则见 [quality/README.md](../quality/README.md)。
 
-共 166 条功能、736 条体验，其中 687 条有检查。
+共 167 条功能、742 条体验，其中 693 条有检查。
 
 ## Agent 能力
 
@@ -187,7 +187,7 @@ Agent 在自己的工作区（或用户指定的桌面）上打开应用、看�
 
 `agent.computer-use` · Linux 系统功能 — Codex 默认使用当前模型和登录凭据，根据截图操作桌面。用户可以显式选择 Luna API。输入和窗口管理复用 KWin 与标准门户。
 
-- **E1** Agent 能点击、双击、拖动、滚动、按键和输入任何语言的文字来操作图形应用。应用收到的是普通的键盘鼠标事件，Plasma 在后台时也能输入。（系统测试、人工；只能在手机上看：任何语言的文字靠 KWin 的 commitText 提交，这是 Rungic 的 KWin 补丁（virtualkeyboard-commit-text），系统测试容器里是 Ubuntu 原版 KWin，只测了按键和指针。“Plasma 在后台”指 Android 前台是别的应用，只有手机能造出）
+- **E1** Agent 能点击、双击、拖动、滚动、按键和输入任何语言的文字来操作图形应用。应用收到的是普通的键盘鼠标事件，Plasma 在后台时也能输入。（单元测试、系统测试、人工；只能在手机上看：任何语言的文字靠 KWin 的 commitText 提交，这是 Rungic 的 KWin 补丁（virtualkeyboard-commit-text），系统测试容器是 Ubuntu 原版 KWin：另测 keysym 兼容输入的大小写、符号、中文及真实字段读回；不替代正式补丁的手机整段输入验收。“Plasma 在后台”指 Android 前台是别的应用，只有手机能造出）
 - **E2** 截图只截任务所在的窗口（连同它的弹出菜单和对话框），范围变化时用一句话告诉模型。点击坐标误差约 1 像素。（单元测试、系统测试、人工；只能在手机上看：截图的像素由 KWin 的 ScreenShot2 渲染，需要 OpenGL 合成。系统测试容器没有 GPU 渲染节点，KWin 退回 QPainter，截图被取消，真实画面和点击误差只能在手机上看）
 - **E3** 默认 Codex 用 desktop_screenshot 和 desktop_act 逐步操作并核验结果。API 备选保留 desktop_goal 的完成、提问、失败和中止。（单元测试、系统测试、人工）
 - **E4** 程序被一个看不见的对话框挡住时（门户的“另存为”没有回来），工具结果直接说明，Agent 不会一直点菜单。（单元测试、人工）
@@ -536,7 +536,7 @@ Agent 在自己的工作区（或用户指定的桌面）上打开应用、看�
 - **E2** 本机 token 统计不重复计数：服务重启、重读同一事件后数值不变，同一回合内的多次请求不重复也不遗漏。按账户分开。不含实时语音。（单元测试、人工）
 - **E3** 每个 Agent 是一个提供方，由描述文件声明（系统目录或用户目录），各带自己的标志。契约之外的字段丢弃。多个 Agent 用切换片。（单元测试）
 - **E4** Claude Code 的 token 来自其会话记录，每条消息只算一次。额度只取文档化的 statusline 数据，不用未文档化的接口。（单元测试）
-- **E5** 读取失败、离线、未登录各自显示，不编造额度。账户切换期间读到的旧响应被丢弃，别的账户的 token 不会算进来。（单元测试）
+- **E5** 未安装、读取失败、离线、未登录各自显示，不编造安装状态或额度。连接断开时安装状态保持未知；账户切换期间读到的旧响应被丢弃，别的账户的 token 不会算进来。（单元测试）
 - **E6** 额度的重置时间到了只标记“待刷新”，不在本地把已用额度清零。（单元测试）
 - **E7** 点用量进入应用的用量页，点像素标志回到 Agent 对话。（单元测试、人工）
 
@@ -554,7 +554,7 @@ Agent 在自己的工作区（或用户指定的桌面）上打开应用、看�
 
 `agent.codex-install` · Linux 系统功能 — 系统不自带 Codex。设置里用官方脚本一键安装到用户目录，有新的正式版时提示更新。
 
-- **E1** 设置里显示 Codex 已安装、未安装或正在安装。未安装时一键用官方脚本装到 ~/.codex，期间语音服务不退出，对话里提示“还差一步：安装 Codex”。（单元测试、人工）
+- **E1** 默认不自动安装 Codex。首页明确提示未安装并打开设置中的原有安装入口，设置分别显示已安装、未安装、无法确认或正在安装；未安装时由用户点击，用官方脚本装到 ~/.codex。安装检查和账户连接分开，读取失败不能推断未安装或未登录。（单元测试、人工）
 - **E2** 只跟正式版：有新版本时设置显示“可更新到 X”，预发布版和带后缀的标签不算。结果缓存 6 小时，离线时保留上次的结果。（单元测试、人工）
 - **E3** 安装或更新完成后，等没有任务在跑、也没人在说话（最多 30 分钟）再重启 app-server，模型列表随之重新读取。（单元测试）
 - **E4** /usr/bin/codex 对所有调用者（助手的 app-server、命令行、实时语音）运行用户的独立安装版本，并带上手机代理。没装时提示去设置安装，退出码 127。（单元测试、人工）
@@ -623,7 +623,7 @@ Agent 在自己的工作区（或用户指定的桌面）上打开应用、看�
 
 - **E1** rungic MCP 提供 21 个工具。只读工具不改变设备状态，会改变设备的（符号化、控件操作、追踪采集）在说明里标明。（单元测试）
 - **E2** 多个 ADB 服务器、多台手机同时在线时，按配置的端口和序列号操作那一台，不沿用工具的历史默认设备。（单元测试）
-- **E3** 按无障碍名称在启动器里打开和关闭应用（ui_launch_check），每一步对照进程表和 AT-SPI 核对，点错就失败，不悄悄测错对象。抽屉搜索按 text 角色、可编辑／可见／启用状态和有效屏幕范围定位，不依赖 Search 或搜索等翻译名称；多个候选拒绝操作，位置连续两次稳定才放行。（单元测试、实机验收）
+- **E3** 按桌面文件 ID 解析当前会话的应用显示名，在启动器里定位并启动（ui_launch_check）；以用户进程 PID、同 PID 的 AT-SPI 注册、桌面类名及 KWin 窗口 ID 核对身份，按该窗口 ID 关闭并确认窗口、进程退出，不依赖英文显示名、标题或导航按钮名。抽屉搜索按 text 角色、可编辑／可见／启用状态和有效屏幕范围定位，不依赖 Search 或搜索等翻译名称；多个候选拒绝操作，位置连续两次稳定才放行。（单元测试、系统测试、实机验收）
 - **E4** 合并日志把 Android、容器和内核日志按同一时钟排成一条时间线。（单元测试）
 
 注意：
@@ -1364,6 +1364,21 @@ Linux 应用用手机的相机拍照录像，用手机的扬声器和麦克风�
 
 文档：[docs/94-build-fingerprints.md](../docs/94-build-fingerprints.md)
 
+#### 发版验收清单（实验）
+
+`delivery.release-checklist` · 依赖安卓 — 每个发布候选重新安装之后，Agent 像用户一样看着 G100 的屏幕、经 ADB 触摸，把 docs/121 列好的十项走一遍，屏幕看不出的事实用一条命令核对，写带截图的报告。取代 task
+
+经由接口：`host-input`、`camera`、`audio`、`platform-bridge`
+
+- **E1** 清单每项写明操作、看到什么算过和一条核对命令；结果只有通过、失败、没跑（写原因）三种，失败照实保留，重试另记。（人工）
+- **E2** 报告每项附截图，人不用重跑就能复核；只操作 G100，只删除本轮 rungic-e2e-<RUN> 下的文件。（人工）
+
+注意：
+- Agent 看图判断可能偏宽松，所以每项写死“看到什么算过”；看不清就判失败。 [docs/121-acceptance-checklist.md](../docs/121-acceptance-checklist.md)
+- 同一 adb 上还有用户日常用的 G100 S；rungic_device 的默认序列号就是它，必须显式指定 ZY32M9MRVP。 [docs/121-acceptance-checklist.md](../docs/121-acceptance-checklist.md)
+
+文档：[docs/121-acceptance-checklist.md](../docs/121-acceptance-checklist.md)
+
 ### 查清手机上出了什么问题
 
 Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图、完整性报告，并按控件名操作桌面复现问题。
@@ -1450,6 +1465,8 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 - **E1** 按名称找到控件并操作（按下、点击、填文字）：打开抽屉找到 Calculator 启动，在 Kalk 里按 C、7、+、8、= 得到 15，全程不用固定坐标。（系统测试、人工）
 - **E2** 无障碍按需开启，运行中的 Qt 程序约 2 秒内注册，不用重启。用完关闭并记录状态。（系统测试、人工）
 - **E3** 没有动作的元素（启动器图标、自绘键盘）按“窗口原点＋元素中心”换算到物理坐标，经 Android 输入点击。（单元测试、人工）
+- **E4** 没有控件名可用时，Agent 看着截图按截图像素触摸、滑动、长按、按键和输入网址，并用一条命令核对屏幕上看不出的结果；坐标不用换算，命令失败如实返回退出码。（单元测试）
+- **E5** Agent 用屏幕键盘打字时按键的无障碍标识找到真实的键去点：大小写用 Shift，数字和标点切到符号页，拼音点完字母后按候选文字选词。同一页的键一次发给手机，一行字几十秒内打完；键盘上没有的字报错，不改用别的输入方式。（单元测试）
 
 注意：
 - 会话刚重启时抽屉搜索结果不进 AT-SPI 树。快捷设置折叠时未显示的磁贴仍报告 showing。plasma-keyboard 的面板坐标与屏幕有偏移。Kirigami 搜索框没有 EditableText 接口。 [docs/55-agent-native-debugging.md](../docs/55-agent-native-debugging.md)
@@ -1912,7 +1929,7 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 经由接口：`audio`、`platform-bridge`
 
-- **E1** 窗口在手机上的应用从手机出声，窗口在电视上的从电视出声。没有窗口的声音在电视投电脑模式时去电视，否则留在手机。（单元测试、人工）
+- **E1** 窗口在手机上的应用从手机出声，窗口在电视上的从电视出声。没有窗口的声音在电视投电脑模式时去电视，否则留在手机。（单元测试、系统测试、人工）
 - **E2** 助理屏的声音在电视显示它时去电视，否则去手机。独立桌面（0 号）在电视投电脑模式时去电视，否则在手机。（单元测试）
 - **E3** 应用自己选定的去处不动：语音助手的手机输出、通话用的扬声器、工作区自己的声道。（单元测试）
 - **E4** 断开电视后，挪过的声音都回到默认输出。（单元测试）
@@ -2099,6 +2116,7 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 - **E2** 录屏图块换成本项目的录屏插件，用户原来禁用的录屏仍是禁用。（单元测试、系统测试）
 - **E3** 设置里指向旧 /usr/local 路径的输入法、门户覆盖、Codex 配置和 Firefox 启动器改到新路径。用户自己改过的值不动。（单元测试、系统测试）
 - **E4** 迁移在 KWin 启动前运行，KWin 第一次就读到新的输入法路径。每个迁移只运行一次。旧的固定 3 倍显示迁移已退役，不凭 scale=3 猜测用户选择。（单元测试、系统测试）
+- **E5** 新账户第一次进桌面就用 Rime 拼音键盘，键盘语言是简体中文和美式英文，可以用语言键切换。用户自己选过的输入法和语言不动。（单元测试）
 
 注意：
 - 家目录不随 rootfs 快照回滚，失败部署期间写进 ~/.config 的内容会留下。排查部署后异常时要看部署时段改过的用户配置。 [docs/61-delivery-diagnostics-plan.md](../docs/61-delivery-diagnostics-plan.md)
@@ -2226,6 +2244,7 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 - **E4** 用户词库只在打字时打开：键盘收起、失焦或显示时 5 秒不按键就关闭会话并释放词库，组合中不关闭。另一个进程正持有词库时本边仍能打中文（不学习），对方释放后转为共享，学到的词两边都排第一，词库不被修复程序改写。（单元测试、人工）
 - **E5** 建会话加第一个键在实机上远低于 50 ms，不需要预建会话。（人工；只能在手机上看：耗时取决于手机的 CPU 和存储（LevelDB 每次打开都写 MANIFEST 并 fsync）。离线在 tmpfs 与 NVMe 上就相差十倍，只有手机上量的数字能说明。）
 - **E6** 密码字段不交给 Rime，敏感字段不学习词频。用户词频和定制在 ~/.local/share/plasma-rime（0700），default.custom.yaml 只首次创建。（单元测试）
+- **E7** 在把预编辑算进光标周围文字的编辑器里（KWrite、Kate），拼音留在预编辑区直到选词；只有光标被移开或文字在别处被改动才提交组合。（单元测试）
 
 注意：
 - librime 打开词库失败会安排 userdb_recovery_task，LevelDB RepairDB 不取 LOCK，会改写另一进程正在用的词库。所以在确认能独占词库之前，任何会话都不能尝试打开它。 [docs/41-plasma-rime-input.md](../docs/41-plasma-rime-input.md)
@@ -2678,7 +2697,7 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 - **E4** 停止失败、容器状态未知、进程或挂载／mapper／loop 残留时不删除数据。与安装及首启协调，未完成卸载阻止新的安装与运行入口，并在安装器与控制器说明重新运行卸载。新操作尚未改变安装就失败时撤掉阻止标记。（单元测试）
 - **E5** 中断后按持久化源、目标、inode 和状态四项记录恢复。损坏记录、缺失目标或不符状态停止。不存在项可重复处理，不覆盖已保留的家目录。（单元测试）
 - **E6** 保留有效的空 Magisk product 首启拦截，不修改 Android 镜像。重启后旧种子不得自动重新安装 Rungic。（单元测试；只能在手机上看：空脚本离线验证不能代替实际固件重启后、不开 App 的真机读回。）
-- **E7** 安装与卸载共用受管理路径清单。扫描固定首启及安装器路径，要求明确删除或保留归属。成功或失败都保留可读报告和 JSON，逐项读回删除与保留范围。清除卸载标记并独立确认之后重采最终快照，清除前快照另存；路径集合必须完整、唯一且值为 0 或 1，否则读回未知。最终重新核验全部删除路径、原本存在及新建的保留记录、Termux 路径和包状态；未知、内容再现或保留项消失均不报完成。三个 pm 操作保留原始输出和退出码，以数据目录、更新标志与路径、用户 0 包列表的独立读回判断成败。删除前确认包类型并写进既有卸载记录，续做沿用记录。完成前有界等待卸载状态落盘，兼容文本与 Android 二进制 XML，主文件稳定且无优先备份：系统包要求用户 0 明确未安装，普通包要求全局包条目消失；未知、系统包缺条目、失败或超时不报完成。清标记独立确认后重新采集最终 after，清除前快照另存；最终快照失败或标记再现不报完成。（单元测试）
+- **E7** 安装与卸载共用受管理路径清单。扫描固定首启及安装器路径，要求明确删除或保留归属。成功或失败都保留可读报告和 JSON，逐项读回删除与保留范围。清除卸载标记并独立确认之后重采最终快照，清除前快照另存；路径集合必须完整、唯一且值为 0 或 1，否则读回未知。最终重新核验全部删除路径、原本存在及新建的保留记录、Termux 路径和包状态；系统底座从全局当前包的 codePath 与 flags 核验，不依赖用户 0 仍安装；未知、内容再现或保留项消失均不报完成。三个 pm 操作保留原始输出和退出码，以数据目录、更新标志与路径、用户 0 包列表的独立读回判断成败。删除前确认包类型并写进既有卸载记录，续做沿用记录。完成前有界等待卸载状态落盘，兼容文本与 Android 二进制 XML，主文件稳定且无优先备份：系统包要求用户 0 明确未安装，普通包要求全局包条目消失；未知、系统包缺条目、失败或超时不报完成。清标记独立确认后重新采集最终 after，清除前快照另存；最终快照失败或标记再现不报完成。（单元测试）
 
 文档：[docs/118-standalone-uninstall.md](../docs/118-standalone-uninstall.md)
 
@@ -2702,7 +2721,7 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 - **E4** 等待解锁时提示先解锁手机、解锁后自动继续。三分钟没有新阶段时只提示“较长时间未收到新的阶段状态”，不判为失败。（单元测试）
 - **E5** 准备期间可以返回 Android，再打开时接着显示当前阶段。（缺口：返回 Android 再打开时的阶段显示由 MainActivity/StartupScreen 的生命周期决定，离线 Java 测试只覆盖状态文件的读取（FirstBootStateTest）。82 篇把“安装中进入/退出 Rungic”列为待做的首启场景，尚无实机记录）
 - **E6** 清除 Rungic 应用数据后再打开，不用重启手机：已完成的安装重新发布状态并直接放行，进行中的安装交给首启脚本，复用底座上的旧 product 种子不会让它一直等待。（单元测试、人工）
-- **E7** 首装时离开前台后，通知按真实准备阶段更新；就绪但尚未配置账户时提示回来设置，失败时提示查看原因。状态读不清不覆盖已有通知。已有账户、失败或前台接手时停止后台检查，控制器调用不并发。（单元测试）
+- **E7** 首装时离开前台后，通知按真实准备阶段更新；就绪但尚未配置账户时提示回来设置，失败时提示查看原因。状态读不清不覆盖已有通知。已有账户、失败或前台接手时停止后台检查，控制器调用不并发。行动提醒独立于前台服务；打开账户表单保留，账户成功撤回，失败替换旧提醒，原因已展示后撤回失败项。（单元测试）
 
 注意：
 - 只看 Android `sys.boot_completed=1` 证明不了 rootfs 已展开、共享目录已挂载或容器已就绪。按原子状态和真实条件放行，不靠固定延时。 [docs/80-g100-image-installation-retrospective.md](../docs/80-g100-image-installation-retrospective.md)
@@ -2718,7 +2737,7 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 - **E1** 只有以下条件全部满足时，才显示账户表单：安装 ready、容器运行、账户工具存在、共享存储已挂载、用户目录已建立。条件未满足时，界面显示准备问题，不要求用户重复输入密码。（人工）
 - **E2** 用户名必须以小写字母开头，最多 32 位，且不能是已有系统账户。密码至少 8 个字符，UTF-8 最多 256 字节，不含换行或空字符，两次输入必须一致。表单在不合规字段旁提示，root 侧账户助手再次校验。（单元测试）
-- **E3** 用户名已被使用或主目录已存在时表单保留、提示换一个名字。其他失败关闭表单、显示“账户设置尚未完成”，不自动重复提交密码。（单元测试、人工）
+- **E3** 用户名已被使用或主目录已存在时表单保留，字段旁和表单下方同时显示具体原因及修改用户名／重输密码提示。其他失败关闭表单、显示“账户设置尚未完成”，不自动重复提交密码。（单元测试、人工）
 - **E4** 密码只通过 root 进程的 stdin 传递，不写入命令行、日志或持久状态。表单禁止截屏和自动填充。两个密码框默认掩码显示，用户可以切换显示。（单元测试、人工）
 - **E5** 创建失败时回到原状态（原锁定口令、附加组和登录名），不写完成标记。已有密码或已完成的账户不能经首装接口重置。（单元测试）
 - **E6** 提交后超时、切后台或重开，先查询真实结果：正在创建时显示“账户仍在设置中”，已完成的不再出现表单，不会创建第二个账户。（单元测试）
@@ -2974,8 +2993,8 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 `install.rungicos-image` · Linux 系统功能 — 构建器使用干净的 ARM64 root 树和固定包集合，生成 ext4 rootfs、压缩载荷、包锁和报告。镜像不含个人数据，预装集合遵循清单。
 
 - **E1** 镜像不带个人账户、密码、凭据或构建机痕迹：只有一个口令锁定的 UID 1000 模板账户，没有账户完成标记，home 里没有别的条目。违反时拒绝出镜像，报错里不出现口令哈希。（单元测试、人工）
-- **E2** 预装集合按清单：被排除的独立应用（Angelfish、Haruna、Journald Browser、KleverNotes、Marknote）不在镜像里，Emoji Selector 入口被 dpkg 排除，桌面与 Emoji 字体保留。旧树有残留时拒绝。（单元测试、人工）
-- **E3** 镜像里的包安装干净：dpkg --audit、apt-get check、ext4 检查通过。APT pin 按本次 manifest 重新生成，不留旧 release 的 pin。（系统测试、人工）
+- **E2** 预装集合按清单：KWrite 文本编辑器、可执行文件与桌面入口必须存在；被排除的独立应用（Angelfish、Haruna、Journald Browser、KleverNotes、Marknote）不在镜像里，Emoji Selector 与 Kate 入口被 dpkg 排除（保留 KWrite 硬依赖的 Kate 程序），桌面与 Emoji 字体保留。旧树有残留时拒绝。（单元测试、系统测试、人工）
+- **E3** 镜像里的包安装干净：dpkg --audit、apt-get check、ext4 检查通过。APT pin 按本次 manifest 重新生成，不留旧 release 的 pin。完整首装以新目录执行，包不能读取编排输入；最终完成凭据绑定源码、release 与包状态，缺失或不符时拒绝出镜像。（单元测试、系统测试、人工）
 - **E4** 按输入指纹复用产物：安装包里组件被替换、缺少构建绑定、输入被改或依赖未解析时 verify 拒绝。（单元测试、人工）
 - **E5** 在 x86 主机上构建 ARM64 root 树时，chroot 不继承宿主的 Python 设置和 HOME，但保留代理。（单元测试）
 
@@ -3102,11 +3121,11 @@ Agent 不靠点界面就能拿到合并日志、崩溃回溯、追踪、截图�
 
 | 接口 | 说明 | 使用它的功能 | 使用方测试 | 提供方测试 |
 |---|---|---|---|---|
-| `platform-bridge` 平台桥 | Rungic 应用通过 files/tmp/platform.sock 提供 Unix socket 接口，每行传输一个 JSON 对象。接口涵盖状态、显示、亮度、方向、振动、设置面板、桌面模式、助理屏、电视、导播台和文字提交。 | `agent.voice`、`agent.progress`、`agent.task-control`、`agent.phone-mode`、`agent.workspaces`、`agent.where`、`delivery.acceptance`、`delivery.agent-diagnostics`、`delivery.system-tests`、`desktop-mode.on-off`、`desktop-mode.floating-window`、`desktop-mode.fullscreen`、`desktop-mode.cast-connect`、`desktop-mode.tv-computer-mode`、`desktop-mode.tv-touchpad`、`desktop-mode.audio-follow`、`desktop-mode.director`、`desktop-mode.tv-director`、`desktop-mode.remote-viewing`、`desktop-mode.cast-test-pattern`、`desktop.orientation`、`desktop.resolution-refresh`、`desktop.brightness`、`desktop.host-bridges`、`desktop.power`、`desktop.device-panel` | 12 | 1 |
+| `platform-bridge` 平台桥 | Rungic 应用通过 files/tmp/platform.sock 提供 Unix socket 接口，每行传输一个 JSON 对象。接口涵盖状态、显示、亮度、方向、振动、设置面板、桌面模式、助理屏、电视、导播台和文字提交。 | `agent.voice`、`agent.progress`、`agent.task-control`、`agent.phone-mode`、`agent.workspaces`、`agent.where`、`delivery.acceptance`、`delivery.agent-diagnostics`、`delivery.release-checklist`、`delivery.system-tests`、`desktop-mode.on-off`、`desktop-mode.floating-window`、`desktop-mode.fullscreen`、`desktop-mode.cast-connect`、`desktop-mode.tv-computer-mode`、`desktop-mode.tv-touchpad`、`desktop-mode.audio-follow`、`desktop-mode.director`、`desktop-mode.tv-director`、`desktop-mode.remote-viewing`、`desktop-mode.cast-test-pattern`、`desktop.orientation`、`desktop.resolution-refresh`、`desktop.brightness`、`desktop.host-bridges`、`desktop.power`、`desktop.device-panel` | 12 | 1 |
 | `kwin-android-host` KWin 安卓宿主 | KWin 的 android-host 后端连接 Rungic 应用内的宿主。接口提供输出、帧时钟、零拷贝呈现、显式同步、空闲抑制和投屏输出。 | `agent.workspaces`、`apps.gpu`、`apps.vulkan`、`apps.xwayland-gpu`、`delivery.acceptance`、`delivery.trace`、`delivery.probes`、`desktop-mode.tv-computer-mode`、`desktop-mode.external-screen`、`desktop-mode.tv-director`、`desktop-mode.apk-fullscreen`、`desktop.session`、`desktop.panels`、`desktop.orientation`、`desktop.host-display`、`desktop.resolution-refresh`、`desktop.display-size`、`desktop.power`、`install.desktop-entry`、`install.app-restart-recovery`、`install.apk-build` | — | 5 |
-| `host-input` 宿主输入 | Android 将触摸、按键、指针、手势和输入法文字送入 KWin。输入方式包括直接触摸、触控板、电视遥控和键盘。 | `delivery.acceptance`、`delivery.ui-automation`、`desktop-mode.fullscreen`、`desktop-mode.fullscreen-touch`、`desktop-mode.tv-computer-mode`、`desktop-mode.tv-touchpad`、`desktop-mode.apk-fullscreen`、`desktop.touch`、`desktop.edge-back`、`desktop.android-text` | — | 1 |
-| `camera` 相机 | Android Camera2 通过 PipeWire 相机节点 rungic.camera.N 提供画面，并按需开关相机。平台桥的 capture-info 查询返回可用相机。 | `apps.camera`、`apps.snapshot`、`apps.plasma-camera`、`apps.firefox`、`delivery.acceptance`、`delivery.probes` | 2 | 3 |
-| `audio` 扬声器与麦克风 | Android 扬声器和麦克风作为 PulseAudio 设备提供，包括 android、android_phone 输出和麦克风源。设备按需挂起，输出通过 Android 侧的 PulseAudio（system/android-audio）。 | `agent.voice`、`agent.call-proxy`、`apps.phone-audio`、`apps.virtual-audio`、`apps.firefox`、`delivery.acceptance`、`delivery.probes`、`desktop-mode.audio-follow`、`desktop.screen-recording`、`install.cold-start` | 5 | 3 |
+| `host-input` 宿主输入 | Android 将触摸、按键、指针、手势和输入法文字送入 KWin。输入方式包括直接触摸、触控板、电视遥控和键盘。 | `delivery.acceptance`、`delivery.ui-automation`、`delivery.release-checklist`、`desktop-mode.fullscreen`、`desktop-mode.fullscreen-touch`、`desktop-mode.tv-computer-mode`、`desktop-mode.tv-touchpad`、`desktop-mode.apk-fullscreen`、`desktop.touch`、`desktop.edge-back`、`desktop.android-text` | — | 1 |
+| `camera` 相机 | Android Camera2 通过 PipeWire 相机节点 rungic.camera.N 提供画面，并按需开关相机。平台桥的 capture-info 查询返回可用相机。 | `apps.camera`、`apps.snapshot`、`apps.plasma-camera`、`apps.firefox`、`delivery.acceptance`、`delivery.release-checklist`、`delivery.probes` | 2 | 3 |
+| `audio` 扬声器与麦克风 | Android 扬声器和麦克风作为 PulseAudio 设备提供，包括 android、android_phone 输出和麦克风源。设备按需挂起，输出通过 Android 侧的 PulseAudio（system/android-audio）。 | `agent.voice`、`agent.call-proxy`、`apps.phone-audio`、`apps.virtual-audio`、`apps.firefox`、`delivery.acceptance`、`delivery.release-checklist`、`delivery.probes`、`desktop-mode.audio-follow`、`desktop.screen-recording`、`install.cold-start` | 5 | 3 |
 | `communication-audio` 通话音频 | $XDG_RUNTIME_DIR/rungic-communication.sock 为电话模式和通话提供双向通信音频，使用 android_communication 设备。 | `agent.phone-mode` | 1 | 2 |
 | `codec` 硬件编解码 | Android MediaCodec 通过 IPC 为 GStreamer、FFmpeg 和 Firefox 提供 H.264/HEVC/VP9 解码及 H.264 编码。 | `apps.snapshot`、`apps.hw-codec`、`apps.firefox-hw-video`、`delivery.acceptance`、`desktop.screen-recording` | 9 | 1 |
 | `clipboard` 剪贴板 | Android ClipboardDaemon 与 Wayland 剪贴板双向同步。 | `desktop-mode.clipboard`、`desktop.clipboard`、`desktop.clipboard-history` | 3 | 1 |

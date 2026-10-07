@@ -449,7 +449,7 @@ features:
     summary: 系统不自带 Codex。设置里用官方脚本一键安装到用户目录，有新的正式版时提示更新。
     experience:
       - id: E1
-        text: 设置里显示 Codex 已安装、未安装或正在安装。未安装时一键用官方脚本装到 ~/.codex，期间语音服务不退出，对话里提示“还差一步：安装 Codex”。
+        text: 默认不自动安装 Codex。首页明确提示未安装并打开设置中的原有安装入口，设置分别显示已安装、未安装、无法确认或正在安装；未安装时由用户点击，用官方脚本装到 ~/.codex。安装检查和账户连接分开，读取失败不能推断未安装或未登录。
         evidence:
           - {doc: docs/99-codex-standalone.md, date: 2026-10-01, note: "Setup 报告已安装、能运行；一键安装本身未重跑"}
       - id: E2
@@ -474,6 +474,8 @@ features:
       - packaging/rungic-codex/
       - agent/assistant/codex_install.py
       - agent/assistant/app/qml/CodexPage.qml
+      - agent/suggestions/qml/AgentWidget.qml
+      - tools/tests/test_assistant_app.py
       - tools/tests/test_codex_install.py
     docs: [docs/99-codex-standalone.md]
 
@@ -611,7 +613,7 @@ features:
       - id: E2
         text: 多个 ADB 服务器、多台手机同时在线时，按配置的端口和序列号操作那一台，不沿用工具的历史默认设备。
       - id: E3
-        text: 按无障碍名称在启动器里打开和关闭应用（ui_launch_check），每一步对照进程表和 AT-SPI 核对，点错就失败，不悄悄测错对象。抽屉搜索按 text 角色、可编辑／可见／启用状态和有效屏幕范围定位，不依赖 Search 或搜索等翻译名称；多个候选拒绝操作，位置连续两次稳定才放行。
+        text: 按桌面文件 ID 解析当前会话的应用显示名，在启动器里定位并启动（ui_launch_check）；以用户进程 PID、同 PID 的 AT-SPI 注册、桌面类名及 KWin 窗口 ID 核对身份，按该窗口 ID 关闭并确认窗口、进程退出，不依赖英文显示名、标题或导航按钮名。抽屉搜索按 text 角色、可编辑／可见／启用状态和有效屏幕范围定位，不依赖 Search 或搜索等翻译名称；多个候选拒绝操作，位置连续两次稳定才放行。
       - id: E4
         text: 合并日志把 Android、容器和内核日志按同一时钟排成一条时间线。
     pitfalls:
@@ -642,7 +644,7 @@ features:
         text: Agent 能点击、双击、拖动、滚动、按键和输入任何语言的文字来操作图形应用。应用收到的是普通的键盘鼠标事件，Plasma 在后台时也能输入。
         evidence:
           - {doc: docs/68-luna-computer-use.md, date: 2026-09-25, note: "微信 3 步打开聊天"}
-        device: 任何语言的文字靠 KWin 的 commitText 提交，这是 Rungic 的 KWin 补丁（virtualkeyboard-commit-text），系统测试容器里是 Ubuntu 原版 KWin，只测了按键和指针。“Plasma 在后台”指 Android 前台是别的应用，只有手机能造出
+        device: 任何语言的文字靠 KWin 的 commitText 提交，这是 Rungic 的 KWin 补丁（virtualkeyboard-commit-text），系统测试容器是 Ubuntu 原版 KWin：另测 keysym 兼容输入的大小写、符号、中文及真实字段读回；不替代正式补丁的手机整段输入验收。“Plasma 在后台”指 Android 前台是别的应用，只有手机能造出
       - id: E2
         text: 截图只截任务所在的窗口（连同它的弹出菜单和对话框），范围变化时用一句话告诉模型。点击坐标误差约 1 像素。
         evidence:
@@ -695,6 +697,7 @@ features:
       - agent/computer-use/rungic_cua/__init__.py
       - agent/computer-use/rungic_cua/__main__.py
       - agent/computer-use/rungic_cua/server.py
+      - agent/computer-use/rungic_cua/applications.py
       - agent/computer-use/rungic_cua/i18n.py
       - agent/computer-use/rungic_cua/kwin.py
       - agent/computer-use/rungic_cua/portal.py
@@ -837,6 +840,7 @@ features:
       - agent/workspace/portal.cpp
       - agent/workspace/wayland-ready.h
       - agent/workspace/dbus/org.freedesktop.impl.portal.desktop.kde.service.in
+      - agent/workspace/dbus/org.freedesktop.impl.portal.desktop.gtk.service.in
       - tools/tests/test_workspace_portal.py
       - tools/system/tests/workspace_portal.py
       - agent/workspace/CMakeLists.txt
@@ -1461,7 +1465,7 @@ features:
       - id: E4
         text: Claude Code 的 token 来自其会话记录，每条消息只算一次。额度只取文档化的 statusline 数据，不用未文档化的接口。
       - id: E5
-        text: 读取失败、离线、未登录各自显示，不编造额度。账户切换期间读到的旧响应被丢弃，别的账户的 token 不会算进来。
+        text: 未安装、读取失败、离线、未登录各自显示，不编造安装状态或额度。连接断开时安装状态保持未知；账户切换期间读到的旧响应被丢弃，别的账户的 token 不会算进来。
       - id: E6
         text: 额度的重置时间到了只标记“待刷新”，不在本地把已用额度清零。
       - id: E7
@@ -1475,6 +1479,7 @@ features:
         docs: [docs/research/95-agent-usage-providers.md]
     code:
       - agent/suggestions/usage.cpp
+      - agent/suggestions/client-tests.cpp
       - agent/suggestions/usage.h
       - agent/suggestions/claude_code.cpp
       - agent/suggestions/claude_code.h

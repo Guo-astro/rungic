@@ -118,7 +118,7 @@ Agent 2  KWin#2 ──── │ 显示源 agent-2               │  电视 / �
   - `rungic-workspace N`（用户单元 `rungic-workspace@N`）：独立 D-Bus 会话、独立 KWin 设置目录、自己的 Xwayland。GPU 环境取自 `/etc/plasma/gpu-env`，另需 `FD_KGSL_DMABUF_UBWC=1`，否则报 EGL_BAD_MATCH。启动器把总线地址和 X 显示号写入 `~/.local/state/rungic-workspaces/N/`。
   - `rungic-workspace-env N 命令`：在工作区里运行一条命令。
   - `rungic-user 命令`：在工作区里，把一条命令送回用户会话执行（例如通知）。
-  - `rungic-workspace-input`：Agent 的指针和键盘，走 KWin fake input。
+  - `rungic-workspace-input`：Agent 的指针和键盘，走 KWin fake input。2026-10-07 修正文字输入：第 6 版 `keyboard_keysym` 由 KWin 处理实际键盘映射和修饰键，支持混合大小写、!、@ 和 Unicode。单独快捷键也复用同一上游接口。整段文字编码／可打印性先验证，不支持则报错，不写入前缀。文字输入要求 keystate 第 5 版确认没有活动修饰键或 Caps Lock；不能确认时拒绝。指针协议不变。原生测试覆盖真实 GTK 字段及 AT-SPI 读回、英美／德文映射、错误分支；手机焦点及实际呈现由第三轮继续验证。
   - `rungic-workspace-stream`：给浮窗的画面，走 zkde_screencast，内嵌指针；同时转发浮窗里的触摸。
   - `rungic-workspace-desktop`：壁纸。
 - **语音服务**：启动时拉起工作区 1。每个 Codex 线程的 `shell_environment_policy.set` 和 `mcp_servers.rungic-desktop.env` 都设为工作区环境：`WAYLAND_DISPLAY`、`DISPLAY`、`DBUS_SESSION_BUS_ADDRESS`、`RUNGIC_WORKSPACE`，外加用户会话的 `RUNGIC_USER_*`。
@@ -892,3 +892,12 @@ Agent 2  KWin#2 ──── │ 显示源 agent-2               │  电视 / �
   - 浮窗里看板的焦点格很小：成员行只排到“决定”那一行上方，放不下的裁掉（浮窗约能显示一行，全屏和电视能显示全部）。已用测试看板在实机核对。
 
 **仍未验收**：通知（没人看对话时发出、点击打开会话），以及开着实时语音时的里程碑播报。另外，息屏后团队无法继续，见第一次验收的第 1 条。
+
+
+### 2026-10-07 GTK portal 的显示就绪条件（task #99）
+
+第二轮 C01.1 的私有工作空间总线先激活 GTK portal 的 Lockdown 回退接口。01:23:04Z 的 GTK 进程报告 `cannot open display` 并退出，随后同一总线的 KDE portal 激活成功、GTK 再次激活成功。首次错误不能被后来成功覆盖。这份日志来自本轮第一次开机，不是上一轮 QA。
+
+同一私有总线原先只为 KDE backend 使用 `rungic-workspace-portal`。现在 GTK activation 也复用这个包装器：使用工作空间的 `WAYLAND_DISPLAY`，等现有 `waylandRoundtrip` 成功，再 exec 发行版原有 backend，保留其参数与进程身份。监听 socket 存在不足以放行；缺地址、超时、compositor 断开和 backend 不存在都继续失败。系统用户总线的发行版 activation 文件不改。
+
+构建时从目标发行版 KDE／GTK 的 `.service` 读取原始 Exec；包明确声明 GTK runtime 和 build 依赖，保持拒绝把宿主路径嵌入交叉构建。GTK 初始化必须能打开显示，参见 [GTK init_check](https://docs.gtk.org/gtk3/func.init_check.html)。两个 backend 都由同一私人总线 activation 回归和现有三次真实工作空间启动测试覆盖；G100 的复验留给第三轮。GTK 的用户影响，以及其他 portal 日志问题，不由本次启动条件检查自动证明。

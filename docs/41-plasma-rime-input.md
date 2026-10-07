@@ -126,3 +126,21 @@ enabledLocales=zh_CN,en_US
 - **原因**：插件对敏感字段调用 `set_option(session, "_no_learning", true)`，但 librime 没有这个开关（`librime.so.1.16.1` 中不含任何 `learn` 字样），设了等于没设；共享会话照常把选词写进用户词库。
 - **修复**：敏感字段改用访客会话（`RimeRuntime::openGuest`，建会话时关闭 `enable_user_dict`），既不读也不写用户词库；离开敏感字段、没有组合时再回到共享会话。`sessionShared` 在敏感字段里为 false。
 - **验证**：`tst_session.qml` 的 `test_7_sensitive_field_does_not_learn` 修复前失败、修复后通过；同一轮还检查了密码字段不进 Rime（`test_6`）、用户目录 0700 与 `default.custom.yaml` 只在没有时创建（`check.cpp`、`run.sh`）。实机尚未复核。
+
+## 2026-10-07：按键的无障碍名称与标识
+
+- **为什么**：读屏和操作手机的 Agent 都要先找到按键；图标键（Shift、退格、空格、切换语言）原本没有任何文字。
+- **调研**：plasma-keyboard 6.6.6 与上游 master 的 `BreezeKeyPanel.qml`、Breeze `style.qml`、候选列表都没有 `Accessible` 声明；Qt Virtual Keyboard 6.10.2 的按键是普通 Item。字母键里的 QQC2.Label 会被 Qt 自动暴露为静态文字，但 Shift、退格、空格、切换语言是图标，没有文字。2026-10-07 用 KDE GitLab API 搜 plasma-keyboard 的 MR/issue（accessib、a11y、screen reader、Accessible），只有键盘导航 !25/!29，没有按键无障碍的工作（本轮未找到，不代表不存在）。
+- **补丁** `packages/plasma-keyboard/debian/patches/rungic/accessible-keys.patch`（`+rungic2`）：每个按键面板是 `Accessible.Button`，名称是它输入的字符（大写状态时为大写）或功能（经 i18n 翻译，给读屏用）；另有不随界面语言变化的 `Accessible.id`：`key:<字符>`（无字符的键为 `key`）、`shift`、`backspace`、`space`、`enter`、`language`、`symbol`、`mode`、`hide`、`handwriting`，候选词 `candidate`、长按备选 `alternate`，语言列表项 `language:<地区>`。只加名称，不加 `onPressAction`：Qt 给按钮角色暴露的 Press 动作什么也不做，测试必须真实触摸。我们自己的浮动键盘（`agent/screen/vkb/rungic/style.qml`、`FloatingKeyboard.qml`）用同一套标识，顶栏另有 `esc`、`tab`、`ctrl`、`alt`、方向键、`hide`、`dock`。`rungic-a11y` 的节点输出增加 `id` 字段。第 3 轮之后再请 Kevin 决定是否提交给 KDE。
+- **两个坐标事实**（测试工具在实机上点手机键盘时同样要遵守）：
+  1. plasma-keyboard 的窗口铺满整个输出（`InputPanelWindow` 的 `height: Screen.height`），按键画在底部，AT-SPI 坐标相对输出；KWin 的输入法面板（`inputMethod` 窗口，`clientGeometry` 只有可触摸的那块，例如 720×450 位于 y=1050）记在 KWin 自己名下，不能按 plasma-keyboard 的 PID 找。`rungic_agent.ui_tap` 目前按 PID 和窗口尺寸找窗口，点不到这个键盘；按截图坐标触摸即可。
+  2. 语言列表是 Qt Quick 弹出层，AT-SPI 给它的内容以弹出层自己为原点（对话框节点在 0,0）。`LanguagePopup.show()` 把列表左下角放在语言键左上角，所以按这个锚定换算位置，并以语言确实切换作为验证。2026-10-07 无头测试中按报告坐标或面板偏移去点都不中，按锚定换算后切换成功。
+- **中文句号**：中文字母页右下角的键是全角点“．”（U+FF0E），句号“。”（U+3002）在符号页的第 2 页，长按“．”的备选里也有。验收清单的 `你好，中国。` 用的是“。”。
+- **验证**：2026-10-07 在 Mac mini 无头 KWin 上，两个键盘都逐键真实触摸输入 `Rungic E2E AbC123\n你好，中国。\n`，读回全文 37 字节与预期一致（当时的无头测试工具未合入）。实机由验收清单 E2E-02、E2E-08 覆盖（docs/121）。
+
+## 2026-10-07：新账户没有 Rime、KWrite 里拼音逐键上屏（G100 实机，已修）
+
+发版验收清单（docs/121）第一次在 G100 上跑时发现两处，均已在实机复核。
+
+- **新账户用的不是 Rime 键盘，也没有英文**：plasma-mobile 在自己的 `~/.config/plasma-mobile/kwinrc`（XDG_CONFIG_DIRS）里写 `InputMethod=…/org.kde.plasma.keyboard.desktop`，我们只在迁移旧路径时（`rungic-usr-paths.sh`）改输入法；`plasmakeyboardrc` 没有 `enabledLocales` 时 plasma-keyboard 只开系统语言，语言键是灰的，设置页的语言列表里也没有 Rime 中文。新的 kconf_update `rungic-keyboard-defaults.sh` 在 KWin 启动前，用户自己的 kwinrc 没写输入法时设成 `rungic-plasma-rime.desktop`，没写语言时设成 `zh_CN,en_US`（与浮动键盘的默认一致）；只读用户自己的文件（绝对路径，不级联），用户选过的不动。改了用户 kwinrc 之后，正在运行的 KWin 要到下次会话才换输入法进程（`kwriteconfig6 --notify` 和开关虚拟键盘都不行）。
+- **KWrite 里每个拼音字母都上屏成首候选**（“nihao”→“你i和啊哦”）：KTextEditor 把预编辑算进光标周围的文字，经 Wayland 到键盘就成了“周围文字变了”，Qt VK 调输入法的 `update()`，插件在那里提交组合。而且回报比下一个键晚一步（显示 “ni h” 时才收到含 “ni” 的回报）。设置页那种普通 Qt 输入框不这样，所以无头测试没发现。修复：组合开始时记下周围文字和光标，`update()` 里如果只是本次组合显示过的某个预编辑被原样算进了光标处，就不提交；光标移开或文字在别处被改才提交（`desktop/rime/echo.h`，`rungic-rime-check` 的 10 条检查）。实机：KWrite 里 “ni hao” 留在预编辑区，首候选“你好”，屏幕键盘逐键打出整段夹具并保存为 37 字节、SHA256 与预期一致。

@@ -76,3 +76,83 @@ python tools/build_artifact.py /path/to/recipe.json --check
 证据均在本轮运行目录：`identity-preservation.json`、`device-payload-check.log`、`acceptance/report.json`、`desktop-reboot.png`、`reboot-services-after-unlock.log`、`reboot-audio/report.json`、`cast-scan.json`、`cast-scan-after-reboot.json`、`final-system.log` 与 `cleanup.log`。smoke 工具自动附带了上次 X70 指标对比，跨机型数值不能作为本次性能改善结论。
 
 本轮通过的是构建复用检查、离线镜像检查和 G100 保留账户更新及重启检查；没有重新验收空白账户首装、Android 清数据刷入或故障回退，不能用本轮结果替代这些边界。
+
+
+## 完整首装编排
+
+`tools/ci/prepare_rootfs.py` 从 Ubuntu ARM64 最小树开始，复用
+`system/ubuntu-packages.txt` 和现有 `build_rootfs_image.py`。
+在原生 ARM64 构建容器内，以 root（或构建用 user namespace 内的 root）运行：
+
+```bash
+python3 tools/ci/prepare_rootfs.py --packages "$checked_package_repo" \
+  --source-commit "$source_sha" --firefox-version "$firefox_version" \
+  --output "$new_attempt_dir" --size-gib 16
+```
+
+`--packages` 指向已核对的本地 APT 仓库，包含 `release.json`、`Packages`、
+`Release` 和该 release 的精确 DEB。参数绑定源码 SHA、Firefox 版本、Ubuntu
+suite 与镜像大小。构建记录仍应通过 `build_artifact.py` 的输入指纹固定仓库、
+工具链和脚本；完成凭据不能补足上游二进制的原始源码证明。
+
+编排先安装拥有 Mozilla 源、密钥和 pin 的 `rungic-plasma-config`，再刷新源并
+安装完整 release 和运行依赖。临时 APT 源选择写在 `/var/lib/rungic-apt`，
+编排不手写包拥有的 `/etc/apt` 配置。安装脚本来自磁盘，所有包管理命令
+关闭 stdin；配置询问或维护脚本读取输入失败会停止构建，不能吞掉后续命令。
+随后创建锁定口令的模板账户，生成中英文 locale，核验 APT、dpkg、项目 venv
+及其运行导入，记录安装包集合，再清理本轮下载缓存。
+
+`root-install.complete` 仅在最后一步写入，包含源码 SHA、release 版本及
+文件摘要、dpkg 状态摘要和脚本摘要。镜像命令的 `--install-source` 必须匹配
+它；缺少或不匹配时，在创建镜像目录之前拒绝。已有带完成凭据的树不能省略
+此参数。镜像入口必须显式选择 `--install-source` 或 `--unverified-root`，两者都不给就拒绝。历史手动树用后一项，报告的 `install_receipt` 为 null；验证模式记录安装源码与凭据文件 SHA-256。带凭据的树不能用未验证模式直接绕过核验。
+
+每次 `--output` 必须是不存在的新目录；失败的目录保留，工具没有续跑或
+补齐完成凭据的选项。`--prepare-only` 在安装检查结束后停止；之后仍需用
+带 `--install-source` 的现有镜像器打包。同一个 output 不能再次执行首装。
+`--qemu` 供已有 ARM64 binfmt 配置的 x86 runner 使用，完整交叉安装仍需在
+相应 runner 验证。此工具不接触手机，也不修改已冻结的候选。
+
+### 2026-10-07 原生完整首装验证
+
+工具源码 `a31509a162cb90c930193320a7d6a75f5f5102d2` 在 Mac 的独立 ARM64
+构建容器完成最小树、配置包、完整 release、模板账户、locale、APT／dpkg、
+venv 导入、最后完成凭据、封镜和独立读回。实际安装 1501 个包，release
+`20261007.1` 的 88 个锁定包及元包均匹配，Firefox 为 `157.0.1~build1`。
+`e2fsck -fn` 返回 0，压缩流完整性及两份包锁摘要一致。
+
+| 产物 | SHA-256 |
+| --- | --- |
+| 16 GiB ext4 | `f439d5885c7d9831609084a8cb3ee6cffaaf2fe4f792d82ea6f45a31635e9a61` |
+| gzip（1,773,844,883 字节） | `9d7971ab93bb7d64c18d0fddf854a7630a4c5e323ea62a28ca8f1ade0a891a66` |
+| 安装及镜像包锁 | `e9a027650103cc7e17a82f9aa2a2964217fe3589cb5e832b60e98bdd32074aa3` |
+
+反例也经同一原生入口：配置 DEB 的维护脚本遇到 EOF 返回 42，完整首装
+非零退出，没有账户、完成凭据或镜像；重用其输出目录被拒绝，失败树的
+包状态不变。安装已成功的正例因构建盘余量不足而暂停编排父进程，包管理
+子进程正常完成；已验证归档释放空间、重新检查构建卷和宿主余量后恢复
+同一父进程，未重跑安装。该容量暂停不等同于允许续跑失败的树。
+
+最初两次真实失败（APT `.sources` 格式、非锁定运行包参数覆盖精确版本）
+原样保留，修复后使用新目录重建。离线检查通过 1343 项及 685 个子用例，
+原生正反例不代替未执行的 QEMU 路径和手机首装验证。
+
+基线更新路径 `build_fingerprinted_rootfs.py` 的输入是构建配方明确声明并整体
+指纹绑定的二进制树（历史安装模板，或正式首装工具的输出），不是本次完整
+首装。它只在新副本里、更新 dpkg 前移除已失效的首装凭据，再显式以
+`--unverified-root` 封镜；原基线和原凭据不改，也不补造完成证明。镜像报告
+保留 `install_receipt: null`，该路径的来源由现有 baseline／build-manifest
+记录承担。其 chroot 调用也关闭 stdin。
+
+上述安装代码对应 `a31509a`，根据预审改为显式模式并记录凭据的镜像代码
+对应 `c68c0af`；安装脚本内容不变，以原完成凭据生成新的镜像，报告绑定
+原安装源码 `a31509a` 和凭据摘要 `99a6f1147fa212ff68096335ac709da9424d0f9cd3cbdc710e9175dfb732439a`。
+
+完整 `/etc/apt` 读回比较了首装准备树、最终镜像树及第二轮 clean2 根树。
+最终两个树的 26 项目录／文件／链接、内容摘要和权限属主全部一致。
+Ubuntu 源仍是 `/etc/apt/sources.list` 的普通 `deb` 行，镜像为
+`http://ports.ubuntu.com/ubuntu-ports`，suite 为 resolute、resolute-updates、
+resolute-security，components 为 main、universe、multiverse、restricted。
+Mozilla 和 Rungic 源、源代码索引、密钥、pin 位置和内容也没有变化。
+首装准备树少的唯一一项是 `preferences.d/rungic-release`，由原有封镜器
+在镜像副本中生成；最终 pin 与第二轮一致，未改变用户安装后 APT 的源配置。

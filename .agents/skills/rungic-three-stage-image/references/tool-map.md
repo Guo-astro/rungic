@@ -18,7 +18,7 @@ All paths are relative to the repository root.
 | ABI | `tools/ci/module_abi.py` | Supports legacy/extended modversions. Compare symvers with OEM modules. Retain limits for uncovered references. |
 | Module trust | `tools/ci/restore_module_trust.py` | Checks baseline/certificates and produces reports. Its restoration method does not automatically apply to arbitrary Images. |
 | ARM64 packages | `tools/build_on_device.py`, `tools/rungic_release.py` | Pinned recipe builds, collect, and versioned package sets. See docs/77 for repository-snapshot maturity. |
-| ARM64 rootfs installation | `tools/ci/arm64_chroot.py`, `tools/ci/rootfs.Dockerfile` | QEMU/real chroot with host Python isolation. Check runner namespaces, binfmt, and capacity. |
+| ARM64 rootfs installation | `tools/ci/prepare_rootfs.py`, `tools/ci/arm64_chroot.py`, `tools/ci/rootfs.Dockerfile` | Fresh root, configuration owner first, file-based installer with closed stdin, final source/release receipt. Native ARM64 or a QEMU/binfmt runner; check namespaces and capacity. Failed output directories cannot resume. |
 | Rootfs image | `tools/ci/build_rootfs_image.py` | Packages a prepared root tree/release into ext4, compressed seeds, package locks, and reports. Check `system/ubuntu-excluded-packages.txt` and Emoji Selector exclusion. This is not a complete package downloader. |
 | APK | `android/build-apk.sh`, `tools/ci/apk-builder.Dockerfile` | Builds the Android entry point. Preserve the specified development signing identity. Exclude other credentials. |
 | Host seed | `tools/ci/build_host_seed.py` | Inputs: runtime, rootfs-tree, repo, lxc/plasma enter binaries, `--cast-jar` from `shared/android/rungic-cast/build.sh`. Casting is optional. First-boot casting installation failure produces a log only. |
@@ -91,7 +91,7 @@ python3 tools/ci/preflight.py "$device_spec" "$stock_dir" \
 python3 tools/ci/module_abi.py "$kernel_symvers" "$oem_modules" \
   --output "$run_dir/kernel-abi.json"
 
-python3 tools/ci/build_rootfs_image.py --root "$rootfs_tree" \
+python3 tools/ci/build_rootfs_image.py --install-source "$source_sha" --root "$rootfs_tree" \
   --release "$package_release" --output "$rootfs_output" \
   --size-gib "$rootfs_size_gib" --firefox-version "$firefox_version"
 ```
@@ -151,3 +151,5 @@ python3 tools/ci/accept_release.py "$release_dir" \
 Isolated tests and controlled UI state do not replace the applicable first-installation evidence.
 Record independent installation, upgrade, and old full-bundle data-removal acceptance separately.
 Do not run phone tests or reflash devices for documentation or skill changes.
+
+Historical binary-root composition must explicitly select `--unverified-root` instead of `--install-source`. Its report has `install_receipt: null`; copied stale installation receipts must be removed before package updates.

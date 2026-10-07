@@ -36,13 +36,15 @@ def tree(root, release):
         path.chmod(mode)
 
     installed = {**release['packages'], 'firefox': '140.0', 'rungic-release': release['version'],
-                 'base-files': '14ubuntu1'}
+                 'base-files': '14ubuntu1', 'kwrite': '4:25.12.3-0ubuntu1'}
     write('var/lib/dpkg/status', '\n'.join(
         f'Package: {name}\nStatus: install ok installed\nVersion: {version}\nArchitecture: arm64\n'
         for name, version in installed.items()))
     write('etc/passwd', 'root:x:0:0::/root:/bin/sh\nrungic:x:1000:1000::/home/rungic:/bin/sh\n')
     write('etc/shadow', 'root:*:0::::::\nrungic:!:0::::::\n', 0o640)
     write('usr/share/rungic/account-protocol', '2\n')
+    write('usr/bin/kwrite', '#!/bin/sh\n', 0o755)
+    write('usr/share/applications/org.kde.kwrite.desktop', '[Desktop Entry]\nName=KWrite\nExec=kwrite\n')
     config = 'etc/dpkg/dpkg.cfg.d/zz-rungic-apps'
     write(config, (SRC / 'system/config' / config).read_text())
     (root / 'home/rungic').mkdir(parents=True)
@@ -83,9 +85,10 @@ def test():
     (WORK / 'release.json').write_text(json.dumps(release))
     tree(root, release)
     image = WORK / 'out/rootfs.img'
-    sh('python3', str(SRC / 'tools/ci/build_rootfs_image.py'), '--inside', '--root', str(root),
+    sh('python3', str(SRC / 'tools/ci/build_rootfs_image.py'), '--inside', '--unverified-root', '--root', str(root),
        '--release', str(WORK / 'release.json'), '--output', str(image), '--size-gib', '8', '--firefox-version', '140.0')
     report = json.loads((WORK / 'out/rootfs-report.json').read_text())
+    check(report['install_receipt'] is None, 'explicit binary-root mode has no installation receipt')
     check(report['filesystem_check'] in (0, 1), 'the builder checks the ext4 image (e2fsck)')
     check(sh('e2fsck', '-fn', str(image), check=False).returncode == 0, 'the image is a clean ext4 file system')
     check(report['rootfs_sha256'] and (WORK / 'out/rootfs.img.gz').stat().st_size == report['compressed_bytes'],
@@ -110,7 +113,7 @@ def test():
     # A tree that does not have this release's versions installed does not become an image.
     other = WORK / 'other.json'
     other.write_text(json.dumps({**release, 'packages': {**release['packages'], 'rungic-plasma-config': '0.6'}}))
-    refused = sh('python3', str(SRC / 'tools/ci/build_rootfs_image.py'), '--inside', '--root', str(root),
+    refused = sh('python3', str(SRC / 'tools/ci/build_rootfs_image.py'), '--inside', '--unverified-root', '--root', str(root),
                  '--release', str(other), '--output', str(WORK / 'other/rootfs.img'), '--size-gib', '8',
                  '--firefox-version', '140.0', check=False)
     check(refused.returncode != 0 and 'release package mismatch' in refused.stderr + refused.stdout
